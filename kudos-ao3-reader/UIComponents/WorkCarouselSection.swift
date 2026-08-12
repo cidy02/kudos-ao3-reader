@@ -10,6 +10,11 @@ import SwiftUI
 /// philosophy — simple and scannable by default, with depth one tap away.
 struct WorkCarouselSection<Cards: View, Empty: View>: View {
     private let title: String
+    /// Defaults to every section's standard header weight. Overridable so a
+    /// carousel that reads as a *subsection* of something above it (e.g. Home's
+    /// "More In Progress" strip under its own "Continue Reading" title) doesn't
+    /// compete with real top-level section headers at the same visual weight.
+    private let titleFont: Font
     private let hasItems: Bool
     private let onSeeAll: (() -> Void)?
     private let cards: () -> Cards
@@ -20,6 +25,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
 
     init(
         title: String,
+        titleFont: Font = .title2.bold(),
         collapseKey: String,
         hasItems: Bool,
         onSeeAll: (() -> Void)? = nil,
@@ -27,6 +33,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         @ViewBuilder emptyState: @escaping () -> Empty
     ) {
         self.title = title
+        self.titleFont = titleFont
         self.hasItems = hasItems
         self.onSeeAll = onSeeAll
         self.cards = cards
@@ -63,7 +70,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Text(title).font(.title2.bold()).foregroundStyle(.primary)
+                    Text(title).font(titleFont).foregroundStyle(.primary)
                     Image(systemName: "chevron.down")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)

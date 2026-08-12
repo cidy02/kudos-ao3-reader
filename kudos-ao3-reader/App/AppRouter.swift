@@ -145,6 +145,9 @@ final class AppRouter {
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
     /// work's detail page). Consumed + cleared by `LibraryView`.
     var pendingLibraryTag: LibraryTagFilter?
+    /// A Library section to push on its next appearance (e.g. Home Resume "See all"
+    /// → Reading Now). Consumed + cleared by `LibraryView`.
+    var pendingLibrarySection: LibrarySectionKind?
     /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/
     /// relationship chip). Consumed + cleared by `SearchView`.
     var pendingTagSearch: AO3TagSearch?
@@ -305,6 +308,13 @@ final class AppRouter {
     /// Switches to the Library and filters it to works containing `value` in `field`.
     func filterLibrary(_ field: LibraryTagFilter.Field, _ value: String) {
         pendingLibraryTag = LibraryTagFilter(field: field, value: value)
+        selection = .library
+    }
+
+    /// Switches to the Library and pushes the full list for `kind` (e.g. Home Resume
+    /// "See all" → `.readingNow`).
+    func showLibrarySection(_ kind: LibrarySectionKind) {
+        pendingLibrarySection = kind
         selection = .library
     }
 

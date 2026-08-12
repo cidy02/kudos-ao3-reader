@@ -6,8 +6,7 @@ import SwiftUI
 /// horizontal card carousel with a `>` chevron that opens its full vertical list.
 /// Tapping a local card opens the reader; long-press opens management actions,
 /// including Work Details. Remote cards still tap through to Work Details.
-/// Sections, in order: Reading Now, Recently Updated, Subscriptions, Favorites,
-/// Recently Opened.
+/// Sections, in order: Resume (hero+strip), Recently Updated, Subscriptions.
 struct HomeView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -27,9 +26,9 @@ struct HomeView: View {
     @State private var isLoadingSubscriptions = false
 
     // Multi-select / bulk actions, mirroring LibraryView's carousel selection.
-    // Scoped to the four local-work carousels — Subscriptions merges in remote
-    // entries via CanonicalWorkCoverCard, a different card type not wired for
-    // selection here.
+    // Scoped to local works (Resume hero+strip + Recently Updated) — Subscriptions
+    // merges in remote entries via CanonicalWorkCoverCard, a different card type
+    // not wired for selection here.
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
 
@@ -86,14 +85,12 @@ struct HomeView: View {
 
     private var readingNow: [SavedWork] { section(.readingNow) }
     private var recentlyUpdated: [SavedWork] { section(.recentlyUpdated) }
-    private var favorites: [SavedWork] { section(.favorites) }
-    private var recentlyOpened: [SavedWork] { section(.recentlyOpened) }
 
     /// The union of every local section, untruncated, for the Privacy button's
     /// visibility check — a `.prefix(12)`-truncated set could hide the button even
     /// though an adult work is sitting further down a section.
     private var allLocalSectionWorks: [SavedWork] {
-        readingNow + recentlyUpdated + favorites + recentlyOpened
+        readingNow + recentlyUpdated
     }
 
     private var homeSectionsRevision: String {
@@ -130,11 +127,9 @@ struct HomeView: View {
                 if hasSectionCache {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
-                            localSection(.readingNow, works: readingNow)
+                            resumeSection
                             localSection(.recentlyUpdated, works: recentlyUpdated)
                             subscriptionsSection
-                            localSection(.favorites, works: favorites)
-                            localSection(.recentlyOpened, works: recentlyOpened)
                         }
                         .padding(.vertical, 12)
                     }
@@ -143,7 +138,7 @@ struct HomeView: View {
                     TabDashboardShell(
                         sectionTitles: [
                             "Reading Now", "Recently Updated",
-                            "Subscriptions", "Favorites", "Recently Opened"
+                            "Subscriptions"
                         ]
                     )
                 }
@@ -157,6 +152,12 @@ struct HomeView: View {
                 .navigationDestination(for: LocalWorkDestination.self) { destination in
                     LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
                 }
+                // Still live for Recently Updated (`localSection` → path.append(kind)).
+                // Resume "See all" intentionally does NOT use this: it deep-links into
+                // Library via `router.showLibrarySection(.readingNow)` so the full list
+                // lives on Library's stack (Phase A contract). `.readingNow` remains a
+                // valid HomeSectionKind for section cache / empty copy; the destination
+                // case is simply unreached from current Home chrome, not orphaned wiring.
                 .navigationDestination(for: HomeSectionKind.self) { kind in
                     HomeSectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
                 }
@@ -230,6 +231,97 @@ struct HomeView: View {
     }
 
     // MARK: Sections
+
+    private var resumeSection: some View {
+        Group {
+            if readingNow.isEmpty {
+                // Strong empty state (Synthesis v2): section chrome + CTAs, not a
+                // dead hero-shaped hole. Same header weight as other Home rows.
+                VStack(alignment: .leading, spacing: 12) {
+                    // "Continue Reading" — matches the title used above the hero
+                    // in the non-empty branch below, so the section doesn't
+                    // appear to rename itself depending on whether it has content.
+                    Text("Continue Reading")
+                        .font(.title2.bold())
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 16)
+
+                    SectionEmptyState(
+                        message: HomeSectionKind.readingNow.emptyMessage,
+                        systemImage: HomeSectionKind.readingNow.emptyIcon
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+
+                    HStack(spacing: 12) {
+                        Button("Browse AO3") {
+                            router.selection = .browse
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button("Open Library") {
+                            router.selection = .library
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.horizontal, 16)
+                }
+            } else {
+                // Hero = most recent; strip = next up to 4 (5 visible total).
+                // "See all" only when a 6th+ work exists beyond that window.
+                let heroWork = readingNow[0]
+                let stripWorks = Array(readingNow.dropFirst().prefix(4))
+
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Continue Reading")
+                        .font(.title2.bold())
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 16)
+
+                    HomeResumeHero(
+                        work: heroWork,
+                        isSelecting: isSelecting,
+                        isSelected: selection.contains(heroWork.id),
+                        onToggleSelection: { toggleSelection(heroWork) },
+                        onSelect: selectAction(for: heroWork)
+                    )
+                    .padding(.horizontal, 16)
+
+                    if !stripWorks.isEmpty {
+                        // Smaller title than a normal section header — this strip
+                        // is a subsection of "Continue Reading" above, not a peer
+                        // top-level row, so it shouldn't compete at the same weight.
+                        WorkCarouselSection(
+                            title: "More In Progress",
+                            titleFont: .subheadline.weight(.semibold),
+                            collapseKey: "home.readingNow.strip",
+                            hasItems: true,
+                            onSeeAll: readingNow.count > 5
+                                ? { router.showLibrarySection(.readingNow) }
+                                : nil
+                        ) {
+                            // HomeResumeStripCard wraps its own NavigationLink/
+                            // selection/blur handling internally (same pattern as
+                            // HomeResumeHero above), so unlike SensitiveWorkCoverCard
+                            // it doesn't need the isSelecting branch or an external
+                            // NavigationLink wrapper at the call site.
+                            ForEach(stripWorks) { work in
+                                HomeResumeStripCard(
+                                    work: work,
+                                    isSelecting: isSelecting,
+                                    isSelected: selection.contains(work.id),
+                                    onToggleSelection: { toggleSelection(work) },
+                                    onSelect: selectAction(for: work)
+                                )
+                            }
+                        } emptyState: {
+                            EmptyView()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     private func localSection(_ kind: HomeSectionKind, works sectionWorks: [SavedWork]) -> some View {
         WorkCarouselSection(
@@ -331,8 +423,6 @@ struct HomeView: View {
         unique(
             Array(readingNow.prefix(12))
                 + Array(recentlyUpdated.prefix(12))
-                + Array(favorites.prefix(12))
-                + Array(recentlyOpened.prefix(12))
         )
     }
 
@@ -351,13 +441,11 @@ struct HomeView: View {
 
     private func footer(_ kind: HomeSectionKind, _ work: SavedWork) -> String? {
         switch kind {
-        case .readingNow, .recentlyOpened:
+        case .readingNow:
             return work.readingProgressLabel
         case .recentlyUpdated:
             let new = work.postedChapterCount - work.knownChapterCount
             return new > 0 ? "+\(new) new" : "Updated"
-        case .favorites:
-            return nil
         }
     }
 

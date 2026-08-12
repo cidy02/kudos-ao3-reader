@@ -252,6 +252,22 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // user separately backs all the way out.
                     path = NavigationPath()
                 }
+                // Home Resume "See all" (and future Account/widget deep-links) push a
+                // Library section list. Reuses the same `LibrarySectionKind` destination
+                // as the carousel chevrons — `initial: true` catches a section set just
+                // before this view appears.
+                .onChange(of: router.pendingLibrarySection, initial: true) { _, kind in
+                    guard let kind else { return }
+                    // Reset first, same as `pendingLibraryTag` above — without it, a
+                    // deep-link arriving while the user is already mid-navigation
+                    // elsewhere in Library (e.g. left inside a Collection before
+                    // switching tabs) would stack the section list under whatever was
+                    // already pushed instead of landing cleanly, or double-push the
+                    // same kind if it happens to already be on the stack.
+                    path = NavigationPath()
+                    path.append(kind)
+                    router.pendingLibrarySection = nil
+                }
         }
         // Declared on the stack itself so the cards inside it and the screens
         // pushed from it resolve the same namespace — that pairing is what the
