@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings → About: app identity, the GPL-3.0 license, open-source credits, and
+/// Settings → About: app identity, the AGPL-3.0 license, open-source credits, and
 /// the AO3/OTW disclaimer. Presented as a sheet from the Settings page.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
@@ -29,8 +29,9 @@ struct AboutView: View {
 
                 Section("License") {
                     Text("Kudos is free software, released under the "
-                         + "**GNU General Public License v3.0**. You may use, study, "
-                         + "share, and modify it under the terms of that license.")
+                        + "**GNU Affero General Public License v3.0 (AGPL-3.0)**. "
+                        + "You may use, study, share, and modify it under the terms "
+                        + "of that license.")
                 }
 
                 Section("Open-Source Components") {
@@ -66,9 +67,9 @@ struct AboutView: View {
 
                 Section("Disclaimer") {
                     Text("Kudos is an unofficial, personal project. It is not "
-                         + "affiliated with or endorsed by the Organization for "
-                         + "Transformative Works or Archive of Our Own, and it reads "
-                         + "AO3's public web pages — AO3 has no official API.")
+                        + "affiliated with or endorsed by the Organization for "
+                        + "Transformative Works or Archive of Our Own, and it reads "
+                        + "AO3's public web pages — AO3 has no official API.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -79,15 +80,15 @@ struct AboutView: View {
         .appThemedScroll()
         .navigationTitle("About")
         #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
-        }
-        .presentationDragIndicator(.visible)
-        .sheet(isPresented: $showingBugReport) { BugReportView() }
+            .presentationDragIndicator(.visible)
+            .sheet(isPresented: $showingBugReport) { BugReportView() }
     }
 
     private func creditRow(_ name: String, license: String, detail: String, url: String) -> some View {
