@@ -95,7 +95,7 @@ the status here in sync with the board.
 
 - **[FI-16] About / Sources & Licenses page** — *Status: Done (2026-06-20) · Board: T-39*
   A Settings → "About Kudos" sheet: app name + version (from the bundle), the
-  GPL-3.0 license statement, an open-source credits section (SwiftSoup MIT, Readium
+  AGPL-3.0 license statement, an open-source credits section (SwiftSoup MIT, Readium
   BSD-3-Clause, ao3_api as the selector reference, each linked), and the AO3/OTW
   "unofficial, unaffiliated, no API" disclaimer. Pre-public license compliance.
 

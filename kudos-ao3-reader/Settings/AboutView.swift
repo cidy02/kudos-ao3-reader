@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings → About: app identity, the GPL-3.0 license, open-source credits, and
+/// Settings → About: app identity, the AGPL-3.0 license, open-source credits, and
 /// the AO3/OTW disclaimer. Presented as a sheet from the Settings page.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
@@ -29,8 +29,9 @@ struct AboutView: View {
 
                 Section("License") {
                     Text("Kudos is free software, released under the "
-                        + "**GNU General Public License v3.0**. You may use, study, "
-                        + "share, and modify it under the terms of that license.")
+                        + "**GNU Affero General Public License v3.0 (AGPL-3.0)**. "
+                        + "You may use, study, share, and modify it under the terms "
+                        + "of that license.")
                 }
 
                 Section("Open-Source Components") {
