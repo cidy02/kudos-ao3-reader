@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Person
@@ -1161,9 +1162,11 @@ fun WorkDetailScreen(
         onAddToQueue = {
             // Open the picker immediately — never wait on AO3 metadata/EPUB work.
             // Selecting a queue still runs ensureLocalThen(queueOnly = true) + preserve.
-            availableQueues = readingQueueRepository.listQueues()
-                .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
             queuePickerOpen = true
+            scope.launch {
+                availableQueues = readingQueueRepository.listQueues()
+                    .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
+            }
         },
         onAddToCollection = { collectionDialogOpen = true },
         onBookmark = {
@@ -1924,8 +1927,8 @@ private fun LibraryTab(
     SectionLabel("Status")
     DetailFormCard {
         StatusToggleRow(
-            icon = if (isSaved) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
-            title = if (isSaved) "Saved" else "Save",
+            icon = if (isSaved) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
+            title = if (isSaved) "Downloaded" else "Download",
             checked = isSaved,
             enabled = !busy,
             onClick = onToggleSaved,

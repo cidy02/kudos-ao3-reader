@@ -267,10 +267,18 @@ class LibraryViewModel(
         }
     }
 
-    fun toggleSavedForLaterOne(workId: String) {
+    /**
+     * [alreadyQueued] must be the same [SavedWork.isQueuedForLater] the caller's UI
+     * already showed (e.g. to decide an "Add"/"Remove" label) — not re-derived here via
+     * the precise [ReadingQueueRepository.isInSavedForLater] check, which can disagree
+     * with the coarse flag for a work that's only in a *different* queue. Re-deriving
+     * here previously let a "Remove from Saved for Later" label add the work instead,
+     * because the label used the coarse flag while this function used the precise one.
+     */
+    fun toggleSavedForLaterOne(workId: String, alreadyQueued: Boolean) {
         val repo = queueRepository ?: return
         viewModelScope.launch {
-            if (repo.isInSavedForLater(workId)) {
+            if (alreadyQueued) {
                 repo.removeFromSavedForLater(workId)
             } else {
                 runCatching { repo.addToSavedForLater(workId) }

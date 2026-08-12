@@ -533,7 +533,7 @@ private fun LibraryContent(
     onToggleFinishedOne: (String) -> Unit,
     onRemoveOne: (String) -> Unit,
     onSetSavedOne: (String, Boolean) -> Unit,
-    onToggleSavedForLaterOne: (String) -> Unit = {},
+    onToggleSavedForLaterOne: (String, Boolean) -> Unit = { _, _ -> },
     onRevealWork: (String) -> Unit,
     onAddToQueue: (String) -> Unit,
     onAddToCollection: (String) -> Unit,
@@ -864,7 +864,7 @@ data class LibraryCardActions(
     val onRemove: (String) -> Unit,
     val onSetSaved: (String, Boolean) -> Unit,
     /** Toggle Saved for Later queue membership (not isSaved / Download). */
-    val onToggleSavedForLater: (String) -> Unit = {},
+    val onToggleSavedForLater: (String, Boolean) -> Unit = { _, _ -> },
     val onSelect: (String) -> Unit,
     val onReveal: (String) -> Unit,
     val onAddToQueue: (String) -> Unit,
@@ -1285,7 +1285,7 @@ fun LibraryCarouselCard(
                 label = if (work.isQueuedForLater) "Remove from Saved for Later" else "Save for Later",
                 onClick = {
                     menuOpen = false
-                    actions.onToggleSavedForLater(work.id)
+                    actions.onToggleSavedForLater(work.id, work.isQueuedForLater)
                 }
             )
             ContextMenuItem(

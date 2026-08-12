@@ -293,7 +293,10 @@ fun FandomWorksScreen(
 private fun LocalIndicatorRow(indicator: BrowseLocalIndicator) {
     if (!indicator.any) return
     val labels = buildList {
-        if (indicator.isSaved) add("Saved")
+        // isSaved ("kept permanently") is a finer distinction than hasEpub ("file is
+        // present") that belongs on Work Detail's own toggle, not a scan-list chip —
+        // showing both here read as a stale duplicate "Downloaded" after the isSaved
+        // wording rename (both used to say different things: "Saved" vs "Downloaded").
         if (indicator.hasEpub) add("Downloaded")
         if (indicator.isFavorite) add("Favorite")
         if (indicator.isFinished) add("Finished")
