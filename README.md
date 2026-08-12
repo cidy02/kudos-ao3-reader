@@ -1,5 +1,12 @@
 # Kudos — AO3 Reader
 
+<p align="center">
+  <img src="docs/assets/screenshot_library.png" width="22%" />
+  <img src="docs/assets/screenshot_reader.png" width="22%" />
+  <img src="docs/assets/screenshot_filters.png" width="22%" />
+  <img src="docs/assets/screenshot_work_detail.png" width="22%" />
+</p>
+
 A native macOS / iOS / iPadOS reader for Archive of Our Own with a polished
 Liquid Glass experience. Personal and open-source (GPL-3.0 / AGPL-3.0 — see below), built with SwiftUI
 and SwiftData.
