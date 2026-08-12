@@ -1,1 +1,1 @@
-{"cookies":[{"isHTTPOnly":true,"name":"_otwarchive_session","isSecure":true,"value":"SYNTHETIC_TEST_SESSION_0001","path":"\/","domain":".archiveofourown.org"}],"savedAt":808267845.882772,"username":"audit-user"}
+{"username":"audit-user","cookies":[{"value":"SYNTHETIC_TEST_SESSION_0001","path":"\/","isHTTPOnly":true,"name":"_otwarchive_session","isSecure":true,"domain":".archiveofourown.org"}],"savedAt":808269129.911243}

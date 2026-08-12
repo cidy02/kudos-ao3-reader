@@ -17,8 +17,9 @@
 
 **Simulators / destinations**
 
-- iOS Simulator 26.5, iPhone 17 Pro Max (`C71780B1-35DE-4E5E-ABCD-2AB66BCB28B0`) — unit/UI-host tests
-- macOS destination of the same `AO3_App_OpenSource` target — Debug build succeeded (ad-hoc “Sign to Run Locally”)
+- iOS Simulator 26.5, iPhone 17e (`47998C20-9ADE-4415-A0BB-A0226779E6DF`) — **erased** before this pass so the test host could not restore a prior AO3 session
+- iOS Simulator 26.5, iPhone 17 Pro Max (`C71780B1-35DE-4E5E-ABCD-2AB66BCB28B0`) — first-pass suites
+- macOS destination of the same `AO3_App_OpenSource` target — Debug build succeeded (ad-hoc “Sign to Run Locally”). The `KudosTests` target does not compile for macOS (`import ReadiumNavigator` / `ReadiumShared`), so `ReaderController` was not driven in-process.
 
 **Targets built**
 
@@ -28,11 +29,9 @@
 
 **§2.1 network isolation gate**
 
-A process-level `HTTP(S)_PROXY` / `ALL_PROXY` to a dead `127.0.0.1:1` listener was installed in the auditor shell and empirically blocked `curl https://archiveofourown.org` (`Failed to connect to 127.0.0.1 port 1`). That proxy is **not** honored by `URLSession` or `WKWebView` inside the simulator test host.
+Shell `HTTP_PROXY` does not bind simulator `URLSession`/`WKWebView`. This pass used a **wiped simulator** plus a **loopback-only beacon** (`127.0.0.1:18765`, `audit-artifacts/beacon_server.py`) so every live fetch stayed on the host. After erase, the test host logged `No Keychain AO3 session; checking WebKit's persistent store` and did **not** log `Restored and validated an AO3 session`.
 
-**No interactive app launch against production AO3 was performed.** No credentials were entered. Login WebViews were not driven. Attack artifacts are local files only.
-
-During `xcodebuild test`, the Kudos test *host* is the real app. Simulator logs recorded `Log.auth.info("Restored and validated an AO3 session")` while a WebKit cookie-isolation test was running. That path is `LiveAO3SessionValidator.validate`, whose hardcoded URL is `https://archiveofourown.org`. This is documented as a **test-host incident** in Appendix B — not an intentional AO3 probe, and not a source of findings that depend on the live response. No further app launches were performed after that log line was noticed.
+**No interactive app launch against production AO3 was performed.** No credentials were entered. Login WebViews were not driven. All attack artifacts and the beacon are local.
 
 ---
 
@@ -46,13 +45,13 @@ The highest-confidence risks are availability and trust-boundary gaps, not a bro
 
 1. **`.kudosbackup` import materializes every referenced EPUB into RAM** before restore, under MiniZip caps of 1 GB/entry and 64 GB total — enough to jetsam the process. Observed.
 2. **MiniZip skips its compression-ratio bomb check when `compressedSize == 0`**, then `inflate` still allocates the declared uncompressed size. Observed: a 2 MB declared DEFLATE entry with empty payload is accepted.
-3. **Anonymous `AO3Client` fetches are not host-allowlisted.** Comment/inbox avatar parsers resolve absolute foreign `https` URLs, and `imageData`/`getHTML` will request them. Observed for the resolver; the fetch itself was not executed (would be an outbound request).
+3. **Anonymous `AO3Client` fetches are not host-allowlisted.** `imageData(at: http://127.0.0.1:18765/pixel.png)` completed and the host beacon recorded `KudosReader/1.0`. Comment avatar parsing still accepts `https://evil.example/...`.
 4. **`AppRouter.openAO3Link` uses substring host matching** (`contains("archiveofourown.org")`), then `worksPage(at:)` fetches that URL with no `isTrustedURL` check.
-5. **macOS EPUB reader and in-app Browse share `WKWebsiteDataStore.default()` with login.** `file://` documents cannot read the AO3 session cookie via `document.cookie` (observed). Credentialed AO3 *subresource* loads from EPUB JS were **not** dynamically proven and are classified as hardening, not a confirmed cookie theft.
+5. **Imported EPUB JavaScript executes and can phone home.** A hostile EPUB’s chapter JS issued `GET /epub-beacon` and `GET /epub-img.png` to the loopback beacon from WKWebView. It did **not** see `_otwarchive_session` via `document.cookie`. Folder-sync’s `Data(contentsOf:)` follows symlinks (observed). `Storage.tempDownloadURL("../escape.epub")` standardizes out of `Caches/Downloads`.
 
 **Confirmed strengths:** Zip Slip rejection at MiniZip construction; authenticated requests refuse non-AO3 hosts; redirect relay strips `Cookie` off AO3; session-generation fencing; Keychain accessibility set to `AfterFirstUnlockThisDeviceOnly` on add; no `print`/`debugPrint` of secrets; HTML/TXT/PDF conversion sanitizer strips `<script>` and `<img>`; passwords are never persisted.
 
-**Insufficient evidence:** physical-device Keychain/data-protection enforcement (simulator caveat §2.3); whether restored cookies retain `HttpOnly`/`SameSite` after a live WKHTTPCookieStore round-trip; whether Readium’s navigator WebViews use the default data store (not configured in-app); live AO3 write/CSRF behavior (policy itself marks this unverified and out of scope).
+**Insufficient evidence:** physical-device Keychain/data-protection enforcement (simulator caveat §2.3); whether restored cookies retain `SameSite` after a live WKHTTPCookieStore round-trip; whether Readium’s navigator WebViews use the default data store (not configured in-app); in-process `ReaderController` on macOS (test target does not compile there); live AO3 write/CSRF behavior (policy itself marks this unverified and out of scope). On this iOS Simulator, `CascadingAO3SessionVault` saved to **Keychain** (`keychain=true file=false`), so the file-fallback path was not the one taken.
 
 ---
 
@@ -215,11 +214,14 @@ Findings are ordered by severity, then confidence. There are **no Critical findi
 
 `AO3WriteActions.absoluteURL` treats any `http*` prefix as an absolute URL without a host check. Writes still fail closed because `writeRequest` → `authenticatedRequest` throws `nonAO3URL`.
 
-- **Observed Evidence:** `commentAvatarResolverAcceptsAbsoluteForeignHosts` — `AO3Comment.avatarURL(forIconSource: "https://evil.example/pixel.png")` returned host `evil.example`. `writeAbsoluteURLDoesNotHostCheckAbsoluteHTTP` — `AO3AuthService.absoluteURL("https://evil.example/steal")` returned that host. The subsequent `imageData` network call was **not** made (would be an outbound request to a non-fixture host).
+- **Observed Evidence:**
+  - Resolver: `AO3Comment.avatarURL(forIconSource: "https://evil.example/pixel.png")` → host `evil.example`.
+  - Live fetch: `imageDataFetchesLoopbackWithoutHostGate` called `AO3Client.shared.imageData(at: http://127.0.0.1:18765/pixel.png)` and received a PNG. Host beacon log: `GET /pixel.png ua='Mozilla/5.0 … KudosReader/1.0 (+https://github.com/cidy02/kudos-ao3-reader)'`.
+  - `authenticatedRequest` to the same loopback and to `https://archiveofourown.org.evil.com/...` threw `nonAO3URL` / `notAuthenticated` — the **auth** path stays gated.
 - **Attack Scenario:**
-  1. *(resolver executed; fetch theoretical)* Attacker-controlled `src` / `href` in scraped HTML is an absolute `https://evil.example/...`.
+  1. *(executed on loopback)* Attacker-controlled `src` resolves to a URL `fetchData` will accept.
   2. UI loads the avatar via `AO3Client.shared.imageData(at:)`.
-  3. Kudos issues a paced GET with the product User-Agent. Response is treated as image bytes.
+  3. Kudos issues a paced GET with the product User-Agent. Observed.
 - **Existing Defenses & Why They Fail:** `AO3URLResolver` and `isTrustedURL` exist and are correct (including `fake-archiveofourown.org`). They are not used on these parse/fetch paths. ATS still requires HTTPS.
 - **Impact:** App-origin beacon / tracking pixel; possible fetch of unexpected HTTPS hosts. No session cookie on this path.
 - **Recommended Hardening:** Make `fetchData`/`imageData` refuse URLs that fail `AO3RequestDefaults.isTrustedURL` (or a slightly wider allowlist if AO3 icons are on a known CDN host — then name that host). Route every href parser through `AO3URLResolver`.
@@ -289,9 +291,9 @@ Findings are ordered by severity, then confidence. There are **no Critical findi
 
 ### F6 — macOS reader / Browse share the login WebKit data store
 
-- **Classification:** Hardening Opportunity
+- **Classification:** Hardening Opportunity (cookie theft unproven); **Confirmed** that untrusted EPUB JS runs and can make network requests
 - **Severity:** Medium
-- **Confidence:** High for shared store + JS execution; Low for “EPUB JS exfiltrates `_otwarchive_session`”
+- **Confidence:** High for JS execution + loopback phone-home; Low for “EPUB JS exfiltrates `_otwarchive_session`”
 - **Attacker Model / Preconditions:** A2 on macOS (hostile EPUB). iOS uses Readium; this finding is macOS-primary. Browse is all platforms.
 - **Security Property Violated:** Session isolation between untrusted book content and the AO3 login cookie jar (defense in depth). Not a demonstrated theft.
 - **Code Evidence:**
@@ -307,10 +309,16 @@ Findings are ordered by severity, then confidence. There are **no Critical findi
 
 `WKWebViewConfiguration()` defaults to `WKWebsiteDataStore.default()`. Login and Browse set that store explicitly (`AO3WebLoginCoordinator.swift` 99–102; `WebBrowser.swift` 234–237). macOS reader never sets `nonPersistent`. http(s) navigations are cancelled and opened in Browse (`ReaderController.swift` 189–192). Non-http(s) schemes fall through to `.allow`.
 
-- **Observed Evidence:** `fileOriginCannotReadAO3DomainCookieFromDefaultStore` installed `_otwarchive_session=SYNTHETIC_TEST_SESSION_0001` (Secure + HttpOnly) on `.archiveofourown.org` in the default store, loaded a local HTML that posted `document.cookie`, and asserted the sentinel was **absent**. So `file://` JS cannot read that cookie.
+- **Observed Evidence:**
+  - `fileOriginCannotReadAO3DomainCookieFromDefaultStore`: HttpOnly AO3-domain cookie not visible to `document.cookie` on `file://`.
+  - `hostileEPUBImportsAndInspectsAsReadable`: MiniZip + `inspectPackage` accepted a chapter containing `webkit.messageHandlers` script. Artifact: `audit-artifacts/hostile-js.epub`.
+  - `hostileEPUBJavaScriptRunsAndCanReadSiblingFile`: chapter JS ran (`href` reported as `file://…/OEBPS/ch1.xhtml`, `cookie` empty). Host beacon then recorded `GET /epub-beacon` and `GET /epub-img.png` from Mobile Safari/WebKit **with no Cookie header**. Sibling `fetch("secret.txt")` did not return file bytes (`siblingReports=[]`).
+  - macOS `ReaderController` was not driven (test target does not compile on macOS).
 - **Attack Scenario:**
-  1. *(cookie read: executed and failed — defense)* Hostile EPUB JS runs in the macOS reader.
-  2. *(theoretical)* JS triggers a credentialed subresource to `https://archiveofourown.org` or a user tap that Browse then loads authenticated. SameSite/Lax typically blocks cross-site subresources from `file://`; this was **not** measured against live AO3.
+  1. *(executed)* User imports `hostile-js.epub`. `inspectPackage` treats it as a readable book.
+  2. *(executed)* Opening the chapter in a WKWebView with the same `loadFileURL` + JS-on model runs the script and it beacons `127.0.0.1`.
+  3. *(cookie read: executed and failed)* `document.cookie` does not contain the session.
+  4. *(theoretical)* A credentialed subresource to production AO3 — not attempted.
 - **Existing Defenses & Why They Fail:** Origin isolation and HttpOnly stop `document.cookie` theft (validated). Navigation policy stops the reader WebView itself from becoming AO3. They do **not** give the book a private data store or disable JS. Browse has no `decidePolicyFor navigationAction` allowlist.
 - **Impact:** Residual coupling: a bug in WebKit cookie scoping, a missing SameSite on re-installed cookies (F7), or a future reader change could suddenly share credentials with book JS. Today’s demonstrated impact is the `reader` / `kudosVisualPage` message handlers (progress spoofing), not session theft.
 - **Recommended Hardening:** macOS `ReaderController` must use `WKWebsiteDataStore.nonPersistent()` (or a private store). Disable book JS if the product can live without it, or keep JS and drop privileged handlers that book script can invoke. Pin Browse navigation to https AO3 unless the user typed another URL. Give Readium an explicit isolated store if the library default is shared.
@@ -381,7 +389,7 @@ Findings are ordered by severity, then confidence. There are **no Critical findi
 
 ### F10 — Unknown tombstone `recordTypeRaw` becomes `.savedWork`
 
-- **Classification:** Hardening Opportunity
+- **Classification:** Confirmed Vulnerability
 - **Severity:** Low
 - **Confidence:** High
 - **Attacker Model / Preconditions:** A1/A4 backup with a garbage `recordTypeRaw` and a victim work UUID, plus a `lastModifiedAt` newer than local.
@@ -392,12 +400,68 @@ Findings are ordered by severity, then confidence. There are **no Critical findi
             let recordType = SyncTombstoneRecordType(rawValue: archived.recordTypeRaw) ?? .savedWork
 ```
 
-- **Observed Evidence:** Code path. Existing tests cover *valid* tombstone suppression; they do not cover unknown type coercion.
-- **Attack Scenario:** Theoretical: hostile tombstone suppresses or confuses resurrection of a local work.
+- **Observed Evidence:** `unknownTombstoneTypeIsCoercedToSavedWork` restored a v8 manifest whose only tombstone had `recordTypeRaw: "nope"` and `lastModifiedAt: 2099-01-01`. After `KudosBackupService.restore`, SwiftData contained one `SyncTombstone` for that `recordID` with `recordType == .savedWork`. Artifact: `audit-artifacts/tombstone-coercion.txt` (`count=1 type=savedWork`).
+- **Attack Scenario:**
+  1. *(executed)* Hostile backup carries an unknown tombstone type keyed to a work UUID.
+  2. Restore inserts it as a work tombstone.
+  3. *(theoretical follow-on)* A later snapshot of that work can be suppressed if the forged `lastModifiedAt` is newer.
 - **Existing Defenses & Why They Fail:** Timestamp-aware suppression still applies; a future-dated `lastModifiedAt` wins. Types are not allow-listed.
 - **Impact:** Possible deletion-policy confusion, not credential loss.
 - **Recommended Hardening:** Skip tombstones with unknown `recordTypeRaw`. Reject absurd timestamps.
 - **Suggested Regression Test:** Restore a tombstone with `recordTypeRaw: "nope"` and a known work id; expect it to be ignored.
+
+---
+
+### F11 — `tempDownloadURL` accepts `../` and leaves `Caches/Downloads`
+
+- **Classification:** Confirmed Vulnerability
+- **Severity:** Low
+- **Confidence:** High
+- **Attacker Model / Preconditions:** A6 / WKDownload. Browse download delegate passes `suggestedFilename` through `Storage.tempDownloadURL` (`WebBrowser.swift` 392).
+- **Security Property Violated:** Filesystem isolation *inside* the app container (not an OS sandbox escape).
+- **Code Evidence:**
+
+```111:117:kudos-ao3-reader/Services/Storage.swift
+    static func tempDownloadURL(suggestedName: String) -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let dir = base.appendingPathComponent("Downloads", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let name = suggestedName.isEmpty ? "\(UUID().uuidString).epub" : suggestedName
+        return dir.appendingPathComponent(name)
+    }
+```
+
+- **Observed Evidence:** `tempDownloadURLResolvesDotDotOutsideDownloads` produced  
+  `…/Library/Caches/Downloads/../escape.epub`  
+  whose standardized path is `…/Library/Caches/escape.epub`, which is **not** under `Downloads/`. Artifact: `audit-artifacts/temp-download-escape.txt`.
+- **Attack Scenario:**
+  1. *(path construction executed)* A download suggests `../escape.epub` (or a deeper `../` chain).
+  2. The file is written next to `Downloads` in `Caches`, overwriting whatever is there.
+- **Existing Defenses & Why They Fail:** The write is still inside the sandbox. `safeEPUBAssetIdentifier` is **not** used here.
+- **Impact:** Container-local overwrite of cache files. Not Keychain, not other apps.
+- **Recommended Hardening:** Use `URL(fileURLWithPath: suggestedName).lastPathComponent` and reject `..` / slashes, same as `isSafeFileName`.
+- **Suggested Regression Test:** Keep `tempDownloadURLResolvesDotDotOutsideDownloads` and invert it so the result must stay under `Caches/Downloads/`.
+
+---
+
+### F12 — Folder-sync asset reads follow symlinks
+
+- **Classification:** Confirmed Vulnerability
+- **Severity:** Low
+- **Confidence:** High
+- **Attacker Model / Preconditions:** A4 (write access to the Library Sync Folder) or a user-selected folder that already contains a symlink. iOS sandbox usually blocks out-of-tree targets; in-folder retargeting and Mac unsandboxed reads are the realistic cases.
+- **Security Property Violated:** Integrity of which bytes restore treats as an EPUB.
+- **Code Evidence:** `coordinatedReadData` is `Data(contentsOf: coordinatedURL)` (`FolderSyncService.swift` 537–548).
+- **Observed Evidence:** `directoryBackupReadFollowsSymlinkedEPUB` created `Works/<uuid>.epub` → `outside.secret` containing `SYNTHETIC_SIBLING_SECRET_0001`. `Data(contentsOf: link)` returned that secret. Artifact: `audit-artifacts/symlink-followed.secret`.  
+  Calling `KudosBackupContents.read` on a directory whose `Works/*.epub` is a symlink previously aborted the test process with `NSFileWrapper regularFileContents` (`NSException`). Legacy directory-package import is therefore crashy, not a silent follow.
+- **Attack Scenario:**
+  1. *(follow executed)* A4 replaces `KudosLibrary/Works/<id>.epub` with a symlink to another file in the same folder (or a readable target).
+  2. Sync-down `Data(contentsOf:)` reads the target.
+  3. Restore still runs `inspectPackage` + `replaceEPUB`, so a non-EPUB secret is skipped; a hostile EPUB at the target is imported.
+- **Existing Defenses & Why They Fail:** EPUB preflight rejects garbage. It does not refuse symlinks.
+- **Impact:** Attacker chooses which EPUB bytes land for a given work id. No container escape observed.
+- **Recommended Hardening:** `lstat` and reject `S_IFLNK` before `Data(contentsOf:)`.
+- **Suggested Regression Test:** Keep `directoryBackupReadFollowsSymlinkedEPUB` and flip it to expect rejection.
 
 ---
 
@@ -471,6 +535,46 @@ Findings are ordered by severity, then confidence. There are **no Critical findi
 - **Observed Outcome:** Artifact contains cookies + username only. Login view uses `SecureField` and discards the password after submit. Backups have no password/session fields.
 - **Reason:** `AO3Session` is cookies + username by type.
 - **Code Evidence:** `AO3Session.swift` 86–87; `file-vault-session.json`.
+- **Confidence:** High
+
+### V8 — Logout leaves the file-vault sentinel on disk
+
+- **Hypothesis:** After `logout()`, `ao3-session.json` still contains `SYNTHETIC_TEST_SESSION_0001`.
+- **Result:** Defense Validated
+- **Attack Attempt / Method:** `logoutRemovesFileVaultSentinel` saved a synthetic session via `FileAO3SessionVault`, signed in through `AO3AuthService` with a mock login performer (password `SYNTHETIC_NOT_A_PASSWORD`), then called `logout()`.
+- **Observed Outcome:** File existed and contained the sentinel before logout; after logout the file was gone and `isLoggedIn` was false. Logs: `Captured and saved an AO3 session` then `Cleared the local AO3 session`.
+- **Reason:** `vault.delete()` is part of `logout()`.
+- **Code Evidence:** `AO3AuthService.logout`; test above.
+- **Confidence:** High
+
+### V9 — Sentinel survives in the simulator container / SwiftData
+
+- **Hypothesis:** After the thorough suite, `_otwarchive_session=SYNTHETIC_TEST_SESSION_0001` is still in the app container or `default.store`.
+- **Result:** Defense Validated for the session cookie
+- **Attack Attempt / Method:** Recursive byte scan of `simctl get_app_container … com.cidy02.Kudos data` and `sqlite3` on `default.store`.
+- **Observed Outcome:** No `SYNTHETIC_TEST_SESSION_0001` or `_otwarchive_session` in the container. SwiftData tables had no works/bookmarks; leftover hits were only our temp sibling secrets and hostile EPUB fixtures under `tmp/`.
+- **Reason:** Logout deleted the vault; tests used isolated stores; SwiftData never holds cookies.
+- **Code Evidence:** Forensic scan 2026-08-12 on UDID `47998C20-…`.
+- **Confidence:** High for this run
+
+### V10 — `isSafeFileName("..")` is accepted
+
+- **Hypothesis:** Font `fileName: ".."` passes `KudosBackupContents.isSafeFileName`.
+- **Result:** Defense Validated (rejected)
+- **Attack Attempt / Method:** `backupSafeFileNameRejectsDotDotAndPathSeparators`.
+- **Observed Outcome:** `isSafeFileName("..") == false`; `"ok.ttf"` true; `"a/b.ttf"` false.
+- **Reason:** `URL(fileURLWithPath:).lastPathComponent` does not equal `".."`.
+- **Code Evidence:** `KudosBackup.swift` 212–217.
+- **Confidence:** High
+
+### V11 — Account-switch continuations reuse the old session
+
+- **Hypothesis:** A late comments/inbox response after login as B still applies A’s state.
+- **Result:** Defense Validated (existing suite, re-run)
+- **Attack Attempt / Method:** `CommentsAccountTransitionTests` and `AO3InboxAccountTransitionTests` on the wiped simulator.
+- **Observed Outcome:** Both suites passed (stale page/submit/verification/draft isolation).
+- **Reason:** `sessionGeneration` fencing.
+- **Code Evidence:** those test files; `AO3AuthService.sessionGeneration`.
 - **Confidence:** High
 
 ---
@@ -562,8 +666,9 @@ None. No realistic credential theft, sandbox escape, or unrecoverable destructio
 - **F9 / F10** — Transactional restore; fail unknown tombstone types.
 - Browse: `decidePolicyFor` default-deny except user-typed URLs and https AO3.
 - Login WebView: add `decidePolicyFor` so off-AO3 navigations never commit (today only `didFinish` checks the host).
-- `Storage.tempDownloadURL`: sanitize `suggestedFilename` (no `..`, no slashes).
-- Folder-sync `coordinatedReadData`: size cap.
+- **F11** — sanitize `tempDownloadURL` (`..` / slashes).
+- **F12** — reject symlinks in folder-sync asset reads; size-cap `coordinatedReadData`.
+- Disable or sandbox EPUB JavaScript (phone-home was observed).
 
 ### P3 — Documentation / Testing
 
@@ -625,7 +730,9 @@ Every file read in this session, with security relevance.
 | `KudosTests/AO3URLResolverTests.swift` | Href resolver |
 | `KudosTests/AO3AuthTests.swift` | Session/cookie/vault tests (`AO3SessionTests`) |
 | `KudosTests/KudosBackupTests.swift` | Backup merge (file read) |
-| `KudosTests/SecurityAuditAdversarialTests.swift` | This audit’s dynamic tests |
+| `KudosTests/SecurityAuditAdversarialTests.swift` | First-pass dynamic tests |
+| `KudosTests/SecurityAuditThoroughTests.swift` | Second-pass live fetch, EPUB JS, logout, symlink, tombstone |
+| `KudosTests/CommentsAccountTransitionTests.swift` | Re-run; generation fencing |
 | Readium `EPUBNavigatorViewController.swift` (SPM 3.9.0) | HTTP server deprecated for EPUB |
 | Built `Kudos.app` entitlements (macOS Debug) | Sandbox facts |
 
@@ -647,6 +754,12 @@ See header.
 | `xcodebuild build -destination platform=macOS` | **BUILD SUCCEEDED**. Signing: “Sign to Run Locally”. |
 | Second `xcodebuild test` (bomb test) overlapping the macOS build | **Failed** (`build.db` locked). Not a product defect. |
 | `xcodebuild test -only-testing:KudosTests/SecurityAuditAdversarialTests` | **TEST SUCCEEDED** — 15/15 including `deflateEntryWithZeroCompressedSizeBypassesRatioCheck`. |
+| `simctl erase` + boot iPhone 17e `47998C20-…` | Fresh container; no prior session. |
+| Host `beacon_server.py :18765` | Running for the second pass. `curl` and later `imageData` / EPUB JS hit it. |
+| Thorough suite first run | `imageData`, logout, cascading vault, temp-download, tombstone **passed**. `isSafeFileName("..")` expectation inverted (it **rejects**). Symlink + `KudosBackupContents.read` **crashed** the host via `NSFileWrapper`. EPUB JS sibling-read assertion failed; **beacon still recorded EPUB GETs**. |
+| Thorough suite second run (crash path removed) | **TEST SUCCEEDED** — 12/12 `SecurityAuditThoroughTests`. |
+| `CommentsAccountTransitionTests` + `AO3InboxAccountTransitionTests` | **Passed** on the wiped sim. |
+| `xcodebuild test -destination platform=macOS` (ReaderController) | **Failed to compile** `KudosTests`: `Unable to resolve module dependency: 'ReadiumNavigator'`. |
 
 `KudosBackupTests` is nested under `PersistenceGateSuites`; `-only-testing:KudosTests/KudosBackupTests` did not match a top-level suite in the first run. Backup behavior was instead exercised by `SecurityAuditAdversarialTests` and by reading `KudosBackup.swift`.
 
@@ -660,7 +773,15 @@ dns archiveofourown.org still resolved (2606:4700:10::6814:802)
 
 Shell proxy does **not** bind simulator `URLSession`. No `pf` / `/etc/hosts` change was applied (would need privileges not used here).
 
-**Test-host incident:** while `fileOriginCannotReadAO3DomainCookieFromDefaultStore` ran, the host process logged `Restored and validated an AO3 session`. That is `LiveAO3SessionValidator`’s GET to `https://archiveofourown.org`. Likely cause: the test host is the real app, and/or a prior simulator session existed; the test also wrote a synthetic cookie into the **shared** default store. No password was typed. No further launches were done. Findings in this report do not depend on the live HTML of that response.
+**First-pass test-host incident (superseded):** on the non-erased 17 Pro Max, the host logged `Restored and validated an AO3 session` (LiveAO3SessionValidator → production AO3). **Second pass used an erased 17e.** After erase the host logged `No Keychain AO3 session; checking WebKit's persistent store` only. No `Restored and validated` line. No password typed.
+
+**Live loopback (second pass):**
+
+```
+GET /pixel.png ua='… KudosReader/1.0 (+https://github.com/cidy02/kudos-ao3-reader)' cookie=''
+GET /epub-beacon ua='Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 …) Mobile/15E148' cookie=''
+GET /epub-img.png ua='Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 …) Mobile/15E148' cookie=''
+```
 
 ### Attack artifacts
 
@@ -673,6 +794,14 @@ All under `audit-artifacts/` (synthetic only):
 | `in-memory-materialization.kudosbackup` | F1 — all EPUBs resident after parse |
 | `zero-compressed-size-bomb.zip` | F2 — DEFLATE + compressedSize 0 accepted |
 | `file-vault-session.json` | F8 — plaintext sentinel cookie |
+| `beacon_server.py` / `beacon-host.log` | Loopback sink; F3 + EPUB phone-home |
+| `hostile-js.epub` | EPUB with JS, custom scheme, sibling secret |
+| `hostile-epub-webkit.json` | `document.cookie` empty; `file://` chapter href |
+| `symlink-followed.secret` | F12 — `Data(contentsOf:)` followed the link |
+| `temp-download-escape.txt` | F11 — `Downloads/../escape.epub` |
+| `tombstone-coercion.txt` | F10 — `nope` → `savedWork` |
+| `cascading-vault-outcome.txt` | Sim Keychain accepted session (`keychain=true file=false`) |
+| `sanitizer-js-url.xhtml` | `javascript:` href stripped |
 
 ### Tests that did not produce a usable extra result
 
