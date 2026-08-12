@@ -766,26 +766,28 @@ struct AddWorkToQueueCard: View {
     init() {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
-                       minHeight: cardSize.height)
-                .overlay {
+        // Icon + label live inside the dashed box itself (not stacked below it,
+        // like NewReadingQueueCard does) so this card's total footprint matches
+        // a real work card's height instead of running taller than the row.
+        RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+            .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+            .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
+                   minHeight: cardSize.height)
+            .overlay {
+                VStack(spacing: 6) {
                     Image(systemName: "plus")
-                        .font(.system(size: 34, weight: .medium))
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text("Add Work")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("From your library")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            Text("Add Work")
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            Text("From your library")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .frame(width: cardSize.width, alignment: .leading)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+            }
     }
 }
 
