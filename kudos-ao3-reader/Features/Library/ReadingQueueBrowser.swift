@@ -47,6 +47,7 @@ struct ReadingQueueBrowserView: View {
     @State private var pendingCompactOrder: [UUID]?
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
+    @State private var showingAddWorks = false
     var cardSize = ScaledCarouselCardSize()
 
     /// Saved for Later first, then customs by `sortOrder`.
@@ -124,6 +125,11 @@ struct ReadingQueueBrowserView: View {
         #endif
             .onAppear(perform: resolveInitialSelection)
             .sheet(isPresented: $showingNewQueue) { newQueueSheet }
+            .sheet(isPresented: $showingAddWorks) {
+                if let selectedQueue {
+                    AddWorksToQueueView(queue: selectedQueue)
+                }
+            }
             .inspector(isPresented: $showingFilters) {
                 LibraryFilterPanel(
                     filters: $filters,
@@ -367,6 +373,12 @@ struct ReadingQueueBrowserView: View {
                 )
             } description: {
                 Text("Works you add to this queue will keep a local EPUB for offline reading.")
+            } actions: {
+                Button {
+                    showingAddWorks = true
+                } label: {
+                    Label("Add Works", systemImage: "plus")
+                }
             }
         } else {
             Group {
@@ -398,6 +410,38 @@ struct ReadingQueueBrowserView: View {
 
     private var detailedList: some View {
         List {
+            // Full-width dashed row (not the fixed-size grid card) so it reads as a
+            // normal list entry under `.cardRow()`. Hidden during reorder/select so
+            // it never participates in `.onMove` or bulk selection.
+            if !isReordering && !isSelecting {
+                Button {
+                    showingAddWorks = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Spacer()
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .medium))
+                        Text("Add Work")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                    }
+                    // Match the visual weight of a short work row without wedging a
+                    // full-size card into the List.
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .foregroundStyle(.secondary)
+                    .overlay {
+                        // strokeBorder draws inside the path so the dash isn't clipped
+                        // by the list row's content bounds.
+                        RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add Work")
+                .accessibilityHint("Opens a list of library works you can add to this queue.")
+                .cardRow()
+            }
             ForEach(displayedWorks) { work in
                 SensitiveWorkRow(
                     work: work,
@@ -430,6 +474,16 @@ struct ReadingQueueBrowserView: View {
     private var compactGrid: some View {
         ScrollView {
             LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
+                if !isReordering && !isSelecting {
+                    Button {
+                        showingAddWorks = true
+                    } label: {
+                        AddWorkToQueueCard()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Add Work")
+                    .accessibilityHint("Opens a list of library works you can add to this queue.")
+                }
                 ForEach(compactDisplayedWorks) { work in
                     compactCard(work)
                 }
@@ -529,6 +583,11 @@ struct ReadingQueueBrowserView: View {
                         onClearFilters: { filters = LibraryFilters() }
                     )
                     WorkListMoreMenu {
+                        Button {
+                            showingAddWorks = true
+                        } label: {
+                            Label("Add Works", systemImage: "plus")
+                        }
                         Button {
                             setReordering(true)
                         } label: {
@@ -689,5 +748,213 @@ struct ReadingQueueBrowserView: View {
         for work in selectedWorks {
             ReadingQueueService.removeFromQueue(work, from: queue, in: context)
         }
+    }
+}
+
+// MARK: - Add works to queue
+
+/// Dashed "+" card for a queue's compact grid — same tile and stroke as
+/// `NewReadingQueueCard`, so it reads as the same "create/add" affordance
+/// inside the works grid rather than a full cover card.
+struct AddWorkToQueueCard: View {
+    /// Scales width and height together so the card grows proportionally at
+    /// large Dynamic Type sizes instead of only getting taller — matches
+    /// `NewReadingQueueCard`'s sizing so the two dashed cards stay consistent.
+    var cardSize = ScaledCarouselCardSize()
+
+    /// Explicit, non-defaulted init — see `ReadingQueueCard.init`.
+    init() {}
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
+                       minHeight: cardSize.height)
+                .overlay {
+                    Image(systemName: "plus")
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            Text("Add Work")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+            Text("From your library")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: cardSize.width, alignment: .leading)
+    }
+}
+
+/// The membership rules behind `AddWorksToQueueView`, kept free of view/@Query
+/// state so they're unit-testable. Privacy filtering stays in the view (it needs the
+/// live `PrivacyGate`); everything here is pure eligibility. Adding itself is *not*
+/// here — queues call the async `ReadingQueueService.addAndPreserve` so each new
+/// member keeps a local EPUB (Collections' sync `add` is insufficient).
+enum ReadingQueueWorkPicker {
+    /// Library works eligible to be added to `queue`: real works only (queue-only
+    /// EPUB-preservation records are excluded) that aren't already members.
+    /// Pending-deletion filtering is the caller's `@Query` responsibility.
+    static func candidates(from works: [SavedWork], notIn queue: ReadingQueue) -> [SavedWork] {
+        works.filter { work in
+            !work.isQueueOnlyWork && !queue.memberships.contains { $0.work?.id == work.id }
+        }
+    }
+}
+
+/// A sheet, opened from a queue's own page, to pick existing Library works and add
+/// them to that queue. Mirrors `AddWorksToCollectionView`, but each confirm runs
+/// `ReadingQueueService.addAndPreserve` so membership also triggers EPUB download —
+/// hence the in-flight `isAdding` busy state and swipe-dismiss lock.
+struct AddWorksToQueueView: View {
+    let queue: ReadingQueue
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppRouter.self) private var router
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
+    private var allWorks: [SavedWork]
+
+    @State private var selection = Set<UUID>()
+    @State private var query = ""
+    @State private var isAdding = false
+
+    /// Real Library works not already in this queue — same universe LibraryView's
+    /// select mode uses (excludes queue-only preservation records and, in Hide mode,
+    /// mature works), so the picker never offers a work twice or leaks a hidden one.
+    private var candidates: [SavedWork] {
+        ReadingQueueWorkPicker.candidates(from: allWorks, notIn: queue)
+            .filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+    }
+
+    private var filtered: [SavedWork] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return candidates }
+        return candidates.filter { work in
+            work.title.lowercased().contains(trimmed)
+                || work.author.lowercased().contains(trimmed)
+                || work.workFandoms.contains { $0.lowercased().contains(trimmed) }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if candidates.isEmpty {
+                    ContentUnavailableView {
+                        Label("No works to add", systemImage: "list.bullet.rectangle")
+                    } description: {
+                        Text("Every work in your library is already in this queue, "
+                            + "or there are no works to add yet.")
+                    }
+                } else {
+                    List {
+                        ForEach(filtered) { work in
+                            Button { toggle(work) } label: { row(work) }
+                                .buttonStyle(.plain)
+                                .disabled(isAdding)
+                        }
+                        .appThemedRows()
+                        if filtered.isEmpty {
+                            Text("No works match “\(query)”.")
+                                .foregroundStyle(.secondary)
+                                .appThemedRows()
+                        }
+                    }
+                    .appThemedScroll()
+                    // Default placement — .navigationBarDrawer is iOS-only and would
+                    // break the macOS build.
+                    .searchable(text: $query, prompt: "Filter works")
+                    .disabled(isAdding)
+                }
+            }
+            .navigationTitle("Add to \(queue.displayName)")
+            #if !os(macOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                            .disabled(isAdding)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            Task { await addSelected() }
+                        } label: {
+                            if isAdding {
+                                ProgressView()
+                            } else {
+                                Text(selection.isEmpty ? "Add" : "Add (\(selection.count))")
+                            }
+                        }
+                        .disabled(selection.isEmpty || isAdding)
+                    }
+                }
+        }
+        .presentationDragIndicator(.visible)
+        // Multi-add runs serial EPUB preserves; don't let a swipe abort mid-loop.
+        .interactiveDismissDisabled(isAdding)
+    }
+
+    private func row(_ work: SavedWork) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(work.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                if !work.author.isEmpty {
+                    AO3AuthorBylineView(
+                        displayText: work.author,
+                        identities: work.verifiedAuthorIdentities,
+                        font: .caption,
+                        compact: true,
+                        onOpenRoute: { route in
+                            guard !isAdding else { return }
+                            dismiss()
+                            router.openAuthorProfile(route)
+                        }
+                    )
+                }
+            }
+            Spacer(minLength: 8)
+            Image(systemName: selection.contains(work.id) ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(selection.contains(work.id) ? Color.accentColor : Color.secondary)
+                .imageScale(.large)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
+        .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
+    }
+
+    private func toggle(_ work: SavedWork) {
+        guard !isAdding else { return }
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func addSelected() async {
+        // Re-entrancy guard: a second quick tap can spawn another Task before the
+        // first `isAdding = true` re-render disables the button.
+        guard !isAdding else { return }
+        let chosen = candidates.filter { selection.contains($0.id) }
+        guard !chosen.isEmpty else { dismiss(); return }
+        isAdding = true
+        for work in chosen {
+            _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+        }
+        dismiss()
     }
 }
