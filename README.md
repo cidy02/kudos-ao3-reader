@@ -2,7 +2,11 @@
 
 Kudos is an open-source **AO3 reader** for **iPhone**, **iPad**, and **Mac**. It is a native SwiftUI app for browsing [Archive of Our Own](https://archiveofourown.org), downloading works for **offline EPUB reading**, and managing a personal library—built with privacy in mind and released under AGPL-3.0.
 
-![Kudos Library on iPhone — local library with Reading Now and Saved for Later sections](docs/assets/screenshot-library.png)
+| Library | Work detail |
+| :---: | :---: |
+| ![Library — Reading Now and Saved for Later with local works](docs/assets/screenshot-library.png) | ![Work detail — summary, metadata, and quick actions for a downloaded work](docs/assets/screenshot-work-detail.png) |
+| **Reader** | **Search filters** |
+| ![Reader — offline EPUB reading in dark theme](docs/assets/screenshot-reader.png) | ![Filters — sort, rating, and archive-warning search controls](docs/assets/screenshot-filters.png) |
 
 ## What Kudos does
 
