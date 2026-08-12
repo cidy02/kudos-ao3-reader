@@ -341,7 +341,7 @@ fun CardMetaSeparator(modifier: Modifier = Modifier) {
  * Uses HSL wash over the MD3 surface container — not iOS cover-art cloning.
  */
 @Composable
-private fun coverContainerColor(title: String): Color {
+internal fun coverContainerColor(title: String): Color {
     val base = MaterialTheme.colorScheme.surfaceContainerHigh
     val hue = coverHue(title)
     val wash = Color.hsl(

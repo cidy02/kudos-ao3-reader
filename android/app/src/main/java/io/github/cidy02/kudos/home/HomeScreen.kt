@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -98,11 +99,9 @@ fun HomeScreen(
     var isSelecting by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
     
-    val allLocalWorks = remember(state.continueReading, state.recentlyUpdated, state.favorites, state.recentlyOpened) {
-        (state.continueReading.map { it.item.work } + 
-         state.recentlyUpdated.map { it.item.work } + 
-         state.favorites.map { it.item.work } + 
-         state.recentlyOpened.map { it.item.work }).distinctBy { it.id }
+    val allLocalWorks = remember(state.continueReading, state.recentlyUpdated) {
+        (state.continueReading.map { it.item.work } +
+         state.recentlyUpdated.map { it.item.work }).distinctBy { it.id }
     }
     val selectedWorks = allLocalWorks.filter { it.id in selection }
     val allLocalSelected = allLocalWorks.isNotEmpty() && selection.containsAll(allLocalWorks.map { it.id })
@@ -164,31 +163,101 @@ fun HomeScreen(
             }
         }
 
-        // Section order matches iOS Home: Reading Now, Recently Updated,
-        // Subscriptions, Favorites, Recently Opened (no Recently Added).
+        // Section order matches iOS Home: Continue Reading (hero + strip),
+        // Recently Updated, Subscriptions.
         item {
-            HomeShelf(
-                title = "Continue Reading",
-                items = state.continueReading.take(HomeShelfLimit),
-                emptyMessage =
-                    "You're not reading anything right now. Start exploring in Browse or open something from your Library.",
-                isCollapsed = collapsedShelves["reading"],
-                onToggleCollapse = { collapsedShelves.toggle("reading") },
-                onOpenWork = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenWork(id)
-                },
-                onOpenReader = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenReader(id)
-                },
-                onReveal = onReveal,
-                footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.ReadingNow, isSelecting, selection) },
-                isSelecting = isSelecting,
-                selection = selection,
-                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Continue Reading",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                if (state.continueReading.isEmpty()) {
+                    EmptyStateCard(
+                        title = "Nothing here yet",
+                        message = "You're not reading anything right now. Start exploring in Browse or open something from your Library.",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                } else {
+                    val heroDisplay = state.continueReading.first()
+                    val heroWork = heroDisplay.item.work
+                    val heroObscured = heroDisplay.privacyVisibility == LibraryPrivacyVisibility.Obscured
+                    val heroCanRead = heroWork.hasEpub && !heroObscured
+                    HomeResumeHero(
+                        work = heroWork,
+                        obscured = heroObscured,
+                        onOpen = { 
+                            if (heroCanRead) {
+                                viewModel.onOpenLocalWork(heroWork.id)
+                                onOpenReader(heroWork.id)
+                            } else {
+                                viewModel.onOpenLocalWork(heroWork.id)
+                                onOpenWork(heroWork.id)
+                            }
+                        },
+                        onOpenDetails = {
+                            viewModel.onOpenLocalWork(heroWork.id)
+                            onOpenWork(heroWork.id)
+                        },
+                        onReveal = { onReveal(heroWork.id) },
+                        isSelecting = isSelecting,
+                        isSelected = heroWork.id in selection,
+                        onToggleSelection = { 
+                            selection = if (heroWork.id in selection) selection - heroWork.id else selection + heroWork.id 
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    
+                    if (state.continueReading.size > 1) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "More In Progress",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            if (state.continueReading.size > 5) {
+                                TextButton(onClick = { onOpenSection(HomeSectionKind.ReadingNow, isSelecting, selection) }) {
+                                    Text("See all")
+                                }
+                            }
+                        }
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(state.continueReading.drop(1).take(4), key = { "resume-${it.item.work.id}" }) { display ->
+                                val work = display.item.work
+                                val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
+                                val canRead = work.hasEpub && !obscured
+                                HomeResumeStripCard(
+                                    work = work,
+                                    obscured = obscured,
+                                    onOpen = { 
+                                        if (canRead) {
+                                            viewModel.onOpenLocalWork(work.id)
+                                            onOpenReader(work.id)
+                                        } else {
+                                            viewModel.onOpenLocalWork(work.id)
+                                            onOpenWork(work.id)
+                                        }
+                                    },
+                                    onReveal = { onReveal(work.id) },
+                                    isSelecting = isSelecting,
+                                    isSelected = work.id in selection,
+                                    onToggleSelection = { 
+                                        selection = if (work.id in selection) selection - work.id else selection + work.id 
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
         item {
             HomeShelf(
@@ -222,52 +291,6 @@ fun HomeScreen(
                 onToggleCollapse = { collapsedShelves.toggle("subscriptions") },
                 onOpenRemoteWork = onOpenRemoteWork,
                 onSeeAll = onOpenSubscriptionsList
-            )
-        }
-        item {
-            HomeShelf(
-                title = "Favorites",
-                items = state.favorites.take(HomeShelfLimit),
-                emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
-                isCollapsed = collapsedShelves["favorites"],
-                onToggleCollapse = { collapsedShelves.toggle("favorites") },
-                onOpenWork = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenWork(id)
-                },
-                onOpenReader = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenReader(id)
-                },
-                onReveal = onReveal,
-                footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.Favorites, isSelecting, selection) },
-                isSelecting = isSelecting,
-                selection = selection,
-                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
-            )
-        }
-        item {
-            HomeShelf(
-                title = "Recently Opened",
-                items = state.recentlyOpened.take(HomeShelfLimit),
-                emptyMessage = "Nothing opened recently. Start reading to see your history here.",
-                isCollapsed = collapsedShelves["opened"],
-                onToggleCollapse = { collapsedShelves.toggle("opened") },
-                onOpenWork = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenWork(id)
-                },
-                onOpenReader = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenReader(id)
-                },
-                onReveal = onReveal,
-                footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyOpened, isSelecting, selection) },
-                isSelecting = isSelecting,
-                selection = selection,
-                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
             )
         }
         item {

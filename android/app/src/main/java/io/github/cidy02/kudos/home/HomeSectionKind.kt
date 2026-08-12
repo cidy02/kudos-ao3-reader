@@ -27,16 +27,6 @@ enum class HomeSectionKind(val id: String, val title: String, val emptyMessage: 
         // by hasUpdate, not subscriptions. Deliberate divergence — see
         // docs/iOS_Issues_Found_While_Porting.md #1.
         emptyMessage = "No recent updates from your library works yet."
-    ),
-    Favorites(
-        id = "favorites",
-        title = "Favorites",
-        emptyMessage = "No favorites yet. Mark works as favorites to see them here."
-    ),
-    RecentlyOpened(
-        id = "recentlyOpened",
-        title = "Recently Opened",
-        emptyMessage = "Nothing opened recently. Start reading to see your history here."
     );
 
     /**
@@ -50,19 +40,10 @@ enum class HomeSectionKind(val id: String, val title: String, val emptyMessage: 
             .filter { it.isInProgress && !it.isQueueOnlyWork && visible(it) }
             .sortedByDescending { it.recency }
 
-        Favorites -> from
-            .filter { it.isFavorite && visible(it) }
-            .sortedByDescending { it.recency }
-
         // Works AO3 has added chapters to since the user last saw them.
         RecentlyUpdated -> from
             .filter { it.hasUpdate && !it.isQueueOnlyWork && visible(it) }
             .sortedByDescending { it.lastUpdateCheck ?: Instant.EPOCH }
-
-        // Anything actually opened, newest first.
-        RecentlyOpened -> from
-            .filter { it.lastReadDate != null && !it.isQueueOnlyWork && visible(it) }
-            .sortedByDescending { it.lastReadDate ?: Instant.EPOCH }
     }
 
     private val SavedWork.recency: Instant
