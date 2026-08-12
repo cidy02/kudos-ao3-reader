@@ -190,7 +190,13 @@ struct ReadingQueueBrowserView: View {
         HStack(spacing: 10) {
             Button { showingSwitcher = true } label: {
                 Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 15, weight: .semibold))
+                    // 17pt (.body scale), not the 15pt this app's other custom glass
+                    // bars use (e.g. ReaderChromeTopBar) — those pair a custom top bar
+                    // with a custom bottom bar sized to match each other, but this
+                    // screen's top bar is a real system .toolbar (FilterButton /
+                    // WorkListMoreMenu use the platform's own default, larger icon
+                    // size), so 15pt here read smaller than the bar above it.
+                    .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }
@@ -200,7 +206,11 @@ struct ReadingQueueBrowserView: View {
             .popover(isPresented: $showingSwitcher, arrowEdge: .bottom) {
                 switcherList
                     .presentationCompactAdaptation(.sheet)
-                    .presentationDetents([.medium, .large])
+                    // Sized to actual content instead of a fixed .medium fraction of
+                    // the screen — with only 2-4 queues, .medium left a large dead
+                    // black area below the last row. .large stays available so a
+                    // long queue list can still be dragged up to scroll.
+                    .presentationDetents([switcherListHeight, .large])
             }
 
             Button { showingSwitcher = true } label: {
@@ -228,7 +238,7 @@ struct ReadingQueueBrowserView: View {
                 showingNewQueue = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }
@@ -310,6 +320,18 @@ struct ReadingQueueBrowserView: View {
     }
 
     // MARK: - Switcher list
+
+    /// Fits the popover's sheet to the actual row count instead of the fixed
+    /// .medium detent (~50% of screen height), which left a large empty area
+    /// below the last row whenever there were only a few queues. Clamped so a
+    /// single queue doesn't render a too-short sheet and a long list doesn't
+    /// grow unbounded before the user drags to the .large detent.
+    private var switcherListHeight: PresentationDetent {
+        let rowHeight: CGFloat = 54
+        let chrome: CGFloat = 40 // drag indicator + List's own top/bottom insets
+        let content = CGFloat(orderedQueues.count) * rowHeight + chrome
+        return .height(min(max(content, 160), 500))
+    }
 
     private var switcherList: some View {
         List {
