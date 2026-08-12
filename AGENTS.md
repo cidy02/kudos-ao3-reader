@@ -17,7 +17,7 @@
 ## Project in one paragraph
 
 Kudos is a native **SwiftUI + SwiftData** reader for Archive of Our Own, targeting
-**iOS / iPadOS / macOS** (GPL-3.0). It scrapes AO3's public HTML with SwiftSoup
+**iOS / iPadOS / macOS** (AGPL-3.0). It scrapes AO3's public HTML with SwiftSoup
 (AO3 has no API), imports works as EPUBs, and reads them in a native reader. See
 [`README.md`](README.md) for features and build instructions, and
 [`docs/PROJECT_PHILOSOPHY.md`](docs/PROJECT_PHILOSOPHY.md) for the product
