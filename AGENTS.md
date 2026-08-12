@@ -4,29 +4,38 @@
 > This project is worked on by multiple AIs (Claude, Codex) plus the human owner.
 > This file is the contract that keeps us from clobbering each other's work.
 
+## Operational docs (read the ones your task touches)
+
+| Doc | When |
+|---|---|
+| [`docs/AGENT_ONBOARDING.md`](docs/AGENT_ONBOARDING.md) | Always — pitfalls + definition of done |
+| [`docs/ARCHITECTURE_MAP.md`](docs/ARCHITECTURE_MAP.md) | Finding where anything lives |
+| [`docs/DATA_AND_PERSISTENCE_INVARIANTS.md`](docs/DATA_AND_PERSISTENCE_INVARIANTS.md) | Models, backup, sync, deletion, import |
+| [`docs/AO3_NETWORKING_POLICY.md`](docs/AO3_NETWORKING_POLICY.md) | Anything that talks to AO3 |
+| [`docs/REGRESSION_TEST_MATRIX.md`](docs/REGRESSION_TEST_MATRIX.md) | Before claiming "done"; where new tests go |
+
 ## Project in one paragraph
 
 Kudos is a native **SwiftUI + SwiftData** reader for Archive of Our Own, targeting
-**iOS / iPadOS / macOS** (GPL-3.0). It scrapes AO3's public HTML with SwiftSoup
+**iOS / iPadOS / macOS** (AGPL-3.0). It scrapes AO3's public HTML with SwiftSoup
 (AO3 has no API), imports works as EPUBs, and reads them in a native reader. See
 [`README.md`](README.md) for features and build instructions, and
 [`docs/PROJECT_PHILOSOPHY.md`](docs/PROJECT_PHILOSOPHY.md) for the product
 direction, design/engineering principles, and the final guiding principle every
 contribution is measured against.
 
-## Branch — single `main`
+## Branches — `main` is gated; features stack on `merge-test`
 
-The project is a **single `main` branch** (origin default; private
-`github.com/cidy02/kudos-ao3-reader`). A `main` (legacy) / `readium-migration` split
-existed during the reader migration; it was **consolidated into `main` in June 2026**,
-and all other branches (`readium-migration`, `test/card-lists`, etc.) were deleted.
-Just commit to `main` — there is no more cross-branch porting / cherry-picking.
+*(Updated 2026-07-07; supersedes the earlier "just commit to main" rule.)*
 
-**Android port exception:** the human-approved Android port branch is
-`kudos-ao3-reader-android`. Android-port work must happen on that branch (or a
-short-lived branch/worktree based from it), not directly on `main`, until the
-human explicitly approves a merge. See `docs/android/ANDROID_PORT_PLAN.md` and
-`docs/ai/HANDOFF.md`.
+- **`main`** (origin default; **public** `github.com/cidy02/kudos-ao3-reader`) = last
+  human-approved state. **Never commit to it directly** — merging requires the human
+  UI approval gate in `TASKS.md` ("UI Consistency & Density Audit").
+- **`merge-test`** = integration branch: a linear chain of every feature since T-65.
+- **Feature work**: one focused branch per task, created from the current tip of the
+  stack (check `TASKS.md`'s newest rows for the tip), with its own T-xx row,
+  verification evidence, and an adversarial review before merging.
+- **`kudos-ao3-reader-android`** is a separate product line — never merge or delete it.
 
 **Reader (per-platform, one codebase):** `BookReaderView` routes **iOS → Readium**
 (`Features/ReaderReadium/`, the Readium Swift Toolkit) and **macOS → the legacy
@@ -58,18 +67,9 @@ branch, touch only its files, and never revert another agent's commits.**
    [`TASKS.md`](TASKS.md)** (the Bugs / Feature Ideas / UI Polish registries).
 3. If your work touches the reader or the migration, read
    **`READIUM_MIGRATION_NOTES.md`** (gitignored, local-only — ask the human if absent).
-4. **Before writing any Swift code**, skim **`docs/xcode/latest/`** (gitignored,
-   local-only). This is Apple's own LLM-oriented Markdown documentation, bundled
-   inside Xcode and synced into the repo via `Scripts/sync-xcode-docs.sh` — current
-   platform APIs and best practices (SwiftUI, SwiftData, Foundation, Swift
-   Concurrency, Liquid Glass, etc.) written for an AI writing Apple-platform code,
-   not general web docs. If the directory is missing or looks stale for the SDK
-   you're targeting, run `Scripts/sync-xcode-docs.sh` to refresh it before
-   proceeding — don't guess at current API shape from training data when this is
-   sitting right there.
-5. Run `git status` + `git branch --show-current`. Know where you are and that the
+4. Run `git status` + `git branch --show-current`. Know where you are and that the
    tree is clean before you start.
-6. **Claim your task in `TASKS.md`** (set `Owner` + `🔄 IN PROGRESS`) before editing.
+5. **Claim your task in `TASKS.md`** (set `Owner` + `🔄 IN PROGRESS`) before editing.
    If a task is already in progress under another owner, pick a different one.
 
 ## Git workflow
@@ -79,10 +79,9 @@ branch, touch only its files, and never revert another agent's commits.**
 - **Commit messages:** imperative subject; short body explaining *why*; end with
   your own co-author trailer, e.g.
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-- **Branching:** work directly on **`main`** for normal tasks (the human prefers this
-  to PR branches for a solo repo). Use a feature branch only for a risky/large spike,
-  and say so in `TASKS.md`. (No more cross-branch porting — single branch.)
-- **Pushing:** push as you go (`git push origin main`) unless told to batch.
+- **Branching:** see "Branches" above — one feature branch per task off the stack's
+  tip; never commit to `main` directly.
+- **Pushing:** push your feature branch as you go (`git push -u origin <branch>`).
   A `could not resolve host` failure is a transient DNS hiccup — just retry.
 - **Verify before commit:** `Scripts/lint.sh` (SwiftLint gate) and `Scripts/test.sh`.
   Build **both** iOS (resolves the Readium SPM graph) and **macOS** (legacy reader,
@@ -144,3 +143,15 @@ The next agent should continue from `TASKS.md` + your commit with **zero archaeo
   ## UI Consistency
   - UI modernization must preserve or improve information density, a visually cleaner design that reduces scanability or hides metadata is considered a regression unless explicitly approved.
     - New UI elements should be consistent with existing elements, unless explicitly approved.
+
+## Future Agent Checklist (before writing any code)
+
+1. `git status` + `git branch --show-current` — clean tree, correct branch (feature branch off the stack's tip; **never `main`**).
+2. Read [`docs/AGENT_ONBOARDING.md`](docs/AGENT_ONBOARDING.md) — the pitfalls table is real scar tissue, not boilerplate.
+3. Claim a `TASKS.md` row before editing; check nobody else owns it.
+4. Locate your target in [`docs/ARCHITECTURE_MAP.md`](docs/ARCHITECTURE_MAP.md) — reuse the named service/component; do not write a second matcher, importer, UA string, or blur implementation.
+5. Touching models/backup/sync/deletion? Re-read [`docs/DATA_AND_PERSISTENCE_INVARIANTS.md`](docs/DATA_AND_PERSISTENCE_INVARIANTS.md). Touching AO3 traffic? [`docs/AO3_NETWORKING_POLICY.md`](docs/AO3_NETWORKING_POLICY.md) — the "must not implement" list is binding.
+6. New Swift files need **no** pbxproj edit; revert cosmetic pbxproj churn.
+7. Before "done": **`Scripts/verify.sh`** all green (invariants → lint → iOS suite → macOS build → whitespace) → tests added per [`docs/REGRESSION_TEST_MATRIX.md`](docs/REGRESSION_TEST_MATRIX.md) → any `docs/*.md` statement your change falsified updated in the same commit → `TASKS.md` row updated with what was verified **and what remains manual**.
+8. Merge-bound work gets an adversarial review per [`docs/ADVERSARIAL_REVIEW_TEMPLATE.md`](docs/ADVERSARIAL_REVIEW_TEMPLATE.md); write multi-part task prompts per [`docs/TASK_PROMPT_TEMPLATE.md`](docs/TASK_PROMPT_TEMPLATE.md).
+9. Never claim UI is visually correct without seeing it; the human screenshot gate applies to all UI changes.

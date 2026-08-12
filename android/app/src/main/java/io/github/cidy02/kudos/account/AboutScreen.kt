@@ -60,9 +60,9 @@ fun AboutScreen(
 
         Text("License", style = MaterialTheme.typography.titleMedium)
         Text(
-            text = "Kudos is free software, released under the GNU General Public " +
-                "License v3.0. You may use, study, share, and modify it under the " +
-                "terms of that license.",
+            text = "Kudos is free software, released under the GNU Affero General " +
+                "Public License v3.0 (AGPL-3.0). You may use, study, share, and " +
+                "modify it under the terms of that license.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -82,6 +82,13 @@ fun AboutScreen(
             license = "BSD-3-Clause",
             detail = "The EPUB reading engine.",
             url = "https://github.com/readium/kotlin-toolkit",
+            onOpenUrl = { openUrl(context, it) }
+        )
+        DependencyCredit(
+            name = "MuPDF",
+            license = "AGPL-3.0",
+            detail = "PDF rendering engine for offline PDF works.",
+            url = "https://mupdf.com",
             onOpenUrl = { openUrl(context, it) }
         )
 
