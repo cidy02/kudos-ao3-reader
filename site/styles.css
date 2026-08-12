@@ -169,7 +169,8 @@ p {
 .container {
   max-width: 1024px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding-left: 24px;
+  padding-right: 24px;
 }
 
 main > section {
