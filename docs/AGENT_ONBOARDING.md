@@ -4,7 +4,7 @@ Operational doc for AI agents. Facts below are **confirmed against the codebase 
 
 ## What Kudos is
 
-Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, GPL-3.0). Scrapes AO3's public HTML with SwiftSoup (no official API), downloads works as EPUBs, reads them natively. Unofficial; not affiliated with OTW/AO3 (README.md:139). Single app target `AO3_App_OpenSource`, product name `Kudos`, bundle `com.cidy02.Kudos`, scheme `AO3_App_OpenSource`.
+Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL-3.0). Scrapes AO3's public HTML with SwiftSoup (no official API), downloads works as EPUBs, reads them natively. Unofficial; not affiliated with OTW/AO3 (README.md:139). Single app target `AO3_App_OpenSource`, product name `Kudos`, bundle `com.cidy02.Kudos`, scheme `AO3_App_OpenSource`.
 
 ## High-level architecture
 
