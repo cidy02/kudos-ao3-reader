@@ -429,7 +429,7 @@ struct WorkStateBadge: View {
 
 /// Author/fandom meta row for work cards: a theme-tinted icon paired with
 /// secondary text, matching the tinted-icon style of `WorkStatLabel`.
-private struct CardMetaLabel: View {
+struct CardMetaLabel: View {
     let text: String
     let symbol: String
     var lineLimit: Int = 1
