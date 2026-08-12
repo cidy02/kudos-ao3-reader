@@ -8,8 +8,6 @@ import Foundation
 enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     case readingNow
     case recentlyUpdated
-    case favorites
-    case recentlyOpened
 
     var id: String {
         rawValue
@@ -19,8 +17,6 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
         switch self {
         case .readingNow: "Reading Now"
         case .recentlyUpdated: "Recently Updated"
-        case .favorites: "Favorites"
-        case .recentlyOpened: "Recently Opened"
         }
     }
 
@@ -31,10 +27,6 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
             "You're not reading anything right now. Start exploring in Browse or open something from your Library."
         case .recentlyUpdated:
             "No recent updates from your subscriptions yet."
-        case .favorites:
-            "No favorites yet. Mark works as favorites to see them here."
-        case .recentlyOpened:
-            "Nothing opened recently. Start reading to see your history here."
         }
     }
 
@@ -42,8 +34,6 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
         switch self {
         case .readingNow: "book"
         case .recentlyUpdated: "sparkles"
-        case .favorites: "star"
-        case .recentlyOpened: "clock"
         }
     }
 
@@ -56,20 +46,11 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
             works
                 .filter { $0.isInProgress && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { recency($0) > recency($1) }
-        case .favorites:
-            works
-                .filter { $0.isFavorite && visible($0) }
-                .sorted { recency($0) > recency($1) }
         case .recentlyUpdated:
             // Works AO3 has added chapters to since the user last saw them.
             works
                 .filter { $0.hasUpdate && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { ($0.lastUpdateCheck ?? .distantPast) > ($1.lastUpdateCheck ?? .distantPast) }
-        case .recentlyOpened:
-            // Anything actually opened (has a read date), newest first.
-            works
-                .filter { $0.lastReadDate != nil && !$0.isQueueOnlyWork && visible($0) }
-                .sorted { ($0.lastReadDate ?? .distantPast) > ($1.lastReadDate ?? .distantPast) }
         }
     }
 
