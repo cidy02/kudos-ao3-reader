@@ -21,7 +21,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 | Xcode | Xcode-beta at `/Applications/Xcode-beta.app` is the active toolchain (`xcode-select -p`). `Scripts/build-macos.sh` pins a stable build for macOS. |
 | Test destination | `platform=iOS Simulator,name=iPhone 17,OS=26.5` (canonical, used in TASKS.md verification notes). |
 | Parallel tests | **Disabled** (`Scripts/test.sh` passes `-parallel-testing-enabled NO`): `PersistenceOperationGate` is a process-wide static lock; parallel suites contend it and flake. Persistence-touching suites are `@Suite(.serialized)`. |
-| Signing | Simulator/tests: `CODE_SIGNING_ALLOWED=NO`. Device builds need a team in Xcode's Accounts pane. ⚠️ Policy drift: AGENTS.md says keep `DEVELOPMENT_TEAM` scrubbed to `""`, but commit `bcfe335`'s follow-ups carry `NQH85H7343` — human decision pending; don't "fix" either way without asking. |
+| Signing | Simulator/tests: `CODE_SIGNING_ALLOWED=NO`. Device builds need a team in Xcode's Accounts pane. macOS **Release** must not ad-hoc-sign (`CODE_SIGN_IDENTITY[sdk=macosx*] = "-"` is Debug-only) and must set `ENABLE_HARDENED_RUNTIME = YES`; `Scripts/check-macos-release-entitlements.sh` is the gate. A local Apple Development sign is not a distribution sign — Developer ID Application is still required for notarization. ⚠️ Policy drift: AGENTS.md says keep `DEVELOPMENT_TEAM` scrubbed to `""`, but commit `bcfe335`'s follow-ups carry `NQH85H7343` — human decision pending; don't "fix" either way without asking. |
 | Release config | Historical: Release builds once crashed the beta Swift compiler in vendored SwiftSoup (T-66 note). Verify before assuming Release works. |
 
 ## Branch / workflow rules (supersedes AGENTS.md's old "just commit to main")
