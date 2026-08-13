@@ -1448,7 +1448,7 @@ struct KudosBackupTests {
         ])
         
         let contents = try KudosBackupContents(zipData: zipData)
-        #expect(contents.epubFiles.isEmpty, "Lazy loading should leave epubFiles empty until requested")
+        #expect(contents.epubData(for: workID) == epubData, "EPUB bytes should be retrievable on demand")
     }
 
     @Test @MainActor func directoryPreConfirmDoesNotMaterializeEPUBs() throws {

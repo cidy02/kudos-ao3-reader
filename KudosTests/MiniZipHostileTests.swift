@@ -111,7 +111,7 @@ struct MiniZipHostileTests {
                 method: 8,
                 payload: Data(),
                 declaredCompressedSize: 0,
-                declaredUncompressedSize: 500_000_000
+                declaredUncompressedSize: 2_000_000 // Must stay under 200MB maxSingleEntryUncompressedSize
             )
         ])
         #expect(throws: MiniZipError.suspiciousCompressionRatio) {
