@@ -1155,7 +1155,7 @@ private extension String {
 }
 
 /// An error surfaced from the AO3 client, with a user-facing description.
-nonisolated enum AO3Error: LocalizedError, Sendable {
+nonisolated enum AO3Error: LocalizedError, Sendable, Equatable {
     /// HTTP 429. `retryAfter` is the server's `Retry-After` hint in seconds, if given.
     case rateLimited(retryAfter: TimeInterval?)
     case notFound
@@ -1171,6 +1171,9 @@ nonisolated enum AO3Error: LocalizedError, Sendable {
     /// AO3 bounced an authenticated request to its login page — the saved session
     /// is no longer valid and the user needs to sign in again.
     case authenticationRequired
+    /// Anonymous `getHTML` / `imageData` was asked to fetch a non-AO3 host
+    /// (M6). Never retried; the request must not leave the process.
+    case untrustedHost
 
     var errorDescription: String? {
         switch self {
@@ -1182,6 +1185,7 @@ nonisolated enum AO3Error: LocalizedError, Sendable {
         case let .network(detail): detail
         case .parse: "AO3's page format wasn't what the app expected."
         case .authenticationRequired: "Your AO3 session expired. Please log in again."
+        case .untrustedHost: "That address is not Archive of Our Own."
         }
     }
 }

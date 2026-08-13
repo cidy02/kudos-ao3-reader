@@ -43,6 +43,9 @@ final class ReaderController: NSObject {
 
     private let proxy = ReaderScriptProxy()
     private var loadedURL: URL?
+    /// Directory the chapter was opened with (`allowingReadAccessTo`). Off-origin
+    /// `file://` navigations are cancelled against this root (M8).
+    private var publicationRoot: URL?
     private var landOnLast = false
     /// Normalized position (0…1) to restore once the chapter's layout is ready.
     private var pendingRestoreFraction: Double?
@@ -59,6 +62,7 @@ final class ReaderController: NSObject {
 
     override init() {
         let configuration = WKWebViewConfiguration()
+        ReaderWebIsolation.applyIsolatedStore(to: configuration)
         // Process pools are shared by WebKit automatically on modern iOS.
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
@@ -90,6 +94,7 @@ final class ReaderController: NSObject {
         pendingRestoreFraction = landOnLast ? nil : restoreFraction
         generation += 1
         loadedURL = url
+        publicationRoot = readAccess
         page = 1
         pageTotal = 1
         webView.loadFileURL(url, allowingReadAccessTo: readAccess)
@@ -186,9 +191,17 @@ extension ReaderController: WKNavigationDelegate {
             decisionHandler(.allow)
             return
         }
-        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+        let origin: ReaderPublicationOrigin = {
+            if let publicationRoot { return .fileRoot(publicationRoot) }
+            if let loadedURL { return .fileRoot(loadedURL.deletingLastPathComponent()) }
+            return .fileRoot(url.deletingLastPathComponent())
+        }()
+        if !ReaderWebNavigationPolicy.allowsInReaderNavigation(to: url, origin: origin) {
             decisionHandler(.cancel)
-            onOpenExternalURL?(url)
+            if navigationAction.navigationType == .linkActivated,
+               ReaderWebNavigationPolicy.isWebURL(url) {
+                onOpenExternalURL?(url)
+            }
             return
         }
         if url.scheme?.lowercased() == "file", isCrossSpineNavigation(to: url),

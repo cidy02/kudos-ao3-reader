@@ -107,12 +107,28 @@ nonisolated enum Storage {
         return dir
     }
 
-    /// Temporary destination for an in-flight download.
+    /// Temporary destination for an in-flight download. `suggestedName` is a
+    /// basename only — `../`, `/`, and `\` are rejected (M11) so a hostile
+    /// Content-Disposition cannot escape `Caches/Downloads`.
     static func tempDownloadURL(suggestedName: String) -> URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Downloads", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let name = suggestedName.isEmpty ? "\(UUID().uuidString).epub" : suggestedName
-        return dir.appendingPathComponent(name)
+        return dir.appendingPathComponent(safeTempDownloadName(suggestedName))
+    }
+
+    /// Internal so the sanitizer is unit-testable without touching disk.
+    static func safeTempDownloadName(_ suggestedName: String) -> String {
+        let fallback = "\(UUID().uuidString).epub"
+        let candidate = suggestedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty,
+              URL(fileURLWithPath: candidate).lastPathComponent == candidate,
+              !candidate.contains("/"),
+              !candidate.contains("\\"),
+              !candidate.contains(".."),
+              candidate != ".",
+              candidate != ".."
+        else { return fallback }
+        return candidate
     }
 }

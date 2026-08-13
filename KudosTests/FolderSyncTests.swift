@@ -656,6 +656,66 @@ struct FolderSyncTests {
         #expect(third.skippedUnchanged)
     }
 
+    /// A4: a regular sync folder whose EPUB asset is a symlink to a file
+    /// outside the folder must not import that file's bytes (M12).
+    @Test func syncDownRejectsSymlinkedEPUBAsset() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let work = try insertWork(into: sourceContext, title: "Symlink Bait", ao3WorkID: 9301)
+        work.hasEPUB = true
+        try sourceContext.save()
+        let contents = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let syncDirectoryURL = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let worksDirectory = syncDirectoryURL
+            .appendingPathComponent(FolderSyncService.worksSubdirectoryName)
+        try FileManager.default.createDirectory(
+            at: worksDirectory,
+            withIntermediateDirectories: true
+        )
+        try contents.manifestData().write(
+            to: syncDirectoryURL.appendingPathComponent(FolderSyncService.manifestFileName),
+            options: .atomic
+        )
+
+        let secretDirectory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: secretDirectory) }
+        let secretURL = secretDirectory.appendingPathComponent("secret.epub")
+        let secretBytes = Data("SYMLINK-SECRET-SHOULD-NOT-BE-IMPORTED".utf8)
+        try secretBytes.write(to: secretURL)
+        let remoteEPUB = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+        try FileManager.default.createSymbolicLink(at: remoteEPUB, withDestinationURL: secretURL)
+        #expect(FolderSyncService.isSymbolicLink(at: remoteEPUB))
+        #expect(throws: FolderSyncError.symlinkedAsset) {
+            try FolderSyncService.readRegularFileData(from: remoteEPUB)
+        }
+        #expect(try Data(contentsOf: remoteEPUB) == secretBytes)
+
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        _ = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        defer { try? FileManager.default.removeItem(at: restored.fileURL) }
+
+        #expect(restored.hasEPUB == false)
+        if FileManager.default.fileExists(atPath: restored.fileURL.path) {
+            let imported = try Data(contentsOf: restored.fileURL)
+            #expect(imported != secretBytes)
+        }
+    }
+
     @Test func syncDownSkipsUnchangedRemotePackage() async throws {
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
