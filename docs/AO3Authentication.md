@@ -14,8 +14,11 @@ website session, and never stores the user's password.
   it. It exposes that same WebView only when the automatic mechanism cannot
   complete.
 - `AO3Session` and `AO3StoredCookie` are serializable session values. Cookies are
-  scoped by AO3 domain, path, expiry, and secure transport when requests are
-  built.
+  scoped by AO3 domain, path, expiry, secure transport, and SameSite (Lax/Strict
+  via Foundation's public `HTTPCookie.sameSitePolicy`; SameSite=None does not
+  round-trip through `HTTPCookie`) when requests are built. Capture persists
+  only `_otwarchive_session` and the remember-me cookie `user_credentials`, not
+  every AO3-domain cookie.
 - `CascadingAO3SessionVault` (default) stores the session in **Keychain first**
   (`KeychainAO3SessionVault`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`).
   On success it does **not** dual-write cookies elsewhere. Only when Keychain

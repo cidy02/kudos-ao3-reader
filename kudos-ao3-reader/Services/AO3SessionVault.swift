@@ -340,8 +340,19 @@ enum AO3CookieBridge {
 
     static func captureAO3Cookies() async -> [AO3StoredCookie] {
         let cookies = await allCookies(in: WKWebsiteDataStore.default().httpCookieStore)
-        return cookies
-            .filter { AO3StoredCookie.isAO3Domain($0.domain) }
+        return persistableCookies(from: cookies)
+    }
+
+    /// Persistence policy applied by `captureAO3Cookies`. Name allow-list
+    /// (`AO3RequestDefaults.persistedCookieNames`) AND AO3 domain — the domain
+    /// check is defense-in-depth, not the policy. Extracted so tests can feed a
+    /// known set without touching the shared `WKWebsiteDataStore`.
+    static func persistableCookies(from cookies: [HTTPCookie]) -> [AO3StoredCookie] {
+        cookies
+            .filter {
+                AO3StoredCookie.isAO3Domain($0.domain)
+                    && AO3RequestDefaults.persistedCookieNames.contains($0.name)
+            }
             .map(AO3StoredCookie.init)
     }
 

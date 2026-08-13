@@ -180,7 +180,10 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
             headers[String(describing: key)] = String(describing: value)
         }
         return HTTPCookie.cookies(withResponseHeaderFields: headers, for: url)
-            .filter { AO3StoredCookie.isAO3Domain($0.domain) }
+            .filter {
+                AO3StoredCookie.isAO3Domain($0.domain)
+                    && AO3RequestDefaults.persistedCookieNames.contains($0.name)
+            }
     }
 
     private static func merging(
@@ -231,6 +234,22 @@ nonisolated enum AO3RequestDefaults {
     /// that must recognize or, just as importantly, deliberately exclude it (T-100's
     /// Cloudflare-cookie jar) references the same literal.
     static let sessionCookieName = "_otwarchive_session"
+
+    /// Cookies written into the Keychain session blob. This is a name allow-list,
+    /// not "everything whose domain is AO3". Domain is still checked as
+    /// defense-in-depth so a same-named cookie on a non-AO3 host is never
+    /// captured (`AO3CookieBridge.persistableCookies`).
+    ///
+    /// `_otwarchive_session` is the only identity-bearing cookie (see
+    /// `sessionCookieName`). `user_credentials` is otwarchive's remember-me
+    /// cookie (Authlogic/Devise rememberable): login always checks remember-me
+    /// (`AO3WebLoginCoordinator`), and without this token a restored session
+    /// dies when the signed session cookie expires. Named explicitly rather
+    /// than inferred from "looks long-lived".
+    static let persistedCookieNames: Set<String> = [
+        sessionCookieName,
+        "user_credentials"
+    ]
 }
 
 /// The sole authentication API exposed to the rest of the app. UI and future AO3

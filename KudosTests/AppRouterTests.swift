@@ -180,4 +180,36 @@ struct AppRouterTests {
             for: URL(string: "https://example.com/users/someone")!
         ) == nil)
     }
+
+    /// M19: `open()` is the unguarded sink `openAO3Link` falls through to.
+    /// Rejects must leave both `pendingURL` and the sheet flag untouched;
+    /// a normal https AO3 URL must set both, or the rejects could pass
+    /// against a no-op `open()`.
+    @Test func openRejectsNonHTTPSchemes() throws {
+        let router = AppRouter()
+
+        let javascript = try #require(URL(string: "javascript:alert(1)"))
+        #expect(javascript.scheme?.lowercased() == "javascript")
+        router.open(javascript)
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
+
+        let data = try #require(URL(string: "data:text/html,hello"))
+        #expect(data.scheme?.lowercased() == "data")
+        router.open(data)
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
+
+        let file = try #require(URL(string: "file:///tmp/index.html"))
+        #expect(file.scheme?.lowercased() == "file")
+        router.open(file)
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
+
+        let https = try #require(URL(string: "https://archiveofourown.org/works/1"))
+        #expect(https.scheme?.lowercased() == "https")
+        router.open(https)
+        #expect(router.pendingURL == https)
+        #expect(router.isPresentingWebBrowser == true)
+    }
 }
