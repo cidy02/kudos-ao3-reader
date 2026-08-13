@@ -1,0 +1,12 @@
+--- kudos-ao3-reader/Reading/MiniZip.swift
++++ kudos-ao3-reader/Reading/MiniZip.swift
+@@ -415,9 +415,6 @@
+             // Stored entries are their own proof: declared sizes must match.
+             guard compressedSize == uncompressedSize else { throw MiniZipError.malformedArchive }
+         }
+-        if method == 8, compressedSize == 0, uncompressedSize > 0 {
+-            throw MiniZipError.suspiciousCompressionRatio
+-        }
+         guard uncompressedSize <= limits.maxSingleEntryUncompressedSize else {
+             throw MiniZipError.entryTooLarge
+         }

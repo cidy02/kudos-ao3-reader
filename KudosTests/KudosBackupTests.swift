@@ -1450,6 +1450,14 @@ struct KudosBackupTests {
         let contents = try KudosBackupContents(zipData: zipData)
         #expect(contents.epubFiles.isEmpty, "Extraction is lazy: epubFiles dictionary should not be pre-populated")
         #expect(contents.epubData(for: workID) == epubData, "EPUB bytes should be retrievable on demand")
+        // The accessor must not MEMOISE. Without this, a future "optimisation" that
+        // caches each inflated entry into `epubFiles` would reintroduce F1 — the
+        // unbounded [UUID: Data] growth this whole fix exists to remove — and both
+        // assertions above would still pass, because they only observe the state
+        // BEFORE any call. This is the strongest laziness property observable without
+        // adding a seam to production code: it cannot rule out a private eager cache,
+        // but it does pin the one regression path that runs through the public field.
+        #expect(contents.epubFiles.isEmpty, "epubData(for:) must not memoise into epubFiles")
     }
 
     @Test @MainActor func directoryPreConfirmDoesNotMaterializeEPUBs() throws {
