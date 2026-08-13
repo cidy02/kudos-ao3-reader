@@ -125,6 +125,59 @@ struct ArchiveTrustBoundaryTests {
         #expect(onDisk != attacker, "attacker bytes reached a preserved work's file")
     }
 
+    /// D13: the A∩C merged hunk needs its own test, because neither lane's reviewers
+    /// could see this code — it only exists after the rebase.
+    ///
+    /// The merge changed the works loop from `contents.epubFiles[archived.id]` (an
+    /// eager dictionary) to `contents.epubData(for:)` (WP-C's lazy accessor, which
+    /// falls through to `zip?.data(named:)`). `preservedWorkWithAFileIsNeverByte
+    /// ReplacedByARestore` hands `epubFiles` in directly, so it exercises the eager
+    /// branch — a path a real `.kudosbackup` import **no longer takes**. A gate that
+    /// was broken only on the zip branch would leave that test green.
+    ///
+    /// This drives the real production path: encode an actual archive, reopen it with
+    /// `init(zipData:)` so assets resolve lazily through MiniZip, and assert the
+    /// preserved bytes survive.
+    @Test func preservedBytesSurviveARestoreDrivenFromARealZipArchive() throws {
+        let container = try container()
+        let context = container.mainContext
+        let workID = UUID()
+
+        let local = SavedWork(id: workID, title: "Preserved", author: "Writer")
+        local.isSaved = true
+        local.hasEPUB = true
+        context.insert(local)
+        let genuine = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try genuine.write(to: local.fileURL)
+        defer { try? FileManager.default.removeItem(at: local.fileURL) }
+        local.isQueuedForLater = false
+        local.epubPreservationStatus = .preserved
+        try context.save()
+
+        // A real archive carrying attacker bytes under the victim's own record id.
+        let attacker = try Data(contentsOf: EPUBTests.sampleEPUB) + Data("<!-- ATTACKER -->".utf8)
+        let donor = SavedWork(id: workID, title: "Preserved", author: "Writer")
+        donor.lastModifiedAt = Date().addingTimeInterval(60 * 60)
+        let staged = KudosBackupContents(
+            manifest: KudosBackupManifest(
+                works: [KudosBackupWork(work: donor)], bookmarks: [], fonts: [],
+                settings: .capture(defaults: try testDefaults())
+            ),
+            epubFiles: [workID: attacker]
+        )
+        // Round-trip through the real ZIP so `epubData(for:)` resolves via MiniZip,
+        // exactly as a user-imported `.kudosbackup` does.
+        let reopened = try KudosBackupContents(zipData: try staged.zipData())
+        #expect(reopened.epubFiles.isEmpty, "control: reopened archive must resolve assets lazily")
+        #expect(reopened.epubData(for: workID) != nil, "control: the archive really carries the asset")
+
+        _ = try KudosBackupService.restore(reopened, into: context, defaults: try testDefaults())
+
+        let onDisk = try Data(contentsOf: local.fileURL)
+        #expect(onDisk == genuine, "preserved bytes were replaced via the zip path")
+        #expect(onDisk != attacker, "attacker bytes reached a preserved work through the zip path")
+    }
+
     @Test func replacementIsAllowedWhereThereIsNothingToDestroy() {
         let newRecord = SavedWork(title: "Fresh", author: "Writer")
         newRecord.hasEPUB = true
