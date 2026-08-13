@@ -415,6 +415,9 @@ nonisolated struct MiniZip {
             // Stored entries are their own proof: declared sizes must match.
             guard compressedSize == uncompressedSize else { throw MiniZipError.malformedArchive }
         }
+        if method == 8, compressedSize == 0, uncompressedSize > 0 {
+            throw MiniZipError.suspiciousCompressionRatio
+        }
         guard uncompressedSize <= limits.maxSingleEntryUncompressedSize else {
             throw MiniZipError.entryTooLarge
         }
