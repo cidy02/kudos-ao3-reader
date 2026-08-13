@@ -54,6 +54,59 @@ struct AnnotationNotePreservationTests {
     /// depends on this LWW, because `annotationResolution(.suppressStaleData)` only skips and
     /// never sets the flag. Refusing incoming deletion flags would mean a highlight deleted on
     /// the phone never disappears on the iPad.
+    /// The **dedup-site** half of M1c, which had no coverage at all.
+    ///
+    /// M1f's `parkDisplacedNote` protects the *id-keyed* path (same id, incoming note
+    /// overwrites a pre-existing one) and is covered by
+    /// `forgedSameIDRecordCannotDestroyAPreExistingNote`. But an attacker who knows a
+    /// locator — an A4 adversary reads it out of the sync folder's own manifest —
+    /// collides on `(work, kind, locatorString)` with a *different* UUID, which lands
+    /// in `dedupeSamePassageAnnotations` instead. There, a pre-existing loser used to
+    /// be `context.delete`d outright; it is now soft-deleted so the row and its text
+    /// remain recoverable.
+    ///
+    /// Disabling that soft-delete flipped **no** test in the suite (verified by
+    /// revert-check), which is why this exists. `twoDevicesEditingOneNoteConverge…`
+    /// cannot catch it: it asserts on the surviving winner, and a hard-deleted loser
+    /// and a soft-deleted loser look identical from there.
+    @Test func aDedupCollisionSoftDeletesThePreExistingLoserRatherThanDestroyingIt() throws {
+        let schema = schema()
+        let target = try context(schema)
+        let workID = UUID()
+        let work = SavedWork(id: workID, title: "Annotated Work", author: "Marginalia")
+        work.isSaved = true
+        target.insert(work)
+
+        let mine = ReadingAnnotation(
+            work: work, kind: .highlight, locatorString: Self.locator,
+            note: "MY IRREPLACEABLE NOTE", color: .yellow,
+            createdAt: Date(timeIntervalSince1970: 1_000)
+        )
+        mine.lastModifiedAt = Date(timeIntervalSince1970: 1_500)
+        target.insert(mine)
+        try target.save()
+        let mineID = mine.id
+
+        // Different UUID, colliding locator, newer stamp — it wins the dedup ranking.
+        let contents = try forgedContents(
+            annotationID: UUID(), workID: workID, work: work,
+            note: "ATTACKER NOTE", isPendingDeletion: false
+        )
+        _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
+
+        let all = try target.fetch(FetchDescriptor<ReadingAnnotation>())
+        let survivor = try #require(
+            all.first { $0.id == mineID },
+            "the pre-existing annotation row was destroyed outright by dedup"
+        )
+        #expect(survivor.isPendingDeletion || survivor.deletedAt != nil,
+                "loser should be soft-deleted, not left live")
+        // The text must still exist somewhere recoverable — either on the parked row
+        // itself or salvaged onto the winner.
+        let textSurvives = all.contains { $0.note.contains("MY IRREPLACEABLE NOTE") }
+        #expect(textSurvives, "the user's note text is unrecoverable after a dedup collision")
+    }
+
     @Test func incomingDeleteStillPropagatesToAPreExistingAnnotation() throws {
         let schema = schema()
         let target = try context(schema)
