@@ -20,27 +20,38 @@ struct ArchiveTrustBoundaryTests {
     /// security control. Revert-check: remove `clampedArchiveDate(...)` from the
     /// decoder's `dateDecodingStrategy` and this must go red.
     @Test func futureDatedArchiveTimestampsAreClampedAtDecode() throws {
+        // Build a REAL, schema-complete manifest, then rewrite every timestamp in the
+        // encoded JSON to the year 3000 — which is exactly what an adversary does to a
+        // legitimate backup. Hand-writing the JSON is not viable here: KudosBackupWork
+        // has ~30 non-optional fields, and an incomplete fixture throws in the decoder
+        // and "fails" for the wrong reason (it did, on the first run of this rewrite).
+        let container = try container()
+        let context = container.mainContext
+        let donor = SavedWork(title: "Year 3000", author: "Adversary")
+        donor.isSaved = true
+        // makeContents reads EPUB bytes for any work with hasEPUB (defaults true).
+        donor.hasEPUB = false
+        context.insert(donor)
+
+        let honest = try KudosBackupService.makeContents(
+            works: [donor], bookmarks: [], fonts: [], readingQueues: [],
+            defaults: try testDefaults()
+        )
+        var json = String(decoding: try honest.manifestData(), as: UTF8.self)
+        json = json.replacingOccurrences(
+            of: #""(\d{4})-\d{2}-\d{2}T[^"]+Z""#,
+            with: #""3000-01-01T00:00:00.000Z""#,
+            options: .regularExpression
+        )
+        #expect(json.contains("3000-01-01"), "fixture did not actually carry a future date")
+
         let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
-        let json = """
-        {
-          "version": 8,
-          "exportedAt": "3000-01-01T00:00:00.000Z",
-          "works": [{
-            "id": "\(UUID().uuidString)",
-            "title": "Year 3000",
-            "author": "Adversary",
-            "dateAdded": "3000-01-01T00:00:00.000Z",
-            "lastModifiedAt": "3000-01-01T00:00:00.000Z"
-          }],
-          "bookmarks": [], "fonts": [], "settings": {}
-        }
-        """
         let manifest = try KudosBackupContents.decodeManifest(Data(json.utf8))
 
         #expect(manifest.exportedAt <= ceiling, "exportedAt escaped the decode clamp")
         let work = try #require(manifest.works.first)
-        #expect(work.lastModifiedAt.map { $0 <= ceiling } ?? true, "lastModifiedAt escaped the clamp")
         #expect(work.dateAdded <= ceiling, "dateAdded escaped the clamp")
+        #expect(work.lastModifiedAt.map { $0 <= ceiling } ?? true, "lastModifiedAt escaped the clamp")
     }
 
     /// An honest past date must survive the clamp untouched — otherwise the fix
