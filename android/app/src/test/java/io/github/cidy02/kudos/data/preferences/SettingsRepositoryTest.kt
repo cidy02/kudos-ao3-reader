@@ -117,6 +117,21 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun testM21_RestoreRetainsLocalFontSelection() = runBlocking {
+        repository.updateReaderFontId("local-font-uuid")
+        
+        val settings = KudosSettings.Defaults.copy(
+            reader = KudosSettings.Defaults.reader.copy(
+                readerFontId = "attacker-font-uuid"
+            )
+        )
+        repository.replaceAll(settings)
+        
+        val afterRestore = repository.snapshot()
+        assertEquals("local-font-uuid", afterRestore.reader.readerFontId)
+    }
+
+    @Test
     fun hasCompletedOnboardingDefaultsFalseAndRoundTrips() = runBlocking {
         assertFalse(repository.hasCompletedOnboarding.first())
 

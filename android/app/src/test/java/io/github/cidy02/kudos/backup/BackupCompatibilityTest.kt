@@ -1350,7 +1350,7 @@ private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
 private const val DATE_STRING = "2026-06-26T12:00:00Z"
 private val DATE: Instant = Instant.parse(DATE_STRING)
 private val EPUB_BYTES = "dummy epub bytes".toByteArray()
-private val FONT_BYTES = "dummy font bytes".toByteArray()
+private val FONT_BYTES = byteArrayOf(0x00, 0x01, 0x00, 0x00) + "dummy font bytes".toByteArray()
 
 private fun samplePackage(
     manifest: KudosBackupManifest = sampleManifest(),

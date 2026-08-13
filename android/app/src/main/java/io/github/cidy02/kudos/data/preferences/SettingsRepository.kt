@@ -191,7 +191,6 @@ class SettingsRepository(
     suspend fun replaceAll(settings: KudosSettings) {
         val current = snapshot()
         dataStore.edit { prefs ->
-            prefs[Keys.ReaderFontId] = settings.reader.readerFontId
             prefs[Keys.ReaderMode] = settings.reader.readerMode.storageValue
             prefs[Keys.ReaderTwoPage] = settings.reader.readerTwoPage
             prefs[Keys.ReaderCustomize] = settings.reader.readerCustomize

@@ -37,4 +37,6 @@ object BackupLimits {
     const val MAX_ARCHIVE_BYTES: Long = 1024L * 1024L * 1024L
     const val MAX_ENTRY_BYTES: Long = 128L * 1024L * 1024L
     const val MAX_MANIFEST_BYTES: Long = 8L * 1024L * 1024L
+    const val MAX_FONT_ENTRY_BYTES: Long = 4L * 1024L * 1024L
+    const val MAX_TOTAL_FONT_BYTES: Long = 32L * 1024L * 1024L
 }

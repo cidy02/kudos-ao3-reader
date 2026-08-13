@@ -24,6 +24,7 @@ object BackupImporter {
         var manifestBytes: ByteArray? = null
         val epubFiles = mutableMapOf<String, ByteArray>()
         val fontFiles = mutableMapOf<String, ByteArray>()
+        var totalFontBytes = 0L
         val seenEntries = mutableSetOf<String>()
 
         try {
@@ -48,6 +49,16 @@ object BackupImporter {
                         }
                         path.startsWith("${BackupPaths.FONTS_DIRECTORY}/") -> {
                             val fileName = validateFontEntry(path)
+                            if (payload.size > BackupLimits.MAX_FONT_ENTRY_BYTES) {
+                                throw BackupError.EntryTooLarge(path)
+                            }
+                            totalFontBytes += payload.size
+                            if (totalFontBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
+                                throw BackupError.InvalidPackage("Total font size exceeds limit")
+                            }
+                            if (!isLoadableFont(payload)) {
+                                throw BackupError.InvalidPackage("Invalid font file")
+                            }
                             fontFiles[fileName] = payload
                         }
                         else -> Unit
@@ -99,10 +110,25 @@ object BackupImporter {
 
         val fontsDirectory = resolveInsideRoot(normalizedRoot, BackupPaths.FONTS_DIRECTORY)
         val fontFiles = mutableMapOf<String, ByteArray>()
+        var totalFontBytes = 0L
         manifest.fonts.forEach { font ->
             BackupPaths.requireSafeFontFileName(font.fileName)
+            if (!io.github.cidy02.kudos.files.CustomFontRepository.isSupportedFontFileName(font.fileName)) {
+                throw BackupError.InvalidPackage("Unsupported font extension")
+            }
             val file = findCaseInsensitiveChild(fontsDirectory, font.fileName) ?: return@forEach
-            fontFiles[font.fileName] = readLimitedFile(file, "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}")
+            val payload = readLimitedFile(file, "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}")
+            if (payload.size > BackupLimits.MAX_FONT_ENTRY_BYTES) {
+                throw BackupError.EntryTooLarge("${BackupPaths.FONTS_DIRECTORY}/${font.fileName}")
+            }
+            totalFontBytes += payload.size
+            if (totalFontBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
+                throw BackupError.InvalidPackage("Total font size exceeds limit")
+            }
+            if (!isLoadableFont(payload)) {
+                throw BackupError.InvalidPackage("Invalid font file")
+            }
+            fontFiles[font.fileName] = payload
         }
 
         return KudosBackupPackage(
@@ -127,6 +153,9 @@ object BackupImporter {
             throw BackupError.UnsafePath(path)
         }
         BackupPaths.requireSafeFontFileName(parts[1])
+        if (!io.github.cidy02.kudos.files.CustomFontRepository.isSupportedFontFileName(parts[1])) {
+            throw BackupError.InvalidPackage("Unsupported font extension")
+        }
         return parts[1]
     }
 
@@ -182,6 +211,26 @@ object BackupImporter {
                 return true
             }
         }
+        return false
+    }
+
+    private fun isLoadableFont(bytes: ByteArray): Boolean {
+        if (bytes.size < 4) return false
+        val b0 = bytes[0].toInt() and 0xFF
+        val b1 = bytes[1].toInt() and 0xFF
+        val b2 = bytes[2].toInt() and 0xFF
+        val b3 = bytes[3].toInt() and 0xFF
+
+        // TrueType (TTF) magic: 0x00 0x01 0x00 0x00 or 't' 'r' 'u' 'e' (0x74 0x72 0x75 0x65)
+        if (b0 == 0x00 && b1 == 0x01 && b2 == 0x00 && b3 == 0x00) return true
+        if (b0 == 0x74 && b1 == 0x72 && b2 == 0x75 && b3 == 0x65) return true
+
+        // OpenType (OTF) magic: 'O' 'T' 'T' 'O' (0x4F 0x54 0x54 0x4F)
+        if (b0 == 0x4F && b1 == 0x54 && b2 == 0x54 && b3 == 0x4F) return true
+
+        // WOFF / WOFF2 magic
+        if (b0 == 0x77 && b1 == 0x4F && b2 == 0x46 && (b3 == 0x46 || b3 == 0x32)) return true
+
         return false
     }
 }
