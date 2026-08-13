@@ -72,7 +72,7 @@ struct KudosBackupTests {
         #expect(decoded.manifest.fonts.first?.fileName == font.fileName)
         #expect(decoded.manifest.settings.appTheme == "sepia")
         #expect(decoded.manifest.settings.readerFontPt == 21)
-        #expect(decoded.epubFiles[work.id] == epub)
+        #expect(decoded.epubData(for: work.id) == epub)
         #expect(decoded.fontFiles[font.fileName] == fontData)
     }
 
@@ -538,7 +538,7 @@ struct KudosBackupTests {
 
         let decoded = try KudosBackupContents.read(from: packageURL)
         #expect(decoded.manifest.works.first?.title == "Legacy Work")
-        #expect(decoded.epubFiles[work.id] == epub)
+        #expect(decoded.epubData(for: work.id) == epub)
     }
 
     /// A truncated archive — the partially-written state an interrupted copy
@@ -608,8 +608,8 @@ struct KudosBackupTests {
         let reference = try KudosBackupContents(zipData: inMemory)
         #expect(decoded.manifest.works == reference.manifest.works)
         #expect(decoded.manifest.settings == reference.manifest.settings)
-        #expect(decoded.epubFiles[work.id] == epub)
-        #expect(decoded.epubFiles[ghost.id] == nil)
+        #expect(decoded.epubData(for: work.id) == epub)
+        #expect(decoded.epubData(for: ghost.id) == nil)
     }
 
     /// The streaming writer itself has no ceilings (ZIP64), so `writeArchive`
@@ -1439,7 +1439,7 @@ struct KudosBackupTests {
         let fakeWork = KudosBackupWork(work: savedWork)
         let workID = savedWork.id
         let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
-        let manifestData = try JSONEncoder().encode(manifest)
+        let manifestData = try KudosBackupContents(manifest: manifest).manifestData()
         
         let epubData = Data("dummy".utf8)
         let zipData = HostileZipFixture.build([
@@ -1460,7 +1460,7 @@ struct KudosBackupTests {
         let fakeWork = KudosBackupWork(work: savedWork)
         let workID = savedWork.id
         let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
-        let manifestData = try JSONEncoder().encode(manifest)
+        let manifestData = try KudosBackupContents(manifest: manifest).manifestData()
         try manifestData.write(to: dirURL.appendingPathComponent("manifest.json"))
         
         let worksDir = dirURL.appendingPathComponent("Works")
