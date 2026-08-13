@@ -206,6 +206,87 @@ struct KudosBackupTests {
         try? FileManager.default.removeItem(at: restored.fileURL)
     }
 
+    /// M15a/M20 regression: the final font-write failure happens after restore has
+    /// already changed the work and inserted its tag, bookmark, saved-for-later
+    /// queue, and font row. Saving the caller after the throw emulates its next
+    /// autosave tick; before the isolated-context boundary, that save persisted all
+    /// of those partial mutations and this test failed.
+    @Test func failedRestoreLeavesNoSwiftDataMutationsVisibleAfterCallerAutosave() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let workID = UUID()
+
+        let localWork = SavedWork(id: workID, title: "Local Title", author: "Local Author")
+        localWork.markModified(Date(timeIntervalSince1970: 100))
+        context.insert(localWork)
+        try context.save()
+
+        let archivedWork = SavedWork(
+            id: workID,
+            title: "Archive Title",
+            author: "Archive Author"
+        )
+        archivedWork.tags = [Tag(name: "archive-tag")]
+        archivedWork.markModified(Date(timeIntervalSince1970: 200))
+        let archivedBookmark = Bookmark(
+            title: "Archive Bookmark",
+            urlString: "https://archiveofourown.org/works/12345"
+        )
+        let missingParent = "missing-\(UUID().uuidString)/font.ttf"
+        let archivedFont = CustomFont(name: "Archive Font", fileName: missingParent)
+        let baseContents = try KudosBackupService.makeContents(
+            works: [archivedWork],
+            bookmarks: [archivedBookmark],
+            fonts: [archivedFont],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let contents = KudosBackupContents(
+            manifest: baseContents.manifest,
+            fontFiles: [missingParent: Data("font-data".utf8)]
+        )
+
+        var restoreError: NSError?
+        do {
+            _ = try KudosBackupService.restore(
+                contents,
+                into: context,
+                defaults: try testDefaults()
+            )
+            Issue.record("Expected the font write into a missing parent directory to fail")
+        } catch {
+            restoreError = error as NSError
+        }
+        // Prove this reached the intended late failure, rather than passing because
+        // archive construction or an earlier restore phase threw for another reason.
+        #expect(restoreError?.domain == NSCocoaErrorDomain)
+        #expect(restoreError?.code == 4) // Cocoa fileNoSuchFile
+
+        try context.save()
+        let observer = ModelContext(container)
+        let works = try observer.fetch(FetchDescriptor<SavedWork>())
+        let persistedWork = try #require(works.first)
+        #expect(works.count == 1)
+        #expect(persistedWork.title == "Local Title")
+        #expect(persistedWork.author == "Local Author")
+        #expect(persistedWork.tags.isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<Kudos.Tag>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<Bookmark>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<CustomFont>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<WorkCollection>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<ReadingQueue>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<ReadingQueueMembership>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<SavedSearch>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<ReadingAnnotation>()).isEmpty)
+    }
+
     @Test func backupRestoresReadingQueuesAndPreservedEPUBs() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
