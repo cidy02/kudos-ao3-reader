@@ -1448,6 +1448,7 @@ struct KudosBackupTests {
         ])
         
         let contents = try KudosBackupContents(zipData: zipData)
+        #expect(contents.epubFiles.isEmpty, "Extraction is lazy: epubFiles dictionary should not be pre-populated")
         #expect(contents.epubData(for: workID) == epubData, "EPUB bytes should be retrievable on demand")
     }
 
