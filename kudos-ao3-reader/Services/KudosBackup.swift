@@ -1245,12 +1245,33 @@ enum KudosBackupService {
         )
     }
 
-    // Restore is transactional and intentionally linear for data-safety review.
-    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    /// Restores through a same-container context so a failed merge cannot leave
+    /// pending mutations in the caller's autosaving context. SwiftData does not
+    /// expose parent/child contexts; a separate `ModelContext` sharing the same
+    /// container provides the required store boundary instead.
     static func restore(
         _ contents: KudosBackupContents,
         into context: ModelContext,
         defaults: UserDefaults = .standard
+    ) throws -> KudosBackupRestoreSummary {
+        // The isolated context must merge against everything the caller can see.
+        // Saving pre-existing caller changes preserves them rather than risking
+        // the shared-context rollback that this boundary exists to avoid.
+        if context.hasChanges {
+            try context.save()
+        }
+
+        let restoreContext = ModelContext(context.container)
+        restoreContext.autosaveEnabled = false
+        return try restoreIsolatedContents(contents, into: restoreContext, defaults: defaults)
+    }
+
+    // Intentionally linear for data-safety review.
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    private static func restoreIsolatedContents(
+        _ contents: KudosBackupContents,
+        into context: ModelContext,
+        defaults: UserDefaults
     ) throws -> KudosBackupRestoreSummary {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
         var workIndex = WorkRestoreIndex(existingWorks)
@@ -1300,6 +1321,12 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
 
+        // Asset writes are deliberately monotonic, not atomic with the database
+        // save below. A crash can still leave the filesystem ahead of SwiftData
+        // for a non-preserved work. That trade-off is intentional: re-running the
+        // restore safely converges, while staging/journaling cleanup is defeated
+        // by an uncatchable signal. Existing hasEPUB/.missingFile reconciliation
+        // already models and repairs the opposite, database-ahead-of-disk state.
         for archived in contents.manifest.works {
             let work: SavedWork
             let isNewRecord: Bool
