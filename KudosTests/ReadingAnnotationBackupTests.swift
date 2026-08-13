@@ -175,12 +175,19 @@ struct ReadingAnnotationBackupTests {
         _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
 
         let all = try target.fetch(FetchDescriptor<ReadingAnnotation>())
-        // Merged in place by id, not duplicated.
-        #expect(all.count == 1)
-        let merged = try #require(all.first)
+        // Merged in place by id, not duplicated: still exactly one LIVE mark. This used to
+        // assert `all.count == 1`. Under M1f the older local note ("stale") is not destroyed
+        // by the merge — it is parked on a hidden sibling — because restore cannot tell this
+        // honest edit from a forged same-id record, which is the whole point of the rule.
+        let live = all.filter { !$0.isPendingDeletion && $0.deletedAt == nil }
+        #expect(live.count == 1)
+        let merged = try #require(live.first)
         #expect(merged.note == "edited later")
         #expect(merged.color == .blue)
         #expect(merged.selectedText == "new snapshot")
+
+        // The superseded text is still in the store, hidden.
+        #expect(all.contains { $0.isPendingDeletion && $0.note == "stale" })
     }
 
     @Test func sameChapterHighlightFromTwoDevicesCollapsesToOneOnRestore() throws {
@@ -225,13 +232,26 @@ struct ReadingAnnotationBackupTests {
         _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
 
         let all = try target.fetch(FetchDescriptor<ReadingAnnotation>())
-        #expect(all.count == 1)
-        let survivor = try #require(all.first)
+        // The passage collapses to ONE LIVE mark. This used to assert `all.count == 1` —
+        // i.e. that the loser row was destroyed. M1c changed that deliberately: device A's
+        // highlight existed on this device before the archive was applied, and the audit's
+        // A4 case showed a forged, future-dated record can be made to win this ranking, so a
+        // pre-existing loser is now soft-deleted rather than `context.delete`d. The row
+        // surviving is the fix, not a leak — so the count assertion moves to live rows and
+        // the hidden row is asserted explicitly below.
+        let live = all.filter { !$0.isPendingDeletion && $0.deletedAt == nil }
+        #expect(live.count == 1)
+        let survivor = try #require(live.first)
         // Device B's copy is more recently modified, so it wins the passage...
         #expect(survivor.id == deviceBHighlight.id)
         #expect(survivor.color == .green)
         // ...but device A's note is salvaged since the winner had none.
         #expect(survivor.note == "device A's note")
+
+        // Device A's own row is still in the store, hidden — never destroyed by a merge.
+        let hidden = try #require(all.first { $0.id == deviceAHighlight.id })
+        #expect(hidden.isPendingDeletion)
+        #expect(hidden.note == "device A's note")
 
         // The loser is tombstoned, not silently dropped — an older archive
         // that still lists it must not resurrect a duplicate later.

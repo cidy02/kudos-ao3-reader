@@ -785,7 +785,13 @@ struct KudosBackupTests {
         // backup-validation fix under test.
         let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
         ReadingQueueService.add(localWork, to: queue, in: context)
-        localWork.epubPreservationStatus = .preserved
+        // Deliberately NOT `.preserved`. D7 (`mayReplaceEPUB`) now refuses to replace a
+        // preserved work's bytes at all, so with `.preserved` the corrupt payload would never
+        // reach `EPUBDocument.inspectPackage` and this test would pass without exercising the
+        // A5-F3 validator it exists to test — green for the wrong reason. The preserved case
+        // has its own coverage in ArchiveTrustBoundaryTests; this fixture keeps the validator
+        // on the hook.
+        localWork.epubPreservationStatus = .notPreserved
         try context.save()
         defer { try? FileManager.default.removeItem(at: localWork.fileURL) }
 
@@ -797,7 +803,6 @@ struct KudosBackupTests {
 
         let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.hasEPUB)
-        #expect(restored.epubPreservationStatus == .preserved)
         #expect(try Data(contentsOf: restored.fileURL) == validEPUB)
         #expect(summary.skippedInvalidEPUBs == 1)
     }
