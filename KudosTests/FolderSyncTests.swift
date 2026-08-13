@@ -656,8 +656,13 @@ struct FolderSyncTests {
         #expect(third.skippedUnchanged)
     }
 
-    /// A4: a regular sync folder whose EPUB asset is a symlink to a file
-    /// outside the folder must not import that file's bytes (M12).
+    /// A4 / M12: a regular sync folder whose EPUB asset is a symlink to a file
+    /// outside the folder must not import that file's bytes.
+    ///
+    /// The symlink target is a *valid* EPUB (`EPUBTests.sampleEPUB`). A5-F3's
+    /// restore-time validator would accept those bytes, so `hasEPUB == false`
+    /// after `syncDown` can only come from `readRegularFileData`'s `lstat` /
+    /// `S_IFLNK` reject — not from the EPUB validator discarding garbage.
     @Test func syncDownRejectsSymlinkedEPUBAsset() async throws {
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -689,8 +694,10 @@ struct FolderSyncTests {
         let secretDirectory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: secretDirectory) }
         let secretURL = secretDirectory.appendingPathComponent("secret.epub")
-        let secretBytes = Data("SYMLINK-SECRET-SHOULD-NOT-BE-IMPORTED".utf8)
+        let secretBytes = try Data(contentsOf: EPUBTests.sampleEPUB)
         try secretBytes.write(to: secretURL)
+        // A5-F3 would accept these bytes if the symlink were followed.
+        _ = try EPUBDocument.inspectPackage(ofEPUBAt: secretURL)
         let remoteEPUB = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
         try FileManager.default.createSymbolicLink(at: remoteEPUB, withDestinationURL: secretURL)
         #expect(FolderSyncService.isSymbolicLink(at: remoteEPUB))
@@ -710,6 +717,7 @@ struct FolderSyncTests {
         defer { try? FileManager.default.removeItem(at: restored.fileURL) }
 
         #expect(restored.hasEPUB == false)
+        #expect(FileManager.default.fileExists(atPath: restored.fileURL.path) == false)
         if FileManager.default.fileExists(atPath: restored.fileURL.path) {
             let imported = try Data(contentsOf: restored.fileURL)
             #expect(imported != secretBytes)
