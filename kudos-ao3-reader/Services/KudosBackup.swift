@@ -1245,25 +1245,48 @@ enum KudosBackupService {
         )
     }
 
-    /// Restores through a same-container context so a failed merge cannot leave
-    /// pending mutations in the caller's autosaving context. SwiftData does not
-    /// expose parent/child contexts; a separate `ModelContext` sharing the same
-    /// container provides the required store boundary instead.
+    /// Restores with an explicit commit boundary: **nothing reaches the store unless the
+    /// whole merge succeeds** (M15a/M20). A hostile archive that is rejected part-way must
+    /// leave no trace, and before this the caller's `@Environment` context autosaved, so a
+    /// throw left partial merge state to be committed by the next autosave tick.
+    ///
+    /// **Why the caller's own context and not an isolated one.** The ratified design said
+    /// to run on a separate `ModelContext` over the same container. Implemented and
+    /// measured, that failed twice over: intermediate `saveBestEffort` calls inside
+    /// `ReadingQueueService` still committed mid-merge (now guarded at the helper), and —
+    /// decisively — SwiftData exposes no parent/child contexts, so an already-live sibling
+    /// context does **not** observe what the isolated one saved.
+    /// `FolderSyncService.performSyncDown` reads back through the context it passed in, and
+    /// `syncDownRetriesManifestReferencedEPUBOnceItAppears` went red on exactly that.
+    ///
+    /// So: run on the caller's context, and make `rollback()` safe rather than avoiding it.
+    /// The design rejected rollback because the shared context may hold unsaved work
+    /// belonging to the rest of the app — true, and answered by flushing that work first.
+    /// After the pre-flush, the only uncommitted changes are restore's own, so rolling back
+    /// discards exactly them and nothing else.
     static func restore(
         _ contents: KudosBackupContents,
         into context: ModelContext,
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupRestoreSummary {
-        // The isolated context must merge against everything the caller can see.
-        // Saving pre-existing caller changes preserves them rather than risking
-        // the shared-context rollback that this boundary exists to avoid.
+        // Flush anything the caller had pending, so the rollback below can only ever
+        // discard changes this restore made.
         if context.hasChanges {
             try context.save()
         }
 
-        let restoreContext = ModelContext(context.container)
-        restoreContext.autosaveEnabled = false
-        return try restoreIsolatedContents(contents, into: restoreContext, defaults: defaults)
+        // Suppress autosave AND `saveBestEffort` (which honours this same flag) for the
+        // duration, so the merge has exactly one commit point: the save on success.
+        let callerAutosave = context.autosaveEnabled
+        context.autosaveEnabled = false
+        defer { context.autosaveEnabled = callerAutosave }
+
+        do {
+            return try restoreIsolatedContents(contents, into: context, defaults: defaults)
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     // Intentionally linear for data-safety review.
