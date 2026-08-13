@@ -215,16 +215,39 @@ nonisolated struct KudosBackupContents {
         return encoder
     }
 
+    /// How far ahead of "now" a timestamp in an untrusted archive may legitimately
+    /// sit. Real backups never carry future dates; the allowance exists only for
+    /// clock skew between two of the user's own devices.
+    ///
+    /// **This is a security boundary, not a tidiness rule.** Every merge decision in
+    /// this file ranks records by `lastModifiedAt` — `SyncMerge.shouldApplyIncoming`,
+    /// the annotation same-passage dedup, tombstone suppression, and the
+    /// `incomingWins` flag that can lower `epubPreservationStatus`. All of those read
+    /// their input from a `.kudosbackup` the user was sent, or from a `manifest.json`
+    /// in the Library Sync Folder that a cloud-account adversary can write. Without a
+    /// bound, a record dated year 3000 wins every comparison forever: it overwrites
+    /// newer local metadata, wins the annotation dedup (which then *hard-deletes* the
+    /// user's own note), and makes a forged tombstone suppress every future genuine
+    /// restore. Clamping at the decode boundary fixes all of those at once, because
+    /// this is the single funnel every manifest date passes through.
+    nonisolated static let maxFutureTimestampSkew: TimeInterval = 24 * 60 * 60
+
+    /// Clamps a decoded archive timestamp to at most `now + maxFutureTimestampSkew`.
+    /// Pure and internal so the boundary itself is unit-testable without a manifest.
+    nonisolated static func clampedArchiveDate(_ date: Date, now: Date = Date()) -> Date {
+        min(date, now.addingTimeInterval(maxFutureTimestampSkew))
+    }
+
     private nonisolated static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let string = try container.decode(String.self)
             if let date = fractionalSecondsISO8601Formatter.date(from: string) {
-                return date
+                return clampedArchiveDate(date)
             }
             if let date = wholeSecondISO8601Formatter.date(from: string) {
-                return date
+                return clampedArchiveDate(date)
             }
             throw DecodingError.dataCorruptedError(
                 in: container,
@@ -1216,7 +1239,14 @@ enum KudosBackupService {
         for archived in contents.manifest.tombstones {
             let key = "\(archived.recordTypeRaw)|\(archived.recordID)"
             guard !knownTombstoneKeys.contains(key) else { continue }
-            let recordType = SyncTombstoneRecordType(rawValue: archived.recordTypeRaw) ?? .savedWork
+            // An unknown `recordTypeRaw` used to fall back to `.savedWork`, which turned
+            // any garbage type string in an untrusted archive into a *work* tombstone —
+            // and work tombstones are what suppress a later restore of that work. Skip
+            // what we cannot type instead of guessing the most destructive option.
+            guard let recordType = SyncTombstoneRecordType(rawValue: archived.recordTypeRaw) else {
+                Log.library.notice("Skipped a backup tombstone with an unrecognized record type")
+                continue
+            }
             let tombstone = SyncTombstone(
                 recordID: archived.recordID,
                 recordType: recordType,
@@ -1226,7 +1256,12 @@ enum KudosBackupService {
                 deletedOnDeviceID: archived.deletedOnDeviceID,
                 deletionReason: archived.deletionReason
             )
-            tombstone.lastModifiedAt = archived.lastModifiedAt
+            // A tombstone cannot legitimately be newer than the snapshot that carries
+            // it. The decode-time clamp already bounds this to now+24h; capping at the
+            // archive's own `exportedAt` closes the remaining window, in which a forged
+            // tombstone dated "just now" would still outrank every genuine backup the
+            // user restores afterwards.
+            tombstone.lastModifiedAt = min(archived.lastModifiedAt, contents.manifest.exportedAt)
             context.insert(tombstone)
             localTombstones.append(tombstone)
             knownTombstoneKeys.insert(key)
@@ -1289,8 +1324,13 @@ enum KudosBackupService {
             // next unrelated reindex.
             WorkSearchIndex.reindex(work)
 
-            let epubData = contents.epubData(for: archived.id)
-            if let epub = epubData {
+            // D6: gate BEFORE materialising. `epubData(for:)` inflates the entry (WP-C
+            // made extraction lazy precisely so a restore holds one EPUB at a time), so
+            // running the cheap preservation check first means a work we are going to
+            // skip never costs an inflation at all. Order matters for M4's memory win,
+            // not just for readability.
+            if Self.mayReplaceEPUB(local: work, archivedID: archived.id, isNewRecord: isNewRecord),
+               let epub = contents.epubData(for: archived.id) {
                 // A5-F3: never let corrupt/untrusted bytes overwrite a valid local EPUB.
                 // Stage to a scratch file and preflight through the same hardened
                 // validator (`EPUBDocument.inspectPackage`, backed by the hardened
@@ -1379,10 +1419,15 @@ enum KudosBackupService {
             // fix: an unconditional merge here would let an older, non-deleted snapshot
             // permanently flip a soft-deleted collection back to not-deleted the moment
             // it syncs in, the same bug class fixed for those boolean flags.
-            collection.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : collection.isPendingDeletion
-            collection.permanentDeletionScheduledAt = incomingWins
-                ? archived.permanentDeletionScheduledAt
-                : collection.permanentDeletionScheduledAt
+            if incomingWins {
+                let deletion = Self.archivedDeletionState(
+                    incomingIsDeleted: archived.isDeleted ?? false,
+                    localIsPendingDeletion: collection.isPendingDeletion,
+                    localScheduledAt: collection.permanentDeletionScheduledAt
+                )
+                collection.isPendingDeletion = deletion.isPendingDeletion
+                collection.permanentDeletionScheduledAt = deletion.scheduledAt
+            }
             // Android merge: `archived.description ?: existing.description` (and the
             // same for sortOrder) — non-null archive wins; null/absent never wipes a
             // local value. On a brand-new collection the local defaults are already
@@ -1512,10 +1557,15 @@ enum KudosBackupService {
             // Same incomingWins gating as SavedWork/WorkCollection's isDeleted merge —
             // a device that already restored a queue must win over a stale device that
             // hasn't synced the restore yet.
-            queue.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : queue.isPendingDeletion
-            queue.permanentDeletionScheduledAt = incomingWins
-                ? archived.permanentDeletionScheduledAt
-                : queue.permanentDeletionScheduledAt
+            if incomingWins {
+                let deletion = Self.archivedDeletionState(
+                    incomingIsDeleted: archived.isDeleted ?? false,
+                    localIsPendingDeletion: queue.isPendingDeletion,
+                    localScheduledAt: queue.permanentDeletionScheduledAt
+                )
+                queue.isPendingDeletion = deletion.isPendingDeletion
+                queue.permanentDeletionScheduledAt = deletion.scheduledAt
+            }
             queueIDMap[archived.id] = queue
         }
 
@@ -1724,6 +1774,11 @@ enum KudosBackupService {
         guard !contents.manifest.annotations.isEmpty else { return }
         let existing = (try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? []
         var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // Everything that already belonged to this device before the archive was
+        // applied. `dedupeSamePassageAnnotations` must never hard-delete one of these
+        // (see its doc comment); it needs the set to tell them from records this
+        // restore has just inserted.
+        let preexistingIDs = Set(existing.map(\.id))
 
         for archived in contents.manifest.annotations {
             guard let work = restoredWorksByArchivedID[archived.workID] else { continue }
@@ -1783,16 +1838,28 @@ enum KudosBackupService {
             byID[archived.id] = restored
         }
 
-        dedupeSamePassageAnnotations(context: context)
+        dedupeSamePassageAnnotations(context: context, preexistingIDs: preexistingIDs)
     }
 
     /// ANN-8: two devices creating the "same" highlight/bookmark offline
     /// produce two different UUIDs, so id-keyed merging above never notices.
     /// After the restore merge, collapse any still-live annotations that
     /// share (work, kind, **exact** locator string) — same-kind only, never a
-    /// fuzzy text match. The most recently modified one wins; a non-empty
-    /// note on the loser is salvaged onto the winner if the winner has none.
-    private static func dedupeSamePassageAnnotations(context: ModelContext) {
+    /// fuzzy text match. The most recently modified one wins.
+    ///
+    /// **Security rule added after the 2026-08 audit:** a record that existed on this
+    /// device *before* the archive was applied is never `context.delete`d here. The
+    /// ranking key is `lastModifiedAt`, which for an incoming record comes straight
+    /// from an untrusted manifest — so an attacker who knows a locator (an A4 adversary
+    /// reads it out of the sync folder's own manifest) could otherwise post a colliding,
+    /// newer-dated annotation and have the user's note row hard-deleted, note text and
+    /// all, with no user interaction. Pre-existing losers are soft-deleted instead, so
+    /// the row and its text remain recoverable, and their note is *always* salvaged onto
+    /// the winner rather than only when the winner's note is empty.
+    private static func dedupeSamePassageAnnotations(
+        context: ModelContext,
+        preexistingIDs: Set<UUID>
+    ) {
         let live = ((try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? [])
             .filter { !$0.isPendingDeletion && $0.deletedAt == nil }
 
@@ -1810,8 +1877,14 @@ enum KudosBackupService {
             }
             guard let winner = ranked.first else { continue }
             for loser in ranked.dropFirst() {
-                if winner.note.isEmpty, !loser.note.isEmpty {
-                    winner.note = loser.note
+                if !loser.note.isEmpty, winner.note != loser.note {
+                    // Always salvage, not only when the winner's note is empty: the
+                    // loser may be the user's own pre-existing note being collapsed
+                    // into an incoming record, and dropping its text is exactly the
+                    // destruction this rule exists to prevent.
+                    winner.note = winner.note.isEmpty
+                        ? loser.note
+                        : "\(winner.note)\n\n\(loser.note)"
                     // Salvaging is a real content edit: without stamping it, the
                     // winner keeps its old `lastModifiedAt`, and the very next
                     // merge would see a "newer" remote copy of the winner (which
@@ -1820,7 +1893,14 @@ enum KudosBackupService {
                     winner.markModified()
                 }
                 SyncTombstones.recordDeletion(of: loser, in: context, reason: "samePassageDeduped")
-                context.delete(loser)
+                if preexistingIDs.contains(loser.id) {
+                    // Soft-delete: the row and its text survive and can be recovered.
+                    loser.isPendingDeletion = true
+                    loser.deletedAt = Date()
+                    loser.markModified()
+                } else {
+                    context.delete(loser)
+                }
             }
         }
     }
@@ -2004,6 +2084,67 @@ enum KudosBackupService {
         }
     }
 
+    /// Whether a restore may overwrite `local`'s EPUB bytes with an archived asset.
+    ///
+    /// The old code replaced whenever `contents.epubFiles[archived.id]` existed — no
+    /// timestamp check, no preservation check, nothing. That is a *separate* hole from
+    /// the merge-priority one: `WorkRestoreIndex.existingWork` binds an archived record
+    /// to a local work by **`ao3WorkID` first**, and AO3 work ids are public, so any
+    /// archive naming a work id the victim happens to own could replace that work's
+    /// file with attacker bytes. Clamping timestamps does not touch this path.
+    ///
+    /// The rule: a `.preserved` work's bytes are never replaced by a *foreign* record.
+    /// Preservation is the app's promise that this exact copy is being kept — often of
+    /// a fic that no longer exists upstream — so a merge must not silently swap it. A
+    /// record round-tripping through the user's own backup (same `id`) is still allowed
+    /// to restore itself, and a work with no local file can always be filled in.
+    ///
+    /// Pure and internal so the policy is unit-testable without a `ModelContext`.
+    nonisolated static func mayReplaceEPUB(
+        local: SavedWork,
+        archivedID: UUID,
+        isNewRecord: Bool
+    ) -> Bool {
+        if isNewRecord { return true }
+        if local.id == archivedID { return true }
+        if !local.hasEPUB { return true }
+        return local.epubPreservationStatus != .preserved
+    }
+
+    /// The `(isPendingDeletion, permanentDeletionScheduledAt)` a soft-deletable record should
+    /// carry once an archive-supplied `isDeleted` flag has been applied to it.
+    ///
+    /// **`permanentDeletionScheduledAt` is never copied from the archive.** It was, at every one
+    /// of the three merge sites (works, collections, queues), and that is a whole-library
+    /// destruction bug: `PreservedWorkService.sweepExpired` hard-deletes anything with
+    /// `isPendingDeletion && scheduledAt <= now` (`PreservedWorkService.swift:150-176`) and runs
+    /// on **every launch** from `ContentView.swift:94`, deliberately independent of folder sync.
+    /// So one `manifest.json` in the Library Sync Folder carrying `isDeleted: true` plus a
+    /// past `permanentDeletionScheduledAt` — with a `lastModifiedAt` high enough to win
+    /// `incomingWins` — permanently destroys every work, collection and queue on the next
+    /// launch, straight through the 90-day Recently Deleted window that
+    /// `DATA_AND_PERSISTENCE_INVARIANTS.md` promises. No user interaction beyond having
+    /// trusted the folder.
+    ///
+    /// The countdown is therefore always this device's own: `now + recoveryWindow` when a
+    /// record enters Recently Deleted, `nil` when it leaves. Soft-delete still syncs in both
+    /// directions — only the *schedule* is refused.
+    ///
+    /// Pure and internal so the policy is unit-testable without a `ModelContext`.
+    nonisolated static func archivedDeletionState(
+        incomingIsDeleted: Bool,
+        localIsPendingDeletion: Bool,
+        localScheduledAt: Date?,
+        now: Date = Date()
+    ) -> (isPendingDeletion: Bool, scheduledAt: Date?) {
+        guard incomingIsDeleted else { return (false, nil) }
+        // Already counting down on this device: keep that countdown. Restarting it every time
+        // the flag round-trips through sync would push the sweep date out forever and the
+        // record would never actually be swept.
+        if localIsPendingDeletion, let localScheduledAt { return (true, localScheduledAt) }
+        return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
+    }
+
     private static func apply(_ archived: KudosBackupWork, to work: SavedWork, isNewRecord: Bool) {
         let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
         // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
@@ -2050,14 +2191,20 @@ enum KudosBackupService {
         work.isSaved = incomingWins ? archived.isSaved : work.isSaved
         work.isFinished = incomingWins ? archived.isFinished : work.isFinished
         work.isComplete = incomingWins ? archived.isComplete : work.isComplete
-        work.isPendingDeletion = incomingWins ? (archived.isDeleted ?? false) : work.isPendingDeletion
         work.deletedAt = newest(work.deletedAt, archived.deletedAt)
-        // incomingWins-gated like isDeleted, not a blind "newest wins" — a device that
-        // already called restore() (clearing this field) must win over a stale device
-        // that hasn't synced the restore yet, the same way an un-set isDeleted does.
-        work.permanentDeletionScheduledAt = incomingWins
-            ? archived.permanentDeletionScheduledAt
-            : work.permanentDeletionScheduledAt
+        // incomingWins-gated like the flags above — a device that already called restore()
+        // must win over a stale device that hasn't synced the restore yet. The *schedule*
+        // is this device's own and is never taken from the archive: see
+        // `archivedDeletionState`.
+        if incomingWins {
+            let deletion = archivedDeletionState(
+                incomingIsDeleted: archived.isDeleted ?? false,
+                localIsPendingDeletion: work.isPendingDeletion,
+                localScheduledAt: work.permanentDeletionScheduledAt
+            )
+            work.isPendingDeletion = deletion.isPendingDeletion
+            work.permanentDeletionScheduledAt = deletion.scheduledAt
+        }
 
         work.wordCount = mergedPositive(
             current: work.wordCount,
@@ -2089,7 +2236,14 @@ enum KudosBackupService {
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
         work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater
 
-        if incomingWins || work.epubPreservationStatus == .notPreserved {
+        // Preservation is monotonic under merge: an archive may promote a work to
+        // `.preserved`, never demote one. A future-dated record used to win
+        // `incomingWins` and flip a preserved work back to `.notPreserved`, which both
+        // loses the user's explicit intent and re-opens the byte-replacement path that
+        // `mayReplaceEPUB` closes. Local `.preserved` is the floor; only the user
+        // un-preserves, through the UI.
+        if work.epubPreservationStatus != .preserved,
+           incomingWins || work.epubPreservationStatus == .notPreserved {
             work.epubPreservationStatusRaw = archived.epubPreservationStatusRaw
         }
         if incomingWins || work.metadataSyncStatus == .unknown {
