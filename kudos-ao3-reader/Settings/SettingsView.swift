@@ -534,11 +534,21 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             case let .confirmImport(scopedURL, manifest):
                 Alert(
                     title: Text("Import this backup?"),
+                    // M1e. The previous copy ended "Existing items won't be deleted." That was
+                    // false in a way that mattered: a merge can overwrite a local work's title,
+                    // author and metadata, and can replace an existing highlight's note text —
+                    // the archive wins wherever its record is newer. Nothing is *removed* from
+                    // the Library, which is presumably what the old wording meant, but a user
+                    // reading it would reasonably conclude their existing content was safe.
+                    // Say what merge actually does instead, without overclaiming risk either:
+                    // preserved EPUBs and privacy settings ARE protected (M1b/D7, M1d, M3), so
+                    // the honest message is "newer wins", not "this may destroy your library".
                     message: Text(
                         "This backup contains \(manifest.works.count) Library records, "
                             + "\(manifest.bookmarks.count) saved links, and "
-                            + "\(manifest.fonts.count) custom fonts. Existing items "
-                            + "won't be deleted."
+                            + "\(manifest.fonts.count) custom fonts. Nothing in your Library "
+                            + "is removed, but where the backup's copy is newer it replaces "
+                            + "your details for that item, including notes."
                     ),
                     primaryButton: .default(Text("Import and Merge")) {
                         restorePendingBackup(scopedURL: scopedURL, manifest: manifest)
