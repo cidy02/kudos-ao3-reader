@@ -149,17 +149,21 @@ struct AnnotationNotePreservationTests {
         )
     }
 
+    // Matches ReadingAnnotationBackupTests exactly — the known-working shape for this schema.
+    // Taking `.mainContext` off a freshly-constructed container instead threw during setup.
     private func schema() -> Schema {
         Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+            SyncTombstone.self, ReadingAnnotation.self
         ])
     }
 
     private func context(_ schema: Schema) throws -> ModelContext {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        return try ModelContainer(for: schema, configurations: [configuration]).mainContext
+        ModelContext(try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ))
     }
 
     private func testDefaults() throws -> UserDefaults {
