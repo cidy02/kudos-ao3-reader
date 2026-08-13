@@ -1045,10 +1045,36 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         defaults.set(readerWordSpacing, forKey: "readerWordSpacing")
         defaults.set(readerMargin, forKey: "readerMargin")
         defaults.set(readerJustify, forKey: "readerJustify")
-        defaults.set(confirmBeforeDelete, forKey: "confirmBeforeDelete")
-        defaults.set(hideMatureContent, forKey: "hideMatureContent")
-        defaults.set(matureContentMode, forKey: "matureContentMode")
-        defaults.set(requireBiometricToReveal, forKey: "requireBiometricToReveal")
+        // M3. These four are safety gates, and until the 2026-08 audit an archive could
+        // *relax* every one of them by blind assignment. That is not only an import-time
+        // problem: `KudosBackupService.restore` always ends here (it is the last thing it
+        // does), and `FolderSyncService` calls `restore` from four separate places
+        // — foldConflictContents, syncDown, the legacy package fold and foldConflictVersions
+        // — none of which shows any UI. Auto Sync is on by default and syncDown runs at
+        // launch and on every foreground, so a `manifest.json` in the Library Sync Folder
+        // could silently turn off mature-content hiding and the biometric reveal prompt.
+        //
+        // A confirmation prompt on the Settings import path would have covered none of those
+        // four. So the rule lives here, at the single funnel every restore passes through:
+        // **a restore may tighten a privacy gate, never loosen one.** The user relaxes them
+        // in Settings, on the device in their hand.
+        //
+        // Consequence worth knowing: a relaxation cannot propagate between the user's own
+        // devices either — once a gate is on anywhere it stays on until it is turned off on
+        // each device. That is the intended direction of the trade.
+        defaults.set(defaults.bool(forKey: "confirmBeforeDelete") || confirmBeforeDelete, forKey: "confirmBeforeDelete")
+        defaults.set(defaults.bool(forKey: "hideMatureContent") || hideMatureContent, forKey: "hideMatureContent")
+        defaults.set(
+            defaults.bool(forKey: "requireBiometricToReveal") || requireBiometricToReveal,
+            forKey: "requireBiometricToReveal"
+        )
+        // `.hide` is stricter than `.obscure`. An unrecognised incoming string keeps the local
+        // value rather than being coerced — the same fail-closed shape as M2's tombstone types.
+        if let incomingMode = MaturePrivacyMode(rawValue: matureContentMode) {
+            let localMode = MaturePrivacyMode(rawValue: defaults.string(forKey: "matureContentMode") ?? "")
+            let stricter = (localMode == .hide || incomingMode == .hide) ? MaturePrivacyMode.hide : incomingMode
+            defaults.set(stricter.rawValue, forKey: "matureContentMode")
+        }
         defaults.set(appTheme, forKey: "appTheme")
         defaults.set(readerTheme, forKey: "readerTheme")
         defaults.set(matchAppReaderTheme, forKey: "matchAppReaderTheme")
@@ -1329,7 +1355,11 @@ enum KudosBackupService {
             // running the cheap preservation check first means a work we are going to
             // skip never costs an inflation at all. Order matters for M4's memory win,
             // not just for readability.
-            if Self.mayReplaceEPUB(local: work, archivedID: archived.id, isNewRecord: isNewRecord),
+            //
+            // D7: no `archivedID` parameter — a matching record id is not evidence of
+            // provenance, because an A4 adversary reads record UUIDs straight out of the
+            // sync folder's own manifest.
+            if Self.mayReplaceEPUB(local: work, isNewRecord: isNewRecord),
                let epub = contents.epubData(for: archived.id) {
                 // A5-F3: never let corrupt/untrusted bytes overwrite a valid local EPUB.
                 // Stage to a scratch file and preflight through the same hardened
@@ -1798,6 +1828,20 @@ enum KudosBackupService {
                     localModifiedAt: local.lastModifiedAt,
                     incomingModifiedAt: incomingModifiedAt
                 ) else { continue }
+                // M1f. This id-keyed path — not the dedup path below — is where a forged
+                // annotation actually lands: an A4 adversary reads the real UUID out of the
+                // sync folder's own `manifest.json`, so there is no dedup loser and the
+                // pre-existing guard in `dedupeSamePassageAnnotations` never runs. Straight
+                // LWW here would overwrite the user's note text in place, unrecoverably, with
+                // no interaction beyond having trusted the folder.
+                //
+                // The live row still takes LWW (deletion flags included — annotation delete
+                // between the user's own devices depends on it, because
+                // `annotationResolution(.suppressStaleData)` only skips and never sets the
+                // flag). Only the displaced *text* is preserved, on a hidden sibling.
+                if preexistingIDs.contains(local.id), !local.note.isEmpty, archived.note != local.note {
+                    parkDisplacedNote(local.note, from: local, work: work, in: context)
+                }
                 local.kindRaw = archived.kindRaw
                 local.colorRaw = archived.colorRaw
                 local.locatorString = archived.locatorString
@@ -1841,6 +1885,64 @@ enum KudosBackupService {
         dedupeSamePassageAnnotations(context: context, preexistingIDs: preexistingIDs)
     }
 
+    /// Parks note text that a merge is about to overwrite onto a hidden, already-soft-deleted
+    /// copy of the row it came from, so the live row can take a clean last-write-wins update
+    /// without the user's typing being destroyed.
+    ///
+    /// **Why a sibling row rather than appending onto the live note.** Appending was the first
+    /// design and it fails twice. It injects the other side's text into what the user actually
+    /// sees — an attacker-supplied note ends up *in* the user's note rather than merely
+    /// replacing it. And because `SyncMerge.shouldApplyIncoming` is `incoming >= local`
+    /// (`PersistenceSync.swift`) while modified annotations re-export on every snapshot, two of
+    /// the user's own devices that legitimately disagree ping-pong the concatenation and it
+    /// grows without bound on every sync cycle. Parking keeps the live row a clean LWW winner,
+    /// converges, and still never loses a byte the user typed.
+    ///
+    /// **Honest limitation.** There is no Recently Deleted surface for annotations
+    /// (`RecentlyDeletedView` lists works, collections and queues only). "Recoverable" here
+    /// means the text survives in the store and round-trips through backup — *not* that the
+    /// user can tap to restore it. Do not describe this as a recovery flow.
+    ///
+    /// **Known consequence, flagged rather than optimised away.** Restore cannot tell a forged
+    /// same-id record from the user's own honest edit arriving from another device — that
+    /// asymmetry is the premise of the whole rule — so a parked row is created on *every*
+    /// divergent note update a device receives, not only on an attack. In effect the store
+    /// keeps a version history of every note that has ever been edited on two devices, and
+    /// those rows are exported in every backup. Bounding it is tempting and the obvious bounds
+    /// are unsafe: keeping only the most recent parked row lets an attacker overwrite twice,
+    /// the second write displacing the user's real text out of the single slot. Left unbounded
+    /// deliberately; if the row count ever becomes a real problem the fix is a pruning policy
+    /// with an explicit retention rule, not a smaller buffer.
+    @discardableResult
+    private static func parkDisplacedNote(
+        _ note: String,
+        from original: ReadingAnnotation,
+        work: SavedWork,
+        in context: ModelContext,
+        now: Date = Date()
+    ) -> ReadingAnnotation? {
+        guard !note.isEmpty else { return nil }
+        let parked = ReadingAnnotation(
+            work: work,
+            kind: original.kind,
+            locatorString: original.locatorString,
+            selectedText: original.selectedText,
+            note: note,
+            color: original.color,
+            progression: original.progression,
+            spineIndex: original.spineIndex,
+            chapterTitle: original.chapterTitle,
+            createdAt: original.createdAt
+        )
+        // Born hidden: it is a salvage record, not a second live highlight. Dedup skips
+        // pending-deletion rows, so it never competes with the live one it was split from.
+        parked.isPendingDeletion = true
+        parked.deletedAt = now
+        parked.lastModifiedAt = now
+        context.insert(parked)
+        return parked
+    }
+
     /// ANN-8: two devices creating the "same" highlight/bookmark offline
     /// produce two different UUIDs, so id-keyed merging above never notices.
     /// After the restore merge, collapse any still-live annotations that
@@ -1853,9 +1955,10 @@ enum KudosBackupService {
     /// from an untrusted manifest — so an attacker who knows a locator (an A4 adversary
     /// reads it out of the sync folder's own manifest) could otherwise post a colliding,
     /// newer-dated annotation and have the user's note row hard-deleted, note text and
-    /// all, with no user interaction. Pre-existing losers are soft-deleted instead, so
-    /// the row and its text remain recoverable, and their note is *always* salvaged onto
-    /// the winner rather than only when the winner's note is empty.
+    /// all, with no user interaction. Pre-existing losers are soft-deleted instead, so the
+    /// row and its text survive; a losing note that would otherwise be dropped is filled
+    /// onto an empty winner, or parked on a hidden sibling when both notes are non-empty
+    /// (see `parkDisplacedNote` for why this is not a concatenation).
     private static func dedupeSamePassageAnnotations(
         context: ModelContext,
         preexistingIDs: Set<UUID>
@@ -1878,19 +1981,22 @@ enum KudosBackupService {
             guard let winner = ranked.first else { continue }
             for loser in ranked.dropFirst() {
                 if !loser.note.isEmpty, winner.note != loser.note {
-                    // Always salvage, not only when the winner's note is empty: the
-                    // loser may be the user's own pre-existing note being collapsed
-                    // into an incoming record, and dropping its text is exactly the
-                    // destruction this rule exists to prevent.
-                    winner.note = winner.note.isEmpty
-                        ? loser.note
-                        : "\(winner.note)\n\n\(loser.note)"
-                    // Salvaging is a real content edit: without stamping it, the
-                    // winner keeps its old `lastModifiedAt`, and the very next
-                    // merge would see a "newer" remote copy of the winner (which
-                    // still has an empty note) and overwrite the rescued note —
-                    // silently undoing the salvage this dedup just performed.
-                    winner.markModified()
+                    if winner.note.isEmpty {
+                        // Empty-winner fill, as before the audit: no text is in contention,
+                        // so the rescued note simply becomes the winner's.
+                        winner.note = loser.note
+                        // Salvaging is a real content edit: without stamping it, the winner
+                        // keeps its old `lastModifiedAt`, and the very next merge would see a
+                        // "newer" remote copy of the winner (which still has an empty note)
+                        // and overwrite the rescued note — silently undoing this salvage.
+                        winner.markModified()
+                    } else if let work = loser.work {
+                        // Both notes are non-empty and different. Concatenating them onto the
+                        // winner was the first fix and it ping-pongs without bound between two
+                        // honest devices (see `parkDisplacedNote`). Park instead: the winner
+                        // stays a clean LWW result and the loser's text is still not lost.
+                        parkDisplacedNote(loser.note, from: loser, work: work, in: context)
+                    }
                 }
                 SyncTombstones.recordDeletion(of: loser, in: context, reason: "samePassageDeduped")
                 if preexistingIDs.contains(loser.id) {
@@ -2093,20 +2199,31 @@ enum KudosBackupService {
     /// archive naming a work id the victim happens to own could replace that work's
     /// file with attacker bytes. Clamping timestamps does not touch this path.
     ///
-    /// The rule: a `.preserved` work's bytes are never replaced by a *foreign* record.
-    /// Preservation is the app's promise that this exact copy is being kept — often of
-    /// a fic that no longer exists upstream — so a merge must not silently swap it. A
-    /// record round-tripping through the user's own backup (same `id`) is still allowed
-    /// to restore itself, and a work with no local file can always be filled in.
+    /// The rule: **a `.preserved` work that still has its file is never byte-replaced by a
+    /// restore.** Preservation is the app's promise that this exact copy is being kept — often
+    /// of a fic that no longer exists upstream — so a merge must not silently swap it. A work
+    /// with no local file can always be filled in, and a brand-new record has nothing to lose.
+    ///
+    /// An earlier draft also allowed replacement when `local.id == archivedID`, reasoning that
+    /// a record round-tripping through the user's own backup should be able to restore itself.
+    /// That hatch is attacker-reachable: an A4 adversary reads record UUIDs straight out of the
+    /// sync folder's `manifest.json` (the same read that yields annotation locators), and
+    /// `FolderSyncService.readChangedRemoteAssets` treats a size difference as a change signal
+    /// and hands the remote bytes to `restore` under that very id. Same-id was therefore no
+    /// evidence of provenance at all. Dropped — a preserved file that is still on disk does not
+    /// need restoring over the top of itself.
+    ///
+    /// **Must ship with M1d.** `apply(_:to:isNewRecord:)` runs earlier in the same loop
+    /// iteration than the EPUB branch, so without the monotonic-preservation rule a single
+    /// restore can flip `.preserved` to `.notPreserved` and then satisfy this gate on the very
+    /// next line.
     ///
     /// Pure and internal so the policy is unit-testable without a `ModelContext`.
     nonisolated static func mayReplaceEPUB(
         local: SavedWork,
-        archivedID: UUID,
         isNewRecord: Bool
     ) -> Bool {
         if isNewRecord { return true }
-        if local.id == archivedID { return true }
         if !local.hasEPUB { return true }
         return local.epubPreservationStatus != .preserved
     }
