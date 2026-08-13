@@ -187,7 +187,19 @@ class BackupRepository(
 
         snapshot.savedSearches.forEach { database.savedSearchDao().upsert(it.toEntity()) }
 
-        snapshot.tombstones.forEach { database.syncTombstoneDao().upsert(it.toEntity()) }
+        val knownTombstoneTypes = setOf(
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION
+        )
+        snapshot.tombstones.forEach { tombstone ->
+            if (tombstone.recordTypeRaw in knownTombstoneTypes) {
+                database.syncTombstoneDao().upsert(tombstone.toEntity())
+            }
+        }
 
         // Queues before memberships (FK).
         snapshot.readingQueues.forEach { database.readingQueueDao().upsertQueue(it.toEntity()) }

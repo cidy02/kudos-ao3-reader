@@ -9,6 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.time.Instant
 import java.time.Duration
@@ -138,5 +139,26 @@ class BackupRestoreSecurityTest {
         assertFalse(restoredQueue.isDeleted)
         assertNull(restoredQueue.deletedAt)
         assertNull(restoredQueue.permanentDeletionScheduledAt)
+    }
+
+    @Test
+    fun testM2b_BlankOrUnknownTombstoneRejected() {
+        val blankTombstone = BackupTombstone(
+            id = "11111111-1111-1111-1111-111111111111",
+            recordID = "22222222-2222-2222-2222-222222222222",
+            recordTypeRaw = "   "
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            blankTombstone.toSyncTombstone()
+        }
+
+        val unknownTombstone = BackupTombstone(
+            id = "33333333-3333-3333-3333-333333333333",
+            recordID = "44444444-4444-4444-4444-444444444444",
+            recordTypeRaw = "maliciousType"
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            unknownTombstone.toSyncTombstone()
+        }
     }
 }

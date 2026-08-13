@@ -369,6 +369,19 @@ object BackupMergeService {
             val incomingBytes = backupFontFiles[archived.fileName] ?: return@forEach
             val existing = fontsByName[archived.fileName]
             if (existing == null) {
+                val existingBytes = currentFontFiles[archived.fileName]
+                if (existingBytes != null && BackupPaths.sha256(existingBytes) != BackupPaths.sha256(incomingBytes)) {
+                    val newFileName = BackupPaths.uniqueSuffixedFontFileName(
+                        archived.fileName,
+                        fontsByName.keys + filesToWrite.keys
+                    )
+                    fontsByName[newFileName] = archived.toCustomFont(fileNameOverride = newFileName)
+                    filesToWrite[newFileName] = incomingBytes
+                    renamedFonts[archived.fileName] = newFileName
+                    created += 1
+                    return@forEach
+                }
+
                 val font = archived.toCustomFont()
                 fontsByName[font.fileName] = font
                 filesToWrite[font.fileName] = incomingBytes

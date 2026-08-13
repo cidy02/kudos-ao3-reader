@@ -527,7 +527,18 @@ fun BackupTombstone.toSyncTombstone(): SyncTombstone {
     } else {
         created
     }
-    val type = recordTypeRaw.ifBlank { "savedWork" }
+    val type = recordTypeRaw.trim()
+    val knownTypes = setOf(
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION
+    )
+    if (type.isEmpty() || type !in knownTypes) {
+        throw IllegalArgumentException("Invalid or unknown tombstone recordTypeRaw: $recordTypeRaw")
+    }
     return SyncTombstone(
         id = BackupPaths.canonicalUuid(id, "tombstone.id"),
         recordID = BackupPaths.canonicalUuid(
