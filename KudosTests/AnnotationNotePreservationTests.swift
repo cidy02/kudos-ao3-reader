@@ -100,9 +100,18 @@ struct AnnotationNotePreservationTests {
         try target.save()
 
         // Device B's newer "B" arrives, twice (the second sync must be a no-op on the text).
+        //
+        // The incoming record carries a DIFFERENT UUID that collides only by
+        // (work, kind, locatorString). That is the whole premise of ANN-8: two devices
+        // creating the same highlight offline mint different ids. The earlier version of
+        // this test reused `annotation.id`, so `restore()` matched by id and updated in
+        // place — `dedupeSamePassageAnnotations` only acts when `group.count > 1`, so it
+        // never ran, and this test proved nothing about the convergence it is named for.
+        // Fixed id per iteration so the second sync is genuinely the same remote record.
+        let deviceBID = UUID()
         for _ in 0..<2 {
             let contents = try forgedContents(
-                annotationID: annotation.id, workID: workID, work: work,
+                annotationID: deviceBID, workID: workID, work: work,
                 note: "B", isPendingDeletion: false
             )
             _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())

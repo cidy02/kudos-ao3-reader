@@ -13,25 +13,100 @@ struct ArchiveTrustBoundaryTests {
 
     // MARK: - M1a — decode clamp
 
-    @Test func futureDatedArchiveTimestampsAreClampedAtDecode() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        let far = Date(timeIntervalSince1970: 32_503_680_000)  // year 3000
-        let clamped = KudosBackupContents.clampedArchiveDate(far, now: now)
-        #expect(clamped == now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew))
-        // An honest past date is untouched.
-        let past = Date(timeIntervalSince1970: 500_000)
-        #expect(KudosBackupContents.clampedArchiveDate(past, now: now) == past)
+    /// Drives the REAL decoder with a year-3000 manifest rather than calling
+    /// `clampedArchiveDate` directly. The earlier version of this test invoked the
+    /// helper and proved only that `min()` works — it stayed green with the clamp
+    /// deleted from `makeDecoder()`, which is the only place that makes it a
+    /// security control. Revert-check: remove `clampedArchiveDate(...)` from the
+    /// decoder's `dateDecodingStrategy` and this must go red.
+    @Test func futureDatedArchiveTimestampsAreClampedAtDecode() throws {
+        let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        let json = """
+        {
+          "version": 8,
+          "exportedAt": "3000-01-01T00:00:00.000Z",
+          "works": [{
+            "id": "\(UUID().uuidString)",
+            "title": "Year 3000",
+            "author": "Adversary",
+            "dateAdded": "3000-01-01T00:00:00.000Z",
+            "lastModifiedAt": "3000-01-01T00:00:00.000Z"
+          }],
+          "bookmarks": [], "fonts": [], "settings": {}
+        }
+        """
+        let manifest = try KudosBackupContents.decodeManifest(Data(json.utf8))
+
+        #expect(manifest.exportedAt <= ceiling, "exportedAt escaped the decode clamp")
+        let work = try #require(manifest.works.first)
+        #expect(work.lastModifiedAt.map { $0 <= ceiling } ?? true, "lastModifiedAt escaped the clamp")
+        #expect(work.dateAdded <= ceiling, "dateAdded escaped the clamp")
+    }
+
+    /// An honest past date must survive the clamp untouched — otherwise the fix
+    /// would "pass" by flattening every timestamp, destroying merge ordering.
+    @Test func honestPastTimestampsAreNotAlteredByTheDecodeClamp() throws {
+        let json = """
+        {
+          "version": 8,
+          "exportedAt": "2023-11-14T09:30:00.000Z",
+          "works": [], "bookmarks": [], "fonts": [], "settings": {}
+        }
+        """
+        let manifest = try KudosBackupContents.decodeManifest(Data(json.utf8))
+        let expected = ISO8601DateFormatter().date(from: "2023-11-14T09:30:00Z")
+        #expect(manifest.exportedAt == expected, "a past date must pass through unchanged")
     }
 
     // MARK: - M1b + D7 — EPUB replacement gate
 
-    @Test func preservedWorkWithAFileIsNeverByteReplacedByARestore() {
-        let work = SavedWork(title: "Preserved", author: "Writer")
-        work.hasEPUB = true
-        work.epubPreservationStatusRaw = EPUBPreservationStatus.preserved.rawValue
-        // D7: same-id is no longer an escape hatch — an A4 adversary reads record UUIDs out
-        // of the sync folder's own manifest, so it was never evidence of provenance.
-        #expect(!KudosBackupService.mayReplaceEPUB(local: work, isNewRecord: false))
+    /// Drives the REAL `restore()` and asserts on the BYTES ON DISK. The earlier
+    /// version called `mayReplaceEPUB` directly, so deleting the gate's call site
+    /// from the works loop — the actual vulnerability — left it green.
+    ///
+    /// D7: same-id is not an escape hatch. An A4 adversary reads record UUIDs out of
+    /// the sync folder's own manifest, so a matching id was never evidence of
+    /// provenance. The donor here deliberately uses the victim's own id.
+    ///
+    /// Revert-check: delete `Self.mayReplaceEPUB(...)` from the `if let epub =`
+    /// condition in the works loop and this must go red.
+    @Test func preservedWorkWithAFileIsNeverByteReplacedByARestore() throws {
+        let container = try container()
+        let context = container.mainContext
+        let workID = UUID()
+
+        let local = SavedWork(id: workID, title: "Preserved", author: "Writer")
+        local.isSaved = true
+        local.hasEPUB = true
+        context.insert(local)
+        let genuine = try Data(contentsOf: EPUBTests.sampleEPUB)
+        try genuine.write(to: local.fileURL)
+        defer { try? FileManager.default.removeItem(at: local.fileURL) }
+        // `.preserved` only survives `ReadingQueueService.normalize` with queue
+        // membership and a real file (see the M1d test's note).
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        ReadingQueueService.add(local, to: queue, in: context)
+        local.epubPreservationStatus = .preserved
+        try context.save()
+
+        // The attacker ships different, structurally valid EPUB bytes under the
+        // victim's own record id.
+        let attacker = try Data(contentsOf: EPUBTests.sampleEPUB) + Data("<!-- ATTACKER -->".utf8)
+        let donor = SavedWork(id: workID, title: "Preserved", author: "Writer")
+        donor.lastModifiedAt = Date().addingTimeInterval(60 * 60)
+        let contents = KudosBackupContents(
+            manifest: KudosBackupManifest(
+                works: [KudosBackupWork(work: donor)], bookmarks: [], fonts: [],
+                settings: .capture(defaults: try testDefaults())
+            ),
+            epubFiles: [workID: attacker]
+        )
+
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let onDisk = try Data(contentsOf: local.fileURL)
+        #expect(onDisk == genuine, "a preserved work's bytes were replaced by a restore")
+        #expect(onDisk != attacker, "attacker bytes reached a preserved work's file")
     }
 
     @Test func replacementIsAllowedWhereThereIsNothingToDestroy() {
@@ -68,8 +143,19 @@ struct ArchiveTrustBoundaryTests {
         let validEPUB = try Data(contentsOf: EPUBTests.sampleEPUB)
         try validEPUB.write(to: local.fileURL)
         defer { try? FileManager.default.removeItem(at: local.fileURL) }
-        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
-        ReadingQueueService.add(local, to: queue, in: context)
+        // Deliberately NOT queued, and `isQueuedForLater` left false.
+        //
+        // The earlier fixture put the work in a queue so `.preserved` would survive
+        // `ReadingQueueService.normalize` — and that scaffolding is exactly what made
+        // this test worthless: `normalizeAllQueuedWorks` then RE-UPGRADED the work to
+        // `.preserved` after the archive demoted it, so the test passed with M1d fully
+        // reverted (verified: it did).
+        //
+        // `normalizeAllQueuedWorks` (ReadingQueueService.swift:167-192) only visits works
+        // that hold a queue membership or still carry a stale `isQueuedForLater` flag.
+        // An un-queued, unflagged work is never normalized at all, so whatever the merge
+        // leaves is what we observe — no masking in either direction.
+        local.isQueuedForLater = false
         local.epubPreservationStatus = .preserved
         try context.save()
 
