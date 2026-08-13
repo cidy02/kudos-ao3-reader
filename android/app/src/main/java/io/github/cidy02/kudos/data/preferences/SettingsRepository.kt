@@ -189,6 +189,7 @@ class SettingsRepository(
 
     /** Replace all preference keys from a full settings snapshot (backup restore). */
     suspend fun replaceAll(settings: KudosSettings) {
+        val current = snapshot()
         dataStore.edit { prefs ->
             prefs[Keys.ReaderFontId] = settings.reader.readerFontId
             prefs[Keys.ReaderMode] = settings.reader.readerMode.storageValue
@@ -202,9 +203,18 @@ class SettingsRepository(
             prefs[Keys.ReaderMargin] = settings.reader.readerMargin
             prefs[Keys.ReaderJustify] = settings.reader.readerJustify
             prefs[Keys.ConfirmBeforeDelete] = settings.app.confirmBeforeDelete
-            prefs[Keys.HideMatureContent] = settings.privacy.hideMatureContent
-            prefs[Keys.MatureContentMode] = settings.privacy.matureContentMode.storageValue
-            prefs[Keys.RequireBiometricToReveal] = settings.privacy.requireBiometricToReveal
+            prefs[Keys.HideMatureContent] = current.privacy.hideMatureContent || settings.privacy.hideMatureContent
+            
+            val newMatureMode = if (current.privacy.matureContentMode == MatureContentMode.Hide) {
+                MatureContentMode.Hide
+            } else {
+                settings.privacy.matureContentMode
+            }
+            prefs[Keys.MatureContentMode] = newMatureMode.storageValue
+            
+            val newBiometric = current.privacy.requireBiometricToReveal || settings.privacy.requireBiometricToReveal
+            prefs[Keys.RequireBiometricToReveal] = newBiometric
+            
             prefs[Keys.AppTheme] = settings.app.appTheme.storageValue
             prefs[Keys.ReaderTheme] = settings.reader.readerTheme.storageValue
             prefs[Keys.MatchAppReaderTheme] = settings.reader.matchAppReaderTheme
