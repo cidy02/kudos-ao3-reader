@@ -45,8 +45,13 @@ struct ArchiveTrustBoundaryTests {
         )
         #expect(json.contains("3000-01-01"), "fixture did not actually carry a future date")
 
-        let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
         let manifest = try KudosBackupContents.decodeManifest(Data(json.utf8))
+        // Ceiling captured AFTER the decode, deliberately. The clamp calls `Date()`
+        // itself, so a ceiling taken beforehand is stale by the microseconds between
+        // the two calls and the comparison fails by a hair — which is exactly what
+        // happened on the first run of this rewrite. Taking it after guarantees
+        // `ceiling >= ` the clamp's own now, with no tolerance fudge.
+        let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
 
         #expect(manifest.exportedAt <= ceiling, "exportedAt escaped the decode clamp")
         let work = try #require(manifest.works.first)
