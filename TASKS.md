@@ -230,6 +230,10 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
 
 ## ✅ Completed (recent — newest first)
 
+**WP-E (M1g-Android) Security Fix (`ccc8a40`, branch `security-fixes/wp-e-android`):** Fixed archive ingestion vulnerability by forcing a recomputation of `permanentDeletionScheduledAt` instead of blindly copying it from backups, and clearing it when `isDeleted` is false. This prevents malicious archives from hard-deleting local works.
+**Status:** ✅ DONE
+**Next step / open question:** Analogues (M1a, M2, M3) investigated; `wpe-gemini-android.md` report written. Are any bounds checks required for M1a beyond Android's date parser?
+
 **T-84 verification follow-up (`55f7d63`, 2026-07-09):** assigned every
 app-created `WKWebView` to one shared `WKProcessPool`, so the launch-time prewarm
 actually covers login, Browse, and the legacy macOS reader. `Scripts/verify.sh`
