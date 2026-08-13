@@ -177,7 +177,15 @@ final class AppRouter {
     }
 
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.
+    ///
+    /// Scheme gate lives at this sink, not at the call sites: `javascript:` is a
+    /// WebKit no-op today, but `data:` commits and renders, and a future caller
+    /// that forgets to pre-filter must not be able to load either. Rejected
+    /// schemes leave `pendingURL` and `isPresentingWebBrowser` untouched.
     func open(_ url: URL) {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return }
         pendingURL = url
         isPresentingWebBrowser = true
     }
