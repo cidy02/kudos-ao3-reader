@@ -32,15 +32,18 @@ nonisolated struct KudosBackupContents {
     let manifest: KudosBackupManifest
     let epubFiles: [UUID: Data]
     let fontFiles: [String: Data]
+    let zip: MiniZip?
 
     nonisolated init(
         manifest: KudosBackupManifest,
         epubFiles: [UUID: Data] = [:],
-        fontFiles: [String: Data] = [:]
+        fontFiles: [String: Data] = [:],
+        zip: MiniZip? = nil
     ) {
         self.manifest = manifest
         self.epubFiles = epubFiles
         self.fontFiles = fontFiles
+        self.zip = zip
     }
 
     /// Legacy read path for the pre-archive directory-package format. Kept so
@@ -77,6 +80,7 @@ nonisolated struct KudosBackupContents {
             fonts[font.fileName] = data
         }
         fontFiles = fonts
+        zip = nil
     }
 
     /// Reads a backup from either physical format: a single `.kudosbackup` ZIP
@@ -106,12 +110,9 @@ nonisolated struct KudosBackupContents {
             throw KudosBackupError.unsupportedVersion(manifest.version)
         }
 
-        var epubs: [UUID: Data] = [:]
-        for work in manifest.works {
-            guard let data = zip.data(named: "Works/\(work.id.uuidString).epub") else { continue }
-            epubs[work.id] = data
-        }
-        epubFiles = epubs
+        // M4: Defer reading EPUBs into memory. We only read them out one by one during restore.
+        epubFiles = [:]
+        self.zip = zip
 
         var fonts: [String: Data] = [:]
         for font in manifest.fonts {
@@ -1260,7 +1261,8 @@ enum KudosBackupService {
             // next unrelated reindex.
             WorkSearchIndex.reindex(work)
 
-            if let epub = contents.epubFiles[archived.id] {
+            let epubData = contents.epubFiles[archived.id] ?? contents.zip?.data(named: "Works/\(archived.id.uuidString).epub")
+            if let epub = epubData {
                 // A5-F3: never let corrupt/untrusted bytes overwrite a valid local EPUB.
                 // Stage to a scratch file and preflight through the same hardened
                 // validator (`EPUBDocument.inspectPackage`, backed by the hardened

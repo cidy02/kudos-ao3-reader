@@ -104,6 +104,21 @@ struct MiniZipHostileTests {
 
     // MARK: - 5. Excessive ratio / cumulative size
 
+    @Test func rejectDeflateWithZeroCompressedSize() {
+        let archive = buildArchive([
+            RawEntry(
+                name: "bomb.bin",
+                method: 8,
+                payload: Data(),
+                declaredCompressedSize: 0,
+                declaredUncompressedSize: 500_000_000
+            )
+        ])
+        #expect(throws: MiniZipError.suspiciousCompressionRatio) {
+            _ = try MiniZip(data: archive)
+        }
+    }
+
     @Test func implausibleCompressionRatioIsRejected() {
         let archive = buildArchive([
             RawEntry(
