@@ -236,9 +236,21 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// Fetches a URL's body, validating the HTTP status and retrying transient
     /// failures with backoff (see `withRetry`). Concurrent requests for the same URL
     /// are coalesced into a single fetch.
+    ///
+    /// Host allow-list (M6) is applied *before* coalescing or `pace()` so a
+    /// hostile `imageData`/`getHTML` URL cannot become an app-origin beacon
+    /// to an arbitrary host.
     private func fetchData(from url: URL) async throws -> Data {
-        try await coalescer.shared(url) { [self] in
+        try Self.rejectIfUntrusted(url)
+        return try await coalescer.shared(url) { [self] in
             try await performFetch(from: url)
+        }
+    }
+
+    /// Internal so the allow-list is unit-testable without a network call.
+    static func rejectIfUntrusted(_ url: URL) throws {
+        guard AO3RequestDefaults.isTrustedURL(url) else {
+            throw AO3Error.untrustedHost
         }
     }
 

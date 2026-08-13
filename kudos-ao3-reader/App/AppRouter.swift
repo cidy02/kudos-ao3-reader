@@ -199,7 +199,7 @@ final class AppRouter {
             return
         }
         let parts = url.pathComponents.filter { $0 != "/" }
-        if (url.host ?? "").contains("archiveofourown.org"),
+        if AO3RequestDefaults.isTrustedURL(url),
            parts.first == "tags", parts.count >= 2 {
             pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(parts[1]))
             selection = .browse

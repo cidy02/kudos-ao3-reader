@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import OSLog
 import SwiftData
@@ -59,6 +60,9 @@ enum FolderSyncError: LocalizedError, Equatable {
     case couldNotAccessFolder
     case operationInProgress(String)
     case unreadableSyncFile
+    /// A sync-folder asset (or the manifest) is a symlink. `Data(contentsOf:)`
+    /// would follow it out of the folder (M12).
+    case symlinkedAsset
 
     var errorDescription: String? {
         switch self {
@@ -70,6 +74,8 @@ enum FolderSyncError: LocalizedError, Equatable {
             "Kudos is already running \(operation). Try again when it finishes."
         case .unreadableSyncFile:
             "Kudos couldn't read the Library Sync Folder backup file."
+        case .symlinkedAsset:
+            "A Library Sync Folder file was a symlink and was not read."
         }
     }
 }
@@ -91,6 +97,25 @@ enum FolderSyncService {
     /// written or deleted, which makes the migration idempotent and immune to
     /// interruption.
     nonisolated static let legacySyncFileName = "KudosLibrary.kudosbackup"
+
+    /// `lstat` (does not follow) — true when the path itself is an `S_IFLNK`
+    /// node. Used to refuse folder-sync asset reads that would otherwise
+    /// `Data(contentsOf:)` a file outside the sync folder (M12).
+    nonisolated static func isSymbolicLink(at url: URL) -> Bool {
+        url.withUnsafeFileSystemRepresentation { pointer in
+            guard let pointer else { return false }
+            var info = stat()
+            guard lstat(pointer, &info) == 0 else { return false }
+            return (info.st_mode & S_IFMT) == S_IFLNK
+        }
+    }
+
+    /// Reads file bytes only when `url` is not a symlink. Internal so the
+    /// regression test can invert the original `Data(contentsOf:)` follow.
+    nonisolated static func readRegularFileData(from url: URL) throws -> Data {
+        guard !isSymbolicLink(at: url) else { throw FolderSyncError.symlinkedAsset }
+        return try Data(contentsOf: url, options: .mappedIfSafe)
+    }
 
     private static let bookmarkDataKey = "folderSyncBookmarkData"
     private static let folderDisplayNameKey = "folderSyncFolderDisplayName"
@@ -540,7 +565,7 @@ nonisolated private func coordinatedReadData(from url: URL) throws -> Data {
     var readResult: Result<Data, Error>?
     coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
         readResult = Result {
-            try Data(contentsOf: coordinatedURL, options: .mappedIfSafe)
+            try FolderSyncService.readRegularFileData(from: coordinatedURL)
         }
     }
     if let coordinationError { throw coordinationError }

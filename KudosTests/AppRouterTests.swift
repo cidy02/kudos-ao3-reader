@@ -154,6 +154,24 @@ struct AppRouterTests {
         #expect(router.requestAuthorProfileAfterDismiss(route))
     }
 
+    @Test func lookalikeHostIsNotRoutedAsANativeTagPage() {
+        let router = AppRouter()
+        let bait = URL(string: "https://archiveofourown.org.evil.com/tags/Fluff/works")!
+        router.openAO3Link(bait)
+        #expect(router.pendingTagWorks == nil)
+        #expect(router.pendingURL == bait)
+        #expect(router.isPresentingWebBrowser)
+        #expect(router.selection == .home)
+    }
+
+    @Test func httpAO3TagLinkIsNotTreatedAsTrusted() {
+        let router = AppRouter()
+        let url = URL(string: "http://archiveofourown.org/tags/Fluff/works")!
+        router.openAO3Link(url)
+        #expect(router.pendingTagWorks == nil)
+        #expect(router.pendingURL == url)
+    }
+
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {
         #expect(AppRouter.authorRoute(
             for: URL(string: "https://archiveofourown.org/users/login")!
