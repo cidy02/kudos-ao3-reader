@@ -1434,5 +1434,46 @@ struct KudosBackupTests {
         defaults.removePersistentDomain(forName: name)
         return defaults
     }
+    @Test func backupArchiveIsLazy() throws {
+        let savedWork = SavedWork(title: "Title", author: "Author")
+        let fakeWork = KudosBackupWork(work: savedWork)
+        let workID = savedWork.id
+        let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
+        let manifestData = try JSONEncoder().encode(manifest)
+        
+        let epubData = Data("dummy".utf8)
+        let zipData = HostileZipFixture.build([
+            HostileZipFixture.Entry(name: "manifest.json", payload: manifestData),
+            HostileZipFixture.Entry(name: "Works/\(workID.uuidString).epub", payload: epubData)
+        ])
+        
+        let contents = try KudosBackupContents(zipData: zipData)
+        #expect(contents.epubFiles.isEmpty, "Lazy loading should leave epubFiles empty until requested")
+    }
+
+    @Test @MainActor func directoryPreConfirmDoesNotMaterializeEPUBs() throws {
+        let dirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dirURL) }
+        
+        let savedWork = SavedWork(title: "Title", author: "Author")
+        let fakeWork = KudosBackupWork(work: savedWork)
+        let workID = savedWork.id
+        let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
+        let manifestData = try JSONEncoder().encode(manifest)
+        try manifestData.write(to: dirURL.appendingPathComponent("manifest.json"))
+        
+        let worksDir = dirURL.appendingPathComponent("Works")
+        try FileManager.default.createDirectory(at: worksDir, withIntermediateDirectories: true)
+        
+        let epubURL = worksDir.appendingPathComponent("\(workID.uuidString).epub")
+        try Data("dummy".utf8).write(to: epubURL)
+        
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: worksDir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: worksDir.path) }
+
+        let readManifest = try KudosBackupContents.preConfirmManifest(from: dirURL)
+        #expect(readManifest.version == KudosBackupManifest.currentVersion)
+    }
 }
 }

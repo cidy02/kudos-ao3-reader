@@ -91,7 +91,29 @@ nonisolated struct KudosBackupContents {
             let wrapper = try FileWrapper(url: url, options: .immediate)
             return try Self(fileWrapper: wrapper)
         }
+        // M17 RESIDUAL: .mappedIfSafe can cause SIGBUS if the underlying file is truncated by another process while mapped.
         return try Self(zipData: Data(contentsOf: url, options: .mappedIfSafe))
+    }
+
+    /// Reads just the manifest for the pre-confirmation UI without materializing
+    /// EPUBs or fonts into memory.
+    nonisolated static func preConfirmManifest(from url: URL) throws -> KudosBackupManifest {
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+        if isDirectory {
+            // M4: Defer reading EPUBs into memory. We only read manifest.json.
+            let manifestURL = url.appendingPathComponent("manifest.json")
+            // M17 RESIDUAL: .mappedIfSafe can cause SIGBUS if the underlying file is truncated by another process while mapped.
+            let manifestData = try Data(contentsOf: manifestURL, options: .mappedIfSafe)
+            return try decodeManifest(manifestData)
+        } else {
+            // M17 RESIDUAL: .mappedIfSafe can cause SIGBUS if the underlying file is truncated by another process while mapped.
+            let zipData = try Data(contentsOf: url, options: .mappedIfSafe)
+            let zip = try MiniZip(data: zipData, limits: .backup)
+            guard let manifestData = zip.data(named: "manifest.json") else {
+                throw KudosBackupError.invalidPackage
+            }
+            return try decodeManifest(manifestData)
+        }
     }
 
     nonisolated init(zipData: Data) throws {
@@ -124,6 +146,10 @@ nonisolated struct KudosBackupContents {
         fontFiles = fonts
     }
 
+    nonisolated func epubData(for id: UUID) -> Data? {
+        epubFiles[id] ?? zip?.data(named: "Works/\(id.uuidString).epub")
+    }
+
     /// Encodes just the manifest — the sync directory's `manifest.json` and
     /// the archive's first entry share the same bytes.
     nonisolated func manifestData() throws -> Data {
@@ -151,35 +177,35 @@ nonisolated struct KudosBackupContents {
             entries.append((name: "Works/\(id.uuidString).epub", data: data))
         }
         for (fileName, data) in fontFiles.sorted(by: { $0.key < $1.key })
-        where Self.isSafeFileName(fileName) {
+            where Self.isSafeFileName(fileName) {
             entries.append((name: "Fonts/\(fileName)", data: data))
         }
         return try MiniZip.archiveData(entries)
     }
 
-    // Plain `.iso8601` has no fractional-second support (whole-seconds only), which
-    // silently truncates every timestamp on export. Two edits from different devices
-    // landing in the same wall-clock second — a real possibility with auto-sync —
-    // would then be unorderable by every lastModifiedAt-based merge decision in this
-    // file. A custom formatter with fractional seconds fixes that; the decoder falls
-    // back to the plain formatter so older `.kudosbackup` files (encoded without
-    // fractional seconds) still decode correctly.
-    // ISO8601DateFormatter is not Sendable; formatters are configured once and
-    // only read afterwards (thread-safe for that usage). nonisolated(unsafe)
-    // keeps encode/decode helpers callable from nonisolated backup paths.
-    nonisolated(unsafe) private static let fractionalSecondsISO8601Formatter: ISO8601DateFormatter = {
+    /// Plain `.iso8601` has no fractional-second support (whole-seconds only), which
+    /// silently truncates every timestamp on export. Two edits from different devices
+    /// landing in the same wall-clock second — a real possibility with auto-sync —
+    /// would then be unorderable by every lastModifiedAt-based merge decision in this
+    /// file. A custom formatter with fractional seconds fixes that; the decoder falls
+    /// back to the plain formatter so older `.kudosbackup` files (encoded without
+    /// fractional seconds) still decode correctly.
+    /// ISO8601DateFormatter is not Sendable; formatters are configured once and
+    /// only read afterwards (thread-safe for that usage). nonisolated(unsafe)
+    /// keeps encode/decode helpers callable from nonisolated backup paths.
+    private nonisolated(unsafe) static let fractionalSecondsISO8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    nonisolated(unsafe) private static let wholeSecondISO8601Formatter: ISO8601DateFormatter = {
+    private nonisolated(unsafe) static let wholeSecondISO8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
 
-    nonisolated private static func makeEncoder() -> JSONEncoder {
+    private nonisolated static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
@@ -189,7 +215,7 @@ nonisolated struct KudosBackupContents {
         return encoder
     }
 
-    nonisolated private static func makeDecoder() -> JSONDecoder {
+    private nonisolated static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -242,9 +268,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// `BackupVersion.isSupported` only accepts 1…8.
     let savedSearches: [KudosBackupSavedSearch]
     let settings: KudosBackupSettings
-    // Carrying tombstones with the backup means a fresh install/reinstall restoring
-    // this file inherits the source device's deletion history, instead of having zero
-    // tombstone knowledge and silently resurrecting anything deleted after export.
+    /// Carrying tombstones with the backup means a fresh install/reinstall restoring
+    /// this file inherits the source device's deletion history, instead of having zero
+    /// tombstone knowledge and silently resurrecting anything deleted after export.
     let tombstones: [KudosBackupTombstone]
 
     init(
@@ -943,19 +969,19 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             readerFontPt: number(
                 defaults,
                 "readerFontPt",
-                fallback: Self.defaultReaderFontSizePt
+                fallback: defaultReaderFontSizePt
             ),
             readerLineHeight: number(
                 defaults,
                 "readerLineHeight",
-                fallback: Self.defaultReaderLineHeight
+                fallback: defaultReaderLineHeight
             ),
             readerLetterSpacing: number(defaults, "readerLetterSpacing", fallback: 0),
             readerWordSpacing: number(defaults, "readerWordSpacing", fallback: 0),
             readerMargin: number(
                 defaults,
                 "readerMargin",
-                fallback: Self.defaultReaderMargin
+                fallback: defaultReaderMargin
             ),
             readerJustify: bool(defaults, "readerJustify", fallback: false),
             confirmBeforeDelete: bool(defaults, "confirmBeforeDelete", fallback: true),
@@ -970,7 +996,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             appTheme: defaults.string(forKey: "appTheme") ?? ReaderTheme.light.rawValue,
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
-            accentColorHex: defaults.string(forKey: "accentColorHex") ?? Self.defaultAccentColorHex,
+            accentColorHex: defaults.string(forKey: "accentColorHex") ?? defaultAccentColorHex,
             autoPreserveSmallSeriesOnSaveForLater: bool(
                 defaults,
                 "autoPreserveSmallSeriesOnSaveForLater",
@@ -1118,7 +1144,7 @@ nonisolated enum KudosBackupError: LocalizedError {
     }
 }
 
-// Backup restore stays intentionally linear so conflict and asset safety rules remain auditable.
+/// Backup restore stays intentionally linear so conflict and asset safety rules remain auditable.
 @MainActor
 // swiftlint:disable:next type_body_length
 enum KudosBackupService {
@@ -1135,6 +1161,7 @@ enum KudosBackupService {
     ) throws -> KudosBackupContents {
         var epubFiles: [UUID: Data] = [:]
         for work in works where work.hasEPUB {
+            // M17 RESIDUAL: .mappedIfSafe can cause SIGBUS if the underlying file is truncated by another process while mapped.
             if let data = try? Data(contentsOf: work.fileURL, options: .mappedIfSafe) {
                 epubFiles[work.id] = data
             }
@@ -1142,6 +1169,7 @@ enum KudosBackupService {
 
         var fontFiles: [String: Data] = [:]
         for font in fonts {
+            // M17 RESIDUAL: .mappedIfSafe can cause SIGBUS if the underlying file is truncated by another process while mapped.
             if let data = try? Data(contentsOf: font.fileURL, options: .mappedIfSafe) {
                 fontFiles[font.fileName] = data
             }
@@ -1261,7 +1289,7 @@ enum KudosBackupService {
             // next unrelated reindex.
             WorkSearchIndex.reindex(work)
 
-            let epubData = contents.epubFiles[archived.id] ?? contents.zip?.data(named: "Works/\(archived.id.uuidString).epub")
+            let epubData = contents.epubData(for: archived.id)
             if let epub = epubData {
                 // A5-F3: never let corrupt/untrusted bytes overwrite a valid local EPUB.
                 // Stage to a scratch file and preflight through the same hardened
@@ -1898,15 +1926,14 @@ enum KudosBackupService {
 
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
-            let tombstone: SyncTombstone?
-            if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
-               let match = savedWorkTombstonesByAO3WorkID[archivedAO3WorkID] {
-                tombstone = match
+            let tombstone: SyncTombstone? = if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
+                                               let match = savedWorkTombstonesByAO3WorkID[archivedAO3WorkID] {
+                match
             } else if let canonicalURL = WorkTags.canonicalAO3WorkURL(from: archived.sourceURL),
                       let match = savedWorkTombstonesByCanonicalURL[canonicalURL] {
-                tombstone = match
+                match
             } else {
-                tombstone = savedWorkTombstonesByID[archived.id]
+                savedWorkTombstonesByID[archived.id]
             }
             guard let tombstone else { return false }
             let archivedModifiedAt = archived.lastModifiedAt ?? archived.dateAdded

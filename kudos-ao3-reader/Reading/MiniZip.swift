@@ -68,7 +68,7 @@ nonisolated struct MiniZip {
         /// anything a real EPUB needs, while still bounding a hostile
         /// archive's worst case.
         static let epub = Limits(
-            maxEntryCount: 10_000,
+            maxEntryCount: 10000,
             maxSingleEntryUncompressedSize: 200_000_000,
             maxTotalUncompressedSize: 500_000_000,
             maxCompressionRatio: 1100
@@ -737,7 +737,7 @@ extension MiniZip {
     }
 }
 
-nonisolated private extension UInt16 {
+private nonisolated extension UInt16 {
     /// The value itself when it fits below the ZIP64 sentinel, else the
     /// sentinel (0xFFFF) directing readers to the ZIP64 record.
     init(clampingToSentinel value: UInt64) {
@@ -745,7 +745,7 @@ nonisolated private extension UInt16 {
     }
 }
 
-nonisolated private extension UInt32 {
+private nonisolated extension UInt32 {
     /// The value itself when it fits below the ZIP64 sentinel, else the
     /// sentinel (0xFFFFFFFF) directing readers to the ZIP64 extra field.
     init(clampingToSentinel value: UInt64) {
@@ -753,7 +753,7 @@ nonisolated private extension UInt32 {
     }
 }
 
-nonisolated private extension Data {
+private nonisolated extension Data {
     mutating func appendU16(_ value: UInt16) {
         append(UInt8(value & 0xFF))
         append(UInt8(value >> 8))
@@ -772,7 +772,7 @@ nonisolated private extension Data {
     }
 }
 
-nonisolated private extension Data {
+private nonisolated extension Data {
     /// Little-endian unsigned 16-bit read at an absolute index, or nil if the
     /// read would run past the end of the buffer.
     func safeU16(_ index: Int) -> UInt16? {

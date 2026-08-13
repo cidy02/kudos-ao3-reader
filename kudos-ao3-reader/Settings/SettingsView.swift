@@ -5,6 +5,22 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
+private final class SecurityScopedURL: Sendable {
+    let url: URL
+    let accessed: Bool
+
+    init(_ url: URL) {
+        self.url = url
+        accessed = url.startAccessingSecurityScopedResource()
+    }
+
+    deinit {
+        if accessed {
+            url.stopAccessingSecurityScopedResource()
+        }
+    }
+}
+
 // Lint: this existing form is kept together to avoid behavior refactors.
 // swiftlint:disable file_length
 /// The toggleable reading options, grouped into categories. Shared between the
@@ -65,7 +81,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var backupExportURL: URL?
     @State private var isPreparingBackupExport = false
     @State private var isImportingBackup = false
-    @State private var pendingBackupURL: URL?
+    @State private var pendingBackupURL: SecurityScopedURL?
     @State private var pendingBackupManifest: KudosBackupManifest?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
@@ -187,8 +203,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         Text("Theme")
                     } footer: {
                         Text((themeManager.matchAppAndReader
-                              ? "Light, Sepia, Dark, or OLED across the whole app. The reader uses the same theme."
-                              : "The app and reader use separate themes.")
+                                ? "Light, Sepia, Dark, or OLED across the whole app. The reader uses the same theme."
+                                : "The app and reader use separate themes.")
                             + " The accent colour applies in Light, Dark, and OLED; Sepia keeps its warm tint.")
                     }
                 }
@@ -515,7 +531,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     message: Text(notice.message),
                     dismissButton: .default(Text("OK"))
                 )
-            case let .confirmImport(url, manifest):
+            case let .confirmImport(scopedURL, manifest):
                 Alert(
                     title: Text("Import this backup?"),
                     message: Text(
@@ -525,10 +541,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                             + "won't be deleted."
                     ),
                     primaryButton: .default(Text("Import and Merge")) {
-                        restorePendingBackup(url: url, manifest: manifest)
+                        restorePendingBackup(scopedURL: scopedURL, manifest: manifest)
                     },
                     secondaryButton: .cancel {
-                        url.stopAccessingSecurityScopedResource()
                         pendingBackupURL = nil
                         pendingBackupManifest = nil
                     }
@@ -753,29 +768,14 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private func importBackup(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
-            let accessed = url.startAccessingSecurityScopedResource()
-            
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-            let manifest: KudosBackupManifest
-            if isDirectory {
-                let wrapper = try FileWrapper(url: url, options: .immediate)
-                manifest = try KudosBackupContents(fileWrapper: wrapper).manifest
-            } else {
-                let zipData = try Data(contentsOf: url, options: .mappedIfSafe)
-                let zip = try MiniZip(data: zipData, limits: .backup)
-                guard let manifestData = zip.data(named: "manifest.json") else {
-                    throw KudosBackupError.invalidPackage
-                }
-                manifest = try KudosBackupContents.decodeManifest(manifestData)
-            }
-            
-            pendingBackupURL = url
+            let scopedURL = SecurityScopedURL(url)
+
+            let manifest = try KudosBackupContents.preConfirmManifest(from: url)
+
+            pendingBackupURL = scopedURL
             pendingBackupManifest = manifest
             showImportConfirmation = true
         } catch {
-            if let url = try? result.get().first {
-                url.stopAccessingSecurityScopedResource()
-            }
             backupNotice = BackupNotice(
                 title: "Couldn't Read Backup",
                 message: error.localizedDescription
@@ -793,11 +793,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// lets the confirmation finish dismissing, after which the result alert
     /// presents reliably. The hop also gives the progress indicator on the
     /// Import row a chance to render before the merge begins.
-    private func restorePendingBackup(url: URL, manifest: KudosBackupManifest) {
+    private func restorePendingBackup(scopedURL: SecurityScopedURL, manifest _: KudosBackupManifest) {
         pendingBackupURL = nil
         pendingBackupManifest = nil
         guard PersistenceOperationGate.begin(.backupImport) else {
-            url.stopAccessingSecurityScopedResource()
             backupNotice = BackupNotice(
                 title: "Import Already Busy",
                 message: "Kudos is already running "
@@ -807,13 +806,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         isImportingBackup = true
         Task { @MainActor in
+            _ = scopedURL
             defer {
-                url.stopAccessingSecurityScopedResource()
                 PersistenceOperationGate.end(.backupImport)
                 isImportingBackup = false
             }
             do {
-                let backup = try KudosBackupContents.read(from: url)
+                let backup = try KudosBackupContents.read(from: scopedURL.url)
                 let summary = try KudosBackupService.restore(backup, into: context)
                 applyRestoredTheme(backup.manifest.settings)
                 let conflictMessage = summary.conflictMessage
@@ -993,7 +992,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// (see the call site — SwiftUI drops all but one per view).
     private enum SettingsAlert: Identifiable {
         case notice(BackupNotice)
-        case confirmImport(URL, KudosBackupManifest)
+        case confirmImport(SecurityScopedURL, KudosBackupManifest)
 
         var id: String {
             switch self {
@@ -1010,8 +1009,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private var activeAlertBinding: Binding<SettingsAlert?> {
         Binding(
             get: {
-                if showImportConfirmation, let url = pendingBackupURL, let manifest = pendingBackupManifest {
-                    return .confirmImport(url, manifest)
+                if showImportConfirmation, let scopedURL = pendingBackupURL, let manifest = pendingBackupManifest {
+                    return .confirmImport(scopedURL, manifest)
                 }
                 if let backupNotice { return .notice(backupNotice) }
                 if let epubNotice { return .notice(epubNotice) }
@@ -1021,7 +1020,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 guard newValue == nil else { return }
                 if showImportConfirmation {
                     showImportConfirmation = false
-                    pendingBackupURL?.stopAccessingSecurityScopedResource()
                     pendingBackupURL = nil
                     pendingBackupManifest = nil
                 } else if backupNotice != nil {
@@ -1103,7 +1101,9 @@ struct BackupSettingsSection: View {
     let onExport: () -> Void
     let onImport: () -> Void
 
-    private var isBusy: Bool { isPreparingExport || isImporting }
+    private var isBusy: Bool {
+        isPreparingExport || isImporting
+    }
 
     var body: some View {
         Section {
