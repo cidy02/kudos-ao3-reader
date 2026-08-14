@@ -2,55 +2,50 @@ import Testing
 import Foundation
 @testable import Kudos
 
-#if os(macOS)
 @Suite("AO3SessionVault M16 Tests")
 struct AO3SessionVaultM16Tests {
-    @Test("Keychain attribute is re-asserted on update")
-    @MainActor func keychainAccessibleAttributeIsReasserted() throws {
-        let vault = KeychainAO3SessionVault(service: "org.archiveofourown.session.test")
+    @Test("SecItemUpdate re-asserts AfterFirstUnlockThisDeviceOnly")
+    func keychainUpdateAttributesReassertAccessibility() throws {
+        let data = Data("session-blob".utf8)
+        let attributes = KeychainAO3SessionVault.updateItemAttributes(data: data)
+
+        let accessible = attributes[kSecAttrAccessible as String] as? String
+        #expect(
+            accessible == (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String),
+            "SecItemUpdate omitted kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly"
+        )
+        #expect(attributes[kSecValueData as String] as? Data == data)
+
+        // Also drive save() when the Simulator Keychain is entitled. Missing
+        // entitlement is the unsigned/Simulator fallback, not a pass.
+        let service = "org.archiveofourown.session.test.\(UUID().uuidString)"
+        let vault = KeychainAO3SessionVault(service: service)
         try? vault.delete()
-        
-        let session1 = AO3Session(username: "testuser", cookies: [], savedAt: Date())
-        try vault.save(session1)
-        
-        // Manually weaken the accessibility class to simulate an old item
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "org.archiveofourown.session.test"
-        ]
-        let weakUpdate: [String: Any] = [
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-        ]
-        SecItemUpdate(query as CFDictionary, weakUpdate as CFDictionary)
-        
-        // Save again using production code
-        let session2 = AO3Session(username: "testuser", cookies: [], savedAt: Date())
-        try vault.save(session2)
-        
-        // Verify the accessibility class was restored
-        var item: CFTypeRef?
-        let checkQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "org.archiveofourown.session.test",
-            kSecReturnAttributes as String: true
-        ]
-        let status = SecItemCopyMatching(checkQuery as CFDictionary, &item)
-        #expect(status == errSecSuccess)
-        
-        if let attributes = item as? NSDictionary {
-            if let accessible = attributes[kSecAttrAccessible as String] {
-                let accessibleStr = String(describing: accessible)
-                let targetStr = String(describing: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
-                #expect(accessibleStr == targetStr)
-            } else {
-                // macOS keychain may omit the accessibility attribute
-                #expect(attributes[kSecAttrService as String] as? String == "org.archiveofourown.session.test")
-            }
-        } else {
-            Issue.record("Failed to read keychain attributes: \(String(describing: item))")
+        defer { try? vault.delete() }
+
+        let session = AO3Session(username: "testuser", cookies: [], savedAt: Date())
+        do {
+            try vault.save(session)
+            try vault.save(session)
+
+            var item: CFTypeRef?
+            let checkQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecReturnAttributes as String: true
+            ]
+            let status = SecItemCopyMatching(checkQuery as CFDictionary, &item)
+            #expect(status == errSecSuccess, "Could not read back the saved Keychain item: \(status)")
+            let attributes = try #require(item as? NSDictionary)
+            let accessible = attributes[kSecAttrAccessible] as? String
+                ?? attributes[kSecAttrAccessible as String] as? String
+            #expect(
+                accessible == (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String),
+                "Saved Keychain item did not re-assert AfterFirstUnlockThisDeviceOnly"
+            )
+        } catch let error as AO3SessionVaultError where error.isMissingEntitlement {
+            // Simulator / unsigned: the update-dictionary assertion above is
+            // the load-bearing check. Do not treat this as success of save().
         }
-        
-        try? vault.delete()
     }
 }
-#endif
