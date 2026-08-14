@@ -481,6 +481,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// chapter from the old WKWebView reader). Intra-chapter offset isn't recovered.
     func open(fileURL: URL, initialLocator: Locator?, fallbackSpineIndex: Int? = nil,
               config: EPUBNavigatorViewController.Configuration) async {
+        ReaderWebIsolation.installReadiumStoreIsolation()
+        ReaderWebIsolation.onReadiumOpenExternalURL = { [weak self] url in
+            _ = self?.routeWebURLToBrowse(url)
+        }
         phase = .loading
         hasPresentedFirstPage = false
         firstPagePresentationGeneration += 1
@@ -504,6 +508,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 config: config
             )
             navigator.delegate = self
+            if let view = navigator.view {
+                ReaderWebIsolation.installNavigationGuards(
+                    in: view,
+                    origin: .readiumScheme,
+                    onOpenExternalURL: ReaderWebIsolation.onReadiumOpenExternalURL
+                )
+            }
             let tocLinks = await (try? publication.tableOfContents().get()) ?? []
             self.navigator = navigator
             self.publication = publication
@@ -633,6 +644,13 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     // MARK: EPUBNavigatorDelegate
 
     func navigator(_: Navigator, locationDidChange locator: Locator) {
+        if let view = navigator?.view {
+            ReaderWebIsolation.installNavigationGuards(
+                in: view,
+                origin: .readiumScheme,
+                onOpenExternalURL: ReaderWebIsolation.onReadiumOpenExternalURL
+            )
+        }
         // Freeze `setContentOffset` / hide-under-snapshot can emit spurious
         // location settles. Ignoring them keeps `currentLocator` (and flush)
         // at the pre-gesture reading position. Exit latch keeps the gate up
