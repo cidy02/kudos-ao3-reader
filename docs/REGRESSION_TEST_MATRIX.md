@@ -1,6 +1,6 @@
 # REGRESSION_TEST_MATRIX.md
 
-What must keep working, where it's tested, and what is manual-only. Run everything via `Scripts/verify.sh` (or just the suite via `Scripts/test.sh 'platform=iOS Simulator,name=iPhone 17,OS=26.5'`; parallel testing deliberately disabled). 724+ tests / 68+ suites green as of T-150 (reader redesign polish, on top of the T-148/T-149 reader chrome redesign).
+What must keep working, where it's tested, and what is manual-only. Run everything via `KUDOS_CASEFOLD_SIMULATOR_UDID=<udid> Scripts/verify.sh` (or just the suite via `KUDOS_CASEFOLD_SIMULATOR_UDID=<udid> Scripts/test.sh`; parallel testing deliberately disabled). The full target uses the case-sensitive APFS harness, so raw `xcodebuild test` is not a valid complete-suite command. 724+ tests / 68+ suites green as of T-150 (reader redesign polish, on top of the T-148/T-149 reader chrome redesign).
 
 | Area | Invariant | Automated coverage | Manual-only residue |
 |---|---|---|---|

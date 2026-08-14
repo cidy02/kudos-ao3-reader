@@ -56,11 +56,24 @@ GitHub [Releases](https://github.com/cidy02/kudos-ao3-reader/releases) may list 
 Unit tests live in the `KudosTests` target (Swift Testing) and cover the pure-logic core: the MiniZip reader, EPUB OPF metadata + NCX table-of-contents parsing, HTML-entity decoding / summary stripping, and work-tag normalization. Search-filter tests also cover advanced rating query generation, tag and facet exclusions, and the include/exclude/clear cycle. Authentication tests cover cookie scoping, session restoration and expiration, hidden login outcomes, and automatic fallback. Backup tests cover package round-tripping, merge restoration, and unsupported format versions. A minimal hand-built `KudosTests/Fixtures/sample.epub` backs the EPUB tests.
 
 ```bash
-Scripts/test.sh        # runs on the default iOS Simulator
-# or directly:
-xcodebuild test -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
-  -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+KUDOS_CASEFOLD_SIMULATOR_UDID='<simulator-udid>' Scripts/test.sh
 ```
+
+Case-fold ambiguity regressions require a real case-sensitive filesystem. Run
+the complete iOS Simulator target through the harness, which mounts a temporary
+case-sensitive APFS image inside the installed simulator app container and
+writes the result bundle at the path you provide. Supply the UDID of a booted
+simulator (for example, from `xcrun simctl list devices`):
+
+```bash
+KUDOS_CASEFOLD_SIMULATOR_UDID='<simulator-udid>' \
+  Scripts/test-casefold-fonts.sh /tmp/kudos-casefold.xcresult
+```
+
+`Scripts/test.sh` and `Scripts/verify.sh` use the same harness and therefore
+also require that variable (or accept the UDID as their first argument). Do not
+run raw `xcodebuild test` for the complete target: the case-fold tests fail
+loudly without the mounted volume rather than reporting vacuous coverage.
 
 ## Linting & formatting
 

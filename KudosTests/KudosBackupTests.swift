@@ -1,3 +1,4 @@
+import CoreText
 import Foundation
 import SwiftData
 import Testing
@@ -238,8 +239,20 @@ struct KudosBackupTests {
             title: "Archive Bookmark",
             urlString: "https://archiveofourown.org/works/12345"
         )
-        let missingParent = "missing-\(UUID().uuidString)/font.ttf"
-        let archivedFont = CustomFont(name: "Archive Font", fileName: missingParent)
+        let baseName = "conflict-\(UUID().uuidString)"
+        let safeName = "\(baseName).ttf"
+        let occupiedURL = Storage.fontsDirectory.appendingPathComponent(safeName)
+        let conflictURL = Storage.fontsDirectory.appendingPathComponent(
+            "\(baseName)-restored-1.ttf"
+        )
+        defer {
+            try? FileManager.default.removeItem(at: occupiedURL)
+            try? FileManager.default.removeItem(at: conflictURL)
+        }
+        try Data("occupied".utf8).write(to: occupiedURL)
+        try FileManager.default.createDirectory(at: conflictURL, withIntermediateDirectories: true)
+
+        let archivedFont = CustomFont(name: "Archive Font", fileName: safeName)
         let baseContents = try KudosBackupService.makeContents(
             works: [archivedWork],
             bookmarks: [archivedBookmark],
@@ -247,9 +260,14 @@ struct KudosBackupTests {
             readingQueues: [],
             defaults: try testDefaults()
         )
+
+        let descriptor = CTFontDescriptorCreateWithNameAndSize("Helvetica" as CFString, 12.0)
+        let fontURL = try #require(CTFontDescriptorCopyAttribute(descriptor, kCTFontURLAttribute) as? URL)
+        let validFontData = try Data(contentsOf: fontURL)
+
         let contents = KudosBackupContents(
             manifest: baseContents.manifest,
-            fontFiles: [missingParent: Data("font-data".utf8)]
+            fontFiles: [safeName: validFontData]
         )
 
         var restoreError: NSError?
@@ -259,14 +277,14 @@ struct KudosBackupTests {
                 into: context,
                 defaults: try testDefaults()
             )
-            Issue.record("Expected the font write into a missing parent directory to fail")
+            Issue.record("Expected the font write onto an occupied restored-name directory to fail")
         } catch {
             restoreError = error as NSError
         }
         // Prove this reached the intended late failure, rather than passing because
         // archive construction or an earlier restore phase threw for another reason.
         #expect(restoreError?.domain == NSCocoaErrorDomain)
-        #expect(restoreError?.code == 4) // Cocoa fileNoSuchFile
+        #expect(restoreError?.code == 512) // Cocoa fileWriteFailure (NSFileWriteFailureError)
 
         try context.save()
         let observer = ModelContext(container)
