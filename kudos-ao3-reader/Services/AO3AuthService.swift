@@ -78,6 +78,14 @@ struct LiveAO3CookieManager: AO3CookieManaging {
 /// offline must not log the user out.
 struct LiveAO3SessionValidator: AO3SessionValidating {
     private let session: URLSession
+    /// AUDIT-2. This request sets `Cookie` by hand, and a manually-set header follows a
+    /// redirect wherever it goes — `httpCookieAcceptPolicy = .never` governs the cookie
+    /// *store*, not a hand-set header, so it does not help here. Without this delegate an
+    /// off-domain redirect discloses the full AO3 session to the redirect target, which is
+    /// replayable for reading private works, posting comments and kudos, and changing
+    /// account settings. `AO3Client` already routes both of its authenticated calls through
+    /// this same relay; this was the one call site that did not.
+    private let redirectCookieRelay = AO3RedirectCookieRelay()
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -95,7 +103,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         var request = URLRequest(url: url)
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
