@@ -133,6 +133,11 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
             // scroll view gets caught the next time SwiftUI re-renders this
             // representable (which locator/chrome-state changes already do often).
             restoreNativeScrollIndicators(in: view)
+            ReaderWebIsolation.installNavigationGuards(
+                in: view,
+                origin: .readiumScheme,
+                onOpenExternalURL: ReaderWebIsolation.onReadiumOpenExternalURL
+            )
             guard installedView !== view else { return }
 
             if let dismissPan {
