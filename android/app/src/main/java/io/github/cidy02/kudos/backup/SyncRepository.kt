@@ -14,7 +14,9 @@ import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.files.FontFileStore
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -266,6 +268,7 @@ class SyncRepository(
     private suspend fun importManifest(syncDir: DocumentFile, manifest: KudosBackupManifest) {
         val epubFiles = mutableMapOf<String, ByteArray>()
         val fontFiles = mutableMapOf<String, ByteArray>()
+        var totalFontBytes = 0L
 
         syncDir.findFile(BackupPaths.WORKS_DIRECTORY)?.let { worksDir ->
             manifest.works.forEach { work ->
@@ -281,13 +284,35 @@ class SyncRepository(
             manifest.fonts.forEach { font ->
                 fontsDir.findFile(font.fileName)?.let { file ->
                     context.contentResolver.openInputStream(file.uri)?.use {
-                        fontFiles[font.fileName] = it.readBytes()
+                        val path = "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}"
+                        val bytes = it.readFontBytes(path)
+                        totalFontBytes += bytes.size.toLong()
+                        if (totalFontBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
+                            throw BackupError.InvalidPackage("Total font size exceeds limit")
+                        }
+                        fontFiles[font.fileName] = bytes
                     }
                 }
             }
         }
 
         backupRepository.importPackage(KudosBackupPackage(manifest, epubFiles, fontFiles))
+    }
+
+    private fun InputStream.readFontBytes(path: String): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0L
+        while (true) {
+            val count = read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > BackupLimits.MAX_FONT_ENTRY_BYTES) {
+                throw BackupError.EntryTooLarge(path)
+            }
+            output.write(buffer, 0, count)
+        }
+        return output.toByteArray()
     }
 
     /**

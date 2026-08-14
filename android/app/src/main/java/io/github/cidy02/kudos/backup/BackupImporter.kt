@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.backup
 
+import android.graphics.Typeface
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -26,6 +27,7 @@ object BackupImporter {
         val fontFiles = mutableMapOf<String, ByteArray>()
         var totalFontBytes = 0L
         val seenEntries = mutableSetOf<String>()
+        val seenFontFileNames = mutableSetOf<String>()
 
         try {
             ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
@@ -40,7 +42,22 @@ object BackupImporter {
                     }
                     if (!seenEntries.add(path)) throw BackupError.DuplicateEntry(path)
 
-                    val payload = zip.readEntryBytes(path)
+                    val fontFileName = if (path.startsWith("${BackupPaths.FONTS_DIRECTORY}/")) {
+                        validateFontEntry(path).also { fileName ->
+                            if (!seenFontFileNames.add(BackupPaths.fontFileNameKey(fileName))) {
+                                throw BackupError.DuplicateEntry(path)
+                            }
+                        }
+                    } else {
+                        null
+                    }
+
+                    val payloadLimit = if (fontFileName != null) {
+                        BackupLimits.MAX_FONT_ENTRY_BYTES
+                    } else {
+                        BackupLimits.MAX_ENTRY_BYTES
+                    }
+                    val payload = zip.readEntryBytes(path, payloadLimit)
                     when {
                         path == BackupPaths.MANIFEST -> manifestBytes = payload
                         path.startsWith("${BackupPaths.WORKS_DIRECTORY}/") -> {
@@ -48,16 +65,10 @@ object BackupImporter {
                             epubFiles[workId] = payload
                         }
                         path.startsWith("${BackupPaths.FONTS_DIRECTORY}/") -> {
-                            val fileName = validateFontEntry(path)
-                            if (payload.size > BackupLimits.MAX_FONT_ENTRY_BYTES) {
-                                throw BackupError.EntryTooLarge(path)
-                            }
-                            totalFontBytes += payload.size
+                            val fileName = requireNotNull(fontFileName)
+                            totalFontBytes += payload.size.toLong()
                             if (totalFontBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
                                 throw BackupError.InvalidPackage("Total font size exceeds limit")
-                            }
-                            if (!isLoadableFont(payload)) {
-                                throw BackupError.InvalidPackage("Invalid font file")
                             }
                             fontFiles[fileName] = payload
                         }
@@ -76,6 +87,7 @@ object BackupImporter {
         if (!BackupVersion.isZipCompatible(manifest.version)) {
             throw BackupError.UnsupportedVersion(manifest.version)
         }
+        BackupFontValidator.validate(fontFiles)
 
         return KudosBackupPackage(
             manifest = manifest,
@@ -117,19 +129,19 @@ object BackupImporter {
                 throw BackupError.InvalidPackage("Unsupported font extension")
             }
             val file = findCaseInsensitiveChild(fontsDirectory, font.fileName) ?: return@forEach
-            val payload = readLimitedFile(file, "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}")
-            if (payload.size > BackupLimits.MAX_FONT_ENTRY_BYTES) {
-                throw BackupError.EntryTooLarge("${BackupPaths.FONTS_DIRECTORY}/${font.fileName}")
-            }
-            totalFontBytes += payload.size
+            val backupPath = "${BackupPaths.FONTS_DIRECTORY}/${font.fileName}"
+            val payload = readLimitedFile(
+                file,
+                backupPath,
+                BackupLimits.MAX_FONT_ENTRY_BYTES
+            )
+            totalFontBytes += payload.size.toLong()
             if (totalFontBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
                 throw BackupError.InvalidPackage("Total font size exceeds limit")
             }
-            if (!isLoadableFont(payload)) {
-                throw BackupError.InvalidPackage("Invalid font file")
-            }
             fontFiles[font.fileName] = payload
         }
+        BackupFontValidator.validate(fontFiles)
 
         return KudosBackupPackage(
             manifest = manifest,
@@ -159,7 +171,10 @@ object BackupImporter {
         return parts[1]
     }
 
-    private fun ZipInputStream.readEntryBytes(path: String): ByteArray {
+    private fun ZipInputStream.readEntryBytes(
+        path: String,
+        maxBytes: Long = BackupLimits.MAX_ENTRY_BYTES
+    ): ByteArray {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
         var total = 0L
@@ -167,7 +182,7 @@ object BackupImporter {
             val count = read(buffer)
             if (count < 0) break
             total += count
-            if (total > BackupLimits.MAX_ENTRY_BYTES) throw BackupError.EntryTooLarge(path)
+            if (total > maxBytes) throw BackupError.EntryTooLarge(path)
             output.write(buffer, 0, count)
         }
         return output.toByteArray()
@@ -190,10 +205,14 @@ object BackupImporter {
         }
     }
 
-    private fun readLimitedFile(path: Path, backupPath: String): ByteArray {
+    private fun readLimitedFile(
+        path: Path,
+        backupPath: String,
+        maxBytes: Long = BackupLimits.MAX_ENTRY_BYTES
+    ): ByteArray {
         if (!Files.isRegularFile(path)) throw BackupError.UnsafePath(backupPath)
         val size = Files.size(path)
-        if (size > BackupLimits.MAX_ENTRY_BYTES) throw BackupError.EntryTooLarge(backupPath)
+        if (size > maxBytes) throw BackupError.EntryTooLarge(backupPath)
         return Files.readAllBytes(path)
     }
 
@@ -214,23 +233,121 @@ object BackupImporter {
         return false
     }
 
-    private fun isLoadableFont(bytes: ByteArray): Boolean {
+}
+
+internal object BackupFontValidator {
+    fun validate(
+        fontFiles: Map<String, ByteArray>,
+        temporaryFileFactory: (String, String) -> Path = { prefix, suffix ->
+            Files.createTempFile(prefix, suffix)
+        }
+    ) {
+        var totalBytes = 0L
+        fontFiles.forEach { (fileName, bytes) ->
+            BackupPaths.requireSafeFontFileName(fileName)
+            if (!io.github.cidy02.kudos.files.CustomFontRepository.isSupportedFontFileName(fileName)) {
+                throw BackupError.InvalidPackage("Unsupported font extension")
+            }
+            if (bytes.size.toLong() > BackupLimits.MAX_FONT_ENTRY_BYTES) {
+                throw BackupError.EntryTooLarge("${BackupPaths.FONTS_DIRECTORY}/$fileName")
+            }
+            totalBytes += bytes.size.toLong()
+            if (totalBytes > BackupLimits.MAX_TOTAL_FONT_BYTES) {
+                throw BackupError.InvalidPackage("Total font size exceeds limit")
+            }
+            if (!isLoadableFont(fileName, bytes, temporaryFileFactory)) {
+                throw BackupError.InvalidPackage("Invalid font file")
+            }
+        }
+    }
+
+    private fun isLoadableFont(
+        fileName: String,
+        bytes: ByteArray,
+        temporaryFileFactory: (String, String) -> Path
+    ): Boolean {
         if (bytes.size < 4) return false
         val b0 = bytes[0].toInt() and 0xFF
         val b1 = bytes[1].toInt() and 0xFF
         val b2 = bytes[2].toInt() and 0xFF
         val b3 = bytes[3].toInt() and 0xFF
 
-        // TrueType (TTF) magic: 0x00 0x01 0x00 0x00 or 't' 'r' 'u' 'e' (0x74 0x72 0x75 0x65)
-        if (b0 == 0x00 && b1 == 0x01 && b2 == 0x00 && b3 == 0x00) return true
-        if (b0 == 0x74 && b1 == 0x72 && b2 == 0x75 && b3 == 0x65) return true
+        val hasSupportedSfntSignature =
+            (b0 == 0x00 && b1 == 0x01 && b2 == 0x00 && b3 == 0x00) ||
+                (b0 == 0x74 && b1 == 0x72 && b2 == 0x75 && b3 == 0x65) ||
+                (b0 == 0x4F && b1 == 0x54 && b2 == 0x54 && b3 == 0x4F)
+        if (!hasSupportedSfntSignature) return false
+        if (!hasValidSfntStructure(bytes)) return false
 
-        // OpenType (OTF) magic: 'O' 'T' 'T' 'O' (0x4F 0x54 0x54 0x4F)
-        if (b0 == 0x4F && b1 == 0x54 && b2 == 0x54 && b3 == 0x4F) return true
+        val extension = fileName.substringAfterLast('.').lowercase(Locale.ROOT)
+        val temporary = try {
+            temporaryFileFactory("kudos-font-", ".$extension")
+        } catch (error: Exception) {
+            throw BackupError.FontValidationUnavailable(error)
+        }
+        return try {
+            try {
+                Files.write(temporary, bytes)
+            } catch (error: Exception) {
+                throw BackupError.FontValidationUnavailable(error)
+            }
+            try {
+                Typeface.Builder(temporary.toFile()).build() != null
+            } catch (_: IllegalArgumentException) {
+                false
+            } catch (error: Exception) {
+                throw BackupError.FontValidationUnavailable(error)
+            }
+        } finally {
+            runCatching { Files.deleteIfExists(temporary) }
+        }
+    }
 
-        // WOFF / WOFF2 magic
-        if (b0 == 0x77 && b1 == 0x4F && b2 == 0x46 && (b3 == 0x46 || b3 == 0x32)) return true
+    private fun hasValidSfntStructure(bytes: ByteArray): Boolean {
+        if (bytes.size < 12) return false
+        val tableCount = unsignedShort(bytes, 4)
+        if (tableCount == 0) return false
+        val directoryEnd = 12L + tableCount * 16L
+        if (directoryEnd > bytes.size) return false
 
-        return false
+        val tables = mutableMapOf<String, Pair<Int, Int>>()
+        repeat(tableCount) { index ->
+            val entry = 12 + index * 16
+            val tag = String(bytes, entry, 4, Charsets.US_ASCII)
+            val offset = unsignedInt(bytes, entry + 8)
+            val length = unsignedInt(bytes, entry + 12)
+            if (length == 0L) {
+                if (offset > bytes.size.toLong()) return false
+            } else if (offset < directoryEnd || offset + length > bytes.size.toLong()) {
+                return false
+            }
+            if (tables.put(tag, offset.toInt() to length.toInt()) != null) return false
+        }
+
+        val required = setOf("cmap", "head", "hhea", "hmtx", "maxp", "name")
+        if (!required.all { tables[it]?.second?.let { length -> length > 0 } == true }) return false
+        val hasTrueTypeOutlines = tables["glyf"]?.second?.let { it > 0 } == true &&
+            tables["loca"]?.second?.let { it > 0 } == true
+        val hasCffOutlines = tables["CFF "]?.second?.let { it > 0 } == true ||
+            tables["CFF2"]?.second?.let { it > 0 } == true
+        if (!hasTrueTypeOutlines && !hasCffOutlines) return false
+
+        val (headOffset, headLength) = tables.getValue("head")
+        if (headLength < 16 || unsignedInt(bytes, headOffset + 12) != 0x5F0F3CF5L) return false
+        val (cmapOffset, cmapLength) = tables.getValue("cmap")
+        if (cmapLength < 4 || unsignedShort(bytes, cmapOffset) != 0) return false
+        return true
+    }
+
+    private fun unsignedShort(bytes: ByteArray, offset: Int): Int {
+        return ((bytes[offset].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 1].toInt() and 0xFF)
+    }
+
+    private fun unsignedInt(bytes: ByteArray, offset: Int): Long {
+        return ((bytes[offset].toLong() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toLong() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toLong() and 0xFF) shl 8) or
+            (bytes[offset + 3].toLong() and 0xFF)
     }
 }

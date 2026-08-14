@@ -94,7 +94,7 @@ object BackupValidator {
         val fontNames = mutableSetOf<String>()
         val fonts = manifest.fonts.mapIndexed { index, font ->
             BackupPaths.requireSafeFontFileName(font.fileName)
-            if (!fontNames.add(font.fileName)) {
+            if (!fontNames.add(BackupPaths.fontFileNameKey(font.fileName))) {
                 throw BackupError.InvalidPackage("Duplicate font file name: ${font.fileName}")
             }
             parseInstant(font.dateAdded, "fonts[$index].dateAdded")

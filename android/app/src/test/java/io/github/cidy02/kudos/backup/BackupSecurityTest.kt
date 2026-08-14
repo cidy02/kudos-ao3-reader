@@ -1,15 +1,23 @@
 package io.github.cidy02.kudos.backup
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class BackupSecurityTest {
     private fun rawZip(entries: List<Pair<String, ByteArray>>): ByteArray {
         val output = ByteArrayOutputStream()
@@ -71,6 +79,17 @@ class BackupSecurityTest {
         """.trimIndent().toByteArray()
     }
 
+    private fun validOpenTypeFont(): ByteArray {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        return context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+    }
+
+    private fun validTrueTypeFont(): ByteArray {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        return context.assets.open("readium/readium-css/fonts/iAWriterDuospace-Regular.ttf")
+            .use { it.readBytes() }
+    }
+
     @Test
     fun testFixture_ManifestAloneImportsCleanly() {
         val zipBytes = rawZip(listOf("manifest.json" to VALID_MANIFEST))
@@ -82,28 +101,43 @@ class BackupSecurityTest {
 
     @Test
     fun testM21_ValidFontIsAccepted() {
-        val validFontMagic = byteArrayOf(0x00, 0x01, 0x00, 0x00)
+        val validOtf = validOpenTypeFont()
+        val validTtf = validTrueTypeFont()
+        val ttfControl = runCatching {
+            BackupFontValidator.validate(mapOf("good.ttf" to validTtf))
+        }
+        assertTrue("real TTF fixture must reach loadability: ${ttfControl.exceptionOrNull()}", ttfControl.isSuccess)
+        val otfControl = runCatching {
+            BackupFontValidator.validate(mapOf("good.otf" to validOtf))
+        }
+        assertTrue("real OTF fixture must reach loadability: ${otfControl.exceptionOrNull()}", otfControl.isSuccess)
         
         val zipBytes = rawZip(listOf(
-            "manifest.json" to VALID_MANIFEST,
-            "Fonts/good.ttf" to validFontMagic
+            "manifest.json" to manifestWithFonts("good.otf", "good.ttf"),
+            "Fonts/good.otf" to validOtf,
+            "Fonts/good.ttf" to validTtf
         ))
         val packageZip = BackupImporter.importV2Zip(zipBytes)
-        assertTrue(packageZip.fontFilesByFileName.containsKey("good.ttf"))
-        assertEquals(validFontMagic.toList(), packageZip.fontFilesByFileName["good.ttf"]?.toList())
+        assertTrue(packageZip.fontFilesByFileName.containsKey("good.otf"))
+        assertEquals(validOtf.toList(), packageZip.fontFilesByFileName["good.otf"]?.toList())
+        assertEquals(validTtf.toList(), packageZip.fontFilesByFileName["good.ttf"]?.toList())
 
         val dir = rawDirectory(listOf(
-            "manifest.json" to manifestWithFonts("good.ttf"),
-            "Fonts/good.ttf" to validFontMagic
+            "manifest.json" to manifestWithFonts("good.otf", "good.ttf"),
+            "Fonts/good.otf" to validOtf,
+            "Fonts/good.ttf" to validTtf
         ))
         val packageDir = BackupImporter.importV1Directory(dir)
-        assertTrue(packageDir.fontFilesByFileName.containsKey("good.ttf"))
-        assertEquals(validFontMagic.toList(), packageDir.fontFilesByFileName["good.ttf"]?.toList())
+        assertTrue(packageDir.fontFilesByFileName.containsKey("good.otf"))
+        assertEquals(validOtf.toList(), packageDir.fontFilesByFileName["good.otf"]?.toList())
+        assertEquals(validTtf.toList(), packageDir.fontFilesByFileName["good.ttf"]?.toList())
     }
 
     @Test
     fun testM21_InvalidFontIsRejected() {
-        val badBytes = "This is not a font".toByteArray()
+        // Carries an accepted TrueType signature so a magic-only substitute
+        // reaches this oracle; the bounded SFNT preflight must reject it.
+        val badBytes = byteArrayOf(0x00, 0x01, 0x00, 0x00) + "not a font".toByteArray()
         
         val exZip = assertThrows(BackupError.InvalidPackage::class.java) {
             val zipBytes = rawZip(listOf(
@@ -122,6 +156,18 @@ class BackupSecurityTest {
             BackupImporter.importV1Directory(dir)
         }
         assertEquals("Invalid font file", exDir.message)
+    }
+
+    @Test
+    fun testM21_TemporaryFileFailureIsNotReportedAsMalformedFont() {
+        val error = assertThrows(BackupError.FontValidationUnavailable::class.java) {
+            BackupFontValidator.validate(mapOf("good.otf" to validOpenTypeFont())) { _, _ ->
+                throw IOException("temporary storage unavailable")
+            }
+        }
+
+        assertTrue(error.cause is IOException)
+        assertEquals("The font could not be validated on this device.", error.message)
     }
 
     @Test
@@ -149,12 +195,12 @@ class BackupSecurityTest {
     
     @Test
     fun testM21_UnsupportedFontExtensionRejected() {
-        val validFontMagic = byteArrayOf(0x00, 0x01, 0x00, 0x00)
+        val validFont = validOpenTypeFont()
         
         val exZip = assertThrows(BackupError.InvalidPackage::class.java) {
             val zipBytes = rawZip(listOf(
                 "manifest.json" to VALID_MANIFEST,
-                "Fonts/malicious.html" to validFontMagic
+                "Fonts/malicious.html" to validFont
             ))
             BackupImporter.importV2Zip(zipBytes)
         }
@@ -163,7 +209,7 @@ class BackupSecurityTest {
         val exDir = assertThrows(BackupError.InvalidPackage::class.java) {
             val dir = rawDirectory(listOf(
                 "manifest.json" to manifestWithFonts("malicious.html"),
-                "Fonts/malicious.html" to validFontMagic
+                "Fonts/malicious.html" to validFont
             ))
             BackupImporter.importV1Directory(dir)
         }
@@ -172,16 +218,16 @@ class BackupSecurityTest {
 
     @Test
     fun testM21_TotalFontLimitRejected() {
-        val validFontMagic = byteArrayOf(0x00, 0x01, 0x00, 0x00)
-        val chunk = ByteArray((BackupLimits.MAX_FONT_ENTRY_BYTES).toInt()) { 0x00.toByte() }
-        System.arraycopy(validFontMagic, 0, chunk, 0, 4)
+        val validFont = validOpenTypeFont()
+        val chunk = ByteArray(BackupLimits.MAX_FONT_ENTRY_BYTES.toInt())
+        System.arraycopy(validFont, 0, chunk, 0, validFont.size)
         
         // We need >32MB total. 9 fonts of 4MB = 36MB.
-        val fonts = (1..9).map { "Fonts/font${it}.ttf" to chunk }
-        val manifestFonts = (1..9).map { "font${it}.ttf" }.toTypedArray()
+        val fonts = (1..9).map { "Fonts/font${it}.otf" to chunk }
+        val manifestFonts = (1..9).map { "font${it}.otf" }.toTypedArray()
         
         val exZip = assertThrows(BackupError.InvalidPackage::class.java) {
-            val entries = mutableListOf("manifest.json" to VALID_MANIFEST)
+            val entries = mutableListOf("manifest.json" to manifestWithFonts(*manifestFonts))
             entries.addAll(fonts)
             BackupImporter.importV2Zip(rawZip(entries))
         }
