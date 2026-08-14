@@ -125,23 +125,33 @@ nonisolated enum Storage {
         return dir
     }
 
-    /// Temporary destination for an in-flight download.
+    /// Temporary destination for an in-flight download. `suggestedName` is a
+    /// basename only — a hostile Content-Disposition (`../`, `/`, `\`, `.`,
+    /// control characters) cannot escape `Caches/Downloads`. Unsafe names
+    /// fall back to a UUID rather than being rewritten into a "safe-looking"
+    /// last path component of attacker-controlled input.
     static func tempDownloadURL(suggestedName: String) -> URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Downloads", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        
-        let candidate = URL(fileURLWithPath: suggestedName).lastPathComponent
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "\\", with: "_")
-            .replacingOccurrences(of: "\0", with: "")
-            
-        var safeName = candidate.components(separatedBy: .controlCharacters).joined()
-        if safeName == "." || safeName == ".." { safeName = "" }
-        if safeName.count > 255 { safeName = String(safeName.prefix(255)) }
-        
-        let name = safeName.isEmpty ? "\(UUID().uuidString).epub" : safeName
-        return dir.appendingPathComponent(name)
+        return dir.appendingPathComponent(safeTempDownloadName(suggestedName))
+    }
+
+    /// Production sanitizer used by `tempDownloadURL`. Isolated so tests can
+    /// assert the fallback without depending on a particular UUID.
+    static func safeTempDownloadName(_ suggestedName: String) -> String {
+        let fallback = "\(UUID().uuidString).epub"
+        let candidate = suggestedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty,
+              candidate.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }),
+              URL(fileURLWithPath: candidate).lastPathComponent == candidate,
+              !candidate.contains("/"),
+              !candidate.contains("\\"),
+              !candidate.contains(".."),
+              candidate != ".",
+              candidate != "..",
+              candidate.count <= 255
+        else { return fallback }
+        return candidate
     }
 }
