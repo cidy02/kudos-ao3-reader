@@ -1,8 +1,11 @@
 import Foundation
 import Testing
+
+#if os(iOS)
 import ReadiumNavigator
 import ReadiumShared
 @testable import Kudos
+#endif
 
 #if os(iOS)
 @MainActor

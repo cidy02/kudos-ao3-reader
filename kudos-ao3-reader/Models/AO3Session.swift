@@ -11,6 +11,7 @@ struct AO3StoredCookie: Codable, Hashable {
     let expiresDate: Date?
     let isSecure: Bool
     let isHTTPOnly: Bool
+    let sameSitePolicy: String?
 
     init(_ cookie: HTTPCookie) {
         name = cookie.name
@@ -21,6 +22,7 @@ struct AO3StoredCookie: Codable, Hashable {
         isSecure = cookie.isSecure
         let httpOnlyKey = HTTPCookiePropertyKey(rawValue: "HttpOnly")
         isHTTPOnly = cookie.properties?[httpOnlyKey] != nil
+        sameSitePolicy = cookie.sameSitePolicy?.rawValue
     }
 
     init(
@@ -30,7 +32,8 @@ struct AO3StoredCookie: Codable, Hashable {
         path: String = "/",
         expiresDate: Date? = nil,
         isSecure: Bool = true,
-        isHTTPOnly: Bool = true
+        isHTTPOnly: Bool = true,
+        sameSitePolicy: String? = nil
     ) {
         self.name = name
         self.value = value
@@ -39,6 +42,7 @@ struct AO3StoredCookie: Codable, Hashable {
         self.expiresDate = expiresDate
         self.isSecure = isSecure
         self.isHTTPOnly = isHTTPOnly
+        self.sameSitePolicy = sameSitePolicy
     }
 
     var isExpired: Bool {
@@ -58,6 +62,7 @@ struct AO3StoredCookie: Codable, Hashable {
             .secure: isSecure ? "TRUE" : "FALSE"
         ]
         if let expiresDate { properties[.expires] = expiresDate }
+        if let sameSitePolicy { properties[.sameSitePolicy] = HTTPCookieStringPolicy(rawValue: sameSitePolicy) }
         if isHTTPOnly {
             properties[HTTPCookiePropertyKey(rawValue: "HttpOnly")] = "TRUE"
         }

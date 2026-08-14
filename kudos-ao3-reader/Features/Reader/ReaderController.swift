@@ -191,8 +191,7 @@ extension ReaderController: WKNavigationDelegate {
             onOpenExternalURL?(url)
             return
         }
-        if url.scheme?.lowercased() == "file", isCrossSpineNavigation(to: url),
-           recognizesSpineURL?(url) == true {
+        if url.scheme?.lowercased() == "file", isCrossSpineNavigation(to: url) {
             // Finalize the decision *before* handing off. The host's handler sets
             // `currentIndex`, which re-enters `loadCurrentChapter()` →
             // `webView.loadFileURL(...)`; starting a navigation while a decision is
@@ -200,7 +199,9 @@ extension ReaderController: WKNavigationDelegate {
             // "Completion handler … was not called"). Hence the split into a pure
             // `recognizesSpineURL` query and this action.
             decisionHandler(.cancel)
-            onCrossSpineNavigation?(url)
+            if recognizesSpineURL?(url) == true {
+                onCrossSpineNavigation?(url)
+            }
             return
         }
         decisionHandler(.allow)
