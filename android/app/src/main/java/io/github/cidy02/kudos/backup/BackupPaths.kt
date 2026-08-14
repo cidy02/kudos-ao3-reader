@@ -69,6 +69,8 @@ object BackupPaths {
         }
     }
 
+    const val MAX_FONT_FILE_NAME_LENGTH = 128
+
     fun requireSafeFontFileName(fileName: String) {
         if (!isSafeFontFileName(fileName)) {
             throw BackupError.UnsafePath("$FONTS_DIRECTORY/$fileName")
@@ -76,7 +78,7 @@ object BackupPaths {
     }
 
     fun isSafeFontFileName(fileName: String): Boolean {
-        if (fileName.isBlank() || fileName.length > 128) return false
+        if (fileName.isBlank() || fileName.length > MAX_FONT_FILE_NAME_LENGTH) return false
         if (fileName == "." || fileName == "..") return false
         if (fileName.contains("/") || fileName.contains("\\") || fileName.contains('\u0000')) return false
         return true
@@ -94,7 +96,7 @@ object BackupPaths {
             }
             .joinToString("")
             .trim()
-            .take(128)
+            .take(MAX_FONT_FILE_NAME_LENGTH)
             .trim('.', ' ')
 
         return if (isSafeFontFileName(sanitized)) sanitized else "font.ttf"
@@ -102,19 +104,30 @@ object BackupPaths {
 
     fun uniqueSuffixedFontFileName(fileName: String, existingNames: Set<String>): String {
         val safeName = sanitizeFontFileName(fileName)
-        if (safeName !in existingNames) return safeName
+        val foldedExistingNames = existingNames.mapTo(mutableSetOf()) { fontFileNameKey(it) }
+        if (fontFileNameKey(safeName) !in foldedExistingNames) return safeName
 
         val dotIndex = safeName.lastIndexOf('.').takeIf { it > 0 }
-        val base = dotIndex?.let { safeName.substring(0, it) } ?: safeName
+        val originalBase = dotIndex?.let { safeName.substring(0, it) } ?: safeName
         val extension = dotIndex?.let { safeName.substring(it) }.orEmpty()
 
         var index = 1
         while (true) {
-            val candidate = "$base-restored-$index$extension"
-            if (candidate !in existingNames && isSafeFontFileName(candidate)) return candidate
+            val suffix = "-restored-$index"
+            // Suffix room comes out of the 128-char cap; otherwise a valid
+            // occupied name of length 118–128 can never produce a safe candidate.
+            val budget = (MAX_FONT_FILE_NAME_LENGTH - suffix.length).coerceAtLeast(0)
+            val extensionToUse = extension.take(budget)
+            val baseToUse = originalBase.take(budget - extensionToUse.length)
+            val candidate = "$baseToUse$suffix$extensionToUse"
+            if (fontFileNameKey(candidate) !in foldedExistingNames && isSafeFontFileName(candidate)) {
+                return candidate
+            }
             index += 1
         }
     }
+
+    fun fontFileNameKey(fileName: String): String = fileName.lowercase(Locale.ROOT)
 
     fun sha256(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)

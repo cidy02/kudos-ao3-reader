@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.files
 
 import io.github.cidy02.kudos.backup.BackupPaths
+import io.github.cidy02.kudos.backup.BackupLimits
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -29,6 +30,53 @@ class FontFileStore(
             val path = runCatching { fontPath(fileName) }.getOrNull() ?: return@withContext null
             if (!Files.isRegularFile(path)) return@withContext null
             runCatching { Files.readAllBytes(path) }.getOrNull()
+        }
+    }
+
+    suspend fun readAllFontFiles(
+        contentRequiredForFileNames: Set<String> = emptySet()
+    ): Map<String, ByteArray> {
+        return withContext(Dispatchers.IO) {
+            if (!Files.isDirectory(fontsDirectory)) return@withContext emptyMap()
+            val requiredFoldedNames = contentRequiredForFileNames.mapTo(mutableSetOf()) {
+                BackupPaths.fontFileNameKey(it)
+            }
+            Files.newDirectoryStream(fontsDirectory).use { stream ->
+                stream
+                    .filter(Files::isRegularFile)
+                    .sortedBy { it.fileName.toString() }
+                    .mapNotNull { path ->
+                        val fileName = path.fileName.toString()
+                        runCatching {
+                            BackupPaths.requireSafeFontFileName(fileName)
+                            val bytes = if (BackupPaths.fontFileNameKey(fileName) in requiredFoldedNames) {
+                                runCatching {
+                                    Files.newInputStream(path).use { input ->
+                                        val maxBytes = (BackupLimits.MAX_FONT_ENTRY_BYTES + 1).toInt()
+                                        val buffer = ByteArray(maxBytes)
+                                        var totalRead = 0
+                                        while (totalRead < maxBytes) {
+                                            val read = input.read(buffer, totalRead, maxBytes - totalRead)
+                                            if (read == -1) break
+                                            totalRead += read
+                                        }
+                                        val bytes = buffer.copyOf(totalRead)
+                                        bytes.takeIf {
+                                            it.size.toLong() <= BackupLimits.MAX_FONT_ENTRY_BYTES
+                                        }
+                                    }
+                                }.getOrNull()
+                            } else {
+                                null
+                            }
+                            // Every local file reserves its name. Only names that can
+                            // collide with this incoming package have their bytes read,
+                            // keeping snapshot memory bounded by the package's 32 MiB cap.
+                            fileName to (bytes ?: ByteArray(0))
+                        }.getOrNull()
+                    }
+                    .toMap(linkedMapOf())
+            }
         }
     }
 

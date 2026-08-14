@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.documentfile.provider.DocumentFile
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import io.github.cidy02.kudos.core.model.CustomFont
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.toEntity
@@ -451,6 +452,170 @@ class SyncRepositoryTest {
             readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!)
         )
         assertTrue(manifest.works.any { it.id == WORK_A && it.hasEPUB })
+    }
+
+    @Test
+    fun folderSyncRejectsInvalidFontBeforePersistenceAndRetainsSelector() = runTest {
+        settingsRepository.updateReaderFontId("custom:local.otf")
+        val kudos = ensureKudosLibrary()
+        val fontsDir = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        val manifest = remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(
+            fonts = listOf(
+                BackupFont("Bad", "bad.ttf", "2026-06-26T12:00:00Z")
+            ),
+            settings = BackupSettingsPayload(readerFontID = "custom:bad.ttf")
+        )
+        writeChild(
+            kudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(manifest).toByteArray()
+        )
+        writeChild(
+            fontsDir,
+            "bad.ttf",
+            "font/ttf",
+            byteArrayOf(0x00, 0x01, 0x00, 0x00) + "not a font".toByteArray()
+        )
+
+        val result = syncRepository.runSync()
+
+        assertTrue("invalid folder-sync font must abort: $result", result is SyncResult.Error)
+        assertEquals("Invalid font file", (result as SyncResult.Error).message)
+        assertEquals("custom:local.otf", settingsRepository.snapshot().reader.readerFontId)
+        assertTrue(database.customFontDao().getAll().isEmpty())
+        assertFalse(fontFileStore.fontExists("bad.ttf"))
+    }
+
+    @Test
+    fun zipRestoreInstallsValidFontButRetainsDifferentLocalSelector() = runTest {
+        settingsRepository.updateReaderFontId("custom:local-only.otf")
+        val incomingBytes = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf")
+            .use { it.readBytes() }
+        val manifest = remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(
+            fonts = listOf(
+                BackupFont("ZIP Font", "zip-font.otf", "2026-06-26T12:00:00Z")
+            ),
+            settings = BackupSettingsPayload(readerFontID = "custom:zip-font.otf")
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = manifest,
+                fontFilesByFileName = mapOf("zip-font.otf" to incomingBytes)
+            )
+        )
+
+        backupRepository.importV2ZipBytes(bytes)
+
+        assertArrayEquals(incomingBytes, fontFileStore.readFont("zip-font.otf"))
+        assertEquals(listOf("zip-font.otf"), database.customFontDao().getAll().map { it.fileName })
+        assertEquals("custom:local-only.otf", settingsRepository.snapshot().reader.readerFontId)
+    }
+
+    @Test
+    fun folderSyncPreservesAllLocalFontBytesAndRetainsSelector() = runTest {
+        val localBytes = "local-font-bytes".toByteArray()
+        val orphanBytes = "orphan-font-bytes".toByteArray()
+        fontFileStore.writeFont("reader.otf", localBytes)
+        fontFileStore.writeFont("reader-restored-1.otf", orphanBytes)
+        database.customFontDao().upsert(
+            CustomFont(name = "Local", fileName = "reader.otf").toEntity()
+        )
+        settingsRepository.updateReaderFontId("custom:reader.otf")
+
+        val incomingBytes = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf")
+            .use { it.readBytes() }
+        val kudos = ensureKudosLibrary()
+        val fontsDir = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        val manifest = remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(
+            fonts = listOf(
+                BackupFont("Remote", "reader.otf", "2026-06-26T12:00:00Z")
+            ),
+            settings = BackupSettingsPayload(readerFontID = "custom:reader-restored-2.otf")
+        )
+        writeChild(
+            kudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(manifest).toByteArray()
+        )
+        writeChild(fontsDir, "reader.otf", "font/otf", incomingBytes)
+
+        val result = syncRepository.runSync()
+
+        assertTrue("valid folder-sync font must restore: $result", result is SyncResult.Success)
+        assertArrayEquals(localBytes, fontFileStore.readFont("reader.otf"))
+        assertArrayEquals(orphanBytes, fontFileStore.readFont("reader-restored-1.otf"))
+        assertArrayEquals(incomingBytes, fontFileStore.readFont("reader-restored-2.otf"))
+        assertEquals(
+            listOf("reader-restored-2.otf", "reader.otf"),
+            database.customFontDao().getAll().map { it.fileName }.sorted()
+        )
+        assertEquals("custom:reader.otf", settingsRepository.snapshot().reader.readerFontId)
+    }
+
+    @Test
+    fun folderSyncCaseVariantCollisionPreservesLocalBytesAndUsesSuffix() = runTest {
+        val localBytes = "occupied local bytes".toByteArray()
+        fontFileStore.writeFont("reader.otf", localBytes)
+        database.customFontDao().upsert(
+            CustomFont(name = "Local", fileName = "reader.otf").toEntity()
+        )
+        settingsRepository.updateReaderFontId("custom:reader.otf")
+
+        val incomingBytes = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf")
+            .use { it.readBytes() }
+        val kudos = ensureKudosLibrary()
+        val fontsDir = kudos.createDirectory(BackupPaths.FONTS_DIRECTORY)!!
+        val manifest = remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(
+            fonts = listOf(BackupFont("Remote", "Reader.otf", "2026-06-26T12:00:00Z")),
+            settings = BackupSettingsPayload(readerFontID = "custom:Reader.otf")
+        )
+        writeChild(
+            kudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(manifest).toByteArray()
+        )
+        writeChild(fontsDir, "Reader.otf", "font/otf", incomingBytes)
+
+        val result = syncRepository.runSync()
+
+        assertTrue("case-variant collision must restore with a suffix: $result", result is SyncResult.Success)
+        assertArrayEquals(localBytes, fontFileStore.readFont("reader.otf"))
+        assertArrayEquals(incomingBytes, fontFileStore.readFont("Reader-restored-1.otf"))
+        assertEquals(
+            setOf("reader.otf", "Reader-restored-1.otf"),
+            database.customFontDao().getAll().map { it.fileName }.toSet()
+        )
+        assertEquals("custom:reader.otf", settingsRepository.snapshot().reader.readerFontId)
+    }
+
+    @Test
+    fun zipRestoreHealsMissingFileForExistingFontRowWithoutDuplicate() = runTest {
+        val existing = CustomFont(name = "Local", fileName = "reader.otf")
+        database.customFontDao().upsert(existing.toEntity())
+        settingsRepository.updateReaderFontId("custom:reader.otf")
+        val incomingBytes = context.assets.open("readium/fonts/OpenDyslexic-Regular.otf")
+            .use { it.readBytes() }
+        val manifest = remoteManifest(emptyList(), "2026-06-26T12:00:00Z").copy(
+            fonts = listOf(BackupFont("Remote", "Reader.otf", "2026-06-26T12:00:00Z")),
+            settings = BackupSettingsPayload(readerFontID = "custom:Reader.otf")
+        )
+        val bytes = BackupExporter.exportV2(
+            KudosBackupPackage(
+                manifest = manifest,
+                fontFilesByFileName = mapOf("Reader.otf" to incomingBytes)
+            )
+        )
+
+        backupRepository.importV2ZipBytes(bytes)
+
+        assertArrayEquals(incomingBytes, fontFileStore.readFont("reader.otf"))
+        val restoredFonts = database.customFontDao().getAll()
+        assertEquals(listOf(existing.id), restoredFonts.map { it.id })
+        assertEquals(listOf("reader.otf"), restoredFonts.map { it.fileName })
+        assertEquals("custom:reader.otf", settingsRepository.snapshot().reader.readerFontId)
     }
 
     // --------------------------------------------------------------- helpers

@@ -76,7 +76,7 @@ class BackupRepository(
     suspend fun importV2ZipBytes(bytes: ByteArray): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
-            val current = captureLibrarySnapshot()
+            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = BackupMergeService.merge(current, pack)
             applyMergeResult(merge)
             merge.summary
@@ -85,14 +85,17 @@ class BackupRepository(
 
     suspend fun importPackage(pack: KudosBackupPackage): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
-            val current = captureLibrarySnapshot()
+            BackupFontValidator.validate(pack.fontFilesByFileName)
+            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = BackupMergeService.merge(current, pack)
             applyMergeResult(merge)
             merge.summary
         }
     }
 
-    suspend fun captureLibrarySnapshot(): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
+    suspend fun captureLibrarySnapshot(
+        incomingFontFileNames: Set<String> = emptySet()
+    ): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
         // Include soft-deleted works so export carries Recently Deleted state.
         val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
         val userTagsByWorkId = works.associate { work ->
@@ -116,9 +119,9 @@ class BackupRepository(
                 runCatching { Files.isRegularFile(workFileStore.workEpubPath(id)) }.getOrDefault(false)
             }
             .toSet()
-        val fontFiles = fonts.mapNotNull { font ->
-            fontFileStore.readFont(font.fileName)?.let { font.fileName to it }
-        }.toMap()
+        // Include orphan-but-valid local filenames in the collision set. Restore
+        // must never overwrite bytes merely because their DB row is missing.
+        val fontFiles = fontFileStore.readAllFontFiles(incomingFontFileNames)
 
         BackupLibrarySnapshot(
             works = works,
