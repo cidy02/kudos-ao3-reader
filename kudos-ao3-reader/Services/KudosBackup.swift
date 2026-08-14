@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import OSLog
 import SwiftData
@@ -29,6 +30,9 @@ extension UTType {
 }
 
 nonisolated struct KudosBackupContents {
+    static let maxFontEntryBytes = 4 * 1024 * 1024
+    static let maxTotalFontBytes = 32 * 1024 * 1024
+
     let manifest: KudosBackupManifest
     let epubFiles: [UUID: Data]
     let fontFiles: [String: Data]
@@ -73,10 +77,17 @@ nonisolated struct KudosBackupContents {
 
         let fontWrappers = rootFiles["Fonts"]?.fileWrappers ?? [:]
         var fonts: [String: Data] = [:]
+        var aggregateFontBytes = 0
         for font in manifest.fonts {
             guard Self.isSafeFileName(font.fileName),
                   let data = fontWrappers[font.fileName]?.regularFileContents
             else { continue }
+            guard data.count <= Self.maxFontEntryBytes,
+                  aggregateFontBytes <= Self.maxTotalFontBytes - data.count
+            else {
+                throw KudosBackupError.invalidPackage
+            }
+            aggregateFontBytes += data.count
             fonts[font.fileName] = data
         }
         fontFiles = fonts
@@ -88,11 +99,53 @@ nonisolated struct KudosBackupContents {
     nonisolated static func read(from url: URL) throws -> Self {
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
         if isDirectory {
-            let wrapper = try FileWrapper(url: url, options: .immediate)
-            return try Self(fileWrapper: wrapper)
+            return try readLegacyDirectory(from: url)
         }
         // M17 RESIDUAL: .mappedIfSafe can cause SIGBUS if the underlying file is truncated by another process while mapped.
         return try Self(zipData: Data(contentsOf: url, options: .mappedIfSafe))
+    }
+
+    /// Reads the legacy directory package without asking `FileWrapper(.immediate)`
+    /// to materialize every font first. Font limits are checked from metadata and
+    /// enforced again by a bounded handle before bytes enter the restore batch.
+    nonisolated static func readLegacyDirectory(from rootURL: URL) throws -> Self {
+        let manifestURL = rootURL.appendingPathComponent("manifest.json")
+        let manifest = try decodeManifest(Data(contentsOf: manifestURL, options: .mappedIfSafe))
+
+        let worksDirectory = rootURL.appendingPathComponent("Works", isDirectory: true)
+        var epubs: [UUID: Data] = [:]
+        for work in manifest.works {
+            let url = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+            if let data = try? Data(contentsOf: url, options: .mappedIfSafe) {
+                epubs[work.id] = data
+            }
+        }
+
+        let fontsDirectory = rootURL.appendingPathComponent("Fonts", isDirectory: true)
+        var fonts: [String: Data] = [:]
+        var aggregateFontBytes = 0
+        for font in manifest.fonts where isSafeFileName(font.fileName) {
+            let url = fontsDirectory.appendingPathComponent(font.fileName)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let remainingBytes = maxTotalFontBytes - aggregateFontBytes
+            guard remainingBytes > 0 else { throw KudosBackupError.invalidPackage }
+            let cap = min(maxFontEntryBytes, remainingBytes)
+            if let fileSize = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                guard fileSize <= cap else { throw KudosBackupError.invalidPackage }
+            }
+            let data = try readBoundedData(from: url, maxBytes: cap)
+            aggregateFontBytes += data.count
+            fonts[font.fileName] = data
+        }
+        return Self(manifest: manifest, epubFiles: epubs, fontFiles: fonts)
+    }
+
+    nonisolated private static func readBoundedData(from url: URL, maxBytes: Int) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let data = try handle.read(upToCount: maxBytes + 1) ?? Data()
+        guard data.count <= maxBytes else { throw KudosBackupError.invalidPackage }
+        return data
     }
 
     /// Reads just the manifest for the pre-confirmation UI without materializing
@@ -136,12 +189,26 @@ nonisolated struct KudosBackupContents {
         epubFiles = [:]
         self.zip = zip
 
-        var fonts: [String: Data] = [:]
+        var fontEntries: [(fileName: String, entryName: String)] = []
+        var aggregateFontBytes = 0
         for font in manifest.fonts {
-            guard Self.isSafeFileName(font.fileName),
-                  let data = zip.data(named: "Fonts/\(font.fileName)")
-            else { continue }
-            fonts[font.fileName] = data
+            guard Self.isSafeFileName(font.fileName) else { continue }
+            let entryName = "Fonts/\(font.fileName)"
+            guard let size = zip.uncompressedSize(named: entryName) else { continue }
+            guard size <= Self.maxFontEntryBytes,
+                  aggregateFontBytes <= Self.maxTotalFontBytes - size
+            else {
+                throw KudosBackupError.invalidPackage
+            }
+            aggregateFontBytes += size
+            fontEntries.append((fileName: font.fileName, entryName: entryName))
+        }
+        var fonts: [String: Data] = [:]
+        for entry in fontEntries {
+            guard let data = zip.data(named: entry.entryName) else {
+                throw KudosBackupError.invalidPackage
+            }
+            fonts[entry.fileName] = data
         }
         fontFiles = fonts
     }
@@ -1034,7 +1101,13 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     }
 
     func apply(to defaults: UserDefaults = .standard) {
-        defaults.set(readerFontID, forKey: "readerFontID")
+        // M21. Never assign the archive's readerFontID — the font selection is local-only.
+        // A custom font refers to a file name that may not exist on this device (the
+        // archive might carry a font the user never installed here, or folder-sync
+        // might push one that hasn't been validated yet). Silently switching the reader
+        // to a missing font breaks rendering until the user notices and resets it in
+        // Settings. The user picks their font on each device; sync carries the *files*,
+        // not the selection.
         defaults.set(readerMode, forKey: "readerMode")
         defaults.set(readerTwoPage, forKey: "readerTwoPage")
         defaults.set(readerCustomize, forKey: "readerCustomize")
@@ -1777,38 +1850,165 @@ enum KudosBackupService {
         }
 
         let existingFonts = try context.fetch(FetchDescriptor<CustomFont>())
-        var fontsByFileName = Dictionary(
-            existingFonts.map { ($0.fileName, $0) },
-            uniquingKeysWith: { first, _ in first }
+        let fontsByFoldedFileName = Dictionary(
+            grouping: existingFonts,
+            by: { $0.fileName.lowercased() }
         )
-        var restoredFonts = 0
+
+        // M21: validate the entire applicable font set *before* writing any file.
+        // One bad font rejects the whole batch — no partial font state on disk.
+        let maxSingleFontBytes = KudosBackupContents.maxFontEntryBytes
+        let maxAggregateFontBytes = KudosBackupContents.maxTotalFontBytes
+        let allowedExtensions: Set<String> = ["ttf", "otf"]
+
+        // Collect only fonts that have incoming bytes (the ones that would be written).
+        var validatedFonts: [(archived: KudosBackupFont, data: Data)] = []
+        var validatedFileNames = Set<String>()
+        var aggregateBytes = 0
         for archived in contents.manifest.fonts {
             guard let data = contents.fontFiles[archived.fileName] else { continue }
-            let font: CustomFont
-            if let existing = fontsByFileName[archived.fileName] {
-                font = existing
-            } else {
-                font = CustomFont(name: archived.name, fileName: archived.fileName)
-                context.insert(font)
-                fontsByFileName[archived.fileName] = font
+
+            // Basename-only: no path separators, no traversal.
+            let fileName = archived.fileName
+            guard KudosBackupContents.isSafeFileName(fileName),
+                  URL(fileURLWithPath: fileName).lastPathComponent == fileName
+            else {
+                throw KudosBackupError.invalidPackage
             }
+            guard validatedFileNames.insert(fileName.lowercased()).inserted else {
+                throw KudosBackupError.invalidPackage
+            }
+
+            // Extension must be .ttf or .otf (case-insensitive).
+            let ext = (fileName as NSString).pathExtension.lowercased()
+            guard allowedExtensions.contains(ext) else {
+                throw KudosBackupError.invalidPackage
+            }
+
+            // Per-font size limit.
+            guard data.count <= maxSingleFontBytes else {
+                throw KudosBackupError.invalidPackage
+            }
+
+            aggregateBytes += data.count
+            guard aggregateBytes <= maxAggregateFontBytes else {
+                throw KudosBackupError.invalidPackage
+            }
+
+            // Font must be loadable by the system font stack.
+            guard let provider = CGDataProvider(data: data as CFData),
+                  CGFont(provider) != nil
+            else {
+                throw KudosBackupError.invalidPackage
+            }
+
+            validatedFonts.append((archived: archived, data: data))
+        }
+
+        // All fonts validated — now write.
+        let fileManager = FileManager.default
+        let localFontURLs = (try? fileManager.contentsOfDirectory(
+            at: Storage.fontsDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        ).filter { url in
+            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true
+        }) ?? []
+        let localFontURLsByFoldedName = Dictionary(
+            grouping: localFontURLs,
+            by: { $0.lastPathComponent.lowercased() }
+        )
+        var takenFileNames = Set(
+            (
+                existingFonts.map(\.fileName) + localFontURLs.map(\.lastPathComponent) +
+                    validatedFonts.map { $0.archived.fileName }
+            ).map { $0.lowercased() }
+        )
+
+        func uniqueRestoredFileName(for fileName: String) -> String {
+            let name = fileName as NSString
+            let ext = name.pathExtension
+            let base = name.deletingPathExtension
+            var index = 1
+            while true {
+                let candidate = ext.isEmpty
+                    ? "\(base)-restored-\(index)"
+                    : "\(base)-restored-\(index).\(ext)"
+                if !takenFileNames.contains(candidate.lowercased()) {
+                    takenFileNames.insert(candidate.lowercased())
+                    return candidate
+                }
+                index += 1
+            }
+        }
+
+        var restoredFonts = 0
+        for (archived, data) in validatedFonts {
+            let foldedName = archived.fileName.lowercased()
+            let existingMatches = fontsByFoldedFileName[foldedName] ?? []
+            let localMatches = localFontURLsByFoldedName[foldedName] ?? []
+            var finalFileName = archived.fileName
+            var matchedFont: CustomFont?
+            var shouldWrite = true
+
+            if existingMatches.count > 1 || localMatches.count > 1 {
+                finalFileName = uniqueRestoredFileName(for: archived.fileName)
+            } else if let existing = existingMatches.first {
+                let exactLocalURL = localMatches.first {
+                    $0.lastPathComponent == existing.fileName
+                }
+                if let exactLocalURL,
+                   let size = try? exactLocalURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                   size <= maxSingleFontBytes,
+                   let localData = try? Data(contentsOf: exactLocalURL, options: .mappedIfSafe),
+                   localData == data {
+                    finalFileName = existing.fileName
+                    matchedFont = existing
+                    shouldWrite = false
+                } else if localMatches.isEmpty,
+                          !fileManager.fileExists(atPath: existing.fileURL.path) {
+                    // The row still names this exact path and no case-variant occupies it.
+                    // Heal the missing bytes without ever repointing the row.
+                    finalFileName = existing.fileName
+                    matchedFont = existing
+                } else {
+                    finalFileName = uniqueRestoredFileName(for: archived.fileName)
+                }
+            } else if let localURL = localMatches.first,
+                      let size = try? localURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                      size <= maxSingleFontBytes,
+                      let localData = try? Data(contentsOf: localURL, options: .mappedIfSafe),
+                      localData == data {
+                // A sole byte-identical folded match is an orphan worth adopting.
+                finalFileName = localURL.lastPathComponent
+                shouldWrite = false
+            } else if !localMatches.isEmpty
+                        || fileManager.fileExists(
+                            atPath: Storage.fontsDirectory
+                                .appendingPathComponent(archived.fileName).path
+                        ) {
+                finalFileName = uniqueRestoredFileName(for: archived.fileName)
+            }
+
+            let resolvedFont: CustomFont
+            if let matchedFont {
+                resolvedFont = matchedFont
+            } else {
+                resolvedFont = CustomFont(name: archived.name, fileName: finalFileName)
+                context.insert(resolvedFont)
+            }
+            let font = resolvedFont
             font.name = archived.name
             font.dateAdded = archived.dateAdded
-            try data.write(to: font.fileURL, options: .atomic)
+            if shouldWrite {
+                try data.write(to: font.fileURL, options: .atomic)
+            }
             restoredFonts += 1
         }
 
         try context.save()
-        var settings = contents.manifest.settings
-        if settings.readerFontID.hasPrefix("custom:") {
-            let fileName = String(settings.readerFontID.dropFirst("custom:".count))
-            if !FileManager.default.fileExists(
-                atPath: Storage.fontsDirectory.appendingPathComponent(fileName).path
-            ) {
-                settings.readerFontID = "system"
-            }
-        }
-        settings.apply(to: defaults)
+        // M21: the readerFontID file-existence check is no longer needed here because
+        // apply() no longer assigns readerFontID at all — the local selection is retained.
+        contents.manifest.settings.apply(to: defaults)
         return KudosBackupRestoreSummary(
             // Count what was actually applied — tombstone-suppressed works are skipped
             // and must not inflate the user-facing "N works restored" confirmation.

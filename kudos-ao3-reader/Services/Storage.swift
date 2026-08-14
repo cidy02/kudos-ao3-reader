@@ -24,8 +24,26 @@ nonisolated enum Storage {
         return candidate
     }
 
+    #if DEBUG
+    /// Test-only override for the user-imported-font directory.
+    ///
+    /// The production default remains Application Support/Fonts. The override lets
+    /// restore tests exercise a mounted case-sensitive filesystem without changing
+    /// any production restore path.
+    ///
+    /// **Compiled out of release builds on purpose.** This is a mutable global that
+    /// redirects where restore writes untrusted font bytes — precisely the sink M21
+    /// exists to control. It has no production setter today, but a write-redirect
+    /// primitive should not exist at all in a shipping binary, so the seam is
+    /// `#if DEBUG` rather than merely unused.
+    static var fontsDirectoryOverride: URL?
+    #endif
+
     /// Permanent home for user-imported fonts.
     static var fontsDirectory: URL {
+        #if DEBUG
+        if let fontsDirectoryOverride { return fontsDirectoryOverride }
+        #endif
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Fonts", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

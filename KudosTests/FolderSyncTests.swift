@@ -1,3 +1,4 @@
+import CoreText
 import Foundation
 import SwiftData
 import Testing
@@ -125,6 +126,361 @@ struct FolderSyncTests {
         let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.hasEPUB)
         #expect(try Data(contentsOf: restored.fileURL) == validEPUB)
+    }
+
+    @Test func syncDownRejectsInvalidFontWithoutPersistenceOrSelectorChange() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        targetDefaults.set("custom:local-font.ttf", forKey: "readerFontID")
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+
+        let fileName = "invalid-\(UUID().uuidString).ttf"
+        let installedURL = Storage.fontsDirectory.appendingPathComponent(fileName)
+        defer { try? FileManager.default.removeItem(at: installedURL) }
+        let manifest = try fontManifest(fileName: fileName, readerFontID: "custom:\(fileName)")
+        let invalidBytes = Data([0x00, 0x01, 0x00, 0x00]) + Data("not a font".utf8)
+        try writeRemoteFont(manifest: manifest, fileName: fileName, data: invalidBytes, to: folder)
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        do {
+            _ = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+            Issue.record("Expected live folder sync to reject the invalid custom font.")
+        } catch let error as KudosBackupError {
+            guard case .invalidPackage = error else {
+                Issue.record("Expected invalidPackage, got \(error).")
+                return
+            }
+            #expect(error.localizedDescription == "This file is not a valid Kudos backup.")
+        }
+
+        #expect(try targetContext.fetch(FetchDescriptor<CustomFont>()).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: installedURL.path))
+        #expect(targetDefaults.string(forKey: "readerFontID") == "custom:local-font.ttf")
+    }
+
+    @Test func syncDownSkipsOversizedFontAndRestoresUnrelatedState() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+
+        let fileName = "oversized-\(UUID().uuidString).ttf"
+        let installedURL = Storage.fontsDirectory.appendingPathComponent(fileName)
+        defer { try? FileManager.default.removeItem(at: installedURL) }
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let font = CustomFont(name: "Oversized", fileName: fileName)
+        let bookmark = Bookmark(title: "Unrelated Bookmark", urlString: "https://example.com/safe")
+        sourceContext.insert(font)
+        sourceContext.insert(bookmark)
+        try sourceContext.save()
+        let manifest = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [bookmark],
+            fonts: [font],
+            readingQueues: [],
+            defaults: try testDefaults()
+        ).manifest
+        try writeRemoteFont(
+            manifest: manifest,
+            fileName: fileName,
+            data: Data(repeating: 0, count: KudosBackupContents.maxFontEntryBytes + 1),
+            to: folder
+        )
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let result: FolderSyncResult
+        do {
+            result = try await FolderSyncService.syncDown(
+                in: targetContext,
+                defaults: targetDefaults
+            )
+        } catch {
+            #expect(Bool(false), "Oversized font bytes must not abort sync-down.")
+            return
+        }
+
+        #expect(result.didReadRemoteFile, "Oversized font bytes must not abort sync-down.")
+        #expect(
+            try targetContext.fetch(FetchDescriptor<CustomFont>()).isEmpty,
+            "An oversized font must not persist a CustomFont row."
+        )
+        #expect(!FileManager.default.fileExists(atPath: installedURL.path))
+        let restoredBookmarks = try targetContext.fetch(FetchDescriptor<Bookmark>())
+        #expect(
+            restoredBookmarks.map(\.title) == ["Unrelated Bookmark"],
+            "Sync-down must restore unrelated manifest state after skipping an oversized font."
+        )
+    }
+
+    @Test func syncDownPreservesCollidingFontBytesAndLocalSelector() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+
+        let (fontData, fileExtension) = try validFontData()
+        let localData = fontData + Data(repeating: 0, count: 16)
+        let incomingData = fontData + Data(repeating: 0, count: 15) + Data([1])
+        let fileName = "collision-\(UUID().uuidString).\(fileExtension)"
+        let suffixName = (fileName as NSString).deletingPathExtension
+            + "-restored-1.\((fileName as NSString).pathExtension)"
+        let localURL = Storage.fontsDirectory.appendingPathComponent(fileName)
+        let suffixURL = Storage.fontsDirectory.appendingPathComponent(suffixName)
+        defer {
+            try? FileManager.default.removeItem(at: localURL)
+            try? FileManager.default.removeItem(at: suffixURL)
+        }
+        try FileManager.default.createDirectory(at: Storage.fontsDirectory, withIntermediateDirectories: true)
+        try localData.write(to: localURL)
+        targetContext.insert(CustomFont(name: "Local", fileName: fileName))
+        try targetContext.save()
+        targetDefaults.set("custom:\(fileName)", forKey: "readerFontID")
+
+        let manifest = try fontManifest(fileName: fileName, readerFontID: "custom:remote.ttf")
+        try writeRemoteFont(manifest: manifest, fileName: fileName, data: incomingData, to: folder)
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let result = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+
+        #expect(result.didReadRemoteFile)
+        #expect(try Data(contentsOf: localURL) == localData)
+        let restoredCollisionData = try? Data(contentsOf: suffixURL)
+        #expect(
+            restoredCollisionData == incomingData,
+            "Equal-size different font bytes must be restored under a collision-safe suffix."
+        )
+        #expect(Set(try targetContext.fetch(FetchDescriptor<CustomFont>()).map(\.fileName)) == [fileName, suffixName])
+        #expect(targetDefaults.string(forKey: "readerFontID") == "custom:\(fileName)")
+    }
+
+    @Test func syncDownConvergesWhenFontLibraryExceedsAggregateCap() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        let targetDefaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+
+        let (fontData, fileExtension) = try validFontData()
+        let paddedData = fontData + Data(
+            repeating: 0,
+            count: KudosBackupContents.maxFontEntryBytes - fontData.count
+        )
+        var fontFiles: [String: Data] = [:]
+        var archivedFonts: [CustomFont] = []
+        for index in 0..<9 {
+            let fileName = "aggregate-\(UUID().uuidString)-\(index).\(fileExtension)"
+            archivedFonts.append(CustomFont(name: "Aggregate \(index)", fileName: fileName))
+            fontFiles[fileName] = paddedData
+        }
+        defer {
+            for fileName in fontFiles.keys {
+                try? FileManager.default.removeItem(
+                    at: Storage.fontsDirectory.appendingPathComponent(fileName)
+                )
+            }
+        }
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let work = try insertWork(
+            into: sourceContext,
+            title: "Aggregate-Safe Work",
+            ao3WorkID: 9010
+        )
+        let bookmark = Bookmark(
+            title: "Aggregate-Safe Bookmark",
+            urlString: "https://example.com/aggregate-safe"
+        )
+        sourceContext.insert(bookmark)
+        try sourceContext.save()
+        let manifest = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [bookmark],
+            fonts: archivedFonts,
+            readingQueues: [],
+            defaults: try testDefaults()
+        ).manifest
+        try writeRemoteFonts(manifest: manifest, fontFiles: fontFiles, to: folder)
+        try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+        let first: FolderSyncResult
+        do {
+            first = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        } catch {
+            #expect(Bool(false), "Aggregate exhaustion must not abort sync-down.")
+            return
+        }
+        #expect(first.didReadRemoteFile, "Aggregate exhaustion must not abort sync-down.")
+        #expect(try targetContext.fetch(FetchDescriptor<CustomFont>()).count == 8)
+        #expect(
+            try targetContext.fetch(FetchDescriptor<SavedWork>()).map(\.title)
+                == ["Aggregate-Safe Work"],
+            "Aggregate exhaustion must not roll back an unrelated work."
+        )
+        #expect(
+            try targetContext.fetch(FetchDescriptor<Bookmark>()).map(\.title)
+                == ["Aggregate-Safe Bookmark"],
+            "Aggregate exhaustion must not roll back an unrelated bookmark."
+        )
+
+        let second = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(
+            try targetContext.fetch(FetchDescriptor<CustomFont>()).count == 9,
+            "Already-installed identical fonts must cost no aggregate bytes on retry."
+        )
+        #expect(
+            second.didReadRemoteFile,
+            "An incomplete aggregate pass must re-read the unchanged manifest."
+        )
+        #expect(
+            second.skippedUnchanged == false,
+            "An incomplete aggregate pass must withhold the unchanged stamp and retry."
+        )
+
+        let third = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+        #expect(third.skippedUnchanged, "A converged font library must regain the unchanged stamp.")
+    }
+
+    @Test func syncDownPreservesEveryCaseFoldedDatabaseRow() async throws {
+        try await CaseSensitiveFontTestVolume.withFontsDirectory {
+            let folder = try temporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let targetContainer = try container()
+            let targetContext = targetContainer.mainContext
+            let targetDefaults = try testDefaults()
+            defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+
+            let (incomingData, fileExtension) = try validFontData()
+            let baseName = "sync-case-\(UUID().uuidString)"
+            let archivedFileName = "\(baseName.uppercased()).\(fileExtension.uppercased())"
+            let localFileName = "\(baseName.lowercased()).\(fileExtension.uppercased())"
+            let incomingFileName = "\(baseName.lowercased()).\(fileExtension.lowercased())"
+            let suffixName = (incomingFileName as NSString).deletingPathExtension
+                + "-restored-1.\((incomingFileName as NSString).pathExtension)"
+            let localURL = Storage.fontsDirectory.appendingPathComponent(localFileName)
+            let archivedURL = Storage.fontsDirectory.appendingPathComponent(archivedFileName)
+            let suffixURL = Storage.fontsDirectory.appendingPathComponent(suffixName)
+            defer {
+                try? FileManager.default.removeItem(at: localURL)
+                try? FileManager.default.removeItem(at: archivedURL)
+                try? FileManager.default.removeItem(at: suffixURL)
+            }
+            try FileManager.default.createDirectory(
+                at: Storage.fontsDirectory,
+                withIntermediateDirectories: true
+            )
+            try incomingData.write(to: localURL)
+            try incomingData.write(to: archivedURL)
+            let archivedCaseRow = CustomFont(name: "Archived Case", fileName: archivedFileName)
+            let localCaseRow = CustomFont(name: "Local Case", fileName: localFileName)
+            targetContext.insert(archivedCaseRow)
+            targetContext.insert(localCaseRow)
+            try targetContext.save()
+            targetDefaults.set("custom:\(archivedFileName)", forKey: "readerFontID")
+
+            let manifest = try fontManifest(
+                fileName: incomingFileName,
+                readerFontID: "custom:\(archivedFileName)"
+            )
+            try writeRemoteFont(
+                manifest: manifest,
+                fileName: incomingFileName,
+                data: incomingData,
+                to: folder
+            )
+            try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+            let result = try await FolderSyncService.syncDown(in: targetContext, defaults: targetDefaults)
+
+            #expect(result.didReadRemoteFile)
+            let rows = try targetContext.fetch(FetchDescriptor<CustomFont>())
+            #expect(
+                Set(rows.map(\.fileName)) == [archivedFileName, localFileName, suffixName],
+                "Ambiguous case-fold matches must preserve every DB row and install a suffixed font."
+            )
+            #expect(try Data(contentsOf: localURL) == incomingData)
+            #expect(try Data(contentsOf: archivedURL) == incomingData)
+            #expect(try Data(contentsOf: suffixURL) == incomingData)
+            #expect(targetDefaults.string(forKey: "readerFontID") == "custom:\(archivedFileName)")
+        }
+    }
+
+    @Test func syncDownTreatsTwoLocalFilesAsAmbiguousWhenIncomingMatchesDatabaseFile() async throws {
+        try await CaseSensitiveFontTestVolume.withFontsDirectory {
+            let folder = try temporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let targetContainer = try container()
+            let targetContext = targetContainer.mainContext
+            let targetDefaults = try testDefaults()
+            defer { FolderSyncService.disconnect(defaults: targetDefaults) }
+
+            let (incomingData, fileExtension) = try validFontData()
+            let orphanData = Data("case-variant-orphan".utf8)
+            let baseName = "sync-local-ambiguity-\(UUID().uuidString)"
+            let archivedFileName = "\(baseName.uppercased()).\(fileExtension.lowercased())"
+            let orphanFileName = "\(baseName.lowercased()).\(fileExtension.uppercased())"
+            let incomingFileName = "\(baseName.lowercased()).\(fileExtension.lowercased())"
+            let suffixName = (incomingFileName as NSString).deletingPathExtension
+                + "-restored-1.\((incomingFileName as NSString).pathExtension)"
+            let archivedURL = Storage.fontsDirectory.appendingPathComponent(archivedFileName)
+            let orphanURL = Storage.fontsDirectory.appendingPathComponent(orphanFileName)
+            let suffixURL = Storage.fontsDirectory.appendingPathComponent(suffixName)
+            defer {
+                try? FileManager.default.removeItem(at: archivedURL)
+                try? FileManager.default.removeItem(at: orphanURL)
+                try? FileManager.default.removeItem(at: suffixURL)
+            }
+            try FileManager.default.createDirectory(
+                at: Storage.fontsDirectory,
+                withIntermediateDirectories: true
+            )
+            try incomingData.write(to: archivedURL)
+            try orphanData.write(to: orphanURL)
+            let existingRow = CustomFont(name: "Existing", fileName: archivedFileName)
+            targetContext.insert(existingRow)
+            try targetContext.save()
+            targetDefaults.set("custom:\(archivedFileName)", forKey: "readerFontID")
+
+            let manifest = try fontManifest(
+                fileName: incomingFileName,
+                readerFontID: "custom:\(archivedFileName)"
+            )
+            try writeRemoteFont(
+                manifest: manifest,
+                fileName: incomingFileName,
+                data: incomingData,
+                to: folder
+            )
+            try FolderSyncService.connect(to: folder, defaults: targetDefaults)
+
+            let result = try await FolderSyncService.syncDown(
+                in: targetContext,
+                defaults: targetDefaults
+            )
+
+            #expect(result.didReadRemoteFile)
+            #expect(
+                (try? Data(contentsOf: suffixURL)) == incomingData,
+                "Local-file ambiguity must force a suffixed folder-sync restore."
+            )
+            #expect(existingRow.fileName == archivedFileName)
+            #expect(try Data(contentsOf: archivedURL) == incomingData)
+            #expect(try Data(contentsOf: orphanURL) == orphanData)
+            #expect(
+                Set(try targetContext.fetch(FetchDescriptor<CustomFont>()).map(\.fileName))
+                    == [archivedFileName, suffixName],
+                "Folder sync must retain the row-owned font and add a suffixed incoming row."
+            )
+            #expect(targetDefaults.string(forKey: "readerFontID") == "custom:\(archivedFileName)")
+        }
     }
 
     @Test func syncUpThenSyncDownConvergesWithoutDuplicates() async throws {
@@ -731,6 +1087,67 @@ struct FolderSyncTests {
         let defaults = try #require(UserDefaults(suiteName: name))
         defaults.removePersistentDomain(forName: name)
         return defaults
+    }
+
+    private func validFontData(excluding excludedData: Data? = nil) throws -> (Data, String) {
+        let names = CTFontManagerCopyAvailablePostScriptNames() as? [String] ?? []
+        for name in names {
+            let descriptor = CTFontDescriptorCreateWithNameAndSize(name as CFString, 12)
+            guard let url = CTFontDescriptorCopyAttribute(descriptor, kCTFontURLAttribute) as? URL,
+                  ["ttf", "otf"].contains(url.pathExtension.lowercased()),
+                  let data = try? Data(contentsOf: url),
+                  data.count <= KudosBackupContents.maxFontEntryBytes,
+                  data != excludedData
+            else { continue }
+            return (data, url.pathExtension.lowercased())
+        }
+        throw KudosBackupError.invalidPackage
+    }
+
+    private func fontManifest(fileName: String, readerFontID: String) throws -> KudosBackupManifest {
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let font = CustomFont(name: "Remote", fileName: fileName)
+        sourceContext.insert(font)
+        try sourceContext.save()
+        let defaults = try testDefaults()
+        defaults.set(readerFontID, forKey: "readerFontID")
+        return try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [font],
+            readingQueues: [],
+            defaults: defaults
+        ).manifest
+    }
+
+    private func writeRemoteFont(
+        manifest: KudosBackupManifest,
+        fileName: String,
+        data: Data,
+        to folder: URL
+    ) throws {
+        try writeRemoteFonts(manifest: manifest, fontFiles: [fileName: data], to: folder)
+    }
+
+    private func writeRemoteFonts(
+        manifest: KudosBackupManifest,
+        fontFiles: [String: Data],
+        to folder: URL
+    ) throws {
+        let syncDirectory = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let fontsDirectory = syncDirectory.appendingPathComponent(
+            FolderSyncService.fontsSubdirectoryName,
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: fontsDirectory, withIntermediateDirectories: true)
+        try KudosBackupContents(manifest: manifest).manifestData().write(
+            to: syncDirectory.appendingPathComponent(FolderSyncService.manifestFileName),
+            options: .atomic
+        )
+        for (fileName, data) in fontFiles {
+            try data.write(to: fontsDirectory.appendingPathComponent(fileName), options: .atomic)
+        }
     }
 
     @discardableResult

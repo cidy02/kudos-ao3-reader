@@ -195,6 +195,13 @@ nonisolated struct MiniZip {
         return try? extract(entries[index])
     }
 
+    /// Returns the central-directory size without extracting the entry, so a
+    /// caller can apply a type-specific cap before allocating output bytes.
+    func uncompressedSize(named name: String) -> Int? {
+        guard let index = entryIndexByName[name] else { return nil }
+        return entries[index].uncompressedSize
+    }
+
     /// Unzips every file entry, preserving relative paths. Extraction happens in
     /// a private staging directory first; `directory`'s contents are replaced
     /// only after every entry has validated and extracted successfully, so a

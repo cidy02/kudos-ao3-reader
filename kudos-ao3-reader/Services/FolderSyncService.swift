@@ -286,25 +286,47 @@ enum FolderSyncService {
             // Fetch only assets that are missing or changed relative to local
             // state — unchanged EPUBs never leave disk, unlike the old
             // whole-package read that materialized every blob in memory.
-            let assets = await Task.detached {
+            var assets = await Task.detached {
                 readChangedRemoteAssets(in: syncDirectoryURL, manifest: manifest)
             }.value
             result.didReadRemoteFile = true
-            let contents = KudosBackupContents(
-                manifest: manifest,
-                epubFiles: assets.epubFiles,
-                fontFiles: assets.fontFiles
-            )
-            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
-            result.absorb(summary)
-            result.absorb(try await foldConflictVersions(
+            let missingMainAssets = assets.missingAssetCount
+            do {
+                let contents = KudosBackupContents(
+                    manifest: manifest,
+                    epubFiles: assets.epubFiles,
+                    fontFiles: assets.fontFiles
+                )
+                let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+                result.absorb(summary)
+            }
+            assets.epubFiles.removeAll(keepingCapacity: false)
+            assets.fontFiles.removeAll(keepingCapacity: false)
+
+            let conflictFold = try await foldConflictVersions(
                 at: manifestURL,
                 into: context,
                 defaults: defaults,
-                read: { url in KudosBackupContents(manifest: try coordinatedReadManifest(from: url)) }
-            ))
-            defaults.set(assets.missingAssetCount > 0, forKey: pendingRemoteAssetsKey)
-            if assets.missingAssetCount == 0, let remoteStamp {
+                read: { url in
+                    let conflictManifest = try coordinatedReadManifest(from: url)
+                    let assets = readChangedRemoteAssets(
+                        in: syncDirectoryURL,
+                        manifest: conflictManifest
+                    )
+                    return ConflictVersionRead(
+                        contents: KudosBackupContents(
+                            manifest: conflictManifest,
+                            epubFiles: assets.epubFiles,
+                            fontFiles: assets.fontFiles
+                        ),
+                        missingAssetCount: assets.missingAssetCount
+                    )
+                }
+            )
+            result.absorb(conflictFold.result)
+            let missingAssetCount = missingMainAssets + conflictFold.missingAssetCount
+            defaults.set(missingAssetCount > 0, forKey: pendingRemoteAssetsKey)
+            if missingAssetCount == 0, let remoteStamp {
                 defaults.set(remoteStamp, forKey: lastRestoredRemoteStampKey)
             } else {
                 defaults.removeObject(forKey: lastRestoredRemoteStampKey)
@@ -393,12 +415,18 @@ enum FolderSyncService {
             let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
             result.absorb(summary)
             result.didReadRemoteFile = true
-            result.absorb(try await foldConflictVersions(
+            let conflictFold = try await foldConflictVersions(
                 at: legacyURL,
                 into: context,
                 defaults: defaults,
-                read: coordinatedReadLegacyContents
-            ))
+                read: { url in
+                    ConflictVersionRead(
+                        contents: try coordinatedReadLegacyContents(from: url),
+                        missingAssetCount: 0
+                    )
+                }
+            )
+            result.absorb(conflictFold.result)
             if let legacyStamp {
                 defaults.set(legacyStamp, forKey: lastRestoredLegacyStampKey)
             }
@@ -410,6 +438,16 @@ enum FolderSyncService {
         return result
     }
 
+    private struct ConflictVersionRead: Sendable {
+        let contents: KudosBackupContents
+        let missingAssetCount: Int
+    }
+
+    private struct ConflictFoldResult: Sendable {
+        var result = FolderSyncResult()
+        var missingAssetCount = 0
+    }
+
     /// Folds every unresolved File-Provider conflict version of a sync file
     /// into `context`, one restore per version. Returns the accumulated
     /// `FolderSyncResult` (not just a bare count) so a caller's own totals —
@@ -419,28 +457,36 @@ enum FolderSyncService {
         at url: URL,
         into context: ModelContext,
         defaults: UserDefaults,
-        read: @escaping @Sendable (URL) throws -> KudosBackupContents
-    ) async throws -> FolderSyncResult {
+        read: @escaping @Sendable (URL) throws -> ConflictVersionRead
+    ) async throws -> ConflictFoldResult {
         guard let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
               !versions.isEmpty
-        else { return FolderSyncResult() }
+        else { return ConflictFoldResult() }
 
-        var result = FolderSyncResult()
+        var outcome = ConflictFoldResult()
         for version in versions {
             let conflictURL = version.url
-            let contents = try await Task.detached {
+            let readResult = try await Task.detached {
                 try read(conflictURL)
             }.value
-            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
-            result.absorb(summary)
-            result.foldedConflicts += 1
-            version.isResolved = true
+            let summary = try KudosBackupService.restore(
+                readResult.contents,
+                into: context,
+                defaults: defaults
+            )
+            outcome.result.absorb(summary)
+            outcome.result.foldedConflicts += 1
+            outcome.missingAssetCount += readResult.missingAssetCount
+            if readResult.missingAssetCount == 0 {
+                version.isResolved = true
+            }
         }
 
-        if result.foldedConflicts == versions.count {
+        if outcome.missingAssetCount == 0,
+           outcome.result.foldedConflicts == versions.count {
             try? NSFileVersion.removeOtherVersionsOfItem(at: url)
         }
-        return result
+        return outcome
     }
 
     private static func resolveFolder(defaults: UserDefaults) throws -> URL {
@@ -525,22 +571,27 @@ nonisolated private func coordinatedReadLegacyContents(from url: URL) throws -> 
     var coordinationError: NSError?
     var readResult: Result<KudosBackupContents, Error>?
     coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
-        readResult = Result {
-            try KudosBackupContents(fileWrapper: FileWrapper(url: coordinatedURL, options: .immediate))
-        }
+        readResult = Result { try KudosBackupContents.readLegacyDirectory(from: coordinatedURL) }
     }
     if let coordinationError { throw coordinationError }
     guard let readResult else { throw FolderSyncError.unreadableSyncFile }
     return try readResult.get()
 }
 
-nonisolated private func coordinatedReadData(from url: URL) throws -> Data {
+nonisolated private func coordinatedReadData(from url: URL, maxBytes: Int? = nil) throws -> Data {
     let coordinator = NSFileCoordinator(filePresenter: nil)
     var coordinationError: NSError?
     var readResult: Result<Data, Error>?
     coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
         readResult = Result {
-            try Data(contentsOf: coordinatedURL, options: .mappedIfSafe)
+            if let maxBytes {
+                let handle = try FileHandle(forReadingFrom: coordinatedURL)
+                defer { try? handle.close() }
+                let data = try handle.read(upToCount: maxBytes + 1) ?? Data()
+                guard data.count <= maxBytes else { throw KudosBackupError.invalidPackage }
+                return data
+            }
+            return try Data(contentsOf: coordinatedURL, options: .mappedIfSafe)
         }
     }
     if let coordinationError { throw coordinationError }
@@ -554,9 +605,9 @@ nonisolated private func coordinatedReadManifest(from url: URL) throws -> KudosB
 
 /// The subset of remote assets a sync-down actually needs to move: files that
 /// are missing locally or differ from the local copy. `missingAssetCount`
-/// tracks manifest-referenced assets that couldn't be fetched (typically not
-/// yet uploaded by the writing device) so the caller can withhold the
-/// skip-unchanged stamp and retry them on the next sync.
+/// tracks manifest-referenced assets that couldn't be fetched or fit in this
+/// bounded batch, so the caller can withhold the skip-unchanged stamp and retry
+/// them on the next sync.
 nonisolated private struct RemoteAssetSelection: Sendable {
     var epubFiles: [UUID: Data] = [:]
     var fontFiles: [String: Data] = [:]
@@ -567,7 +618,6 @@ nonisolated private func readChangedRemoteAssets(
     in syncDirectoryURL: URL,
     manifest: KudosBackupManifest
 ) -> RemoteAssetSelection {
-    let fileManager = FileManager.default
     let worksDirectory = syncDirectoryURL.appendingPathComponent(
         FolderSyncService.worksSubdirectoryName,
         isDirectory: true
@@ -575,6 +625,9 @@ nonisolated private func readChangedRemoteAssets(
     let fontsDirectory = syncDirectoryURL.appendingPathComponent(
         FolderSyncService.fontsSubdirectoryName,
         isDirectory: true
+    )
+    let localFontFileNames = Set(
+        (try? FileManager.default.contentsOfDirectory(atPath: Storage.fontsDirectory.path)) ?? []
     )
 
     var selection = RemoteAssetSelection()
@@ -607,17 +660,36 @@ nonisolated private func readChangedRemoteAssets(
             selection.missingAssetCount += 1
         }
     }
+    var totalFontBytes = 0
     for font in manifest.fonts where KudosBackupContents.isSafeFileName(font.fileName) {
-        // Font files are immutable once imported (UUID-based names), so only
-        // locally-missing ones ever need fetching.
-        let localURL = Storage.fontsDirectory.appendingPathComponent(font.fileName)
-        guard !fileManager.fileExists(atPath: localURL.path) else { continue }
+        // Always fetch each remote font within the per-entry cap before deciding
+        // whether it needs restore. Equal size is not equal content, while an exact
+        // byte match is already converged and consumes none of the batch aggregate.
         let remoteURL = fontsDirectory.appendingPathComponent(font.fileName)
         guard remoteAssetExists(remoteURL) else { continue }
         requestDownloadIfNeeded(remoteURL)
-        if let data = try? coordinatedReadData(from: remoteURL) {
+        do {
+            let data = try coordinatedReadData(
+                from: remoteURL,
+                maxBytes: KudosBackupContents.maxFontEntryBytes
+            )
+            let localURL = Storage.fontsDirectory.appendingPathComponent(font.fileName)
+            if localFontFileNames.contains(font.fileName),
+               fileSize(of: localURL) == data.count,
+               let localData = try? Data(contentsOf: localURL, options: .mappedIfSafe),
+               localData == data {
+                continue
+            }
+            guard totalFontBytes <= KudosBackupContents.maxTotalFontBytes - data.count else {
+                selection.missingAssetCount += 1
+                continue
+            }
+            totalFontBytes += data.count
             selection.fontFiles[font.fileName] = data
-        } else {
+        } catch {
+            // Per-entry oversize and temporarily unreadable iCloud files make this
+            // pass incomplete, but must not block unrelated manifest state.
+            // Withholding the stamp makes a later pass retry.
             selection.missingAssetCount += 1
         }
     }
