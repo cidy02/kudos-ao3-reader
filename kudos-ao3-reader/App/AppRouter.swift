@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// The app's top-level sections.
 enum AppTab: String, Hashable, CaseIterable, Identifiable {
@@ -178,6 +183,17 @@ final class AppRouter {
 
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.
     func open(_ url: URL) {
+        let scheme = url.scheme?.lowercased()
+        let isHTTP = scheme == "http" || scheme == "https"
+        if !isHTTP || !AO3AuthorRoute.isAO3URL(url) {
+            #if os(macOS)
+            NSWorkspace.shared.open(url)
+            #else
+            UIApplication.shared.open(url)
+            #endif
+            return
+        }
+        
         pendingURL = url
         isPresentingWebBrowser = true
     }
