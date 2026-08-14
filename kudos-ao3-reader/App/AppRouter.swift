@@ -182,10 +182,17 @@ final class AppRouter {
     }
 
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.
+    ///
+    /// Scheme + host gates live at this sink, not at the call sites.
+    /// `javascript:` / `data:` / `file:` are refused (not handed to the
+    /// system opener). Non-AO3 `http(s)` is routed to the system browser so
+    /// it never shares the AO3 cookie store. Only `https` AO3 hosts present
+    /// the in-app sheet (`AO3AuthorRoute.isAO3URL` is https-only).
     func open(_ url: URL) {
-        let scheme = url.scheme?.lowercased()
-        let isHTTP = scheme == "http" || scheme == "https"
-        if !isHTTP || !AO3AuthorRoute.isAO3URL(url) {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return }
+        if !AO3AuthorRoute.isAO3URL(url) {
             #if os(macOS)
             NSWorkspace.shared.open(url)
             #else
@@ -193,7 +200,6 @@ final class AppRouter {
             #endif
             return
         }
-        
         pendingURL = url
         isPresentingWebBrowser = true
     }
