@@ -126,10 +126,7 @@ struct KeychainAO3SessionVault: AO3SessionPersisting {
 
         let status = SecItemAdd(attributes as CFDictionary, nil)
         if status == errSecDuplicateItem {
-            let update: [String: Any] = [
-                kSecValueData as String: data,
-                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            ]
+            let update = Self.updateItemAttributes(data: data)
             let updateStatus = SecItemUpdate(baseQuery as CFDictionary, update as CFDictionary)
             guard updateStatus == errSecSuccess else {
                 throw AO3SessionVaultError.keychain(updateStatus)
@@ -151,6 +148,16 @@ struct KeychainAO3SessionVault: AO3SessionPersisting {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
+        ]
+    }
+
+    /// The dictionary `save` passes to `SecItemUpdate`. Isolated so the
+    /// accessibility class can be asserted on Simulator, where `SecItemAdd`
+    /// often returns `errSecMissingEntitlement`.
+    static func updateItemAttributes(data: Data) -> [String: Any] {
+        [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
     }
 }
@@ -310,7 +317,7 @@ struct CascadingAO3SessionVault: AO3SessionPersisting {
 @MainActor
 enum AO3CookieBridge {
     static func install(_ session: AO3Session) async {
-        for stored in session.validCookies {
+        for stored in persistableStoredCookies(session.validCookies) {
             guard let cookie = stored.httpCookie else { continue }
             await set(cookie, in: WKWebsiteDataStore.default().httpCookieStore)
         }
@@ -343,9 +350,24 @@ enum AO3CookieBridge {
 
     static func captureAO3Cookies() async -> [AO3StoredCookie] {
         let cookies = await allCookies(in: WKWebsiteDataStore.default().httpCookieStore)
-        return cookies
-            .filter { AO3StoredCookie.isAO3Domain($0.domain) && $0.name == "_otwarchive_session" }
+        return persistableCookies(from: cookies)
+    }
+
+    /// Persistence policy applied by `captureAO3Cookies`. Name allow-list
+    /// (`AO3RequestDefaults.persistedCookieNames`) AND AO3 domain — the domain
+    /// check is defense-in-depth, not the policy. Extracted so tests can feed a
+    /// known set without touching the shared `WKWebsiteDataStore`.
+    static func persistableCookies(from cookies: [HTTPCookie]) -> [AO3StoredCookie] {
+        cookies
+            .filter {
+                AO3StoredCookie.isAO3Domain($0.domain)
+                    && AO3RequestDefaults.persistedCookieNames.contains($0.name)
+            }
             .map(AO3StoredCookie.init)
+    }
+
+    static func persistableStoredCookies(_ cookies: [AO3StoredCookie]) -> [AO3StoredCookie] {
+        cookies.filter { AO3RequestDefaults.persistedCookieNames.contains($0.name) }
     }
 
     private static func allCookies(in store: WKHTTPCookieStore) async -> [HTTPCookie] {
