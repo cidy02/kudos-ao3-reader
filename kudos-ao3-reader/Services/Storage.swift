@@ -130,7 +130,18 @@ nonisolated enum Storage {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Downloads", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let name = suggestedName.isEmpty ? "\(UUID().uuidString).epub" : suggestedName
+        
+        let candidate = URL(fileURLWithPath: suggestedName).lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\", with: "_")
+            .replacingOccurrences(of: "\0", with: "")
+            
+        var safeName = candidate.components(separatedBy: .controlCharacters).joined()
+        if safeName == "." || safeName == ".." { safeName = "" }
+        if safeName.count > 255 { safeName = String(safeName.prefix(255)) }
+        
+        let name = safeName.isEmpty ? "\(UUID().uuidString).epub" : safeName
         return dir.appendingPathComponent(name)
     }
 }
