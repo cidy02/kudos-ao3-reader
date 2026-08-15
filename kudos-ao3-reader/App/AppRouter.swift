@@ -221,7 +221,11 @@ final class AppRouter {
             return
         }
         let parts = url.pathComponents.filter { $0 != "/" }
-        if (url.host ?? "").contains("archiveofourown.org"),
+        // Same host gate as `open(_:)` (`isAO3URL`: https-only, apex or
+        // subdomain) — a substring check here would treat a lookalike host
+        // like `archiveofourown.org.evil.example` as native-eligible and hand
+        // its URL straight to `AO3Client.worksPage(at:)`.
+        if AO3AuthorRoute.isAO3URL(url),
            parts.first == "tags", parts.count >= 2 {
             pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(parts[1]))
             selection = .browse
