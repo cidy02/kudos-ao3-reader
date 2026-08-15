@@ -131,6 +131,7 @@ class BackupMergeDoesNotDeleteExistingWorkTest {
     @Test
     fun mergeKeepsWorksAbsentFromBackup() {
         val existing = sampleSavedWork(id = OTHER_WORK_ID, title = "Local Only")
+            .copy(sourceUrl = "https://archiveofourown.org/works/999")
         val result = BackupMergeService.merge(
             current = BackupLibrarySnapshot(works = listOf(existing)),
             backup = samplePackage()
@@ -987,6 +988,7 @@ class BackupTombstoneTrustPhase1MergeTest {
     @Test
     fun replaceLibraryDropsLocalOnlyWorksAndDoesNotPersistFileTombstones() {
         val localOnly = sampleSavedWork(id = OTHER_WORK_ID, title = "Local only")
+            .copy(sourceUrl = "https://archiveofourown.org/works/999")
         val incomingTombstone = BackupTombstone(
             id = TOMBSTONE_ID,
             recordID = OTHER_WORK_ID,
@@ -1023,6 +1025,7 @@ class BackupTombstoneTrustPhase1MergeTest {
     @Test
     fun laterMergeAfterReplaceCanInsertAWorkTheSnapshotDropped() {
         val localOnly = sampleSavedWork(id = OTHER_WORK_ID, title = "Pre-replace")
+            .copy(sourceUrl = "https://archiveofourown.org/works/999")
         val afterReplace = BackupMergeService.merge(
             current = BackupLibrarySnapshot(works = listOf(sampleSavedWork(), localOnly)),
             backup = samplePackage(manifest = sampleManifest(works = listOf(sampleBackupWork()))),
@@ -1032,7 +1035,12 @@ class BackupTombstoneTrustPhase1MergeTest {
             current = afterReplace.snapshot,
             backup = samplePackage(
                 manifest = sampleManifest(
-                    works = listOf(sampleBackupWork(id = OTHER_WORK_ID).copy(title = "Restored later"))
+                    works = listOf(
+                        sampleBackupWork(id = OTHER_WORK_ID).copy(
+                            title = "Restored later",
+                            sourceURL = "https://archiveofourown.org/works/999"
+                        )
+                    )
                 ),
                 epubFiles = mapOf(OTHER_WORK_ID to EPUB_BYTES)
             )

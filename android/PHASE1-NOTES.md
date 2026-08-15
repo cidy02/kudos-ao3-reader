@@ -114,9 +114,11 @@ Closed this pass (R1 / R2 / R4 / R8 / R9 / R10):
 - File Merge is add-only on existing annotation / collection-name / queue-name
   / membership-note IDs (R2). New annotation IDs on a work you already have
   are inserted (R10). Reconcile stays LWW.
-- Replace confirmation counts (`BackupMergeService.preview`) are identity-aware
-  (`ao3WorkID` → `WorkTags.canonicalAO3WorkURL` → record UUID) via
-  `WorkIdentityIndex.snapshot` (R1). Amber rule unchanged once counts match.
+- Replace confirmation counts (`BackupMergeService.preview`) **and restore
+  apply** rematch works `ao3WorkID` → `WorkTags.canonicalAO3WorkURL` → record
+  UUID (same order as iOS `WorkIdentityIndex`). The local row keeps its id;
+  annotations / memberships / collection work IDs remap. A same-AO3 backup
+  with a different UUID no longer inserts a second row.
 - Replace snapshots bookmarks and saved searches (R8). Merge/reconcile still
   merge-add.
 - Replace soft-deletes omitted works into Recently Deleted with no

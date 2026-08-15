@@ -273,6 +273,80 @@ class BackupTrustPhase1Test {
     }
 
     @Test
+    fun importPackageReconcileMergesByAo3IdentityNotUuid() = runTest {
+        database.workDao().upsert(
+            savedWork(WORK_J, "Phone copy").copy(
+                sourceUrl = "https://archiveofourown.org/works/4242",
+                lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+            ).toEntity()
+        )
+        val pack = packageWithWorkAndTombstone(
+            workId = WORK_K,
+            workTitle = "Peer copy",
+            tombstoneRecordId = TOMBSTONE_ID,
+            ao3WorkId = 4242,
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        )
+
+        val summary = backupRepository.importPackage(pack, BackupImportMode.RECONCILE)
+
+        assertEquals(1, summary.worksUpdated)
+        assertEquals(0, summary.worksCreated)
+        assertEquals("Peer copy", database.workDao().getById(WORK_J)?.title)
+        assertNull(
+            "same AO3 work must not insert a second row under the file UUID",
+            database.workDao().getById(WORK_K)
+        )
+    }
+
+    @Test
+    fun importPackageMergeDoesNotDuplicateSameAo3Work() = runTest {
+        database.workDao().upsert(
+            savedWork(WORK_J, "Phone copy").copy(
+                sourceUrl = "https://archiveofourown.org/works/4242",
+                lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+            ).toEntity()
+        )
+        val pack = packageWithWorkAndTombstone(
+            workId = WORK_K,
+            workTitle = "Hostile title",
+            tombstoneRecordId = TOMBSTONE_ID,
+            ao3WorkId = 4242,
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        )
+
+        backupRepository.importPackage(pack, BackupImportMode.MERGE)
+
+        assertEquals("Phone copy", database.workDao().getById(WORK_J)?.title)
+        assertNull(database.workDao().getById(WORK_K))
+    }
+
+    @Test
+    fun importPackageReplaceRematchesAo3IdentityInsteadOfSoftDeleting() = runTest {
+        database.workDao().upsert(
+            savedWork(WORK_J, "Phone copy").copy(
+                sourceUrl = "https://archiveofourown.org/works/4242",
+                lastModifiedAt = Instant.parse("2026-07-01T00:00:00Z")
+            ).toEntity()
+        )
+        val pack = packageWithWorkAndTombstone(
+            workId = WORK_K,
+            workTitle = "Snapshot copy",
+            tombstoneRecordId = TOMBSTONE_ID,
+            ao3WorkId = 4242,
+            lastModifiedAt = "2026-01-01T00:00:00Z"
+        )
+
+        val summary = backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY)
+
+        assertEquals(0, summary.worksRemoved)
+        val stored = database.workDao().getById(WORK_J)
+        assertEquals(false, stored?.isDeleted)
+        assertEquals("Snapshot copy", stored?.title)
+        assertNull(database.workDao().getById(WORK_K))
+    }
+
+    @Test
     fun importPackageMergeKeepsExistingAnnotationNoteAndInsertsNewId() = runTest {
         database.workDao().upsert(
             savedWork(WORK_K, "Local Title").copy(

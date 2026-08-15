@@ -43,7 +43,7 @@ Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the 
 | **R4** stale Android PHASE1-NOTES | **DONE** | Gaps rewritten; Merge undelete + R8/R9 documented. | `android/PHASE1-NOTES.md` |
 | **R5** iOS Merge undelete test | **DONE** | `fileMergeUndeletesPendingDeletion` GREEN. | `KudosBackupTests.swift` |
 | **R6** Replace UI arming tests | **SKIP** | No SwiftUI/Compose harness. Do not invent one for this merge. | — |
-| **R7** GREEN last after close-out | **DONE** both | iOS `/tmp/tomb-ios-closeout.xcresult`: **54 / 0 / 54**. Android `:app:testDebugUnitTest`: **794 / 0 / 0**. | Filters in notes |
+| **R7** GREEN last after close-out | **DONE** both | iOS `/tmp/tomb-ios-closeout.xcresult`: **54 / 0 / 54**. Android `:app:testDebugUnitTest`: **797 / 0 / 0**. | Filters in notes |
 | **R8** Replace snapshots links + saved searches | **DONE** both | iOS `context.delete`; Android drop omitted bookmarks (URL) and searches (id). No tombstones. | `KudosBackup.swift`; `BackupMergeService` / `BackupRepository` |
 | **R9** Android Replace → Recently Deleted | **DONE** | Soft-delete omitted works (`isDeleted`, 90-day window). EPUB kept. No `deleteById`. No tombstone. Later MERGE undeletes. | `BackupRepository.removeRecordsAbsentFromReplaceSnapshot`; merge snapshot path |
 | **R-P2-*** Phase 2 Ed25519 | **SKIP this merge** | Specified in §2 / §C.3. Not implemented. Do not start in this worktree (same files as Phase 1). | — |
@@ -54,11 +54,22 @@ Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the 
 | Commit | Platform |
 |---|---|
 | `99c8cae` | iOS R1/R2/R3/R5/R8/R10 + this progress section |
-| `293aa1b` | Android R1/R2/R4/R8/R9/R10 + tests. GREEN **794 / 0 / 0** |
+| `293aa1b` | Android R1/R2/R4/R8/R9/R10 + tests |
+| *(this commit)* | Android restore rematch by ao3/canonical URL (parity with iOS). GREEN **797 / 0 / 0** |
 
 ### Known leftover for Claude (not a reopen of tombstone-drop)
 
-**Android work *restore* still matches by UUID only** (`BackupMergeService.merge` `worksById[archived.id]`). Preview/confirmation is identity-aware; the apply path is not. A cross-device Replace of the same AO3 work can still add a second row and soft-delete the local one even if the sheet said “in both = 1”. iOS restore already uses `WorkIdentityIndex`. Treat as **FIX** if you want preview and apply to match before merge; not a tombstone-adopt BLOCK.
+**None for Phase 1 identity rematch.** Android restore apply now uses the same
+`ao3WorkID` → canonical URL → UUID order as iOS (`WorkIdentitySnapshot` +
+`workIdRemap`). Local id is kept; annotations/memberships/collection work IDs
+remap. Tests: `importPackageReconcileMergesByAo3IdentityNotUuid`,
+`importPackageMergeDoesNotDuplicateSameAo3Work`,
+`importPackageReplaceRematchesAo3IdentityInsteadOfSoftDeleting`. GREEN last
+Android **797 / 0 / 0**.
+
+Still **SKIP** this merge: R6 UI arming tests; Phase 2 crypto; other security
+worktrees. Bookmarks/saved searches on Replace are hard-deleted without a
+tombstone (those models have no Recently Deleted UI) on both platforms.
 
 ### What Claude should hunt (close-out + core)
 
@@ -69,7 +80,7 @@ Same §B list, plus:
 3. Merge still **inserts** new annotation ids on an existing work (`R10`).
 4. Folder-sync test hits `foldConflictContents`, not only default `restore`.
 5. Android R9 must leave a soft-deleted **work row** so later MERGE undelete works.
-6. Android restore identity (UUID-only apply vs identity-aware preview) — see leftover above.
+6. Android restore apply rematches ao3 / canonical URL / UUID (same as iOS). Confirm no duplicate row on a cross-device same-AO3 Replace.
 
 ### Owner merge rule
 

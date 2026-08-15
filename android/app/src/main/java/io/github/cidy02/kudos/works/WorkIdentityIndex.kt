@@ -56,16 +56,18 @@ object WorkIdentityIndex {
  * Strongest available tier wins: AO3 work ID → canonical source URL → record UUID.
  */
 class WorkIdentitySnapshot(works: List<SavedWork>) {
-    private val byRecordId: Map<String, SavedWork> = works.associateBy { it.id.lowercase() }
-    private val byAo3Id: Map<Long, SavedWork> = buildMap {
-        for (work in works) {
-            WorkTags.ao3WorkIdFromUrl(work.sourceUrl)?.let { put(it, work) }
-        }
+    private val byRecordId = linkedMapOf<String, SavedWork>()
+    private val byAo3Id = linkedMapOf<Long, SavedWork>()
+    private val byCanonicalUrl = linkedMapOf<String, SavedWork>()
+
+    init {
+        works.forEach(::index)
     }
-    private val byCanonicalUrl: Map<String, SavedWork> = buildMap {
-        for (work in works) {
-            WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let { put(it, work) }
-        }
+
+    fun index(work: SavedWork) {
+        byRecordId[work.id.lowercase()] = work
+        WorkTags.ao3WorkIdFromUrl(work.sourceUrl)?.let { byAo3Id[it] = work }
+        WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let { byCanonicalUrl[it] = work }
     }
 
     fun existingWork(
