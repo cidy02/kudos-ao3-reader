@@ -128,6 +128,16 @@ RED (durations > 0):
 
 Mutations reverted. GREEN last as above.
 
+## Post-review spec fixes (`7b77316`)
+
+Independent review found a compile break and Replace snapshot gaps. Fixed:
+
+- Replace pause-sync now calls `setAutoSyncEnabled` (the old `setAutoSync` API does not exist).
+- Replace confirmation shows “Sync will put removed works back…”
+- Replace overlap is a snapshot (`isNewRecord = true`), not LWW.
+- Replace ignores local work-tombstone suppressors so the snapshot can load.
+- Replace does not apply incoming appearance settings / theme.
+
 ## Opus leftovers Grok filled
 
 - `ReplaceLibraryConfirmationView` + `makePreReplaceBackup` (referenced, not defined)
