@@ -161,4 +161,52 @@ class BackupRestoreSecurityTest {
             unknownTombstone.toSyncTombstone()
         }
     }
+
+    @Test
+    fun testM2b_MergeRejectsBlankOrUnknownTombstone() {
+        val now = Instant.now()
+        val nowStr = BackupValidator.formatInstant(now)
+
+        val blankPack = KudosBackupPackage(
+            manifest = KudosBackupManifest(
+                version = BackupVersion.CURRENT,
+                exportedAt = nowStr,
+                tombstones = listOf(
+                    BackupTombstone(
+                        id = "11111111-1111-1111-1111-111111111111",
+                        recordID = "22222222-2222-2222-2222-222222222222",
+                        recordTypeRaw = "   ",
+                        createdAt = nowStr,
+                        lastModifiedAt = nowStr
+                    )
+                )
+            )
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupMergeService.merge(BackupLibrarySnapshot(), blankPack)
+        }
+
+        val unknownPack = KudosBackupPackage(
+            manifest = KudosBackupManifest(
+                version = BackupVersion.CURRENT,
+                exportedAt = nowStr,
+                tombstones = listOf(
+                    BackupTombstone(
+                        id = "33333333-3333-3333-3333-333333333333",
+                        recordID = "44444444-4444-4444-4444-444444444444",
+                        recordTypeRaw = "maliciousType",
+                        createdAt = nowStr,
+                        lastModifiedAt = nowStr
+                    )
+                )
+            )
+        )
+        val thrown = assertThrows(IllegalArgumentException::class.java) {
+            BackupMergeService.merge(BackupLibrarySnapshot(), unknownPack)
+        }
+        assertTrue(
+            thrown.message?.contains("recordTypeRaw") == true ||
+                thrown.message?.contains("maliciousType") == true
+        )
+    }
 }

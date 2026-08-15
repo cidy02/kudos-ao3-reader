@@ -47,10 +47,12 @@ class BackupTimestampClampTest {
             author = "Author",
             sourceURL = "https://archiveofourown.org/works/1",
             dateAdded = futureStr, // Out of bounds
+            lastModifiedAt = futureStr, // Out of bounds
             hasEPUB = true
         ).toSavedWork(hasEpub = true)
         
         assertTrue("Work dateAdded should be clamped", !work.dateAdded.isAfter(maxAllowed))
+        assertTrue("Work lastModifiedAt should be clamped", !work.lastModifiedAt!!.isAfter(maxAllowed))
 
         // Collection path
         val collection = BackupCollection(
@@ -75,5 +77,53 @@ class BackupTimestampClampTest {
 
         assertTrue("Queue dateCreated should be clamped", !queue.dateCreated.isAfter(maxAllowed))
         assertTrue("Queue dateUpdated should be clamped", !queue.dateUpdated.isAfter(maxAllowed))
+    }
+
+    @Test
+    fun testMerge_ClampFutureTimestampsOnWorksAndCollections() {
+        val now = Instant.now()
+        val farFuture = now.plus(Duration.ofDays(100))
+        val futureStr = BackupValidator.formatInstant(farFuture)
+        val nowStr = BackupValidator.formatInstant(now)
+        val maxAllowed = now.plus(24, ChronoUnit.HOURS).plusSeconds(5)
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = KudosBackupPackage(
+                manifest = KudosBackupManifest(
+                    version = BackupVersion.CURRENT,
+                    exportedAt = nowStr,
+                    works = listOf(
+                        BackupWork(
+                            id = "11111111-1111-1111-1111-111111111111",
+                            title = "Test",
+                            author = "Author",
+                            sourceURL = "https://archiveofourown.org/works/1",
+                            dateAdded = futureStr,
+                            lastModifiedAt = futureStr,
+                            hasEPUB = true
+                        )
+                    ),
+                    collections = listOf(
+                        BackupCollection(
+                            id = "22222222-2222-2222-2222-222222222222",
+                            name = "Test",
+                            dateAdded = futureStr,
+                            lastModifiedAt = futureStr
+                        )
+                    )
+                )
+            )
+        )
+
+        val work = result.snapshot.works.single()
+        val collection = result.snapshot.collections.single()
+        assertTrue("Merged work dateAdded should be clamped", !work.dateAdded.isAfter(maxAllowed))
+        assertTrue("Merged work lastModifiedAt should be clamped", !work.lastModifiedAt!!.isAfter(maxAllowed))
+        assertTrue("Merged collection dateAdded should be clamped", !collection.dateAdded.isAfter(maxAllowed))
+        assertTrue(
+            "Merged collection lastModifiedAt should be clamped",
+            !collection.lastModifiedAt!!.isAfter(maxAllowed)
+        )
     }
 }
