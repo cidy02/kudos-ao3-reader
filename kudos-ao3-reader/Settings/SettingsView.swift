@@ -541,11 +541,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(
+            // Split out of the ViewBuilder so the type checker can finish
+            // (the surrounding modifier chain otherwise times out).
+            let migrationMessage =
                 "Kudos will add existing saved works to the native Saved for Later queue. "
-                    + "It keeps their current saved state and preserves EPUBs one at a time, "
-                    + "with a pause between AO3 requests."
-            )
+                + "It keeps their current saved state and preserves EPUBs one at a time, "
+                + "with a pause between AO3 requests."
+            Text(migrationMessage)
         }
         .confirmationDialog(
             "Import this backup?",
@@ -565,11 +567,11 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             }
         } message: {
             if let backup = pendingBackup {
-                Text(
+                let importMessage =
                     "This backup contains \(backup.manifest.works.count) works. "
-                        + "Merge adds new works without removing existing ones. "
-                        + "Replace Library makes your library match this backup."
-                )
+                    + "Merge adds new works without removing existing ones. "
+                    + "Replace Library makes your library match this backup."
+                Text(importMessage)
             }
         }
         .sheet(isPresented: $showReplaceConfirmation) {

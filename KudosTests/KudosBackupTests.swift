@@ -1506,6 +1506,146 @@ struct KudosBackupTests {
         #expect(active.contains { $0.id == dropID }, "Later merge was blocked by a standing tombstone or leftover pending delete")
     }
 
+    /// File-import Merge is add-only: an active overlapping work keeps its local
+    /// title, progress, and user tags even when the file is lastModifiedAt-newer.
+    @Test func fileMergeDoesNotOverwriteActiveOverlapTitleProgressOrUserTags() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let olderLocalDate = Date(timeIntervalSince1970: 100)
+        let newerArchiveDate = Date(timeIntervalSince1970: 200)
+
+        let local = SavedWork(id: workID, title: "Local Title", author: "Local Author")
+        local.lastSpineIndex = 7
+        local.tags = [Tag(name: "local-note")]
+        local.markProgressModified(olderLocalDate)
+        local.markModified(olderLocalDate)
+        context.insert(local)
+        try context.save()
+
+        let incoming = SavedWork(id: workID, title: "Hostile Title", author: "Hostile Author")
+        incoming.lastSpineIndex = 1
+        incoming.tags = [Tag(name: "hostile-tag")]
+        incoming.markProgressModified(newerArchiveDate)
+        incoming.markModified(newerArchiveDate)
+        let contents = try KudosBackupService.makeContents(
+            works: [incoming],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(
+            contents,
+            into: context,
+            defaults: try testDefaults(),
+            mode: .merge
+        )
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.id == workID)
+        #expect(restored.title == "Local Title", "File Merge must not overwrite an active overlap title")
+        #expect(restored.lastSpineIndex == 7, "File Merge must not overwrite local progress")
+        #expect(
+            restored.tags.map(\.name) == ["local-note"],
+            "File Merge must not overwrite or union incoming user tags onto an active overlap"
+        )
+    }
+
+    /// Folder-sync / default restore stays last-writer-wins on overlap so progress
+    /// and metadata still cross devices. Explicit `.reconcile` is the same path.
+    @Test func defaultReconcileAppliesLastWriterWinsOnOverlap() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let olderLocalDate = Date(timeIntervalSince1970: 100)
+        let newerArchiveDate = Date(timeIntervalSince1970: 200)
+
+        let local = SavedWork(id: workID, title: "Local Title", author: "Local Author")
+        local.lastSpineIndex = 3
+        local.markProgressModified(olderLocalDate)
+        local.markModified(olderLocalDate)
+        context.insert(local)
+        try context.save()
+
+        let incoming = SavedWork(id: workID, title: "Remote Title", author: "Remote Author")
+        incoming.lastSpineIndex = 9
+        incoming.markProgressModified(newerArchiveDate)
+        incoming.markModified(newerArchiveDate)
+        let contents = try KudosBackupService.makeContents(
+            works: [incoming],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        // Omit `mode` so this hits the default `.reconcile` folder-sync path.
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults())
+
+        let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(restored.id == workID)
+        #expect(restored.title == "Remote Title", "Default reconcile must LWW-apply a newer overlap title")
+        #expect(restored.lastSpineIndex == 9, "Default reconcile must LWW-apply newer progress")
+    }
+
+    /// Folder-sync invariant: default restore drops incoming unsigned tombstones
+    /// and must not skip a work present in the same remote snapshot.
+    @Test func defaultReconcileDropsIncomingUnsignedTombstonesAndStillInsertsPresentWork() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let olderWorkDate = Date(timeIntervalSince1970: 100)
+        let newerTombstoneDate = Date(timeIntervalSince1970: 200)
+
+        let remoteWork = SavedWork(id: workID, title: "Present In Snapshot", author: "Peer")
+        remoteWork.ao3WorkID = 4_242
+        remoteWork.markModified(olderWorkDate)
+        let hostile = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            ao3WorkID: 4_242,
+            createdAt: newerTombstoneDate
+        )
+        let snapshot = try KudosBackupService.makeContents(
+            works: [remoteWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [hostile],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: try testDefaults())
+
+        let storedTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(storedTombstones.isEmpty, "Incoming unsigned tombstone was persisted on reconcile")
+        let titles = Set(try context.fetch(FetchDescriptor<SavedWork>()).map(\.title))
+        #expect(
+            titles.contains("Present In Snapshot"),
+            "Reconcile must still insert a work present in the same remote snapshot"
+        )
+    }
+
     /// Decode a hand-written manifest JSON blob with the same date strategy the
     /// real archive path uses (fractional seconds + whole-second fallback).
     private func decodeManifestJSON(_ json: String) throws -> KudosBackupManifest {
