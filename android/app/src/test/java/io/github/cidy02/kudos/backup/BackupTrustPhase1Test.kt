@@ -260,6 +260,44 @@ class BackupTrustPhase1Test {
     }
 
     @Test
+    fun importPackageMergeUndeletesPendingDeletion() = runTest {
+        database.workDao().upsert(
+            savedWork(WORK_K, "Recently Deleted").copy(
+                isDeleted = true,
+                deletedAt = Instant.parse("2026-06-01T00:00:00Z"),
+                permanentDeletionScheduledAt = Instant.parse("2026-08-30T00:00:00Z"),
+                lastModifiedAt = Instant.parse("2026-06-01T00:00:00Z"),
+                sourceUrl = "https://archiveofourown.org/works/4242"
+            ).toEntity()
+        )
+        val incoming = overlapPackage(
+            title = "Restored From File",
+            lastModifiedAt = "2026-07-01T00:00:00Z",
+            lastSpineIndex = 8,
+            lastScrollFraction = 0.8,
+            userTags = listOf("Incoming"),
+            epubBytes = "incoming-epub".toByteArray()
+        )
+
+        val summary = backupRepository.importPackage(incoming, BackupImportMode.MERGE)
+
+        val stored = database.workDao().getById(WORK_K)
+        assertNotNull(stored)
+        assertEquals(false, stored?.isDeleted)
+        assertEquals(null, stored?.deletedAt)
+        assertEquals("Restored From File", stored?.title)
+        assertEquals(1, summary.worksUpdated)
+        assertEquals(
+            listOf("Incoming"),
+            database.tagDao().getTagsForWork(WORK_K).map { it.name }
+        )
+        assertArrayEquals(
+            "incoming-epub".toByteArray(),
+            Files.readAllBytes(workFileStore.workEpubPath(WORK_K))
+        )
+    }
+
+    @Test
     fun importPackageReconcileStillLwwUpdatesOverlap() = runTest {
         seedLocalOverlapWork()
         val incoming = overlapPackage(

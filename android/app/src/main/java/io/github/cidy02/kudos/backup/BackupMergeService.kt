@@ -90,6 +90,15 @@ object BackupMergeService {
             worksById[id] = if (existing == null) {
                 summary = summary.copy(worksCreated = summary.worksCreated + 1)
                 restored
+            } else if (mode == BackupImportMode.MERGE && existing.isDeleted) {
+                // Recently Deleted is not in the active library. File Merge
+                // adds it back without planting a tombstone, matching iOS.
+                summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
+                restored.copy(
+                    isDeleted = false,
+                    deletedAt = null,
+                    permanentDeletionScheduledAt = null
+                )
             } else if (mode == BackupImportMode.MERGE) {
                 existing
             } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
@@ -115,6 +124,7 @@ object BackupMergeService {
             // actually carries the EPUB still wins even when clocks are equal.
             val incomingEpubWins = existing == null ||
                 mode == BackupImportMode.REPLACE_LIBRARY ||
+                (mode == BackupImportMode.MERGE && existing.isDeleted) ||
                 (
                     mode != BackupImportMode.MERGE &&
                     incomingModifiedAt != null &&
@@ -126,7 +136,7 @@ object BackupMergeService {
 
             val mergedTags = if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 archived.userTags.normalizedNames()
-            } else if (mode == BackupImportMode.MERGE && existing != null) {
+            } else if (mode == BackupImportMode.MERGE && existing != null && !existing.isDeleted) {
                 userTagsByWorkId[id].orEmpty()
             } else {
                 (userTagsByWorkId[id].orEmpty() + archived.userTags).normalizedNames()

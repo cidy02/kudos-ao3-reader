@@ -29,7 +29,8 @@ Three restore modes. **Do not collapse file Merge and folder sync.**
 - **Merge (file-import Merge button only):** add-only. Insert works not already
   in the library. Keep the existing overlap row — title, progress, tags, and
   EPUB stay local. Do **not** overwrite EPUB. Do **not** union incoming tags
-  onto an existing work. Drop incoming tombstones.
+  onto an existing work. If the local hit is Recently Deleted (`isDeleted`),
+  undelete and apply the file. Drop incoming tombstones.
 - **Replace Library:** this device’s works / collections / queues / annotations
   become the snapshot. Fonts and appearance stay. Incoming unsigned tombstones
   are not persisted. Removed rows are deleted via existing DAO deletes **without**
