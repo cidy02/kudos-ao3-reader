@@ -14,8 +14,8 @@
 
 | Who | Owns |
 |---|---|
-| **Opus 4.6** | iOS/macOS: Merge vs Replace Library import UX + Phase 1 tombstone drop on **file restore and folder-sync restore** + tests |
-| **Grok / subagents** | Android: same Phase 1 tombstone drop on `BackupMergeService` / `importPackage` / folder sync; Android import UX if a file-import sheet already exists; Android `exportedAt` clamp + canonical `sourceURL` (ledger companions) + tests |
+| **Opus 4.6** | iOS/macOS: three-mode restore (`reconcile` / `merge` / `replaceLibrary`) + Phase 1 tombstone drop on **file restore and folder-sync restore** + Settings Merge vs Replace UX + tests |
+| **Grok / subagents** | Android: same three-mode split + Phase 1 tombstone drop on `BackupMergeService` / `importPackage` / folder sync; file-import Merge vs Replace UX; Android `exportedAt` clamp + canonical `sourceURL` (ledger companions) + tests |
 | **Then** | Grok reviews Opus. Opus reviews Grok/subagent Android work. |
 
 Phase 2 (Ed25519, per-tombstone signatures, iCloud pubs, QR) is **specified below but not implemented in this session**.
@@ -30,10 +30,10 @@ A `.kudosbackup` is attacker-controlled (AirDrop, email, “curated backup”). 
 - Propagates through the Library Sync Folder to every peer.
 - Never expires.
 
-**Current code (still true at `c241d2f`):**
+**Pre-Phase-1 code (true at `c241d2f`):**
 
-- iOS `KudosBackup.swift` `restore` (~1182–1204) inserts every incoming manifest tombstone not already keyed `recordTypeRaw|recordID`, then uses that expanded set to skip works (~1219).
-- Android `BackupMergeService.kt` (~42–44) unconditionally upserts incoming tombstones, then suppresses (~61–62).
+- iOS `KudosBackup.swift` `restore` inserted every incoming manifest tombstone not already keyed `recordTypeRaw|recordID`, then used that expanded set to skip works.
+- Android `BackupMergeService.kt` unconditionally upserted incoming tombstones, then suppressed.
 - Match order: `ao3WorkID` → canonical `sourceURL` → `recordID`. A fresh/forged `lastModifiedAt` wins.
 
 ---
@@ -46,16 +46,19 @@ A `.kudosbackup` is attacker-controlled (AirDrop, email, “curated backup”). 
 
 - File import Merge
 - File import Replace
-- Folder sync ingest
+- Folder sync ingest (`reconcile`)
 
 Owner chose **short inconsistency**: your own deletions will **not** cross devices until Phase 2. That is acceptable. Do **not** leave folder sync applying unsigned incoming tombstones.
 
-**File import is two verbs:**
+**Three restore modes — do not collapse Merge and folder sync:**
 
-| Verb | Meaning |
-|---|---|
-| **Merge** (default) | Add works in the backup that are **not** already in the library. Do not delete anything present. Do not overwrite an existing work’s progress, tags, or notes. Drop incoming tombstones. |
-| **Replace Library** | This device’s library (works, progress, collections, queues, annotations) becomes the snapshot. Fonts, appearance, AO3 login, and (later) trusted keys stay. |
+| Mode | Who uses it | Meaning |
+|---|---|---|
+| **reconcile** | Folder sync / default `restore` / default `importPackage` | Last-writer-wins on overlap. Add missing works. Do **not** delete local works omitted from the snapshot. Drop incoming tombstones. Local tombstones still suppress resurrection. |
+| **merge** | File import **Merge** button | Add-only. Insert works not already in the active library. Undelete Recently Deleted / pending-delete if the file has that work. Do **not** overwrite an existing active work’s progress, tags, notes, or EPUB. Drop incoming tombstones. |
+| **replaceLibrary** | File import **Replace Library** after extra step | This device’s library (works, progress, collections, queues, annotations) becomes the snapshot. Fonts, appearance, AO3 login, and (later) trusted keys stay. Soft-delete / DAO-delete omissions **without** minting `SyncTombstone`. Drop incoming tombstones. |
+
+**Why three modes:** “Merge” as the owner’s file-import verb is add-only. Folder sync must keep LWW so progress and metadata still cross devices. Using file Merge for folder sync would freeze overlap on every peer. Using folder LWW for file Merge would let a hostile file overwrite local notes/progress.
 
 **Replace extra step (required):**
 
@@ -68,7 +71,7 @@ Owner chose **short inconsistency**: your own deletions will **not** cross devic
 
 **Empty library / first run:** skip Merge vs Replace. One **Restore from Backup** button (functionally Merge into empty).
 
-**Folder sync** stays implicit Merge forever. No Replace-via-sync.
+**Folder sync** stays implicit **reconcile** forever. No Replace-via-sync.
 
 **Replace does not persist the file’s unsigned tombstones.** Absence in the snapshot is enough for *this* load. Do **not** mint new standing tombstones for works Replace removed (that would be a signed fleet wipe in Phase 2).
 
@@ -90,45 +93,49 @@ Owner chose **short inconsistency**: your own deletions will **not** cross devic
 
 ### iOS — `KudosBackup.restore`
 
-Today it always: adopt all new tombstones → skip suppressed works → `apply` on new **and** existing works.
-
-Change:
-
 1. **Do not insert incoming tombstones** into `SyncTombstone` (file restore and any folder-sync caller of `restore`).
 2. **Do not** use incoming tombstones to populate `TombstoneIndex` for this batch. Local tombstones that were already on the device still apply (the user deleted them *here*).
-3. Add a mode: `enum BackupImportMode { case merge, replaceLibrary }`.
-   - **merge:** if `workIndex.existingWork(for:)` hits, **skip `apply`** (local overlap unchanged). Only insert + apply new works. Still create collections/queues from the file when they introduce new works (so added works are not orphaned). Do not remove local works.
-   - **replaceLibrary:** existing works / collections / queues / annotations that are not in the snapshot are removed from *this* store (Recently Deleted / existing deletion machinery if that is how the app already deletes — do not invent a new hard-delete). Load the snapshot’s works via existing `apply`. Still do **not** insert the file’s tombstones.
-4. Folder sync continues to call restore as **merge**.
-5. Settings import UI (`SettingsView.swift` ~773 `restorePendingBackup`): present Merge vs Replace Library when `SavedWork` count > 0. Empty → Restore only.
-
-**Invariant to test (file Merge):**
-
-> After `restore(A, mode: .merge)` on a library that already contains work J, a `savedWork` tombstone in A for J (or for a work K that A also contains) must **not** be in the local tombstone store, and a later `restore(B, mode: .merge)` that contains work K must still insert K.
-
-**Invariant to test (Replace):**
-
-> After `restore(A, mode: .replaceLibrary)`, local works absent from A are gone from the active library, A’s works are present, and **no new** `SyncTombstone` rows exist for A’s unsigned tombstones. A later `restore(B, mode: .merge)` containing a work that was in the pre-Replace library but not in A **must insert that work** (no standing suppressor).
-
-**Invariant to test (folder sync):**
-
-> Folder-sync ingest of a remote manifest that contains a new `savedWork` tombstone for identity I must not insert that tombstone and must not skip a work I present in the same or a later remote snapshot.
+3. Modes:
+   - **reconcile (default):** existing LWW `apply` on overlap. Incoming tombstones dropped. Folder sync must call this (or omit `mode` so it defaults here). Existing FolderSync / restore tests that expect LWW on default restore must keep passing.
+   - **merge:** if `workIndex.existingWork(for:)` hits an *active* work, **skip `apply`** (local overlap unchanged). If the hit is `isPendingDeletion`, undelete then apply. Only insert + apply new works. Still create collections/queues from the file when they introduce new works (so added works are not orphaned). Do not remove local works.
+   - **replaceLibrary:** existing works / collections / queues / annotations that are not in the snapshot are removed from *this* store (Recently Deleted / existing deletion machinery if that is how the app already deletes — do not invent a new hard-delete). Load the snapshot’s works via existing `apply`. Still do **not** insert the file’s tombstones. Soft-delete must **not** create a `SyncTombstone`.
+4. Settings import UI (`SettingsView.swift`): empty library → one Restore. Non-empty → Merge vs Replace Library sheet, then Replace extra step (`ReplaceLibraryConfirmationView` + `makePreReplaceBackup()`).
 
 ### Android — `BackupMergeService` / `BackupRepository.importPackage`
 
-Same tombstone rule: do not upsert incoming tombstones; do not suppress from incoming ones. Local tombstones already in Room still suppress.
+Same three modes (`RECONCILE` / `MERGE` / `REPLACE_LIBRARY`).
 
-If there is already a file-import UI, add Merge vs Replace Library with the same extra step. If import is only “always merge,” implement the merge-side tombstone drop now and a `replaceLibrary` flag on `merge` / `importPackage` even if the sheet comes a follow-up — the API must exist.
+- Default of `merge()` / `importPackage` / `importV2ZipBytes` is **RECONCILE** so folder-sync LWW stays.
+- File-import UI (`BackupScreen`) must pass **MERGE** or **REPLACE_LIBRARY** explicitly.
+- MERGE overlap: keep `existing` work row, do not overwrite EPUB, do not union incoming tags onto the existing work.
+- RECONCILE: keep existing LWW + tag union.
+- REPLACE_LIBRARY: snapshot this device; DAO-delete omissions **without** minting tombstones.
+- Do not upsert incoming tombstones; do not suppress from incoming ones. Local Room tombstones still suppress (except Replace, which ignores even local suppressors so the snapshot can load).
 
-Also (ledger companions, this session if cheap):
+Also (ledger companions):
 
 - Clamp archived `lastModifiedAt` with `min(value, exportedAt)` and reject > now+24h (iOS already does).
 - Canonicalize `sourceURL` like `WorkTags.canonicalAO3WorkURL`.
+
+### Invariants to test
+
+**File Merge (mode `.merge` / `MERGE`):**
+
+> After `restore(A, mode: .merge)` on a library that already contains work J, a `savedWork` tombstone in A for J (or for a work K that A also contains) must **not** be in the local tombstone store, and a later `restore(B, mode: .merge)` that contains work K must still insert K. Active overlap is not overwritten (title/progress/tags/EPUB stay local).
+
+**Replace:**
+
+> After `restore(A, mode: .replaceLibrary)`, local works absent from A are gone from the active library, A’s works are present, and **no new** `SyncTombstone` rows exist for A’s unsigned tombstones. A later `restore(B, mode: .merge)` containing a work that was in the pre-Replace library but not in A **must insert that work** (no standing suppressor).
+
+**Folder sync / reconcile:**
+
+> Folder-sync ingest (default restore / `importPackage`) of a remote manifest that contains a new `savedWork` tombstone for identity I must not insert that tombstone and must not skip a work I present in the same or a later remote snapshot. Overlap still LWW-updates.
 
 ### What legitimate input is now rejected (Phase 1)
 
 - Incoming deletion claims from a file or sync folder. **Your deletes on phone A will not appear on phone B** until Phase 2. Owner accepted this.
 - Replace of an unsigned file cannot plant suppressors that block a later Merge of the user’s real backup.
+- File Merge of an unsigned file cannot overwrite local overlap.
 
 ---
 
@@ -150,13 +157,18 @@ Per platform:
 2. Mutation A: restore unconditional tombstone adopt → RED, quoted assertion, duration > 0.
 3. Mutation B: weaker substitute (e.g. drop tombstones on file import but still adopt on folder sync) → RED.
 4. GREEN last; counts from the result bundle / Gradle. `totalTestCount` 0 is a fail.
-5. iOS: **never** `-sdk iphonesimulator` with a UDID destination.
+5. iOS: **never** `-sdk iphonesimulator` with a UDID destination. Use `KUDOS_CASEFOLD_SIMULATOR_UDID=C71780B1-35DE-4E5E-ABCD-2AB66BCB28B0` if you need that simulator. Destination is `id=<UDID>` only.
 6. Do not weaken existing assertions.
 7. Local commits only. No push.
 
 ---
 
-## 6. Status
+## 6. Status (updated 2026-08-15)
 
-**Done:** owner decisions, three-model discussion, this spec.  
-**Not done until the implementers finish:** code, tests, mutation evidence, cross-review.
+**Locked:** owner decisions, three-model discussion, this spec (including reconcile vs merge).
+
+**iOS (commit `a0533c1`):** Opus started restore + Settings fork, then hit Antigravity quota. Grok finished `ReplaceLibraryConfirmationView`, `makePreReplaceBackup`, `BackupImportMode.reconcile`, and two production-entry tests (`incomingUnsignedTombstonesAreNotAdoptedOnMerge`, `replaceDoesNotLeaveStandingTombstonesThatBlockLaterMerge`). KudosBackupTests / Mutation A/B evidence not yet produced this session.
+
+**Android (commit `a1aa83f` + uncommitted follow-up):** Phase 1 drop + Replace UX + ledger companions committed. Gemini review required file Merge to stop LWW-overwriting overlap. Uncommitted working tree adds `BackupImportMode.RECONCILE`, MERGE skip-overlap/EPUB/tags, and `importPackage` default `RECONCILE`. File UI still passes `MERGE`. Android MERGE add-only tests and a GREEN re-run after that split are still open. Previous `:app:testDebugUnitTest` was **779 / 0 / 0** before the RECONCILE split.
+
+**Do not treat this status block as permission to rewrite working code.** Fill gaps. Do not re-implement working restore.
