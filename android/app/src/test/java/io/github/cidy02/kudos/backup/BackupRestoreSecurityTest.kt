@@ -34,13 +34,18 @@ class BackupRestoreSecurityTest {
             hasEPUB = true
         )
         val restoredWork = maliciousWork.toSavedWork(hasEpub = true)
-        
+
         assertTrue(restoredWork.isDeleted)
         assertNotNull(restoredWork.permanentDeletionScheduledAt)
         // Since we use Instant.now() internally it might differ by a few ms, so check it's after `now`
         assertTrue(
             "Permanent deletion schedule must be recomputed to the future",
             restoredWork.permanentDeletionScheduledAt!!.isAfter(now)
+        )
+        assertApproximatelyEqual(
+            expectedRecoveryDate,
+            restoredWork.permanentDeletionScheduledAt,
+            "Work permanent deletion schedule must be approximately now + RECOVERY_WINDOW"
         )
         
         // Collection
@@ -59,6 +64,11 @@ class BackupRestoreSecurityTest {
         assertTrue(
             "Collection permanent deletion schedule must be recomputed to the future",
             restoredCollection.permanentDeletionScheduledAt!!.isAfter(now)
+        )
+        assertApproximatelyEqual(
+            expectedRecoveryDate,
+            restoredCollection.permanentDeletionScheduledAt,
+            "Collection permanent deletion schedule must be approximately now + RECOVERY_WINDOW"
         )
 
         // Queue
@@ -81,6 +91,99 @@ class BackupRestoreSecurityTest {
             "Queue permanent deletion schedule must be recomputed to the future",
             restoredQueue.permanentDeletionScheduledAt!!.isAfter(now)
         )
+        assertApproximatelyEqual(
+            expectedRecoveryDate,
+            restoredQueue.permanentDeletionScheduledAt,
+            "Queue permanent deletion schedule must be approximately now + RECOVERY_WINDOW"
+        )
+    }
+
+    @Test
+    fun testAttack_HostileArchiveDeletionOverlay_DoesNotScheduleImmediateWipe() {
+        val now = Instant.now()
+        val pastDate = now.minus(Duration.ofDays(10))
+        val expectedRecoveryDate = now.plus(WorkRepository.RECOVERY_WINDOW)
+        val localCreated = now.minus(Duration.ofDays(30))
+        val incomingNewer = now.minus(Duration.ofMinutes(1))
+
+        val localCollection = WorkCollection(
+            id = "77777777-7777-4777-8777-777777777777",
+            name = "Live Collection",
+            dateAdded = localCreated,
+            lastModifiedAt = localCreated,
+            isDeleted = false
+        )
+        val hostileCollection = BackupCollection(
+            id = localCollection.id,
+            name = "Live Collection",
+            dateAdded = BackupValidator.formatInstant(localCreated),
+            lastModifiedAt = BackupValidator.formatInstant(incomingNewer),
+            isDeleted = true,
+            deletedAt = BackupValidator.formatInstant(incomingNewer),
+            permanentDeletionScheduledAt = BackupValidator.formatInstant(pastDate)
+        )
+
+        val localQueue = ReadingQueue(
+            id = "88888888-8888-4888-8888-888888888888",
+            name = "Live Queue",
+            kindRaw = "custom",
+            dateCreated = localCreated,
+            dateUpdated = localCreated,
+            isDeleted = false
+        )
+        val hostileQueue = BackupReadingQueue(
+            id = localQueue.id,
+            name = "Live Queue",
+            kindRaw = "custom",
+            dateCreated = BackupValidator.formatInstant(localCreated),
+            dateUpdated = BackupValidator.formatInstant(incomingNewer),
+            isDeleted = true,
+            deletedAt = BackupValidator.formatInstant(incomingNewer),
+            permanentDeletionScheduledAt = BackupValidator.formatInstant(pastDate)
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                collections = listOf(localCollection),
+                readingQueues = listOf(localQueue)
+            ),
+            backup = KudosBackupPackage(
+                manifest = KudosBackupManifest(
+                    version = BackupVersion.CURRENT,
+                    exportedAt = BackupValidator.formatInstant(now),
+                    collections = listOf(hostileCollection),
+                    readingQueues = listOf(hostileQueue)
+                )
+            )
+        )
+
+        val mergedCollection = result.snapshot.collections.single()
+        assertTrue(mergedCollection.isDeleted)
+        assertNotNull(mergedCollection.permanentDeletionScheduledAt)
+        assertTrue(
+            "Merged collection permanent deletion schedule must be recomputed to the future",
+            mergedCollection.permanentDeletionScheduledAt!!.isAfter(now)
+        )
+        assertApproximatelyEqual(
+            expectedRecoveryDate,
+            mergedCollection.permanentDeletionScheduledAt,
+            "Merged collection must not keep the archive's past wipe deadline"
+        )
+        assertEquals(1, result.summary.collectionsUpdated)
+
+        val mergedQueue = result.snapshot.readingQueues.single()
+        assertTrue(mergedQueue.isDeleted)
+        assertNotNull(mergedQueue.permanentDeletionScheduledAt)
+        assertTrue(
+            "Merged queue permanent deletion schedule must be recomputed to the future",
+            mergedQueue.permanentDeletionScheduledAt!!.isAfter(now)
+        )
+        assertApproximatelyEqual(
+            expectedRecoveryDate,
+            mergedQueue.permanentDeletionScheduledAt,
+            "Merged queue must not keep the archive's past wipe deadline"
+        )
+        assertEquals(1, result.summary.queuesUpdated)
     }
 
     @Test
@@ -138,5 +241,19 @@ class BackupRestoreSecurityTest {
         assertFalse(restoredQueue.isDeleted)
         assertNull(restoredQueue.deletedAt)
         assertNull(restoredQueue.permanentDeletionScheduledAt)
+    }
+
+    private fun assertApproximatelyEqual(
+        expected: Instant,
+        actual: Instant?,
+        message: String,
+        tolerance: Duration = Duration.ofSeconds(5)
+    ) {
+        assertNotNull(message, actual)
+        val drift = Duration.between(expected, actual!!).abs()
+        assertTrue(
+            "$message (expected ~$expected, was $actual, drift=${drift.toMillis()}ms)",
+            drift <= tolerance
+        )
     }
 }
