@@ -24,8 +24,9 @@ import java.time.Instant
  * - [BackupImportMode.RECONCILE] (default / folder sync): LWW on work metadata
  *   via [lastModifiedAt] and progress via [progressModifiedAt] / [lastReadDate]
  * - [BackupImportMode.MERGE] (file Merge): add-only; keep existing overlap
- * - Local Room tombstones suppress resurrection; **incoming unsigned tombstones
- *   are dropped** on file import and folder-sync ingest (Phase 1)
+ * - Local Room tombstones suppress resurrection. Incoming unsigned tombstones
+ *   still drop (Phase 1). Incoming signed tombstones are adopted only when the
+ *   signature verifies and the signer public key is already trusted.
  * - Queues, memberships, annotations stored and restored by id (LWW)
  */
 object BackupMergeService {
@@ -33,7 +34,8 @@ object BackupMergeService {
         current: BackupLibrarySnapshot,
         backup: KudosBackupPackage,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
-        now: Instant = Instant.now()
+        now: Instant = Instant.now(),
+        trustedPublicKeys: Set<String> = emptySet()
     ): BackupMergeResult {
         val manifest = BackupValidator.validateManifest(backup.manifest)
         val exportedAt = parseOptionalInstant(manifest.exportedAt)
@@ -43,15 +45,26 @@ object BackupMergeService {
         var summary = BackupRestoreSummary()
         val epubFilesToWrite = linkedMapOf<String, ByteArray>()
 
-        // Phase 1: do not upsert incoming tombstones and do not use them to
-        // suppress works. Local tombstones already in Room still apply.
-        // Replace ignores even local suppressors — the snapshot is this device's
-        // new library, and absence (not a minted tombstone) is enough.
+        // Phase 1: unsigned incoming still drop. Phase 2: verify + already-trusted
+        // signer → adopt into the local store and this batch's TombstoneIndex.
+        // A file never writes the trust store. Replace still does not mint
+        // tombstones for omitted works, and still ignores pre-existing local
+        // suppressors so the snapshot can load.
         val tombstonesById = current.tombstones
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
+        val adoptedIncoming = ArrayList<SyncTombstone>()
+        manifest.tombstones.forEach { archived ->
+            val incoming = archived.toSyncTombstone()
+            if (!TombstoneSigning.verify(incoming)) return@forEach
+            if (!TombstoneSigning.isTrustedSigner(incoming.signerPublicKey, trustedPublicKeys)) {
+                return@forEach
+            }
+            tombstonesById[BackupPaths.normalizeIdForComparison(incoming.id)] = incoming
+            adoptedIncoming += incoming
+        }
         val tombstoneIndex = TombstoneIndex(
             tombstones = if (mode == BackupImportMode.REPLACE_LIBRARY) {
-                emptyList()
+                adoptedIncoming
             } else {
                 tombstonesById.values.toList()
             },

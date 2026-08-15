@@ -1317,6 +1317,111 @@ class BackupTombstoneTrustPhase1MergeTest {
     }
 }
 
+/**
+ * Phase 2: signed incoming tombstones at [BackupMergeService.merge].
+ * Unsigned drop tests above must stay GREEN.
+ */
+class BackupTombstoneTrustPhase2MergeTest {
+    @Test
+    fun trustedSignedIncomingIsAdoptedAndSuppressesWork() {
+        val peer = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        val incoming = signedBackupTombstone(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123),
+            peer.privateKey,
+            pub
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = setOf(pub)
+        )
+        assertEquals(1, result.snapshot.tombstones.size)
+        assertEquals(pub, result.snapshot.tombstones.single().signerPublicKey)
+        assertTrue(result.snapshot.tombstones.single().signature.isNotEmpty())
+        assertEquals(1, result.summary.worksSuppressed)
+        assertTrue(result.snapshot.works.none { it.id == WORK_ID })
+    }
+
+    @Test
+    fun untrustedValidSignatureIsDropped() {
+        val peer = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        val incoming = signedBackupTombstone(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123),
+            peer.privateKey,
+            pub
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = emptySet()
+        )
+        assertTrue(result.snapshot.tombstones.isEmpty())
+        assertEquals(0, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.works.size)
+    }
+
+    @Test
+    fun forgedSignatureOnTrustedPubIsDropped() {
+        val peer = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        val valid = signedBackupTombstone(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123),
+            peer.privateKey,
+            pub
+        )
+        val flipped = valid.signature.last().let { last ->
+            val flippedLast = if (last == '0') '1' else '0'
+            valid.signature.dropLast(1) + flippedLast
+        }
+        val incoming = valid.copy(signature = flipped)
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = setOf(pub)
+        )
+        assertTrue(result.snapshot.tombstones.isEmpty())
+        assertEquals(0, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.works.size)
+    }
+
+    @Test
+    fun ownDevicePubIsTrustedWithoutTrustStoreEntry() {
+        val incoming = TombstoneSigning.sign(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123).toSyncTombstone()
+        ).toBackupTombstone()
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = emptySet()
+        )
+        assertEquals(1, result.snapshot.tombstones.size)
+        assertEquals(1, result.summary.worksSuppressed)
+        assertTrue(result.snapshot.works.none { it.id == WORK_ID })
+    }
+}
+
 class BackupAnnotationApplyTest {
     @Test
     fun appliesAnnotationsByIdWithLww() {
@@ -1854,6 +1959,38 @@ private const val DATE_STRING = "2026-06-26T12:00:00Z"
 private val DATE: Instant = Instant.parse(DATE_STRING)
 private val EPUB_BYTES = "dummy epub bytes".toByteArray()
 private val FONT_BYTES = "dummy font bytes".toByteArray()
+
+private fun unsignedWorkTombstone(
+    recordId: String,
+    ao3WorkId: Int,
+    sourceUrl: String = "https://archiveofourown.org/works/$ao3WorkId"
+): BackupTombstone {
+    return BackupTombstone(
+        id = TOMBSTONE_ID,
+        recordID = recordId,
+        recordTypeRaw = "savedWork",
+        createdAt = DATE_STRING,
+        lastModifiedAt = DATE_STRING,
+        sourceURL = sourceUrl,
+        ao3WorkID = ao3WorkId
+    )
+}
+
+private fun signedBackupTombstone(
+    base: BackupTombstone,
+    rawPrivateKey: ByteArray,
+    publicKeyHex: String
+): BackupTombstone {
+    val signed = TombstoneSigning.signWithRawKey(
+        base.copy(signerPublicKey = publicKeyHex).toSyncTombstone(),
+        rawPrivateKey,
+        publicKeyHex
+    )
+    return base.copy(
+        signerPublicKey = signed.signerPublicKey,
+        signature = signed.signature
+    )
+}
 
 private fun samplePackage(
     manifest: KudosBackupManifest = sampleManifest(),

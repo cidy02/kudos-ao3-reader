@@ -87,7 +87,9 @@ data class SyncTombstone(
     val sourceURL: String = "",
     val ao3WorkID: Int? = null,
     val deletedOnDeviceID: String = "",
-    val deletionReason: String = ""
+    val deletionReason: String = "",
+    val signerPublicKey: String = "",
+    val signature: String = ""
 )
 
 /** Matches Apple `ReadingQueueKind` raw values. */

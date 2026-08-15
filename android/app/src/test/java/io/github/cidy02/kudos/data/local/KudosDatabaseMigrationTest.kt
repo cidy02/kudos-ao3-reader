@@ -160,14 +160,91 @@ class KudosDatabaseMigrationTest {
     }
 
     @Test
-    fun roomOpensFreshDatabaseAtVersion8WithMigrationRegistered() {
+    fun migrate8To9_addsEmptyTombstoneSignatureColumns() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name("kudos-migration-8-9")
+                .callback(object : SupportSQLiteOpenHelper.Callback(8) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL(
+                            """
+                            CREATE TABLE IF NOT EXISTS `sync_tombstones` (
+                                `id` TEXT NOT NULL,
+                                `recordID` TEXT NOT NULL,
+                                `recordTypeRaw` TEXT NOT NULL,
+                                `createdAt` INTEGER NOT NULL,
+                                `lastModifiedAt` INTEGER NOT NULL,
+                                `sourceURL` TEXT NOT NULL,
+                                `ao3WorkID` INTEGER,
+                                `deletedOnDeviceID` TEXT NOT NULL,
+                                `deletionReason` TEXT NOT NULL,
+                                PRIMARY KEY(`id`)
+                            )
+                            """.trimIndent()
+                        )
+                    }
+
+                    override fun onUpgrade(
+                        db: SupportSQLiteDatabase,
+                        oldVersion: Int,
+                        newVersion: Int
+                    ) = Unit
+                })
+                .build()
+        )
+
+        val db = helper.writableDatabase
+        try {
+            assertEquals(8, db.version)
+            db.execSQL(
+                """
+                INSERT INTO sync_tombstones (
+                    id, recordID, recordTypeRaw, createdAt, lastModifiedAt,
+                    sourceURL, ao3WorkID, deletedOnDeviceID, deletionReason
+                ) VALUES (
+                    'ts-pre', 'work-pre', 'savedWork', 0, 0,
+                    'https://archiveofourown.org/works/1', 1, '', 'workDeleted'
+                )
+                """.trimIndent()
+            )
+            val before = columnNames(db, "sync_tombstones")
+            assertFalse(before.contains("signerPublicKey"))
+            assertFalse(before.contains("signature"))
+
+            KudosDatabaseMigrations.MIGRATION_8_9.migrate(db)
+            db.version = 9
+
+            val after = columnNames(db, "sync_tombstones")
+            assertTrue(after.contains("signerPublicKey"))
+            assertTrue(after.contains("signature"))
+            db.query(
+                "SELECT signerPublicKey, signature FROM sync_tombstones WHERE id = ?",
+                arrayOf("ts-pre")
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("", cursor.getString(0))
+                assertEquals("", cursor.getString(1))
+            }
+            assertEquals(9, db.version)
+        } finally {
+            db.close()
+            helper.close()
+        }
+    }
+
+    @Test
+    fun roomOpensFreshDatabaseAtVersion9WithMigrationRegistered() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries()
-            .addMigrations(KudosDatabaseMigrations.MIGRATION_7_8)
+            .addMigrations(
+                KudosDatabaseMigrations.MIGRATION_7_8,
+                KudosDatabaseMigrations.MIGRATION_8_9
+            )
             .build()
         try {
-            assertEquals(8, db.openHelper.readableDatabase.version)
+            assertEquals(9, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }

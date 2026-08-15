@@ -22,11 +22,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +37,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -179,7 +185,7 @@ fun BackupScreen(
                     "Export writes ZIP packages at manifest v${BackupVersion.CURRENT} (Apple-compatible).",
                     "Import accepts Apple/Android .kudosbackup ZIP versions ${BackupVersion.APPLE_V1}–${BackupVersion.CURRENT}.",
                     "Merge adds works that are not already here. Replace Library makes this device match the file.",
-                    "Unsigned deletion claims in a backup or sync folder are ignored until signed tombstones ship."
+                    "Unsigned deletion claims in a backup or sync folder are ignored. Signed tombstones apply only from devices you already trust."
                 )
             )
         }
@@ -217,7 +223,7 @@ fun BackupScreen(
                     )
                     Text(
                         text = "Export saves a portable library archive. Import can merge new works " +
-                            "or replace this device's library. Unsigned tombstones in the file are not applied.",
+                            "or replace this device's library. Unsigned or untrusted tombstones in the file are not applied.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -271,6 +277,9 @@ fun BackupScreen(
                     }
                 }
             }
+        }
+        item {
+            TrustedDevicesCard(settingsRepository = settingsRepository)
         }
     }
 
@@ -408,6 +417,101 @@ private fun ReplaceOrMergeDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+private fun TrustedDevicesCard(settingsRepository: SettingsRepository) {
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    val trusted by settingsRepository.trustedTombstonePublicKeys.collectAsState(initial = emptySet())
+    var deviceHex by remember { mutableStateOf("") }
+    var pasteHex by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf<String?>(null) }
+    var statusIsError by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        deviceHex = TombstoneSigning.publicKeyHex()
+    }
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Trusted devices", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "This device's public key. Paste another device's key to accept its signed deletions. " +
+                    "A backup file never adds a trusted key.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SelectionContainer {
+                Text(
+                    text = deviceHex.ifBlank { "Generating…" },
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    enabled = deviceHex.isNotBlank(),
+                    onClick = {
+                        clipboard.setText(AnnotatedString(deviceHex))
+                        statusIsError = false
+                        status = "Copied this device's public key."
+                    }
+                ) {
+                    Text("Copy")
+                }
+            }
+            OutlinedTextField(
+                value = pasteHex,
+                onValueChange = { pasteHex = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Other device public key") },
+                placeholder = { Text("64-character hex") },
+                singleLine = true
+            )
+            Button(
+                enabled = pasteHex.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        val store = TombstoneTrustStore(settingsRepository)
+                        if (store.trust(pasteHex)) {
+                            statusIsError = false
+                            status = "Trusted that device."
+                            pasteHex = ""
+                        } else {
+                            statusIsError = true
+                            status = "Not a 64-character hex public key."
+                        }
+                    }
+                }
+            ) {
+                Text("Trust device")
+            }
+            if (trusted.isNotEmpty()) {
+                Text(
+                    "${trusted.size} other device key(s) trusted.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            status?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (statusIsError) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable

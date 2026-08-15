@@ -494,7 +494,9 @@ fun SyncTombstone.toBackupTombstone(): BackupTombstone {
         sourceURL = sourceURL,
         ao3WorkID = ao3WorkID,
         deletedOnDeviceID = deletedOnDeviceID,
-        deletionReason = deletionReason
+        deletionReason = deletionReason,
+        signerPublicKey = signerPublicKey,
+        signature = signature
     )
 }
 
@@ -522,7 +524,9 @@ fun BackupTombstone.toSyncTombstone(): SyncTombstone {
         sourceURL = sourceURL,
         ao3WorkID = ao3WorkID,
         deletedOnDeviceID = deletedOnDeviceID,
-        deletionReason = deletionReason
+        deletionReason = deletionReason,
+        signerPublicKey = signerPublicKey,
+        signature = signature
     )
 }
 

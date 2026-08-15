@@ -129,4 +129,4 @@ Still open / out of scope:
 - Safety backup is app-specific Documents (`getExternalFilesDir`), not the
   shared system Documents folder.
 - No Compose UI test of the 1.5s Replace arming / pause-sync checkbox (R6).
-- Phase 2 Ed25519 not implemented (out of scope).
+- Phase 2 Ed25519 is in `android/PHASE2-NOTES.md`.

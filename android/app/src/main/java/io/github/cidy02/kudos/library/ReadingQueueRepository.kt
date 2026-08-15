@@ -7,9 +7,11 @@ import io.github.cidy02.kudos.core.model.ReadingQueueMembership
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.backup.TombstoneSigning
+import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
-import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
+import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.works.WorkRepository
@@ -120,8 +122,8 @@ class ReadingQueueRepository(
         // Without a tombstone, restoring a backup that still lists this membership
         // silently resurrects it (mergeQueues/TombstoneIndex.membershipResolution
         // expect one to exist for every removed membership).
-        tombstoneDao.upsert(
-            SyncTombstoneEntity(
+        upsertSignedTombstone(
+            SyncTombstone(
                 id = uuidFactory(),
                 recordID = existing.id,
                 recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
@@ -300,13 +302,14 @@ class ReadingQueueRepository(
     suspend fun hardDeleteQueue(queueId: String) {
         queueDao.deleteQueueById(queueId)
         // Membership rows cascade via FK in DB.
-        tombstoneDao.upsert(
-            SyncTombstoneEntity(
+        val now = clock()
+        upsertSignedTombstone(
+            SyncTombstone(
                 id = uuidFactory(),
                 recordID = queueId,
                 recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE,
-                createdAt = clock(),
-                lastModifiedAt = clock(),
+                createdAt = now,
+                lastModifiedAt = now,
                 deletedOnDeviceID = "",
                 deletionReason = "queueDeleted"
             )
@@ -332,6 +335,10 @@ class ReadingQueueRepository(
         return collectionDao.observeAllActive().map { entities ->
             entities.map { it.toDomain() }
         }
+    }
+
+    private suspend fun upsertSignedTombstone(tombstone: SyncTombstone) {
+        tombstoneDao.upsert(TombstoneSigning.sign(tombstone).toEntity())
     }
 
     private suspend fun touchQueueMembershipChanged(queueId: String, now: Instant) {
@@ -409,7 +416,17 @@ class ReadingQueueRepository(
                             permanentDeletionScheduledAt = null,
                             lastModifiedAt = now
                         ))
-                        tombstoneDao.deleteByRecord(existing.id, SyncTombstoneRecordType.SAVED_WORK)
+                        val ao3Id = WorkTags.ao3WorkIdFromUrl(existing.sourceUrl)
+                            ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
+                            ?.toInt()
+                        tombstoneDao.deleteSavedWorkByIdentity(
+                            recordId = existing.id,
+                            ao3WorkId = ao3Id,
+                            canonicalSourceUrl = WorkTags.canonicalAO3WorkURL(existing.sourceUrl)
+                                .orEmpty(),
+                            sourceUrl = existing.sourceUrl,
+                            recordType = SyncTombstoneRecordType.SAVED_WORK
+                        )
                     }
                 }
 

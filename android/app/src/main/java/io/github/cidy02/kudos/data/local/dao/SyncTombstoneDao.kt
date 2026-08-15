@@ -25,4 +25,28 @@ interface SyncTombstoneDao {
     /** Retract all tombstones for a restored record (Apple PreservedWorkService). */
     @Query("DELETE FROM sync_tombstones WHERE recordID = :recordId AND recordTypeRaw = :recordType")
     suspend fun deleteByRecord(recordId: String, recordType: String)
+
+    /**
+     * Identity-aware retract for savedWork: record UUID, ao3WorkID, or source URL
+     * (canonical or the original stored value).
+     */
+    @Query(
+        """
+        DELETE FROM sync_tombstones
+        WHERE recordTypeRaw = :recordType
+          AND (
+            recordID = :recordId
+            OR (:ao3WorkId IS NOT NULL AND ao3WorkID = :ao3WorkId)
+            OR (:canonicalSourceUrl != '' AND sourceURL = :canonicalSourceUrl)
+            OR (:sourceUrl != '' AND sourceURL = :sourceUrl)
+          )
+        """
+    )
+    suspend fun deleteSavedWorkByIdentity(
+        recordId: String,
+        ao3WorkId: Int?,
+        canonicalSourceUrl: String,
+        sourceUrl: String,
+        recordType: String
+    )
 }

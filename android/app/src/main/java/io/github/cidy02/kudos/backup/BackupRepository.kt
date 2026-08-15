@@ -82,8 +82,9 @@ class BackupRepository(
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
+            TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
             val current = captureLibrarySnapshot()
-            val merge = BackupMergeService.merge(current, pack, mode = mode)
+            val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
             merge.summary
         }
@@ -94,11 +95,26 @@ class BackupRepository(
         mode: BackupImportMode = BackupImportMode.RECONCILE
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
+            TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
             val current = captureLibrarySnapshot()
-            val merge = BackupMergeService.merge(current, pack, mode = mode)
+            val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
             merge.summary
         }
+    }
+
+    private suspend fun mergePackage(
+        current: BackupLibrarySnapshot,
+        pack: KudosBackupPackage,
+        mode: BackupImportMode
+    ): BackupMergeResult {
+        val trusted = TombstoneTrustStore(settingsRepository).trustedPublicKeys()
+        return BackupMergeService.merge(
+            current = current,
+            backup = pack,
+            mode = mode,
+            trustedPublicKeys = trusted
+        )
     }
 
     suspend fun previewImport(pack: KudosBackupPackage): BackupImportPreview {
@@ -222,8 +238,9 @@ class BackupRepository(
 
         snapshot.savedSearches.forEach { database.savedSearchDao().upsert(it.toEntity()) }
 
-        // Snapshot tombstones are the pre-import local set only — incoming
-        // unsigned tombstones are never present here (Phase 1).
+        // Snapshot tombstones are the pre-import local set plus any incoming
+        // rows that verified and were already trusted. Unsigned / untrusted
+        // incoming never reach here. File import does not write the trust store.
         snapshot.tombstones.forEach { database.syncTombstoneDao().upsert(it.toEntity()) }
 
         // Queues before memberships (FK).
