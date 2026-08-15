@@ -22,11 +22,20 @@ enum ReaderPublicationOrigin: Equatable, Sendable {
 nonisolated enum ReaderWebNavigationPolicy {
     static let readiumScheme = "readium"
 
+    /// Schemes that must never commit inside a reader web view, even if a
+    /// future origin rule is loosened. `javascript:`/`data:` are the M8
+    /// off-publication cancels; `blob:`/`vbscript:` are the same class of
+    /// script-document navigation.
+    static let forbiddenReaderSchemes: Set<String> = [
+        "javascript", "data", "blob", "vbscript",
+    ]
+
     /// True only when `url` stays inside the loaded publication. HTTP(S),
     /// `javascript:`, `data:`, and `file://` paths outside the book directory
     /// all return false.
     static func allowsInReaderNavigation(to url: URL, origin: ReaderPublicationOrigin) -> Bool {
         let scheme = url.scheme?.lowercased() ?? ""
+        if forbiddenReaderSchemes.contains(scheme) { return false }
         if scheme == "about" { return true }
         switch origin {
         case .readiumScheme:
@@ -122,7 +131,7 @@ extension WKWebViewConfiguration {
     ) {
         kudos_setURLSchemeHandler(handler, forURLScheme: urlScheme)
         if urlScheme == ReaderWebNavigationPolicy.readiumScheme {
-            websiteDataStore = ReaderWebIsolation.isolatedDataStore
+            ReaderWebIsolation.applyIsolatedStore(to: self)
         }
     }
 }
