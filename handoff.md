@@ -7,7 +7,8 @@
 **Do not** run git in `/Users/cidy02/Documents/AO3_App_OpenSource`.  
 **Discussion:** `/Users/cidy02/kudos-fix-tombstone/backup-trust-design-discussion.md`  
 **iOS notes:** `/Users/cidy02/kudos-fix-tombstone/IMPLEMENTATION-NOTES.md`  
-**Android notes:** `/Users/cidy02/kudos-fix-tombstone/android/PHASE1-NOTES.md`  
+**Android notes:** `/Users/cidy02/kudos-fix-tombstone/android/PHASE1-NOTES.md` · `/Users/cidy02/kudos-fix-tombstone/android/PHASE2-NOTES.md`  
+**Phase 2 contract:** `/Users/cidy02/kudos-fix-tombstone/PHASE2-CONTRACT.md`  
 **Prior iOS review:** `/Users/cidy02/kudos-fix-tombstone/GROK-REVIEW-IOS.md` (partly stale — items 1, 2, 4 were fixed in `7b77316` / `14267e5`)
 
 This document is five things:
@@ -24,7 +25,7 @@ This document is five things:
 
 Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the whole pile before any merge**. Do **not** push. Do **not** merge. Phase 2 crypto is **not** in this merge.
 
-**Review the branch** `security-fixes/tombstone-trust` vs `origin/hig-review` (`c241d2f`). Working tree should be clean except untracked `OPUS-IMPLEMENT.md` / `OPUS-REVIEW-GROK.md` (agent prompts, not product). **13 local commits**, nothing pushed.
+**Review the branch** `security-fixes/tombstone-trust` vs `origin/hig-review` (`c241d2f`). Working tree should be clean except untracked `OPUS-IMPLEMENT.md` / `OPUS-REVIEW-GROK.md` (agent prompts, not product). **19+ local commits**, nothing pushed. Run `git log --oneline origin/hig-review..HEAD`.
 
 ### Status key
 
@@ -43,10 +44,10 @@ Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the 
 | **R4** stale Android PHASE1-NOTES | **DONE** | Gaps rewritten; Merge undelete + R8/R9 documented. | `android/PHASE1-NOTES.md` |
 | **R5** iOS Merge undelete test | **DONE** | `fileMergeUndeletesPendingDeletion` GREEN. | `KudosBackupTests.swift` |
 | **R6** Replace UI arming tests | **SKIP** | No SwiftUI/Compose harness. Do not invent one for this merge. | — |
-| **R7** GREEN last after close-out | **DONE** both | iOS `/tmp/tomb-ios-closeout.xcresult`: **54 / 0 / 54**. Android `:app:testDebugUnitTest`: **797 / 0 / 0**. | Filters in notes |
+| **R7** GREEN last after close-out | **DONE** both | iOS close-out **54 / 0 / 54**; iOS Phase 2 **39 / 0 / 39**. Android Phase 2 suite **814 / 0 / 0**. | Filters in notes |
 | **R8** Replace snapshots links + saved searches | **DONE** both | iOS `context.delete`; Android drop omitted bookmarks (URL) and searches (id). No tombstones. | `KudosBackup.swift`; `BackupMergeService` / `BackupRepository` |
 | **R9** Android Replace → Recently Deleted | **DONE** | Soft-delete omitted works (`isDeleted`, 90-day window). EPUB kept. No `deleteById`. No tombstone. Later MERGE undeletes. | `BackupRepository.removeRecordsAbsentFromReplaceSnapshot`; merge snapshot path |
-| **R-P2-*** Phase 2 Ed25519 | **DONE iOS** / **WIP Android** | **No Phase 3.** Contract `PHASE2-CONTRACT.md`. iOS `e4c9278` GREEN **39 / 0 / 39**. Android implementer still running (uncommitted). | iOS `TombstoneSigning.swift`; Android `TombstoneSigning.kt` |
+| **R-P2-*** Phase 2 Ed25519 | **DONE** both | **No Phase 3.** Contract `PHASE2-CONTRACT.md`. iOS `e4c9278` GREEN **39 / 0 / 39**. Android `71f72fc` GREEN **814 / 0 / 0**. Unsigned still drop. Adopt only verify+trusted. File never adds a key. Replace still does not mint tombstones. | iOS `TombstoneSigning.swift`; Android `TombstoneSigning.kt` / `PHASE2-NOTES.md` |
 | Original audit WPs A–F | **OUT OF THIS BRANCH** | Separate worktrees (`kudos-fix-wp-*`). Not part of this merge. | Do not review those files here unless owner expands scope |
 
 ### Close-out commits (this session)
@@ -58,6 +59,8 @@ Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the 
 | `ee84fad` | Android restore rematch by ao3/canonical URL (parity with iOS). GREEN **797 / 0 / 0** |
 | `2f5579c` | Shared Phase 2 contract (no Phase 3) |
 | `e4c9278` | iOS Phase 2 Ed25519 sign/verify/trust/re-sign. GREEN **39 / 0 / 39** |
+| `15b1230` | Handoff: iOS P2 landed, Android still in flight |
+| `71f72fc` | Android Phase 2 Tink Ed25519 + Room v9 + trust store. GREEN **814 / 0 / 0** |
 
 ### Known leftover for Claude (not a reopen of tombstone-drop)
 
@@ -69,9 +72,15 @@ remap. Tests: `importPackageReconcileMergesByAo3IdentityNotUuid`,
 `importPackageReplaceRematchesAo3IdentityInsteadOfSoftDeleting`. GREEN last
 Android **797 / 0 / 0**.
 
-Still **SKIP** this merge: R6 UI arming tests; Phase 2 crypto; other security
-worktrees. Bookmarks/saved searches on Replace are hard-deleted without a
-tombstone (those models have no Recently Deleted UI) on both platforms.
+Still **SKIP** this merge: R6 UI arming tests; other security worktrees (`kudos-fix-wp-*`).
+Bookmarks/saved searches on Replace are hard-deleted without a tombstone (those
+models have no Recently Deleted UI) on both platforms. Android trust is
+device-local hex paste (no QR lib, no iCloud). iOS same-Apple-ID KVS needs the
+KVS entitlement on device; simulator falls back to local persist + hex paste.
+
+Phase 2 leftover (not BLOCK unless review finds a verify hole): annotation
+deletes on Android still do not mint tombstones (there was no insert path).
+iOS signs all `recordDeletion` types.
 
 ### What Claude should hunt (close-out + core)
 
@@ -83,6 +92,8 @@ Same §B list, plus:
 4. Folder-sync test hits `foldConflictContents`, not only default `restore`.
 5. Android R9 must leave a soft-deleted **work row** so later MERGE undelete works.
 6. Android restore apply rematches ao3 / canonical URL / UUID (same as iOS). Confirm no duplicate row on a cross-device same-AO3 Replace.
+7. Phase 2: unsigned still drop; trusted+valid adopted; untrusted valid dropped; forged dropped; file never writes the trust store. Payload matches `PHASE2-CONTRACT.md` on both platforms (hex pub + hex sig, UTC `yyyy-MM-dd'T'HH:mm:ss'Z'`).
+8. Replace still does not mint signed tombstones for omitted works.
 
 ### Owner merge rule
 
@@ -100,9 +111,9 @@ Claude reviews → owner merges. No agent push. No agent merge to `hig-review`.
 
 Cross-review after every implement pass: the implementer does not review their own patch. Opus reviews Grok; Grok reviews Opus. Codex may add a third pass.
 
-**There is no Phase 3.** Tombstone trust is Phase 1 (drop unsigned) + Phase 2 (sign so deletes can cross devices). After Phase 2 the remaining product work is review/merge, not another crypto phase.
+**There is no Phase 3.** Tombstone trust is Phase 1 (drop unsigned) + Phase 2 (sign so deletes can cross devices). After Phase 2 the remaining product work is **Claude review + owner merge**, not another crypto phase.
 
-Phase 2 implementation is in progress. Shared wire contract: `PHASE2-CONTRACT.md`.
+Phase 2 is implemented on both platforms. Shared wire contract: `PHASE2-CONTRACT.md`.
 
 ---
 
