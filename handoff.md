@@ -2,7 +2,7 @@
 
 **Workspace:** `/Users/cidy02/kudos-fix-tombstone`  
 **Branch:** `security-fixes/tombstone-trust` (from `c241d2f` / `origin/hig-review`)  
-**HEAD:** `ab6f7c5` — **8 local commits ahead**, nothing pushed  
+**HEAD:** branch tip of `security-fixes/tombstone-trust` — **10 local commits ahead** of `origin/hig-review`, nothing pushed. Run `git log --oneline origin/hig-review..HEAD`.  
 **Embargo:** local only. Do **not** push, merge, open a PR, or create a remote branch.  
 **Do not** run git in `/Users/cidy02/Documents/AO3_App_OpenSource`.  
 **Discussion:** `/Users/cidy02/kudos-fix-tombstone/backup-trust-design-discussion.md`  
@@ -10,13 +10,26 @@
 **Android notes:** `/Users/cidy02/kudos-fix-tombstone/android/PHASE1-NOTES.md`  
 **Prior iOS review:** `/Users/cidy02/kudos-fix-tombstone/GROK-REVIEW-IOS.md` (partly stale — items 1, 2, 4 were fixed in `7b77316` / `14267e5`)
 
-This document is three things:
+This document is four things:
 
 1. **Accomplishment report** (what this session actually shipped).
-2. **Review brief** for **Opus 5** or **Codex Sol 5.6** (read-only review of the work).
-3. **Locked Phase 1 spec** (owner + three-model discussion). The earlier “trust tombstones only on first empty-device restore” design is rejected.
+2. **Review brief** for the Phase 1 diff as it stands (§B).
+3. **Remaining work** with implement vs review owners (§C).
+4. **Locked Phase 1 spec** (§1–§5). The earlier “trust tombstones only on first empty-device restore” design is rejected.
 
-Phase 2 (Ed25519, per-tombstone signatures, iCloud pubs, QR) is specified and **not** implemented.
+### Agent roles (standing)
+
+**Opus 5 and Opus 4.6 are the same role.** Prefer **Opus 5** if that model is available. If it is not (quota, plan, routing), use **Opus 4.6**. Do not wait for 5 if 4.6 can start. Do not run both as implementers on the same files.
+
+| Role | Who | Default platform |
+|---|---|---|
+| **Opus** (5, else 4.6) | Implement remaining **iOS/macOS**. Review Grok’s Android. | iOS |
+| **Grok 4.6** | Implement remaining **Android**. Review Opus’s iOS. | Android |
+| **Codex Sol 5.6** | Optional **independent** read-only review of the whole Phase 1 (same brief as §B). Not an implementer unless the owner says so. | both, review-only |
+
+Cross-review after every implement pass: the implementer does not review their own patch. Opus reviews Grok; Grok reviews Opus. Codex may add a third pass.
+
+Phase 2 (Ed25519, per-tombstone signatures, iCloud pubs, QR) is specified and **not** implemented. It is remaining work R-P2-* in §C, not a license to start it during the Phase 1 review.
 
 ---
 
@@ -139,23 +152,15 @@ Never pass `-sdk iphonesimulator` together with a UDID destination. Simulator: `
 - `folderSyncIngestDoesNotAdoptIncomingTombstones` — `"folder-sync must not insert the remote unsigned tombstone"` — **3.212s**
 - `importPackageDoesNotAdoptIncomingTombstones` — **0.035s**
 
-### Known gaps (not done — reviewer should confirm, not silently “fix” unless BLOCK)
-
-1. **Replace confirmation counts are UUID-only** (iOS `ReplaceLibraryConfirmationView`, Android preview). Restore identity is `ao3WorkID` → canonical `sourceURL` → `recordID`. A cross-device backup of the same AO3 works can overstate “will remove.” Safer than understating; the checkbox number can be a lie.
-2. **File Merge still LWW-applies existing annotation notes / collection names / queue memberships** on both platforms. Work-level title/progress/tags/EPUB are protected. Spec said Merge does not overwrite notes.
-3. **No `FolderSyncService.syncDown` ingest test on iOS.** Default `restore` (the function those four callers use) is tested. A weaker substitute that re-inserts tombstones in `FolderSyncService` *before* `restore` would stay green.
-4. **Android Replace DAO-deletes omissions** instead of Recently Deleted. Done so a later Merge can insert; a standing soft-deleted row would block that.
-5. **Bookmarks / saved searches still merge-add on Replace** (not listed in the snapshot set).
-6. **No Compose / SwiftUI test** of the 1.5s Replace arming.
-7. **Android `PHASE1-NOTES.md` Gaps section** still claims Merge does not undelete — that is stale after `bf81772`.
-8. **Phase 2 crypto** not started (out of scope).
-9. **Opus 4.6 never reviewed the Android / Grok finish** (quota). That is the job in §B.
+Known gaps are enumerated with owners in **§C**. The Phase 1 review in §B should confirm them, not silently implement them, unless a finding is **BLOCK**.
 
 ---
 
-## B. Review brief — Opus 5 or Codex Sol 5.6
+## B. Review brief — current Phase 1 (do this first)
 
-You are reviewing, not implementing. **Read-only unless you find a BLOCK** (does not compile, incoming unsigned tombstones are adopted, Replace plants `SyncTombstone`, or folder sync uses add-only Merge). Do not restyle. Do not start Phase 2. Do not push. Do not run git in `/Users/cidy02/Documents/AO3_App_OpenSource`.
+**Assignee:** Opus **5** if available, otherwise Opus **4.6**. Codex Sol 5.6 may run the same brief as an independent second review.
+
+You are reviewing, not implementing. **Read-only unless you find a BLOCK** (does not compile, incoming unsigned tombstones are adopted, Replace plants `SyncTombstone`, or folder sync uses add-only Merge). Do not restyle. Do not start Phase 2. Do not start §C implement items during this pass. Do not push. Do not run git in `/Users/cidy02/Documents/AO3_App_OpenSource`.
 
 ### B.1 Read first, in this order
 
@@ -201,7 +206,7 @@ Must be true:
 
 ### B.4 How to report
 
-Write `/Users/cidy02/kudos-fix-tombstone/REVIEW-OPUS5-OR-CODEX.md` (or append a “Round 4 review” section to `backup-trust-design-discussion.md` if you prefer one file).
+Write `/Users/cidy02/kudos-fix-tombstone/REVIEW-OPUS5-OR-CODEX.md` (or append a “Round 4 review” section to `backup-trust-design-discussion.md` if you prefer one file). Sign the review with which model actually ran (Opus 5, Opus 4.6, or Codex Sol 5.6).
 
 Use **SHIP / FIX / BLOCK** only:
 
@@ -240,13 +245,84 @@ cd android && ./gradlew :app:testDebugUnitTest
 
 Do not invent Java. Do not weaken tests to get green.
 
-### B.5 Out of scope for you
+### B.5 Out of scope for you (this review pass)
 
-- Phase 2 Ed25519 / QR / iCloud pubs
+- Phase 2 Ed25519 / QR / iCloud pubs (see §C R-P2-*)
+- Implementing §C items (review first; implement only after this pass, and only your platform)
 - Push, PR, remote branch
 - Rewriting working restore “for clarity”
 - Reopening “trust tombstones on first empty restore”
 - Running git in `/Users/cidy02/Documents/AO3_App_OpenSource`
+
+---
+
+## C. Remaining work — implement vs review
+
+**Opus = Opus 5 if available, otherwise Opus 4.6.** Same person/role either way.
+
+Do these in order. Do not start Phase 2 until the owner says so. Local commits only. No push.
+
+### C.0 Next action (now)
+
+| ID | Work | Implement | Review |
+|---|---|---|---|
+| **R0** | Independent review of Phase 1 as shipped (`origin/hig-review...HEAD`). Follow §B. Write `REVIEW-OPUS5-OR-CODEX.md`. | — (read-only) | **Opus** (5 else 4.6). Optional second pass: **Codex Sol 5.6**. |
+
+Grok already reviewed the iOS side (`GROK-REVIEW-IOS.md`; several items fixed in `7b77316`). R0 is the missing reverse review (Android + Grok finish + whether those iOS fixes hold).
+
+### C.1 Phase 1 close-out (do after R0, unless R0 is BLOCK)
+
+| ID | Work | Implement | Review | Notes |
+|---|---|---|---|---|
+| **R1** | **Identity-aware Replace confirmation counts.** Classify will-add / will-remove / in-both with the same `ao3WorkID` → canonical `sourceURL` → `recordID` order restore uses. Feed those counts to the amber rule and the “Remove N works…” checkbox. | **Opus** iOS `ReplaceLibraryConfirmationView`. **Grok** Android `BackupImportPreview` / `BackupScreen`. | Cross: Opus reviews Android; Grok reviews iOS. | UUID-only today. Overstates removals on a cross-device backup of the same AO3 works. |
+| **R2** | **File Merge must not overwrite notes on active overlap.** Gate annotation LWW, collection name LWW, and queue-membership note LWW so `.merge` / `MERGE` only *adds* missing records. New/undeleted works may still get collections so they are not orphaned. Reconcile stays LWW. | **Opus** `restoreAnnotations` + collection/queue loops in `KudosBackup.swift`. **Grok** `mergeAnnotations` / `mergeCollections` / `mergeQueues` when `mode == MERGE`. | Cross. | Spec: Merge does not overwrite progress, tags, **notes**, or EPUB. Work row is already protected. |
+| **R3** | **iOS folder-sync ingest test at the real caller.** Add a production-entry test of `FolderSyncService.syncDown` / `foldConflictContents` (not only default `restore`) whose remote manifest carries a `savedWork` tombstone + the work. Assert no local `SyncTombstone` and the work present. | **Opus** in `FolderSyncTests` or `KudosBackupTests`. | **Grok** | Mutation B today would miss a `FolderSyncService` re-insert before `restore`. |
+| **R4** | **Android `PHASE1-NOTES.md` Gaps is stale.** It still says Merge does not undelete Recently Deleted. That is false after `bf81772`. Rewrite the Gaps list to match §C. | **Grok** | **Opus** (skim) | Docs only. |
+| **R5** | **Production-entry test: Merge undelete Recently Deleted** on iOS if not already explicit (Android has `importPackageMergeUndeletesPendingDeletion`). | **Opus** if missing. | **Grok** | Confirm before adding a duplicate. |
+| **R6** | **Replace extra-step UI tests.** 1.5s arming, checkbox required, pause-sync default on, amber when much smaller. | **Opus** SwiftUI if a harness exists. **Grok** Compose if a harness exists. | Cross. | Lower priority. Do not invent a UI test stack. |
+| **R7** | **GREEN last after R1–R5.** iOS: `KudosTests/PersistenceGateSuites/KudosBackupTests` (never the short filter; never `-sdk` + UDID). Android: `:app:testDebugUnitTest`. Quote counts. Mutation A/B if restore/tombstone code changed. | The implementer of the last patch on that platform. | The other agent. | `totalTestCount` 0 is a fail. |
+
+### C.2 Product decisions (owner first — do not implement until answered)
+
+| ID | Decision | If yes, implement | Review |
+|---|---|---|---|
+| **R8** | Should **Replace** snapshot **bookmarks and saved searches** (today they merge-add; spec listed works / progress / collections / queues / annotations only)? | **Opus** iOS, **Grok** Android | Cross |
+| **R9** | Should Android Replace send omissions through **Recently Deleted** instead of DAO-delete? A standing soft-deleted row must not block later Merge (Merge undelete already exists). | **Grok** | **Opus** |
+| **R10** | Should file Merge **add** incoming annotations that are *new IDs* on an existing work (add-only notes) or skip all annotation work on overlap? | **Opus** iOS, **Grok** Android once owner picks | Cross |
+
+### C.3 Phase 2 (specified in §2 — owner must say go)
+
+| ID | Work | Implement | Review |
+|---|---|---|---|
+| **R-P2-1** | Ed25519 keypair on device. Private key never leaves the device. Sign each tombstone at delete time. Payload UTF-8 fields joined by `\n`: `recordType`, `ao3WorkID`, `canonicalSourceURL`, `recordID`, `deletedAt` (`2026-08-15T16:00:00Z`), `signerPublicKey`. | **Opus** iOS (`CryptoKit.Curve25519.Signing`). **Grok** Android (Tink or API 33 Ed25519). | Cross. Optional Codex Sol 5.6 pass on the crypto boundary. |
+| **R-P2-2** | `canonicalSourceURL` must match `WorkTags.canonicalAO3WorkURL` on both platforms. Sign **sink identity**, not a bare workId. | Both (shared contract). | Cross |
+| **R-P2-3** | iCloud publishes **public** keys only; same Apple ID auto-trusts those pubs. A file never adds a trusted key. | **Opus** | **Grok** |
+| **R-P2-4** | Android: QR once to trust the other platform’s pub. | **Grok** (QR + trust store). **Opus** (iOS show-pub / scan if needed for parity). | Cross |
+| **R-P2-5** | Merge applies an incoming tombstone only if the signer is already trusted. Incoming unsigned still drop. | **Opus** iOS, **Grok** Android | Cross |
+| **R-P2-6** | First Phase 2 launch: one-time local re-sign of tombstones already in *this* store (`tombstoneMigrationComplete`). | **Opus** iOS, **Grok** Android | Cross |
+| **R-P2-7** | 24h clock clamp stays a pre-filter, not authorization. Do not treat clamp as “signed.” | Both (already present as clamp — do not regress). | Cross |
+| **R-P2-8** | Identity-aware `retractWorkTombstone` (ao3 / canonical URL / recordID), not UUID-only. | **Opus** iOS, **Grok** Android | Cross |
+| **R-P2-9** | Same drop-or-verify rule for collection / queue / annotation tombstone *types* when they arrive. Do not invent a new product; apply the signed-tombstone rule. | Both | Cross |
+| **R-P2-10** | Deletes cross devices again (the Phase 1 short inconsistency ends). Production-entry tests + Mutation A/B: unsigned incoming still drop; trusted signed incoming suppress; forged signature does not. | Both | Cross + optional Codex |
+
+Do **not** mint signed tombstones from Replace for omitted works (owner + Grok/Opus rejected a signed fleet wipe).
+
+### C.4 Explicitly not remaining work
+
+- Push / PR / remote branch — **owner only**.
+- GPG / OpenPGP — rejected.
+- Wiping or rewriting the Library Sync Folder from Replace — rejected.
+- Re-implementing working `restore` / `merge` “for clarity.”
+- Trust-on-first-empty-restore / file TOFU — rejected.
+
+### C.5 How a later implement pass should run
+
+1. R0 review is done (or owner waives it).
+2. Implementer reads §2 + the row in this table. Does **not** rewrite unrelated restore.
+3. Tests at the production entry point. Do not weaken existing assertions.
+4. Local commit. No push.
+5. The other agent reviews that commit against §2. SHIP / FIX / BLOCK.
+6. Only then start the next ID.
 
 ---
 
@@ -374,4 +450,4 @@ Per platform:
 6. Do not weaken existing assertions.
 7. Local commits only. No push.
 
-iOS and Android Phase 1 meet this definition at `ab6f7c5`, with the known gaps in §A. The remaining session task is the independent review in §B.
+iOS and Android Phase 1 meet this definition at the current branch tip for the tombstone-drop + three-mode core. Remaining work and owners are §C. The next task is R0 (§B).
