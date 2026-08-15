@@ -1646,6 +1646,156 @@ struct KudosBackupTests {
         )
     }
 
+    @Test func fileMergeUndeletesPendingDeletion() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let local = SavedWork(id: workID, title: "Recently Deleted", author: "A")
+        local.isPendingDeletion = true
+        local.deletedAt = Date(timeIntervalSince1970: 50)
+        context.insert(local)
+        try context.save()
+
+        let incoming = SavedWork(id: workID, title: "Restored From File", author: "A")
+        let contents = try KudosBackupService.makeContents(
+            works: [incoming],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults(), mode: .merge)
+        let stored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(stored.isPendingDeletion == false)
+        #expect(stored.title == "Restored From File")
+    }
+
+    @Test func fileMergeAddsNewAnnotationIDsWithoutOverwritingExisting() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let existingNoteID = UUID()
+        let newNoteID = UUID()
+        let local = SavedWork(id: workID, title: "Annotated", author: "A")
+        context.insert(local)
+        let localNote = ReadingAnnotation(
+            id: existingNoteID,
+            work: local,
+            kind: .highlight,
+            locatorString: "loc-1",
+            note: "Keep me"
+        )
+        context.insert(localNote)
+        try context.save()
+
+        let incomingWork = SavedWork(id: workID, title: "Annotated", author: "A")
+        let overwritten = ReadingAnnotation(
+            id: existingNoteID,
+            work: incomingWork,
+            kind: .highlight,
+            locatorString: "loc-1",
+            note: "Hostile overwrite"
+        )
+        overwritten.lastModifiedAt = Date(timeIntervalSince1970: 999)
+        let added = ReadingAnnotation(
+            id: newNoteID,
+            work: incomingWork,
+            kind: .highlight,
+            locatorString: "loc-2",
+            note: "New from file"
+        )
+        let contents = try KudosBackupService.makeContents(
+            works: [incomingWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            annotations: [overwritten, added],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults(), mode: .merge)
+        let notes = try context.fetch(FetchDescriptor<ReadingAnnotation>())
+        #expect(notes.contains { $0.id == existingNoteID && $0.note == "Keep me" })
+        #expect(notes.contains { $0.id == newNoteID && $0.note == "New from file" })
+    }
+
+    @Test func replaceSnapshotsBookmarksAndSavedSearches() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self, SavedSearch.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let keepWork = SavedWork(id: UUID(), title: "Keep", author: "A")
+        context.insert(keepWork)
+        context.insert(Bookmark(title: "Local only", urlString: "https://archiveofourown.org/works/1"))
+        let keepLink = Bookmark(title: "In both", urlString: "https://archiveofourown.org/works/2")
+        context.insert(keepLink)
+        let dropSearch = SavedSearch(name: "Local search", filters: AO3SearchFilters())
+        context.insert(dropSearch)
+        try context.save()
+
+        let fileLink = Bookmark(title: "From file", urlString: "https://archiveofourown.org/works/2")
+        let fileSearch = SavedSearch(name: "File search", filters: AO3SearchFilters())
+        let contents = try KudosBackupService.makeContents(
+            works: [keepWork],
+            bookmarks: [fileLink],
+            fonts: [],
+            readingQueues: [],
+            savedSearches: [fileSearch],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(
+            contents, into: context, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        let urls = Set(try context.fetch(FetchDescriptor<Bookmark>()).map(\.urlString))
+        #expect(urls == ["https://archiveofourown.org/works/2"])
+        let searches = try context.fetch(FetchDescriptor<SavedSearch>())
+        #expect(searches.map(\.id) == [fileSearch.id])
+        #expect(searches.map(\.name) == ["File search"])
+    }
+
+    @Test func replaceDeltaMatchesWorksByAO3IdentityNotUUID() throws {
+        let localID = UUID()
+        let fileID = UUID()
+        let local = SavedWork(id: localID, title: "Local", author: "A")
+        local.ao3WorkID = 4242
+        local.sourceURL = "https://archiveofourown.org/works/4242"
+        let incomingWork = SavedWork(id: fileID, title: "File", author: "A")
+        incomingWork.ao3WorkID = 4242
+        incomingWork.sourceURL = "https://archiveofourown.org/works/4242"
+        let contents = try KudosBackupService.makeContents(
+            works: [incomingWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        let delta = BackupReplaceWorkDelta.classify(
+            localWorks: [local],
+            incoming: contents.manifest.works
+        )
+        #expect(delta.willAdd == 0)
+        #expect(delta.willRemove == 0)
+        #expect(delta.inBoth == 1)
+    }
+
     /// Decode a hand-written manifest JSON blob with the same date strategy the
     /// real archive path uses (fractional seconds + whole-second fallback).
     private func decodeManifestJSON(_ json: String) throws -> KudosBackupManifest {

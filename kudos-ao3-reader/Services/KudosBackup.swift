@@ -1364,10 +1364,15 @@ enum KudosBackupService {
                 isNewCollection = true
             }
 
-            let incomingWins = isNewCollection || SyncMerge.shouldApplyIncoming(
-                localModifiedAt: collection.lastModifiedAt,
-                incomingModifiedAt: incomingModifiedAt
-            )
+            // File Merge is add-only: keep the local collection name/fields.
+            let incomingWins = if mode == .merge {
+                isNewCollection
+            } else {
+                isNewCollection || SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: collection.lastModifiedAt,
+                    incomingModifiedAt: incomingModifiedAt
+                )
+            }
             if incomingWins || collection.name.isEmpty {
                 collection.name = archived.name
                 collection.syncStatusRaw = archived.syncStatusRaw ?? collection.syncStatusRaw
@@ -1494,10 +1499,14 @@ enum KudosBackupService {
                 )
             }
             let localModifiedAt = SyncMerge.effectiveQueueModifiedAt(queue)
-            let incomingWins = SyncMerge.shouldApplyIncoming(
-                localModifiedAt: localModifiedAt,
-                incomingModifiedAt: incomingModifiedAt
-            )
+            let incomingWins = if mode == .merge {
+                false
+            } else {
+                SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: localModifiedAt,
+                    incomingModifiedAt: incomingModifiedAt
+                )
+            }
             if kind == .savedForLater {
                 queue.name = ReadingQueueService.savedForLaterName
                 queue.kind = .savedForLater
@@ -1568,7 +1577,7 @@ enum KudosBackupService {
             }
             if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
                 let incomingModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
-                if SyncMerge.shouldApplyIncoming(
+                if mode != .merge, SyncMerge.shouldApplyIncoming(
                     localModifiedAt: existing.lastModifiedAt,
                     incomingModifiedAt: incomingModifiedAt
                 ) {
@@ -1605,6 +1614,7 @@ enum KudosBackupService {
             context: context,
             tombstones: tombstones,
             restoredWorksByArchivedID: restoredWorksByArchivedID,
+            mode: mode,
             suppressed: &suppressedAnnotations
         )
 
@@ -1630,6 +1640,12 @@ enum KudosBackupService {
                 savedSearchesByID[archived.id] = search
             }
         }
+        if mode == .replaceLibrary {
+            let snapshotSearchIDs = Set(contents.manifest.savedSearches.map(\.id))
+            for search in existingSavedSearches where !snapshotSearchIDs.contains(search.id) {
+                context.delete(search)
+            }
+        }
 
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(
@@ -1647,6 +1663,14 @@ enum KudosBackupService {
             }
             bookmark.title = archived.title
             bookmark.dateAdded = archived.dateAdded
+        }
+        if mode == .replaceLibrary {
+            // Bookmarks have no Recently Deleted UI. Drop omissions without a
+            // tombstone so a later Merge can insert them again.
+            let snapshotURLs = Set(contents.manifest.bookmarks.map(\.urlString))
+            for bookmark in existingBookmarks where !snapshotURLs.contains(bookmark.urlString) {
+                context.delete(bookmark)
+            }
         }
 
         let existingFonts = try context.fetch(FetchDescriptor<CustomFont>())
@@ -1777,6 +1801,7 @@ enum KudosBackupService {
         context: ModelContext,
         tombstones: TombstoneIndex,
         restoredWorksByArchivedID: [UUID: SavedWork],
+        mode: BackupImportMode,
         suppressed: inout Int
     ) {
         guard !contents.manifest.annotations.isEmpty else { return }
@@ -1797,6 +1822,9 @@ enum KudosBackupService {
             }
 
             if let local = byID[archived.id] {
+                // File Merge is add-only by annotation id: never overwrite a
+                // highlight/note this device already has. New ids still insert.
+                if mode == .merge { continue }
                 guard SyncMerge.shouldApplyIncoming(
                     localModifiedAt: local.lastModifiedAt,
                     incomingModifiedAt: incomingModifiedAt

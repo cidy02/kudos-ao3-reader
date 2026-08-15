@@ -2,7 +2,7 @@
 
 **Workspace:** `/Users/cidy02/kudos-fix-tombstone`  
 **Branch:** `security-fixes/tombstone-trust` (from `c241d2f` / `origin/hig-review`)  
-**HEAD:** branch tip of `security-fixes/tombstone-trust` — **10 local commits ahead** of `origin/hig-review`, nothing pushed. Run `git log --oneline origin/hig-review..HEAD`.  
+**HEAD:** branch tip of `security-fixes/tombstone-trust` — local only, nothing pushed. Run `git log --oneline origin/hig-review..HEAD` and `git status`.  
 **Embargo:** local only. Do **not** push, merge, open a PR, or create a remote branch.  
 **Do not** run git in `/Users/cidy02/Documents/AO3_App_OpenSource`.  
 **Discussion:** `/Users/cidy02/kudos-fix-tombstone/backup-trust-design-discussion.md`  
@@ -10,12 +10,65 @@
 **Android notes:** `/Users/cidy02/kudos-fix-tombstone/android/PHASE1-NOTES.md`  
 **Prior iOS review:** `/Users/cidy02/kudos-fix-tombstone/GROK-REVIEW-IOS.md` (partly stale — items 1, 2, 4 were fixed in `7b77316` / `14267e5`)
 
-This document is four things:
+This document is five things:
 
-1. **Accomplishment report** (what this session actually shipped).
-2. **Review brief** for the Phase 1 diff as it stands (§B).
-3. **Remaining work** with implement vs review owners (§C).
-4. **Locked Phase 1 spec** (§1–§5). The earlier “trust tombstones only on first empty-device restore” design is rejected.
+1. **Progress for Claude** (review map — start here).
+2. **Accomplishment report** (what this session actually shipped).
+3. **Review brief** for the Phase 1 core (§B).
+4. **Remaining work** with implement vs review owners (§C).
+5. **Locked Phase 1 spec** (§1–§5). The earlier “trust tombstones only on first empty-device restore” design is rejected.
+
+---
+
+## Progress for Claude (2026-08-15, live)
+
+Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the whole pile before any merge**. Do **not** push. Do **not** merge. Phase 2 crypto is **not** in this merge.
+
+**Review the branch** `security-fixes/tombstone-trust` vs `origin/hig-review` (`c241d2f`) **plus** any still-dirty Android close-out if `git status` shows it.
+
+### Status key
+
+`DONE` committed · `WIP` implemented, not yet GREEN/committed · `OPEN` not started · `SKIP` owner/out of scope for this merge · `REVIEW` waiting for Claude
+
+| ID | Status | What | Where to look |
+|---|---|---|---|
+| Core tombstone drop + 3 modes | **DONE** | Incoming unsigned tombstones dropped on Merge / Replace / reconcile. Folder sync uses default reconcile. | `a1aa83f` `a0533c1` `ab04d64` |
+| iOS Replace extra step + snapshot-wins | **DONE** | Pause-sync `setAutoSyncEnabled`; ignore local suppressors; no appearance apply. | `7b77316` |
+| Android RECONCILE vs add-only MERGE + undelete | **DONE** | File UI passes MERGE. Folder sync default RECONCILE. MERGE undeletes `isDeleted`. | `ab04d64` `bf81772` |
+| Tests + Mutation A/B (core) | **DONE** | iOS 30/0/30 (`/tmp/tomb-ios-rerun.xcresult`). Android 787/0/0 then 10/0/0 undelete. | `14267e5` `IMPLEMENTATION-NOTES.md` `android/PHASE1-NOTES.md` |
+| **R0** independent Opus review of shipped Phase 1 | **OPEN** | Opus quota blocked. Claude is the review gate before merge. | §B |
+| **R1** identity-aware Replace counts | **DONE iOS** / **WIP Android** | iOS: `BackupReplaceWorkDelta` + `replaceDeltaMatchesWorksByAO3IdentityNotUUID`. Android: subagent in progress. | `SettingsView.swift`; Android `BackupMergeService.preview` |
+| **R2+R10** Merge add-only notes; insert new annotation ids | **DONE iOS** / **WIP Android** | iOS: `restoreAnnotations` skip LWW on `.merge`; collection/queue/membership LWW skipped on merge. `fileMergeAddsNewAnnotationIDsWithoutOverwritingExisting` GREEN. | `KudosBackup.swift` |
+| **R3** iOS folder-sync ingest test | **DONE** | `foldConflictContentsDoesNotAdoptIncomingUnsignedTombstones` GREEN (`FolderSyncService.foldConflictContents`). | `KudosTests/FolderSyncTests.swift` |
+| **R4** stale Android PHASE1-NOTES | **OPEN** | Android subagent tasked. | `android/PHASE1-NOTES.md` |
+| **R5** iOS Merge undelete test | **DONE** | `fileMergeUndeletesPendingDeletion` GREEN. | `KudosBackupTests.swift` |
+| **R6** Replace UI arming tests | **SKIP** | No SwiftUI/Compose harness. Do not invent one for this merge. | — |
+| **R7** GREEN last after close-out | **DONE iOS** / **OPEN Android** | iOS `/tmp/tomb-ios-closeout.xcresult`: **Passed 54 / 0 / 54** (`KudosBackupTests` + `FolderSyncTests`). Android pending subagent. | Filter `PersistenceGateSuites/KudosBackupTests` and `FolderSyncTests` |
+| **R8** Replace snapshots links + saved searches | **DONE iOS** / **WIP Android** | iOS: omitted bookmarks/saved searches `context.delete` (no RD UI on those models — no tombstone). `replaceSnapshotsBookmarksAndSavedSearches` GREEN. | `KudosBackup.swift` |
+| **R9** Android Replace → Recently Deleted | **WIP Android** | Subagent: soft-delete works, do not `deleteById`. | `BackupRepository.removeRecordsAbsentFromReplaceSnapshot` |
+| **R-P2-*** Phase 2 Ed25519 | **SKIP this merge** | Specified in §2 / §C.3. Not implemented. Do not start in this worktree (same files as Phase 1). | — |
+| Original audit WPs A–F | **OUT OF THIS BRANCH** | Separate worktrees (`kudos-fix-wp-*`). Not part of this merge. | Do not review those files here unless owner expands scope |
+
+### iOS close-out files (this session, Grok — commit with this handoff)
+
+- `kudos-ao3-reader/Services/KudosBackup.swift`
+- `kudos-ao3-reader/Settings/SettingsView.swift` (`BackupReplaceWorkDelta`)
+- `KudosTests/KudosBackupTests.swift` (R1/R5/R8/R10 tests)
+- `KudosTests/FolderSyncTests.swift` (R3)
+
+### What Claude should hunt (close-out + core)
+
+Same §B list, plus:
+
+1. Bookmark / SavedSearch Replace is **hard delete without tombstone** (no `isPendingDeletion` on those models). Confirm that cannot plant a suppressor and that later Merge can re-insert.
+2. `BackupReplaceWorkDelta` uses `WorkIdentityIndex` (ao3 → canonical URL → UUID).
+3. Merge still **inserts** new annotation ids on an existing work (`R10`).
+4. Folder-sync test hits `foldConflictContents`, not only default `restore`.
+5. Android R9 must leave a soft-deleted **work row** so later MERGE undelete works.
+
+### Owner merge rule
+
+Claude reviews → owner merges. No agent push. No agent merge to `hig-review`.
 
 ### Agent roles (standing)
 
@@ -266,24 +319,26 @@ Do these in order. Do not start Phase 2 until the owner says so. Local commits o
 
 | ID | Work | Implement | Review |
 |---|---|---|---|
-| **R0** | Independent review of Phase 1 as shipped (`origin/hig-review...HEAD`). Follow §B. Write `REVIEW-OPUS5-OR-CODEX.md`. | — (read-only) | **Opus** (5 else 4.6). Optional second pass: **Codex Sol 5.6**. |
+| **R0** | Independent review of Phase 1 as shipped + close-out. Follow §B and §Progress. | — (read-only) | **Claude** before merge. Optional: Opus 5/4.6 or Codex Sol 5.6. |
 
-Grok already reviewed the iOS side (`GROK-REVIEW-IOS.md`; several items fixed in `7b77316`). R0 is the missing reverse review (Android + Grok finish + whether those iOS fixes hold).
+Grok already reviewed the iOS core (`GROK-REVIEW-IOS.md`; several items fixed in `7b77316`). Owner assigned Claude as the merge-gate review.
 
-### C.1 Phase 1 close-out (do after R0, unless R0 is BLOCK)
+### C.1 Phase 1 close-out
 
-| ID | Work | Implement | Review | Notes |
-|---|---|---|---|---|
-| **R1** | **Identity-aware Replace confirmation counts.** Classify will-add / will-remove / in-both with the same `ao3WorkID` → canonical `sourceURL` → `recordID` order restore uses. Feed those counts to the amber rule and the “Remove N works…” checkbox. | **Opus** iOS `ReplaceLibraryConfirmationView`. **Grok** Android `BackupImportPreview` / `BackupScreen`. | Cross: Opus reviews Android; Grok reviews iOS. | UUID-only today. Overstates removals on a cross-device backup of the same AO3 works. |
-| **R2** | **File Merge must not overwrite notes on active overlap** (see also locked **R10**). Gate annotation / collection-name / queue-membership LWW so `.merge` / `MERGE` only *adds* missing records. Existing annotation IDs stay local. **New annotation IDs on a work you already have are inserted.** New/undeleted works may still get collections so they are not orphaned. Reconcile stays LWW. | **Opus** `restoreAnnotations` + collection/queue loops in `KudosBackup.swift`. **Grok** `mergeAnnotations` / `mergeCollections` / `mergeQueues` when `mode == MERGE`. | Cross. | Spec: Merge does not overwrite progress, tags, **notes**, or EPUB. Work row is already protected. |
-| **R3** | **iOS folder-sync ingest test at the real caller.** Add a production-entry test of `FolderSyncService.syncDown` / `foldConflictContents` (not only default `restore`) whose remote manifest carries a `savedWork` tombstone + the work. Assert no local `SyncTombstone` and the work present. | **Opus** in `FolderSyncTests` or `KudosBackupTests`. | **Grok** | Mutation B today would miss a `FolderSyncService` re-insert before `restore`. |
-| **R4** | **Android `PHASE1-NOTES.md` Gaps is stale.** It still says Merge does not undelete Recently Deleted. That is false after `bf81772`. Rewrite the Gaps list to match §C. | **Grok** | **Opus** (skim) | Docs only. |
-| **R5** | **Production-entry test: Merge undelete Recently Deleted** on iOS if not already explicit (Android has `importPackageMergeUndeletesPendingDeletion`). | **Opus** if missing. | **Grok** | Confirm before adding a duplicate. |
-| **R6** | **Replace extra-step UI tests.** 1.5s arming, checkbox required, pause-sync default on, amber when much smaller. | **Opus** SwiftUI if a harness exists. **Grok** Compose if a harness exists. | Cross. | Lower priority. Do not invent a UI test stack. |
-| **R7** | **GREEN last after R1–R5 and R8–R10.** iOS: `KudosTests/PersistenceGateSuites/KudosBackupTests` (never the short filter; never `-sdk` + UDID). Android: `:app:testDebugUnitTest`. Quote counts. Mutation A/B if restore/tombstone code changed. | The implementer of the last patch on that platform. | The other agent. | `totalTestCount` 0 is a fail. |
-| **R8** | **Replace snapshots saved links and saved searches.** Local bookmarks / saved searches absent from the file are removed from *this* device (same Recently Deleted / no-tombstone rule as works). File contents become the snapshot. Merge/reconcile still merge-add. | **Opus** iOS bookmark + `SavedSearch` loops in `KudosBackup.swift`. **Grok** Android `mergeBookmarks` / `mergeSavedSearches` (or replace counterparts) when `REPLACE_LIBRARY`. | Cross. | Owner locked 2026-08-15: “r8 replace.” |
-| **R9** | **Android Replace matches iOS Recently Deleted.** Omissions are soft-deleted (`isDeleted` / recovery window) **without** minting tombstones. Do **not** DAO-hard-delete active works. Later Merge must still undelete (already implemented). | **Grok** `BackupMergeService` / `BackupRepository.removeRecordsAbsentFromReplaceSnapshot`. | **Opus** | Owner locked 2026-08-15: “r9 bring Android to parity with iOS.” |
-| **R10** | **File Merge adds new annotation IDs.** On an existing work: leave local annotations whose IDs are already present (no LWW overwrite of note/locator/color). **Insert** incoming annotations whose IDs are not local. Do not skip the whole annotation pass on overlap. Reconcile stays LWW. | **Opus** iOS `restoreAnnotations` when `mode == .merge`. **Grok** Android `mergeAnnotations` when `MERGE`. | Cross. | Owner locked 2026-08-15: “r10 add new IDs.” Fold into R2; do not implement twice. |
+**Live status is the table in §Progress.** Spec text below is what “done” means. Reviewer is **Claude** before merge (owner). Implementer for this close-out is **Grok** (Opus quota).
+
+| ID | Work |
+|---|---|
+| **R1** | Identity-aware Replace confirmation counts (`ao3WorkID` → canonical `sourceURL` → `recordID`). |
+| **R2** | File Merge add-only on collection name / queue name / membership note / existing annotation ids. Reconcile stays LWW. |
+| **R3** | Production-entry folder-sync ingest test (`foldConflictContents` or `syncDown`). |
+| **R4** | Fix stale Android `PHASE1-NOTES.md` Gaps (Merge **does** undelete). |
+| **R5** | iOS production-entry Merge undelete test. |
+| **R6** | Replace extra-step UI tests — **SKIP** this merge (no harness). |
+| **R7** | GREEN last after close-out. Filter `KudosTests/PersistenceGateSuites/KudosBackupTests`. |
+| **R8** | Replace snapshots saved links and saved searches (no tombstone). |
+| **R9** | Android Replace soft-deletes omitted **works** (Recently Deleted), no DAO-hard-delete, no tombstone. |
+| **R10** | File Merge inserts **new** annotation ids; does not overwrite existing ids. Folded into R2. |
 
 ### C.2 Product decisions — locked 2026-08-15
 

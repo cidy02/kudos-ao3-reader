@@ -1451,6 +1451,35 @@ private struct EPUBImportNoticeSummary {
     }
 }
 
+/// Classify Replace confirmation counts with the same identity order restore uses.
+enum BackupReplaceWorkDelta {
+    @MainActor
+    static func classify(
+        localWorks: [SavedWork],
+        incoming: [KudosBackupWork]
+    ) -> (willAdd: Int, willRemove: Int, inBoth: Int) {
+        let index = WorkIdentityIndex(localWorks)
+        var matchedLocalIDs = Set<UUID>()
+        var willAdd = 0
+        for archived in incoming {
+            if let existing = index.existingWork(
+                ao3WorkID: archived.ao3WorkID,
+                sourceURL: archived.sourceURL,
+                recordID: archived.id
+            ) {
+                matchedLocalIDs.insert(existing.id)
+            } else {
+                willAdd += 1
+            }
+        }
+        return (
+            willAdd,
+            localWorks.filter { !matchedLocalIDs.contains($0.id) }.count,
+            matchedLocalIDs.count
+        )
+    }
+}
+
 /// Extra step for Replace Library: counts, checkbox, delayed red button, optional
 /// pause-sync, and a pre-replace backup of the current library.
 struct ReplaceLibraryConfirmationView: View {
@@ -1467,11 +1496,14 @@ struct ReplaceLibraryConfirmationView: View {
     @State private var backupFileName: String?
     @State private var backupError: String?
 
-    private var localIDs: Set<UUID> { Set(localWorks.map(\.id)) }
-    private var backupIDs: Set<UUID> { Set(backup.manifest.works.map(\.id)) }
-    private var willRemove: Int { localIDs.subtracting(backupIDs).count }
-    private var willAdd: Int { backupIDs.subtracting(localIDs).count }
-    private var inBoth: Int { localIDs.intersection(backupIDs).count }
+    /// Same identity order restore uses: ao3WorkID → canonical sourceURL → recordID.
+    private var replaceDelta: (willAdd: Int, willRemove: Int, inBoth: Int) {
+        BackupReplaceWorkDelta.classify(localWorks: localWorks, incoming: backup.manifest.works)
+    }
+
+    private var willRemove: Int { replaceDelta.willRemove }
+    private var willAdd: Int { replaceDelta.willAdd }
+    private var inBoth: Int { replaceDelta.inBoth }
     private var backupIsMuchSmaller: Bool { willRemove >= 20 && willRemove >= willAdd * 10 }
 
     var body: some View {
