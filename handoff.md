@@ -46,7 +46,7 @@ Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the 
 | **R7** GREEN last after close-out | **DONE** both | iOS `/tmp/tomb-ios-closeout.xcresult`: **54 / 0 / 54**. Android `:app:testDebugUnitTest`: **797 / 0 / 0**. | Filters in notes |
 | **R8** Replace snapshots links + saved searches | **DONE** both | iOS `context.delete`; Android drop omitted bookmarks (URL) and searches (id). No tombstones. | `KudosBackup.swift`; `BackupMergeService` / `BackupRepository` |
 | **R9** Android Replace → Recently Deleted | **DONE** | Soft-delete omitted works (`isDeleted`, 90-day window). EPUB kept. No `deleteById`. No tombstone. Later MERGE undeletes. | `BackupRepository.removeRecordsAbsentFromReplaceSnapshot`; merge snapshot path |
-| **R-P2-*** Phase 2 Ed25519 | **IN PROGRESS** | Owner said go. Shared contract `PHASE2-CONTRACT.md`. iOS + Android implementers running in parallel. **No Phase 3.** | `PHASE2-CONTRACT.md` |
+| **R-P2-*** Phase 2 Ed25519 | **DONE iOS** / **WIP Android** | **No Phase 3.** Contract `PHASE2-CONTRACT.md`. iOS `e4c9278` GREEN **39 / 0 / 39**. Android implementer still running (uncommitted). | iOS `TombstoneSigning.swift`; Android `TombstoneSigning.kt` |
 | Original audit WPs A–F | **OUT OF THIS BRANCH** | Separate worktrees (`kudos-fix-wp-*`). Not part of this merge. | Do not review those files here unless owner expands scope |
 
 ### Close-out commits (this session)
@@ -55,7 +55,9 @@ Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the 
 |---|---|
 | `99c8cae` | iOS R1/R2/R3/R5/R8/R10 + this progress section |
 | `293aa1b` | Android R1/R2/R4/R8/R9/R10 + tests |
-| *(this commit)* | Android restore rematch by ao3/canonical URL (parity with iOS). GREEN **797 / 0 / 0** |
+| `ee84fad` | Android restore rematch by ao3/canonical URL (parity with iOS). GREEN **797 / 0 / 0** |
+| `2f5579c` | Shared Phase 2 contract (no Phase 3) |
+| `e4c9278` | iOS Phase 2 Ed25519 sign/verify/trust/re-sign. GREEN **39 / 0 / 39** |
 
 ### Known leftover for Claude (not a reopen of tombstone-drop)
 
