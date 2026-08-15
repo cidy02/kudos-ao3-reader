@@ -165,8 +165,9 @@ struct KeychainAO3SessionVault: AO3SessionPersisting {
 /// App-container session file used when Keychain can't hold the session
 /// (unsigned / Simulator `errSecMissingEntitlement` builds) and as a durable
 /// backup that survives process death better than relying on WebKit cookie
-/// capture alone. Wiped with the app; never migrates via iCloud backup of the
-/// Keychain item.
+/// capture alone. Wiped with the app. The `KudosAuth` directory and
+/// `ao3-session.json` are marked `isExcludedFromBackup` on every save so the
+/// file-vault fallback is not copied into iCloud or a device backup.
 struct FileAO3SessionVault: AO3SessionPersisting {
     private let fileURL: URL
 
@@ -214,6 +215,19 @@ struct FileAO3SessionVault: AO3SessionPersisting {
         #else
         try data.write(to: fileURL, options: [.atomic])
         #endif
+        // Atomic replace creates a new inode; re-apply on every save so an
+        // existing file is not left backup-eligible after overwrite.
+        try Self.excludeFromBackup(directory)
+        try Self.excludeFromBackup(fileURL)
+    }
+
+    /// Marks `url` with `NSURLIsExcludedFromBackupKey` so the Simulator/unsigned
+    /// file-vault fallback is not copied into iCloud or an unencrypted device backup.
+    static func excludeFromBackup(_ url: URL) throws {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutableURL = url
+        try mutableURL.setResourceValues(values)
     }
 
     func delete() throws {
