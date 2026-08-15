@@ -334,6 +334,8 @@ nonisolated struct KudosBackupTombstone: Codable, Equatable {
     let ao3WorkID: Int?
     let deletedOnDeviceID: String
     let deletionReason: String
+    let signerPublicKey: String
+    let signature: String
 
     init(tombstone: SyncTombstone) {
         id = tombstone.id
@@ -345,6 +347,37 @@ nonisolated struct KudosBackupTombstone: Codable, Equatable {
         ao3WorkID = tombstone.ao3WorkID
         deletedOnDeviceID = tombstone.deletedOnDeviceID
         deletionReason = tombstone.deletionReason
+        signerPublicKey = tombstone.signerPublicKey
+        signature = tombstone.signature
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case recordID
+        case recordTypeRaw
+        case createdAt
+        case lastModifiedAt
+        case sourceURL
+        case ao3WorkID
+        case deletedOnDeviceID
+        case deletionReason
+        case signerPublicKey
+        case signature
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        recordID = try container.decode(UUID.self, forKey: .recordID)
+        recordTypeRaw = try container.decode(String.self, forKey: .recordTypeRaw)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        lastModifiedAt = try container.decode(Date.self, forKey: .lastModifiedAt)
+        sourceURL = try container.decode(String.self, forKey: .sourceURL)
+        ao3WorkID = try container.decodeIfPresent(Int.self, forKey: .ao3WorkID)
+        deletedOnDeviceID = try container.decode(String.self, forKey: .deletedOnDeviceID)
+        deletionReason = try container.decode(String.self, forKey: .deletionReason)
+        signerPublicKey = try container.decodeIfPresent(String.self, forKey: .signerPublicKey) ?? ""
+        signature = try container.decodeIfPresent(String.self, forKey: .signature) ?? ""
     }
 }
 
@@ -1209,15 +1242,25 @@ enum KudosBackupService {
         var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
         var skippedInvalidEPUBs = 0
 
-        // Phase 1 backup trust: never adopt incoming unsigned tombstones.
-        // A .kudosbackup is attacker-controlled input — its tombstones could
-        // contain forged deletion claims for works the user never deleted,
-        // permanently suppressing those works from later merges and propagating
-        // through folder sync to every peer. Only local pre-existing tombstones
-        // (from deletions the user performed on this device) are consulted.
-        // Phase 2 will add per-tombstone Ed25519 signatures.
+        // Phase 1: unsigned incoming tombstones still drop.
+        // Phase 2: adopt only if the signature verifies over the incoming
+        // fields and signerPublicKey is already in the local trust store.
+        // A .kudosbackup never writes the trust store.
+        TombstoneSigning.resignLocalUnsignedIfNeeded(in: context, defaults: defaults)
         let localTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
-        let tombstones = TombstoneIndex(localTombstones)
+        var batchTombstones = localTombstones
+        var seenTombstoneKeys = Set(
+            localTombstones.map { "\($0.recordTypeRaw)|\($0.recordID.uuidString.lowercased())" }
+        )
+        for archived in contents.manifest.tombstones {
+            guard TombstoneSigning.shouldAdopt(archived, defaults: defaults) else { continue }
+            let key = "\(archived.recordTypeRaw)|\(archived.recordID.uuidString.lowercased())"
+            guard seenTombstoneKeys.insert(key).inserted else { continue }
+            guard let adopted = makeTombstone(from: archived) else { continue }
+            context.insert(adopted)
+            batchTombstones.append(adopted)
+        }
+        let tombstones = TombstoneIndex(batchTombstones)
 
         let existingTags = try context.fetch(FetchDescriptor<Tag>())
         var tagsByName = Dictionary(
@@ -1236,6 +1279,15 @@ enum KudosBackupService {
                         existing.isPendingDeletion = false
                         existing.deletedAt = nil
                         existing.permanentDeletionScheduledAt = nil
+                        PreservedWorkService.retractTombstone(
+                            recordID: existing.id,
+                            type: .savedWork,
+                            ao3WorkID: existing.ao3WorkID
+                                ?? archived.ao3WorkID
+                                ?? WorkTags.ao3WorkID(from: existing.sourceURL),
+                            sourceURL: existing.sourceURL.isEmpty ? archived.sourceURL : existing.sourceURL,
+                            in: context
+                        )
                         work = existing
                         isNewRecord = false
                     } else {
@@ -2067,6 +2119,26 @@ enum KudosBackupService {
             guard let incomingModifiedAt else { return true }
             return tombstone.lastModifiedAt >= incomingModifiedAt
         }
+    }
+
+    private static func makeTombstone(from archived: KudosBackupTombstone) -> SyncTombstone? {
+        guard let recordType = SyncTombstoneRecordType(rawValue: archived.recordTypeRaw) else {
+            return nil
+        }
+        let tombstone = SyncTombstone(
+            recordID: archived.recordID,
+            recordType: recordType,
+            sourceURL: archived.sourceURL,
+            ao3WorkID: archived.ao3WorkID,
+            createdAt: archived.createdAt,
+            deletedOnDeviceID: archived.deletedOnDeviceID,
+            deletionReason: archived.deletionReason,
+            signerPublicKey: archived.signerPublicKey,
+            signature: archived.signature
+        )
+        tombstone.id = archived.id
+        tombstone.lastModifiedAt = archived.lastModifiedAt
+        return tombstone
     }
 
     /// Thin adapter over the shared `WorkIdentityIndex` for archived backup records

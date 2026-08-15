@@ -142,3 +142,61 @@ Independent review found a compile break and Replace snapshot gaps. Fixed:
 
 - `ReplaceLibraryConfirmationView` + `makePreReplaceBackup` (referenced, not defined)
 - `BackupImportMode.reconcile` so folder sync does not inherit add-only merge
+
+## Phase 2 — Ed25519 tombstone signatures (iOS/macOS)
+
+Signed deletes so a trusted peer can adopt incoming tombstones again. There is
+no Phase 3. Replace still does not mint tombstones. A `.kudosbackup` never
+writes the trust store.
+
+### Files
+
+- `kudos-ao3-reader/Services/TombstoneSigning.swift` — CryptoKit
+  `Curve25519.Signing` payload / sign / verify; Keychain private key
+  (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`); local trusted-pub set
+  plus `NSUbiquitousKeyValueStore` publish of **public** keys only; injectable
+  `now` + `keyOverride` for tests. Unsigned/Simulator Keychain misses fall back
+  to an Application Support file excluded from backup.
+- `kudos-ao3-reader/Models/Models.swift` — `SyncTombstone.signerPublicKey` /
+  `signature` (default `""`)
+- `kudos-ao3-reader/Services/KudosBackup.swift` — `KudosBackupTombstone`
+  decodes missing signature fields as `""`; `restore` still drops unsigned;
+  verified + trusted incoming rows are inserted and included in this batch’s
+  `TombstoneIndex`
+- `kudos-ao3-reader/Services/PersistenceSync.swift` — every
+  `SyncTombstones.recordDeletion` signs after insert; work `sourceURL` is the
+  canonical AO3 URL; `deletedAt` is `createdAt` UTC `yyyy-MM-dd'T'HH:mm:ss'Z'`;
+  one-time `tombstoneMigrationComplete` re-sign from `runIfNeeded` / `run`
+- `kudos-ao3-reader/Services/PreservedWorkService.swift` —
+  `retractTombstone` matches savedWork by ao3WorkID or canonical sourceURL or
+  recordID. File Merge undelete of Recently Deleted uses the same retract.
+- `kudos-ao3-reader/Settings/SettingsView.swift` — this-device hex pub + paste
+  field to trust another hex pub
+
+### Adopt rule
+
+1. Unsigned incoming still drop (Phase 1 tests unchanged).
+2. Signature verifies over the incoming fields, not local state.
+3. `signerPublicKey` must already be trusted. Own device pub is always trusted.
+4. Forged or untrusted signatures are not inserted and do not suppress.
+5. Replace still does not mint tombstones for omitted works.
+
+### Tests (`KudosTests/KudosBackupTests.swift`, production `restore`)
+
+- Existing unsigned-drop tests stay as-is.
+- `trustedSignedIncomingTombstoneIsAdoptedAndSuppressesWork`
+- `untrustedButValidSignedTombstoneIsDropped`
+- `forgedSignatureOnTrustedKeyIsDropped`
+- `restoreDoesNotAddIncomingSignerPublicKeyToTrustStore`
+- `retractTombstoneMatchesAO3OrCanonicalURLNotOnlyRecordID`
+
+Filter: `-only-testing:KudosTests/PersistenceGateSuites/KudosBackupTests`
+
+GREEN last (`/tmp/tomb-p2-ios.xcresult`):
+
+```
+result: Passed
+passedTests: 39
+failedTests: 0
+totalTestCount: 39
+```

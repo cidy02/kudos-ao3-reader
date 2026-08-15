@@ -1771,6 +1771,232 @@ struct KudosBackupTests {
         #expect(searches.map(\.name) == ["File search"])
     }
 
+    @Test func trustedSignedIncomingTombstoneIsAdoptedAndSuppressesWork() throws {
+        let defaults = try testDefaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        let peerPub = TombstoneSigning.publicKeyHex(of: peer)
+        #expect(TombstoneTrustStore.add(peerPub, defaults: defaults))
+
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let workDate = Date(timeIntervalSince1970: 100)
+        let deletedAt = Date(timeIntervalSince1970: 200)
+        let remoteWork = SavedWork(id: workID, title: "Should Stay Deleted", author: "Peer")
+        remoteWork.ao3WorkID = 7_001
+        remoteWork.sourceURL = "https://archiveofourown.org/works/7001"
+        remoteWork.markModified(workDate)
+        let tomb = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/7001",
+            ao3WorkID: 7_001,
+            createdAt: deletedAt
+        )
+        TombstoneSigning.sign(tomb, key: peer)
+        let snapshot = try KudosBackupService.makeContents(
+            works: [remoteWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [tomb],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults)
+
+        let stored = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(stored.contains { $0.recordID == workID && $0.signature == tomb.signature })
+        #expect(
+            try context.fetch(FetchDescriptor<SavedWork>()).isEmpty,
+            "Trusted signed tombstone must suppress the work in the same snapshot"
+        )
+
+        let later = try KudosBackupService.makeContents(
+            works: [remoteWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(later, into: context, defaults: defaults)
+        #expect(
+            try context.fetch(FetchDescriptor<SavedWork>()).isEmpty,
+            "Adopted trusted tombstone must still suppress a later restore of that work"
+        )
+    }
+
+    @Test func untrustedButValidSignedTombstoneIsDropped() throws {
+        let defaults = try testDefaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let remoteWork = SavedWork(id: workID, title: "Keep Me", author: "Peer")
+        remoteWork.ao3WorkID = 7_002
+        remoteWork.sourceURL = "https://archiveofourown.org/works/7002"
+        remoteWork.markModified(Date(timeIntervalSince1970: 100))
+        let tomb = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/7002",
+            ao3WorkID: 7_002,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        TombstoneSigning.sign(tomb, key: peer)
+        let snapshot = try KudosBackupService.makeContents(
+            works: [remoteWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [tomb],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults)
+
+        #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).map(\.title) == ["Keep Me"])
+        #expect(!TombstoneTrustStore.isTrusted(TombstoneSigning.publicKeyHex(of: peer), defaults: defaults))
+    }
+
+    @Test func forgedSignatureOnTrustedKeyIsDropped() throws {
+        let defaults = try testDefaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        #expect(TombstoneTrustStore.add(TombstoneSigning.publicKeyHex(of: peer), defaults: defaults))
+
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let remoteWork = SavedWork(id: workID, title: "Keep Forged", author: "Peer")
+        remoteWork.ao3WorkID = 7_003
+        remoteWork.sourceURL = "https://archiveofourown.org/works/7003"
+        remoteWork.markModified(Date(timeIntervalSince1970: 100))
+        let tomb = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/7003",
+            ao3WorkID: 7_003,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        TombstoneSigning.sign(tomb, key: peer)
+        tomb.signature = flipSignatureHex(tomb.signature)
+        let snapshot = try KudosBackupService.makeContents(
+            works: [remoteWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [tomb],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults)
+
+        #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).map(\.title) == ["Keep Forged"])
+    }
+
+    @Test func restoreDoesNotAddIncomingSignerPublicKeyToTrustStore() throws {
+        let defaults = try testDefaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        let peerPub = TombstoneSigning.publicKeyHex(of: peer)
+
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let remoteWork = SavedWork(id: workID, title: "No TOFU", author: "Peer")
+        let tomb = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/7004",
+            ao3WorkID: 7_004,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        TombstoneSigning.sign(tomb, key: peer)
+        #expect(!tomb.signerPublicKey.isEmpty)
+        let snapshot = try KudosBackupService.makeContents(
+            works: [remoteWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [tomb],
+            defaults: defaults
+        )
+        #expect(snapshot.manifest.tombstones.first?.signerPublicKey == peerPub)
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults)
+
+        #expect(!TombstoneTrustStore.isTrusted(peerPub, defaults: defaults))
+        #expect(!(defaults.stringArray(forKey: TombstoneTrustStore.localKeysKey) ?? []).contains(peerPub))
+    }
+
+    @Test func retractTombstoneMatchesAO3OrCanonicalURLNotOnlyRecordID() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let localID = UUID()
+        let foreignTombstoneID = UUID()
+        let local = SavedWork(id: localID, title: "Recently Deleted", author: "A")
+        local.ao3WorkID = 8_008
+        local.sourceURL = "https://archiveofourown.org/works/8008"
+        local.isPendingDeletion = true
+        context.insert(local)
+        let planted = SyncTombstone(
+            recordID: foreignTombstoneID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/8008?view_full_work=true",
+            ao3WorkID: 8_008
+        )
+        context.insert(planted)
+        try context.save()
+
+        let incoming = SavedWork(id: localID, title: "Restored From File", author: "A")
+        incoming.ao3WorkID = 8_008
+        incoming.sourceURL = "https://archiveofourown.org/works/8008"
+        let contents = try KudosBackupService.makeContents(
+            works: [incoming],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(contents, into: context, defaults: try testDefaults(), mode: .merge)
+
+        #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
+        let stored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+        #expect(stored.isPendingDeletion == false)
+    }
+
     @Test func replaceDeltaMatchesWorksByAO3IdentityNotUUID() throws {
         let localID = UUID()
         let fileID = UUID()
@@ -1800,6 +2026,11 @@ struct KudosBackupTests {
     /// real archive path uses (fractional seconds + whole-second fallback).
     private func decodeManifestJSON(_ json: String) throws -> KudosBackupManifest {
         try KudosBackupContents.decodeManifest(Data(json.utf8))
+    }
+
+    private func flipSignatureHex(_ hex: String) -> String {
+        guard let last = hex.last else { return hex }
+        return String(hex.dropLast()) + String(last == "0" ? "1" : "0")
     }
 
     private func testDefaults() throws -> UserDefaults {
