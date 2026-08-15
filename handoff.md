@@ -46,7 +46,7 @@ Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the 
 | **R7** GREEN last after close-out | **DONE** both | iOS `/tmp/tomb-ios-closeout.xcresult`: **54 / 0 / 54**. Android `:app:testDebugUnitTest`: **797 / 0 / 0**. | Filters in notes |
 | **R8** Replace snapshots links + saved searches | **DONE** both | iOS `context.delete`; Android drop omitted bookmarks (URL) and searches (id). No tombstones. | `KudosBackup.swift`; `BackupMergeService` / `BackupRepository` |
 | **R9** Android Replace → Recently Deleted | **DONE** | Soft-delete omitted works (`isDeleted`, 90-day window). EPUB kept. No `deleteById`. No tombstone. Later MERGE undeletes. | `BackupRepository.removeRecordsAbsentFromReplaceSnapshot`; merge snapshot path |
-| **R-P2-*** Phase 2 Ed25519 | **SKIP this merge** | Specified in §2 / §C.3. Not implemented. Do not start in this worktree (same files as Phase 1). | — |
+| **R-P2-*** Phase 2 Ed25519 | **IN PROGRESS** | Owner said go. Shared contract `PHASE2-CONTRACT.md`. iOS + Android implementers running in parallel. **No Phase 3.** | `PHASE2-CONTRACT.md` |
 | Original audit WPs A–F | **OUT OF THIS BRANCH** | Separate worktrees (`kudos-fix-wp-*`). Not part of this merge. | Do not review those files here unless owner expands scope |
 
 ### Close-out commits (this session)
@@ -98,7 +98,9 @@ Claude reviews → owner merges. No agent push. No agent merge to `hig-review`.
 
 Cross-review after every implement pass: the implementer does not review their own patch. Opus reviews Grok; Grok reviews Opus. Codex may add a third pass.
 
-Phase 2 (Ed25519, per-tombstone signatures, iCloud pubs, QR) is specified and **not** implemented. It is remaining work R-P2-* in §C, not a license to start it during the Phase 1 review.
+**There is no Phase 3.** Tombstone trust is Phase 1 (drop unsigned) + Phase 2 (sign so deletes can cross devices). After Phase 2 the remaining product work is review/merge, not another crypto phase.
+
+Phase 2 implementation is in progress. Shared wire contract: `PHASE2-CONTRACT.md`.
 
 ---
 
