@@ -1245,9 +1245,11 @@ enum KudosBackupService {
                     }
                 } else {
                     work = existing
-                    isNewRecord = false
+                    // Replace is a snapshot, not LWW: the file wins even when
+                    // the local overlap is newer.
+                    isNewRecord = mode == .replaceLibrary
                 }
-            } else if tombstones.suppressesResurrection(of: archived) {
+            } else if mode != .replaceLibrary, tombstones.suppressesResurrection(of: archived) {
                 // The user explicitly deleted this work on this device and this backup
                 // predates that deletion — do not resurrect it.
                 continue
@@ -1720,16 +1722,18 @@ enum KudosBackupService {
         }
 
         try context.save()
-        var settings = contents.manifest.settings
-        if settings.readerFontID.hasPrefix("custom:") {
-            let fileName = String(settings.readerFontID.dropFirst("custom:".count))
-            if !FileManager.default.fileExists(
-                atPath: Storage.fontsDirectory.appendingPathComponent(fileName).path
-            ) {
-                settings.readerFontID = "system"
+        if mode != .replaceLibrary {
+            var settings = contents.manifest.settings
+            if settings.readerFontID.hasPrefix("custom:") {
+                let fileName = String(settings.readerFontID.dropFirst("custom:".count))
+                if !FileManager.default.fileExists(
+                    atPath: Storage.fontsDirectory.appendingPathComponent(fileName).path
+                ) {
+                    settings.readerFontID = "system"
+                }
             }
+            settings.apply(to: defaults)
         }
-        settings.apply(to: defaults)
         return KudosBackupRestoreSummary(
             // Count what was actually applied — tombstone-suppressed works are skipped
             // and must not inflate the user-facing "N works restored" confirmation.

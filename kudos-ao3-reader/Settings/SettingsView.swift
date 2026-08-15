@@ -582,8 +582,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     syncIsConnected: folderSyncStatus.isConnected,
                     onConfirm: { pauseSync in
                         if pauseSync {
-                            FolderSyncService.setAutoSync(false)
-                            folderSyncStatus = FolderSyncService.snapshot()
+                            setAutoSyncEnabled(false)
                         }
                         showReplaceConfirmation = false
                         restorePendingBackup(backup, mode: .replaceLibrary)
@@ -847,7 +846,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 let summary = try KudosBackupService.restore(
                     backup, into: context, mode: mode
                 )
-                applyRestoredTheme(backup.manifest.settings)
+                if mode != .replaceLibrary {
+                    applyRestoredTheme(backup.manifest.settings)
+                }
                 let verb = mode == .replaceLibrary ? "Replaced" : "Merged"
                 let title = mode == .replaceLibrary ? "Library Replaced" : "Backup Imported"
                 let conflictMessage = summary.conflictMessage
@@ -1495,6 +1496,9 @@ struct ReplaceLibraryConfirmationView: View {
                     }
                     if syncIsConnected {
                         Toggle("Pause Library Sync on this device", isOn: $pauseSync)
+                        Text("Sync will put removed works back. Pause sync for this device?")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                     if let backupFileName {
                         Text("A copy of your current library was saved as \(backupFileName).")
