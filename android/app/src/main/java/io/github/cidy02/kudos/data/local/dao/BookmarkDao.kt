@@ -19,4 +19,7 @@ interface BookmarkDao {
 
     @Query("SELECT * FROM bookmarks ORDER BY dateAdded DESC")
     suspend fun getAll(): List<BookmarkEntity>
+
+    @Query("DELETE FROM bookmarks WHERE id = :id")
+    suspend fun deleteById(id: String)
 }

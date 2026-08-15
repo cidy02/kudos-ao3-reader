@@ -6,6 +6,9 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.documentfile.provider.DocumentFile
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import io.github.cidy02.kudos.core.model.Bookmark
+import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
@@ -16,6 +19,7 @@ import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.works.WorkRepository
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
@@ -197,6 +201,7 @@ class BackupTrustPhase1Test {
     @Test
     fun replaceLibraryRemovesLocalOnlyWorkWithoutMintingTombstones() = runTest {
         database.workDao().upsert(savedWork(WORK_J, "Keep me out of the snapshot").toEntity())
+        workFileStore.writeWorkEpub(WORK_J, "j-epub".toByteArray())
         database.workDao().upsert(savedWork(WORK_K, "Will be replaced").toEntity())
 
         val pack = packageWithWorkAndTombstone(
@@ -208,7 +213,21 @@ class BackupTrustPhase1Test {
         val summary = backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY)
 
         assertEquals(1, summary.worksRemoved)
-        assertNull("J must leave this device's library", database.workDao().getById(WORK_J))
+        val omitted = database.workDao().getById(WORK_J)
+        assertNotNull("J stays in Room as Recently Deleted", omitted)
+        assertEquals(true, omitted?.isDeleted)
+        assertNotNull(omitted?.deletedAt)
+        assertEquals(
+            omitted!!.deletedAt!!.plus(WorkRepository.RECOVERY_WINDOW),
+            omitted.permanentDeletionScheduledAt
+        )
+        assertTrue(
+            database.workDao().getAllIncludingDeleted().any { it.id == WORK_J && it.isDeleted }
+        )
+        assertArrayEquals(
+            "j-epub".toByteArray(),
+            Files.readAllBytes(workFileStore.workEpubPath(WORK_J))
+        )
         assertEquals("Snapshot K", database.workDao().getById(WORK_K)?.title)
         assertTrue(
             "replace must not persist the file tombstone or mint one for J",
@@ -221,9 +240,131 @@ class BackupTrustPhase1Test {
             tombstoneRecordId = "ffffffff-ffff-4fff-8fff-ffffffffffff",
             ao3WorkId = 222
         )
-        val laterSummary = backupRepository.importPackage(later)
-        assertEquals(1, laterSummary.worksCreated)
-        assertEquals("J from later backup", database.workDao().getById(WORK_J)?.title)
+        val laterSummary = backupRepository.importPackage(later, BackupImportMode.MERGE)
+        val restored = database.workDao().getById(WORK_J)
+        assertEquals(false, restored?.isDeleted)
+        assertEquals(null, restored?.deletedAt)
+        assertEquals("J from later backup", restored?.title)
+        assertEquals(1, laterSummary.worksUpdated)
+        assertTrue(database.syncTombstoneDao().getAll().isEmpty())
+    }
+
+    @Test
+    fun previewImportCountsSameAo3WorkDifferentUuidAsInBoth() = runTest {
+        database.workDao().upsert(
+            savedWork(WORK_J, "Phone copy").copy(
+                sourceUrl = "https://archiveofourown.org/works/4242"
+            ).toEntity()
+        )
+        val pack = packageWithWorkAndTombstone(
+            workId = WORK_K,
+            workTitle = "Backup copy",
+            tombstoneRecordId = TOMBSTONE_ID,
+            ao3WorkId = 4242
+        )
+
+        val preview = backupRepository.previewImport(pack)
+
+        assertEquals(1, preview.localWorkCount)
+        assertEquals(1, preview.fileWorkCount)
+        assertEquals(0, preview.willAdd)
+        assertEquals(0, preview.willRemove)
+        assertEquals(1, preview.inBoth)
+    }
+
+    @Test
+    fun importPackageMergeKeepsExistingAnnotationNoteAndInsertsNewId() = runTest {
+        database.workDao().upsert(
+            savedWork(WORK_K, "Local Title").copy(
+                sourceUrl = "https://archiveofourown.org/works/4242"
+            ).toEntity()
+        )
+        database.annotationDao().upsert(
+            ReadingAnnotation(
+                id = ANN_EXISTING,
+                workID = WORK_K,
+                kindRaw = "highlight",
+                colorRaw = "yellow",
+                locatorString = """{"href":"local"}""",
+                note = "keep this note",
+                createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+                lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+            ).toEntity()
+        )
+        val incoming = overlapPackage(
+            title = "Incoming Title",
+            lastModifiedAt = "2026-07-01T00:00:00Z",
+            lastSpineIndex = 8,
+            lastScrollFraction = 0.8,
+            userTags = emptyList(),
+            epubBytes = "incoming-epub".toByteArray()
+        ).let { pack ->
+            pack.copy(
+                manifest = pack.manifest.copy(
+                    annotations = listOf(
+                        BackupAnnotation(
+                            id = ANN_EXISTING,
+                            workID = WORK_K,
+                            kindRaw = "highlight",
+                            colorRaw = "green",
+                            locatorString = """{"href":"incoming"}""",
+                            note = "do not overwrite",
+                            createdAt = "2026-01-01T00:00:00Z",
+                            lastModifiedAt = "2026-07-01T00:00:00Z"
+                        ),
+                        BackupAnnotation(
+                            id = ANN_NEW,
+                            workID = WORK_K,
+                            kindRaw = "bookmark",
+                            note = "new from file",
+                            createdAt = "2026-07-01T00:00:00Z",
+                            lastModifiedAt = "2026-07-01T00:00:00Z"
+                        )
+                    )
+                )
+            )
+        }
+
+        backupRepository.importPackage(incoming, BackupImportMode.MERGE)
+
+        val existing = database.annotationDao().getById(ANN_EXISTING)
+        val inserted = database.annotationDao().getById(ANN_NEW)
+        assertEquals("keep this note", existing?.note)
+        assertEquals("yellow", existing?.colorRaw)
+        assertEquals("""{"href":"local"}""", existing?.locatorString)
+        assertEquals("new from file", inserted?.note)
+    }
+
+    @Test
+    fun importPackageReplaceSnapshotsBookmarksAndSavedSearches() = runTest {
+        database.workDao().upsert(savedWork(WORK_K, "Keep").toEntity())
+        database.bookmarkDao().upsert(
+            Bookmark(
+                id = BOOKMARK_LOCAL,
+                title = "Local only",
+                urlString = "https://example.com/local-only",
+                dateAdded = FIXED_CLOCK
+            ).toEntity()
+        )
+        database.savedSearchDao().upsert(
+            SavedSearch(
+                id = SEARCH_LOCAL,
+                name = "Local only search",
+                dateAdded = FIXED_CLOCK
+            ).toEntity()
+        )
+
+        val pack = packageWithWorkAndTombstone(
+            workId = WORK_K,
+            workTitle = "Snapshot K",
+            tombstoneRecordId = TOMBSTONE_ID,
+            ao3WorkId = 4242
+        )
+        backupRepository.importPackage(pack, BackupImportMode.REPLACE_LIBRARY)
+
+        assertTrue(database.bookmarkDao().getAll().none { it.urlString == "https://example.com/local-only" })
+        assertNull(database.savedSearchDao().getById(SEARCH_LOCAL))
+        assertTrue(database.syncTombstoneDao().getAll().isEmpty())
     }
 
     @Test
@@ -606,5 +747,9 @@ class BackupTrustPhase1Test {
         private const val WORK_K = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
         private const val LOCAL_TAG_ID = "44444444-4444-4444-8444-444444444444"
+        private const val ANN_EXISTING = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        private const val ANN_NEW = "66666666-6666-4666-8666-666666666666"
+        private const val BOOKMARK_LOCAL = "77777777-7777-4777-8777-777777777777"
+        private const val SEARCH_LOCAL = "55555555-5555-4555-8555-555555555555"
     }
 }

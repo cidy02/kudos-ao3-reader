@@ -10,6 +10,7 @@ import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.works.WorkRepository
 import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneOffset
@@ -249,18 +250,43 @@ class BackupRepository(
     }
 
     /**
-     * Replace is this-device-only. Drop rows that are not in the snapshot using
-     * existing DAO deletes — do not mint tombstones (those would become a
-     * standing suppressor / fleet wipe).
+     * Replace is this-device-only. Works omitted from the snapshot go to
+     * Recently Deleted (no EPUB delete, no SyncTombstone). Bookmarks / saved
+     * searches / collections / queues / annotations without a Recently Deleted
+     * persist path are DAO-deleted — do not mint tombstones.
      */
     private suspend fun removeRecordsAbsentFromReplaceSnapshot(snapshot: BackupLibrarySnapshot) {
+        val now = clock()
         val keepWorks = snapshot.works
             .map { BackupPaths.normalizeIdForComparison(it.id) }
             .toSet()
         database.workDao().getAllIncludingDeleted().forEach { entity ->
             if (BackupPaths.normalizeIdForComparison(entity.id) !in keepWorks) {
-                workFileStore.deleteWorkEpub(entity.id)
-                database.workDao().deleteById(entity.id)
+                if (!entity.isDeleted) {
+                    database.workDao().upsert(
+                        entity.copy(
+                            isDeleted = true,
+                            deletedAt = now,
+                            permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                        )
+                    )
+                }
+            }
+        }
+
+        val keepBookmarkUrls = snapshot.bookmarks.mapTo(mutableSetOf()) { it.urlString }
+        database.bookmarkDao().getAll().forEach { entity ->
+            if (entity.urlString !in keepBookmarkUrls) {
+                database.bookmarkDao().deleteById(entity.id)
+            }
+        }
+
+        val keepSavedSearches = snapshot.savedSearches
+            .map { BackupPaths.normalizeIdForComparison(it.id) }
+            .toSet()
+        database.savedSearchDao().getAll().forEach { entity ->
+            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepSavedSearches) {
+                database.savedSearchDao().deleteById(entity.id)
             }
         }
 

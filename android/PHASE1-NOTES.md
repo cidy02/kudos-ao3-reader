@@ -31,10 +31,15 @@ Three restore modes. **Do not collapse file Merge and folder sync.**
   EPUB stay local. Do **not** overwrite EPUB. Do **not** union incoming tags
   onto an existing work. If the local hit is Recently Deleted (`isDeleted`),
   undelete and apply the file. Drop incoming tombstones.
-- **Replace Library:** this device’s works / collections / queues / annotations
-  become the snapshot. Fonts and appearance stay. Incoming unsigned tombstones
-  are not persisted. Removed rows are deleted via existing DAO deletes **without**
-  minting tombstones, so a later Merge of a real backup can insert them again.
+- **Replace Library:** this device’s works / progress / collections / queues /
+  annotations / **saved links (bookmarks)** / **saved searches** become the
+  snapshot (R8). Fonts and appearance stay. Incoming unsigned tombstones are
+  not persisted. Omitted **works** are soft-deleted into Recently Deleted
+  (`isDeleted` + 90-day `WorkRepository.RECOVERY_WINDOW`) **without** minting
+  tombstones and **without** deleting the EPUB (R9). Collections / queues /
+  annotations / bookmarks / saved searches omitted from the file are dropped
+  from this device (no tombstones). A later file Merge undeletes a
+  Recently Deleted work that is present in the file (`bf81772`).
 - **File-import UI** (`BackupScreen`): empty library → one Restore button.
   Non-empty → counts, Merge vs Replace, “Remove N works…” checkbox, 1.5s delay,
   pause-sync prompt (default Pause; folder is not wiped), timestamped safety
@@ -74,7 +79,7 @@ New / updated:
   tombstones; merge adopt assertion is now `0` (unsigned incoming are dropped)
 - `WorkIdentityIndexTest.canonicalUrlHelper` covers `/downloads/<id>`
 
-GREEN last (`:app:testDebugUnitTest`): **787 tests, 0 failures, 0 errors**.
+GREEN last (`:app:testDebugUnitTest`): **794 tests, 0 failures, 0 errors**.
 
 ### Mutation A — restore unconditional tombstone adopt
 
@@ -102,15 +107,24 @@ Mutations reverted. GREEN last as above.
 
 ## Gaps / follow-up
 
-- File Merge does not undelete a local pending-delete / Recently Deleted row
-  when the file contains that work (spec: undelete then apply). Overlap skip
-  keeps the existing deleted row.
-- Replace does not send removed works through Recently Deleted (a standing
-  soft-deleted row would block “later Merge must insert”). DAO delete without
-  a tombstone is used instead.
-- Replace does not rewrite bookmarks / saved searches to the snapshot (they
-  still merge). Fonts/appearance stay by spec.
+Closed this pass (R1 / R2 / R4 / R8 / R9 / R10):
+
+- File Merge **does** undelete Recently Deleted (`bf81772`). Active overlap
+  still keeps title / progress / tags / EPUB.
+- File Merge is add-only on existing annotation / collection-name / queue-name
+  / membership-note IDs (R2). New annotation IDs on a work you already have
+  are inserted (R10). Reconcile stays LWW.
+- Replace confirmation counts (`BackupMergeService.preview`) are identity-aware
+  (`ao3WorkID` → `WorkTags.canonicalAO3WorkURL` → record UUID) via
+  `WorkIdentityIndex.snapshot` (R1). Amber rule unchanged once counts match.
+- Replace snapshots bookmarks and saved searches (R8). Merge/reconcile still
+  merge-add.
+- Replace soft-deletes omitted works into Recently Deleted with no
+  `SyncTombstone` and keeps the EPUB (R9). Later Merge undeletes.
+
+Still open / out of scope:
+
 - Safety backup is app-specific Documents (`getExternalFilesDir`), not the
   shared system Documents folder.
-- No Compose UI test of the 1.5s Replace arming / pause-sync checkbox.
+- No Compose UI test of the 1.5s Replace arming / pause-sync checkbox (R6).
 - Phase 2 Ed25519 not implemented (out of scope).

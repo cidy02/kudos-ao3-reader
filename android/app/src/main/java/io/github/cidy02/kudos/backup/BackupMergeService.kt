@@ -13,6 +13,8 @@ import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
+import io.github.cidy02.kudos.works.WorkIdentityIndex
+import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import java.time.Duration
 import java.time.Instant
@@ -154,15 +156,23 @@ object BackupMergeService {
                 .toSet()
             worksById.keys.toList().forEach { id ->
                 if (id in incomingWorkIds) return@forEach
-                val existing = worksById.remove(id) ?: return@forEach
-                if (!existing.isDeleted) {
-                    summary = summary.copy(worksRemoved = summary.worksRemoved + 1)
-                }
-                userTagsByWorkId.remove(id)
+                val existing = worksById[id] ?: return@forEach
+                if (existing.isDeleted) return@forEach
+                // Recently Deleted, no SyncTombstone. Keep the EPUB and tags.
+                worksById[id] = existing.copy(
+                    isDeleted = true,
+                    deletedAt = now,
+                    permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                )
+                summary = summary.copy(worksRemoved = summary.worksRemoved + 1)
             }
         }
 
-        val bookmarks = mergeBookmarks(current.bookmarks, manifest.bookmarks).also {
+        val bookmarks = mergeBookmarks(
+            current.bookmarks,
+            manifest.bookmarks,
+            mode = mode
+        ).also {
             summary = summary.copy(
                 bookmarksCreated = it.created,
                 bookmarksUpdated = it.updated
@@ -192,6 +202,7 @@ object BackupMergeService {
                 current.collections,
                 manifest.collections,
                 tombstoneIndex,
+                mode,
                 exportedAt,
                 now
             ).also {
@@ -202,7 +213,11 @@ object BackupMergeService {
             }.items
         }
 
-        val savedSearches = mergeSavedSearches(current.savedSearches, manifest.savedSearches).also {
+        val savedSearches = mergeSavedSearches(
+            current.savedSearches,
+            manifest.savedSearches,
+            mode = mode
+        ).also {
             summary = summary.copy(
                 savedSearchesCreated = it.created,
                 savedSearchesUpdated = it.updated
@@ -279,19 +294,33 @@ object BackupMergeService {
         current: BackupLibrarySnapshot,
         backup: KudosBackupPackage
     ): BackupImportPreview {
-        val localIds = current.works
-            .filterNot { it.isDeleted }
-            .map { BackupPaths.normalizeIdForComparison(it.id) }
-            .toSet()
+        val localActive = current.works.filterNot { it.isDeleted }
+        val index = WorkIdentityIndex.snapshot(localActive)
         val fileIds = backup.manifest.works
             .map { BackupPaths.canonicalUuid(it.id, "work.id") }
             .toSet()
+        val matchedLocalIds = mutableSetOf<String>()
+        var willAdd = 0
+        backup.manifest.works.forEach { archived ->
+            val match = index.existingWork(
+                ao3WorkId = archived.ao3WorkID?.toLong(),
+                sourceUrl = archived.sourceURL,
+                recordId = BackupPaths.canonicalUuid(archived.id, "work.id")
+            )
+            if (match != null) {
+                matchedLocalIds += BackupPaths.normalizeIdForComparison(match.id)
+            } else {
+                willAdd += 1
+            }
+        }
         return BackupImportPreview(
-            localWorkCount = localIds.size,
+            localWorkCount = localActive.size,
             fileWorkCount = fileIds.size,
-            willAdd = fileIds.count { it !in localIds },
-            willRemove = localIds.count { it !in fileIds },
-            inBoth = localIds.count { it in fileIds }
+            willAdd = willAdd,
+            willRemove = localActive.count {
+                BackupPaths.normalizeIdForComparison(it.id) !in matchedLocalIds
+            },
+            inBoth = matchedLocalIds.size
         )
     }
 
@@ -436,7 +465,8 @@ object BackupMergeService {
 
     private fun mergeBookmarks(
         current: List<Bookmark>,
-        incoming: List<BackupBookmark>
+        incoming: List<BackupBookmark>,
+        mode: BackupImportMode = BackupImportMode.RECONCILE
     ): MergeItems<Bookmark> {
         val byUrl = current.associateByTo(linkedMapOf()) { it.urlString }
         var created = 0
@@ -452,6 +482,12 @@ object BackupMergeService {
                     title = archived.title,
                     dateAdded = BackupValidator.parseInstant(archived.dateAdded, "bookmark.dateAdded")
                 )
+            }
+        }
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            val incomingUrls = incoming.mapTo(mutableSetOf()) { it.urlString }
+            byUrl.keys.toList().forEach { url ->
+                if (url !in incomingUrls) byUrl.remove(url)
             }
         }
         return MergeItems(byUrl.values.sortedByDescending { it.dateAdded }, created, updated)
@@ -550,6 +586,7 @@ object BackupMergeService {
         current: List<WorkCollection>,
         incoming: List<BackupCollection>,
         tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
         exportedAt: Instant? = null,
         now: Instant = Instant.now()
     ): MergeItems<WorkCollection> {
@@ -582,6 +619,26 @@ object BackupMergeService {
                 collectionsById[id] = restored
                 names += restoredName
                 created += 1
+            } else if (mode == BackupImportMode.MERGE) {
+                // Add-only: keep the local name/fields. Still attach incoming
+                // work IDs so a newly added work is not orphaned.
+                val incomingWorkIds = archived.workIDs
+                    .map { BackupPaths.normalizeIdForComparison(it) }
+                    .distinct()
+                    .filterNot { workId ->
+                        tombstoneIndex.collectionMembershipResolution(
+                            collectionMembershipRecordId(id, workId),
+                            incomingModified
+                        ) == TombstoneResolution.SUPPRESS_STALE
+                    }
+                val existingIds = existing.workIds
+                    .map { BackupPaths.normalizeIdForComparison(it) }
+                    .toSet()
+                val added = incomingWorkIds.filter { it !in existingIds }
+                if (added.isNotEmpty()) {
+                    collectionsById[id] = existing.copy(workIds = existing.workIds + added)
+                    updated += 1
+                }
             } else {
                 val localModified = existing.lastModifiedAt ?: existing.dateAdded
                 if (!SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
@@ -629,7 +686,8 @@ object BackupMergeService {
 
     private fun mergeSavedSearches(
         current: List<SavedSearch>,
-        incoming: List<BackupSavedSearch>
+        incoming: List<BackupSavedSearch>,
+        mode: BackupImportMode = BackupImportMode.RECONCILE
     ): MergeItems<SavedSearch> {
         val searchesById = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -654,6 +712,15 @@ object BackupMergeService {
                 )
                 names += archived.name
                 updated += 1
+            }
+        }
+
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            val incomingIds = incoming.mapTo(mutableSetOf()) {
+                BackupPaths.canonicalUuid(it.id, "savedSearch.id")
+            }
+            searchesById.keys.toList().forEach { id ->
+                if (id !in incomingIds) searchesById.remove(id)
             }
         }
 
@@ -726,6 +793,8 @@ object BackupMergeService {
                 }
                 queuesById[id] = archived.toReadingQueue()
                 queuesCreated += 1
+            } else if (mode == BackupImportMode.MERGE) {
+                // Keep local queue name / fields. New memberships still insert below.
             } else {
                 val localModified = SyncMerge.effectiveQueueModifiedAt(
                     queueUpdatedAt = existing.dateUpdated,
@@ -795,12 +864,11 @@ object BackupMergeService {
             if (existing == null) {
                 membershipsById[id] = restored
                 membershipsCreated += 1
-            } else {
-                val localModified = existing.lastModifiedAt ?: existing.queuedAt
-                if (SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
-                    membershipsById[id] = restored
-                    membershipsUpdated += 1
-                }
+            } else if (mode != BackupImportMode.MERGE &&
+                SyncMerge.shouldApplyIncoming(existing.lastModifiedAt ?: existing.queuedAt, incomingModified)
+            ) {
+                membershipsById[id] = restored
+                membershipsUpdated += 1
             }
         }
 
@@ -880,6 +948,8 @@ object BackupMergeService {
             if (existing == null) {
                 byId[id] = restored
                 created += 1
+            } else if (mode == BackupImportMode.MERGE) {
+                // Keep local note / locator / color. New ids still insert above.
             } else if (mode == BackupImportMode.REPLACE_LIBRARY ||
                 SyncMerge.shouldApplyIncoming(existing.effectiveLastModifiedAt, incomingModified)
             ) {

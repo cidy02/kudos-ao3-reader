@@ -1006,9 +1006,13 @@ class BackupTombstoneTrustPhase1MergeTest {
             ),
             mode = BackupImportMode.REPLACE_LIBRARY
         )
-        assertEquals(1, result.snapshot.works.size)
-        assertEquals(WORK_ID, result.snapshot.works.single().id)
-        assertEquals("From file", result.snapshot.works.single().title)
+        val active = result.snapshot.works.filterNot { it.isDeleted }
+        val omitted = result.snapshot.works.filter { it.isDeleted }
+        assertEquals(1, active.size)
+        assertEquals(WORK_ID, active.single().id)
+        assertEquals("From file", active.single().title)
+        assertEquals(listOf(OTHER_WORK_ID), omitted.map { it.id })
+        assertNotNull(omitted.single().deletedAt)
         assertEquals(1, result.summary.worksRemoved)
         assertTrue(
             "replace must not persist the file's unsigned tombstones or mint new ones",
@@ -1253,6 +1257,56 @@ class BackupTombstoneTrustPhase1MergeTest {
         assertEquals(0, result.summary.worksSuppressed)
         assertEquals(1, result.snapshot.works.size)
     }
+
+    @Test
+    fun previewCountsSameAo3WorkDifferentUuidAsInBoth() {
+        val local = sampleSavedWork(
+            id = OTHER_WORK_ID,
+            title = "Phone copy"
+        ).copy(sourceUrl = "https://archiveofourown.org/works/4242")
+        val incoming = sampleBackupWork().copy(
+            id = WORK_ID,
+            title = "Backup copy",
+            sourceURL = "https://www.archiveofourown.org/works/4242/chapters/9",
+            ao3WorkID = 4242
+        )
+        val preview = BackupMergeService.preview(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(incoming)))
+        )
+        assertEquals(1, preview.localWorkCount)
+        assertEquals(1, preview.fileWorkCount)
+        assertEquals(0, preview.willAdd)
+        assertEquals(0, preview.willRemove)
+        assertEquals(1, preview.inBoth)
+    }
+
+    @Test
+    fun replaceLibrarySnapshotsBookmarksAndSavedSearches() {
+        val localOnlyBookmark = Bookmark(
+            title = "Local only",
+            urlString = "https://example.com/local-only",
+            dateAdded = DATE
+        )
+        val localOnlySearch = SavedSearch(
+            id = OTHER_SEARCH_ID,
+            name = "Local only search",
+            dateAdded = DATE
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                bookmarks = listOf(localOnlyBookmark),
+                savedSearches = listOf(localOnlySearch)
+            ),
+            backup = samplePackage(),
+            mode = BackupImportMode.REPLACE_LIBRARY
+        )
+        assertTrue(result.snapshot.bookmarks.none { it.urlString == localOnlyBookmark.urlString })
+        assertTrue(result.snapshot.bookmarks.any { it.urlString == "https://archiveofourown.org/works/123" })
+        assertTrue(result.snapshot.savedSearches.none { it.id == OTHER_SEARCH_ID })
+        assertTrue(result.snapshot.savedSearches.any { it.id == SEARCH_ID })
+    }
 }
 
 class BackupAnnotationApplyTest {
@@ -1319,6 +1373,60 @@ class BackupAnnotationApplyTest {
             )
         )
         assertTrue(result.snapshot.annotations.isEmpty())
+    }
+
+    @Test
+    fun mergeModeKeepsExistingAnnotationNoteAndInsertsNewId() {
+        val existing = io.github.cidy02.kudos.core.model.ReadingAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "highlight",
+            colorRaw = "yellow",
+            locatorString = """{"href":"local"}""",
+            note = "keep this note",
+            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val incomingExisting = BackupAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "highlight",
+            colorRaw = "green",
+            locatorString = """{"href":"incoming"}""",
+            note = "do not overwrite",
+            createdAt = "2026-01-01T00:00:00Z",
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        )
+        val incomingNew = BackupAnnotation(
+            id = OTHER_ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            note = "new from file",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                annotations = listOf(existing)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(incomingExisting, incomingNew)
+                )
+            ),
+            mode = BackupImportMode.MERGE
+        )
+
+        val byId = result.snapshot.annotations.associateBy { it.id }
+        assertEquals("keep this note", byId.getValue(ANN_ID).note)
+        assertEquals("yellow", byId.getValue(ANN_ID).colorRaw)
+        assertEquals("""{"href":"local"}""", byId.getValue(ANN_ID).locatorString)
+        assertEquals("new from file", byId.getValue(OTHER_ANN_ID).note)
+        assertEquals(1, result.summary.annotationsCreated)
+        assertEquals(0, result.summary.annotationsUpdated)
     }
 }
 
@@ -1728,7 +1836,9 @@ private const val OTHER_WORK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 private const val COLLECTION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 private const val OTHER_COLLECTION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 private const val SEARCH_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+private const val OTHER_SEARCH_ID = "55555555-5555-4555-8555-555555555555"
 private const val ANN_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+private const val OTHER_ANN_ID = "66666666-6666-4666-8666-666666666666"
 private const val QUEUE_ID = "11111111-1111-4111-8111-111111111111"
 private const val MEMBERSHIP_ID = "22222222-2222-4222-8222-222222222222"
 private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"

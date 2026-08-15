@@ -9,8 +9,13 @@ import io.github.cidy02.kudos.network.ao3.AO3URLResolver
  * 2. Canonical AO3 work URL
  * 3. Exact source URL
  * 4. Local UUID
+ *
+ * Backup restore / Replace confirmation use [snapshot] with the locked
+ * order ao3WorkID → [WorkTags.canonicalAO3WorkURL] → record UUID.
  */
 object WorkIdentityIndex {
+    fun snapshot(works: List<SavedWork>): WorkIdentitySnapshot = WorkIdentitySnapshot(works)
+
     fun ao3WorkId(work: SavedWork): Long? = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
 
     fun canonicalSourceUrl(work: SavedWork): String? {
@@ -41,6 +46,43 @@ object WorkIdentityIndex {
         }
         if (candidateSourceUrl.isNotBlank()) {
             bySourceUrl(candidateSourceUrl)?.let { return it }
+        }
+        return null
+    }
+}
+
+/**
+ * In-memory identity index over a snapshot list (Apple `WorkIdentityIndex`).
+ * Strongest available tier wins: AO3 work ID → canonical source URL → record UUID.
+ */
+class WorkIdentitySnapshot(works: List<SavedWork>) {
+    private val byRecordId: Map<String, SavedWork> = works.associateBy { it.id.lowercase() }
+    private val byAo3Id: Map<Long, SavedWork> = buildMap {
+        for (work in works) {
+            WorkTags.ao3WorkIdFromUrl(work.sourceUrl)?.let { put(it, work) }
+        }
+    }
+    private val byCanonicalUrl: Map<String, SavedWork> = buildMap {
+        for (work in works) {
+            WorkTags.canonicalAO3WorkURL(work.sourceUrl)?.let { put(it, work) }
+        }
+    }
+
+    fun existingWork(
+        ao3WorkId: Long? = null,
+        sourceUrl: String? = null,
+        recordId: String? = null
+    ): SavedWork? {
+        val ao3 = ao3WorkId ?: sourceUrl?.let { WorkTags.ao3WorkIdFromUrl(it) }
+        if (ao3 != null) {
+            byAo3Id[ao3]?.let { return it }
+        }
+        val canonical = sourceUrl?.let { WorkTags.canonicalAO3WorkURL(it) }
+        if (canonical != null) {
+            byCanonicalUrl[canonical]?.let { return it }
+        }
+        if (!recordId.isNullOrBlank()) {
+            byRecordId[recordId.lowercase()]?.let { return it }
         }
         return null
     }
