@@ -49,7 +49,7 @@ Phase 1 (this session, no crypto):
 |---|---|---|
 | **reconcile** | Folder sync / default `restore` / default `importPackage` | LWW on overlap. Add missing. Do not delete omitted local works. Drop incoming tombstones. Local tombstones still suppress. |
 | **merge** | File-import **Merge** | Add-only. Undelete Recently Deleted if the file has that work. Do not overwrite active overlap (title/progress/tags/notes/EPUB). Drop incoming tombstones. |
-| **replaceLibrary** | File-import **Replace Library** after extra step | This device’s works / progress / collections / queues / annotations become the snapshot. Fonts, appearance, AO3 login stay. Soft-delete / DAO-delete omissions **without** minting `SyncTombstone`. Drop incoming tombstones. This device only. |
+| **replaceLibrary** | File-import **Replace Library** after extra step | This device’s works / progress / collections / queues / annotations / **saved links (bookmarks)** / **saved searches** become the snapshot. Fonts, appearance, AO3 login stay. Omissions go to **Recently Deleted** on **both** platforms (no `SyncTombstone`). Drop incoming tombstones. This device only. |
 
 Replace extra step: counts, amber if much smaller, checkbox + 1.5s delay, pause-sync default, pre-replace safety `.kudosbackup`. Empty library: one Restore. No Replace-via-sync.
 
@@ -275,20 +275,25 @@ Grok already reviewed the iOS side (`GROK-REVIEW-IOS.md`; several items fixed in
 | ID | Work | Implement | Review | Notes |
 |---|---|---|---|---|
 | **R1** | **Identity-aware Replace confirmation counts.** Classify will-add / will-remove / in-both with the same `ao3WorkID` → canonical `sourceURL` → `recordID` order restore uses. Feed those counts to the amber rule and the “Remove N works…” checkbox. | **Opus** iOS `ReplaceLibraryConfirmationView`. **Grok** Android `BackupImportPreview` / `BackupScreen`. | Cross: Opus reviews Android; Grok reviews iOS. | UUID-only today. Overstates removals on a cross-device backup of the same AO3 works. |
-| **R2** | **File Merge must not overwrite notes on active overlap.** Gate annotation LWW, collection name LWW, and queue-membership note LWW so `.merge` / `MERGE` only *adds* missing records. New/undeleted works may still get collections so they are not orphaned. Reconcile stays LWW. | **Opus** `restoreAnnotations` + collection/queue loops in `KudosBackup.swift`. **Grok** `mergeAnnotations` / `mergeCollections` / `mergeQueues` when `mode == MERGE`. | Cross. | Spec: Merge does not overwrite progress, tags, **notes**, or EPUB. Work row is already protected. |
+| **R2** | **File Merge must not overwrite notes on active overlap** (see also locked **R10**). Gate annotation / collection-name / queue-membership LWW so `.merge` / `MERGE` only *adds* missing records. Existing annotation IDs stay local. **New annotation IDs on a work you already have are inserted.** New/undeleted works may still get collections so they are not orphaned. Reconcile stays LWW. | **Opus** `restoreAnnotations` + collection/queue loops in `KudosBackup.swift`. **Grok** `mergeAnnotations` / `mergeCollections` / `mergeQueues` when `mode == MERGE`. | Cross. | Spec: Merge does not overwrite progress, tags, **notes**, or EPUB. Work row is already protected. |
 | **R3** | **iOS folder-sync ingest test at the real caller.** Add a production-entry test of `FolderSyncService.syncDown` / `foldConflictContents` (not only default `restore`) whose remote manifest carries a `savedWork` tombstone + the work. Assert no local `SyncTombstone` and the work present. | **Opus** in `FolderSyncTests` or `KudosBackupTests`. | **Grok** | Mutation B today would miss a `FolderSyncService` re-insert before `restore`. |
 | **R4** | **Android `PHASE1-NOTES.md` Gaps is stale.** It still says Merge does not undelete Recently Deleted. That is false after `bf81772`. Rewrite the Gaps list to match §C. | **Grok** | **Opus** (skim) | Docs only. |
 | **R5** | **Production-entry test: Merge undelete Recently Deleted** on iOS if not already explicit (Android has `importPackageMergeUndeletesPendingDeletion`). | **Opus** if missing. | **Grok** | Confirm before adding a duplicate. |
 | **R6** | **Replace extra-step UI tests.** 1.5s arming, checkbox required, pause-sync default on, amber when much smaller. | **Opus** SwiftUI if a harness exists. **Grok** Compose if a harness exists. | Cross. | Lower priority. Do not invent a UI test stack. |
-| **R7** | **GREEN last after R1–R5.** iOS: `KudosTests/PersistenceGateSuites/KudosBackupTests` (never the short filter; never `-sdk` + UDID). Android: `:app:testDebugUnitTest`. Quote counts. Mutation A/B if restore/tombstone code changed. | The implementer of the last patch on that platform. | The other agent. | `totalTestCount` 0 is a fail. |
+| **R7** | **GREEN last after R1–R5 and R8–R10.** iOS: `KudosTests/PersistenceGateSuites/KudosBackupTests` (never the short filter; never `-sdk` + UDID). Android: `:app:testDebugUnitTest`. Quote counts. Mutation A/B if restore/tombstone code changed. | The implementer of the last patch on that platform. | The other agent. | `totalTestCount` 0 is a fail. |
+| **R8** | **Replace snapshots saved links and saved searches.** Local bookmarks / saved searches absent from the file are removed from *this* device (same Recently Deleted / no-tombstone rule as works). File contents become the snapshot. Merge/reconcile still merge-add. | **Opus** iOS bookmark + `SavedSearch` loops in `KudosBackup.swift`. **Grok** Android `mergeBookmarks` / `mergeSavedSearches` (or replace counterparts) when `REPLACE_LIBRARY`. | Cross. | Owner locked 2026-08-15: “r8 replace.” |
+| **R9** | **Android Replace matches iOS Recently Deleted.** Omissions are soft-deleted (`isDeleted` / recovery window) **without** minting tombstones. Do **not** DAO-hard-delete active works. Later Merge must still undelete (already implemented). | **Grok** `BackupMergeService` / `BackupRepository.removeRecordsAbsentFromReplaceSnapshot`. | **Opus** | Owner locked 2026-08-15: “r9 bring Android to parity with iOS.” |
+| **R10** | **File Merge adds new annotation IDs.** On an existing work: leave local annotations whose IDs are already present (no LWW overwrite of note/locator/color). **Insert** incoming annotations whose IDs are not local. Do not skip the whole annotation pass on overlap. Reconcile stays LWW. | **Opus** iOS `restoreAnnotations` when `mode == .merge`. **Grok** Android `mergeAnnotations` when `MERGE`. | Cross. | Owner locked 2026-08-15: “r10 add new IDs.” Fold into R2; do not implement twice. |
 
-### C.2 Product decisions (owner first — do not implement until answered)
+### C.2 Product decisions — locked 2026-08-15
 
-| ID | Decision | If yes, implement | Review |
-|---|---|---|---|
-| **R8** | Should **Replace** snapshot **bookmarks and saved searches** (today they merge-add; spec listed works / progress / collections / queues / annotations only)? | **Opus** iOS, **Grok** Android | Cross |
-| **R9** | Should Android Replace send omissions through **Recently Deleted** instead of DAO-delete? A standing soft-deleted row must not block later Merge (Merge undelete already exists). | **Grok** | **Opus** |
-| **R10** | Should file Merge **add** incoming annotations that are *new IDs* on an existing work (add-only notes) or skip all annotation work on overlap? | **Opus** iOS, **Grok** Android once owner picks | Cross |
+| ID | Owner said | Meaning |
+|---|---|---|
+| **R8** | **Replace** | Saved links and saved searches are part of the Replace snapshot, not merge-add leftovers. |
+| **R9** | **Bring Android to parity with iOS** | Android Replace uses Recently Deleted, not a hard DAO delete. |
+| **R10** | **Add new IDs** | File Merge inserts highlights/notes the file has that this phone does not; it never overwrites an existing highlight/note. |
+
+These are no longer questions. Implement as C.1 rows. Do not re-ask.
 
 ### C.3 Phase 2 (specified in §2 — owner must say go)
 
@@ -367,9 +372,15 @@ Owner chose **short inconsistency**: your own deletions will **not** cross devic
 
 **Folder sync** stays implicit **reconcile** forever. No Replace-via-sync.
 
+**Replace snapshot includes** works, progress, collections, queues, in-book annotations, **saved links (browse bookmarks)**, and **saved searches**. Fonts, appearance, AO3 login, and (later) trusted keys stay.
+
+**Replace omissions** go to **Recently Deleted** on iOS **and** Android. Soft-delete only. **No** `SyncTombstone` / Room tombstone. A later Merge of the user’s real backup must still be able to bring those works back (undelete).
+
 **Replace does not persist the file’s unsigned tombstones.** Absence in the snapshot is enough for *this* load. Do **not** mint new standing tombstones for works Replace removed (that would be a signed fleet wipe in Phase 2).
 
 **Replace is this device only.** Other phones are untouched.
+
+**File Merge and in-book notes:** add-only by annotation id. Existing ids stay local. New ids in the file are inserted even if the work already exists. Folder-sync reconcile stays LWW on annotations.
 
 ### Phase 2 (specified, not this session)
 
@@ -391,8 +402,8 @@ Owner chose **short inconsistency**: your own deletions will **not** cross devic
 2. **Do not** use incoming tombstones to populate `TombstoneIndex` for this batch. Local tombstones still apply on Merge/reconcile. **Replace ignores local work suppressors** so the snapshot can load. Still do not insert the file’s tombstones.
 3. Modes:
    - **reconcile (default):** LWW `apply` on overlap. Incoming tombstones dropped. Folder sync omits `mode`.
-   - **merge:** active identity hit → skip `apply`. `isPendingDeletion` → undelete then apply. Insert + apply new works. Still create collections/queues so added works are not orphaned. Do not remove local works.
-   - **replaceLibrary:** snapshot-wins on overlap (treat as `isNewRecord` / incomingWins). Soft-delete omissions (Recently Deleted) **without** `SyncTombstone`. Do not apply incoming appearance settings.
+   - **merge:** active identity hit → skip `apply`. `isPendingDeletion` → undelete then apply. Insert + apply new works. Still create collections/queues so added works are not orphaned. Do not remove local works. Annotations: skip LWW on an existing id; **insert new ids** (R10).
+   - **replaceLibrary:** snapshot-wins on overlap (treat as `isNewRecord` / incomingWins). Soft-delete omitted works / collections / queues / annotations / **bookmarks** / **saved searches** into Recently Deleted **without** `SyncTombstone`. Do not apply incoming appearance settings.
 4. Settings UI: empty → Restore. Non-empty → Merge vs Replace extra step. Pause-sync must call `setAutoSyncEnabled`.
 
 ### Android — `BackupMergeService` / `BackupRepository.importPackage`
@@ -401,20 +412,20 @@ Same three modes (`RECONCILE` / `MERGE` / `REPLACE_LIBRARY`).
 
 - Default of `merge()` / `importPackage` / `importV2ZipBytes` is **RECONCILE**.
 - File-import UI (`BackupScreen`) passes **MERGE** or **REPLACE_LIBRARY** explicitly.
-- MERGE overlap: keep `existing` unless `isDeleted`, then undelete + apply. Do not overwrite EPUB or union tags on an **active** existing work.
+- MERGE overlap: keep `existing` unless `isDeleted`, then undelete + apply. Do not overwrite EPUB or union tags on an **active** existing work. Annotations: keep existing ids; **insert new ids** (R10).
 - RECONCILE: LWW + tag union.
-- REPLACE_LIBRARY: snapshot this device; DAO-delete omissions **without** minting tombstones; keep `current.settings`.
+- REPLACE_LIBRARY: snapshot this device including bookmarks and saved searches (R8). Soft-delete omitted works into Recently Deleted (`isDeleted` + recovery window) **without** minting tombstones (R9 — parity with iOS; no DAO-hard-delete of active works). Keep `current.settings`.
 - Ledger: clamp `lastModifiedAt` with `min(value, exportedAt)` and reject `> now+24h`. Canonicalize `sourceURL` like `WorkTags.canonicalAO3WorkURL`.
 
 ### Invariants to test
 
 **File Merge**
 
-> After `restore(A, mode: .merge)` on a library that already contains work J, a `savedWork` tombstone in A must **not** be in the local tombstone store, and a later `restore(B, mode: .merge)` that contains work K must still insert K. Active overlap is not overwritten.
+> After `restore(A, mode: .merge)` on a library that already contains work J, a `savedWork` tombstone in A must **not** be in the local tombstone store, and a later `restore(B, mode: .merge)` that contains work K must still insert K. Active overlap is not overwritten. A new annotation id in A on work J is inserted; an existing annotation id on J is left local.
 
 **Replace**
 
-> After `restore(A, mode: .replaceLibrary)`, local works absent from A are gone from the active library, A’s works are present, and **no new** work tombstones exist for A’s unsigned tombstones. A later `restore(B, mode: .merge)` of a pre-Replace work **must insert that work**.
+> After `restore(A, mode: .replaceLibrary)`, local works absent from A are in Recently Deleted (not hard-gone, not tombstoned), A’s works are present, A’s bookmarks and saved searches are the snapshot, and **no new** work tombstones exist for A’s unsigned tombstones. A later `restore(B, mode: .merge)` of a pre-Replace work **must insert / undelete that work**.
 
 **Folder sync / reconcile**
 
@@ -424,7 +435,7 @@ Same three modes (`RECONCILE` / `MERGE` / `REPLACE_LIBRARY`).
 
 - Incoming deletion claims from a file or sync folder. **Your deletes on phone A will not appear on phone B** until Phase 2.
 - Replace of an unsigned file cannot plant suppressors that block a later Merge of the user’s real backup.
-- File Merge of an unsigned file cannot overwrite local active overlap.
+- File Merge of an unsigned file cannot overwrite local active overlap (including an existing highlight/note id). New highlight/note ids from the file are still added.
 
 ---
 
