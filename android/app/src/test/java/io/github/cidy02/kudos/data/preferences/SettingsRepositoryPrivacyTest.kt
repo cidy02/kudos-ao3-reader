@@ -42,8 +42,18 @@ class SettingsRepositoryPrivacyTest {
         repo.replaceAll(relaxedSettings)
         
         val current = repo.settings.first()
-        assertTrue(current.privacy.hideMatureContent)
-        assertEquals(MatureContentMode.Hide, current.privacy.matureContentMode)
-        assertTrue(current.privacy.requireBiometricToReveal)
+        assertTrue(
+            "hideMatureContent must stay true under stricter-of restore",
+            current.privacy.hideMatureContent
+        )
+        assertEquals(
+            "matureContentMode must stay Hide under stricter-of restore",
+            MatureContentMode.Hide,
+            current.privacy.matureContentMode
+        )
+        assertTrue(
+            "requireBiometricToReveal must stay true under stricter-of restore",
+            current.privacy.requireBiometricToReveal
+        )
     }
 }
