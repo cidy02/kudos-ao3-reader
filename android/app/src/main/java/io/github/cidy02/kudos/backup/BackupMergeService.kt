@@ -19,8 +19,9 @@ import java.time.Instant
 
 /**
  * Restore semantics aligned with Apple `KudosBackup` + `SyncMerge`:
- * - LWW on work metadata via [lastModifiedAt] (merge)
- * - LWW on reading progress via [progressModifiedAt] / [lastReadDate]
+ * - [BackupImportMode.RECONCILE] (default / folder sync): LWW on work metadata
+ *   via [lastModifiedAt] and progress via [progressModifiedAt] / [lastReadDate]
+ * - [BackupImportMode.MERGE] (file Merge): add-only; keep existing overlap
  * - Local Room tombstones suppress resurrection; **incoming unsigned tombstones
  *   are dropped** on file import and folder-sync ingest (Phase 1)
  * - Queues, memberships, annotations stored and restored by id (LWW)
@@ -29,7 +30,7 @@ object BackupMergeService {
     fun merge(
         current: BackupLibrarySnapshot,
         backup: KudosBackupPackage,
-        mode: BackupImportMode = BackupImportMode.MERGE,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
         now: Instant = Instant.now()
     ): BackupMergeResult {
         val manifest = BackupValidator.validateManifest(backup.manifest)
@@ -89,6 +90,8 @@ object BackupMergeService {
             worksById[id] = if (existing == null) {
                 summary = summary.copy(worksCreated = summary.worksCreated + 1)
                 restored
+            } else if (mode == BackupImportMode.MERGE) {
+                existing
             } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
                 applyReplaceWork(existing, restored)
@@ -113,6 +116,7 @@ object BackupMergeService {
             val incomingEpubWins = existing == null ||
                 mode == BackupImportMode.REPLACE_LIBRARY ||
                 (
+                    mode != BackupImportMode.MERGE &&
                     incomingModifiedAt != null &&
                         existing.effectiveLastModifiedAt.isBefore(incomingModifiedAt)
                     )
@@ -122,6 +126,8 @@ object BackupMergeService {
 
             val mergedTags = if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 archived.userTags.normalizedNames()
+            } else if (mode == BackupImportMode.MERGE && existing != null) {
+                userTagsByWorkId[id].orEmpty()
             } else {
                 (userTagsByWorkId[id].orEmpty() + archived.userTags).normalizedNames()
             }
@@ -651,7 +657,7 @@ object BackupMergeService {
         incomingMemberships: List<BackupReadingQueueMembership>,
         worksById: Map<String, SavedWork>,
         tombstoneIndex: TombstoneIndex,
-        mode: BackupImportMode = BackupImportMode.MERGE,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
         exportedAt: Instant? = null,
         now: Instant = Instant.now()
     ): QueueMerge {
@@ -823,7 +829,7 @@ object BackupMergeService {
         incoming: List<BackupAnnotation>,
         worksById: Map<String, SavedWork>,
         tombstoneIndex: TombstoneIndex,
-        mode: BackupImportMode = BackupImportMode.MERGE,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
         exportedAt: Instant? = null,
         now: Instant = Instant.now()
     ): AnnotationMerge {

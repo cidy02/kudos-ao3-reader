@@ -14,14 +14,22 @@ tombstones are dropped on file Merge, file Replace, and folder-sync ingest.
 - `android/app/src/main/java/io/github/cidy02/kudos/app/AppNavHost.kt`
 - `android/app/src/main/java/io/github/cidy02/kudos/works/WorkTags.kt`
 - `android/app/src/test/java/io/github/cidy02/kudos/backup/BackupCompatibilityTest.kt`
-- `android/app/src/test/java/io/github/cidy02/kudos/backup/BackupTrustPhase1Test.kt` (new)
+- `android/app/src/test/java/io/github/cidy02/kudos/backup/BackupTrustPhase1Test.kt`
 - `android/app/src/test/java/io/github/cidy02/kudos/works/WorkIdentityIndexTest.kt`
 
 ## Behaviour
 
-- **Merge (default, also folder sync):** add / LWW-update works. Do not delete
-  local works. Do not upsert incoming tombstones. Do not suppress from incoming
-  tombstones. Tombstones already in Room still suppress.
+Three restore modes. **Do not collapse file Merge and folder sync.**
+
+- **Reconcile (default of `merge()` / `importPackage` / `importV2ZipBytes`;
+  folder-sync ingest):** last-writer-wins on overlap. Add missing works. Do
+  **not** delete local works omitted from the snapshot. Do not upsert incoming
+  tombstones. Do not suppress from incoming tombstones. Tombstones already in
+  Room still suppress. Tag union on overlap.
+- **Merge (file-import Merge button only):** add-only. Insert works not already
+  in the library. Keep the existing overlap row — title, progress, tags, and
+  EPUB stay local. Do **not** overwrite EPUB. Do **not** union incoming tags
+  onto an existing work. Drop incoming tombstones.
 - **Replace Library:** this device’s works / collections / queues / annotations
   become the snapshot. Fonts and appearance stay. Incoming unsigned tombstones
   are not persisted. Removed rows are deleted via existing DAO deletes **without**
@@ -29,15 +37,16 @@ tombstones are dropped on file Merge, file Replace, and folder-sync ingest.
 - **File-import UI** (`BackupScreen`): empty library → one Restore button.
   Non-empty → counts, Merge vs Replace, “Remove N works…” checkbox, 1.5s delay,
   pause-sync prompt (default Pause; folder is not wiped), timestamped safety
-  `.kudosbackup` in app-specific Documents first.
+  `.kudosbackup` in app-specific Documents first. File Merge passes
+  `BackupImportMode.MERGE`. Replace passes `REPLACE_LIBRARY`. Folder sync
+  omits the mode so it stays `RECONCILE`.
 - **Ledger companions:** `lastModifiedAt` is `min(value, exportedAt)` and
   rejected if `> now+24h`. `sourceURL` is canonicalized like iOS
   `WorkTags.canonicalAO3WorkURL` (work pages, chapters, `/downloads/<id>`).
 
-Merge still LWW-updates overlapping work rows. That matches current iOS
-`KudosBackup.restore` `apply`, existing Android LWW tests, and folder-sync
-updates. Skip-apply on overlap would stop progress/metadata from crossing
-devices.
+Using file Merge for folder sync would freeze overlap on every peer. Using
+folder LWW for file Merge would let a hostile file overwrite local
+notes/progress.
 
 ## Rejected legitimate input (Phase 1)
 
@@ -46,7 +55,8 @@ ignored. **Your deletes on phone A will not appear on phone B** until Phase 2
 signed tombstones. Owner accepted this short inconsistency.
 
 Replace of an unsigned file cannot plant suppressors that block a later Merge
-of the user’s real backup.
+of the user’s real backup. File Merge of an unsigned file cannot overwrite
+local overlap.
 
 ## Tests
 
@@ -55,13 +65,15 @@ Production entry points: `BackupMergeService.merge`,
 
 New / updated:
 
-- `BackupTombstoneTrustPhase1MergeTest` (7)
-- `BackupTrustPhase1Test` (5) — Room `importPackage` + folder-sync ingest
+- `BackupTombstoneTrustPhase1MergeTest` — tombstone drop + MERGE add-only vs
+  RECONCILE LWW at `BackupMergeService.merge`
+- `BackupTrustPhase1Test` — Room `importPackage` MERGE/RECONCILE + folder-sync
+  ingest (tombstones dropped; overlap still LWW on reconcile)
 - `exportsAndReimportsTombstonesInManifest` still asserts the ZIP carries
   tombstones; merge adopt assertion is now `0` (unsigned incoming are dropped)
 - `WorkIdentityIndexTest.canonicalUrlHelper` covers `/downloads/<id>`
 
-GREEN last (`:app:testDebugUnitTest`): **779 tests, 0 failures, 0 errors**.
+GREEN last (`:app:testDebugUnitTest`): **787 tests, 0 failures, 0 errors**.
 
 ### Mutation A — restore unconditional tombstone adopt
 
@@ -89,6 +101,9 @@ Mutations reverted. GREEN last as above.
 
 ## Gaps / follow-up
 
+- File Merge does not undelete a local pending-delete / Recently Deleted row
+  when the file contains that work (spec: undelete then apply). Overlap skip
+  keeps the existing deleted row.
 - Replace does not send removed works through Recently Deleted (a standing
   soft-deleted row would block “later Merge must insert”). DAO delete without
   a tombstone is used instead.

@@ -37,7 +37,13 @@ data class BackupLibrarySnapshot(
 )
 
 enum class BackupImportMode {
-    /** Add works not already present. Keep local overlap. Do not adopt unsigned tombstones. */
+    /**
+     * Folder-sync / default. LWW-update overlap. Do not adopt unsigned tombstones.
+     * Does not delete works omitted from the snapshot.
+     */
+    RECONCILE,
+
+    /** File Merge: add works not already present. Keep local overlap untouched. */
     MERGE,
 
     /**
@@ -87,5 +93,5 @@ data class BackupMergeResult(
     val summary: BackupRestoreSummary,
     val epubFilesToWriteByWorkId: Map<String, ByteArray> = emptyMap(),
     val fontFilesToWriteByFileName: Map<String, ByteArray> = emptyMap(),
-    val mode: BackupImportMode = BackupImportMode.MERGE
+    val mode: BackupImportMode = BackupImportMode.RECONCILE
 )

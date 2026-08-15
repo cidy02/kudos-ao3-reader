@@ -70,14 +70,14 @@ class BackupRepository(
     }
 
     /**
-     * Import a ZIP archive (bytes from SAF). Default is [BackupImportMode.MERGE]:
-     * never deletes existing local works, and never adopts unsigned incoming
-     * tombstones. [BackupImportMode.REPLACE_LIBRARY] makes this device's library
-     * match the snapshot without persisting the file's tombstones.
+     * Import a ZIP archive (bytes from SAF). Default is [BackupImportMode.RECONCILE]
+     * (folder-sync LWW). File Merge uses [BackupImportMode.MERGE] (add-only).
+     * [BackupImportMode.REPLACE_LIBRARY] makes this device's library match the
+     * snapshot without persisting the file's tombstones.
      */
     suspend fun importV2ZipBytes(
         bytes: ByteArray,
-        mode: BackupImportMode = BackupImportMode.MERGE
+        mode: BackupImportMode = BackupImportMode.RECONCILE
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
@@ -90,7 +90,7 @@ class BackupRepository(
 
     suspend fun importPackage(
         pack: KudosBackupPackage,
-        mode: BackupImportMode = BackupImportMode.MERGE
+        mode: BackupImportMode = BackupImportMode.RECONCILE
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val current = captureLibrarySnapshot()

@@ -10,6 +10,8 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.TagEntity
+import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
@@ -24,6 +26,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -42,6 +45,8 @@ import org.robolectric.annotation.Config
  * [importPackageDoesNotAdoptIncomingTombstones] goes red.
  * Mutation B: drop tombstones on file import but still adopt on folder sync →
  * [folderSyncIngestDoesNotAdoptIncomingTombstones] goes red.
+ * File Merge add-only vs folder-sync LWW: [importPackageMergeDoesNotOverwriteExistingOverlap]
+ * vs [importPackageReconcileStillLwwUpdatesOverlap] / [folderSyncIngestStillLwwUpdatesOverlap].
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -222,6 +227,89 @@ class BackupTrustPhase1Test {
     }
 
     @Test
+    fun importPackageMergeDoesNotOverwriteExistingOverlap() = runTest {
+        seedLocalOverlapWork()
+        val incoming = overlapPackage(
+            title = "Incoming Title",
+            lastModifiedAt = "2026-07-01T00:00:00Z",
+            lastSpineIndex = 8,
+            lastScrollFraction = 0.8,
+            userTags = listOf("Incoming"),
+            epubBytes = "incoming-epub".toByteArray(),
+            tombstoneRecordId = WORK_J
+        )
+
+        val summary = backupRepository.importPackage(incoming, BackupImportMode.MERGE)
+
+        val stored = database.workDao().getById(WORK_K)
+        assertNotNull(stored)
+        assertEquals("Local Title", stored?.title)
+        assertEquals(3, stored?.lastSpineIndex)
+        assertEquals(0.3, stored?.lastScrollFraction ?: -1.0, 0.0)
+        assertEquals(listOf("Local"), database.tagDao().getTagsForWork(WORK_K).map { it.name })
+        assertArrayEquals(
+            "local-epub".toByteArray(),
+            Files.readAllBytes(workFileStore.workEpubPath(WORK_K))
+        )
+        assertEquals(0, summary.worksUpdated)
+        assertEquals(0, summary.worksCreated)
+        assertTrue(
+            "incoming unsigned tombstones must not be written to Room",
+            database.syncTombstoneDao().getAll().isEmpty()
+        )
+    }
+
+    @Test
+    fun importPackageReconcileStillLwwUpdatesOverlap() = runTest {
+        seedLocalOverlapWork()
+        val incoming = overlapPackage(
+            title = "Incoming Title",
+            lastModifiedAt = "2026-07-01T00:00:00Z",
+            lastSpineIndex = 8,
+            lastScrollFraction = 0.8,
+            userTags = listOf("Incoming"),
+            epubBytes = "incoming-epub".toByteArray()
+        )
+
+        val summary = backupRepository.importPackage(incoming, BackupImportMode.RECONCILE)
+
+        val stored = database.workDao().getById(WORK_K)
+        assertNotNull(stored)
+        assertEquals("Incoming Title", stored?.title)
+        assertEquals(8, stored?.lastSpineIndex)
+        assertEquals(0.8, stored?.lastScrollFraction ?: -1.0, 0.0)
+        assertEquals(
+            listOf("Incoming", "Local"),
+            database.tagDao().getTagsForWork(WORK_K).map { it.name }.sorted()
+        )
+        assertArrayEquals(
+            "incoming-epub".toByteArray(),
+            Files.readAllBytes(workFileStore.workEpubPath(WORK_K))
+        )
+        assertEquals(1, summary.worksUpdated)
+    }
+
+    @Test
+    fun importPackageMergeDoesNotAdoptIncomingTombstones() = runTest {
+        val pack = packageWithWorkAndTombstone(
+            workId = WORK_K,
+            workTitle = "Should still insert",
+            tombstoneRecordId = WORK_K,
+            ao3WorkId = 4242
+        )
+
+        val summary = backupRepository.importPackage(pack, BackupImportMode.MERGE)
+
+        assertEquals(1, summary.worksCreated)
+        assertEquals(0, summary.worksSuppressed)
+        assertNotNull(database.workDao().getById(WORK_K))
+        assertTrue(
+            "incoming unsigned tombstones must not be written to Room",
+            database.syncTombstoneDao().getAll().isEmpty()
+        )
+    }
+
+    @Test
     fun folderSyncIngestDoesNotAdoptIncomingTombstones() = runTest {
         val remoteWork = backupWork(WORK_K, "From sync folder", 4242)
         val remoteTombstone = BackupTombstone(
@@ -267,6 +355,129 @@ class BackupTrustPhase1Test {
         assertTrue(
             "folder-sync must not insert the remote unsigned tombstone",
             database.syncTombstoneDao().getAll().isEmpty()
+        )
+    }
+
+    @Test
+    fun folderSyncIngestStillLwwUpdatesOverlap() = runTest {
+        seedLocalOverlapWork()
+        val remoteWork = backupWork(
+            id = WORK_K,
+            title = "From sync folder",
+            ao3WorkId = 4242,
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        ).copy(
+            lastSpineIndex = 8,
+            lastScrollFraction = 0.8,
+            lastReadDate = "2026-07-01T00:00:00Z",
+            progressModifiedAt = "2026-07-01T00:00:00Z",
+            userTags = listOf("Incoming")
+        )
+        val remoteTombstone = BackupTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_K,
+            recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+            createdAt = "2026-01-01T00:00:00Z",
+            lastModifiedAt = "2026-01-01T00:00:00Z",
+            sourceURL = "https://archiveofourown.org/works/4242",
+            ao3WorkID = 4242
+        )
+        val manifest = KudosBackupManifest(
+            version = BackupVersion.CURRENT,
+            exportedAt = "2026-07-02T00:00:00Z",
+            exportedBy = BackupExportedBy(
+                platform = "android",
+                appVersion = "test",
+                schemaVersion = BackupVersion.CURRENT
+            ),
+            works = listOf(remoteWork),
+            tombstones = listOf(remoteTombstone),
+            settings = BackupSettingsPayload()
+        )
+
+        val kudos = ensureKudosLibrary()
+        val worksDir = kudos.findFile(BackupPaths.WORKS_DIRECTORY)
+            ?: kudos.createDirectory(BackupPaths.WORKS_DIRECTORY)!!
+        writeChild(
+            kudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(manifest).toByteArray()
+        )
+        writeChild(worksDir, "$WORK_K.epub", "application/epub+zip", "remote-epub".toByteArray())
+
+        val result = syncRepository.runSync()
+        assertTrue("sync: $result", result is SyncResult.Success)
+
+        val stored = database.workDao().getById(WORK_K)
+        assertEquals("From sync folder", stored?.title)
+        assertEquals(8, stored?.lastSpineIndex)
+        assertEquals(0.8, stored?.lastScrollFraction ?: -1.0, 0.0)
+        assertTrue(
+            "folder-sync must not insert the remote unsigned tombstone",
+            database.syncTombstoneDao().getAll().isEmpty()
+        )
+    }
+
+    private suspend fun seedLocalOverlapWork() {
+        database.workDao().upsert(
+            savedWork(WORK_K, "Local Title").copy(
+                lastSpineIndex = 3,
+                lastScrollFraction = 0.3,
+                lastReadDate = Instant.parse("2026-01-01T00:00:00Z"),
+                progressModifiedAt = Instant.parse("2026-01-01T00:00:00Z"),
+                lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z"),
+                sourceUrl = "https://archiveofourown.org/works/4242"
+            ).toEntity()
+        )
+        database.tagDao().upsert(
+            TagEntity(id = LOCAL_TAG_ID, name = "Local", dateCreated = FIXED_CLOCK)
+        )
+        database.tagDao().addToWork(WorkTagCrossRef(workId = WORK_K, tagId = LOCAL_TAG_ID))
+        workFileStore.writeWorkEpub(WORK_K, "local-epub".toByteArray())
+    }
+
+    private fun overlapPackage(
+        title: String,
+        lastModifiedAt: String,
+        lastSpineIndex: Int,
+        lastScrollFraction: Double,
+        userTags: List<String>,
+        epubBytes: ByteArray,
+        tombstoneRecordId: String = TOMBSTONE_ID
+    ): KudosBackupPackage {
+        return KudosBackupPackage(
+            manifest = KudosBackupManifest(
+                version = BackupVersion.CURRENT,
+                exportedAt = "2026-07-02T00:00:00Z",
+                exportedBy = BackupExportedBy(
+                    platform = "android",
+                    appVersion = "test",
+                    schemaVersion = BackupVersion.CURRENT
+                ),
+                works = listOf(
+                    backupWork(WORK_K, title, 4242, lastModifiedAt).copy(
+                        lastSpineIndex = lastSpineIndex,
+                        lastScrollFraction = lastScrollFraction,
+                        lastReadDate = lastModifiedAt,
+                        progressModifiedAt = lastModifiedAt,
+                        userTags = userTags
+                    )
+                ),
+                tombstones = listOf(
+                    BackupTombstone(
+                        id = TOMBSTONE_ID,
+                        recordID = tombstoneRecordId,
+                        recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                        createdAt = lastModifiedAt,
+                        lastModifiedAt = lastModifiedAt,
+                        sourceURL = "https://archiveofourown.org/works/111",
+                        ao3WorkID = 111
+                    )
+                ),
+                settings = BackupSettingsPayload()
+            ),
+            epubFilesByWorkId = mapOf(WORK_K to epubBytes)
         )
     }
 
@@ -356,5 +567,6 @@ class BackupTrustPhase1Test {
         private const val WORK_J = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         private const val WORK_K = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
+        private const val LOCAL_TAG_ID = "44444444-4444-4444-8444-444444444444"
     }
 }
