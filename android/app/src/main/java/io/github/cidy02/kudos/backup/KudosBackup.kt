@@ -36,10 +36,34 @@ data class BackupLibrarySnapshot(
     val annotations: List<ReadingAnnotation> = emptyList()
 )
 
+enum class BackupImportMode {
+    /** Add works not already present. Keep local overlap. Do not adopt unsigned tombstones. */
+    MERGE,
+
+    /**
+     * This device's library becomes the snapshot. Fonts, appearance, and login stay.
+     * Does not persist the file's unsigned tombstones or mint new ones for removals.
+     */
+    REPLACE_LIBRARY
+}
+
+data class BackupImportPreview(
+    val localWorkCount: Int,
+    val fileWorkCount: Int,
+    val willAdd: Int,
+    val willRemove: Int,
+    val inBoth: Int
+) {
+    val isLibraryEmpty: Boolean get() = localWorkCount == 0
+    val isMuchSmallerThanLibrary: Boolean
+        get() = willRemove > 0 && fileWorkCount * 2 < localWorkCount
+}
+
 data class BackupRestoreSummary(
     val worksCreated: Int = 0,
     val worksUpdated: Int = 0,
     val worksSuppressed: Int = 0,
+    val worksRemoved: Int = 0,
     val bookmarksCreated: Int = 0,
     val bookmarksUpdated: Int = 0,
     val fontsCreated: Int = 0,
@@ -62,5 +86,6 @@ data class BackupMergeResult(
     val snapshot: BackupLibrarySnapshot,
     val summary: BackupRestoreSummary,
     val epubFilesToWriteByWorkId: Map<String, ByteArray> = emptyMap(),
-    val fontFilesToWriteByFileName: Map<String, ByteArray> = emptyMap()
+    val fontFilesToWriteByFileName: Map<String, ByteArray> = emptyMap(),
+    val mode: BackupImportMode = BackupImportMode.MERGE
 )

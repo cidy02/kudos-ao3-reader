@@ -70,26 +70,46 @@ class BackupRepository(
     }
 
     /**
-     * Import a ZIP archive (bytes from SAF). Merge-only restore; never deletes
-     * existing local works. Returns a human-readable summary.
+     * Import a ZIP archive (bytes from SAF). Default is [BackupImportMode.MERGE]:
+     * never deletes existing local works, and never adopts unsigned incoming
+     * tombstones. [BackupImportMode.REPLACE_LIBRARY] makes this device's library
+     * match the snapshot without persisting the file's tombstones.
      */
-    suspend fun importV2ZipBytes(bytes: ByteArray): BackupRestoreSummary = persistenceGate.withLock {
+    suspend fun importV2ZipBytes(
+        bytes: ByteArray,
+        mode: BackupImportMode = BackupImportMode.MERGE
+    ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
             val current = captureLibrarySnapshot()
-            val merge = BackupMergeService.merge(current, pack)
+            val merge = BackupMergeService.merge(current, pack, mode = mode)
             applyMergeResult(merge)
             merge.summary
         }
     }
 
-    suspend fun importPackage(pack: KudosBackupPackage): BackupRestoreSummary = persistenceGate.withLock {
+    suspend fun importPackage(
+        pack: KudosBackupPackage,
+        mode: BackupImportMode = BackupImportMode.MERGE
+    ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
             val current = captureLibrarySnapshot()
-            val merge = BackupMergeService.merge(current, pack)
+            val merge = BackupMergeService.merge(current, pack, mode = mode)
             applyMergeResult(merge)
             merge.summary
         }
+    }
+
+    suspend fun previewImport(pack: KudosBackupPackage): BackupImportPreview {
+        val current = captureLibrarySnapshot()
+        return BackupMergeService.preview(current, pack)
+    }
+
+    fun suggestedSafetyBackupFileName(now: Instant = clock()): String {
+        val stamp = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss")
+            .withZone(ZoneOffset.systemDefault())
+            .format(now)
+        return "Kudos-before-replace-$stamp.kudosbackup"
     }
 
     suspend fun captureLibrarySnapshot(): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
@@ -140,6 +160,10 @@ class BackupRepository(
     private suspend fun applyMergeResult(merge: BackupMergeResult) {
         val snapshot = merge.snapshot
 
+        if (merge.mode == BackupImportMode.REPLACE_LIBRARY) {
+            removeRecordsAbsentFromReplaceSnapshot(snapshot)
+        }
+
         // Works first so cross-refs have targets.
         snapshot.works.forEach { work ->
             database.workDao().upsert(work.toEntity())
@@ -178,6 +202,16 @@ class BackupRepository(
 
         snapshot.collections.forEach { collection ->
             database.collectionDao().upsert(collection.toEntity())
+            if (merge.mode == BackupImportMode.REPLACE_LIBRARY) {
+                val desired = collection.workIds
+                    .map(BackupPaths::normalizeIdForComparison)
+                    .toSet()
+                database.collectionDao().getWorkIdsForCollection(collection.id).forEach { workId ->
+                    if (BackupPaths.normalizeIdForComparison(workId) !in desired) {
+                        database.collectionDao().removeWork(collection.id, workId)
+                    }
+                }
+            }
             collection.workIds.forEach { workId ->
                 database.collectionDao().addWork(
                     CollectionWorkCrossRef(collectionId = collection.id, workId = workId)
@@ -187,6 +221,8 @@ class BackupRepository(
 
         snapshot.savedSearches.forEach { database.savedSearchDao().upsert(it.toEntity()) }
 
+        // Snapshot tombstones are the pre-import local set only — incoming
+        // unsigned tombstones are never present here (Phase 1).
         snapshot.tombstones.forEach { database.syncTombstoneDao().upsert(it.toEntity()) }
 
         // Queues before memberships (FK).
@@ -194,10 +230,67 @@ class BackupRepository(
         snapshot.readingQueueMemberships.forEach {
             database.readingQueueDao().upsertMembership(it.toEntity())
         }
+        if (merge.mode == BackupImportMode.REPLACE_LIBRARY) {
+            val keepMemberships = snapshot.readingQueueMemberships
+                .map { BackupPaths.normalizeIdForComparison(it.id) }
+                .toSet()
+            database.readingQueueDao().getAllMemberships().forEach { membership ->
+                if (BackupPaths.normalizeIdForComparison(membership.id) !in keepMemberships) {
+                    database.readingQueueDao().deleteMembershipById(membership.id)
+                }
+            }
+        }
 
         snapshot.annotations.forEach { database.annotationDao().upsert(it.toEntity()) }
 
-        settingsRepository.replaceAll(snapshot.settings.toSettings())
+        if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
+            settingsRepository.replaceAll(snapshot.settings.toSettings())
+        }
+    }
+
+    /**
+     * Replace is this-device-only. Drop rows that are not in the snapshot using
+     * existing DAO deletes — do not mint tombstones (those would become a
+     * standing suppressor / fleet wipe).
+     */
+    private suspend fun removeRecordsAbsentFromReplaceSnapshot(snapshot: BackupLibrarySnapshot) {
+        val keepWorks = snapshot.works
+            .map { BackupPaths.normalizeIdForComparison(it.id) }
+            .toSet()
+        database.workDao().getAllIncludingDeleted().forEach { entity ->
+            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepWorks) {
+                workFileStore.deleteWorkEpub(entity.id)
+                database.workDao().deleteById(entity.id)
+            }
+        }
+
+        val keepCollections = snapshot.collections
+            .map { BackupPaths.normalizeIdForComparison(it.id) }
+            .toSet()
+        database.collectionDao().getAllIncludingDeleted().forEach { entity ->
+            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepCollections) {
+                database.collectionDao().removeAllWorks(entity.id)
+                database.collectionDao().deleteById(entity.id)
+            }
+        }
+
+        val keepQueues = snapshot.readingQueues
+            .map { BackupPaths.normalizeIdForComparison(it.id) }
+            .toSet()
+        database.readingQueueDao().getAllQueues().forEach { entity ->
+            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepQueues) {
+                database.readingQueueDao().deleteQueueById(entity.id)
+            }
+        }
+
+        val keepAnnotations = snapshot.annotations
+            .map { BackupPaths.normalizeIdForComparison(it.id) }
+            .toSet()
+        database.annotationDao().getAll().forEach { entity ->
+            if (BackupPaths.normalizeIdForComparison(entity.id) !in keepAnnotations) {
+                database.annotationDao().deleteById(entity.id)
+            }
+        }
     }
 }
 
@@ -205,6 +298,7 @@ fun BackupRestoreSummary.toUserMessage(): String {
     val parts = buildList {
         if (worksCreated > 0) add("$worksCreated work(s) added")
         if (worksUpdated > 0) add("$worksUpdated work(s) updated")
+        if (worksRemoved > 0) add("$worksRemoved work(s) removed from this library")
         if (worksSuppressed > 0) add("$worksSuppressed previously deleted work(s) skipped")
         if (bookmarksCreated + bookmarksUpdated > 0) {
             add("${bookmarksCreated + bookmarksUpdated} bookmark(s)")

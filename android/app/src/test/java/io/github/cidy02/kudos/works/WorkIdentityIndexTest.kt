@@ -39,5 +39,9 @@ class WorkIdentityIndexTest {
             "https://archiveofourown.org/works/99",
             WorkTags.canonicalAO3WorkURL("https://www.archiveofourown.org/works/99/chapters/1")
         )
+        assertEquals(
+            "https://archiveofourown.org/works/98765",
+            WorkTags.canonicalAO3WorkURL("https://archiveofourown.org/downloads/98765/work.epub")
+        )
     }
 }
