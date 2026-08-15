@@ -75,6 +75,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var showingSyncDetails = false
     @State private var showingAvailabilitySweep = false
     @State private var lastFolderSyncResult: FolderSyncResult?
+    @State private var showImportModeChoice = false
+    @State private var showReplaceConfirmation = false
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -516,15 +518,14 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 )
             case let .confirmImport(backup):
                 Alert(
-                    title: Text("Import this backup?"),
+                    title: Text("Restore from Backup"),
                     message: Text(
                         "This backup contains \(backup.manifest.works.count) Library records, "
                             + "\(backup.manifest.bookmarks.count) saved links, and "
-                            + "\(backup.manifest.fonts.count) custom fonts. Existing items "
-                            + "won't be deleted."
+                            + "\(backup.manifest.fonts.count) custom fonts."
                     ),
-                    primaryButton: .default(Text("Import and Merge")) {
-                        restorePendingBackup(backup)
+                    primaryButton: .default(Text("Restore from Backup")) {
+                        restorePendingBackup(backup, mode: .merge)
                     },
                     secondaryButton: .cancel { pendingBackup = nil }
                 )
@@ -545,6 +546,53 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     + "It keeps their current saved state and preserves EPUBs one at a time, "
                     + "with a pause between AO3 requests."
             )
+        }
+        .confirmationDialog(
+            "Import this backup?",
+            isPresented: $showImportModeChoice,
+            titleVisibility: .visible
+        ) {
+            if let backup = pendingBackup {
+                Button("Merge") {
+                    restorePendingBackup(backup, mode: .merge)
+                }
+                Button("Replace Library…", role: .destructive) {
+                    showReplaceConfirmation = true
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingBackup = nil
+                }
+            }
+        } message: {
+            if let backup = pendingBackup {
+                Text(
+                    "This backup contains \(backup.manifest.works.count) works. "
+                        + "Merge adds new works without removing existing ones. "
+                        + "Replace Library makes your library match this backup."
+                )
+            }
+        }
+        .sheet(isPresented: $showReplaceConfirmation) {
+            if let backup = pendingBackup {
+                ReplaceLibraryConfirmationView(
+                    backup: backup,
+                    localWorks: works.filter { !$0.isPendingDeletion },
+                    syncIsConnected: folderSyncStatus.isConnected,
+                    onConfirm: { pauseSync in
+                        if pauseSync {
+                            FolderSyncService.setAutoSync(false)
+                            folderSyncStatus = FolderSyncService.snapshot()
+                        }
+                        showReplaceConfirmation = false
+                        restorePendingBackup(backup, mode: .replaceLibrary)
+                    },
+                    onCancel: {
+                        showReplaceConfirmation = false
+                        pendingBackup = nil
+                    },
+                    makePreReplaceBackup: makePreReplaceBackup
+                )
+            }
         }
         #if os(iOS)
         .sheet(isPresented: $showCustomize) {
@@ -751,7 +799,14 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             pendingBackup = try KudosBackupContents.read(from: url)
-            showImportConfirmation = true
+            let activeWorks = works.filter { !$0.isPendingDeletion }
+            if activeWorks.isEmpty {
+                // Empty library: single "Restore from Backup" button.
+                showImportConfirmation = true
+            } else {
+                // Non-empty library: offer Merge vs Replace Library.
+                showImportModeChoice = true
+            }
         } catch {
             backupNotice = BackupNotice(
                 title: "Couldn't Read Backup",
@@ -770,7 +825,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// lets the confirmation finish dismissing, after which the result alert
     /// presents reliably. The hop also gives the progress indicator on the
     /// Import row a chance to render before the merge begins.
-    private func restorePendingBackup(_ backup: KudosBackupContents) {
+    private func restorePendingBackup(_ backup: KudosBackupContents, mode: BackupImportMode = .merge) {
         pendingBackup = nil
         guard PersistenceOperationGate.begin(.backupImport) else {
             backupNotice = BackupNotice(
@@ -787,12 +842,16 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 isImportingBackup = false
             }
             do {
-                let summary = try KudosBackupService.restore(backup, into: context)
+                let summary = try KudosBackupService.restore(
+                    backup, into: context, mode: mode
+                )
                 applyRestoredTheme(backup.manifest.settings)
+                let verb = mode == .replaceLibrary ? "Replaced" : "Merged"
+                let title = mode == .replaceLibrary ? "Library Replaced" : "Backup Imported"
                 let conflictMessage = summary.conflictMessage
                 backupNotice = BackupNotice(
-                    title: "Backup Imported",
-                    message: "Merged into your library:\n\(summary.changeMessage)"
+                    title: title,
+                    message: "\(verb) into your library:\n\(summary.changeMessage)"
                         + (conflictMessage.isEmpty ? "" : "\n\n\(conflictMessage)")
                 )
             } catch {
@@ -801,6 +860,30 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     message: error.localizedDescription
                 )
             }
+        }
+    }
+
+    /// Writes a timestamped copy of the current library so Replace can be undone
+    /// by importing that file. Returns a user-visible path or an error string.
+    private func makePreReplaceBackup() -> Result<String, Error> {
+        do {
+            let contents = try KudosBackupService.makeContents(
+                works: works,
+                bookmarks: bookmarks,
+                fonts: customFonts,
+                collections: collections,
+                readingQueues: readingQueues,
+                annotations: readingAnnotations,
+                savedSearches: savedSearches,
+                tombstones: syncTombstones
+            )
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let name = "Kudos Library Before Replace \(Self.backupDateFormatter.string(from: Date()))"
+            let url = docs.appendingPathComponent(name).appendingPathExtension("kudosbackup")
+            try contents.zipData().write(to: url, options: .atomic)
+            return .success(url.lastPathComponent)
+        } catch {
+            return .failure(error)
         }
     }
 
@@ -1362,6 +1445,100 @@ private struct EPUBImportNoticeSummary {
 
     mutating func recordFailure(fileName: String, message: String) {
         failures.append((fileName, message))
+    }
+}
+
+/// Extra step for Replace Library: counts, checkbox, delayed red button, optional
+/// pause-sync, and a pre-replace backup of the current library.
+struct ReplaceLibraryConfirmationView: View {
+    let backup: KudosBackupContents
+    let localWorks: [SavedWork]
+    let syncIsConnected: Bool
+    let onConfirm: (Bool) -> Void
+    let onCancel: () -> Void
+    let makePreReplaceBackup: () -> Result<String, Error>
+
+    @State private var acknowledgedRemoval = false
+    @State private var pauseSync = true
+    @State private var replaceEnabled = false
+    @State private var backupFileName: String?
+    @State private var backupError: String?
+
+    private var localIDs: Set<UUID> { Set(localWorks.map(\.id)) }
+    private var backupIDs: Set<UUID> { Set(backup.manifest.works.map(\.id)) }
+    private var willRemove: Int { localIDs.subtracting(backupIDs).count }
+    private var willAdd: Int { backupIDs.subtracting(localIDs).count }
+    private var inBoth: Int { localIDs.intersection(backupIDs).count }
+    private var backupIsMuchSmaller: Bool { willRemove >= 20 && willRemove >= willAdd * 10 }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("This backup") {
+                    LabeledContent("Works in your library", value: "\(localWorks.count)")
+                    LabeledContent("Works in this backup", value: "\(backup.manifest.works.count)")
+                    LabeledContent("Will be added", value: "\(willAdd)")
+                    LabeledContent("Will be removed", value: "\(willRemove)")
+                    LabeledContent("In both", value: "\(inBoth)")
+                }
+                if backupIsMuchSmaller {
+                    Section {
+                        Text("This backup is much smaller than your library.")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Section {
+                    Toggle(isOn: $acknowledgedRemoval) {
+                        Text("Remove \(willRemove) works that are not in this backup")
+                    }
+                    if syncIsConnected {
+                        Toggle("Pause Library Sync on this device", isOn: $pauseSync)
+                    }
+                    if let backupFileName {
+                        Text("A copy of your current library was saved as \(backupFileName).")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let backupError {
+                        Text("Could not save an undo copy: \(backupError)")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                } footer: {
+                    Text("Replace Library only changes this device. It does not plant deletion records that would block a later Merge of your own backup.")
+                }
+            }
+            .navigationTitle("Replace Library")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Replace Library") {
+                        onConfirm(syncIsConnected && pauseSync)
+                    }
+                    .disabled(!replaceEnabled)
+                    .foregroundStyle(replaceEnabled ? .red : .secondary)
+                }
+            }
+            .onAppear {
+                switch makePreReplaceBackup() {
+                case let .success(name): backupFileName = name
+                case let .failure(error): backupError = error.localizedDescription
+                }
+            }
+            .onChange(of: acknowledgedRemoval) { _, checked in
+                replaceEnabled = false
+                guard checked else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1.5))
+                    if acknowledgedRemoval { replaceEnabled = true }
+                }
+            }
+        }
     }
 }
 

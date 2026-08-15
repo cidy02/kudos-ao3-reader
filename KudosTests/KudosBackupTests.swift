@@ -1422,6 +1422,90 @@ struct KudosBackupTests {
         #expect(second.filters == AO3SearchFilters())
     }
 
+    @Test func incomingUnsignedTombstonesAreNotAdoptedOnMerge() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let victimID = UUID()
+        let hostile = SyncTombstone(recordID: victimID, recordType: .savedWork, ao3WorkID: 99)
+        let seedWork = SavedWork(id: UUID(), title: "Seed", author: "A")
+        context.insert(seedWork)
+        try context.save()
+
+        let victim = SavedWork(id: victimID, title: "Victim", author: "B")
+        victim.ao3WorkID = 99
+        let attack = try KudosBackupService.makeContents(
+            works: [victim],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [hostile],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(attack, into: context, defaults: try testDefaults(), mode: .merge)
+
+        let storedTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(storedTombstones.isEmpty, "Incoming unsigned tombstone was persisted")
+        let titles = Set(try context.fetch(FetchDescriptor<SavedWork>()).map(\.title))
+        #expect(titles.contains("Seed"))
+        #expect(titles.contains("Victim"), "Merge should add the work the file also tombstoned")
+    }
+
+    @Test func replaceDoesNotLeaveStandingTombstonesThatBlockLaterMerge() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let keepID = UUID()
+        let dropID = UUID()
+        let localKeep = SavedWork(id: keepID, title: "Keep", author: "A")
+        let localDrop = SavedWork(id: dropID, title: "Drop", author: "B")
+        context.insert(localKeep)
+        context.insert(localDrop)
+        try context.save()
+
+        let hostile = SyncTombstone(recordID: dropID, recordType: .savedWork)
+        let snapshot = SavedWork(id: keepID, title: "Keep From File", author: "A")
+        let replaceContents = try KudosBackupService.makeContents(
+            works: [snapshot],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [hostile],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(
+            replaceContents, into: context, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+
+        #expect(try context.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
+        let afterReplace = try context.fetch(FetchDescriptor<SavedWork>())
+        #expect(afterReplace.filter { !$0.isPendingDeletion }.map(\.id) == [keepID])
+
+        let comeBack = SavedWork(id: dropID, title: "Drop Restored", author: "B")
+        let later = try KudosBackupService.makeContents(
+            works: [comeBack],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(later, into: context, defaults: try testDefaults(), mode: .merge)
+        let active = try context.fetch(FetchDescriptor<SavedWork>()).filter { !$0.isPendingDeletion }
+        #expect(active.contains { $0.id == dropID }, "Later merge was blocked by a standing tombstone or leftover pending delete")
+    }
+
     /// Decode a hand-written manifest JSON blob with the same date strategy the
     /// real archive path uses (fractional seconds + whole-second fallback).
     private func decodeManifestJSON(_ json: String) throws -> KudosBackupManifest {

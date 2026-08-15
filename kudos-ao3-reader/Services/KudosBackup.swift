@@ -1038,6 +1038,9 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     var ambiguousCollectionConflicts: Int = 0
     var skippedInvalidEPUBs: Int = 0
     var suppressedAnnotations: Int = 0
+    var removedWorks: Int = 0
+    var removedCollections: Int = 0
+    var removedQueues: Int = 0
 
     /// Everything the merge actually changed, one item per line, for the
     /// post-import confirmation. Separate from `conflictMessage`, which reports
@@ -1063,6 +1066,15 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
         }
         if revivedCollections > 0 {
             parts.append(line(revivedCollections, "restored Collection", "restored Collections"))
+        }
+        if removedWorks > 0 {
+            parts.append(line(removedWorks, "work removed", "works removed"))
+        }
+        if removedCollections > 0 {
+            parts.append(line(removedCollections, "collection removed", "collections removed"))
+        }
+        if removedQueues > 0 {
+            parts.append(line(removedQueues, "queue removed", "queues removed"))
         }
         return parts.joined(separator: "\n")
     }
@@ -1115,6 +1127,23 @@ nonisolated enum KudosBackupError: LocalizedError {
             "This backup uses unsupported format version \(version)."
         }
     }
+}
+
+/// Controls how a backup import interacts with the existing library.
+///
+/// - `reconcile`: Folder-sync / default. Existing LWW `apply` on overlap.
+///   Incoming tombstones are still dropped (Phase 1). This is **not**
+///   Replace — it never deletes local works that the snapshot omitted.
+/// - `merge`: File-import Merge. Add works not already present. Existing
+///   works are left untouched. Nothing is deleted.
+/// - `replaceLibrary`: This device's works, progress, collections, queues,
+///   and annotations become the snapshot. Works absent from the backup are
+///   soft-deleted (without creating tombstones) so a later merge can still
+///   re-add them.
+nonisolated enum BackupImportMode {
+    case reconcile
+    case merge
+    case replaceLibrary
 }
 
 // Backup restore stays intentionally linear so conflict and asset safety rules remain auditable.
@@ -1172,36 +1201,22 @@ enum KudosBackupService {
     static func restore(
         _ contents: KudosBackupContents,
         into context: ModelContext,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        mode: BackupImportMode = .reconcile
     ) throws -> KudosBackupRestoreSummary {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
         var workIndex = WorkRestoreIndex(existingWorks)
         var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
         var skippedInvalidEPUBs = 0
 
-        // Adopt the source device's deletion history so a fresh install/reinstall
-        // restoring this backup inherits the same tombstone protection the source
-        // device had, instead of having zero local tombstones to consult.
-        var localTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
-        var knownTombstoneKeys = Set(localTombstones.map { "\($0.recordTypeRaw)|\($0.recordID)" })
-        for archived in contents.manifest.tombstones {
-            let key = "\(archived.recordTypeRaw)|\(archived.recordID)"
-            guard !knownTombstoneKeys.contains(key) else { continue }
-            let recordType = SyncTombstoneRecordType(rawValue: archived.recordTypeRaw) ?? .savedWork
-            let tombstone = SyncTombstone(
-                recordID: archived.recordID,
-                recordType: recordType,
-                sourceURL: archived.sourceURL,
-                ao3WorkID: archived.ao3WorkID,
-                createdAt: archived.createdAt,
-                deletedOnDeviceID: archived.deletedOnDeviceID,
-                deletionReason: archived.deletionReason
-            )
-            tombstone.lastModifiedAt = archived.lastModifiedAt
-            context.insert(tombstone)
-            localTombstones.append(tombstone)
-            knownTombstoneKeys.insert(key)
-        }
+        // Phase 1 backup trust: never adopt incoming unsigned tombstones.
+        // A .kudosbackup is attacker-controlled input — its tombstones could
+        // contain forged deletion claims for works the user never deleted,
+        // permanently suppressing those works from later merges and propagating
+        // through folder sync to every peer. Only local pre-existing tombstones
+        // (from deletions the user performed on this device) are consulted.
+        // Phase 2 will add per-tombstone Ed25519 signatures.
+        let localTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
         let tombstones = TombstoneIndex(localTombstones)
 
         let existingTags = try context.fetch(FetchDescriptor<Tag>())
@@ -1214,8 +1229,24 @@ enum KudosBackupService {
             let work: SavedWork
             let isNewRecord: Bool
             if let existing = workIndex.existingWork(for: archived) {
-                work = existing
-                isNewRecord = false
+                if mode == .merge {
+                    if existing.isPendingDeletion {
+                        // Not in the active library (Recently Deleted). Merge
+                        // adds it back without planting a tombstone.
+                        existing.isPendingDeletion = false
+                        existing.deletedAt = nil
+                        existing.permanentDeletionScheduledAt = nil
+                        work = existing
+                        isNewRecord = false
+                    } else {
+                        // Active overlap: leave local state entirely.
+                        restoredWorksByArchivedID[archived.id] = existing
+                        continue
+                    }
+                } else {
+                    work = existing
+                    isNewRecord = false
+                }
             } else if tombstones.suppressesResurrection(of: archived) {
                 // The user explicitly deleted this work on this device and this backup
                 // predates that deletion — do not resurrect it.
@@ -1638,6 +1669,56 @@ enum KudosBackupService {
             restoredFonts += 1
         }
 
+        var removedWorks = 0
+        var removedCollections = 0
+        var removedQueues = 0
+        if mode == .replaceLibrary {
+            // Soft-delete works not present in the snapshot, without minting
+            // tombstones — absence in the snapshot is sufficient for this load,
+            // and standing unsigned tombstones would block a later merge of the
+            // user's real backup. Works land in Recently Deleted (90-day
+            // recovery) the same way user-initiated deletes do, just without
+            // the SyncTombstone.
+            let snapshotWorkIDs = Set(restoredWorksByArchivedID.values.map(\.id))
+            let now = Date()
+            let recoveryDeadline = now.addingTimeInterval(PreservedWorkService.recoveryWindow)
+            for work in existingWorks where !snapshotWorkIDs.contains(work.id) {
+                guard !work.isPendingDeletion else { continue }
+                work.isPendingDeletion = true
+                work.deletedAt = now
+                work.permanentDeletionScheduledAt = recoveryDeadline
+                removedWorks += 1
+            }
+
+            let snapshotCollectionIDs = Set(contents.manifest.collections.map(\.id))
+            for collection in existingCollections where !snapshotCollectionIDs.contains(collection.id) {
+                guard !collection.isPendingDeletion else { continue }
+                collection.isPendingDeletion = true
+                collection.deletedAt = now
+                collection.permanentDeletionScheduledAt = recoveryDeadline
+                removedCollections += 1
+            }
+
+            let snapshotQueueIDs = Set(contents.manifest.readingQueues.map(\.id))
+            for queue in existingQueues {
+                guard queue.kind != .savedForLater else { continue }
+                guard !snapshotQueueIDs.contains(queue.id) else { continue }
+                guard !queue.isPendingDeletion else { continue }
+                queue.isPendingDeletion = true
+                queue.deletedAt = now
+                queue.permanentDeletionScheduledAt = recoveryDeadline
+                removedQueues += 1
+            }
+
+            let snapshotAnnotationIDs = Set(contents.manifest.annotations.map(\.id))
+            let allAnnotations = (try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? []
+            for annotation in allAnnotations where !snapshotAnnotationIDs.contains(annotation.id) {
+                guard !annotation.isPendingDeletion else { continue }
+                annotation.isPendingDeletion = true
+                annotation.deletedAt = now
+            }
+        }
+
         try context.save()
         var settings = contents.manifest.settings
         if settings.readerFontID.hasPrefix("custom:") {
@@ -1664,7 +1745,10 @@ enum KudosBackupService {
             revivedCollections: revivedCollections,
             ambiguousCollectionConflicts: ambiguousCollectionConflicts,
             skippedInvalidEPUBs: skippedInvalidEPUBs,
-            suppressedAnnotations: suppressedAnnotations
+            suppressedAnnotations: suppressedAnnotations,
+            removedWorks: removedWorks,
+            removedCollections: removedCollections,
+            removedQueues: removedQueues
         )
     }
 
