@@ -72,7 +72,7 @@ struct KudosBackupTests {
         #expect(decoded.manifest.fonts.first?.fileName == font.fileName)
         #expect(decoded.manifest.settings.appTheme == "sepia")
         #expect(decoded.manifest.settings.readerFontPt == 21)
-        #expect(decoded.epubFiles[work.id] == epub)
+        #expect(decoded.epubData(for: work.id) == epub)
         #expect(decoded.fontFiles[font.fileName] == fontData)
     }
 
@@ -538,7 +538,7 @@ struct KudosBackupTests {
 
         let decoded = try KudosBackupContents.read(from: packageURL)
         #expect(decoded.manifest.works.first?.title == "Legacy Work")
-        #expect(decoded.epubFiles[work.id] == epub)
+        #expect(decoded.epubData(for: work.id) == epub)
     }
 
     /// A truncated archive — the partially-written state an interrupted copy
@@ -608,8 +608,8 @@ struct KudosBackupTests {
         let reference = try KudosBackupContents(zipData: inMemory)
         #expect(decoded.manifest.works == reference.manifest.works)
         #expect(decoded.manifest.settings == reference.manifest.settings)
-        #expect(decoded.epubFiles[work.id] == epub)
-        #expect(decoded.epubFiles[ghost.id] == nil)
+        #expect(decoded.epubData(for: work.id) == epub)
+        #expect(decoded.epubData(for: ghost.id) == nil)
     }
 
     /// The streaming writer itself has no ceilings (ZIP64), so `writeArchive`
@@ -1433,6 +1433,56 @@ struct KudosBackupTests {
         let defaults = try #require(UserDefaults(suiteName: name))
         defaults.removePersistentDomain(forName: name)
         return defaults
+    }
+    @Test func backupArchiveIsLazy() throws {
+        let savedWork = SavedWork(title: "Title", author: "Author")
+        let fakeWork = KudosBackupWork(work: savedWork)
+        let workID = savedWork.id
+        let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
+        let manifestData = try KudosBackupContents(manifest: manifest).manifestData()
+        
+        let epubData = Data("dummy".utf8)
+        let zipData = HostileZipFixture.build([
+            HostileZipFixture.Entry(name: "manifest.json", payload: manifestData),
+            HostileZipFixture.Entry(name: "Works/\(workID.uuidString).epub", payload: epubData)
+        ])
+        
+        let contents = try KudosBackupContents(zipData: zipData)
+        #expect(contents.epubFiles.isEmpty, "Extraction is lazy: epubFiles dictionary should not be pre-populated")
+        #expect(contents.epubData(for: workID) == epubData, "EPUB bytes should be retrievable on demand")
+        // The accessor must not MEMOISE. Without this, a future "optimisation" that
+        // caches each inflated entry into `epubFiles` would reintroduce F1 — the
+        // unbounded [UUID: Data] growth this whole fix exists to remove — and both
+        // assertions above would still pass, because they only observe the state
+        // BEFORE any call. This is the strongest laziness property observable without
+        // adding a seam to production code: it cannot rule out a private eager cache,
+        // but it does pin the one regression path that runs through the public field.
+        #expect(contents.epubFiles.isEmpty, "epubData(for:) must not memoise into epubFiles")
+    }
+
+    @Test @MainActor func directoryPreConfirmDoesNotMaterializeEPUBs() throws {
+        let dirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dirURL) }
+        
+        let savedWork = SavedWork(title: "Title", author: "Author")
+        let fakeWork = KudosBackupWork(work: savedWork)
+        let workID = savedWork.id
+        let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
+        let manifestData = try KudosBackupContents(manifest: manifest).manifestData()
+        try manifestData.write(to: dirURL.appendingPathComponent("manifest.json"))
+        
+        let worksDir = dirURL.appendingPathComponent("Works")
+        try FileManager.default.createDirectory(at: worksDir, withIntermediateDirectories: true)
+        
+        let epubURL = worksDir.appendingPathComponent("\(workID.uuidString).epub")
+        try Data("dummy".utf8).write(to: epubURL)
+        
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: worksDir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: worksDir.path) }
+
+        let readManifest = try KudosBackupContents.preConfirmManifest(from: dirURL)
+        #expect(readManifest.version == KudosBackupManifest.currentVersion)
     }
 }
 }
