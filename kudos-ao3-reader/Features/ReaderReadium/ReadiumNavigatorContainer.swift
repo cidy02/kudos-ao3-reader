@@ -133,6 +133,9 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
             // scroll view gets caught the next time SwiftUI re-renders this
             // representable (which locator/chrome-state changes already do often).
             restoreNativeScrollIndicators(in: view)
+            // Belt-and-braces. The setter hook wraps each spread at
+            // `navigationDelegate` assignment; this sweep only refreshes
+            // the Browse callback on views SwiftUI can already see.
             ReaderWebIsolation.installNavigationGuards(
                 in: view,
                 origin: .readiumScheme,

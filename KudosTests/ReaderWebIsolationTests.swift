@@ -188,6 +188,118 @@ struct ReaderWebIsolationTests {
     }
     #endif
 
+    /// Production entry: Readium's `EPUBSpreadView.setupWebView()` assigns
+    /// `navigationDelegate` in the spread initializer, then immediately
+    /// `loadSpread()`. A view-tree sweep after the navigator exists is too
+    /// late. The setter hook must wrap at assignment.
+    @Test func assigningNavigationDelegateOnAnIsolatedStoreWebViewInstallsTheGuard() {
+        ReaderWebIsolation.installReadiumStoreIsolation()
+        let configuration = WKWebViewConfiguration()
+        ReaderWebIsolation.applyIsolatedStore(to: configuration)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let original = DummyNavigationDelegate()
+        webView.navigationDelegate = original
+        #expect(
+            webView.navigationDelegate is ReaderWebNavigationGuard,
+            "must wrap at navigationDelegate assignment, not a later view-tree sweep"
+        )
+        let navGuard = webView.navigationDelegate as? ReaderWebNavigationGuard
+        #expect(navGuard?.original === original)
+    }
+
+    /// Same construction order as `EPUBSpreadView.init`: register the
+    /// `readium` scheme (store swap) → `WKWebView(configuration:)` →
+    /// assign `navigationDelegate`.
+    @Test func readiumSchemeWebViewIsGuardedWhenItsDelegateIsAssigned() {
+        ReaderWebIsolation.installReadiumStoreIsolation()
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(DummySchemeHandler(), forURLScheme: "readium")
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        // `navigationDelegate` is weak — keep the original alive.
+        let original = DummyNavigationDelegate()
+        webView.navigationDelegate = original
+        #expect(
+            webView.navigationDelegate is ReaderWebNavigationGuard,
+            "a Readium-built spread must be guarded before loadSpread"
+        )
+        #expect(
+            (webView.navigationDelegate as? ReaderWebNavigationGuard)?.original
+                === original
+        )
+    }
+
+    @Test func defaultStoreWebViewsAreNotWrappedByTheDelegateHook() {
+        ReaderWebIsolation.installReadiumStoreIsolation()
+        let webView = WKWebView(frame: .zero)
+        let original = DummyNavigationDelegate()
+        webView.navigationDelegate = original
+        #expect(webView.navigationDelegate === original)
+        #expect(!(webView.navigationDelegate is ReaderWebNavigationGuard))
+    }
+
+    @Test func reassignedDelegateOnAnIsolatedStoreWebViewIsRewrapped() {
+        ReaderWebIsolation.installReadiumStoreIsolation()
+        let configuration = WKWebViewConfiguration()
+        ReaderWebIsolation.applyIsolatedStore(to: configuration)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let first = DummyNavigationDelegate()
+        let second = DummyNavigationDelegate()
+        webView.navigationDelegate = first
+        let firstGuard = webView.navigationDelegate as? ReaderWebNavigationGuard
+        #expect(firstGuard?.original === first)
+        webView.navigationDelegate = second
+        #expect(
+            webView.navigationDelegate is ReaderWebNavigationGuard,
+            "reassigning navigationDelegate must re-wrap, not skip on a stale map entry"
+        )
+        let secondGuard = webView.navigationDelegate as? ReaderWebNavigationGuard
+        #expect(secondGuard?.original === second)
+        #expect(secondGuard !== firstGuard)
+    }
+
+    @Test func setterInstalledGuardCancelsScriptDrivenOffPublicationNavigation() throws {
+        ReaderWebIsolation.installReadiumStoreIsolation()
+        let configuration = WKWebViewConfiguration()
+        ReaderWebIsolation.applyIsolatedStore(to: configuration)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        // `navigationDelegate` is weak — keep the original alive.
+        let original = DummyNavigationDelegate()
+        webView.navigationDelegate = original
+        #expect(
+            webView.navigationDelegate is ReaderWebNavigationGuard,
+            "must wrap at navigationDelegate assignment, not a later view-tree sweep"
+        )
+        let navGuard = try #require(
+            webView.navigationDelegate as? ReaderWebNavigationGuard
+        )
+        var opened: URL?
+        navGuard.onOpenExternalURL = { opened = $0 }
+        let cancelled = [
+            "javascript:alert(1)",
+            "data:text/html,hello",
+            "https://evil.example/navigated",
+        ]
+        for raw in cancelled {
+            var policy: WKNavigationActionPolicy?
+            navGuard.webView(
+                webView,
+                decidePolicyFor: ScriptedNavigationAction(
+                    url: try #require(URL(string: raw))
+                )
+            ) { policy = $0 }
+            #expect(policy == .cancel)
+        }
+        #expect(opened == nil)
+        var allowed: WKNavigationActionPolicy?
+        navGuard.webView(
+            webView,
+            decidePolicyFor: ScriptedNavigationAction(
+                url: try #require(URL(string: "readium://abc/chapter.xhtml"))
+            )
+        ) { allowed = $0 }
+        #expect(allowed == .allow)
+    }
+
     /// Cookie jars can be probed through `WKHTTPCookieStore` without loading a
     /// page. A live `document.cookie` / `window.location` probe still needs a
     /// real Readium spread on a device.
@@ -268,4 +380,16 @@ private final class ScriptedNavigationAction: WKNavigationAction {
 private final class DummySchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {}
     func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
+}
+
+/// Stands in for Readium's `EPUBSpreadView`, which implements
+/// `decidePolicyFor` and allows everything that is not `.linkActivated`.
+private final class DummyNavigationDelegate: NSObject, WKNavigationDelegate {
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        decisionHandler(.allow)
+    }
 }
