@@ -18,6 +18,17 @@ struct AppRouterTests {
         #expect(router.pendingURL == nil)
     }
 
+    /// A lookalike host that merely *contains* "archiveofourown.org" must not
+    /// qualify for the native tag-works path — that would hand the attacker's
+    /// own host straight to `AO3Client.worksPage(at:)`. Same host gate as
+    /// `open(_:)` (`isAO3URL`), not a looser inline check.
+    @Test func lookalikeTagHostFallsBackToOpenInsteadOfNativeTagWorks() {
+        let router = AppRouter()
+        let lookalike = URL(string: "https://archiveofourown.org.evil.example/tags/Fluff/works")!
+        router.openAO3Link(lookalike)
+        #expect(router.pendingTagWorks == nil, "Lookalike host was routed to native tag works")
+    }
+
     @Test func userLinkRoutesToNativeAuthorWithoutChangingTabs() {
         let router = AppRouter()
         router.openAO3Link(URL(string: "https://archiveofourown.org/users/someone")!)

@@ -24,8 +24,26 @@ nonisolated enum Storage {
         return candidate
     }
 
+    #if DEBUG
+    /// Test-only override for the user-imported-font directory.
+    ///
+    /// The production default remains Application Support/Fonts. The override lets
+    /// restore tests exercise a mounted case-sensitive filesystem without changing
+    /// any production restore path.
+    ///
+    /// **Compiled out of release builds on purpose.** This is a mutable global that
+    /// redirects where restore writes untrusted font bytes — precisely the sink M21
+    /// exists to control. It has no production setter today, but a write-redirect
+    /// primitive should not exist at all in a shipping binary, so the seam is
+    /// `#if DEBUG` rather than merely unused.
+    static var fontsDirectoryOverride: URL?
+    #endif
+
     /// Permanent home for user-imported fonts.
     static var fontsDirectory: URL {
+        #if DEBUG
+        if let fontsDirectoryOverride { return fontsDirectoryOverride }
+        #endif
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Fonts", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -107,12 +125,33 @@ nonisolated enum Storage {
         return dir
     }
 
-    /// Temporary destination for an in-flight download.
+    /// Temporary destination for an in-flight download. `suggestedName` is a
+    /// basename only — a hostile Content-Disposition (`../`, `/`, `\`, `.`,
+    /// control characters) cannot escape `Caches/Downloads`. Unsafe names
+    /// fall back to a UUID rather than being rewritten into a "safe-looking"
+    /// last path component of attacker-controlled input.
     static func tempDownloadURL(suggestedName: String) -> URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Downloads", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let name = suggestedName.isEmpty ? "\(UUID().uuidString).epub" : suggestedName
-        return dir.appendingPathComponent(name)
+        return dir.appendingPathComponent(safeTempDownloadName(suggestedName))
+    }
+
+    /// Production sanitizer used by `tempDownloadURL`. Isolated so tests can
+    /// assert the fallback without depending on a particular UUID.
+    static func safeTempDownloadName(_ suggestedName: String) -> String {
+        let fallback = "\(UUID().uuidString).epub"
+        let candidate = suggestedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty,
+              candidate.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }),
+              URL(fileURLWithPath: candidate).lastPathComponent == candidate,
+              !candidate.contains("/"),
+              !candidate.contains("\\"),
+              !candidate.contains(".."),
+              candidate != ".",
+              candidate != "..",
+              candidate.count <= 255
+        else { return fallback }
+        return candidate
     }
 }
