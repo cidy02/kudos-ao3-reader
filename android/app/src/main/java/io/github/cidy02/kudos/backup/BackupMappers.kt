@@ -144,15 +144,16 @@ fun SavedWork.toBackupWork(
     )
 }
 
-fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
+fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): SavedWork {
     val added = if (dateAdded.isNotBlank()) {
-        BackupValidator.parseInstant(dateAdded, "work.dateAdded")
+        BackupValidator.parseInstant(dateAdded, "work.dateAdded", exportedAt)
     } else {
         java.time.Instant.now()
     }
     val lastModified = BackupValidator.parseNullableInstant(
         lastModifiedAt?.takeIf { it.isNotBlank() },
-        "work.lastModifiedAt"
+        "work.lastModifiedAt",
+        exportedAt
     ) ?: added
     val deletionState = restoredDeletionState(isDeleted)
     return SavedWork(
@@ -187,7 +188,8 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         lastScrollFraction = lastScrollFraction,
         lastReadDate = BackupValidator.parseNullableInstant(
             lastReadDate?.takeIf { it.isNotBlank() },
-            "work.lastReadDate"
+            "work.lastReadDate",
+            exportedAt
         ),
         workWarnings = workWarnings,
         workCategories = workCategories,
@@ -203,23 +205,27 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         knownChapterCount = knownChapterCount,
         lastUpdateCheck = BackupValidator.parseNullableInstant(
             lastUpdateCheck?.takeIf { it.isNotBlank() },
-            "work.lastUpdateCheck"
+            "work.lastUpdateCheck",
+            exportedAt
         ),
         lastModifiedAt = lastModified,
         progressModifiedAt = BackupValidator.parseNullableInstant(
             progressModifiedAt?.takeIf { it.isNotBlank() },
-            "work.progressModifiedAt"
+            "work.progressModifiedAt",
+            exportedAt
         ),
         ao3Unavailable = ao3Unavailable ?: false,
         lastAvailabilityCheck = BackupValidator.parseNullableInstant(
             lastAvailabilityCheck?.takeIf { it.isNotBlank() },
-            "work.lastAvailabilityCheck"
+            "work.lastAvailabilityCheck",
+            exportedAt
         ),
         isDeleted = deletionState.isDeleted,
         deletedAt = if (deletionState.isDeleted) {
             BackupValidator.parseNullableInstant(
                 deletedAt?.takeIf { it.isNotBlank() },
-                "work.deletedAt"
+                "work.deletedAt",
+                exportedAt
             )
         } else null,
         permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
@@ -227,11 +233,13 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         epubPreservationStatusRaw = epubPreservationStatusRaw?.takeIf { it.isNotBlank() },
         preservedAt = BackupValidator.parseNullableInstant(
             preservedAt?.takeIf { it.isNotBlank() },
-            "work.preservedAt"
+            "work.preservedAt",
+            exportedAt
         ),
         lastPreservationAttemptAt = BackupValidator.parseNullableInstant(
             lastPreservationAttemptAt?.takeIf { it.isNotBlank() },
-            "work.lastPreservationAttemptAt"
+            "work.lastPreservationAttemptAt",
+            exportedAt
         )
     )
 }
@@ -244,11 +252,11 @@ fun Bookmark.toBackupBookmark(): BackupBookmark {
     )
 }
 
-fun BackupBookmark.toBookmark(): Bookmark {
+fun BackupBookmark.toBookmark(exportedAt: Instant? = null): Bookmark {
     return Bookmark(
         title = title,
         urlString = urlString,
-        dateAdded = BackupValidator.parseInstant(dateAdded, "bookmark.dateAdded")
+        dateAdded = BackupValidator.parseInstant(dateAdded, "bookmark.dateAdded", exportedAt)
     )
 }
 
@@ -260,11 +268,14 @@ fun CustomFont.toBackupFont(): BackupFont {
     )
 }
 
-fun BackupFont.toCustomFont(fileNameOverride: String = fileName): CustomFont {
+fun BackupFont.toCustomFont(
+    fileNameOverride: String = fileName,
+    exportedAt: Instant? = null
+): CustomFont {
     return CustomFont(
         name = name,
         fileName = fileNameOverride,
-        dateAdded = BackupValidator.parseInstant(dateAdded, "font.dateAdded")
+        dateAdded = BackupValidator.parseInstant(dateAdded, "font.dateAdded", exportedAt)
     )
 }
 
@@ -284,20 +295,25 @@ fun WorkCollection.toBackupCollection(): BackupCollection {
     )
 }
 
-fun BackupCollection.toWorkCollection(nameOverride: String = name): WorkCollection {
+fun BackupCollection.toWorkCollection(
+    nameOverride: String = name,
+    exportedAt: Instant? = null
+): WorkCollection {
     val deletionState = restoredDeletionState(isDeleted)
     return WorkCollection(
         id = BackupPaths.canonicalUuid(id, "collection.id"),
         name = nameOverride,
-        dateAdded = BackupValidator.parseInstant(dateAdded, "collection.dateAdded"),
+        dateAdded = BackupValidator.parseInstant(dateAdded, "collection.dateAdded", exportedAt),
         workIds = workIDs.map { BackupPaths.canonicalUuid(it, "collection.workId") },
         description = description,
         sortOrder = sortOrder,
         lastModifiedAt = lastModifiedAt?.takeIf { it.isNotBlank() }
-            ?.let { BackupValidator.parseInstant(it, "collection.lastModifiedAt") },
+            ?.let { BackupValidator.parseInstant(it, "collection.lastModifiedAt", exportedAt) },
         isDeleted = deletionState.isDeleted,
         deletedAt = if (deletionState.isDeleted) {
-            deletedAt?.takeIf { it.isNotBlank() }?.let { BackupValidator.parseInstant(it, "collection.deletedAt") }
+            deletedAt?.takeIf { it.isNotBlank() }?.let {
+                BackupValidator.parseInstant(it, "collection.deletedAt", exportedAt)
+            }
         } else null,
         permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
     )
@@ -312,11 +328,14 @@ fun SavedSearch.toBackupSavedSearch(): BackupSavedSearch {
     )
 }
 
-fun BackupSavedSearch.toSavedSearch(nameOverride: String = name): SavedSearch {
+fun BackupSavedSearch.toSavedSearch(
+    nameOverride: String = name,
+    exportedAt: Instant? = null
+): SavedSearch {
     return SavedSearch(
         id = BackupPaths.canonicalUuid(id, "savedSearch.id"),
         name = nameOverride,
-        dateAdded = BackupValidator.parseInstant(dateAdded, "savedSearch.dateAdded"),
+        dateAdded = BackupValidator.parseInstant(dateAdded, "savedSearch.dateAdded", exportedAt),
         filtersJson = filters.toString()
     )
 }
@@ -385,14 +404,14 @@ fun ReadingQueue.toBackupReadingQueue(): BackupReadingQueue {
     )
 }
 
-fun BackupReadingQueue.toReadingQueue(): ReadingQueue {
+fun BackupReadingQueue.toReadingQueue(exportedAt: Instant? = null): ReadingQueue {
     val created = if (dateCreated.isNotBlank()) {
-        BackupValidator.parseInstant(dateCreated, "queue.dateCreated")
+        BackupValidator.parseInstant(dateCreated, "queue.dateCreated", exportedAt)
     } else {
         Instant.now()
     }
     val updated = if (dateUpdated.isNotBlank()) {
-        BackupValidator.parseInstant(dateUpdated, "queue.dateUpdated")
+        BackupValidator.parseInstant(dateUpdated, "queue.dateUpdated", exportedAt)
     } else {
         created
     }
@@ -406,12 +425,14 @@ fun BackupReadingQueue.toReadingQueue(): ReadingQueue {
         dateUpdated = updated,
         lastMembershipChangedAt = BackupValidator.parseNullableInstant(
             lastMembershipChangedAt?.takeIf { it.isNotBlank() },
-            "queue.lastMembershipChangedAt"
+            "queue.lastMembershipChangedAt",
+            exportedAt
         ),
         deletedAt = if (deletionState.isDeleted) {
             BackupValidator.parseNullableInstant(
                 deletedAt?.takeIf { it.isNotBlank() },
-                "queue.deletedAt"
+                "queue.deletedAt",
+                exportedAt
             )
         } else null,
         isDeleted = deletionState.isDeleted,
@@ -431,9 +452,11 @@ fun ReadingQueueMembership.toBackupReadingQueueMembership(): BackupReadingQueueM
     )
 }
 
-fun BackupReadingQueueMembership.toReadingQueueMembership(): ReadingQueueMembership {
+fun BackupReadingQueueMembership.toReadingQueueMembership(
+    exportedAt: Instant? = null
+): ReadingQueueMembership {
     val queued = if (queuedAt.isNotBlank()) {
-        BackupValidator.parseInstant(queuedAt, "membership.queuedAt")
+        BackupValidator.parseInstant(queuedAt, "membership.queuedAt", exportedAt)
     } else {
         Instant.now()
     }
@@ -444,7 +467,8 @@ fun BackupReadingQueueMembership.toReadingQueueMembership(): ReadingQueueMembers
         queuedAt = queued,
         lastModifiedAt = BackupValidator.parseNullableInstant(
             lastModifiedAt?.takeIf { it.isNotBlank() },
-            "membership.lastModifiedAt"
+            "membership.lastModifiedAt",
+            exportedAt
         ) ?: queued,
         sortOrderInQueue = sortOrderInQueue,
         note = note
@@ -470,9 +494,9 @@ fun ReadingAnnotation.toBackupAnnotation(): BackupAnnotation {
     )
 }
 
-fun BackupAnnotation.toReadingAnnotation(): ReadingAnnotation {
+fun BackupAnnotation.toReadingAnnotation(exportedAt: Instant? = null): ReadingAnnotation {
     val created = if (createdAt.isNotBlank()) {
-        BackupValidator.parseInstant(createdAt, "annotation.createdAt")
+        BackupValidator.parseInstant(createdAt, "annotation.createdAt", exportedAt)
     } else {
         Instant.now()
     }
@@ -490,11 +514,13 @@ fun BackupAnnotation.toReadingAnnotation(): ReadingAnnotation {
         createdAt = created,
         lastModifiedAt = BackupValidator.parseNullableInstant(
             lastModifiedAt?.takeIf { it.isNotBlank() },
-            "annotation.lastModifiedAt"
+            "annotation.lastModifiedAt",
+            exportedAt
         ) ?: created,
         deletedAt = BackupValidator.parseNullableInstant(
             deletedAt?.takeIf { it.isNotBlank() },
-            "annotation.deletedAt"
+            "annotation.deletedAt",
+            exportedAt
         ),
         isPendingDeletion = isPendingDeletion
     )
@@ -519,14 +545,20 @@ fun SyncTombstone.toBackupTombstone(): BackupTombstone {
     )
 }
 
-fun BackupTombstone.toSyncTombstone(): SyncTombstone {
+fun BackupTombstone.toSyncTombstone(exportedAt: Instant? = null): SyncTombstone {
     val created = if (createdAt.isNotBlank()) {
-        BackupValidator.parseInstant(createdAt, "tombstone.createdAt")
+        BackupValidator.parseInstant(createdAt, "tombstone.createdAt", exportedAt)
     } else {
         Instant.now()
     }
+    // lastModifiedAt is unsigned and the adopt path pins it to createdAt
+    // (TOMB-1). A hostile 2099 wire value must not reject the whole package.
     val modified = if (lastModifiedAt.isNotBlank()) {
-        BackupValidator.parseInstant(lastModifiedAt, "tombstone.lastModifiedAt")
+        try {
+            BackupValidator.parseInstant(lastModifiedAt, "tombstone.lastModifiedAt", exportedAt)
+        } catch (_: BackupError.InvalidDate) {
+            created
+        }
     } else {
         created
     }

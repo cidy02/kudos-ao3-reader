@@ -238,7 +238,10 @@ class KudosAppContainer(context: Context) {
     }
 
     val annotationRepository: io.github.cidy02.kudos.reader.AnnotationRepository by lazy {
-        io.github.cidy02.kudos.reader.AnnotationRepository(database.annotationDao())
+        io.github.cidy02.kudos.reader.AnnotationRepository(
+            dao = database.annotationDao(),
+            tombstoneDao = database.syncTombstoneDao()
+        )
     }
 
     val fandomCatalogCache: FandomCatalogCache by lazy {

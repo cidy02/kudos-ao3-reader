@@ -45,8 +45,13 @@ object BackupValidator {
         }
         // Some Apple archives use fractional-second ISO8601; tolerate empty only
         // for unit fixtures that skip the field (coerceInputValues).
-        if (manifest.exportedAt.isNotBlank()) {
+        // Parse exportedAt first so every other archive clock can be clamped
+        // to it (a forged "just now" / future lastModifiedAt cannot outrank
+        // later genuine backups).
+        val exportedAt = if (manifest.exportedAt.isNotBlank()) {
             parseInstant(manifest.exportedAt, "exportedAt")
+        } else {
+            null
         }
 
         val workIds = mutableSetOf<String>()
@@ -56,12 +61,16 @@ object BackupValidator {
             val id = BackupPaths.canonicalUuid(work.id, "works[$index].id")
             if (!workIds.add(id)) throw BackupError.InvalidPackage("Duplicate work id: $id")
             if (work.dateAdded.isNotBlank()) {
-                parseInstant(work.dateAdded, "works[$index].dateAdded")
+                parseInstant(work.dateAdded, "works[$index].dateAdded", exportedAt)
             }
+            work.lastModifiedAt?.takeIf { it.isNotBlank() }
+                ?.let { parseInstant(it, "works[$index].lastModifiedAt", exportedAt) }
             work.lastReadDate?.takeIf { it.isNotBlank() }
-                ?.let { parseInstant(it, "works[$index].lastReadDate") }
+                ?.let { parseInstant(it, "works[$index].lastReadDate", exportedAt) }
             work.lastUpdateCheck?.takeIf { it.isNotBlank() }
-                ?.let { parseInstant(it, "works[$index].lastUpdateCheck") }
+                ?.let { parseInstant(it, "works[$index].lastUpdateCheck", exportedAt) }
+            work.progressModifiedAt?.takeIf { it.isNotBlank() }
+                ?.let { parseInstant(it, "works[$index].progressModifiedAt", exportedAt) }
             if (work.lastSpineIndex < 0) {
                 throw BackupError.InvalidPackage("lastSpineIndex must be non-negative for work $id.")
             }
@@ -87,7 +96,7 @@ object BackupValidator {
             if (bookmark.urlString.isBlank()) {
                 throw BackupError.InvalidPackage("Bookmark urlString must not be blank.")
             }
-            parseInstant(bookmark.dateAdded, "bookmarks[$index].dateAdded")
+            parseInstant(bookmark.dateAdded, "bookmarks[$index].dateAdded", exportedAt)
             bookmark
         }
 
@@ -97,7 +106,7 @@ object BackupValidator {
             if (!fontNames.add(BackupPaths.fontFileNameKey(font.fileName))) {
                 throw BackupError.InvalidPackage("Duplicate font file name: ${font.fileName}")
             }
-            parseInstant(font.dateAdded, "fonts[$index].dateAdded")
+            parseInstant(font.dateAdded, "fonts[$index].dateAdded", exportedAt)
             font
         }
 
@@ -107,7 +116,9 @@ object BackupValidator {
             if (!collectionIds.add(id)) {
                 throw BackupError.InvalidPackage("Duplicate collection id: $id")
             }
-            parseInstant(collection.dateAdded, "collections[$index].dateAdded")
+            parseInstant(collection.dateAdded, "collections[$index].dateAdded", exportedAt)
+            collection.lastModifiedAt?.takeIf { it.isNotBlank() }
+                ?.let { parseInstant(it, "collections[$index].lastModifiedAt", exportedAt) }
             collection.copy(
                 id = id,
                 workIDs = collection.workIDs.mapIndexed { workIndex, workId ->
@@ -122,7 +133,7 @@ object BackupValidator {
             if (!savedSearchIds.add(id)) {
                 throw BackupError.InvalidPackage("Duplicate saved search id: $id")
             }
-            parseInstant(savedSearch.dateAdded, "savedSearches[$index].dateAdded")
+            parseInstant(savedSearch.dateAdded, "savedSearches[$index].dateAdded", exportedAt)
             savedSearch.copy(id = id)
         }
 
@@ -141,7 +152,24 @@ object BackupValidator {
         )
     }
 
-    fun parseInstant(value: String, field: String): Instant {
+    /**
+     * Parse an archive timestamp.
+     *
+     * A value more than 24h in the future is **rejected** (not clamped to
+     * `now + 24h`). Clamping would let a 2099 clock become "just now + 24h"
+     * and win every later LWW comparison. Clock skew between the user's own
+     * devices is the only reason a future date is allowed at all.
+     *
+     * When [exportedAt] is present, the result is also `min(parsed, exportedAt)`
+     * so a forged "just now" timestamp inside an older snapshot cannot outrank
+     * a later genuine backup.
+     */
+    fun parseInstant(
+        value: String,
+        field: String,
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now()
+    ): Instant {
         val parsed = try {
             Instant.parse(value)
         } catch (_: DateTimeParseException) {
@@ -151,12 +179,20 @@ object BackupValidator {
                 throw BackupError.InvalidDate(field, value)
             }
         }
-        val maxAllowed = Instant.now().plus(24, java.time.temporal.ChronoUnit.HOURS)
-        return if (parsed.isAfter(maxAllowed)) maxAllowed else parsed
+        val maxAllowed = now.plus(24, ChronoUnit.HOURS)
+        if (parsed.isAfter(maxAllowed)) {
+            throw BackupError.InvalidDate(field, value)
+        }
+        return if (exportedAt != null && parsed.isAfter(exportedAt)) exportedAt else parsed
     }
 
-    fun parseNullableInstant(value: String?, field: String): Instant? {
-        return value?.let { parseInstant(it, field) }
+    fun parseNullableInstant(
+        value: String?,
+        field: String,
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now()
+    ): Instant? {
+        return value?.let { parseInstant(it, field, exportedAt, now) }
     }
 
     /**

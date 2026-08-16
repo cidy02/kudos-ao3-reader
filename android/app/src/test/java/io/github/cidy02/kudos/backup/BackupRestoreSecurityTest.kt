@@ -143,8 +143,32 @@ class BackupRestoreSecurityTest {
             permanentDeletionScheduledAt = BackupValidator.formatInstant(pastDate)
         )
 
+        val localWork = SavedWork(
+            id = "99999999-9999-4999-8999-999999999999",
+            title = "Live Work",
+            author = "Author",
+            sourceUrl = "https://archiveofourown.org/works/99",
+            dateAdded = localCreated,
+            lastModifiedAt = localCreated,
+            isDeleted = false,
+            isSaved = true
+        )
+        val hostileWork = BackupWork(
+            id = localWork.id,
+            title = "Live Work",
+            author = "Author",
+            sourceURL = localWork.sourceUrl,
+            dateAdded = BackupValidator.formatInstant(localCreated),
+            lastModifiedAt = BackupValidator.formatInstant(incomingNewer),
+            isDeleted = true,
+            deletedAt = BackupValidator.formatInstant(incomingNewer),
+            permanentDeletionScheduledAt = BackupValidator.formatInstant(pastDate),
+            hasEPUB = true
+        )
+
         val result = BackupMergeService.merge(
             current = BackupLibrarySnapshot(
+                works = listOf(localWork),
                 collections = listOf(localCollection),
                 readingQueues = listOf(localQueue)
             ),
@@ -152,6 +176,7 @@ class BackupRestoreSecurityTest {
                 manifest = KudosBackupManifest(
                     version = BackupVersion.CURRENT,
                     exportedAt = BackupValidator.formatInstant(now),
+                    works = listOf(hostileWork),
                     collections = listOf(hostileCollection),
                     readingQueues = listOf(hostileQueue)
                 )
@@ -185,6 +210,20 @@ class BackupRestoreSecurityTest {
             "Merged queue must not keep the archive's past wipe deadline"
         )
         assertEquals(1, result.summary.queuesUpdated)
+
+        val mergedWork = result.snapshot.works.single()
+        assertTrue(mergedWork.isDeleted)
+        assertNotNull(mergedWork.permanentDeletionScheduledAt)
+        assertTrue(
+            "Merged work permanent deletion schedule must be recomputed to the future",
+            mergedWork.permanentDeletionScheduledAt!!.isAfter(now)
+        )
+        assertApproximatelyEqual(
+            expectedRecoveryDate,
+            mergedWork.permanentDeletionScheduledAt,
+            "Merged work must not keep the archive's past wipe deadline"
+        )
+        assertEquals(1, result.summary.worksUpdated)
     }
 
     @Test
