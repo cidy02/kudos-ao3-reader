@@ -14,6 +14,7 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
 import io.github.cidy02.kudos.works.WorkIdentityIndex
+import io.github.cidy02.kudos.works.WorkIdentitySnapshot
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
 import java.time.Duration
@@ -98,6 +99,22 @@ object BackupMergeService {
         // Archived work UUID → local row UUID after ao3 / canonical-URL rematch.
         val workIdRemap = linkedMapOf<String, String>()
 
+        // D8 anomaly hold: count unsigned isDeleted hides that this pass would
+        // apply, before mutating anything. ≥ floor holds the whole unsigned-hide
+        // batch (other merge work still proceeds). Below the floor we apply and
+        // surface a digest. First-sync-from-new-trust exemption is deferred —
+        // TombstoneTrustStore has no cheap "just granted" signal, and pairing
+        // UI is out of scope for this unit.
+        val unsignedHideCandidates = collectUnsignedWorkHides(
+            works = manifest.works,
+            identity = identity,
+            tombstoneIndex = tombstoneIndex,
+            mode = mode,
+            exportedAt = exportedAt,
+            now = now
+        )
+        val holdUnsignedHides = unsignedHideCandidates.size >= UNSIGNED_HIDE_HOLD_FLOOR
+
         manifest.works.forEach { archived ->
             val archivedId = BackupPaths.canonicalUuid(archived.id, "work.id")
             val existing = identity.existingWork(
@@ -123,17 +140,37 @@ object BackupMergeService {
                 exportedAt = exportedAt,
                 now = now
             )
+            val hasTrustedTombstone = tombstoneIndex.suppressesWorkResurrection(archived)
+            val skipUnsignedHide = holdUnsignedHides &&
+                unsignedWorkHideWouldApply(
+                    archived = archived,
+                    existing = existing,
+                    tombstoneIndex = tombstoneIndex,
+                    mode = mode,
+                    incomingModifiedAt = incomingModifiedAt
+                )
             val restoredBase = archived.toSavedWork(
                 hasEpub = restoredHasEpub,
                 exportedAt = exportedAt,
                 localIsPendingDeletion = existing?.isDeleted == true,
                 localScheduledAt = existing?.permanentDeletionScheduledAt,
-                hasTrustedTombstone = tombstoneIndex.suppressesWorkResurrection(archived)
+                hasTrustedTombstone = hasTrustedTombstone,
+                now = now
             )
             val restored = restoredBase.copy(
                 id = existing?.id ?: restoredBase.id,
                 lastModifiedAt = incomingModifiedAt ?: restoredBase.dateAdded
-            )
+            ).let { work ->
+                if (!skipUnsignedHide) {
+                    work
+                } else {
+                    work.copy(
+                        isDeleted = existing?.isDeleted ?: false,
+                        deletedAt = existing?.deletedAt,
+                        permanentDeletionScheduledAt = existing?.permanentDeletionScheduledAt
+                    )
+                }
+            }
             worksById[targetId] = if (existing == null) {
                 summary = summary.copy(worksCreated = summary.worksCreated + 1)
                 restored
@@ -317,6 +354,21 @@ object BackupMergeService {
                 .normalizeSettings(settingsPayload, fontMerge.items.map { it.fileName }.toSet())
                 .toCoreBackupSettings()
         }
+
+        summary = summary.copy(
+            unsignedHidesApplied = if (holdUnsignedHides) 0 else unsignedHideCandidates.size,
+            unsignedHidesHeld = if (holdUnsignedHides) unsignedHideCandidates.size else 0,
+            unsignedHideTitles = if (holdUnsignedHides) {
+                unsignedHideCandidates.map { it.title }
+            } else {
+                emptyList()
+            },
+            heldUnsignedHideWorkIDs = if (holdUnsignedHides) {
+                unsignedHideCandidates.map { it.workId }
+            } else {
+                emptyList()
+            }
+        )
 
         return BackupMergeResult(
             snapshot = BackupLibrarySnapshot(
@@ -775,13 +827,18 @@ object BackupMergeService {
                     TombstoneResolution.PRESERVE_AMBIGUOUS,
                     TombstoneResolution.NO_TOMBSTONE -> Unit
                 }
+                val hasTrustedTombstone = tombstoneIndex.hasTrustedCollectionDeletion(
+                    id,
+                    incomingModified
+                )
                 val restoredName = archived.name.uniqueName(names)
                 val restored = archived.toWorkCollection(
                     nameOverride = restoredName,
                     exportedAt = exportedAt,
                     localIsPendingDeletion = false,
                     localScheduledAt = null,
-                    hasTrustedTombstone = tombstoneIndex.collectionResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
+                    hasTrustedTombstone = hasTrustedTombstone,
+                    now = now
                 )
                 collectionsById[id] = restored
                 names += restoredName
@@ -824,11 +881,16 @@ object BackupMergeService {
                             incomingModified
                         ) == TombstoneResolution.SUPPRESS_STALE
                     }
+                val hasTrustedTombstone = tombstoneIndex.hasTrustedCollectionDeletion(
+                    id,
+                    incomingModified
+                )
                 val deletionState = restoredDeletionState(
-                    incomingIsDeleted = archived.isDeleted,
+                    incomingIsDeleted = archivedIsDeleted,
                     localIsPendingDeletion = existing.isDeleted,
                     localScheduledAt = existing.permanentDeletionScheduledAt,
-                    hasTrustedTombstone = tombstoneIndex.collectionResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
+                    hasTrustedTombstone = hasTrustedTombstone,
+                    now = now
                 )
                 collectionsById[id] = existing.copy(
                     name = if (archivedIsDeleted) existing.name else archived.name,
@@ -986,7 +1048,11 @@ object BackupMergeService {
                     exportedAt = exportedAt,
                     localIsPendingDeletion = false,
                     localScheduledAt = null,
-                    hasTrustedTombstone = tombstoneIndex.queueResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
+                    hasTrustedTombstone = tombstoneIndex.hasTrustedQueueDeletion(
+                        id,
+                        incomingModified
+                    ),
+                    now = now
                 )
                 queuesCreated += 1
             } else if (mode == BackupImportMode.MERGE) {
@@ -998,19 +1064,24 @@ object BackupMergeService {
                     membershipModifiedAts = localMembershipTimes[id].orEmpty()
                 )
                 if (SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
-                    val hasTrustedTombstone = tombstoneIndex.queueResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
+                    val hasTrustedTombstone = tombstoneIndex.hasTrustedQueueDeletion(
+                        id,
+                        incomingModified
+                    )
                     val restored = archived.toReadingQueue(
                         exportedAt = exportedAt,
                         localIsPendingDeletion = existing.isDeleted,
                         localScheduledAt = existing.permanentDeletionScheduledAt,
-                        hasTrustedTombstone = hasTrustedTombstone
+                        hasTrustedTombstone = hasTrustedTombstone,
+                        now = now
                     )
                     val finalIsDeleted = !isSystemQueue && restored.isDeleted
                     val deletionState = restoredDeletionState(
                         incomingIsDeleted = finalIsDeleted,
                         localIsPendingDeletion = existing.isDeleted,
                         localScheduledAt = existing.permanentDeletionScheduledAt,
-                        hasTrustedTombstone = hasTrustedTombstone
+                        hasTrustedTombstone = hasTrustedTombstone,
+                        now = now
                     )
                     queuesById[id] = restored.copy(
                         // Keep the local identity: local memberships already point
@@ -1299,6 +1370,86 @@ object BackupMergeService {
     )
 
     private val FUTURE_CLOCK_SKEW: Duration = Duration.ofHours(24)
+
+    /** Floor for the D8 anomaly hold. */
+    const val UNSIGNED_HIDE_HOLD_FLOOR = 10
+
+    private data class UnsignedHideCandidate(
+        val workId: String,
+        val title: String
+    )
+
+    private fun collectUnsignedWorkHides(
+        works: List<BackupWork>,
+        identity: WorkIdentitySnapshot,
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode,
+        exportedAt: Instant?,
+        now: Instant
+    ): List<UnsignedHideCandidate> {
+        val candidates = mutableListOf<UnsignedHideCandidate>()
+        works.forEach { archived ->
+            val archivedId = BackupPaths.canonicalUuid(archived.id, "work.id")
+            val existing = identity.existingWork(
+                ao3WorkId = archived.ao3WorkID?.toLong(),
+                sourceUrl = archived.sourceURL,
+                recordId = archivedId
+            )
+            val incomingModifiedAt = resolveIncomingLastModifiedAt(
+                lastModifiedAt = archived.lastModifiedAt,
+                dateAdded = archived.dateAdded,
+                exportedAt = exportedAt,
+                now = now
+            )
+            if (!unsignedWorkHideWouldApply(
+                    archived = archived,
+                    existing = existing,
+                    tombstoneIndex = tombstoneIndex,
+                    mode = mode,
+                    incomingModifiedAt = incomingModifiedAt
+                )
+            ) {
+                return@forEach
+            }
+            candidates += UnsignedHideCandidate(
+                workId = existing?.id ?: archivedId,
+                title = archived.title
+            )
+        }
+        return candidates
+    }
+
+    /**
+     * Whether this archived work would apply an unsigned hide under [mode].
+     * Mirrors the restore loop's skip / LWW rules so the hold count matches
+     * what merge would actually do.
+     */
+    private fun unsignedWorkHideWouldApply(
+        archived: BackupWork,
+        existing: SavedWork?,
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode,
+        incomingModifiedAt: Instant?
+    ): Boolean {
+        if (archived.isDeleted != true) return false
+        if (tombstoneIndex.suppressesWorkResurrection(archived)) return false
+        if (existing == null) return true
+        return when (mode) {
+            BackupImportMode.MERGE -> false
+            BackupImportMode.REPLACE_LIBRARY -> true
+            BackupImportMode.RECONCILE -> SyncMerge.shouldApplyIncoming(
+                existing.effectiveLastModifiedAt,
+                incomingModifiedAt
+            )
+        }
+    }
+
+    fun unsignedHideSourceLabel(mode: BackupImportMode): String {
+        return when (mode) {
+            BackupImportMode.RECONCILE -> "your Library Sync Folder"
+            BackupImportMode.MERGE, BackupImportMode.REPLACE_LIBRARY -> "a backup"
+        }
+    }
 }
 
 /** Apple `SyncMerge` helpers used by backup restore. */
@@ -1392,6 +1543,38 @@ internal class TombstoneIndex(
                 else -> Unit
             }
         }
+    }
+
+    /**
+     * Existence-only identity match for D8 reconciliation. Recency is not
+     * required — any matching local tombstone means a trusted delete was
+     * recorded on this device.
+     */
+    fun hasLocalWorkTombstone(work: SavedWork): Boolean {
+        val ao3 = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+            ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
+            ?.toInt()
+        if (ao3 != null && workByAo3Id.containsKey(ao3)) return true
+        canonicalSourceUrl(work.sourceUrl)?.let { url ->
+            if (workBySourceUrl.containsKey(url)) return true
+        }
+        return workById.containsKey(BackupPaths.normalizeIdForComparison(work.id))
+    }
+
+    fun hasLocalCollectionTombstone(id: String): Boolean {
+        return collectionById.containsKey(BackupPaths.normalizeIdForComparison(id))
+    }
+
+    fun hasLocalQueueTombstone(id: String): Boolean {
+        return queueById.containsKey(BackupPaths.normalizeIdForComparison(id))
+    }
+
+    fun hasTrustedCollectionDeletion(id: String, incomingModifiedAt: Instant?): Boolean {
+        return collectionResolution(id, incomingModifiedAt) == TombstoneResolution.SUPPRESS_STALE
+    }
+
+    fun hasTrustedQueueDeletion(id: String, incomingModifiedAt: Instant?): Boolean {
+        return queueResolution(id, incomingModifiedAt) == TombstoneResolution.SUPPRESS_STALE
     }
 
     fun suppressesWorkResurrection(archived: BackupWork): Boolean {

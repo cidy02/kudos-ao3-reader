@@ -185,7 +185,7 @@ fun BackupScreen(
                     "Export writes ZIP packages at manifest v${BackupVersion.CURRENT} (Apple-compatible).",
                     "Import accepts Apple/Android .kudosbackup ZIP versions ${BackupVersion.APPLE_V1}–${BackupVersion.CURRENT}.",
                     "Merge adds works that are not already here. Replace Library makes this device match the file.",
-                    "Unsigned deletion claims in a backup or sync folder are ignored. Signed tombstones apply only from devices you already trust."
+                    "Unsigned isDeleted flags hide a work in Recently Deleted without starting the 90-day clock, unless a trusted tombstone backs the deletion. Signed tombstones apply only from devices you already trust."
                 )
             )
         }

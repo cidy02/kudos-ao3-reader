@@ -11,6 +11,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.MaterialTheme
+import io.github.cidy02.kudos.backup.UnsignedDeletionReview
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.onboarding.WelcomeScreen
@@ -136,6 +137,63 @@ fun KudosApp(container: KudosAppContainer) {
             text = { androidx.compose.material3.Text(importStatus.orEmpty()) },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = { importStatus = null }) {
+                    androidx.compose.material3.Text("OK")
+                }
+            }
+        )
+    }
+
+    val unsignedHideHold by UnsignedDeletionReview.pendingHold.collectAsState()
+    val unsignedHideDigest by UnsignedDeletionReview.pendingDigest.collectAsState()
+    if (unsignedHideHold != null) {
+        val hold = unsignedHideHold!!
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { UnsignedDeletionReview.dismissHold() },
+            title = { androidx.compose.material3.Text("Review Hidden Works") },
+            text = {
+                androidx.compose.foundation.layout.Column {
+                    androidx.compose.material3.Text(
+                        "${hold.count} works from ${hold.sourceLabel} want to be hidden. " +
+                            "Review before applying. Hidden works stay in Recently Deleted " +
+                            "and are not scheduled for permanent deletion."
+                    )
+                    hold.titles.forEach { title ->
+                        androidx.compose.material3.Text(
+                            "• ${title.ifBlank { "(untitled)" }}",
+                            modifier = Modifier
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { UnsignedDeletionReview.dismissHold() }
+                ) {
+                    androidx.compose.material3.Text("Keep Visible")
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        scope.launch {
+                            container.backupRepository.applyHeldUnsignedHides(hold.workIds)
+                            UnsignedDeletionReview.dismissHold()
+                        }
+                    }
+                ) {
+                    androidx.compose.material3.Text("Hide ${hold.count}")
+                }
+            }
+        )
+    } else if (unsignedHideDigest != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { UnsignedDeletionReview.dismissDigest() },
+            title = { androidx.compose.material3.Text("Recently Deleted") },
+            text = { androidx.compose.material3.Text(unsignedHideDigest.orEmpty()) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { UnsignedDeletionReview.dismissDigest() }
+                ) {
                     androidx.compose.material3.Text("OK")
                 }
             }

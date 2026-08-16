@@ -77,13 +77,21 @@ fun restoredDeletionState(
     incomingIsDeleted: Boolean?,
     localIsPendingDeletion: Boolean,
     localScheduledAt: Instant?,
-    hasTrustedTombstone: Boolean
+    hasTrustedTombstone: Boolean,
+    now: Instant = Instant.now()
 ): RestoredDeletionState {
     val deleted = incomingIsDeleted == true
     if (!deleted) return RestoredDeletionState(false, null)
-    if (!hasTrustedTombstone) return RestoredDeletionState(true, null)
-    if (localIsPendingDeletion && localScheduledAt != null) return RestoredDeletionState(true, localScheduledAt)
-    return RestoredDeletionState(true, Instant.now().plus(WorkRepository.RECOVERY_WINDOW))
+    if (!hasTrustedTombstone) {
+        // Hidden, but the clock does not start (or keep running) on an
+        // unsigned say-so. Without this, sweepExpired can be driven by
+        // data nobody signed — see D8.
+        return RestoredDeletionState(true, null)
+    }
+    if (localIsPendingDeletion && localScheduledAt != null) {
+        return RestoredDeletionState(true, localScheduledAt)
+    }
+    return RestoredDeletionState(true, now.plus(WorkRepository.RECOVERY_WINDOW))
 }
 
 fun SavedWork.toBackupWork(
@@ -150,7 +158,8 @@ fun BackupWork.toSavedWork(
     exportedAt: Instant? = null,
     localIsPendingDeletion: Boolean = false,
     localScheduledAt: Instant? = null,
-    hasTrustedTombstone: Boolean = false
+    hasTrustedTombstone: Boolean = false,
+    now: Instant = Instant.now()
 ): SavedWork {
     val added = if (dateAdded.isNotBlank()) {
         BackupValidator.parseInstant(dateAdded, "work.dateAdded", exportedAt)
@@ -166,7 +175,8 @@ fun BackupWork.toSavedWork(
         incomingIsDeleted = isDeleted,
         localIsPendingDeletion = localIsPendingDeletion,
         localScheduledAt = localScheduledAt,
-        hasTrustedTombstone = hasTrustedTombstone
+        hasTrustedTombstone = hasTrustedTombstone,
+        now = now
     )
     return SavedWork(
         id = BackupPaths.canonicalUuid(id, "work.id"),
@@ -312,13 +322,15 @@ fun BackupCollection.toWorkCollection(
     exportedAt: Instant? = null,
     localIsPendingDeletion: Boolean = false,
     localScheduledAt: Instant? = null,
-    hasTrustedTombstone: Boolean = false
+    hasTrustedTombstone: Boolean = false,
+    now: Instant = Instant.now()
 ): WorkCollection {
     val deletionState = restoredDeletionState(
         incomingIsDeleted = isDeleted,
         localIsPendingDeletion = localIsPendingDeletion,
         localScheduledAt = localScheduledAt,
-        hasTrustedTombstone = hasTrustedTombstone
+        hasTrustedTombstone = hasTrustedTombstone,
+        now = now
     )
     return WorkCollection(
         id = BackupPaths.canonicalUuid(id, "collection.id"),
@@ -428,7 +440,8 @@ fun BackupReadingQueue.toReadingQueue(
     exportedAt: Instant? = null,
     localIsPendingDeletion: Boolean = false,
     localScheduledAt: Instant? = null,
-    hasTrustedTombstone: Boolean = false
+    hasTrustedTombstone: Boolean = false,
+    now: Instant = Instant.now()
 ): ReadingQueue {
     val created = if (dateCreated.isNotBlank()) {
         BackupValidator.parseInstant(dateCreated, "queue.dateCreated", exportedAt)
@@ -444,7 +457,8 @@ fun BackupReadingQueue.toReadingQueue(
         incomingIsDeleted = isDeleted,
         localIsPendingDeletion = localIsPendingDeletion,
         localScheduledAt = localScheduledAt,
-        hasTrustedTombstone = hasTrustedTombstone
+        hasTrustedTombstone = hasTrustedTombstone,
+        now = now
     )
     return ReadingQueue(
         id = BackupPaths.canonicalUuid(id, "queue.id"),
