@@ -1,7 +1,11 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.backup.TombstoneSigning
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.core.model.SyncTombstone
+import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.dao.AnnotationDao
+import io.github.cidy02.kudos.data.local.dao.SyncTombstoneDao
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import java.time.Instant
@@ -17,8 +21,17 @@ import kotlinx.coroutines.flow.map
  * Same-passage recolor (iOS `ReadingAnnotationMatching`): if a new highlight
  * targets the same selected text + similar progression, update color instead of
  * stacking a second row.
+ *
+ * Deletes mint a signed `readingAnnotation` tombstone so folder-sync RECONCILE
+ * cannot resurrect the highlight from an older peer snapshot (iOS
+ * `SyncTombstones.recordDeletion`).
  */
-class AnnotationRepository(private val dao: AnnotationDao) {
+class AnnotationRepository(
+    private val dao: AnnotationDao,
+    private val tombstoneDao: SyncTombstoneDao,
+    private val clock: () -> Instant = { Instant.now() },
+    private val uuidFactory: () -> String = { UUID.randomUUID().toString() }
+) {
     fun observeForWork(workId: String): Flow<List<ReadingAnnotation>> {
         return dao.observeForWork(workId).map { rows -> rows.map { it.toDomain() } }
     }
@@ -28,7 +41,22 @@ class AnnotationRepository(private val dao: AnnotationDao) {
     }
 
     suspend fun deleteAnnotation(id: String) {
+        val existing = dao.getById(id)
         dao.deleteById(id)
+        if (existing == null) return
+        val now = clock()
+        tombstoneDao.upsert(
+            TombstoneSigning.sign(
+                SyncTombstone(
+                    id = uuidFactory(),
+                    recordID = id.lowercase(),
+                    recordTypeRaw = SyncTombstoneRecordType.READING_ANNOTATION,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletionReason = "annotationDeleted"
+                )
+            ).toEntity()
+        )
     }
 
     suspend fun updateNote(id: String, note: String) {
