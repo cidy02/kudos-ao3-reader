@@ -100,9 +100,52 @@ Both FIX findings are the exact class the reviewer was asked to hunt — **the f
 
 Conductor's note: WPA-1/WPA-2 are test-coverage holes, not live vulnerabilities — the production code is correct today on both. They are genuine FIX (the brief's definition of done requires a test that goes RED when the fix is removed), but neither is a BLOCK for stacking.
 
-### WP-B, WP-D, tombstone — reviews in flight (Claude Opus 5, via Workflow `wv60qb8dd`)
-### WP-C, WP-E — reviews in flight (Grok, xhigh)
-### WP-F — review in flight (Gemini 3.1 Pro)
+### WP-C — reviewed by **Grok (xhigh)** (implementers: Claude Opus 5 + Gemini 3.1 Pro)
+
+Full report: `/Users/cidy02/kudos-fix-wp-c/REVIEW-GROK-WPC.md` (340 lines). **Verdict: 0 BLOCK, 5 FIX, 5 SHIP.** Reviewer's headline: *"Do not merge as 'done' until the FIX items below are closed — T-195 overclaims directory laziness, the ZIP laziness test still does not prove unread-until-access, and `1ee0ade` shipped leftover artifacts."*
+
+**SHIP:** M5 zero-compressed-DEFLATE guard placement + the 500 MB → 2 MB fixture change (a *strengthening*, not a weakening) · ZIP EPUB decode genuinely lazy and restore uses the accessor · Settings pre-confirm ordering · M17 residual honestly recorded as accepted-risk rather than claimed fixed · existing restore/round-trip tests adapted, not gutted.
+
+**FIX-1** — the ZIP laziness test does not prove unread-until-access, so it is not yet a regression test for M4.
+**FIX-2** — **directory import still materialises every EPUB (and the whole tree) after confirm.** M4 is only actually fixed on the `.kudosbackup` ZIP path; the directory path is still a live user-facing Settings route. **T-195's "DONE" claim is an overclaim.**
+**FIX-3** — ZIP `init(zipData:)` still eagerly extracts every font (same decompression-bomb class as M4, smaller typical N).
+**FIX-4** — leftover artifacts committed in `1ee0ade`; reviewer independently flags these must go *before* stacking onto `security-fixes/rc`. **This is the same issue as WPC-1 above, found independently.**
+**FIX-5** — the split read introduces a confirm-time TOCTOU (new with this WP, lower severity than FIX-2).
+
+### WP-E — reviewed by **Grok (xhigh)**
+
+Full report: `/Users/cidy02/kudos-fix-wp-e/REVIEW-GROK-WPE.md` (257 lines). **Verdict: SHIP, 0 BLOCK, 2 FIX (both test-coverage/bookkeeping, not production holes).**
+
+Confirms the load-bearing question from the brief: the M1g guard **is** at the merge entry point for the paths that bypass the mapper (SHIP-3), the shared helper never copies the archive wipe instant (SHIP-1), T1 does assert ≈`now + RECOVERY_WINDOW` (SHIP-5), T2 hits `BackupMergeService.merge` and proves overlay neutralisation for collections and queues (SHIP-6), and no existing assertions were weakened (SHIP-8).
+
+**FIX-1** — T2 never overlays a *work*, so the P0 vector is untested at the merge entry (collections and queues are covered; production is currently safe, hence FIX not BLOCK).
+**FIX-2** — `TASKS.md` cites a SHA that is not on this branch.
+
+### WP-F — reviewed by **Gemini 3.1 Pro (High)** (implementers: Grok 4.5 + Claude Opus 5/4.8)
+
+Full report: `/Users/cidy02/kudos-fix-wp-f/REVIEW-GEMINI-WPF.md`. **Verdict: 1 FIX, 2 SHIP, 0 BLOCK.**
+
+**SHIP** — M3 privacy stricter-of is correctly implemented *at the real persistence boundary* (`SettingsRepository.replaceAll:205-215`, used by `BackupRepository.applyMergeResult`), and its mutations are strong. M21/M2b: font extension allow-list, per-entry cap enforced during read, aggregate `MAX_TOTAL_FONT_BYTES` bound, and blank/unknown `recordTypeRaw` strictly rejected rather than defaulting to `savedWork`.
+
+**FIX (WPF-1) — the M1a timestamp clamp does not do what WP-F claims, and its own mutation evidence is unsound.**
+- `BackupValidator.kt:154-155` *clamps* a `> now + 24h` value to `now + 24h` instead of **rejecting** it.
+- The `min(value, exportedAt)` clamp is **absent entirely** from both `parseInstant` and `BackupMergeService.parseOptionalInstant`.
+- Reviewer's judgement on the evidence: the M1a mutations quoted in `android/WP-F-REVERT-CHECKS.md` are **"too weak to be meaningful — they test that the timestamp is clamped to `now + 24h`, asserting the *broken* implementation instead of enforcing the spec."** This is exactly the failure mode the review was asked to hunt: mutation evidence that certifies the bug rather than the fix.
+
+---
+
+### G9 (NEW, STACK) — two Android `exportedAt` clamp implementations will collide on RC
+
+Conductor-level finding; no single-tree reviewer could see it.
+
+WP-F's Android clamp is **missing** the `exportedAt` component (WPF-1 above). But the **tombstone tree** independently added one: commit `a1aa83f` is described as *"Android: drop unsigned incoming tombstones; Replace UX; `exportedAt` clamp; canonical `sourceURL`"*. Both trees therefore modify Android backup date handling, and they merge at RC steps 5 and 7.
+
+This corroborates, from a second direction, the gap recorded in the pre-existing tombstone design notes ("Android has no `exportedAt` clamp; iOS clamps via `min(archived.lastModifiedAt, contents.manifest.exportedAt)` at `KudosBackup.swift:1334`").
+
+**Action at merge:** verify the tombstone tree's clamp actually lands and supersedes WP-F's weaker one, and that the combined result **rejects** `> now + 24h` rather than clamping it. If the tombstone version also only clamps, WPF-1 must be fixed on RC. Do not assume the later merge silently fixes it — diff the final `parseInstant`/`parseOptionalInstant` on RC and re-run the Android gate.
+
+### WP-D — reviewed by Claude Opus 5 (report written, not yet read into this log)
+### WP-B, tombstone — reviews still in flight (Claude Opus 5, via Workflow `wv60qb8dd`)
 
 ---
 
