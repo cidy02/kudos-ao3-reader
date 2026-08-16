@@ -1,6 +1,7 @@
-# WP-F revert checks (M1a timestamp clamp, M3 privacy stricter-of, M2b)
+# WP-F revert checks (M1a timestamp reject + exportedAt clamp, M3 privacy stricter-of, M2b)
 
-Local-only verification on `security-fixes/wp-f-android`. No push. No merge. Tests were not weakened.
+Local-only verification on `rc-fix/android` (stacked RC). No push. No merge.
+Tests were not weakened.
 
 Environment:
 
@@ -8,86 +9,81 @@ Environment:
 - `ANDROID_HOME=$HOME/Library/Android/sdk`
 - `./gradlew :app:testDebugUnitTest`
 
+The previous M1a mutations in this file certified the *broken* clamp-to-`now+24h`
+implementation. They have been replaced. M3 / M2b evidence below is unchanged
+from the WP-F tree (those production checks were not touched here).
+
 ## Production still present
 
-**M1a — archive timestamp clamp.** `BackupValidator.parseInstant` still rejects far-future clocks by clamping to `now + 24h`:
+**M1a — reject `> now+24h`, clamp `min(value, exportedAt)`.**
+`BackupValidator.parseInstant` throws `BackupError.InvalidDate` when the parsed
+instant is more than 24h in the future. It does **not** rewrite the value to
+`now + 24h`. When `exportedAt` is supplied, the result is also
+`min(parsed, exportedAt)`.
 
-```144:156:android/app/src/main/java/io/github/cidy02/kudos/backup/BackupValidator.kt
-    fun parseInstant(value: String, field: String): Instant {
-        val parsed = try {
-            Instant.parse(value)
-        } catch (_: DateTimeParseException) {
-            try {
-                OffsetDateTime.parse(value).toInstant()
-            } catch (_: DateTimeParseException) {
-                throw BackupError.InvalidDate(field, value)
-            }
-        }
-        val maxAllowed = Instant.now().plus(24, java.time.temporal.ChronoUnit.HOURS)
-        return if (parsed.isAfter(maxAllowed)) maxAllowed else parsed
-    }
-```
+`BackupValidator.validateManifest` parses `exportedAt` first and threads it into
+every other archive clock it checks, including `works[].lastModifiedAt`.
+`BackupMergeService.parseOptionalInstant` and the inbound mappers take the same
+`exportedAt`. Tombstone adopt still pins `lastModifiedAt` to the signed
+`createdAt` (TOMB-1) and then applies `min(..., exportedAt)`.
 
-Ingest (`BackupWork.toSavedWork`, `BackupCollection.toWorkCollection`, `BackupReadingQueue.toReadingQueue`) and merge (`BackupMergeService.merge` via those mappers plus `parseOptionalInstant`) all go through this helper.
+**M3 — privacy stricter-of.** Unchanged. `SettingsRepository.replaceAll` is the
+persist path used by `BackupRepository.applyMergeResult`.
 
-**M3 — privacy stricter-of.** `SettingsRepository.replaceAll` is the persist path used by `BackupRepository.applyMergeResult`. It ORs `hideMatureContent` and `requireBiometricToReveal`, and keeps local `Hide` over incoming `Obscure`:
+**M2b — blank/unknown `recordTypeRaw`.** Unchanged. `toSyncTombstone()` throws
+on blank or unknown types.
 
-```205:215:android/app/src/main/java/io/github/cidy02/kudos/data/preferences/SettingsRepository.kt
-            prefs[Keys.HideMatureContent] = current.privacy.hideMatureContent || settings.privacy.hideMatureContent
-            
-            val newMatureMode = if (current.privacy.matureContentMode == MatureContentMode.Hide) {
-                MatureContentMode.Hide
-            } else {
-                settings.privacy.matureContentMode
-            }
-            prefs[Keys.MatureContentMode] = newMatureMode.storageValue
-            
-            val newBiometric = current.privacy.requireBiometricToReveal || settings.privacy.requireBiometricToReveal
-            prefs[Keys.RequireBiometricToReveal] = newBiometric
-```
+## M1a Mutation A — drop reject and exportedAt clamp
 
-**M2b — blank/unknown `recordTypeRaw`.** `BackupTombstone.toSyncTombstone()` throws `IllegalArgumentException` when the trimmed type is empty or not in the known allow-list. It does **not** default to `savedWork`. `BackupMergeService.merge` calls that mapper, so a hostile tombstone cannot be indexed as `SAVED_WORK`.
-
-Hole closed in this pass:
-
-- Existing ingest tests never set work `lastModifiedAt`, so a clamp-`dateAdded`-only substitute stayed GREEN on works.
-- No production-entry merge test existed for the clamp or for M2b tombstone rejection.
-- Privacy assertions had no messages (harder to quote on RED).
-
-## M1a Mutation A — drop the clamp (far-future dates win)
-
-Change: `parseInstant` returned `parsed` with no `now + 24h` cap.
+Change: `parseInstant` returned `parsed` with no `now+24h` reject and no
+`exportedAt` clamp.
 
 Command: `./gradlew :app:testDebugUnitTest --tests io.github.cidy02.kudos.backup.BackupTimestampClampTest`
 
-Result: **RED**. `4 tests completed, 3 failed`. Wall clock **real 4.31s** (`/usr/bin/time -p`; suite XML time `0.041s`).
+Result: **RED**. JUnit XML `tests=8 failures=6 errors=0 time=0.171`.
 
-Quoted assertions:
+Quoted assertions (durations from the testcase `time` attribute):
 
-- `java.lang.AssertionError: expected:<2026-08-16T21:04:04Z> but was:<2026-08-25T21:04:04Z>` — `testParseInstant_ClampsFutureDate`
-- `java.lang.AssertionError: Work dateAdded should be clamped` — `testIngestPaths_ClampFutureTimestamps`
-- `java.lang.AssertionError: Merged work dateAdded should be clamped` — `testMerge_ClampFutureTimestampsOnWorksAndCollections`
+- `java.lang.AssertionError: expected io.github.cidy02.kudos.backup.BackupError.InvalidDate to be thrown, but nothing was thrown` — `testParseInstant_RejectsFutureDate` — **0.002s**
+- `java.lang.AssertionError: expected io.github.cidy02.kudos.backup.BackupError.InvalidDate to be thrown, but nothing was thrown` — `testIngestPaths_RejectFutureTimestamps` — **0.002s**
+- `java.lang.AssertionError: expected io.github.cidy02.kudos.backup.BackupError.InvalidDate to be thrown, but nothing was thrown` — `testMerge_RejectsFutureTimestampsOnWorksAndCollections` — **0.032s**
+- `java.lang.AssertionError: expected io.github.cidy02.kudos.backup.BackupError.InvalidDate to be thrown, but nothing was thrown` — `testMerge_RejectsFutureExportedAt` — **0.067s**
+- `java.lang.AssertionError: forged just-now timestamp must clamp to the snapshot exportedAt expected:<2026-08-09T16:39:35.472645Z> but was:<2026-08-16T16:39:35.472Z>` — `testParseInstant_ClampsToExportedAt` — **0.060s**
+- `java.lang.AssertionError: Merged work dateAdded must clamp to exportedAt expected:<2026-08-09T16:39:35.631Z> but was:<2026-08-16T16:39:35.631Z>` — `testMerge_ClampsLastModifiedAtToExportedAt` — **0.003s**
 
 Code restored immediately after.
 
-## M1a Mutation B — weaker substitute (clamp `dateAdded` only)
+## M1a Mutation B — reject future, skip exportedAt clamp
 
-Change: `parseInstant` clamped only when `field` contained `dateAdded`. `lastModifiedAt` / queue clocks passed through unclamped.
+Change: `parseInstant` still threw on `> now+24h` but returned `parsed` without
+`min(parsed, exportedAt)`.
 
 Same test command.
 
-Result: **RED**. `4 tests completed, 2 failed`. Wall clock **real 4.06s** (suite XML time `0.037s`).
+Result: **RED**. JUnit XML `tests=8 failures=2 errors=0 time=0.14`.
 
-Quoted assertions:
+Reject tests stayed GREEN (so Mutation B is not just Mutation A again):
 
-- `java.lang.AssertionError: Work lastModifiedAt should be clamped` — `testIngestPaths_ClampFutureTimestamps`
-- `java.lang.AssertionError: Merged work lastModifiedAt should be clamped` — `testMerge_ClampFutureTimestampsOnWorksAndCollections`
+- `testParseInstant_RejectsFutureDate` — **0.005s**
+- `testMerge_RejectsFutureExportedAt` — **0.035s**
+- `testMerge_RejectsFutureTimestampsOnWorksAndCollections` — **0.010s**
+- `testIngestPaths_RejectFutureTimestamps` — **0.003s**
 
-`testParseInstant_ClampsFutureDate` stayed GREEN (field name is `dateAdded`), which is why the lastModified / merge assertions are load-bearing.
+Quoted RED assertions:
+
+- `java.lang.AssertionError: forged just-now timestamp must clamp to the snapshot exportedAt expected:<2026-08-09T16:40:17.873055Z> but was:<2026-08-16T16:40:17.873Z>` — `testParseInstant_ClampsToExportedAt` — **0.056s**
+- `java.lang.AssertionError: Merged work dateAdded must clamp to exportedAt expected:<2026-08-09T16:40:17.980Z> but was:<2026-08-16T16:40:17.980Z>` — `testMerge_ClampsLastModifiedAtToExportedAt` — **0.018s**
+
+The merge-entry dateAdded assertion is load-bearing: `sanitizeArchivedLastModifiedAt`
+still clamps `lastModifiedAt` even without the parseInstant clamp, so a lastModified-only
+check would have stayed GREEN. The dateAdded check fails because ingest now goes
+through `parseInstant(..., exportedAt)`.
 
 Code restored immediately after.
 
 ## M3 Mutation A — incoming backup overwrites privacy
+
+(Unchanged from the WP-F tree. Production was not edited in this pass.)
 
 Change: `replaceAll` wrote incoming `hideMatureContent`, `matureContentMode`, and `requireBiometricToReveal` with no stricter-of.
 
@@ -99,13 +95,9 @@ Quoted assertion:
 
 - `java.lang.AssertionError: hideMatureContent must stay true under stricter-of restore` — `testPrivacyStricterOf` (`SettingsRepositoryPrivacyTest.kt`)
 
-Code restored immediately after (then re-applied as Mutation B).
-
 ## M3 Mutation B — weaker substitute (OR hide flag only)
 
 Change: kept `hideMatureContent` OR, but applied incoming `matureContentMode` and `requireBiometricToReveal` unchanged.
-
-Same test command.
 
 Result: **RED**. `1 test completed, 1 failed`. Wall clock **real 6.14s** (suite XML time `0.243s`).
 
@@ -113,25 +105,14 @@ Quoted assertion:
 
 - `java.lang.AssertionError: matureContentMode must stay Hide under stricter-of restore expected:<Hide> but was:<Obscure>` — `testPrivacyStricterOf`
 
-Code restored immediately after.
-
 ## M2b
 
-Mapper already throws on blank (`"   "`) and unknown (`"maliciousType"`) `recordTypeRaw`. Existing `testM2b_BlankOrUnknownTombstoneRejected` hits `toSyncTombstone()` directly.
-
-Added production-entry `testM2b_MergeRejectsBlankOrUnknownTombstone`: `BackupMergeService.merge` of a package whose only payload is a blank or unknown tombstone throws `IllegalArgumentException`. The hostile type never becomes `savedWork`.
+Mapper already throws on blank (`"   "`) and unknown (`"maliciousType"`) `recordTypeRaw`.
+`testM2b_MergeRejectsBlankOrUnknownTombstone` hits `BackupMergeService.merge`.
 
 ## GREEN last
 
-After all restores (production diffs empty vs pre-mutation):
+After all restores (production reject + exportedAt clamp present):
 
-Targeted classes (clamp + restore-security + privacy):
-
-| Suite | tests | failures |
-|---|---:|---:|
-| `BackupTimestampClampTest` | 4 | 0 |
-| `BackupRestoreSecurityTest` | 4 | 0 |
-| `SettingsRepositoryPrivacyTest` | 1 | 0 |
-| **targeted total** | **9** | **0** |
-
-Full `:app:testDebugUnitTest`: **798 tests, 0 failures, 0 errors, 0 skipped** (224 suites). Wall clock **real 16.40s**.
+Full `:app:testDebugUnitTest` tallied from `android/app/build/test-results/testDebugUnitTest/*.xml`:
+**854 tests, 0 failures, 0 errors, 0 skipped** (230 suites).
