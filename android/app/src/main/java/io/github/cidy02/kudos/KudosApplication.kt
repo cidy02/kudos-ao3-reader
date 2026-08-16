@@ -54,6 +54,12 @@ class KudosApplication : Application(), Configuration.Provider {
                     container.settingsRepository
                 )
             }
+            runCatching {
+                D8ReconciliationMigration.runIfNeeded(
+                    container.database,
+                    container.settingsRepository
+                )
+            }
             runCatching { container.workRepository.sweepExpiredSoftDeletes() }
             runCatching { container.workRepository.sweepExpiredCollectionSoftDeletes() }
             runCatching { container.readingQueueRepository.sweepExpiredQueueSoftDeletes() }

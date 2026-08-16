@@ -126,4 +126,15 @@ interface CollectionDao {
 
     @Query("DELETE FROM collections WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query(
+        """
+        SELECT * FROM collections
+        WHERE isDeleted = 1 AND permanentDeletionScheduledAt IS NOT NULL
+        """
+    )
+    suspend fun getPendingDeletions(): List<CollectionEntity>
+
+    @Query("UPDATE collections SET permanentDeletionScheduledAt = NULL WHERE id = :id")
+    suspend fun clearDeletionSchedule(id: String)
 }

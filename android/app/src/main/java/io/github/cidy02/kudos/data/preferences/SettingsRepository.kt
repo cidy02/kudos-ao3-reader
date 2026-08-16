@@ -332,7 +332,16 @@ class SettingsRepository(
         val SyncLastSyncAt = androidx.datastore.preferences.core.longPreferencesKey("syncLastSyncAt")
         val SyncHasPendingChanges = booleanPreferencesKey("syncHasPendingChanges")
         val TombstoneMigrationComplete = booleanPreferencesKey("tombstoneMigrationComplete")
+        val D8ReconciliationComplete = booleanPreferencesKey("d8ReconciliationComplete")
         val TrustedTombstonePublicKeys = stringSetPreferencesKey("trustedTombstonePublicKeys")
+    }
+
+    suspend fun isD8ReconciliationComplete(): Boolean {
+        return dataStore.data.map { it[Keys.D8ReconciliationComplete] ?: false }.first()
+    }
+
+    suspend fun setD8ReconciliationComplete(complete: Boolean) {
+        dataStore.edit { it[Keys.D8ReconciliationComplete] = complete }
     }
 
     companion object {
