@@ -197,10 +197,25 @@ UDID=C71780B1-35DE-4E5E-ABCD-2AB66BCB28B0
 xcodebuild test -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
   -destination "id=$UDID" \
   -only-testing:KudosTests/PersistenceGateSuites/KudosBackupTests \
+  -only-testing:KudosTests/PersistenceGateSuites/FolderSyncTests \
   CODE_SIGNING_ALLOWED=NO
 ```
 
 `KudosTests/KudosBackupTests` matches **0** Swift Testing cases. Use the `PersistenceGateSuites` filter. `totalTestCount` 0 is a fail.
+
+**⚠️ The same trap applies to FolderSync — corrected 2026-08-16.** This section
+previously said to gate FolderSync but gave no path, and the obvious
+`-only-testing:KudosTests/FolderSyncTests` **matches 0 cases and still exits 0**
+(verified on the RC: `totalTestCount: 0`, exit 0, no suites reported). `FolderSyncTests`
+is nested exactly like `KudosBackupTests` —
+`extension PersistenceGateSuites { @Suite(.serialized) struct FolderSyncTests }` — so the
+only correct path is `KudosTests/PersistenceGateSuites/FolderSyncTests` (27 cases).
+Following the old form gives a green iOS gate that never exercised folder sync at all,
+including the F4 symlink guard in `coordinatedReadData`.
+
+**Do not trust "green" alone — confirm what ran.** `grep -oE "Suite [A-Za-z]+ (passed|failed)"`
+over the xcodebuild log, and read `totalTestCount` from the result bundle rather than
+xcodebuild's exit code.
 
 Android:
 
