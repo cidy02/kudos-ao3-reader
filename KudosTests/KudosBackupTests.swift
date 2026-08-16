@@ -1607,7 +1607,10 @@ struct KudosBackupTests {
         )
         _ = try KudosBackupService.restore(later, into: context, defaults: try testDefaults(), mode: .merge)
         let active = try context.fetch(FetchDescriptor<SavedWork>()).filter { !$0.isPendingDeletion }
-        #expect(active.contains { $0.id == dropID }, "Later merge was blocked by a standing tombstone or leftover pending delete")
+        #expect(
+            active.contains { $0.id == dropID },
+            "Later merge was blocked by a standing tombstone or leftover pending delete"
+        )
     }
 
     /// File-import Merge is add-only: an active overlapping work keeps its local
@@ -1781,6 +1784,74 @@ struct KudosBackupTests {
         #expect(stored.title == "Restored From File")
     }
 
+    @Test func fileMergeUndeletesPendingDeletionCollectionsAndQueues() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let work = SavedWork(id: UUID(), title: "Keep", author: "A")
+        context.insert(work)
+        let collection = WorkCollection(name: "Slow burn")
+        collection.works.append(work)
+        context.insert(collection)
+        let queue = ReadingQueue(name: "TBR", kind: .custom)
+        context.insert(queue)
+        try context.save()
+
+        let realBackup = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            collections: [collection],
+            readingQueues: [queue],
+            defaults: try testDefaults()
+        )
+        let replaceSnapshot = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            collections: [],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(
+            replaceSnapshot, into: context, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        let afterReplaceCollection = try #require(
+            try context.fetch(FetchDescriptor<WorkCollection>()).first { $0.id == collection.id }
+        )
+        let afterReplaceQueue = try #require(
+            try context.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
+        )
+        #expect(afterReplaceCollection.isPendingDeletion)
+        #expect(afterReplaceQueue.isPendingDeletion)
+
+        _ = try KudosBackupService.restore(
+            realBackup, into: context, defaults: try testDefaults(), mode: .merge
+        )
+        let restoredCollection = try #require(
+            try context.fetch(FetchDescriptor<WorkCollection>()).first { $0.id == collection.id }
+        )
+        let restoredQueue = try #require(
+            try context.fetch(FetchDescriptor<ReadingQueue>()).first { $0.id == queue.id }
+        )
+        #expect(restoredCollection.isPendingDeletion == false)
+        #expect(restoredCollection.deletedAt == nil)
+        #expect(restoredCollection.permanentDeletionScheduledAt == nil)
+        #expect(
+            restoredCollection.works.contains { $0.id == work.id },
+            "Undeleted collection must keep the restored work as a member"
+        )
+        #expect(restoredQueue.isPendingDeletion == false)
+        #expect(restoredQueue.deletedAt == nil)
+        #expect(restoredQueue.permanentDeletionScheduledAt == nil)
+    }
+
     @Test func fileMergeAddsNewAnnotationIDsWithoutOverwritingExisting() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
@@ -1936,6 +2007,70 @@ struct KudosBackupTests {
         )
     }
 
+    @Test func trustedSignedTombstoneForgedLastModifiedAtCannotPermanentlySuppressWork() throws {
+        let defaults = try testDefaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        let peerPub = TombstoneSigning.publicKeyHex(of: peer)
+        #expect(TombstoneTrustStore.add(peerPub, defaults: defaults))
+
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
+            ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let workID = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_704_067_200) // 2024-01-01Z
+        let laterWorkDate = Date(timeIntervalSince1970: 1_767_225_600) // 2026-01-01Z
+        let forgedLastModified = Date(timeIntervalSince1970: 4_071_513_600) // 2099-01-01Z
+        let tomb = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/7005",
+            ao3WorkID: 7_005,
+            createdAt: createdAt
+        )
+        TombstoneSigning.sign(tomb, key: peer)
+        tomb.lastModifiedAt = forgedLastModified
+        let hostile = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [tomb],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(hostile, into: context, defaults: defaults)
+
+        let storedTomb = try #require(try context.fetch(FetchDescriptor<SyncTombstone>()).first)
+        #expect(storedTomb.signature == tomb.signature)
+        #expect(
+            storedTomb.lastModifiedAt == storedTomb.createdAt,
+            "Adopted lastModifiedAt must be pinned to the signed createdAt"
+        )
+        #expect(storedTomb.lastModifiedAt < forgedLastModified)
+
+        let laterWork = SavedWork(id: workID, title: "Re-saved after delete", author: "Peer")
+        laterWork.ao3WorkID = 7_005
+        laterWork.sourceURL = "https://archiveofourown.org/works/7005"
+        laterWork.markModified(laterWorkDate)
+        let later = try KudosBackupService.makeContents(
+            works: [laterWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(later, into: context, defaults: defaults)
+        #expect(
+            try context.fetch(FetchDescriptor<SavedWork>()).map(\.title) == ["Re-saved after delete"],
+            "Forged unsigned lastModifiedAt must not permanently suppress a later snapshot"
+        )
+    }
+
     @Test func untrustedButValidSignedTombstoneIsDropped() throws {
         let defaults = try testDefaults()
         let peer = TombstoneSigning.makePrivateKey()
@@ -2056,6 +2191,11 @@ struct KudosBackupTests {
 
         #expect(!TombstoneTrustStore.isTrusted(peerPub, defaults: defaults))
         #expect(!(defaults.stringArray(forKey: TombstoneTrustStore.localKeysKey) ?? []).contains(peerPub))
+        #expect(
+            !(UserDefaults.standard.stringArray(forKey: TombstoneTrustStore.localKeysKey) ?? [])
+                .contains(peerPub),
+            "restore leaked a signer pub into standard defaults"
+        )
     }
 
     @Test func retractTombstoneMatchesAO3OrCanonicalURLNotOnlyRecordID() throws {
