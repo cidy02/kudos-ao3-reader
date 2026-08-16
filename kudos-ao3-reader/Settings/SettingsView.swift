@@ -862,7 +862,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         isImportingBackup = true
         Task { @MainActor in
-            _ = scopedURL
+            // WP-A kept a `_ = scopedURL` here to hold the security scope open,
+            // because in its design the archive was read inside this Task. The
+            // RC uses the tombstone tree's flow, where KudosBackupContents is
+            // already decoded before we get here, so there is no scope to hold.
             defer {
                 PersistenceOperationGate.end(.backupImport)
                 isImportingBackup = false
