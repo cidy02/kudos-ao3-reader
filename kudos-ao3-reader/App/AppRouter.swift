@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// The app's top-level sections.
 enum AppTab: String, Hashable, CaseIterable, Identifiable {
@@ -177,7 +182,24 @@ final class AppRouter {
     }
 
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.
+    ///
+    /// Scheme + host gates live at this sink, not at the call sites.
+    /// `javascript:` / `data:` / `file:` are refused (not handed to the
+    /// system opener). Non-AO3 `http(s)` is routed to the system browser so
+    /// it never shares the AO3 cookie store. Only `https` AO3 hosts present
+    /// the in-app sheet (`AO3AuthorRoute.isAO3URL` is https-only).
     func open(_ url: URL) {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return }
+        if !AO3AuthorRoute.isAO3URL(url) {
+            #if os(macOS)
+            NSWorkspace.shared.open(url)
+            #else
+            UIApplication.shared.open(url)
+            #endif
+            return
+        }
         pendingURL = url
         isPresentingWebBrowser = true
     }
@@ -199,7 +221,11 @@ final class AppRouter {
             return
         }
         let parts = url.pathComponents.filter { $0 != "/" }
-        if (url.host ?? "").contains("archiveofourown.org"),
+        // Same host gate as `open(_:)` (`isAO3URL`: https-only, apex or
+        // subdomain) — a substring check here would treat a lookalike host
+        // like `archiveofourown.org.evil.example` as native-eligible and hand
+        // its URL straight to `AO3Client.worksPage(at:)`.
+        if AO3AuthorRoute.isAO3URL(url),
            parts.first == "tags", parts.count >= 2 {
             pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(parts[1]))
             selection = .browse

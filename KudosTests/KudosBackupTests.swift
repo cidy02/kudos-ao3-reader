@@ -1,3 +1,4 @@
+import CoreText
 import Foundation
 import SwiftData
 import Testing
@@ -204,6 +205,104 @@ struct KudosBackupTests {
         #expect(targetDefaults.string(forKey: "appTheme") == "dark")
 
         try? FileManager.default.removeItem(at: restored.fileURL)
+    }
+
+    /// M15a/M20 regression: the final font-write failure happens after restore has
+    /// already changed the work and inserted its tag, bookmark, saved-for-later
+    /// queue, and font row. Saving the caller after the throw emulates its next
+    /// autosave tick; before the isolated-context boundary, that save persisted all
+    /// of those partial mutations and this test failed.
+    @Test func failedRestoreLeavesNoSwiftDataMutationsVisibleAfterCallerAutosave() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let workID = UUID()
+
+        let localWork = SavedWork(id: workID, title: "Local Title", author: "Local Author")
+        localWork.markModified(Date(timeIntervalSince1970: 100))
+        context.insert(localWork)
+        try context.save()
+
+        let archivedWork = SavedWork(
+            id: workID,
+            title: "Archive Title",
+            author: "Archive Author"
+        )
+        archivedWork.tags = [Tag(name: "archive-tag")]
+        archivedWork.markModified(Date(timeIntervalSince1970: 200))
+        let archivedBookmark = Bookmark(
+            title: "Archive Bookmark",
+            urlString: "https://archiveofourown.org/works/12345"
+        )
+        let baseName = "conflict-\(UUID().uuidString)"
+        let safeName = "\(baseName).ttf"
+        let occupiedURL = Storage.fontsDirectory.appendingPathComponent(safeName)
+        let conflictURL = Storage.fontsDirectory.appendingPathComponent(
+            "\(baseName)-restored-1.ttf"
+        )
+        defer {
+            try? FileManager.default.removeItem(at: occupiedURL)
+            try? FileManager.default.removeItem(at: conflictURL)
+        }
+        try Data("occupied".utf8).write(to: occupiedURL)
+        try FileManager.default.createDirectory(at: conflictURL, withIntermediateDirectories: true)
+
+        let archivedFont = CustomFont(name: "Archive Font", fileName: safeName)
+        let baseContents = try KudosBackupService.makeContents(
+            works: [archivedWork],
+            bookmarks: [archivedBookmark],
+            fonts: [archivedFont],
+            readingQueues: [],
+            defaults: try testDefaults()
+        )
+
+        let descriptor = CTFontDescriptorCreateWithNameAndSize("Helvetica" as CFString, 12.0)
+        let fontURL = try #require(CTFontDescriptorCopyAttribute(descriptor, kCTFontURLAttribute) as? URL)
+        let validFontData = try Data(contentsOf: fontURL)
+
+        let contents = KudosBackupContents(
+            manifest: baseContents.manifest,
+            fontFiles: [safeName: validFontData]
+        )
+
+        var restoreError: NSError?
+        do {
+            _ = try KudosBackupService.restore(
+                contents,
+                into: context,
+                defaults: try testDefaults()
+            )
+            Issue.record("Expected the font write onto an occupied restored-name directory to fail")
+        } catch {
+            restoreError = error as NSError
+        }
+        // Prove this reached the intended late failure, rather than passing because
+        // archive construction or an earlier restore phase threw for another reason.
+        #expect(restoreError?.domain == NSCocoaErrorDomain)
+        #expect(restoreError?.code == 512) // Cocoa fileWriteFailure (NSFileWriteFailureError)
+
+        try context.save()
+        let observer = ModelContext(container)
+        let works = try observer.fetch(FetchDescriptor<SavedWork>())
+        let persistedWork = try #require(works.first)
+        #expect(works.count == 1)
+        #expect(persistedWork.title == "Local Title")
+        #expect(persistedWork.author == "Local Author")
+        #expect(persistedWork.tags.isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<Kudos.Tag>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<Bookmark>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<CustomFont>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<WorkCollection>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<ReadingQueue>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<ReadingQueueMembership>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<SavedSearch>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
+        #expect(try observer.fetch(FetchDescriptor<ReadingAnnotation>()).isEmpty)
     }
 
     @Test func backupRestoresReadingQueuesAndPreservedEPUBs() throws {
@@ -785,7 +884,13 @@ struct KudosBackupTests {
         // backup-validation fix under test.
         let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
         ReadingQueueService.add(localWork, to: queue, in: context)
-        localWork.epubPreservationStatus = .preserved
+        // Deliberately NOT `.preserved`. D7 (`mayReplaceEPUB`) now refuses to replace a
+        // preserved work's bytes at all, so with `.preserved` the corrupt payload would never
+        // reach `EPUBDocument.inspectPackage` and this test would pass without exercising the
+        // A5-F3 validator it exists to test — green for the wrong reason. The preserved case
+        // has its own coverage in ArchiveTrustBoundaryTests; this fixture keeps the validator
+        // on the hook.
+        localWork.epubPreservationStatus = .notPreserved
         try context.save()
         defer { try? FileManager.default.removeItem(at: localWork.fileURL) }
 
@@ -797,7 +902,6 @@ struct KudosBackupTests {
 
         let restored = try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.hasEPUB)
-        #expect(restored.epubPreservationStatus == .preserved)
         #expect(try Data(contentsOf: restored.fileURL) == validEPUB)
         #expect(summary.skippedInvalidEPUBs == 1)
     }

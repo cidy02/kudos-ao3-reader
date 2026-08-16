@@ -1,11 +1,12 @@
 #!/bin/sh
-# Runs the KudosTests unit tests on an iOS Simulator.
+# Runs the KudosTests unit tests on a booted iOS Simulator.
 #
-#   Scripts/test.sh                                   # default simulator
-#   Scripts/test.sh 'platform=iOS Simulator,name=iPhone 16'   # pick a device
+#   KUDOS_CASEFOLD_SIMULATOR_UDID=<udid> Scripts/test.sh
+#   Scripts/test.sh <udid>
 #
-# Code signing is disabled for the simulator (Readium resource bundles carry
-# xattrs that block signing on the readium-migration branch).
+# The complete target includes tests that require a case-sensitive APFS image.
+# Delegate to the case-fold harness so the normal test gate cannot silently run
+# those tests on the host's case-insensitive filesystem.
 #
 # Parallel testing is disabled: PersistenceOperationGate is a process-wide
 # static lock (intentionally global in the real app, since only one instance
@@ -15,16 +16,11 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# The OS is pinned deliberately. Without it xcodebuild resolves `OS:latest`, and
-# once an iOS 27 runtime is installed `latest` means 27 — where no plain
-# "iPhone 17" device exists (only Pro Max / 17e / Air), so the run dies with
-# "Unable to find a device matching the provided destination" instead of testing
-# anything. Same pin as `verify.sh`; pass an explicit destination to override.
-DEST="${1:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
-
-xcodebuild test \
-  -project "$ROOT/AO3_App_OpenSource.xcodeproj" \
-  -scheme AO3_App_OpenSource \
-  -destination "$DEST" \
-  -parallel-testing-enabled NO \
-  CODE_SIGNING_ALLOWED=NO
+SIMULATOR_UDID="${1:-${KUDOS_CASEFOLD_SIMULATOR_UDID:-}}"
+if [ -z "$SIMULATOR_UDID" ]; then
+  echo "Usage: KUDOS_CASEFOLD_SIMULATOR_UDID=<udid> $0 [udid]" >&2
+  exit 64
+fi
+export KUDOS_CASEFOLD_SIMULATOR_UDID="$SIMULATOR_UDID"
+RESULT_BUNDLE_PATH="${KUDOS_TEST_RESULT_BUNDLE:-${TMPDIR:-/tmp}/kudos-tests-$(uuidgen).xcresult}"
+exec "$ROOT/Scripts/test-casefold-fonts.sh" "$RESULT_BUNDLE_PATH"

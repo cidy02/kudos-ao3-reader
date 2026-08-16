@@ -78,6 +78,14 @@ struct LiveAO3CookieManager: AO3CookieManaging {
 /// offline must not log the user out.
 struct LiveAO3SessionValidator: AO3SessionValidating {
     private let session: URLSession
+    /// AUDIT-2. This request sets `Cookie` by hand, and a manually-set header follows a
+    /// redirect wherever it goes — `httpCookieAcceptPolicy = .never` governs the cookie
+    /// *store*, not a hand-set header, so it does not help here. Without this delegate an
+    /// off-domain redirect discloses the full AO3 session to the redirect target, which is
+    /// replayable for reading private works, posting comments and kudos, and changing
+    /// account settings. `AO3Client` already routes both of its authenticated calls through
+    /// this same relay; this was the one call site that did not.
+    private let redirectCookieRelay = AO3RedirectCookieRelay()
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -95,7 +103,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         var request = URLRequest(url: url)
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -168,7 +176,10 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
             headers[String(describing: key)] = String(describing: value)
         }
         return HTTPCookie.cookies(withResponseHeaderFields: headers, for: url)
-            .filter { AO3StoredCookie.isAO3Domain($0.domain) }
+            .filter {
+                AO3StoredCookie.isAO3Domain($0.domain)
+                    && AO3RequestDefaults.persistedCookieNames.contains($0.name)
+            }
     }
 
     private static func merging(
@@ -177,7 +188,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         username: String
     ) -> AO3Session {
         var cookies: [String: AO3StoredCookie] = [:]
-        for cookie in session.validCookies {
+        for cookie in AO3CookieBridge.persistableStoredCookies(session.validCookies) {
             cookies[cookieKey(cookie)] = cookie
         }
         for cookie in refreshed {
@@ -219,6 +230,22 @@ nonisolated enum AO3RequestDefaults {
     /// that must recognize or, just as importantly, deliberately exclude it (T-100's
     /// Cloudflare-cookie jar) references the same literal.
     static let sessionCookieName = "_otwarchive_session"
+
+    /// Cookies written into the Keychain session blob. This is a name allow-list,
+    /// not "everything whose domain is AO3". Domain is still checked as
+    /// defense-in-depth so a same-named cookie on a non-AO3 host is never
+    /// captured (`AO3CookieBridge.persistableCookies`).
+    ///
+    /// `_otwarchive_session` is the only identity-bearing cookie (see
+    /// `sessionCookieName`). `user_credentials` is otwarchive's remember-me
+    /// cookie (Authlogic rememberable): login always checks remember-me
+    /// (`AO3WebLoginCoordinator`), and without this token a restored session
+    /// dies when the signed session cookie expires. Named explicitly rather
+    /// than inferred from "looks long-lived".
+    static let persistedCookieNames: Set<String> = [
+        sessionCookieName,
+        "user_credentials"
+    ]
 }
 
 /// The sole authentication API exposed to the rest of the app. UI and future AO3

@@ -19,8 +19,8 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 | Constraint | Detail |
 |---|---|
 | Xcode | Xcode-beta at `/Applications/Xcode-beta.app` is the active toolchain (`xcode-select -p`). `Scripts/build-macos.sh` pins a stable build for macOS. |
-| Test destination | `platform=iOS Simulator,name=iPhone 17,OS=26.5` (canonical, used in TASKS.md verification notes). |
-| Parallel tests | **Disabled** (`Scripts/test.sh` passes `-parallel-testing-enabled NO`): `PersistenceOperationGate` is a process-wide static lock; parallel suites contend it and flake. Persistence-touching suites are `@Suite(.serialized)`. |
+| Test destination | A booted iOS Simulator UDID supplied as `KUDOS_CASEFOLD_SIMULATOR_UDID` (or first argument to `Scripts/test.sh` / `Scripts/verify.sh`). The test harness mounts its case-sensitive APFS volume inside that app container. |
+| Parallel tests | **Disabled** (`Scripts/test-casefold-fonts.sh` passes `-parallel-testing-enabled NO`): `PersistenceOperationGate` is a process-wide static lock; parallel suites contend it and flake. Persistence-touching suites are `@Suite(.serialized)`. |
 | Signing | Simulator/tests: `CODE_SIGNING_ALLOWED=NO`. Device builds need a team in Xcode's Accounts pane. ⚠️ Policy drift: AGENTS.md says keep `DEVELOPMENT_TEAM` scrubbed to `""`, but commit `bcfe335`'s follow-ups carry `NQH85H7343` — human decision pending; don't "fix" either way without asking. |
 | Release config | Historical: Release builds once crashed the beta Swift compiler in vendored SwiftSoup (T-66 note). Verify before assuming Release works. |
 
