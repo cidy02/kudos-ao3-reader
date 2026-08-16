@@ -30,9 +30,9 @@ final class UnsignedDeletionReview {
             )
             shared.pendingDigest = nil
         } else if summary.unsignedHidesApplied > 0 {
-            let n = summary.unsignedHidesApplied
+            let applied = summary.unsignedHidesApplied
             shared.pendingDigest =
-                "\(n) work\(n == 1 ? "" : "s") moved to Recently Deleted by \(source)."
+                "\(applied) work\(applied == 1 ? "" : "s") moved to Recently Deleted by \(source)."
             shared.pendingHold = nil
         }
     }

@@ -34,6 +34,7 @@ struct ContentView: View {
     /// sheet. Populated once onboarding is done (a fresh install has nothing to
     /// show; the welcome flow covers that case instead).
     @State private var whatsNewEntries: [ChangelogEntry] = []
+    @State private var deletionReview = UnsignedDeletionReview.shared
     #if os(iOS)
     /// The screen snapshot grabbed at shake time, offered for attaching to the report.
     @State private var bugReportScreenshot: UIImage?
@@ -78,6 +79,30 @@ struct ContentView: View {
             // Folder-sync queries live in a sibling observer so library mutations
             // don't re-render the whole TabView (which was hitching Liquid Glass).
             .background { FolderSyncObserver() }
+            .background {
+                Color.clear
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+                    .sheet(item: Bindable(deletionReview).pendingHold) { hold in
+                        UnsignedDeletionReviewView(
+                            hold: hold,
+                            onDismiss: { deletionReview.dismissHold() },
+                            onConfirm: { deletionReview.confirmHold(in: modelContext) }
+                        )
+                        .environment(theme)
+                    }
+                    .alert(
+                        "Recently Deleted",
+                        isPresented: Binding(
+                            get: { deletionReview.pendingDigest != nil },
+                            set: { if !$0 { deletionReview.dismissDigest() } }
+                        )
+                    ) {
+                        Button("OK", role: .cancel) { deletionReview.dismissDigest() }
+                    } message: {
+                        Text(deletionReview.pendingDigest ?? "")
+                    }
+            }
             .task {
                 // Yield first so the initial tab chrome (Liquid Glass) can paint before
                 // we burn the main actor on session restore / full-library normalize.
