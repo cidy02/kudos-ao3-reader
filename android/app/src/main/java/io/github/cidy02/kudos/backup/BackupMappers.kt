@@ -73,16 +73,17 @@ data class RestoredDeletionState(
     val permanentDeletionScheduledAt: Instant?
 )
 
-fun restoredDeletionState(archivedIsDeleted: Boolean?): RestoredDeletionState {
-    val deleted = archivedIsDeleted == true
-    return RestoredDeletionState(
-        isDeleted = deleted,
-        permanentDeletionScheduledAt = if (deleted) {
-            Instant.now().plus(WorkRepository.RECOVERY_WINDOW)
-        } else {
-            null
-        }
-    )
+fun restoredDeletionState(
+    incomingIsDeleted: Boolean?,
+    localIsPendingDeletion: Boolean,
+    localScheduledAt: Instant?,
+    hasTrustedTombstone: Boolean
+): RestoredDeletionState {
+    val deleted = incomingIsDeleted == true
+    if (!deleted) return RestoredDeletionState(false, null)
+    if (!hasTrustedTombstone) return RestoredDeletionState(true, null)
+    if (localIsPendingDeletion && localScheduledAt != null) return RestoredDeletionState(true, localScheduledAt)
+    return RestoredDeletionState(true, Instant.now().plus(WorkRepository.RECOVERY_WINDOW))
 }
 
 fun SavedWork.toBackupWork(
@@ -144,7 +145,13 @@ fun SavedWork.toBackupWork(
     )
 }
 
-fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): SavedWork {
+fun BackupWork.toSavedWork(
+    hasEpub: Boolean,
+    exportedAt: Instant? = null,
+    localIsPendingDeletion: Boolean = false,
+    localScheduledAt: Instant? = null,
+    hasTrustedTombstone: Boolean = false
+): SavedWork {
     val added = if (dateAdded.isNotBlank()) {
         BackupValidator.parseInstant(dateAdded, "work.dateAdded", exportedAt)
     } else {
@@ -155,7 +162,12 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         "work.lastModifiedAt",
         exportedAt
     ) ?: added
-    val deletionState = restoredDeletionState(isDeleted)
+    val deletionState = restoredDeletionState(
+        incomingIsDeleted = isDeleted,
+        localIsPendingDeletion = localIsPendingDeletion,
+        localScheduledAt = localScheduledAt,
+        hasTrustedTombstone = hasTrustedTombstone
+    )
     return SavedWork(
         id = BackupPaths.canonicalUuid(id, "work.id"),
         title = title,
@@ -297,9 +309,17 @@ fun WorkCollection.toBackupCollection(): BackupCollection {
 
 fun BackupCollection.toWorkCollection(
     nameOverride: String = name,
-    exportedAt: Instant? = null
+    exportedAt: Instant? = null,
+    localIsPendingDeletion: Boolean = false,
+    localScheduledAt: Instant? = null,
+    hasTrustedTombstone: Boolean = false
 ): WorkCollection {
-    val deletionState = restoredDeletionState(isDeleted)
+    val deletionState = restoredDeletionState(
+        incomingIsDeleted = isDeleted,
+        localIsPendingDeletion = localIsPendingDeletion,
+        localScheduledAt = localScheduledAt,
+        hasTrustedTombstone = hasTrustedTombstone
+    )
     return WorkCollection(
         id = BackupPaths.canonicalUuid(id, "collection.id"),
         name = nameOverride,
@@ -404,7 +424,12 @@ fun ReadingQueue.toBackupReadingQueue(): BackupReadingQueue {
     )
 }
 
-fun BackupReadingQueue.toReadingQueue(exportedAt: Instant? = null): ReadingQueue {
+fun BackupReadingQueue.toReadingQueue(
+    exportedAt: Instant? = null,
+    localIsPendingDeletion: Boolean = false,
+    localScheduledAt: Instant? = null,
+    hasTrustedTombstone: Boolean = false
+): ReadingQueue {
     val created = if (dateCreated.isNotBlank()) {
         BackupValidator.parseInstant(dateCreated, "queue.dateCreated", exportedAt)
     } else {
@@ -415,7 +440,12 @@ fun BackupReadingQueue.toReadingQueue(exportedAt: Instant? = null): ReadingQueue
     } else {
         created
     }
-    val deletionState = restoredDeletionState(isDeleted)
+    val deletionState = restoredDeletionState(
+        incomingIsDeleted = isDeleted,
+        localIsPendingDeletion = localIsPendingDeletion,
+        localScheduledAt = localScheduledAt,
+        hasTrustedTombstone = hasTrustedTombstone
+    )
     return ReadingQueue(
         id = BackupPaths.canonicalUuid(id, "queue.id"),
         name = name,
