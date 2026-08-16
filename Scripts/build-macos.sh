@@ -23,7 +23,24 @@ else
   echo "warning: if that's a beta Xcode, the macOS build may hit a SwiftSoup SIL-verifier crash." >&2
 fi
 
+# Config half first so a signing-regression fails before a multi-minute build.
+"$ROOT/Scripts/check-macos-release-entitlements.sh"
+
 xcodebuild build \
   -project "$ROOT/AO3_App_OpenSource.xcodeproj" \
   -scheme AO3_App_OpenSource \
   -destination 'platform=macOS'
+
+# WPD-2: nothing in the repo previously built Release, so the product half
+# of the entitlement guard (get-task-allow / sandbox / hardened runtime)
+# never ran. Build Release and hand the .app to the same script.
+RELEASE_DD="$ROOT/.build/release-macos"
+xcodebuild build \
+  -project "$ROOT/AO3_App_OpenSource.xcodeproj" \
+  -scheme AO3_App_OpenSource \
+  -configuration Release \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$RELEASE_DD"
+
+RELEASE_APP="$RELEASE_DD/Build/Products/Release/Kudos.app"
+"$ROOT/Scripts/check-macos-release-entitlements.sh" "$RELEASE_APP"
