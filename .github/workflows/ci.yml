@@ -33,6 +33,9 @@ jobs:
         continue-on-error: true
         run: swiftformat --lint kudos-ao3-reader
       # Product dump is local-only (runners cannot build this SDK). The
-      # pbxproj half still catches a reintroduced ad-hoc Release sign.
+      # pbxproj + Kudos.entitlements half still catches a reintroduced
+      # ad-hoc Release sign, an unqualified iOS-affecting pin, get-task-allow
+      # written into the entitlements file, and a missing sandbox / folder-sync
+      # entitlement. The product half runs from Scripts/build-macos.sh locally.
       - name: macOS Release signing config (M13 / M18)
         run: Scripts/check-macos-release-entitlements.sh
