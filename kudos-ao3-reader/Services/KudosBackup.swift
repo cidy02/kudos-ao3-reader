@@ -1426,13 +1426,18 @@ enum KudosBackupService {
     }
 
     // Intentionally linear for data-safety review.
-    // swiftlint:disable:next cyclomatic_complexity function_body_length
     //
     // RC merge (G5): WP-A's M15 split `restore` into this inner implementation
     // plus an outer wrapper that owns the isolated-context / discard-on-throw
     // contract, while the tombstone tree added `mode` to a single-function
     // `restore`. Both are required, so `mode` is threaded through to the inner
     // body that actually branches on it.
+    //
+    // The disable directive must stay glued to the declaration: `disable:next`
+    // covers exactly one following line, so any comment inserted between the
+    // two silently un-suppresses the function (and reports the directive itself
+    // as superfluous).
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private static func restoreIsolatedContents(
         _ contents: KudosBackupContents,
         into context: ModelContext,
