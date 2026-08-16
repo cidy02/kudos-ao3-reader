@@ -126,6 +126,86 @@ struct AO3SessionTests {
         #expect(observation.username == "Reader")
         #expect(observation.errorMessage == nil)
     }
+
+    /// M10: SameSite must survive capture → JSON → decode → `httpCookie`.
+    /// Asserting only the stored string (or only that `httpCookie != nil`)
+    /// would pass if we persist the field and then drop it on reinstall.
+    /// Constructing without an explicit Lax would pass even if the field
+    /// never existed (`nil` survives a missing property).
+    @Test func sameSitePolicySurvivesTheCaptureAndReinstallRoundTrip() throws {
+        let original = try #require(HTTPCookie(properties: [
+            .name: AO3RequestDefaults.sessionCookieName,
+            .value: "session-with-samesite",
+            .domain: ".archiveofourown.org",
+            .path: "/",
+            .secure: true,
+            .sameSitePolicy: HTTPCookieStringPolicy.sameSiteLax
+        ]))
+        // If Foundation dropped Lax at construction, every later assertion
+        // would be comparing nil to nil.
+        #expect(original.sameSitePolicy == HTTPCookieStringPolicy.sameSiteLax)
+
+        let captured = AO3StoredCookie(original)
+        #expect(captured.sameSitePolicy == HTTPCookieStringPolicy.sameSiteLax.rawValue)
+        #expect(captured.name == original.name)
+        #expect(captured.value == original.value)
+
+        let encoded = try JSONEncoder().encode(captured)
+        let decoded = try JSONDecoder().decode(AO3StoredCookie.self, from: encoded)
+        #expect(decoded.sameSitePolicy == HTTPCookieStringPolicy.sameSiteLax.rawValue)
+
+        let reinstalled = try #require(decoded.httpCookie)
+        #expect(reinstalled.sameSitePolicy == HTTPCookieStringPolicy.sameSiteLax)
+        #expect(reinstalled.name == original.name)
+        #expect(reinstalled.value == original.value)
+    }
+
+    /// M14: persist an allow-list, not every AO3-domain cookie. The session
+    /// cookie must survive so an empty filter cannot pass; decoys must die
+    /// so a domain-only filter cannot pass.
+    @Test func onlyAllowListedCookiesArePersisted() throws {
+        func cookie(name: String, value: String) throws -> HTTPCookie {
+            try #require(HTTPCookie(properties: [
+                .name: name,
+                .value: value,
+                .domain: ".archiveofourown.org",
+                .path: "/"
+            ]))
+        }
+
+        let sessionValue = "identity-bearing-session"
+        let rememberValue = "remember-me-token"
+        let session = try cookie(
+            name: AO3RequestDefaults.sessionCookieName, value: sessionValue
+        )
+        let remember = try cookie(name: "user_credentials", value: rememberValue)
+        let analytics = try cookie(name: "_ga", value: "GA1.1.decoy")
+        let preferences = try cookie(name: "view_adult", value: "true")
+
+        let persisted = AO3CookieBridge.persistableCookies(from: [
+            session, remember, analytics, preferences
+        ])
+        let names = Set(persisted.map(\.name))
+
+        #expect(names.contains(AO3RequestDefaults.sessionCookieName))
+        #expect(names.contains("user_credentials"))
+        #expect(!names.contains("_ga"))
+        #expect(!names.contains("view_adult"))
+        #expect(names == [
+            AO3RequestDefaults.sessionCookieName,
+            "user_credentials"
+        ])
+
+        let persistedSession = try #require(
+            persisted.first { $0.name == AO3RequestDefaults.sessionCookieName }
+        )
+        #expect(persistedSession.value == sessionValue)
+
+        let persistedRemember = try #require(
+            persisted.first { $0.name == "user_credentials" }
+        )
+        #expect(persistedRemember.value == rememberValue)
+    }
 }
 
 /// A5-F4: `CascadingAO3SessionVault.delete()` must always attempt both underlying

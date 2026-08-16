@@ -165,6 +165,24 @@ struct AppRouterTests {
         #expect(router.requestAuthorProfileAfterDismiss(route))
     }
 
+    @Test func lookalikeHostIsNotRoutedAsANativeTagPage() {
+        let router = AppRouter()
+        let bait = URL(string: "https://archiveofourown.org.evil.com/tags/Fluff/works")!
+        router.openAO3Link(bait)
+        #expect(router.pendingTagWorks == nil)
+        #expect(router.pendingURL == bait)
+        #expect(router.isPresentingWebBrowser)
+        #expect(router.selection == .home)
+    }
+
+    @Test func httpAO3TagLinkIsNotTreatedAsTrusted() {
+        let router = AppRouter()
+        let url = URL(string: "http://archiveofourown.org/tags/Fluff/works")!
+        router.openAO3Link(url)
+        #expect(router.pendingTagWorks == nil)
+        #expect(router.pendingURL == url)
+    }
+
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {
         #expect(AppRouter.authorRoute(
             for: URL(string: "https://archiveofourown.org/users/login")!
@@ -172,5 +190,37 @@ struct AppRouterTests {
         #expect(AppRouter.authorRoute(
             for: URL(string: "https://example.com/users/someone")!
         ) == nil)
+    }
+
+    /// M19: `open()` is the unguarded sink `openAO3Link` falls through to.
+    /// Rejects must leave both `pendingURL` and the sheet flag untouched;
+    /// a normal https AO3 URL must set both, or the rejects could pass
+    /// against a no-op `open()`.
+    @Test func openRejectsNonHTTPSchemes() throws {
+        let router = AppRouter()
+
+        let javascript = try #require(URL(string: "javascript:alert(1)"))
+        #expect(javascript.scheme?.lowercased() == "javascript")
+        router.open(javascript)
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
+
+        let data = try #require(URL(string: "data:text/html,hello"))
+        #expect(data.scheme?.lowercased() == "data")
+        router.open(data)
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
+
+        let file = try #require(URL(string: "file:///tmp/index.html"))
+        #expect(file.scheme?.lowercased() == "file")
+        router.open(file)
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
+
+        let https = try #require(URL(string: "https://archiveofourown.org/works/1"))
+        #expect(https.scheme?.lowercased() == "https")
+        router.open(https)
+        #expect(router.pendingURL == https)
+        #expect(router.isPresentingWebBrowser == true)
     }
 }

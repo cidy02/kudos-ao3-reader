@@ -11,6 +11,9 @@ struct AO3StoredCookie: Codable, Hashable {
     let expiresDate: Date?
     let isSecure: Bool
     let isHTTPOnly: Bool
+    /// Raw `HTTPCookieStringPolicy` (`"lax"` / `"strict"`). Optional so
+    /// Keychain blobs written before this field still decode (synthesized
+    /// `Decodable` treats a missing optional key as `nil`).
     let sameSitePolicy: String?
 
     init(_ cookie: HTTPCookie) {
@@ -22,6 +25,13 @@ struct AO3StoredCookie: Codable, Hashable {
         isSecure = cookie.isSecure
         let httpOnlyKey = HTTPCookiePropertyKey(rawValue: "HttpOnly")
         isHTTPOnly = cookie.properties?[httpOnlyKey] != nil
+        // Public Foundation API (`HTTPCookie.sameSitePolicy` /
+        // `HTTPCookiePropertyKey.sameSitePolicy`, iOS 13+). This deployment
+        // target is 26.5+, so no availability gate. Unlike HttpOnly, this is
+        // not a private property key. Foundation only recognises Lax and
+        // Strict (`NSHTTPCookieSameSiteLax` / `NSHTTPCookieSameSiteStrict`);
+        // any other value — including SameSite=None — is ignored by
+        // `HTTPCookie` and will not survive capture (see NSHTTPCookie.h).
         sameSitePolicy = cookie.sameSitePolicy?.rawValue
     }
 
@@ -53,6 +63,11 @@ struct AO3StoredCookie: Codable, Hashable {
     /// no public property key for HttpOnly — Foundation only recognises the literal
     /// "HttpOnly" key. Both are long-standing Foundation contracts; documented here
     /// because the string/private-key reliance is otherwise surprising.
+    ///
+    /// SameSite is the public counterpart: `HTTPCookiePropertyKey.sameSitePolicy`
+    /// takes an `HTTPCookieStringPolicy` (`"lax"` / `"strict"`). Setting it is
+    /// what makes `httpCookie.sameSitePolicy` survive a Keychain restore; omitting
+    /// it is how a pre-fix blob silently dropped Lax.
     var httpCookie: HTTPCookie? {
         var properties: [HTTPCookiePropertyKey: Any] = [
             .name: name,
@@ -65,6 +80,9 @@ struct AO3StoredCookie: Codable, Hashable {
         if let sameSitePolicy { properties[.sameSitePolicy] = HTTPCookieStringPolicy(rawValue: sameSitePolicy) }
         if isHTTPOnly {
             properties[HTTPCookiePropertyKey(rawValue: "HttpOnly")] = "TRUE"
+        }
+        if let sameSitePolicy {
+            properties[.sameSitePolicy] = sameSitePolicy
         }
         return HTTPCookie(properties: properties)
     }
