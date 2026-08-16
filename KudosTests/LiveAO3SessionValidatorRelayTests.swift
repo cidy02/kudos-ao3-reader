@@ -10,9 +10,9 @@ struct LiveAO3SessionValidatorRelayTests {
     @Test func validatorRedirectDoesNotForwardTheSessionCookie() async throws {
         let attacker = try LoopbackHTTPServer()
         defer { attacker.stop() }
-        nonisolated(unsafe) var attackerCookie: String?
+        let attackerHits = LoopbackCounter()
         attacker.onRequest = { exchange in
-            attackerCookie = exchange.header("Cookie")
+            attackerHits.bump(cookie: exchange.header("Cookie"))
             exchange.status = 200
             exchange.body = Data("ok".utf8)
         }
@@ -20,7 +20,9 @@ struct LiveAO3SessionValidatorRelayTests {
 
         let origin = try LoopbackHTTPServer()
         defer { origin.stop() }
+        let originHits = LoopbackCounter()
         origin.onRequest = { exchange in
+            originHits.bump()
             exchange.status = 302
             exchange.headers["Location"] = "http://127.0.0.1:\(attacker.port)/stolen"
         }
@@ -30,10 +32,45 @@ struct LiveAO3SessionValidatorRelayTests {
         let validator = LiveAO3SessionValidator(validationURL: originURL)
         var request = URLRequest(url: originURL)
         request.setValue("_otwarchive_session=SECRET-SESSION", forHTTPHeaderField: "Cookie")
-        _ = try? await validator.performRequest(request)
+        // Do not swallow: a transport failure must fail the test, not pass it.
+        _ = try await validator.performRequest(request)
 
+        // Positive controls. Without these the assertions below are vacuous:
+        // "the attacker saw no cookie" is also true when the attacker saw nothing.
+        #expect(originHits.value == 1, "the loopback origin was never reached")
+        #expect(
+            attackerHits.value == 1,
+            "the redirect never reached the attacker — test proved nothing"
+        )
+        let attackerCookie = attackerHits.cookie
         #expect(attackerCookie == nil || attackerCookie?.isEmpty == true)
         #expect(attackerCookie?.contains("SECRET-SESSION") != true)
+    }
+}
+
+/// Hit / header counter shared between the accept thread and the test thread.
+final class LoopbackCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value = 0
+    private var _cookie: String?
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _value
+    }
+
+    var cookie: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _cookie
+    }
+
+    func bump(cookie: String? = nil) {
+        lock.lock()
+        defer { lock.unlock() }
+        _value += 1
+        _cookie = cookie
     }
 }
 
