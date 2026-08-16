@@ -94,7 +94,7 @@ object BackupValidator {
         val fontNames = mutableSetOf<String>()
         val fonts = manifest.fonts.mapIndexed { index, font ->
             BackupPaths.requireSafeFontFileName(font.fileName)
-            if (!fontNames.add(font.fileName)) {
+            if (!fontNames.add(BackupPaths.fontFileNameKey(font.fileName))) {
                 throw BackupError.InvalidPackage("Duplicate font file name: ${font.fileName}")
             }
             parseInstant(font.dateAdded, "fonts[$index].dateAdded")
@@ -142,7 +142,7 @@ object BackupValidator {
     }
 
     fun parseInstant(value: String, field: String): Instant {
-        return try {
+        val parsed = try {
             Instant.parse(value)
         } catch (_: DateTimeParseException) {
             try {
@@ -151,6 +151,8 @@ object BackupValidator {
                 throw BackupError.InvalidDate(field, value)
             }
         }
+        val maxAllowed = Instant.now().plus(24, java.time.temporal.ChronoUnit.HOURS)
+        return if (parsed.isAfter(maxAllowed)) maxAllowed else parsed
     }
 
     fun parseNullableInstant(value: String?, field: String): Instant? {

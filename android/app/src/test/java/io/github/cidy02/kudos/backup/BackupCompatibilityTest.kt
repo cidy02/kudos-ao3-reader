@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.backup
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.BackupSettings as CoreBackupSettings
 import io.github.cidy02.kudos.core.model.Bookmark
 import io.github.cidy02.kudos.core.model.CustomFont
@@ -24,7 +26,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class BackupV1ManifestDecodeTest {
     @Test
     fun decodesCurrentAppleV1ManifestWithoutV2Fields() {
@@ -42,6 +49,7 @@ class BackupV1ManifestDecodeTest {
 
     @Test
     fun importsAppleV1DirectoryPackageWhereAccessible() {
+        val fontBytes = validOpenTypeFont()
         val root = Files.createTempDirectory("kudos-v1").resolve("Library.kudosbackup")
         val works = root.resolve("Works")
         val fonts = root.resolve("Fonts")
@@ -49,27 +57,32 @@ class BackupV1ManifestDecodeTest {
         Files.createDirectories(fonts)
         Files.write(root.resolve(BackupPaths.MANIFEST), v1ManifestJson().toByteArray(Charsets.UTF_8))
         Files.write(works.resolve("${WORK_ID.uppercase()}.epub"), EPUB_BYTES)
-        Files.write(fonts.resolve("Reader.ttf"), FONT_BYTES)
+        Files.write(fonts.resolve("Reader.ttf"), fontBytes)
 
         val backup = BackupImporter.importV1Directory(root)
 
         assertEquals(BackupVersion.APPLE_V1, backup.manifest.version)
         assertArrayEquals(EPUB_BYTES, backup.epubFilesByWorkId[WORK_ID])
-        assertArrayEquals(FONT_BYTES, backup.fontFilesByFileName["Reader.ttf"])
+        assertArrayEquals(fontBytes, backup.fontFilesByFileName["Reader.ttf"])
     }
 }
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class BackupV2ZipDecodeTest {
     @Test
     fun importsV2ZipBackup() {
-        val bytes = BackupExporter.exportV2(samplePackage())
+        val fontBytes = validOpenTypeFont()
+        val bytes = BackupExporter.exportV2(
+            samplePackage(fontFiles = mapOf("Reader.ttf" to fontBytes))
+        )
 
         val backup = BackupImporter.importV2Zip(bytes)
 
         assertEquals(BackupVersion.CURRENT, backup.manifest.version)
         assertEquals("android", backup.manifest.exportedBy?.platform)
         assertArrayEquals(EPUB_BYTES, backup.epubFilesByWorkId[WORK_ID])
-        assertArrayEquals(FONT_BYTES, backup.fontFilesByFileName["Reader.ttf"])
+        assertArrayEquals(fontBytes, backup.fontFilesByFileName["Reader.ttf"])
     }
 
     @Test
@@ -109,10 +122,14 @@ class BackupV2ZipExportTest {
     }
 }
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class BackupRoundTripBasicTest {
     @Test
     fun exportsImportsAndMergesBasicLibrary() {
-        val exported = BackupExporter.exportV2(samplePackage())
+        val exported = BackupExporter.exportV2(
+            samplePackage(fontFiles = mapOf("Reader.ttf" to validOpenTypeFont()))
+        )
         val imported = BackupImporter.importV2Zip(exported)
 
         val result = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
@@ -508,6 +525,140 @@ class BackupFontMissingReaderFontFallbackTest {
         assertTrue(result.snapshot.fonts.any { it.fileName == "Reader-restored-1.ttf" })
         assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
     }
+
+    @Test
+    fun identicalCaseVariantReusesOrphanFileAndRetargetsSettings() {
+        val incomingBytes = FONT_BYTES
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                fontFilesByFileName = mapOf("reader.ttf" to incomingBytes)
+            ),
+            backup = samplePackage(fontFiles = mapOf("Reader.ttf" to incomingBytes))
+        )
+
+        assertEquals(listOf("reader.ttf"), result.snapshot.fonts.map { it.fileName })
+        assertTrue(result.fontFilesToWriteByFileName.isEmpty())
+        assertEquals("custom:reader.ttf", result.snapshot.settings.readerFontID)
+    }
+
+    @Test
+    fun differentCaseVariantBytesAreSuffixedWithoutOverwritingOrphan() {
+        val incomingBytes = FONT_BYTES
+        val localBytes = "occupied by a different local font".toByteArray()
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                fontFilesByFileName = mapOf("reader.ttf" to localBytes)
+            ),
+            backup = samplePackage(fontFiles = mapOf("Reader.ttf" to incomingBytes))
+        )
+
+        assertEquals(listOf("Reader-restored-1.ttf"), result.snapshot.fonts.map { it.fileName })
+        assertArrayEquals(localBytes, result.snapshot.fontFilesByFileName["reader.ttf"])
+        assertArrayEquals(incomingBytes, result.fontFilesToWriteByFileName["Reader-restored-1.ttf"])
+        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+    }
+
+    @Test
+    fun missingFileForExistingDatabaseRowIsHealedInPlace() {
+        val existingFont = CustomFont(name = "Local Reader", fileName = "reader.ttf", dateAdded = DATE)
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(fonts = listOf(existingFont)),
+            backup = samplePackage(fontFiles = mapOf("Reader.ttf" to FONT_BYTES))
+        )
+
+        assertEquals(listOf(existingFont.id), result.snapshot.fonts.map { it.id })
+        assertEquals(listOf("reader.ttf"), result.snapshot.fonts.map { it.fileName })
+        assertArrayEquals(FONT_BYTES, result.fontFilesToWriteByFileName["reader.ttf"])
+        assertEquals("custom:reader.ttf", result.snapshot.settings.readerFontID)
+    }
+
+    @Test
+    fun unreadableOccupiedFileForExistingRowIsPreservedWithSuffix() {
+        val existingFont = CustomFont(name = "Local Reader", fileName = "reader.ttf", dateAdded = DATE)
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                fonts = listOf(existingFont),
+                // Empty is FontFileStore's reservation sentinel for an unreadable
+                // or over-limit occupied local file.
+                fontFilesByFileName = mapOf("reader.ttf" to ByteArray(0))
+            ),
+            backup = samplePackage(fontFiles = mapOf("Reader.ttf" to FONT_BYTES))
+        )
+
+        assertEquals(
+            setOf("reader.ttf", "Reader-restored-1.ttf"),
+            result.snapshot.fonts.map { it.fileName }.toSet()
+        )
+        assertArrayEquals(ByteArray(0), result.snapshot.fontFilesByFileName["reader.ttf"])
+        assertArrayEquals(FONT_BYTES, result.fontFilesToWriteByFileName["Reader-restored-1.ttf"])
+        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+    }
+
+    @Test
+    fun caseVariantOrphanNeverSubstitutesForExactDatabaseFile() {
+        val existingFont = CustomFont(name = "Local Reader", fileName = "Reader.ttf", dateAdded = DATE)
+        val exactLocalBytes = "exact database font".toByteArray()
+        val orphanBytes = "case variant orphan".toByteArray()
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                fonts = listOf(existingFont),
+                fontFilesByFileName = mapOf(
+                    "Reader.ttf" to exactLocalBytes,
+                    "reader.ttf" to orphanBytes
+                )
+            ),
+            backup = samplePackage(fontFiles = mapOf("Reader.ttf" to orphanBytes))
+        )
+
+        assertArrayEquals(exactLocalBytes, result.snapshot.fontFilesByFileName["Reader.ttf"])
+        assertArrayEquals(orphanBytes, result.snapshot.fontFilesByFileName["reader.ttf"])
+        assertArrayEquals(orphanBytes, result.fontFilesToWriteByFileName["Reader-restored-1.ttf"])
+        assertEquals(
+            setOf("Reader.ttf", "Reader-restored-1.ttf"),
+            result.snapshot.fonts.map { it.fileName }.toSet()
+        )
+        assertTrue(result.snapshot.fonts.any { it.id == existingFont.id })
+        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+    }
+
+    @Test
+    fun missingExactDatabaseFileDoesNotCopyOverCaseVariantOrphan() {
+        val existingFont = CustomFont(name = "Local Reader", fileName = "Reader.ttf", dateAdded = DATE)
+        val orphanBytes = FONT_BYTES
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                fonts = listOf(existingFont),
+                fontFilesByFileName = mapOf("reader.ttf" to orphanBytes)
+            ),
+            backup = samplePackage(fontFiles = mapOf("Reader.ttf" to orphanBytes))
+        )
+
+        assertArrayEquals(orphanBytes, result.snapshot.fontFilesByFileName["reader.ttf"])
+        assertTrue("missing exact DB filename must not be manufactured", "Reader.ttf" !in result.fontFilesToWriteByFileName)
+        assertArrayEquals(orphanBytes, result.fontFilesToWriteByFileName["Reader-restored-1.ttf"])
+        assertEquals(
+            setOf("Reader.ttf", "Reader-restored-1.ttf"),
+            result.snapshot.fonts.map { it.fileName }.toSet()
+        )
+        assertTrue(result.snapshot.fonts.any { it.id == existingFont.id })
+        assertEquals("custom:Reader-restored-1.ttf", result.snapshot.settings.readerFontID)
+    }
+
+    @Test
+    fun caseVariantManifestFontNamesAreRejectedAsDuplicates() {
+        val manifest = sampleManifest().copy(
+            fonts = listOf(
+                BackupFont(name = "Reader A", fileName = "Reader.ttf", dateAdded = DATE_STRING),
+                BackupFont(name = "Reader B", fileName = "reader.ttf", dateAdded = DATE_STRING)
+            )
+        )
+
+        val error = assertThrows(BackupError.InvalidPackage::class.java) {
+            BackupValidator.validateManifest(manifest)
+        }
+
+        assertEquals("Duplicate font file name: reader.ttf", error.message)
+    }
 }
 
 class BackupRejectsUnsupportedVersionTest {
@@ -616,6 +767,25 @@ class BackupRejectsDuplicateEntryTest {
                 )
             )
         }
+    }
+
+    @Test
+    fun rejectsCaseVariantDuplicateFontEntries() {
+        val manifestBytes = BackupJson.encodeToString(sampleManifest()).toByteArray()
+
+        val error = assertThrows(BackupError.DuplicateEntry::class.java) {
+            BackupImporter.importV2Zip(
+                rawZip(
+                    listOf(
+                        BackupPaths.MANIFEST to manifestBytes,
+                        "Fonts/Reader.ttf" to FONT_BYTES,
+                        "Fonts/reader.ttf" to FONT_BYTES
+                    )
+                )
+            )
+        }
+
+        assertEquals("Fonts/reader.ttf", error.path)
     }
 }
 
@@ -1958,7 +2128,12 @@ private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
 private const val DATE_STRING = "2026-06-26T12:00:00Z"
 private val DATE: Instant = Instant.parse(DATE_STRING)
 private val EPUB_BYTES = "dummy epub bytes".toByteArray()
-private val FONT_BYTES = "dummy font bytes".toByteArray()
+private val FONT_BYTES = byteArrayOf(0x00, 0x01, 0x00, 0x00) + "dummy font bytes".toByteArray()
+
+private fun validOpenTypeFont(): ByteArray {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    return context.assets.open("readium/fonts/OpenDyslexic-Regular.otf").use { it.readBytes() }
+}
 
 private fun unsignedWorkTombstone(
     recordId: String,

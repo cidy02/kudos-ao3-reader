@@ -30,6 +30,9 @@ sealed class BackupError(message: String, cause: Throwable? = null) : Exception(
     class EntryTooLarge(val path: String) :
         BackupError("The backup entry is too large: $path")
 
+    class FontValidationUnavailable(cause: Throwable) :
+        BackupError("The font could not be validated on this device.", cause)
+
     class ArchiveTooLarge :
         BackupError("The backup archive is too large.")
 }

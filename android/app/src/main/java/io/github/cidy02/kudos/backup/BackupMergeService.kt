@@ -527,40 +527,115 @@ object BackupMergeService {
         backupFontFiles: Map<String, ByteArray>
     ): FontMerge {
         val fontsByName = currentFonts.associateByTo(linkedMapOf()) { it.fileName }
+        val fontNamesByFoldedName = currentFonts.groupByTo(
+            linkedMapOf(),
+            { BackupPaths.fontFileNameKey(it.fileName) },
+            { it.fileName }
+        ).mapValuesTo(linkedMapOf()) { (_, names) -> names.toMutableList() }
+        val currentFilesByFoldedName = currentFontFiles.entries.groupBy {
+            BackupPaths.fontFileNameKey(it.key)
+        }
         val filesToWrite = linkedMapOf<String, ByteArray>()
         val renamedFonts = mutableMapOf<String, String>()
         var created = 0
         var updated = 0
 
+        fun restoreWithSuffix(archived: BackupFont, incomingBytes: ByteArray) {
+            val newFileName = BackupPaths.uniqueSuffixedFontFileName(
+                archived.fileName,
+                fontsByName.keys + currentFontFiles.keys + filesToWrite.keys
+            )
+            fontsByName[newFileName] = archived.toCustomFont(fileNameOverride = newFileName)
+            fontNamesByFoldedName.getOrPut(BackupPaths.fontFileNameKey(newFileName)) {
+                mutableListOf()
+            }.add(newFileName)
+            filesToWrite[newFileName] = incomingBytes
+            renamedFonts[archived.fileName] = newFileName
+            created += 1
+        }
+
         manifestFonts.forEach { archived ->
             val incomingBytes = backupFontFiles[archived.fileName] ?: return@forEach
-            val existing = fontsByName[archived.fileName]
+            val foldedName = BackupPaths.fontFileNameKey(archived.fileName)
+            val existingNames = fontNamesByFoldedName[foldedName].orEmpty()
+            val existingName = existingNames.singleOrNull()
+            val existing = existingName?.let(fontsByName::get)
+            val matchingFiles = currentFilesByFoldedName[foldedName].orEmpty()
+
+            // Multiple local DB rows that differ only by case are already
+            // ambiguous. Preserve every row and file, and give the archive its
+            // own unoccupied name instead of selecting an arbitrary winner.
+            if (existingNames.size > 1) {
+                restoreWithSuffix(archived, incomingBytes)
+                return@forEach
+            }
+
             if (existing == null) {
+                val reusableFile = matchingFiles.singleOrNull()
+                if (reusableFile != null && reusableFile.value.isNotEmpty() &&
+                    BackupPaths.sha256(reusableFile.value) == BackupPaths.sha256(incomingBytes)
+                ) {
+                    val localFileName = reusableFile.key
+                    fontsByName[localFileName] = archived.toCustomFont(fileNameOverride = localFileName)
+                    fontNamesByFoldedName.getOrPut(foldedName) { mutableListOf() }.add(localFileName)
+                    if (localFileName != archived.fileName) {
+                        renamedFonts[archived.fileName] = localFileName
+                    }
+                    created += 1
+                    return@forEach
+                }
+
+                if (matchingFiles.isNotEmpty()) {
+                    restoreWithSuffix(archived, incomingBytes)
+                    return@forEach
+                }
+
                 val font = archived.toCustomFont()
                 fontsByName[font.fileName] = font
+                fontNamesByFoldedName.getOrPut(foldedName) { mutableListOf() }.add(font.fileName)
                 filesToWrite[font.fileName] = incomingBytes
                 created += 1
                 return@forEach
             }
 
-            val existingBytes = currentFontFiles[archived.fileName]
-            if (existingBytes != null &&
-                BackupPaths.sha256(existingBytes) == BackupPaths.sha256(incomingBytes)
+            val canonicalExistingName = requireNotNull(existingName)
+            val exactExistingBytes = currentFontFiles[canonicalExistingName]
+            if (exactExistingBytes == null) {
+                if (matchingFiles.isEmpty()) {
+                    // The DB row exists and no case-variant file occupies its
+                    // name. Repair the missing file without changing its selector.
+                    fontsByName[canonicalExistingName] = existing.copy(
+                        name = archived.name,
+                        dateAdded = BackupValidator.parseInstant(archived.dateAdded, "font.dateAdded")
+                    )
+                    filesToWrite[canonicalExistingName] = incomingBytes
+                    if (canonicalExistingName != archived.fileName) {
+                        renamedFonts[archived.fileName] = canonicalExistingName
+                    }
+                    updated += 1
+                } else {
+                    // A differently-cased file occupies the folded name. Do not
+                    // copy it over the DB row's exact filename or retarget the row;
+                    // either action can destroy bytes or break the local selector.
+                    restoreWithSuffix(archived, incomingBytes)
+                }
+                return@forEach
+            }
+
+            if (
+                exactExistingBytes.isNotEmpty() &&
+                BackupPaths.sha256(exactExistingBytes) == BackupPaths.sha256(incomingBytes)
             ) {
-                fontsByName[archived.fileName] = existing.copy(
+                fontsByName[canonicalExistingName] = existing.copy(
                     name = archived.name,
                     dateAdded = BackupValidator.parseInstant(archived.dateAdded, "font.dateAdded")
                 )
+                if (canonicalExistingName != archived.fileName) {
+                    renamedFonts[archived.fileName] = canonicalExistingName
+                }
                 updated += 1
             } else {
-                val newFileName = BackupPaths.uniqueSuffixedFontFileName(
-                    archived.fileName,
-                    fontsByName.keys + filesToWrite.keys
-                )
-                fontsByName[newFileName] = archived.toCustomFont(fileNameOverride = newFileName)
-                filesToWrite[newFileName] = incomingBytes
-                renamedFonts[archived.fileName] = newFileName
-                created += 1
+                restoreWithSuffix(archived, incomingBytes)
             }
         }
 
