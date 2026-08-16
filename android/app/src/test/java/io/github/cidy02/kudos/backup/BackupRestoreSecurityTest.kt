@@ -9,10 +9,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.time.Instant
 import java.time.Duration
+import org.junit.Assert.assertThrows
 
 class BackupRestoreSecurityTest {
 
@@ -255,6 +255,9 @@ class BackupRestoreSecurityTest {
         assertTrue(
             "$message (expected ~$expected, was $actual, drift=${drift.toMillis()}ms)",
             drift <= tolerance
+        )
+    }
+
     @Test
     fun testM2b_BlankOrUnknownTombstoneRejected() {
         val blankTombstone = BackupTombstone(
