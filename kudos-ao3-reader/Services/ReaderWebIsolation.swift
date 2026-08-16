@@ -9,7 +9,7 @@ import UIKit
 ///
 /// Untrusted EPUB JavaScript must not share the default `WKWebsiteDataStore`
 /// (the store that holds the AO3 session cookie) and must not navigate the
-/// reader web view off the publication origin. Readium 3.x only cancels
+/// reader web view off the publication origin. Readium 3.9.0 only cancels
 /// `.linkActivated`, so a script-driven `window.location` assignment would
 /// otherwise leave the book.
 enum ReaderPublicationOrigin: Equatable, Sendable {
@@ -22,11 +22,20 @@ enum ReaderPublicationOrigin: Equatable, Sendable {
 nonisolated enum ReaderWebNavigationPolicy {
     static let readiumScheme = "readium"
 
+    /// Schemes that must never commit inside a reader web view, even if a
+    /// future origin rule is loosened. `javascript:`/`data:` are the M8
+    /// off-publication cancels; `blob:`/`vbscript:` are the same class of
+    /// script-document navigation.
+    static let forbiddenReaderSchemes: Set<String> = [
+        "javascript", "data", "blob", "vbscript",
+    ]
+
     /// True only when `url` stays inside the loaded publication. HTTP(S),
     /// `javascript:`, `data:`, and `file://` paths outside the book directory
     /// all return false.
     static func allowsInReaderNavigation(to url: URL, origin: ReaderPublicationOrigin) -> Bool {
         let scheme = url.scheme?.lowercased() ?? ""
+        if forbiddenReaderSchemes.contains(scheme) { return false }
         if scheme == "about" { return true }
         switch origin {
         case .readiumScheme:
@@ -122,7 +131,7 @@ extension WKWebViewConfiguration {
     ) {
         kudos_setURLSchemeHandler(handler, forURLScheme: urlScheme)
         if urlScheme == ReaderWebNavigationPolicy.readiumScheme {
-            websiteDataStore = ReaderWebIsolation.isolatedDataStore
+            ReaderWebIsolation.applyIsolatedStore(to: self)
         }
     }
 }
@@ -181,7 +190,6 @@ final class ReaderWebNavigationGuard: NSObject, WKNavigationDelegate {
     }
 }
 
-#if os(iOS)
 private enum NavigationGuardStore {
     /// Strong values, weak keys: a dead spread's web view drops its guard.
     private static let guards = NSMapTable<WKWebView, ReaderWebNavigationGuard>.weakToStrongObjects()
@@ -205,4 +213,3 @@ private enum NavigationGuardStore {
         webView.navigationDelegate = guardDelegate
     }
 }
-#endif

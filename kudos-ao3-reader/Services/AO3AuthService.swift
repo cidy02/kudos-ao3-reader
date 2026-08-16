@@ -86,24 +86,33 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
     /// account settings. `AO3Client` already routes both of its authenticated calls through
     /// this same relay; this was the one call site that did not.
     private let redirectCookieRelay = AO3RedirectCookieRelay()
+    /// Production hits AO3 home; tests inject a loopback URL so the relay
+    /// wire-up (M9) can be asserted without talking to the live site.
+    /// RC note (review finding F5): this seam is un-gated production API, unlike
+    /// WP-A's `#if DEBUG` precedent for `Storage.fontsDirectoryOverride`. Tracked
+    /// for gating; kept ungated here so the merge compiles unchanged.
+    private let validationURL: URL
 
-    init() {
+    init(validationURL: URL = URL(string: "https://archiveofourown.org")!) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
         session = URLSession(configuration: configuration)
+        self.validationURL = validationURL
     }
 
     func validate(_ storedSession: AO3Session) async throws -> AO3SessionValidation {
-        let url = URL(string: "https://archiveofourown.org")!
+        let url = validationURL
         guard let cookieHeader = storedSession.cookieHeader(for: url) else {
             return .expired
         }
         var request = URLRequest(url: url)
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
 
-        let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
+        // WP-B's seam; `performRequest` attaches `redirectCookieRelay`, so
+        // AUDIT-2/M9 is preserved and now assertable on the wire.
+        let (data, response) = try await performRequest(request)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -130,6 +139,13 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         let username = Self.username(in: html) ?? storedSession.username
         let refreshed = Self.responseCookies(from: http, url: url)
         return .valid(Self.merging(refreshed, into: storedSession, username: username))
+    }
+
+    /// The only credential-bearing URLSession call on this type. Always
+    /// attaches `AO3RedirectCookieRelay` so a 302 off AO3 cannot take the
+    /// `_otwarchive_session` Cookie header with it (M9).
+    func performRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await session.data(for: request, delegate: redirectCookieRelay)
     }
 
     /// True when the HTML is a real AO3 document (logged-in or logged-out body).

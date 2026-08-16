@@ -43,8 +43,8 @@ final class ReaderController: NSObject {
 
     private let proxy = ReaderScriptProxy()
     private var loadedURL: URL?
-    /// Unzip root handed to `loadFileURL(..., allowingReadAccessTo:)`. Off-root
-    /// `file://` navigations are cancelled against this, not the chapter file.
+    /// Directory the chapter was opened with (`allowingReadAccessTo`). Off-origin
+    /// `file://` navigations are cancelled against this root (M8).
     private var publicationRoot: URL?
     private var landOnLast = false
     /// Normalized position (0…1) to restore once the chapter's layout is ready.
@@ -198,7 +198,8 @@ extension ReaderController: WKNavigationDelegate {
         }()
         if !ReaderWebNavigationPolicy.allowsInReaderNavigation(to: url, origin: origin) {
             decisionHandler(.cancel)
-            if ReaderWebNavigationPolicy.isWebURL(url) {
+            if navigationAction.navigationType == .linkActivated,
+               ReaderWebNavigationPolicy.isWebURL(url) {
                 onOpenExternalURL?(url)
             }
             return

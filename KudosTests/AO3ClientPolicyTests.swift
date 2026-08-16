@@ -34,7 +34,51 @@ struct AO3ClientPolicyTests {
         #expect(AO3Client.retryDelay(for: AO3Error.parse, attempt: 1) == nil)
         #expect(AO3Client.retryDelay(for: AO3Error.http(status: 418), attempt: 1) == nil)
         #expect(AO3Client.retryDelay(for: AO3Error.authenticationRequired, attempt: 1) == nil)
+        #expect(AO3Client.retryDelay(for: AO3Error.untrustedHost, attempt: 1) == nil)
         #expect(AO3Client.retryDelay(for: URLError(.cancelled), attempt: 1) == nil)
+    }
+
+    // MARK: - Host allow-list (M6)
+
+    @Test func trustedAO3URLsPassTheFetchAllowList() throws {
+        try AO3Client.rejectIfUntrusted(URL(string: "https://archiveofourown.org/works/1")!)
+        try AO3Client.rejectIfUntrusted(URL(string: "https://download.archiveofourown.org/downloads/1/1.epub")!)
+    }
+
+    @Test func lookalikeAndForeignHostsAreRejectedWithoutNetwork() throws {
+        #expect(throws: AO3Error.untrustedHost) {
+            try AO3Client.rejectIfUntrusted(URL(string: "https://archiveofourown.org.evil.com/tags/Fluff")!)
+        }
+        #expect(throws: AO3Error.untrustedHost) {
+            try AO3Client.rejectIfUntrusted(URL(string: "https://evil.example/pixel.gif")!)
+        }
+        #expect(throws: AO3Error.untrustedHost) {
+            try AO3Client.rejectIfUntrusted(URL(string: "http://archiveofourown.org/")!)
+        }
+        #expect(throws: AO3Error.untrustedHost) {
+            try AO3Client.rejectIfUntrusted(URL(string: "https://127.0.0.1/")!)
+        }
+    }
+
+    @Test func imageDataAndGetHTMLRefuseForeignHosts() async {
+        let client = AO3Client()
+        let beacon = URL(string: "https://127.0.0.1:1/pixel")!
+        do {
+            _ = try await client.imageData(at: beacon)
+            Issue.record("imageData fetched a foreign host")
+        } catch AO3Error.untrustedHost {
+            // expected
+        } catch {
+            Issue.record("imageData threw \(error) instead of untrustedHost")
+        }
+        do {
+            _ = try await client.getHTML(URL(string: "https://archiveofourown.org.evil.com/")!)
+            Issue.record("getHTML fetched a lookalike host")
+        } catch AO3Error.untrustedHost {
+            // expected
+        } catch {
+            Issue.record("getHTML threw \(error) instead of untrustedHost")
+        }
     }
 
     // MARK: - Pacing policy
