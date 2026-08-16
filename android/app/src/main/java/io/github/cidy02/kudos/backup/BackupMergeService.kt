@@ -123,7 +123,13 @@ object BackupMergeService {
                 exportedAt = exportedAt,
                 now = now
             )
-            val restoredBase = archived.toSavedWork(hasEpub = restoredHasEpub, exportedAt = exportedAt)
+            val restoredBase = archived.toSavedWork(
+                hasEpub = restoredHasEpub,
+                exportedAt = exportedAt,
+                localIsPendingDeletion = existing?.isDeleted == true,
+                localScheduledAt = existing?.permanentDeletionScheduledAt,
+                hasTrustedTombstone = tombstoneIndex.suppressesWorkResurrection(archived)
+            )
             val restored = restoredBase.copy(
                 id = existing?.id ?: restoredBase.id,
                 lastModifiedAt = incomingModifiedAt ?: restoredBase.dateAdded
@@ -772,7 +778,10 @@ object BackupMergeService {
                 val restoredName = archived.name.uniqueName(names)
                 val restored = archived.toWorkCollection(
                     nameOverride = restoredName,
-                    exportedAt = exportedAt
+                    exportedAt = exportedAt,
+                    localIsPendingDeletion = false,
+                    localScheduledAt = null,
+                    hasTrustedTombstone = tombstoneIndex.collectionResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
                 )
                 collectionsById[id] = restored
                 names += restoredName
@@ -815,7 +824,12 @@ object BackupMergeService {
                             incomingModified
                         ) == TombstoneResolution.SUPPRESS_STALE
                     }
-                val deletionState = restoredDeletionState(archived.isDeleted)
+                val deletionState = restoredDeletionState(
+                    incomingIsDeleted = archived.isDeleted,
+                    localIsPendingDeletion = existing.isDeleted,
+                    localScheduledAt = existing.permanentDeletionScheduledAt,
+                    hasTrustedTombstone = tombstoneIndex.collectionResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
+                )
                 collectionsById[id] = existing.copy(
                     name = if (archivedIsDeleted) existing.name else archived.name,
                     dateAdded = BackupValidator.parseInstant(
@@ -968,7 +982,12 @@ object BackupMergeService {
                     TombstoneResolution.PRESERVE_AMBIGUOUS,
                     TombstoneResolution.NO_TOMBSTONE -> Unit
                 }
-                queuesById[id] = archived.toReadingQueue(exportedAt)
+                queuesById[id] = archived.toReadingQueue(
+                    exportedAt = exportedAt,
+                    localIsPendingDeletion = false,
+                    localScheduledAt = null,
+                    hasTrustedTombstone = tombstoneIndex.queueResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
+                )
                 queuesCreated += 1
             } else if (mode == BackupImportMode.MERGE) {
                 // Keep local queue name / fields. New memberships still insert below.
@@ -979,9 +998,20 @@ object BackupMergeService {
                     membershipModifiedAts = localMembershipTimes[id].orEmpty()
                 )
                 if (SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
-                    val restored = archived.toReadingQueue(exportedAt)
+                    val hasTrustedTombstone = tombstoneIndex.queueResolution(id, incomingModified) == TombstoneResolution.SUPPRESS_STALE
+                    val restored = archived.toReadingQueue(
+                        exportedAt = exportedAt,
+                        localIsPendingDeletion = existing.isDeleted,
+                        localScheduledAt = existing.permanentDeletionScheduledAt,
+                        hasTrustedTombstone = hasTrustedTombstone
+                    )
                     val finalIsDeleted = !isSystemQueue && restored.isDeleted
-                    val deletionState = restoredDeletionState(finalIsDeleted)
+                    val deletionState = restoredDeletionState(
+                        incomingIsDeleted = finalIsDeleted,
+                        localIsPendingDeletion = existing.isDeleted,
+                        localScheduledAt = existing.permanentDeletionScheduledAt,
+                        hasTrustedTombstone = hasTrustedTombstone
+                    )
                     queuesById[id] = restored.copy(
                         // Keep the local identity: local memberships already point
                         // at it, and for the system queue the incoming id is a
