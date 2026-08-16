@@ -508,6 +508,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 config: config
             )
             navigator.delegate = self
+            // Belt-and-braces. Spreads are wrapped when they assign
+            // `navigationDelegate` (ReaderWebIsolation setter hook);
+            // this only refreshes the Browse callback on views already
+            // in the tree. A preloaded spread is guarded before load.
             if let view = navigator.view {
                 ReaderWebIsolation.installNavigationGuards(
                     in: view,
@@ -644,6 +648,8 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     // MARK: EPUBNavigatorDelegate
 
     func navigator(_: Navigator, locationDidChange locator: Locator) {
+        // Belt-and-braces sweep after a page settles. Creation-time wrap
+        // is the setter hook in ReaderWebIsolation.
         if let view = navigator?.view {
             ReaderWebIsolation.installNavigationGuards(
                 in: view,
