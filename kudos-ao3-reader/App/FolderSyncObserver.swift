@@ -10,8 +10,6 @@ import SwiftUI
 struct FolderSyncObserver: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(ThemeManager.self) private var themeManager
-    @State private var deletionReview = UnsignedDeletionReview.shared
 
     @Query private var folderSyncWorks: [SavedWork]
     @Query private var folderSyncBookmarks: [Bookmark]
@@ -86,25 +84,6 @@ struct FolderSyncObserver: View {
             .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
                 FolderSyncService.markDirty()
                 scheduleFolderSyncUp()
-            }
-            .sheet(item: Bindable(deletionReview).pendingHold) { hold in
-                UnsignedDeletionReviewView(
-                    hold: hold,
-                    onDismiss: { deletionReview.dismissHold() },
-                    onConfirm: { deletionReview.confirmHold(in: modelContext) }
-                )
-                .environment(themeManager)
-            }
-            .alert(
-                "Recently Deleted",
-                isPresented: Binding(
-                    get: { deletionReview.pendingDigest != nil },
-                    set: { if !$0 { deletionReview.dismissDigest() } }
-                )
-            ) {
-                Button("OK", role: .cancel) { deletionReview.dismissDigest() }
-            } message: {
-                Text(deletionReview.pendingDigest ?? "")
             }
     }
 

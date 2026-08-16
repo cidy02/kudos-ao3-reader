@@ -290,7 +290,7 @@ struct ArchiveDeletionScheduleTests {
         #expect(summary.unsignedHidesHeld == 0)
         let stored = try context.fetch(FetchDescriptor<SavedWork>())
         #expect(stored.count == 9)
-        #expect(stored.allSatisfy(\.isPendingDeletion))
+        #expect(stored.allSatisfy { $0.isPendingDeletion })
         #expect(stored.allSatisfy { $0.permanentDeletionScheduledAt == nil })
     }
 
