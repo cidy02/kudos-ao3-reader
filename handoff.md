@@ -222,6 +222,12 @@ Maintain `/Users/cidy02/kudos-fix-tombstone/REVIEW-CLAUDE.md` across the loop (a
 ### Cycle log
 
 - 2026-08-15 — Grok wrote this brief. RC not created yet. Claude starts the loop here.
+- 2026-08-15 (Claude Opus 5, cycle 1) — **RC created: `security-fixes/rc` at `/Users/cidy02/kudos-fix-rc`.** Blocker found and solved first: the 7 trees span **two repos** (tombstone hangs off the forbidden main checkout; all 6 `wp-*` hang off `kudos-security-audit-1-claude`) and shared no objects, so a single RC was impossible by merging. Bridged with `git bundle` created *from inside the tombstone worktree* (permitted) and fetched into the audit repo — no git run in `/Users/cidy02/Documents/AO3_App_OpenSource`. RC provisioned with the gitignored `Vendor/MuPDF.xcframework` + `android/local.properties`.
+  **Stacked:** wp-c ✅ clean → wp-a ✅ clean (RC `e9f2110`). **wp-b ❌ 10 files / 33 hunks conflict (G4)** — aborted rather than guess; resolving with the WP-B review's stricter-of input.
+  **G4 partial adjudication (2 of 10 files):** `AppRouter.open(_:)` → **keep WP-A**, it has both the scheme gate *and* the host gate that WP-B's side is missing entirely (taking WP-B would regress M19 and let `https://evil.example` into the in-app browser). `openAO3Link` predicate → `isAO3URL` and `isTrustedURL` verified byte-equivalent (https-only, apex-or-subdomain), free choice.
+  **New finding WPC-1 (FIX):** WP-C committed dev detritus incl. `kudos-ao3-reader/Services/KudosBackup.swift.orig` — a stale uncompiled duplicate of the restore/tombstone file — plus 3 `.patch` files. To be `git rm`'d on RC.
+  **Reviews:** WP-A done (Gemini 3.1 Pro: 6 SHIP / 2 FIX / 0 BLOCK — both FIX are revert-loopholes where the production fix is correct but no test would go RED if it were removed: M19's `unguardedURLSinkIsClosed`, and M14's untested `LiveAO3SessionValidator.responseCookies`/`merging`). WP-C + WP-E (Grok), WP-F (Gemini), tombstone + WP-B + WP-D (Claude Opus 5 via Workflow) all still in flight.
+  Findings collected in `REVIEW-CLAUDE.md`. **Paused here at the owner's request** (owner leaving; session kept alive on a phone hotspot) — no further agents to be spawned; in-flight reviews to be collected on resume.
 
 ---
 
