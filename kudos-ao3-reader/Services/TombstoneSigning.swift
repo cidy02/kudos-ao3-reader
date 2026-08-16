@@ -260,37 +260,40 @@ enum TombstoneTrustStore {
     static let localKeysKey = "trustedTombstonePublicKeys"
     static let iCloudKeysKey = "tombstoneTrustedPublicKeys"
 
-    /// `nil` by default, not `NSUbiquitousKeyValueStore.default`: constructing that
-    /// store without the `com.apple.developer.ubiquity-kvstore-identifier`
-    /// entitlement (which this build does not have) doesn't just no-op — Security
-    /// logs "BUG IN CLIENT OF KVS: Trying to initialize NSUbiquitousKeyValueStore
-    /// without a store identifier", and every `SecItemAdd`/`SecItemCopyMatching`
-    /// call in the same process afterward starts failing (reproduced consistently:
-    /// the trust-store Keychain item round-trips fine until anything in-process
-    /// entitlement (which this build does not have, and per the design decision
-    /// in D9(b) must not get one until its own activation checklist is met).
-    /// Nothing currently sets this back to `.default`; that happens once the
-    /// entitlement is actually added.
+    /// `nil` by default, not `NSUbiquitousKeyValueStore.default`. Constructing
+    /// that store without `com.apple.developer.ubiquity-kvstore-identifier`
+    /// (this build does not have it; D9(b) must not add it until its activation
+    /// checklist is met) logs "BUG IN CLIENT OF KVS" and, in this process, makes
+    /// subsequent `SecItemAdd`/`SecItemCopyMatching` fail. Nothing sets this
+    /// back to `.default` yet; that lands with the entitlement.
     static var iCloudStore: NSUbiquitousKeyValueStore?
 
-    private static let lock = NSLock()
+    private static let lock = NSRecursiveLock()
     private static var didRegisterObserver = false
     private static let keychainAccount = "trusted-tombstone-pubs"
 
-    /// Tests set this to bypass the real Keychain, mirroring
-    /// `TombstoneSigning.keyOverride`. Necessary, not optional: unsigned test
-    /// builds (`CODE_SIGNING_ALLOWED=NO`) get `errSecMissingEntitlement` (-34018)
-    /// from `SecItemAdd`/`SecItemCopyMatching` for this app's keychain-access
-    /// group, the same status `TombstoneSigning.persistDeviceKey` already
-    /// anticipates for the private key. A production, properly signed build has
-    /// the group Xcode provisions automatically and does not need this — but a
-    /// production fallback (writing trust to a file if Keychain fails, the way
-    /// the private key does) would silently reopen the exact vulnerability
-    /// D9(a) exists to close, since a file is exactly as writable by an
-    /// unsandboxed same-user process as the `UserDefaults` plist this replaced.
-    /// So the override is test-only, in-memory, and `nil` means "use the real
-    /// Keychain" — never a disk fallback.
-    static var keychainOverride: Set<String>?
+    #if DEBUG
+    /// Test-only Keychain stand-in. Compiled out of Release (same rationale as
+    /// `Storage.fontsDirectoryOverride`): a mutable global that redirects who
+    /// this device trusts must not exist in a shipping binary.
+    ///
+    /// Unsigned test builds (`CODE_SIGNING_ALLOWED=NO`) get
+    /// `errSecMissingEntitlement` (-34018) from `SecItemAdd`/`SecItemCopyMatching`
+    /// for this app's keychain-access group. A production file fallback would
+    /// reopen the UserDefaults write-vector D9(a) closes, so tests use this
+    /// in-memory seam instead. `nil` means use the real Keychain.
+    enum KeychainOverride: Equatable {
+        /// No Keychain item (`errSecItemNotFound`). The next successful save
+        /// plants `.stored`.
+        case absent
+        /// An existing item containing these keys (empty set is still an item).
+        case stored(Set<String>)
+        /// Keychain calls fail. Load must not wipe UserDefaults or import it.
+        case unavailable
+    }
+
+    static var keychainOverride: KeychainOverride?
+    #endif
 
     static func isTrusted(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
@@ -306,6 +309,8 @@ enum TombstoneTrustStore {
     @discardableResult
     static func add(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
+        lock.lock()
+        defer { lock.unlock() }
         var keys = trustedPublicKeys(defaults: defaults)
         if keys.insert(normalized).inserted {
             saveKeys(keys, defaults: defaults)
@@ -317,6 +322,8 @@ enum TombstoneTrustStore {
     @discardableResult
     static func remove(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
+        lock.lock()
+        defer { lock.unlock() }
         var keys = trustedPublicKeys(defaults: defaults)
         if keys.remove(normalized) != nil {
             saveKeys(keys, defaults: defaults)
@@ -326,8 +333,25 @@ enum TombstoneTrustStore {
         return false
     }
 
-    private static func loadKeychainKeys() -> Set<String>? {
-        if let keychainOverride { return keychainOverride }
+    private enum KeychainRead {
+        case found(Set<String>)
+        case notFound
+        case unavailable
+    }
+
+    private static func loadKeychainKeys() -> KeychainRead {
+        #if DEBUG
+        if let keychainOverride {
+            switch keychainOverride {
+            case .absent:
+                return .notFound
+            case .stored(let keys):
+                return .found(Set(keys.compactMap(normalizedPublicKey)))
+            case .unavailable:
+                return .unavailable
+            }
+        }
+        #endif
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: TombstoneSigning.keychainService,
@@ -337,17 +361,30 @@ enum TombstoneTrustStore {
         ]
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        guard let array = try? JSONDecoder().decode([String].self, from: data) else { return nil }
-        return Set(array)
+        if status == errSecItemNotFound { return .notFound }
+        guard status == errSecSuccess, let data = result as? Data else { return .unavailable }
+        guard let array = try? JSONDecoder().decode([String].self, from: data) else {
+            // Corrupt item: do not treat as missing (that would re-import the
+            // UserDefaults plist — the original write-vector). Fail closed.
+            return .found([])
+        }
+        return .found(Set(array.compactMap(normalizedPublicKey)))
     }
 
-    private static func saveKeychainKeys(_ keys: Set<String>) {
-        if keychainOverride != nil {
-            keychainOverride = keys
-            return
+    @discardableResult
+    private static func saveKeychainKeys(_ keys: Set<String>) -> Bool {
+        #if DEBUG
+        if let override = keychainOverride {
+            switch override {
+            case .absent, .stored:
+                keychainOverride = .stored(keys)
+                return true
+            case .unavailable:
+                return false
+            }
         }
-        guard let data = try? JSONEncoder().encode(Array(keys).sorted()) else { return }
+        #endif
+        guard let data = try? JSONEncoder().encode(Array(keys).sorted()) else { return false }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: TombstoneSigning.keychainService,
@@ -357,34 +394,56 @@ enum TombstoneTrustStore {
         attributes[kSecValueData as String] = data
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(attributes as CFDictionary, nil)
+        if status == errSecSuccess { return true }
         if status == errSecDuplicateItem {
-            SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            return SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+                == errSecSuccess
         }
+        return false
     }
 
     private static func loadKeys(defaults: UserDefaults) -> Set<String> {
+        lock.lock()
+        defer { lock.unlock() }
         if defaults !== UserDefaults.standard {
             let stored = defaults.stringArray(forKey: localKeysKey) ?? []
             return Set(stored.compactMap(normalizedPublicKey))
         }
 
-        if let legacy = defaults.stringArray(forKey: localKeysKey) {
-            var keys = loadKeychainKeys() ?? []
-            keys.formUnion(legacy.compactMap(normalizedPublicKey))
-            saveKeychainKeys(keys)
-            defaults.removeObject(forKey: localKeysKey)
+        switch loadKeychainKeys() {
+        case .found(let keys):
+            // Item exists (even if empty) — never import UserDefaults again.
+            // An unsandboxed same-user process can still write the plist; a
+            // union-on-every-launch migration would re-open that write-vector.
+            if defaults.object(forKey: localKeysKey) != nil {
+                defaults.removeObject(forKey: localKeysKey)
+            }
             return keys
+        case .notFound:
+            let legacy = Set(
+                (defaults.stringArray(forKey: localKeysKey) ?? []).compactMap(normalizedPublicKey)
+            )
+            // Persist even an empty set so a later plist write cannot be
+            // imported as a "first" migration.
+            if saveKeychainKeys(legacy) {
+                defaults.removeObject(forKey: localKeysKey)
+            }
+            return legacy
+        case .unavailable:
+            // Fail closed. Leave UserDefaults so a later launch can retry the
+            // real one-time migration. Do not treat this as "no item".
+            return []
         }
-
-        return loadKeychainKeys() ?? []
     }
 
     private static func saveKeys(_ keys: Set<String>, defaults: UserDefaults) {
+        lock.lock()
+        defer { lock.unlock() }
         if defaults !== UserDefaults.standard {
             defaults.set(Array(keys).sorted(), forKey: localKeysKey)
             return
         }
-        saveKeychainKeys(keys)
+        _ = saveKeychainKeys(keys)
     }
 
     static func normalizedPublicKey(_ hex: String) -> String? {
@@ -404,6 +463,8 @@ enum TombstoneTrustStore {
 
     static func mergeFromiCloud(defaults: UserDefaults = .standard) {
         guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
+        lock.lock()
+        defer { lock.unlock() }
         let remote = store.array(forKey: iCloudKeysKey) as? [String] ?? []
         guard !remote.isEmpty else { return }
         var keys = loadKeys(defaults: defaults)
@@ -441,6 +502,9 @@ enum TombstoneTrustStore {
         lock.lock()
         defer { lock.unlock() }
         guard !didRegisterObserver else { return }
+        // Do not latch the observer against a nil store: D9(b) will assign
+        // `.default` later, and `object: nil` would observe every KVS.
+        guard iCloudStore != nil else { return }
         didRegisterObserver = true
         NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,

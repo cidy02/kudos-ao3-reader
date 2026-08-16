@@ -10,9 +10,12 @@ import Testing
 /// avoid it via `keyOverride`.
 @Suite(.serialized)
 struct TombstoneTrustStoreTests {
+    /// Clears the process-wide override after each test so later suites that
+    /// touch `UserDefaults.standard` cannot inherit a leftover in-memory store.
+    private let reset = KeychainOverrideReset()
 
     init() {
-        TombstoneTrustStore.keychainOverride = []
+        TombstoneTrustStore.keychainOverride = .stored([])
         UserDefaults.standard.removeObject(forKey: TombstoneTrustStore.localKeysKey)
     }
 
@@ -38,6 +41,7 @@ struct TombstoneTrustStoreTests {
     }
 
     @Test func testMigrationFromUserDefaults() {
+        TombstoneTrustStore.keychainOverride = .absent
         let legacyPub1 = String(repeating: "a", count: 64)
         let legacyPub2 = String(repeating: "b", count: 64)
 
@@ -61,9 +65,68 @@ struct TombstoneTrustStoreTests {
     /// process wrote the Keychain item directly" — must still be visible to a read.
     @Test func testOutOfBandWriteIsReflected() {
         let injectedPub = String(repeating: "e", count: 64)
-        TombstoneTrustStore.keychainOverride = [injectedPub]
+        TombstoneTrustStore.keychainOverride = .stored([injectedPub])
 
         #expect(TombstoneTrustStore.isTrusted(injectedPub))
         #expect(TombstoneTrustStore.trustedPublicKeys().contains(injectedPub))
+    }
+
+    /// After the Keychain item exists, a later write to the UserDefaults plist
+    /// must not be imported. That was the original same-user write-vector;
+    /// union-on-every-launch "migration" would reopen it.
+    @Test func testUserDefaultsWriteAfterKeychainItemExistsIsIgnored() {
+        let attacker = String(repeating: "d", count: 64)
+        UserDefaults.standard.set([attacker], forKey: TombstoneTrustStore.localKeysKey)
+
+        #expect(!TombstoneTrustStore.isTrusted(attacker))
+        #expect(!TombstoneTrustStore.trustedPublicKeys().contains(attacker))
+        #expect(UserDefaults.standard.array(forKey: TombstoneTrustStore.localKeysKey) == nil)
+    }
+
+    /// First launch with no Keychain item and no UserDefaults must plant an
+    /// empty item so a subsequent plist write cannot be imported as a migration.
+    @Test func testEmptyFirstLaunchPlantsSentinelAndIgnoresLaterUserDefaults() {
+        TombstoneTrustStore.keychainOverride = .absent
+        #expect(TombstoneTrustStore.trustedPublicKeys().isEmpty)
+
+        let attacker = String(repeating: "d", count: 64)
+        UserDefaults.standard.set([attacker], forKey: TombstoneTrustStore.localKeysKey)
+        #expect(!TombstoneTrustStore.isTrusted(attacker))
+        #expect(UserDefaults.standard.array(forKey: TombstoneTrustStore.localKeysKey) == nil)
+    }
+
+    /// Keychain unavailable must fail closed and must not wipe the legacy
+    /// UserDefaults value — a later launch can still do the real one-time
+    /// migration once Keychain works.
+    @Test func testUnavailableKeychainDoesNotWipeUserDefaults() {
+        TombstoneTrustStore.keychainOverride = .unavailable
+        let legacy = String(repeating: "f", count: 64)
+        UserDefaults.standard.set([legacy], forKey: TombstoneTrustStore.localKeysKey)
+
+        #expect(!TombstoneTrustStore.isTrusted(legacy))
+        #expect(
+            UserDefaults.standard.stringArray(forKey: TombstoneTrustStore.localKeysKey) == [legacy]
+        )
+    }
+
+    @Test func testNormalizedPublicKeyAppliedOnEveryPath() {
+        #expect(!TombstoneTrustStore.add("not-a-key"))
+        #expect(!TombstoneTrustStore.remove("gg"))
+
+        let upper = String(repeating: "A", count: 64)
+        let lower = String(repeating: "a", count: 64)
+        TombstoneTrustStore.keychainOverride = .stored(["NOT-HEX", upper])
+
+        let keys = TombstoneTrustStore.trustedPublicKeys()
+        #expect(!keys.contains("NOT-HEX"))
+        #expect(keys.contains(lower))
+        #expect(TombstoneTrustStore.isTrusted(upper))
+    }
+}
+
+private final class KeychainOverrideReset {
+    deinit {
+        TombstoneTrustStore.keychainOverride = nil
+        UserDefaults.standard.removeObject(forKey: TombstoneTrustStore.localKeysKey)
     }
 }
