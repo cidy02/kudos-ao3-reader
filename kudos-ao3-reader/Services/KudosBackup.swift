@@ -37,17 +37,67 @@ nonisolated struct KudosBackupContents {
     let epubFiles: [UUID: Data]
     let fontFiles: [String: Data]
     let zip: MiniZip?
+    /// Set on the Settings directory-import path so `epubData`/`fontData`
+    /// can pull one file at a time. Nil for ZIP and in-memory contents.
+    let directoryURL: URL?
+
+    /// Counts ZIP entry names this contents object has actually extracted.
+    /// `manifest.json` is pulled at decode; `Works/` and `Fonts/` names appear
+    /// only when the matching accessor runs. Empty for directory / in-memory.
+    var extractedZipEntryNames: [String] { zipSource?.extractedNames ?? [] }
+
+    private let zipSource: ZipSource?
+
+    /// File identity captured at pre-confirm so execute can refuse a swap.
+    ///
+    /// Residual (accepted): a replacement with the same size and the same
+    /// `contentModificationDate` is indistinguishable. Directory imports
+    /// additionally snapshot listed asset sizes, not bytes, so an equal-size
+    /// swap of one EPUB still lands. Closing that fully would mean hashing
+    /// every payload at confirm time, which is the M4 bomb again.
+    struct SourceIdentity: Equatable, Sendable {
+        let isDirectory: Bool
+        let rootFileSize: Int?
+        let rootModificationDate: Date?
+        let listedAssetSizes: [String: Int]
+    }
+
+    private final class ZipSource: @unchecked Sendable {
+        let zip: MiniZip
+        private let lock = NSLock()
+        private var names: [String] = []
+
+        init(_ zip: MiniZip) {
+            self.zip = zip
+        }
+
+        var extractedNames: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return names
+        }
+
+        func data(named name: String) -> Data? {
+            lock.lock()
+            names.append(name)
+            lock.unlock()
+            return zip.data(named: name)
+        }
+    }
 
     nonisolated init(
         manifest: KudosBackupManifest,
         epubFiles: [UUID: Data] = [:],
         fontFiles: [String: Data] = [:],
-        zip: MiniZip? = nil
+        zip: MiniZip? = nil,
+        directoryURL: URL? = nil
     ) {
         self.manifest = manifest
         self.epubFiles = epubFiles
         self.fontFiles = fontFiles
         self.zip = zip
+        self.directoryURL = directoryURL
+        self.zipSource = zip.map(ZipSource.init)
     }
 
     /// Legacy read path for the pre-archive directory-package format. Kept so
@@ -92,6 +142,8 @@ nonisolated struct KudosBackupContents {
         }
         fontFiles = fonts
         zip = nil
+        directoryURL = nil
+        zipSource = nil
     }
 
     /// Reads a backup from either physical format: a single `.kudosbackup` ZIP
@@ -105,24 +157,15 @@ nonisolated struct KudosBackupContents {
         return try Self(zipData: Data(contentsOf: url, options: .mappedIfSafe))
     }
 
-    /// Reads the legacy directory package without asking `FileWrapper(.immediate)`
-    /// to materialize every font first. Font limits are checked from metadata and
-    /// enforced again by a bounded handle before bytes enter the restore batch.
+    /// Reads the legacy directory package without materializing EPUBs or fonts.
+    /// Font limits are checked from metadata (or a discarded bounded read when
+    /// size is unavailable) so a hostile tree still fails before confirm/restore
+    /// holds the bytes. `epubData`/`fontData` pull one file later.
     nonisolated static func readLegacyDirectory(from rootURL: URL) throws -> Self {
         let manifestURL = rootURL.appendingPathComponent("manifest.json")
         let manifest = try decodeManifest(Data(contentsOf: manifestURL, options: .mappedIfSafe))
 
-        let worksDirectory = rootURL.appendingPathComponent("Works", isDirectory: true)
-        var epubs: [UUID: Data] = [:]
-        for work in manifest.works {
-            let url = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
-            if let data = try? Data(contentsOf: url, options: .mappedIfSafe) {
-                epubs[work.id] = data
-            }
-        }
-
         let fontsDirectory = rootURL.appendingPathComponent("Fonts", isDirectory: true)
-        var fonts: [String: Data] = [:]
         var aggregateFontBytes = 0
         for font in manifest.fonts where isSafeFileName(font.fileName) {
             let url = fontsDirectory.appendingPathComponent(font.fileName)
@@ -132,12 +175,19 @@ nonisolated struct KudosBackupContents {
             let cap = min(maxFontEntryBytes, remainingBytes)
             if let fileSize = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
                 guard fileSize <= cap else { throw KudosBackupError.invalidPackage }
+                aggregateFontBytes += fileSize
+                continue
             }
+            // No size metadata: bound-read and discard so the cap still holds.
             let data = try readBoundedData(from: url, maxBytes: cap)
             aggregateFontBytes += data.count
-            fonts[font.fileName] = data
         }
-        return Self(manifest: manifest, epubFiles: epubs, fontFiles: fonts)
+        return Self(
+            manifest: manifest,
+            epubFiles: [:],
+            fontFiles: [:],
+            directoryURL: rootURL
+        )
     }
 
     nonisolated private static func readBoundedData(from url: URL, maxBytes: Int) throws -> Data {
@@ -146,6 +196,78 @@ nonisolated struct KudosBackupContents {
         let data = try handle.read(upToCount: maxBytes + 1) ?? Data()
         guard data.count <= maxBytes else { throw KudosBackupError.invalidPackage }
         return data
+    }
+
+    /// Snapshot used between Settings pre-confirm and execute. Stats only —
+    /// does not read EPUB or font payloads. Uses `attributesOfItem` rather
+    /// than `URL.resourceValues`, which can return a cached size after the
+    /// file has already been replaced.
+    nonisolated static func sourceIdentity(
+        of url: URL,
+        manifest: KudosBackupManifest? = nil
+    ) throws -> SourceIdentity {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            throw KudosBackupError.sourceChanged
+        }
+        let root = fileAttributes(at: url)
+        var listed: [String: Int] = [:]
+        if isDirectory.boolValue, let manifest {
+            let manifestURL = url.appendingPathComponent("manifest.json")
+            if let size = fileAttributes(at: manifestURL).size {
+                listed["manifest.json"] = size
+            }
+            let worksDirectory = url.appendingPathComponent("Works", isDirectory: true)
+            for work in manifest.works {
+                let name = "Works/\(work.id.uuidString).epub"
+                let file = worksDirectory.appendingPathComponent("\(work.id.uuidString).epub")
+                if let size = fileAttributes(at: file).size {
+                    listed[name] = size
+                }
+            }
+            let fontsDirectory = url.appendingPathComponent("Fonts", isDirectory: true)
+            for font in manifest.fonts where isSafeFileName(font.fileName) {
+                let name = "Fonts/\(font.fileName)"
+                let file = fontsDirectory.appendingPathComponent(font.fileName)
+                if let size = fileAttributes(at: file).size {
+                    listed[name] = size
+                }
+            }
+        }
+        return SourceIdentity(
+            isDirectory: isDirectory.boolValue,
+            rootFileSize: root.size,
+            rootModificationDate: root.modified,
+            listedAssetSizes: listed
+        )
+    }
+
+    nonisolated private static func fileAttributes(
+        at url: URL
+    ) -> (size: Int?, modified: Date?) {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let size = (attrs?[.size] as? NSNumber)?.intValue
+        let modified = attrs?[.modificationDate] as? Date
+        return (size, modified)
+    }
+
+    nonisolated static func assertSourceUnchanged(
+        _ url: URL,
+        since expected: SourceIdentity,
+        manifest: KudosBackupManifest? = nil
+    ) throws {
+        let current = try sourceIdentity(of: url, manifest: manifest)
+        guard current == expected else { throw KudosBackupError.sourceChanged }
+    }
+
+    /// Settings execute path: refuse a swapped file, then read lazily.
+    nonisolated static func readForConfirmedImport(
+        from url: URL,
+        expectedIdentity: SourceIdentity,
+        manifest: KudosBackupManifest? = nil
+    ) throws -> Self {
+        try assertSourceUnchanged(url, since: expectedIdentity, manifest: manifest)
+        return try read(from: url)
     }
 
     /// Reads just the manifest for the pre-confirmation UI without materializing
@@ -170,13 +292,15 @@ nonisolated struct KudosBackupContents {
     }
 
     nonisolated init(zipData: Data) throws {
-        let zip: MiniZip
+        let parsed: MiniZip
         do {
-            zip = try MiniZip(data: zipData, limits: .backup)
+            parsed = try MiniZip(data: zipData, limits: .backup)
         } catch {
             throw KudosBackupError.invalidPackage
         }
-        guard let manifestData = zip.data(named: "manifest.json") else {
+        // Extract only through ZipSource so unread-until-access stays observable.
+        let source = ZipSource(parsed)
+        guard let manifestData = source.data(named: "manifest.json") else {
             throw KudosBackupError.invalidPackage
         }
 
@@ -185,36 +309,52 @@ nonisolated struct KudosBackupContents {
             throw KudosBackupError.unsupportedVersion(manifest.version)
         }
 
-        // M4: Defer reading EPUBs into memory. We only read them out one by one during restore.
+        // M4: Defer EPUBs *and* fonts. Size-check fonts from the central
+        // directory so a decompression bomb still fails here, but do not
+        // inflate the payloads until `fontData(for:)` / restore asks.
         epubFiles = [:]
-        self.zip = zip
+        fontFiles = [:]
+        zip = parsed
+        zipSource = source
+        directoryURL = nil
 
-        var fontEntries: [(fileName: String, entryName: String)] = []
         var aggregateFontBytes = 0
         for font in manifest.fonts {
             guard Self.isSafeFileName(font.fileName) else { continue }
             let entryName = "Fonts/\(font.fileName)"
-            guard let size = zip.uncompressedSize(named: entryName) else { continue }
+            guard let size = parsed.uncompressedSize(named: entryName) else { continue }
             guard size <= Self.maxFontEntryBytes,
                   aggregateFontBytes <= Self.maxTotalFontBytes - size
             else {
                 throw KudosBackupError.invalidPackage
             }
             aggregateFontBytes += size
-            fontEntries.append((fileName: font.fileName, entryName: entryName))
         }
-        var fonts: [String: Data] = [:]
-        for entry in fontEntries {
-            guard let data = zip.data(named: entry.entryName) else {
-                throw KudosBackupError.invalidPackage
-            }
-            fonts[entry.fileName] = data
-        }
-        fontFiles = fonts
     }
 
     nonisolated func epubData(for id: UUID) -> Data? {
-        epubFiles[id] ?? zip?.data(named: "Works/\(id.uuidString).epub")
+        if let data = epubFiles[id] { return data }
+        if let data = zipSource?.data(named: "Works/\(id.uuidString).epub") {
+            return data
+        }
+        if let dir = directoryURL {
+            let file = dir.appendingPathComponent("Works/\(id.uuidString).epub")
+            return try? Data(contentsOf: file, options: .mappedIfSafe)
+        }
+        return nil
+    }
+
+    nonisolated func fontData(for fileName: String) -> Data? {
+        guard Self.isSafeFileName(fileName) else { return nil }
+        if let data = fontFiles[fileName] { return data }
+        if let data = zipSource?.data(named: "Fonts/\(fileName)") {
+            return data
+        }
+        if let dir = directoryURL {
+            let file = dir.appendingPathComponent("Fonts/\(fileName)")
+            return try? Self.readBoundedData(from: file, maxBytes: Self.maxFontEntryBytes)
+        }
+        return nil
     }
 
     /// Encodes just the manifest — the sync directory's `manifest.json` and
@@ -1297,9 +1437,11 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     }
 }
 
-nonisolated enum KudosBackupError: LocalizedError {
+nonisolated enum KudosBackupError: LocalizedError, Equatable {
     case invalidPackage
     case unsupportedVersion(Int)
+    /// The file Settings confirmed is not the file it is about to restore.
+    case sourceChanged
 
     var errorDescription: String? {
         switch self {
@@ -1307,6 +1449,8 @@ nonisolated enum KudosBackupError: LocalizedError {
             "This file is not a valid Kudos backup."
         case let .unsupportedVersion(version):
             "This backup uses unsupported format version \(version)."
+        case .sourceChanged:
+            "This backup file changed after you reviewed it. Choose the file again."
         }
     }
 }
@@ -1995,7 +2139,7 @@ enum KudosBackupService {
         var validatedFileNames = Set<String>()
         var aggregateBytes = 0
         for archived in contents.manifest.fonts {
-            guard let data = contents.fontFiles[archived.fileName] else { continue }
+            guard let data = contents.fontData(for: archived.fileName) else { continue }
 
             // Basename-only: no path separators, no traversal.
             let fileName = archived.fileName
