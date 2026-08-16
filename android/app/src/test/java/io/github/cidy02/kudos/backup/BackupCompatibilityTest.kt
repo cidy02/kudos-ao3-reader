@@ -131,6 +131,7 @@ class BackupMergeDoesNotDeleteExistingWorkTest {
     @Test
     fun mergeKeepsWorksAbsentFromBackup() {
         val existing = sampleSavedWork(id = OTHER_WORK_ID, title = "Local Only")
+            .copy(sourceUrl = "https://archiveofourown.org/works/999")
         val result = BackupMergeService.merge(
             current = BackupLibrarySnapshot(works = listOf(existing)),
             backup = samplePackage()
@@ -866,7 +867,558 @@ class BackupTombstoneSuppressTest {
         assertEquals(WORK_ID, imported.manifest.tombstones.single().recordID)
 
         val merged = BackupMergeService.merge(BackupLibrarySnapshot(), imported)
-        assertEquals(1, merged.snapshot.tombstones.size)
+        // Phase 1: the ZIP still carries tombstones for export/round-trip, but
+        // unsigned incoming tombstones are not adopted into the local store.
+        assertEquals(0, merged.snapshot.tombstones.size)
+    }
+}
+
+/**
+ * Phase 1 backup-trust invariants at [BackupMergeService.merge].
+ * Mutation: restoring the pre-Phase-1 "upsert incoming tombstones" loop must
+ * turn [mergeDoesNotAdoptOrSuppressWithIncomingTombstones] red.
+ */
+class BackupTombstoneTrustPhase1MergeTest {
+    @Test
+    fun mergeDoesNotAdoptOrSuppressWithIncomingTombstones() {
+        val incomingTombstone = BackupTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING,
+            sourceURL = "https://archiveofourown.org/works/123",
+            ao3WorkID = 123,
+            deletionReason = "forged"
+        )
+        val archive = sampleBackupWork().copy(
+            lastModifiedAt = DATE_STRING,
+            dateAdded = DATE_STRING
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(archive),
+                    tombstones = listOf(incomingTombstone)
+                )
+            )
+        )
+
+        // Quoted assertion: incoming unsigned tombstones must not land in the
+        // merged store, and must not skip a work present in the same file.
+        assertTrue(
+            "incoming unsigned tombstones must not be adopted",
+            result.snapshot.tombstones.isEmpty()
+        )
+        assertEquals(0, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.works.size)
+        assertEquals(WORK_ID, result.snapshot.works.single().id)
+    }
+
+    @Test
+    fun laterMergeStillInsertsWorkThatAnEarlierFileTriedToTombstone() {
+        val incomingTombstone = BackupTombstone(
+            id = TOMBSTONE_ID,
+            recordID = OTHER_WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING,
+            sourceURL = "https://archiveofourown.org/works/999",
+            ao3WorkID = 999
+        )
+        val first = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incomingTombstone)
+                )
+            )
+        )
+        assertTrue(first.snapshot.tombstones.isEmpty())
+
+        val laterWork = sampleBackupWork(id = OTHER_WORK_ID).copy(
+            sourceURL = "https://archiveofourown.org/works/999",
+            ao3WorkID = 999,
+            title = "Should still insert"
+        )
+        val second = BackupMergeService.merge(
+            current = first.snapshot,
+            backup = samplePackage(
+                manifest = sampleManifest(works = listOf(laterWork)),
+                epubFiles = mapOf(OTHER_WORK_ID to EPUB_BYTES)
+            )
+        )
+        assertTrue(second.snapshot.works.any { it.id == OTHER_WORK_ID })
+        assertEquals(0, second.summary.worksSuppressed)
+    }
+
+    @Test
+    fun localTombstonesStillSuppressResurrection() {
+        val deletedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val local = io.github.cidy02.kudos.core.model.SyncTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = deletedAt,
+            lastModifiedAt = deletedAt,
+            sourceURL = "https://archiveofourown.org/works/123",
+            ao3WorkID = 123
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(tombstones = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(
+                        sampleBackupWork().copy(
+                            lastModifiedAt = "2026-01-01T00:00:00Z",
+                            dateAdded = "2026-01-01T00:00:00Z"
+                        )
+                    )
+                )
+            )
+        )
+        assertTrue(result.snapshot.works.none { it.id == WORK_ID })
+        assertEquals(1, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.tombstones.size)
+    }
+
+    @Test
+    fun replaceLibraryDropsLocalOnlyWorksAndDoesNotPersistFileTombstones() {
+        val localOnly = sampleSavedWork(id = OTHER_WORK_ID, title = "Local only")
+            .copy(sourceUrl = "https://archiveofourown.org/works/999")
+        val incomingTombstone = BackupTombstone(
+            id = TOMBSTONE_ID,
+            recordID = OTHER_WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork(), localOnly)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork().copy(title = "From file")),
+                    tombstones = listOf(incomingTombstone)
+                )
+            ),
+            mode = BackupImportMode.REPLACE_LIBRARY
+        )
+        val active = result.snapshot.works.filterNot { it.isDeleted }
+        val omitted = result.snapshot.works.filter { it.isDeleted }
+        assertEquals(1, active.size)
+        assertEquals(WORK_ID, active.single().id)
+        assertEquals("From file", active.single().title)
+        assertEquals(listOf(OTHER_WORK_ID), omitted.map { it.id })
+        assertNotNull(omitted.single().deletedAt)
+        assertEquals(1, result.summary.worksRemoved)
+        assertTrue(
+            "replace must not persist the file's unsigned tombstones or mint new ones",
+            result.snapshot.tombstones.isEmpty()
+        )
+    }
+
+    @Test
+    fun laterMergeAfterReplaceCanInsertAWorkTheSnapshotDropped() {
+        val localOnly = sampleSavedWork(id = OTHER_WORK_ID, title = "Pre-replace")
+            .copy(sourceUrl = "https://archiveofourown.org/works/999")
+        val afterReplace = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(sampleSavedWork(), localOnly)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(sampleBackupWork()))),
+            mode = BackupImportMode.REPLACE_LIBRARY
+        )
+        val later = BackupMergeService.merge(
+            current = afterReplace.snapshot,
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(
+                        sampleBackupWork(id = OTHER_WORK_ID).copy(
+                            title = "Restored later",
+                            sourceURL = "https://archiveofourown.org/works/999"
+                        )
+                    )
+                ),
+                epubFiles = mapOf(OTHER_WORK_ID to EPUB_BYTES)
+            )
+        )
+        assertTrue(later.snapshot.works.any { it.id == OTHER_WORK_ID && it.title == "Restored later" })
+        assertEquals(0, later.summary.worksSuppressed)
+    }
+
+    @Test
+    fun clampsLastModifiedAtToExportedAtAndRejectsFarFuture() {
+        val now = Instant.parse("2026-08-15T12:00:00Z")
+        val local = sampleSavedWork().copy(
+            title = "Local Title",
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val clamped = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    exportedAt = "2026-06-01T00:00:00Z",
+                    works = listOf(
+                        sampleBackupWork().copy(
+                            title = "Archive Title",
+                            lastModifiedAt = "2026-07-10T00:00:00Z"
+                        )
+                    )
+                )
+            ),
+            now = now
+        )
+        val afterClamp = clamped.snapshot.works.single { it.id == WORK_ID }
+        assertEquals("Archive Title", afterClamp.title)
+        assertEquals(Instant.parse("2026-06-01T00:00:00Z"), afterClamp.lastModifiedAt)
+
+        val future = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    exportedAt = "2026-06-01T00:00:00Z",
+                    works = listOf(
+                        sampleBackupWork().copy(
+                            title = "Forged Future",
+                            lastModifiedAt = "2026-08-20T12:00:00Z"
+                        )
+                    )
+                )
+            ),
+            now = now
+        )
+        val afterReject = future.snapshot.works.single { it.id == WORK_ID }
+        assertEquals("Local Title", afterReject.title)
+    }
+
+    @Test
+    fun canonicalizesIncomingSourceUrl() {
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(
+                        sampleBackupWork().copy(
+                            sourceURL = "https://www.archiveofourown.org/works/123/chapters/9"
+                        )
+                    )
+                )
+            )
+        )
+        assertEquals(
+            "https://archiveofourown.org/works/123",
+            result.snapshot.works.single().sourceUrl
+        )
+    }
+
+    @Test
+    fun mergeModeDoesNotOverwriteExistingOverlapTitleProgressTagsOrEpub() {
+        val incomingEpub = "incoming-hostile-epub".toByteArray()
+        val local = sampleSavedWork().copy(
+            title = "Local Title",
+            lastSpineIndex = 3,
+            lastScrollFraction = 0.3,
+            lastReadDate = Instant.parse("2026-01-01T00:00:00Z"),
+            progressModifiedAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = sampleBackupWork(
+            userTags = listOf("Incoming"),
+            lastSpineIndex = 8,
+            lastScrollFraction = 0.8
+        ).copy(
+            title = "Incoming Title",
+            lastReadDate = "2026-07-01T00:00:00Z",
+            progressModifiedAt = "2026-07-01T00:00:00Z",
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(local),
+                userTagsByWorkId = mapOf(WORK_ID to listOf("Local")),
+                epubWorkIds = setOf(WORK_ID)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(works = listOf(archive)),
+                epubFiles = mapOf(WORK_ID to incomingEpub)
+            ),
+            mode = BackupImportMode.MERGE
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals("Local Title", merged.title)
+        assertEquals(3, merged.lastSpineIndex)
+        assertEquals(0.3, merged.lastScrollFraction, 0.0)
+        assertEquals(Instant.parse("2026-01-01T00:00:00Z"), merged.lastReadDate)
+        assertEquals(listOf("Local"), result.snapshot.userTagsByWorkId[WORK_ID])
+        assertTrue(
+            "file Merge must not overwrite a local EPUB on overlap",
+            result.epubFilesToWriteByWorkId.isEmpty()
+        )
+        assertEquals(0, result.summary.worksUpdated)
+        assertEquals(0, result.summary.worksCreated)
+    }
+
+    @Test
+    fun reconcileModeStillLwwUpdatesOverlap() {
+        val incomingEpub = "incoming-newer-epub".toByteArray()
+        val local = sampleSavedWork().copy(
+            title = "Local Title",
+            lastSpineIndex = 3,
+            lastScrollFraction = 0.3,
+            lastReadDate = Instant.parse("2026-01-01T00:00:00Z"),
+            progressModifiedAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val archive = sampleBackupWork(
+            userTags = listOf("Incoming"),
+            lastSpineIndex = 8,
+            lastScrollFraction = 0.8
+        ).copy(
+            title = "Incoming Title",
+            lastReadDate = "2026-07-01T00:00:00Z",
+            progressModifiedAt = "2026-07-01T00:00:00Z",
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(local),
+                userTagsByWorkId = mapOf(WORK_ID to listOf("Local")),
+                epubWorkIds = setOf(WORK_ID)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(works = listOf(archive)),
+                epubFiles = mapOf(WORK_ID to incomingEpub)
+            ),
+            mode = BackupImportMode.RECONCILE
+        )
+
+        val merged = result.snapshot.works.single { it.id == WORK_ID }
+        assertEquals("Incoming Title", merged.title)
+        assertEquals(8, merged.lastSpineIndex)
+        assertEquals(0.8, merged.lastScrollFraction, 0.0)
+        assertEquals(Instant.parse("2026-07-01T00:00:00Z"), merged.lastReadDate)
+        assertEquals(listOf("Local", "Incoming"), result.snapshot.userTagsByWorkId[WORK_ID])
+        assertArrayEquals(incomingEpub, result.epubFilesToWriteByWorkId[WORK_ID])
+        assertEquals(1, result.summary.worksUpdated)
+    }
+
+    @Test
+    fun mergeModeDoesNotAdoptIncomingTombstones() {
+        val incomingTombstone = BackupTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING,
+            sourceURL = "https://archiveofourown.org/works/123",
+            ao3WorkID = 123
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incomingTombstone)
+                )
+            ),
+            mode = BackupImportMode.MERGE
+        )
+        assertTrue(
+            "incoming unsigned tombstones must not be adopted",
+            result.snapshot.tombstones.isEmpty()
+        )
+        assertEquals(0, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.works.size)
+    }
+
+    @Test
+    fun reconcileModeDoesNotAdoptIncomingTombstones() {
+        val incomingTombstone = BackupTombstone(
+            id = TOMBSTONE_ID,
+            recordID = WORK_ID,
+            recordTypeRaw = "savedWork",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING,
+            sourceURL = "https://archiveofourown.org/works/123",
+            ao3WorkID = 123
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incomingTombstone)
+                )
+            ),
+            mode = BackupImportMode.RECONCILE
+        )
+        assertTrue(
+            "incoming unsigned tombstones must not be adopted",
+            result.snapshot.tombstones.isEmpty()
+        )
+        assertEquals(0, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.works.size)
+    }
+
+    @Test
+    fun previewCountsSameAo3WorkDifferentUuidAsInBoth() {
+        val local = sampleSavedWork(
+            id = OTHER_WORK_ID,
+            title = "Phone copy"
+        ).copy(sourceUrl = "https://archiveofourown.org/works/4242")
+        val incoming = sampleBackupWork().copy(
+            id = WORK_ID,
+            title = "Backup copy",
+            sourceURL = "https://www.archiveofourown.org/works/4242/chapters/9",
+            ao3WorkID = 4242
+        )
+        val preview = BackupMergeService.preview(
+            current = BackupLibrarySnapshot(works = listOf(local)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(incoming)))
+        )
+        assertEquals(1, preview.localWorkCount)
+        assertEquals(1, preview.fileWorkCount)
+        assertEquals(0, preview.willAdd)
+        assertEquals(0, preview.willRemove)
+        assertEquals(1, preview.inBoth)
+    }
+
+    @Test
+    fun replaceLibrarySnapshotsBookmarksAndSavedSearches() {
+        val localOnlyBookmark = Bookmark(
+            title = "Local only",
+            urlString = "https://example.com/local-only",
+            dateAdded = DATE
+        )
+        val localOnlySearch = SavedSearch(
+            id = OTHER_SEARCH_ID,
+            name = "Local only search",
+            dateAdded = DATE
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                bookmarks = listOf(localOnlyBookmark),
+                savedSearches = listOf(localOnlySearch)
+            ),
+            backup = samplePackage(),
+            mode = BackupImportMode.REPLACE_LIBRARY
+        )
+        assertTrue(result.snapshot.bookmarks.none { it.urlString == localOnlyBookmark.urlString })
+        assertTrue(result.snapshot.bookmarks.any { it.urlString == "https://archiveofourown.org/works/123" })
+        assertTrue(result.snapshot.savedSearches.none { it.id == OTHER_SEARCH_ID })
+        assertTrue(result.snapshot.savedSearches.any { it.id == SEARCH_ID })
+    }
+}
+
+/**
+ * Phase 2: signed incoming tombstones at [BackupMergeService.merge].
+ * Unsigned drop tests above must stay GREEN.
+ */
+class BackupTombstoneTrustPhase2MergeTest {
+    @Test
+    fun trustedSignedIncomingIsAdoptedAndSuppressesWork() {
+        val peer = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        val incoming = signedBackupTombstone(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123),
+            peer.privateKey,
+            pub
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = setOf(pub)
+        )
+        assertEquals(1, result.snapshot.tombstones.size)
+        assertEquals(pub, result.snapshot.tombstones.single().signerPublicKey)
+        assertTrue(result.snapshot.tombstones.single().signature.isNotEmpty())
+        assertEquals(1, result.summary.worksSuppressed)
+        assertTrue(result.snapshot.works.none { it.id == WORK_ID })
+    }
+
+    @Test
+    fun untrustedValidSignatureIsDropped() {
+        val peer = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        val incoming = signedBackupTombstone(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123),
+            peer.privateKey,
+            pub
+        )
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = emptySet()
+        )
+        assertTrue(result.snapshot.tombstones.isEmpty())
+        assertEquals(0, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.works.size)
+    }
+
+    @Test
+    fun forgedSignatureOnTrustedPubIsDropped() {
+        val peer = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        val valid = signedBackupTombstone(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123),
+            peer.privateKey,
+            pub
+        )
+        val flipped = valid.signature.last().let { last ->
+            val flippedLast = if (last == '0') '1' else '0'
+            valid.signature.dropLast(1) + flippedLast
+        }
+        val incoming = valid.copy(signature = flipped)
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = setOf(pub)
+        )
+        assertTrue(result.snapshot.tombstones.isEmpty())
+        assertEquals(0, result.summary.worksSuppressed)
+        assertEquals(1, result.snapshot.works.size)
+    }
+
+    @Test
+    fun ownDevicePubIsTrustedWithoutTrustStoreEntry() {
+        val incoming = TombstoneSigning.sign(
+            unsignedWorkTombstone(WORK_ID, ao3WorkId = 123).toSyncTombstone()
+        ).toBackupTombstone()
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    tombstones = listOf(incoming)
+                )
+            ),
+            trustedPublicKeys = emptySet()
+        )
+        assertEquals(1, result.snapshot.tombstones.size)
+        assertEquals(1, result.summary.worksSuppressed)
+        assertTrue(result.snapshot.works.none { it.id == WORK_ID })
     }
 }
 
@@ -934,6 +1486,60 @@ class BackupAnnotationApplyTest {
             )
         )
         assertTrue(result.snapshot.annotations.isEmpty())
+    }
+
+    @Test
+    fun mergeModeKeepsExistingAnnotationNoteAndInsertsNewId() {
+        val existing = io.github.cidy02.kudos.core.model.ReadingAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "highlight",
+            colorRaw = "yellow",
+            locatorString = """{"href":"local"}""",
+            note = "keep this note",
+            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            lastModifiedAt = Instant.parse("2026-01-01T00:00:00Z")
+        )
+        val incomingExisting = BackupAnnotation(
+            id = ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "highlight",
+            colorRaw = "green",
+            locatorString = """{"href":"incoming"}""",
+            note = "do not overwrite",
+            createdAt = "2026-01-01T00:00:00Z",
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        )
+        val incomingNew = BackupAnnotation(
+            id = OTHER_ANN_ID,
+            workID = WORK_ID,
+            kindRaw = "bookmark",
+            note = "new from file",
+            createdAt = DATE_STRING,
+            lastModifiedAt = DATE_STRING
+        )
+
+        val result = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(
+                works = listOf(sampleSavedWork()),
+                annotations = listOf(existing)
+            ),
+            backup = samplePackage(
+                manifest = sampleManifest(
+                    works = listOf(sampleBackupWork()),
+                    annotations = listOf(incomingExisting, incomingNew)
+                )
+            ),
+            mode = BackupImportMode.MERGE
+        )
+
+        val byId = result.snapshot.annotations.associateBy { it.id }
+        assertEquals("keep this note", byId.getValue(ANN_ID).note)
+        assertEquals("yellow", byId.getValue(ANN_ID).colorRaw)
+        assertEquals("""{"href":"local"}""", byId.getValue(ANN_ID).locatorString)
+        assertEquals("new from file", byId.getValue(OTHER_ANN_ID).note)
+        assertEquals(1, result.summary.annotationsCreated)
+        assertEquals(0, result.summary.annotationsUpdated)
     }
 }
 
@@ -1343,7 +1949,9 @@ private const val OTHER_WORK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 private const val COLLECTION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 private const val OTHER_COLLECTION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 private const val SEARCH_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+private const val OTHER_SEARCH_ID = "55555555-5555-4555-8555-555555555555"
 private const val ANN_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+private const val OTHER_ANN_ID = "66666666-6666-4666-8666-666666666666"
 private const val QUEUE_ID = "11111111-1111-4111-8111-111111111111"
 private const val MEMBERSHIP_ID = "22222222-2222-4222-8222-222222222222"
 private const val TOMBSTONE_ID = "33333333-3333-4333-8333-333333333333"
@@ -1351,6 +1959,38 @@ private const val DATE_STRING = "2026-06-26T12:00:00Z"
 private val DATE: Instant = Instant.parse(DATE_STRING)
 private val EPUB_BYTES = "dummy epub bytes".toByteArray()
 private val FONT_BYTES = "dummy font bytes".toByteArray()
+
+private fun unsignedWorkTombstone(
+    recordId: String,
+    ao3WorkId: Int,
+    sourceUrl: String = "https://archiveofourown.org/works/$ao3WorkId"
+): BackupTombstone {
+    return BackupTombstone(
+        id = TOMBSTONE_ID,
+        recordID = recordId,
+        recordTypeRaw = "savedWork",
+        createdAt = DATE_STRING,
+        lastModifiedAt = DATE_STRING,
+        sourceURL = sourceUrl,
+        ao3WorkID = ao3WorkId
+    )
+}
+
+private fun signedBackupTombstone(
+    base: BackupTombstone,
+    rawPrivateKey: ByteArray,
+    publicKeyHex: String
+): BackupTombstone {
+    val signed = TombstoneSigning.signWithRawKey(
+        base.copy(signerPublicKey = publicKeyHex).toSyncTombstone(),
+        rawPrivateKey,
+        publicKeyHex
+    )
+    return base.copy(
+        signerPublicKey = signed.signerPublicKey,
+        signature = signed.signature
+    )
+}
 
 private fun samplePackage(
     manifest: KudosBackupManifest = sampleManifest(),

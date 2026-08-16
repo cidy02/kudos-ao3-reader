@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.backup
 
 import android.net.Uri
+import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -11,16 +12,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,25 +37,32 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
+import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun BackupScreen(
-    repository: BackupRepository
+    repository: BackupRepository,
+    settingsRepository: SettingsRepository
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusIsError by remember { mutableStateOf(false) }
-    var showImportConfirm by remember { mutableStateOf(false) }
-    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingImport by remember { mutableStateOf<PendingBackupImport?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
@@ -79,19 +95,6 @@ fun BackupScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
-        pendingImportUri = uri
-        showImportConfirm = true
-    }
-
-    fun clearPendingImport() {
-        showImportConfirm = false
-        pendingImportUri = null
-    }
-
-    fun confirmImport() {
-        val uri = pendingImportUri
-        clearPendingImport()
-        if (uri == null) return
         scope.launch {
             busy = true
             statusMessage = null
@@ -100,9 +103,61 @@ fun BackupScreen(
                     context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                         ?: error("Could not read the selected file.")
                 }
-                val summary = repository.importV2ZipBytes(bytes)
+                val pack = withContext(Dispatchers.IO) { BackupImporter.importV2Zip(bytes) }
+                val preview = repository.previewImport(pack)
+                val syncEnabled = settingsRepository.settings.first().sync.isEnabled
+                pendingImport = PendingBackupImport(
+                    bytes = bytes,
+                    preview = preview,
+                    syncEnabled = syncEnabled
+                )
+            } catch (error: Exception) {
+                statusIsError = true
+                statusMessage = userFacingError("Import failed", error)
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun clearPendingImport() {
+        pendingImport = null
+    }
+
+    fun runImport(mode: BackupImportMode, pauseSync: Boolean) {
+        val pending = pendingImport
+        clearPendingImport()
+        if (pending == null) return
+        scope.launch {
+            busy = true
+            statusMessage = null
+            try {
+                var safetyName: String? = null
+                if (mode == BackupImportMode.REPLACE_LIBRARY) {
+                    val docs = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+                        ?: File(context.filesDir, "Documents").also { it.mkdirs() }
+                    docs.mkdirs()
+                    val file = File(docs, repository.suggestedSafetyBackupFileName())
+                    val safetyBytes = repository.exportV2ZipBytes()
+                    withContext(Dispatchers.IO) { file.writeBytes(safetyBytes) }
+                    safetyName = file.name
+                    if (pauseSync && pending.syncEnabled) {
+                        settingsRepository.updateSyncIsEnabled(false)
+                    }
+                }
+                val summary = repository.importV2ZipBytes(pending.bytes, mode)
                 statusIsError = false
-                statusMessage = summary.toUserMessage()
+                statusMessage = buildString {
+                    append(summary.toUserMessage())
+                    if (safetyName != null) {
+                        append(" Current library saved as ")
+                        append(safetyName)
+                        append(" first.")
+                    }
+                    if (pauseSync && pending.syncEnabled) {
+                        append(" Sync paused on this device.")
+                    }
+                }
             } catch (error: Exception) {
                 statusIsError = true
                 statusMessage = userFacingError("Import failed", error)
@@ -129,7 +184,8 @@ fun BackupScreen(
                 rows = listOf(
                     "Export writes ZIP packages at manifest v${BackupVersion.CURRENT} (Apple-compatible).",
                     "Import accepts Apple/Android .kudosbackup ZIP versions ${BackupVersion.APPLE_V1}–${BackupVersion.CURRENT}.",
-                    "Restore is merge-only and does not delete works that are already on the device."
+                    "Merge adds works that are not already here. Replace Library makes this device match the file.",
+                    "Unsigned deletion claims in a backup or sync folder are ignored. Signed tombstones apply only from devices you already trust."
                 )
             )
         }
@@ -160,14 +216,14 @@ fun BackupScreen(
                             "v${BackupVersion.CURRENT} ZIP",
                             "v1–v${BackupVersion.CURRENT} import",
                             "SAF picker",
-                            "merge-only",
+                            "merge or replace",
                             "session excluded"
                         ),
                         prominent = true
                     )
                     Text(
-                        text = "Export saves a portable library archive. Import merges a chosen " +
-                            ".kudosbackup into this device without wiping existing works.",
+                        text = "Export saves a portable library archive. Import can merge new works " +
+                            "or replace this device's library. Unsigned or untrusted tombstones in the file are not applied.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -222,29 +278,239 @@ fun BackupScreen(
                 }
             }
         }
+        item {
+            TrustedDevicesCard(settingsRepository = settingsRepository)
+        }
     }
 
-    if (showImportConfirm) {
+    pendingImport?.let { pending ->
+        ImportBackupDialog(
+            pending = pending,
+            onDismiss = { clearPendingImport() },
+            onMerge = { runImport(BackupImportMode.MERGE, pauseSync = false) },
+            onReplace = { pauseSync ->
+                runImport(BackupImportMode.REPLACE_LIBRARY, pauseSync = pauseSync)
+            }
+        )
+    }
+}
+
+private data class PendingBackupImport(
+    val bytes: ByteArray,
+    val preview: BackupImportPreview,
+    val syncEnabled: Boolean
+)
+
+@Composable
+private fun ImportBackupDialog(
+    pending: PendingBackupImport,
+    onDismiss: () -> Unit,
+    onMerge: () -> Unit,
+    onReplace: (pauseSync: Boolean) -> Unit
+) {
+    val preview = pending.preview
+    if (preview.isLibraryEmpty) {
         AlertDialog(
-            onDismissRequest = { clearPendingImport() },
-            title = { Text("Import this backup?") },
+            onDismissRequest = onDismiss,
+            title = { Text("Restore from Backup") },
             text = {
                 Text(
-                    "This merges the selected backup into your existing library. " +
-                        "Existing works, bookmarks, fonts, and settings won't be deleted."
+                    "This library is empty. Restore ${preview.fileWorkCount} work(s) from the selected backup."
                 )
             },
             confirmButton = {
-                TextButton(onClick = { confirmImport() }) {
-                    Text("Import and Merge")
-                }
+                TextButton(onClick = onMerge) { Text("Restore from Backup") }
             },
             dismissButton = {
-                TextButton(onClick = { clearPendingImport() }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         )
+    } else {
+        ReplaceOrMergeDialog(
+            pending = pending,
+            onDismiss = onDismiss,
+            onMerge = onMerge,
+            onReplace = onReplace
+        )
+    }
+}
+
+@Composable
+private fun ReplaceOrMergeDialog(
+    pending: PendingBackupImport,
+    onDismiss: () -> Unit,
+    onMerge: () -> Unit,
+    onReplace: (pauseSync: Boolean) -> Unit
+) {
+    val preview = pending.preview
+    var acknowledgeRemoval by remember { mutableStateOf(false) }
+    var pauseSync by remember { mutableStateOf(true) }
+    var replaceArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(acknowledgeRemoval, preview.willRemove) {
+        replaceArmed = false
+        if (preview.willRemove == 0 || acknowledgeRemoval) {
+            delay(1_500)
+            replaceArmed = true
+        }
+    }
+    val replaceEnabled = replaceArmed && (preview.willRemove == 0 || acknowledgeRemoval)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import this backup?") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Library: ${preview.localWorkCount} works. File: ${preview.fileWorkCount} works. " +
+                        "Will add ${preview.willAdd}. Will remove ${preview.willRemove}. " +
+                        "In both: ${preview.inBoth}."
+                )
+                Text(
+                    "Merge adds works that are not already here. It does not delete local works " +
+                        "or apply unsigned deletion claims from the file."
+                )
+                if (preview.isMuchSmallerThanLibrary) {
+                    Text(
+                        "This backup is much smaller than your library.",
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+                if (preview.willRemove > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = acknowledgeRemoval,
+                            onCheckedChange = { acknowledgeRemoval = it }
+                        )
+                        Text("Remove ${preview.willRemove} works that are not in this backup.")
+                    }
+                }
+                if (pending.syncEnabled) {
+                    Text("Sync will put removed works back. Pause sync for this device?")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = pauseSync,
+                            onCheckedChange = { pauseSync = it }
+                        )
+                        Text("Pause sync (recommended). The sync folder is not wiped.")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = onMerge) { Text("Merge") }
+                TextButton(
+                    onClick = { onReplace(pending.syncEnabled && pauseSync) },
+                    enabled = replaceEnabled,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Replace Library")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun TrustedDevicesCard(settingsRepository: SettingsRepository) {
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    val trusted by settingsRepository.trustedTombstonePublicKeys.collectAsState(initial = emptySet())
+    var deviceHex by remember { mutableStateOf("") }
+    var pasteHex by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf<String?>(null) }
+    var statusIsError by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        deviceHex = TombstoneSigning.publicKeyHex()
+    }
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Trusted devices", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "This device's public key. Paste another device's key to accept its signed deletions. " +
+                    "A backup file never adds a trusted key.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SelectionContainer {
+                Text(
+                    text = deviceHex.ifBlank { "Generating…" },
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    enabled = deviceHex.isNotBlank(),
+                    onClick = {
+                        clipboard.setText(AnnotatedString(deviceHex))
+                        statusIsError = false
+                        status = "Copied this device's public key."
+                    }
+                ) {
+                    Text("Copy")
+                }
+            }
+            OutlinedTextField(
+                value = pasteHex,
+                onValueChange = { pasteHex = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Other device public key") },
+                placeholder = { Text("64-character hex") },
+                singleLine = true
+            )
+            Button(
+                enabled = pasteHex.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        val store = TombstoneTrustStore(settingsRepository)
+                        if (store.trust(pasteHex)) {
+                            statusIsError = false
+                            status = "Trusted that device."
+                            pasteHex = ""
+                        } else {
+                            statusIsError = true
+                            status = "Not a 64-character hex public key."
+                        }
+                    }
+                }
+            ) {
+                Text("Trust device")
+            }
+            if (trusted.isNotEmpty()) {
+                Text(
+                    "${trusted.size} other device key(s) trusted.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            status?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (statusIsError) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
+                )
+            }
+        }
     }
 }
 

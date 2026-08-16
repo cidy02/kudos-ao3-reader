@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.works
 
+import io.github.cidy02.kudos.backup.TombstoneSigning
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
@@ -9,7 +11,6 @@ import io.github.cidy02.kudos.core.model.legacyCollectionMembershipRecordId
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionEntity
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
-import io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
 import io.github.cidy02.kudos.data.local.entity.TagEntity
 import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
@@ -232,7 +233,7 @@ class WorkRepository(
             lastModifiedAt = now
         )
         upsert(restored)
-        retractWorkTombstone(workId)
+        retractWorkTombstone(work)
         return restored
     }
 
@@ -284,14 +285,15 @@ class WorkRepository(
         val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
             ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
             ?.toInt()
-        tombstoneDao.upsert(
-            SyncTombstoneEntity(
+        val canonical = WorkTags.canonicalAO3WorkURL(work.sourceUrl).orEmpty()
+        upsertSignedTombstone(
+            SyncTombstone(
                 id = uuidFactory(),
-                recordID = work.id,
+                recordID = work.id.lowercase(),
                 recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
                 createdAt = now,
                 lastModifiedAt = now,
-                sourceURL = work.sourceUrl,
+                sourceURL = canonical,
                 ao3WorkID = ao3Id,
                 deletedOnDeviceID = "",
                 deletionReason = deletionReason
@@ -299,8 +301,38 @@ class WorkRepository(
         )
     }
 
-    private suspend fun retractWorkTombstone(workId: String) {
-        tombstoneDao.deleteByRecord(workId, SyncTombstoneRecordType.SAVED_WORK)
+    /**
+     * Delete local savedWork tombstones matching record UUID, ao3WorkID, or
+     * canonical source URL — not UUID-only.
+     */
+    suspend fun retractWorkTombstone(
+        recordId: String,
+        ao3WorkId: Int? = null,
+        sourceUrl: String = ""
+    ) {
+        val canonical = WorkTags.canonicalAO3WorkURL(sourceUrl).orEmpty()
+        tombstoneDao.deleteSavedWorkByIdentity(
+            recordId = recordId,
+            ao3WorkId = ao3WorkId,
+            canonicalSourceUrl = canonical,
+            sourceUrl = sourceUrl,
+            recordType = SyncTombstoneRecordType.SAVED_WORK
+        )
+    }
+
+    private suspend fun retractWorkTombstone(work: SavedWork) {
+        val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+            ?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }
+            ?.toInt()
+        retractWorkTombstone(
+            recordId = work.id,
+            ao3WorkId = ao3Id,
+            sourceUrl = work.sourceUrl
+        )
+    }
+
+    private suspend fun upsertSignedTombstone(tombstone: SyncTombstone) {
+        tombstoneDao.upsert(TombstoneSigning.sign(tombstone).toEntity())
     }
 
     suspend fun userTagsForWork(workId: String): List<Tag> {
@@ -496,8 +528,8 @@ class WorkRepository(
         val now = clock()
         // Without a tombstone, restoring a backup that still lists this membership
         // silently resurrects it — same reasoning as reading-queue removeWork.
-        tombstoneDao.upsert(
-            SyncTombstoneEntity(
+        upsertSignedTombstone(
+            SyncTombstone(
                 id = uuidFactory(),
                 recordID = membershipRecordId(collectionId, workId),
                 recordTypeRaw = SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
@@ -584,8 +616,8 @@ class WorkRepository(
         now: Instant,
         deletionReason: String
     ) {
-        tombstoneDao.upsert(
-            SyncTombstoneEntity(
+        upsertSignedTombstone(
+            SyncTombstone(
                 id = uuidFactory(),
                 recordID = collectionId,
                 recordTypeRaw = SyncTombstoneRecordType.WORK_COLLECTION,

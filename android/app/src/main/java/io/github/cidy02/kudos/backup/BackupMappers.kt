@@ -141,7 +141,8 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         title = title,
         author = author,
         summary = summary,
-        sourceUrl = sourceURL,
+        sourceUrl = io.github.cidy02.kudos.works.WorkTags.canonicalAO3WorkURL(sourceURL)
+            ?: sourceURL,
         dateAdded = added,
         isFavorite = isFavorite,
         // Honour the archive's flag exactly, as iOS does (`KudosBackup.swift`
@@ -493,7 +494,9 @@ fun SyncTombstone.toBackupTombstone(): BackupTombstone {
         sourceURL = sourceURL,
         ao3WorkID = ao3WorkID,
         deletedOnDeviceID = deletedOnDeviceID,
-        deletionReason = deletionReason
+        deletionReason = deletionReason,
+        signerPublicKey = signerPublicKey,
+        signature = signature
     )
 }
 
@@ -521,7 +524,9 @@ fun BackupTombstone.toSyncTombstone(): SyncTombstone {
         sourceURL = sourceURL,
         ao3WorkID = ao3WorkID,
         deletedOnDeviceID = deletedOnDeviceID,
-        deletionReason = deletionReason
+        deletionReason = deletionReason,
+        signerPublicKey = signerPublicKey,
+        signature = signature
     )
 }
 

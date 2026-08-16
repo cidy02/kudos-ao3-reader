@@ -92,6 +92,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var showingSyncDetails = false
     @State private var showingAvailabilitySweep = false
     @State private var lastFolderSyncResult: FolderSyncResult?
+    @State private var showImportModeChoice = false
+    @State private var showReplaceConfirmation = false
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -309,6 +311,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         onExport: exportBackup,
                         onImport: { activeImport = .backup }
                     )
+
+                    TombstoneTrustSettingsSection()
 
                     FolderSyncSettingsSection(
                         persistenceStatus: persistenceStatus,
@@ -533,25 +537,14 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 )
             case let .confirmImport(scopedURL, manifest):
                 Alert(
-                    title: Text("Import this backup?"),
-                    // M1e. The previous copy ended "Existing items won't be deleted." That was
-                    // false in a way that mattered: a merge can overwrite a local work's title,
-                    // author and metadata, and can replace an existing highlight's note text —
-                    // the archive wins wherever its record is newer. Nothing is *removed* from
-                    // the Library, which is presumably what the old wording meant, but a user
-                    // reading it would reasonably conclude their existing content was safe.
-                    // Say what merge actually does instead, without overclaiming risk either:
-                    // preserved EPUBs and privacy settings ARE protected (M1b/D7, M1d, M3), so
-                    // the honest message is "newer wins", not "this may destroy your library".
+                    title: Text("Restore from Backup"),
                     message: Text(
-                        "This backup contains \(manifest.works.count) Library records, "
-                            + "\(manifest.bookmarks.count) saved links, and "
-                            + "\(manifest.fonts.count) custom fonts. Nothing in your Library "
-                            + "is removed, but where the backup's copy is newer it replaces "
-                            + "your details for that item, including notes."
+                        "This backup contains \(backup.manifest.works.count) Library records, "
+                            + "\(backup.manifest.bookmarks.count) saved links, and "
+                            + "\(backup.manifest.fonts.count) custom fonts."
                     ),
-                    primaryButton: .default(Text("Import and Merge")) {
-                        restorePendingBackup(scopedURL: scopedURL, manifest: manifest)
+                    primaryButton: .default(Text("Restore from Backup")) {
+                        restorePendingBackup(backup, mode: .merge)
                     },
                     secondaryButton: .cancel {
                         pendingBackupURL = nil
@@ -570,11 +563,59 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(
+            // Split out of the ViewBuilder so the type checker can finish
+            // (the surrounding modifier chain otherwise times out).
+            let migrationMessage =
                 "Kudos will add existing saved works to the native Saved for Later queue. "
-                    + "It keeps their current saved state and preserves EPUBs one at a time, "
-                    + "with a pause between AO3 requests."
-            )
+                + "It keeps their current saved state and preserves EPUBs one at a time, "
+                + "with a pause between AO3 requests."
+            Text(migrationMessage)
+        }
+        .confirmationDialog(
+            "Import this backup?",
+            isPresented: $showImportModeChoice,
+            titleVisibility: .visible
+        ) {
+            if let backup = pendingBackup {
+                Button("Merge") {
+                    restorePendingBackup(backup, mode: .merge)
+                }
+                Button("Replace Library…", role: .destructive) {
+                    showReplaceConfirmation = true
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingBackup = nil
+                }
+            }
+        } message: {
+            if let backup = pendingBackup {
+                let importMessage =
+                    "This backup contains \(backup.manifest.works.count) works. "
+                    + "Merge adds new works without removing existing ones. "
+                    + "Replace Library makes your library match this backup."
+                Text(importMessage)
+            }
+        }
+        .sheet(isPresented: $showReplaceConfirmation) {
+            if let backup = pendingBackup {
+                ReplaceLibraryConfirmationView(
+                    backup: backup,
+                    localWorks: works.filter { !$0.isPendingDeletion },
+                    syncIsConnected: folderSyncStatus.isConnected,
+                    onConfirm: { pauseSync in
+                        if pauseSync {
+                            setAutoSyncEnabled(false)
+                        }
+                        showReplaceConfirmation = false
+                        restorePendingBackup(backup, mode: .replaceLibrary)
+                    },
+                    onCancel: {
+                        showReplaceConfirmation = false
+                        pendingBackup = nil
+                    },
+                    makePreReplaceBackup: makePreReplaceBackup
+                )
+            }
         }
         #if os(iOS)
         .sheet(isPresented: $showCustomize) {
@@ -778,13 +819,17 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private func importBackup(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
-            let scopedURL = SecurityScopedURL(url)
-
-            let manifest = try KudosBackupContents.preConfirmManifest(from: url)
-
-            pendingBackupURL = scopedURL
-            pendingBackupManifest = manifest
-            showImportConfirmation = true
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            pendingBackup = try KudosBackupContents.read(from: url)
+            let activeWorks = works.filter { !$0.isPendingDeletion }
+            if activeWorks.isEmpty {
+                // Empty library: single "Restore from Backup" button.
+                showImportConfirmation = true
+            } else {
+                // Non-empty library: offer Merge vs Replace Library.
+                showImportModeChoice = true
+            }
         } catch {
             backupNotice = BackupNotice(
                 title: "Couldn't Read Backup",
@@ -803,9 +848,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// lets the confirmation finish dismissing, after which the result alert
     /// presents reliably. The hop also gives the progress indicator on the
     /// Import row a chance to render before the merge begins.
-    private func restorePendingBackup(scopedURL: SecurityScopedURL, manifest _: KudosBackupManifest) {
-        pendingBackupURL = nil
-        pendingBackupManifest = nil
+    private func restorePendingBackup(_ backup: KudosBackupContents, mode: BackupImportMode = .merge) {
+        pendingBackup = nil
         guard PersistenceOperationGate.begin(.backupImport) else {
             backupNotice = BackupNotice(
                 title: "Import Already Busy",
@@ -822,13 +866,18 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 isImportingBackup = false
             }
             do {
-                let backup = try KudosBackupContents.read(from: scopedURL.url)
-                let summary = try KudosBackupService.restore(backup, into: context)
-                applyRestoredTheme(backup.manifest.settings)
+                let summary = try KudosBackupService.restore(
+                    backup, into: context, mode: mode
+                )
+                if mode != .replaceLibrary {
+                    applyRestoredTheme(backup.manifest.settings)
+                }
+                let verb = mode == .replaceLibrary ? "Replaced" : "Merged"
+                let title = mode == .replaceLibrary ? "Library Replaced" : "Backup Imported"
                 let conflictMessage = summary.conflictMessage
                 backupNotice = BackupNotice(
-                    title: "Backup Imported",
-                    message: "Merged into your library:\n\(summary.changeMessage)"
+                    title: title,
+                    message: "\(verb) into your library:\n\(summary.changeMessage)"
                         + (conflictMessage.isEmpty ? "" : "\n\n\(conflictMessage)")
                 )
             } catch {
@@ -837,6 +886,30 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     message: error.localizedDescription
                 )
             }
+        }
+    }
+
+    /// Writes a timestamped copy of the current library so Replace can be undone
+    /// by importing that file. Returns a user-visible path or an error string.
+    private func makePreReplaceBackup() -> Result<String, Error> {
+        do {
+            let contents = try KudosBackupService.makeContents(
+                works: works,
+                bookmarks: bookmarks,
+                fonts: customFonts,
+                collections: collections,
+                readingQueues: readingQueues,
+                annotations: readingAnnotations,
+                savedSearches: savedSearches,
+                tombstones: syncTombstones
+            )
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let name = "Kudos Library Before Replace \(Self.backupDateFormatter.string(from: Date()))"
+            let url = docs.appendingPathComponent(name).appendingPathExtension("kudosbackup")
+            try contents.zipData().write(to: url, options: .atomic)
+            return .success(url.lastPathComponent)
+        } catch {
+            return .failure(error)
         }
     }
 
@@ -1157,6 +1230,52 @@ struct BackupSettingsSection: View {
     }
 }
 
+struct TombstoneTrustSettingsSection: View {
+    @State private var pastedKey = ""
+    @State private var addMessage: String?
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("This device")
+                Text(TombstoneSigning.publicKeyHex())
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            TextField("Paste another device's public key", text: $pastedKey)
+                .font(.system(.caption, design: .monospaced))
+                #if canImport(UIKit)
+                .textInputAutocapitalization(.never)
+                #endif
+                .autocorrectionDisabled()
+            Button("Trust this key") {
+                let trimmed = pastedKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                if TombstoneTrustStore.add(trimmed) {
+                    pastedKey = ""
+                    addMessage = "Trusted."
+                } else {
+                    addMessage = "Need a 64-character hex public key."
+                }
+            }
+            .disabled(pastedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if let addMessage {
+                Text(addMessage)
+                    .font(.footnote)
+                    .foregroundStyle(addMessage == "Trusted." ? Color.secondary : Color.red)
+            }
+        } header: {
+            Text("Deletion signing")
+        } footer: {
+            Text("Deletes are signed on this device. Other devices with the same Apple ID "
+                + "pick up this public key automatically. To trust a phone on another "
+                + "account, paste its public key. Backup files never add a trusted key.")
+        }
+        .onAppear {
+            TombstoneTrustStore.add(TombstoneSigning.publicKeyHex())
+        }
+    }
+}
+
 struct FolderSyncSettingsSection: View {
     let persistenceStatus: PersistenceStatusSnapshot
     let folderStatus: FolderSyncSnapshot
@@ -1402,6 +1521,135 @@ private struct EPUBImportNoticeSummary {
 
     mutating func recordFailure(fileName: String, message: String) {
         failures.append((fileName, message))
+    }
+}
+
+/// Classify Replace confirmation counts with the same identity order restore uses.
+enum BackupReplaceWorkDelta {
+    @MainActor
+    static func classify(
+        localWorks: [SavedWork],
+        incoming: [KudosBackupWork]
+    ) -> (willAdd: Int, willRemove: Int, inBoth: Int) {
+        let index = WorkIdentityIndex(localWorks)
+        var matchedLocalIDs = Set<UUID>()
+        var willAdd = 0
+        for archived in incoming {
+            if let existing = index.existingWork(
+                ao3WorkID: archived.ao3WorkID,
+                sourceURL: archived.sourceURL,
+                recordID: archived.id
+            ) {
+                matchedLocalIDs.insert(existing.id)
+            } else {
+                willAdd += 1
+            }
+        }
+        return (
+            willAdd,
+            localWorks.filter { !matchedLocalIDs.contains($0.id) }.count,
+            matchedLocalIDs.count
+        )
+    }
+}
+
+/// Extra step for Replace Library: counts, checkbox, delayed red button, optional
+/// pause-sync, and a pre-replace backup of the current library.
+struct ReplaceLibraryConfirmationView: View {
+    let backup: KudosBackupContents
+    let localWorks: [SavedWork]
+    let syncIsConnected: Bool
+    let onConfirm: (Bool) -> Void
+    let onCancel: () -> Void
+    let makePreReplaceBackup: () -> Result<String, Error>
+
+    @State private var acknowledgedRemoval = false
+    @State private var pauseSync = true
+    @State private var replaceEnabled = false
+    @State private var backupFileName: String?
+    @State private var backupError: String?
+
+    /// Same identity order restore uses: ao3WorkID → canonical sourceURL → recordID.
+    private var replaceDelta: (willAdd: Int, willRemove: Int, inBoth: Int) {
+        BackupReplaceWorkDelta.classify(localWorks: localWorks, incoming: backup.manifest.works)
+    }
+
+    private var willRemove: Int { replaceDelta.willRemove }
+    private var willAdd: Int { replaceDelta.willAdd }
+    private var inBoth: Int { replaceDelta.inBoth }
+    private var backupIsMuchSmaller: Bool { willRemove >= 20 && willRemove >= willAdd * 10 }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("This backup") {
+                    LabeledContent("Works in your library", value: "\(localWorks.count)")
+                    LabeledContent("Works in this backup", value: "\(backup.manifest.works.count)")
+                    LabeledContent("Will be added", value: "\(willAdd)")
+                    LabeledContent("Will be removed", value: "\(willRemove)")
+                    LabeledContent("In both", value: "\(inBoth)")
+                }
+                if backupIsMuchSmaller {
+                    Section {
+                        Text("This backup is much smaller than your library.")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Section {
+                    Toggle(isOn: $acknowledgedRemoval) {
+                        Text("Remove \(willRemove) works that are not in this backup")
+                    }
+                    if syncIsConnected {
+                        Toggle("Pause Library Sync on this device", isOn: $pauseSync)
+                        Text("Sync will put removed works back. Pause sync for this device?")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let backupFileName {
+                        Text("A copy of your current library was saved as \(backupFileName).")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let backupError {
+                        Text("Could not save an undo copy: \(backupError)")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                } footer: {
+                    Text("Replace Library only changes this device. It does not plant deletion records that would block a later Merge of your own backup.")
+                }
+            }
+            .navigationTitle("Replace Library")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Replace Library") {
+                        onConfirm(syncIsConnected && pauseSync)
+                    }
+                    .disabled(!replaceEnabled)
+                    .foregroundStyle(replaceEnabled ? .red : .secondary)
+                }
+            }
+            .onAppear {
+                switch makePreReplaceBackup() {
+                case let .success(name): backupFileName = name
+                case let .failure(error): backupError = error.localizedDescription
+                }
+            }
+            .onChange(of: acknowledgedRemoval) { _, checked in
+                replaceEnabled = false
+                guard checked else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1.5))
+                    if acknowledgedRemoval { replaceEnabled = true }
+                }
+            }
+        }
     }
 }
 

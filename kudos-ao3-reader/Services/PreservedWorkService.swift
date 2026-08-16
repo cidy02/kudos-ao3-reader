@@ -72,7 +72,13 @@ enum PreservedWorkService {
         work.deletedAt = nil
         work.permanentDeletionScheduledAt = nil
         work.markModified()
-        retractTombstone(recordID: work.id, type: .savedWork, in: context)
+        retractTombstone(
+            recordID: work.id,
+            type: .savedWork,
+            ao3WorkID: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL),
+            sourceURL: work.sourceURL,
+            in: context
+        )
         context.saveBestEffort(reason: "Saving restored work failed")
     }
 
@@ -97,14 +103,28 @@ enum PreservedWorkService {
     /// Deletes the tombstone recorded at soft-delete time, rather than relying on a
     /// timestamp race against a sync from another device — once retracted, nothing
     /// suppresses the record on the next sync from anywhere.
-    private static func retractTombstone(
+    ///
+    /// `savedWork` tombstones match ao3WorkID or canonical sourceURL or recordID.
+    static func retractTombstone(
         recordID: UUID,
         type: SyncTombstoneRecordType,
+        ao3WorkID: Int? = nil,
+        sourceURL: String = "",
         in context: ModelContext
     ) {
         guard let tombstones = try? context.fetch(FetchDescriptor<SyncTombstone>()) else { return }
-        for tombstone in tombstones where tombstone.recordID == recordID && tombstone.recordType == type {
-            context.delete(tombstone)
+        let canonical = WorkTags.canonicalAO3WorkURL(from: sourceURL)
+        for tombstone in tombstones where tombstone.recordType == type {
+            let idMatch = tombstone.recordID == recordID
+            let ao3Match = type == .savedWork
+                && ao3WorkID != nil
+                && tombstone.ao3WorkID == ao3WorkID
+            let urlMatch = type == .savedWork
+                && canonical != nil
+                && WorkTags.canonicalAO3WorkURL(from: tombstone.sourceURL) == canonical
+            if idMatch || ao3Match || urlMatch {
+                context.delete(tombstone)
+            }
         }
     }
 
