@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
+import io.github.cidy02.kudos.works.WorkRepository
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -64,6 +65,23 @@ fun BackupLibrarySnapshot.toV2Manifest(
             .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
             .map { it.toBackupTombstone() },
         settings = settings.toBackupSettingsPayload()
+    )
+}
+
+data class RestoredDeletionState(
+    val isDeleted: Boolean,
+    val permanentDeletionScheduledAt: Instant?
+)
+
+fun restoredDeletionState(archivedIsDeleted: Boolean?): RestoredDeletionState {
+    val deleted = archivedIsDeleted == true
+    return RestoredDeletionState(
+        isDeleted = deleted,
+        permanentDeletionScheduledAt = if (deleted) {
+            Instant.now().plus(WorkRepository.RECOVERY_WINDOW)
+        } else {
+            null
+        }
     )
 }
 
@@ -136,6 +154,7 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
         lastModifiedAt?.takeIf { it.isNotBlank() },
         "work.lastModifiedAt"
     ) ?: added
+    val deletionState = restoredDeletionState(isDeleted)
     return SavedWork(
         id = BackupPaths.canonicalUuid(id, "work.id"),
         title = title,
@@ -196,15 +215,14 @@ fun BackupWork.toSavedWork(hasEpub: Boolean): SavedWork {
             lastAvailabilityCheck?.takeIf { it.isNotBlank() },
             "work.lastAvailabilityCheck"
         ),
-        isDeleted = isDeleted == true,
-        deletedAt = BackupValidator.parseNullableInstant(
-            deletedAt?.takeIf { it.isNotBlank() },
-            "work.deletedAt"
-        ),
-        permanentDeletionScheduledAt = BackupValidator.parseNullableInstant(
-            permanentDeletionScheduledAt?.takeIf { it.isNotBlank() },
-            "work.permanentDeletionScheduledAt"
-        ),
+        isDeleted = deletionState.isDeleted,
+        deletedAt = if (deletionState.isDeleted) {
+            BackupValidator.parseNullableInstant(
+                deletedAt?.takeIf { it.isNotBlank() },
+                "work.deletedAt"
+            )
+        } else null,
+        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
         // Pass-through: blank/absent stays null (never invent "notPreserved").
         epubPreservationStatusRaw = epubPreservationStatusRaw?.takeIf { it.isNotBlank() },
         preservedAt = BackupValidator.parseNullableInstant(
@@ -267,6 +285,7 @@ fun WorkCollection.toBackupCollection(): BackupCollection {
 }
 
 fun BackupCollection.toWorkCollection(nameOverride: String = name): WorkCollection {
+    val deletionState = restoredDeletionState(isDeleted)
     return WorkCollection(
         id = BackupPaths.canonicalUuid(id, "collection.id"),
         name = nameOverride,
@@ -276,11 +295,11 @@ fun BackupCollection.toWorkCollection(nameOverride: String = name): WorkCollecti
         sortOrder = sortOrder,
         lastModifiedAt = lastModifiedAt?.takeIf { it.isNotBlank() }
             ?.let { BackupValidator.parseInstant(it, "collection.lastModifiedAt") },
-        isDeleted = isDeleted ?: false,
-        deletedAt = deletedAt?.takeIf { it.isNotBlank() }
-            ?.let { BackupValidator.parseInstant(it, "collection.deletedAt") },
-        permanentDeletionScheduledAt = permanentDeletionScheduledAt?.takeIf { it.isNotBlank() }
-            ?.let { BackupValidator.parseInstant(it, "collection.permanentDeletionScheduledAt") }
+        isDeleted = deletionState.isDeleted,
+        deletedAt = if (deletionState.isDeleted) {
+            deletedAt?.takeIf { it.isNotBlank() }?.let { BackupValidator.parseInstant(it, "collection.deletedAt") }
+        } else null,
+        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
     )
 }
 
@@ -377,6 +396,7 @@ fun BackupReadingQueue.toReadingQueue(): ReadingQueue {
     } else {
         created
     }
+    val deletionState = restoredDeletionState(isDeleted)
     return ReadingQueue(
         id = BackupPaths.canonicalUuid(id, "queue.id"),
         name = name,
@@ -388,15 +408,14 @@ fun BackupReadingQueue.toReadingQueue(): ReadingQueue {
             lastMembershipChangedAt?.takeIf { it.isNotBlank() },
             "queue.lastMembershipChangedAt"
         ),
-        deletedAt = BackupValidator.parseNullableInstant(
-            deletedAt?.takeIf { it.isNotBlank() },
-            "queue.deletedAt"
-        ),
-        isDeleted = isDeleted == true,
-        permanentDeletionScheduledAt = BackupValidator.parseNullableInstant(
-            permanentDeletionScheduledAt?.takeIf { it.isNotBlank() },
-            "queue.permanentDeletionScheduledAt"
-        )
+        deletedAt = if (deletionState.isDeleted) {
+            BackupValidator.parseNullableInstant(
+                deletedAt?.takeIf { it.isNotBlank() },
+                "queue.deletedAt"
+            )
+        } else null,
+        isDeleted = deletionState.isDeleted,
+        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
     )
 }
 

@@ -695,6 +695,7 @@ object BackupMergeService {
                             incomingModified
                         ) == TombstoneResolution.SUPPRESS_STALE
                     }
+                val deletionState = restoredDeletionState(archived.isDeleted)
                 collectionsById[id] = existing.copy(
                     name = if (archivedIsDeleted) existing.name else archived.name,
                     dateAdded = BackupValidator.parseInstant(archived.dateAdded, "collection.dateAdded"),
@@ -702,17 +703,13 @@ object BackupMergeService {
                     description = archived.description ?: existing.description,
                     sortOrder = archived.sortOrder ?: existing.sortOrder,
                     lastModifiedAt = incomingModified ?: existing.lastModifiedAt,
-                    isDeleted = archivedIsDeleted,
-                    deletedAt = if (archivedIsDeleted) {
+                    isDeleted = deletionState.isDeleted,
+                    deletedAt = if (deletionState.isDeleted) {
                         parseOptionalInstant(archived.deletedAt) ?: incomingModified
                     } else {
                         null
                     },
-                    permanentDeletionScheduledAt = if (archivedIsDeleted) {
-                        parseOptionalInstant(archived.permanentDeletionScheduledAt)
-                    } else {
-                        null
-                    }
+                    permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
                 )
                 if (!archivedIsDeleted) names += archived.name
                 updated += 1
@@ -842,6 +839,8 @@ object BackupMergeService {
                 )
                 if (SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
                     val restored = archived.toReadingQueue()
+                    val finalIsDeleted = !isSystemQueue && restored.isDeleted
+                    val deletionState = restoredDeletionState(finalIsDeleted)
                     queuesById[id] = restored.copy(
                         // Keep the local identity: local memberships already point
                         // at it, and for the system queue the incoming id is a
@@ -852,13 +851,9 @@ object BackupMergeService {
                         // there is no UI that could ever bring it back.
                         name = if (isSystemQueue) ReadingQueueKind.SAVED_FOR_LATER_NAME else restored.name,
                         kindRaw = if (isSystemQueue) ReadingQueueKind.SAVED_FOR_LATER else restored.kindRaw,
-                        isDeleted = !isSystemQueue && restored.isDeleted,
-                        deletedAt = if (isSystemQueue) null else restored.deletedAt,
-                        permanentDeletionScheduledAt = if (isSystemQueue) {
-                            null
-                        } else {
-                            restored.permanentDeletionScheduledAt
-                        },
+                        isDeleted = deletionState.isDeleted,
+                        deletedAt = if (deletionState.isDeleted) restored.deletedAt else null,
+                        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
                         dateCreated = minInstant(existing.dateCreated, restored.dateCreated)
                     )
                     queuesUpdated += 1
