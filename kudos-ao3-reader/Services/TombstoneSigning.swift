@@ -86,7 +86,11 @@ enum TombstoneSigning {
         )
     }
 
-    static func sign(_ tombstone: SyncTombstone, key: Curve25519.Signing.PrivateKey? = nil) {
+    static func sign(
+        _ tombstone: SyncTombstone,
+        key: Curve25519.Signing.PrivateKey? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         let privateKey = key ?? devicePrivateKey()
         let pub = publicKeyHex(of: privateKey)
         let body = payload(for: tombstone, signerPublicKey: pub)
@@ -94,7 +98,7 @@ enum TombstoneSigning {
         tombstone.signerPublicKey = pub
         tombstone.signature = hexString(signature)
         if key == nil {
-            TombstoneTrustStore.add(pub)
+            TombstoneTrustStore.add(pub, defaults: defaults)
         }
     }
 
@@ -135,7 +139,7 @@ enum TombstoneSigning {
         let tombstones = (try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []
         var changed = false
         for tombstone in tombstones where tombstone.signature.isEmpty {
-            sign(tombstone)
+            sign(tombstone, defaults: defaults)
             changed = true
         }
         if changed {
