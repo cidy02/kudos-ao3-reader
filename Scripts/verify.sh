@@ -35,7 +35,11 @@ echo "== 2/5 lint =="
 echo "== 3/5 iOS test suite ($SIMULATOR_UDID) =="
 KUDOS_CASEFOLD_SIMULATOR_UDID="$SIMULATOR_UDID" "$ROOT/Scripts/test.sh"
 
-echo "== 4/5 macOS build =="
+echo "== 4/5 macOS build + Release entitlements =="
+# WPD-2: the pbxproj + entitlements-file half must run in the local DoD
+# path, not only in dormant CI. build-macos.sh also builds Release and
+# invokes the product half against Kudos.app.
+"$ROOT/Scripts/check-macos-release-entitlements.sh"
 "$ROOT/Scripts/build-macos.sh"
 
 echo "== 5/5 whitespace =="
