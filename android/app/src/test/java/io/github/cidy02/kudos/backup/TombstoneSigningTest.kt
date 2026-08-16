@@ -76,7 +76,9 @@ class TombstoneSigningTest {
         assertEquals(128, signed.signature.length)
         assertTrue(TombstoneSigning.verify(signed))
         assertFalse(TombstoneSigning.verify(signed.copy(signature = "")))
-        assertFalse(TombstoneSigning.verify(signed.copy(signature = signed.signature.dropLast(1) + "0")))
+        val flipped = signed.signature.dropLast(1) +
+            if (signed.signature.last() == '0') '1' else '0'
+        assertFalse(TombstoneSigning.verify(signed.copy(signature = flipped)))
     }
 
     @Test
