@@ -21,6 +21,15 @@ private final class SecurityScopedURL: Sendable {
     }
 }
 
+/// Confirm-time handle: scoped URL + manifest + identity. Full contents
+/// are read only at execute so a hostile archive cannot sit decoded in
+/// `@State` for the whole Merge/Replace extra step.
+private struct PendingBackupImport {
+    let scopedURL: SecurityScopedURL
+    let manifest: KudosBackupManifest
+    let identity: KudosBackupContents.SourceIdentity
+}
+
 // Lint: this existing form is kept together to avoid behavior refactors.
 // swiftlint:disable file_length
 /// The toggleable reading options, grouped into categories. Shared between the
@@ -81,11 +90,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var backupExportURL: URL?
     @State private var isPreparingBackupExport = false
     @State private var isImportingBackup = false
-    // RC merge: the import flow below is the tombstone tree's three-mode
-    // product, which holds the decoded contents. WP-A/WP-C's lazier
-    // (SecurityScopedURL + manifest) pre-confirm pair is tracked as an open
-    // RC fix; see the tombstone merge commit message.
-    @State private var pendingBackup: KudosBackupContents?
+    /// Pre-confirm holds the scoped URL + manifest only. Full contents are
+    /// read at execute inside `restorePendingBackup` (M4). The identity
+    /// snapshot refuses a swapped file between confirm and restore (FIX-5).
+    @State private var pendingImport: PendingBackupImport?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
     @State private var persistenceStatus = PersistenceStatusStore.snapshot()
@@ -538,19 +546,19 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     message: Text(notice.message),
                     dismissButton: .default(Text("OK"))
                 )
-            case let .confirmImport(backup):
+            case let .confirmImport(manifest):
                 Alert(
                     title: Text("Restore from Backup"),
                     message: Text(
-                        "This backup contains \(backup.manifest.works.count) Library records, "
-                            + "\(backup.manifest.bookmarks.count) saved links, and "
-                            + "\(backup.manifest.fonts.count) custom fonts."
+                        "This backup contains \(manifest.works.count) Library records, "
+                            + "\(manifest.bookmarks.count) saved links, and "
+                            + "\(manifest.fonts.count) custom fonts."
                     ),
                     primaryButton: .default(Text("Restore from Backup")) {
-                        restorePendingBackup(backup, mode: .merge)
+                        restorePendingBackup(mode: .merge)
                     },
                     secondaryButton: .cancel {
-                        pendingBackup = nil
+                        pendingImport = nil
                     }
                 )
             }
@@ -578,30 +586,30 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             isPresented: $showImportModeChoice,
             titleVisibility: .visible
         ) {
-            if let backup = pendingBackup {
+            if pendingImport != nil {
                 Button("Merge") {
-                    restorePendingBackup(backup, mode: .merge)
+                    restorePendingBackup(mode: .merge)
                 }
                 Button("Replace Library…", role: .destructive) {
                     showReplaceConfirmation = true
                 }
                 Button("Cancel", role: .cancel) {
-                    pendingBackup = nil
+                    pendingImport = nil
                 }
             }
         } message: {
-            if let backup = pendingBackup {
+            if let pending = pendingImport {
                 let importMessage =
-                    "This backup contains \(backup.manifest.works.count) works. "
+                    "This backup contains \(pending.manifest.works.count) works. "
                     + "Merge adds new works without removing existing ones. "
                     + "Replace Library makes your library match this backup."
                 Text(importMessage)
             }
         }
         .sheet(isPresented: $showReplaceConfirmation) {
-            if let backup = pendingBackup {
+            if let pending = pendingImport {
                 ReplaceLibraryConfirmationView(
-                    backup: backup,
+                    manifest: pending.manifest,
                     localWorks: works.filter { !$0.isPendingDeletion },
                     syncIsConnected: folderSyncStatus.isConnected,
                     onConfirm: { pauseSync in
@@ -609,11 +617,11 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                             setAutoSyncEnabled(false)
                         }
                         showReplaceConfirmation = false
-                        restorePendingBackup(backup, mode: .replaceLibrary)
+                        restorePendingBackup(mode: .replaceLibrary)
                     },
                     onCancel: {
                         showReplaceConfirmation = false
-                        pendingBackup = nil
+                        pendingImport = nil
                     },
                     makePreReplaceBackup: makePreReplaceBackup
                 )
@@ -821,9 +829,20 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private func importBackup(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            pendingBackup = try KudosBackupContents.read(from: url)
+            // Keep the security scope alive across the confirm UI; the
+            // execute Task captures the same helper so access is not dropped
+            // when `@State` is niled at the start of restore.
+            let scoped = SecurityScopedURL(url)
+            let manifest = try KudosBackupContents.preConfirmManifest(from: scoped.url)
+            let identity = try KudosBackupContents.sourceIdentity(
+                of: scoped.url,
+                manifest: manifest
+            )
+            pendingImport = PendingBackupImport(
+                scopedURL: scoped,
+                manifest: manifest,
+                identity: identity
+            )
             let activeWorks = works.filter { !$0.isPendingDeletion }
             if activeWorks.isEmpty {
                 // Empty library: single "Restore from Backup" button.
@@ -833,6 +852,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 showImportModeChoice = true
             }
         } catch {
+            pendingImport = nil
             backupNotice = BackupNotice(
                 title: "Couldn't Read Backup",
                 message: error.localizedDescription
@@ -850,8 +870,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// lets the confirmation finish dismissing, after which the result alert
     /// presents reliably. The hop also gives the progress indicator on the
     /// Import row a chance to render before the merge begins.
-    private func restorePendingBackup(_ backup: KudosBackupContents, mode: BackupImportMode = .merge) {
-        pendingBackup = nil
+    private func restorePendingBackup(mode: BackupImportMode = .merge) {
+        let pending = pendingImport
+        pendingImport = nil
+        guard let pending else { return }
         guard PersistenceOperationGate.begin(.backupImport) else {
             backupNotice = BackupNotice(
                 title: "Import Already Busy",
@@ -862,20 +884,26 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         isImportingBackup = true
         Task { @MainActor in
-            // WP-A kept a `_ = scopedURL` here to hold the security scope open,
-            // because in its design the archive was read inside this Task. The
-            // RC uses the tombstone tree's flow, where KudosBackupContents is
-            // already decoded before we get here, so there is no scope to hold.
+            // Hold the security scope open for the duration of the read+restore.
+            // Clearing `@State` above would otherwise drop the last reference
+            // and stop access before `readForConfirmedImport` runs.
+            let scopedURL = pending.scopedURL
             defer {
+                _ = scopedURL
                 PersistenceOperationGate.end(.backupImport)
                 isImportingBackup = false
             }
             do {
+                let backup = try KudosBackupContents.readForConfirmedImport(
+                    from: scopedURL.url,
+                    expectedIdentity: pending.identity,
+                    manifest: pending.manifest
+                )
                 let summary = try KudosBackupService.restore(
                     backup, into: context, mode: mode
                 )
                 if mode != .replaceLibrary {
-                    applyRestoredTheme(backup.manifest.settings)
+                    applyRestoredTheme(pending.manifest.settings)
                 }
                 let verb = mode == .replaceLibrary ? "Replaced" : "Merged"
                 let title = mode == .replaceLibrary ? "Library Replaced" : "Backup Imported"
@@ -1080,7 +1108,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// (see the call site — SwiftUI drops all but one per view).
     private enum SettingsAlert: Identifiable {
         case notice(BackupNotice)
-        case confirmImport(KudosBackupContents)
+        case confirmImport(KudosBackupManifest)
 
         var id: String {
             switch self {
@@ -1097,8 +1125,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private var activeAlertBinding: Binding<SettingsAlert?> {
         Binding(
             get: {
-                if showImportConfirmation, let pendingBackup {
-                    return .confirmImport(pendingBackup)
+                if showImportConfirmation, let pending = pendingImport {
+                    return .confirmImport(pending.manifest)
                 }
                 if let backupNotice { return .notice(backupNotice) }
                 if let epubNotice { return .notice(epubNotice) }
@@ -1108,7 +1136,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 guard newValue == nil else { return }
                 if showImportConfirmation {
                     showImportConfirmation = false
-                    pendingBackup = nil
+                    pendingImport = nil
                 } else if backupNotice != nil {
                     backupNotice = nil
                 } else {
@@ -1560,7 +1588,7 @@ enum BackupReplaceWorkDelta {
 /// Extra step for Replace Library: counts, checkbox, delayed red button, optional
 /// pause-sync, and a pre-replace backup of the current library.
 struct ReplaceLibraryConfirmationView: View {
-    let backup: KudosBackupContents
+    let manifest: KudosBackupManifest
     let localWorks: [SavedWork]
     let syncIsConnected: Bool
     let onConfirm: (Bool) -> Void
@@ -1575,7 +1603,7 @@ struct ReplaceLibraryConfirmationView: View {
 
     /// Same identity order restore uses: ao3WorkID → canonical sourceURL → recordID.
     private var replaceDelta: (willAdd: Int, willRemove: Int, inBoth: Int) {
-        BackupReplaceWorkDelta.classify(localWorks: localWorks, incoming: backup.manifest.works)
+        BackupReplaceWorkDelta.classify(localWorks: localWorks, incoming: manifest.works)
     }
 
     private var willRemove: Int { replaceDelta.willRemove }
@@ -1588,7 +1616,7 @@ struct ReplaceLibraryConfirmationView: View {
             Form {
                 Section("This backup") {
                     LabeledContent("Works in your library", value: "\(localWorks.count)")
-                    LabeledContent("Works in this backup", value: "\(backup.manifest.works.count)")
+                    LabeledContent("Works in this backup", value: "\(manifest.works.count)")
                     LabeledContent("Will be added", value: "\(willAdd)")
                     LabeledContent("Will be removed", value: "\(willRemove)")
                     LabeledContent("In both", value: "\(inBoth)")
