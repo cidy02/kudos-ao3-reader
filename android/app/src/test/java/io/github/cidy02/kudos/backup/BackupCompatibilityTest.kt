@@ -1245,23 +1245,27 @@ class BackupTombstoneTrustPhase1MergeTest {
         assertEquals("Archive Title", afterClamp.title)
         assertEquals(Instant.parse("2026-06-01T00:00:00Z"), afterClamp.lastModifiedAt)
 
-        val future = BackupMergeService.merge(
-            current = BackupLibrarySnapshot(works = listOf(local)),
-            backup = samplePackage(
-                manifest = sampleManifest(
-                    exportedAt = "2026-06-01T00:00:00Z",
-                    works = listOf(
-                        sampleBackupWork().copy(
-                            title = "Forged Future",
-                            lastModifiedAt = "2026-08-20T12:00:00Z"
+        val error = assertThrows(BackupError.InvalidDate::class.java) {
+            BackupMergeService.merge(
+                current = BackupLibrarySnapshot(works = listOf(local)),
+                backup = samplePackage(
+                    manifest = sampleManifest(
+                        exportedAt = "2026-06-01T00:00:00Z",
+                        works = listOf(
+                            sampleBackupWork().copy(
+                                title = "Forged Future",
+                                lastModifiedAt = "2026-08-20T12:00:00Z"
+                            )
                         )
                     )
-                )
-            ),
-            now = now
+                ),
+                now = now
+            )
+        }
+        assertTrue(
+            "Far-future lastModifiedAt must reject the package, field=${error.field}",
+            error.field.contains("lastModifiedAt")
         )
-        val afterReject = future.snapshot.works.single { it.id == WORK_ID }
-        assertEquals("Local Title", afterReject.title)
     }
 
     @Test
@@ -1362,7 +1366,11 @@ class BackupTombstoneTrustPhase1MergeTest {
                 epubWorkIds = setOf(WORK_ID)
             ),
             backup = samplePackage(
-                manifest = sampleManifest(works = listOf(archive)),
+                manifest = sampleManifest(
+                    // Legitimate snapshot: exportedAt must be >= the record clocks.
+                    exportedAt = "2026-07-02T00:00:00Z",
+                    works = listOf(archive)
+                ),
                 epubFiles = mapOf(WORK_ID to incomingEpub)
             ),
             mode = BackupImportMode.RECONCILE

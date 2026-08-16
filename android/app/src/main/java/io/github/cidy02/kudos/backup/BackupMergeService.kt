@@ -52,12 +52,20 @@ object BackupMergeService {
         // suppressors so the snapshot can load.
         val tombstonesById = current.tombstones
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
-        val adoptedIncoming = ArrayList<SyncTombstone>()
         manifest.tombstones.forEach { archived ->
             // Only createdAt is inside the signed payload. lastModifiedAt
             // decides suppression, so never let an unsigned wire field set it.
-            val incoming = archived.toSyncTombstone()
+            // Then min(createdAt, exportedAt) so a pinned tombstone still
+            // cannot outrank the snapshot that carries it (iOS G5 clamp).
+            val incoming = archived.toSyncTombstone(exportedAt)
                 .let { it.copy(lastModifiedAt = it.createdAt) }
+                .let { pinned ->
+                    if (exportedAt != null && pinned.lastModifiedAt.isAfter(exportedAt)) {
+                        pinned.copy(lastModifiedAt = exportedAt)
+                    } else {
+                        pinned
+                    }
+                }
             if (!TombstoneSigning.verify(incoming)) return@forEach
             if (!TombstoneSigning.isTrustedSigner(incoming.signerPublicKey, trustedPublicKeys)) {
                 return@forEach
@@ -67,11 +75,12 @@ object BackupMergeService {
             // overwrite a local tombstone row (spec §2: local deletes still suppress).
             if (tombstonesById.containsKey(incomingKey)) return@forEach
             tombstonesById[incomingKey] = incoming
-            adoptedIncoming += incoming
         }
+        // Replace ignores every suppressor (local or adopted) so the snapshot
+        // can load. Adopted trusted rows still write back via tombstonesById.
         val tombstoneIndex = TombstoneIndex(
             tombstones = if (mode == BackupImportMode.REPLACE_LIBRARY) {
-                adoptedIncoming
+                emptyList()
             } else {
                 tombstonesById.values.toList()
             },
@@ -114,7 +123,7 @@ object BackupMergeService {
                 exportedAt = exportedAt,
                 now = now
             )
-            val restoredBase = archived.toSavedWork(hasEpub = restoredHasEpub)
+            val restoredBase = archived.toSavedWork(hasEpub = restoredHasEpub, exportedAt = exportedAt)
             val restored = restoredBase.copy(
                 id = existing?.id ?: restoredBase.id,
                 lastModifiedAt = incomingModifiedAt ?: restoredBase.dateAdded
@@ -139,7 +148,7 @@ object BackupMergeService {
                 applyReplaceWork(existing, restored)
             } else {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
-                mergeWork(existing, restored, archived, incomingModifiedAt)
+                mergeWork(existing, restored, archived, incomingModifiedAt, exportedAt)
             }
             identity.index(worksById.getValue(targetId))
 
@@ -201,7 +210,8 @@ object BackupMergeService {
         val bookmarks = mergeBookmarks(
             current.bookmarks,
             manifest.bookmarks,
-            mode = mode
+            mode = mode,
+            exportedAt = exportedAt
         ).also {
             summary = summary.copy(
                 bookmarksCreated = it.created,
@@ -213,7 +223,8 @@ object BackupMergeService {
             currentFonts = current.fonts,
             currentFontFiles = current.fontFilesByFileName,
             manifestFonts = manifest.fonts,
-            backupFontFiles = backup.fontFilesByFileName
+            backupFontFiles = backup.fontFilesByFileName,
+            exportedAt = exportedAt
         )
         summary = summary.copy(
             fontsCreated = fontMerge.created,
@@ -221,7 +232,7 @@ object BackupMergeService {
         )
 
         val collections = if (mode == BackupImportMode.REPLACE_LIBRARY) {
-            replaceCollections(current.collections, manifest.collections, workIdRemap).also {
+            replaceCollections(current.collections, manifest.collections, workIdRemap, exportedAt).also {
                 summary = summary.copy(
                     collectionsCreated = it.created,
                     collectionsUpdated = it.updated
@@ -247,7 +258,8 @@ object BackupMergeService {
         val savedSearches = mergeSavedSearches(
             current.savedSearches,
             manifest.savedSearches,
-            mode = mode
+            mode = mode,
+            exportedAt = exportedAt
         ).also {
             summary = summary.copy(
                 savedSearchesCreated = it.created,
@@ -365,7 +377,8 @@ object BackupMergeService {
         existing: SavedWork,
         restored: SavedWork,
         archived: BackupWork,
-        incomingModifiedAtOverride: Instant? = null
+        incomingModifiedAtOverride: Instant? = null,
+        exportedAt: Instant? = null
     ): SavedWork {
         // Null means the archive clock was missing or rejected as future skew.
         val incomingModifiedAt = incomingModifiedAtOverride
@@ -435,7 +448,7 @@ object BackupMergeService {
             )
         )
 
-        return applyProgressLww(withPreservation, existing, restored, archived)
+        return applyProgressLww(withPreservation, existing, restored, archived, exportedAt)
     }
 
     /**
@@ -446,7 +459,8 @@ object BackupMergeService {
         base: SavedWork,
         existing: SavedWork,
         restored: SavedWork,
-        archived: BackupWork
+        archived: BackupWork,
+        exportedAt: Instant? = null
     ): SavedWork {
         val incomingHasProgress = restored.lastReadDate != null ||
             restored.lastSpineIndex > 0 ||
@@ -463,7 +477,7 @@ object BackupMergeService {
         }
 
         val localProgressAt = existing.effectiveProgressModifiedAt
-        val incomingProgressAt = parseOptionalInstant(archived.progressModifiedAt)
+        val incomingProgressAt = parseOptionalInstant(archived.progressModifiedAt, exportedAt)
             ?: restored.lastReadDate
 
         if (existing.hasStartedReading) {
@@ -500,7 +514,8 @@ object BackupMergeService {
     private fun mergeBookmarks(
         current: List<Bookmark>,
         incoming: List<BackupBookmark>,
-        mode: BackupImportMode = BackupImportMode.RECONCILE
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        exportedAt: Instant? = null
     ): MergeItems<Bookmark> {
         val byUrl = current.associateByTo(linkedMapOf()) { it.urlString }
         var created = 0
@@ -509,12 +524,16 @@ object BackupMergeService {
             val existing = byUrl[archived.urlString]
             byUrl[archived.urlString] = if (existing == null) {
                 created += 1
-                archived.toBookmark()
+                archived.toBookmark(exportedAt)
             } else {
                 updated += 1
                 existing.copy(
                     title = archived.title,
-                    dateAdded = BackupValidator.parseInstant(archived.dateAdded, "bookmark.dateAdded")
+                    dateAdded = BackupValidator.parseInstant(
+                        archived.dateAdded,
+                        "bookmark.dateAdded",
+                        exportedAt
+                    )
                 )
             }
         }
@@ -531,7 +550,8 @@ object BackupMergeService {
         currentFonts: List<CustomFont>,
         currentFontFiles: Map<String, ByteArray>,
         manifestFonts: List<BackupFont>,
-        backupFontFiles: Map<String, ByteArray>
+        backupFontFiles: Map<String, ByteArray>,
+        exportedAt: Instant? = null
     ): FontMerge {
         val fontsByName = currentFonts.associateByTo(linkedMapOf()) { it.fileName }
         val fontNamesByFoldedName = currentFonts.groupByTo(
@@ -552,7 +572,10 @@ object BackupMergeService {
                 archived.fileName,
                 fontsByName.keys + currentFontFiles.keys + filesToWrite.keys
             )
-            fontsByName[newFileName] = archived.toCustomFont(fileNameOverride = newFileName)
+            fontsByName[newFileName] = archived.toCustomFont(
+                fileNameOverride = newFileName,
+                exportedAt = exportedAt
+            )
             fontNamesByFoldedName.getOrPut(BackupPaths.fontFileNameKey(newFileName)) {
                 mutableListOf()
             }.add(newFileName)
@@ -583,7 +606,10 @@ object BackupMergeService {
                     BackupPaths.sha256(reusableFile.value) == BackupPaths.sha256(incomingBytes)
                 ) {
                     val localFileName = reusableFile.key
-                    fontsByName[localFileName] = archived.toCustomFont(fileNameOverride = localFileName)
+                    fontsByName[localFileName] = archived.toCustomFont(
+                        fileNameOverride = localFileName,
+                        exportedAt = exportedAt
+                    )
                     fontNamesByFoldedName.getOrPut(foldedName) { mutableListOf() }.add(localFileName)
                     if (localFileName != archived.fileName) {
                         renamedFonts[archived.fileName] = localFileName
@@ -597,7 +623,7 @@ object BackupMergeService {
                     return@forEach
                 }
 
-                val font = archived.toCustomFont()
+                val font = archived.toCustomFont(exportedAt = exportedAt)
                 fontsByName[font.fileName] = font
                 fontNamesByFoldedName.getOrPut(foldedName) { mutableListOf() }.add(font.fileName)
                 filesToWrite[font.fileName] = incomingBytes
@@ -613,7 +639,11 @@ object BackupMergeService {
                     // name. Repair the missing file without changing its selector.
                     fontsByName[canonicalExistingName] = existing.copy(
                         name = archived.name,
-                        dateAdded = BackupValidator.parseInstant(archived.dateAdded, "font.dateAdded")
+                        dateAdded = BackupValidator.parseInstant(
+                            archived.dateAdded,
+                            "font.dateAdded",
+                            exportedAt
+                        )
                     )
                     filesToWrite[canonicalExistingName] = incomingBytes
                     if (canonicalExistingName != archived.fileName) {
@@ -635,7 +665,11 @@ object BackupMergeService {
             ) {
                 fontsByName[canonicalExistingName] = existing.copy(
                     name = archived.name,
-                    dateAdded = BackupValidator.parseInstant(archived.dateAdded, "font.dateAdded")
+                    dateAdded = BackupValidator.parseInstant(
+                        archived.dateAdded,
+                        "font.dateAdded",
+                        exportedAt
+                    )
                 )
                 if (canonicalExistingName != archived.fileName) {
                     renamedFonts[archived.fileName] = canonicalExistingName
@@ -677,7 +711,8 @@ object BackupMergeService {
     private fun replaceCollections(
         current: List<WorkCollection>,
         incoming: List<BackupCollection>,
-        workIdRemap: Map<String, String> = emptyMap()
+        workIdRemap: Map<String, String> = emptyMap(),
+        exportedAt: Instant? = null
     ): MergeItems<WorkCollection> {
         val collectionsById = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -689,7 +724,7 @@ object BackupMergeService {
             val id = BackupPaths.canonicalUuid(archived.id, "collection.id")
             incomingIds += id
             val existing = collectionsById[id]
-            val restored = archived.toWorkCollection()
+            val restored = archived.toWorkCollection(exportedAt = exportedAt)
             collectionsById[id] = restored.copy(
                 workIds = restored.workIds.map { remapWorkId(it, workIdRemap) }.distinct()
             )
@@ -723,7 +758,7 @@ object BackupMergeService {
                 archived.lastModifiedAt,
                 exportedAt,
                 now
-            ) ?: parseOptionalInstant(archived.dateAdded)
+            ) ?: parseOptionalInstant(archived.dateAdded, exportedAt)
             val existing = collectionsById[id]
 
             if (existing == null) {
@@ -735,7 +770,10 @@ object BackupMergeService {
                     TombstoneResolution.NO_TOMBSTONE -> Unit
                 }
                 val restoredName = archived.name.uniqueName(names)
-                val restored = archived.toWorkCollection(nameOverride = restoredName)
+                val restored = archived.toWorkCollection(
+                    nameOverride = restoredName,
+                    exportedAt = exportedAt
+                )
                 collectionsById[id] = restored
                 names += restoredName
                 created += 1
@@ -780,14 +818,18 @@ object BackupMergeService {
                 val deletionState = restoredDeletionState(archived.isDeleted)
                 collectionsById[id] = existing.copy(
                     name = if (archivedIsDeleted) existing.name else archived.name,
-                    dateAdded = BackupValidator.parseInstant(archived.dateAdded, "collection.dateAdded"),
+                    dateAdded = BackupValidator.parseInstant(
+                        archived.dateAdded,
+                        "collection.dateAdded",
+                        exportedAt
+                    ),
                     workIds = mergedWorkIds,
                     description = archived.description ?: existing.description,
                     sortOrder = archived.sortOrder ?: existing.sortOrder,
                     lastModifiedAt = incomingModified ?: existing.lastModifiedAt,
                     isDeleted = deletionState.isDeleted,
                     deletedAt = if (deletionState.isDeleted) {
-                        parseOptionalInstant(archived.deletedAt) ?: incomingModified
+                        parseOptionalInstant(archived.deletedAt, exportedAt) ?: incomingModified
                     } else {
                         null
                     },
@@ -804,7 +846,8 @@ object BackupMergeService {
     private fun mergeSavedSearches(
         current: List<SavedSearch>,
         incoming: List<BackupSavedSearch>,
-        mode: BackupImportMode = BackupImportMode.RECONCILE
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        exportedAt: Instant? = null
     ): MergeItems<SavedSearch> {
         val searchesById = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -818,13 +861,20 @@ object BackupMergeService {
             val existing = searchesById[id]
             if (existing == null) {
                 val restoredName = archived.name.uniqueName(names)
-                searchesById[id] = archived.toSavedSearch(nameOverride = restoredName)
+                searchesById[id] = archived.toSavedSearch(
+                    nameOverride = restoredName,
+                    exportedAt = exportedAt
+                )
                 names += restoredName
                 created += 1
             } else {
                 searchesById[id] = existing.copy(
                     name = archived.name,
-                    dateAdded = BackupValidator.parseInstant(archived.dateAdded, "savedSearch.dateAdded"),
+                    dateAdded = BackupValidator.parseInstant(
+                        archived.dateAdded,
+                        "savedSearch.dateAdded",
+                        exportedAt
+                    ),
                     filtersJson = archived.filters.toString()
                 )
                 names += archived.name
@@ -871,8 +921,11 @@ object BackupMergeService {
             .groupBy { BackupPaths.normalizeIdForComparison(it.queueID) }
             .mapValues { (_, memberships) ->
                 memberships.mapNotNull { membership ->
-                    parseOptionalInstant(membership.lastModifiedAt)
-                        ?: parseOptionalInstant(membership.queuedAt.takeIf { it.isNotBlank() })
+                    parseOptionalInstant(membership.lastModifiedAt, exportedAt)
+                        ?: parseOptionalInstant(
+                            membership.queuedAt.takeIf { it.isNotBlank() },
+                            exportedAt
+                        )
                 }
             }
         val localMembershipTimes = currentMemberships
@@ -896,10 +949,16 @@ object BackupMergeService {
             queueIdRemap[incomingId] = id
 
             val incomingModified = SyncMerge.effectiveQueueModifiedAt(
-                queueUpdatedAt = parseOptionalInstant(archived.dateUpdated.takeIf { it.isNotBlank() }),
-                lastMembershipChangedAt = parseOptionalInstant(archived.lastMembershipChangedAt),
+                queueUpdatedAt = parseOptionalInstant(
+                    archived.dateUpdated.takeIf { it.isNotBlank() },
+                    exportedAt
+                ),
+                lastMembershipChangedAt = parseOptionalInstant(
+                    archived.lastMembershipChangedAt,
+                    exportedAt
+                ),
                 membershipModifiedAts = incomingMembershipTimes[incomingId].orEmpty()
-            ) ?: parseOptionalInstant(archived.dateCreated.takeIf { it.isNotBlank() })
+            ) ?: parseOptionalInstant(archived.dateCreated.takeIf { it.isNotBlank() }, exportedAt)
 
             val existing = queuesById[id]
             if (existing == null) {
@@ -909,7 +968,7 @@ object BackupMergeService {
                     TombstoneResolution.PRESERVE_AMBIGUOUS,
                     TombstoneResolution.NO_TOMBSTONE -> Unit
                 }
-                queuesById[id] = archived.toReadingQueue()
+                queuesById[id] = archived.toReadingQueue(exportedAt)
                 queuesCreated += 1
             } else if (mode == BackupImportMode.MERGE) {
                 // Keep local queue name / fields. New memberships still insert below.
@@ -920,7 +979,7 @@ object BackupMergeService {
                     membershipModifiedAts = localMembershipTimes[id].orEmpty()
                 )
                 if (SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
-                    val restored = archived.toReadingQueue()
+                    val restored = archived.toReadingQueue(exportedAt)
                     val finalIsDeleted = !isSystemQueue && restored.isDeleted
                     val deletionState = restoredDeletionState(finalIsDeleted)
                     queuesById[id] = restored.copy(
@@ -967,7 +1026,7 @@ object BackupMergeService {
                 archived.lastModifiedAt,
                 exportedAt,
                 now
-            ) ?: parseOptionalInstant(archived.queuedAt.takeIf { it.isNotBlank() })
+            ) ?: parseOptionalInstant(archived.queuedAt.takeIf { it.isNotBlank() }, exportedAt)
 
             when (tombstoneIndex.membershipResolution(id, incomingModified)) {
                 TombstoneResolution.SUPPRESS_STALE -> {
@@ -978,7 +1037,7 @@ object BackupMergeService {
             }
 
             val existing = membershipsById[id]
-            val restored = archived.toReadingQueueMembership()
+            val restored = archived.toReadingQueueMembership(exportedAt)
                 .copy(queueID = queueId, workID = workId)
             if (existing == null) {
                 membershipsById[id] = restored
@@ -1055,7 +1114,7 @@ object BackupMergeService {
                 archived.lastModifiedAt,
                 exportedAt,
                 now
-            ) ?: parseOptionalInstant(archived.createdAt.takeIf { it.isNotBlank() })
+            ) ?: parseOptionalInstant(archived.createdAt.takeIf { it.isNotBlank() }, exportedAt)
                 ?: Instant.EPOCH
 
             when (tombstoneIndex.annotationResolution(id, incomingModified)) {
@@ -1067,7 +1126,7 @@ object BackupMergeService {
             }
 
             val existing = byId[id]
-            val restored = archived.toReadingAnnotation().copy(workID = workId)
+            val restored = archived.toReadingAnnotation(exportedAt).copy(workID = workId)
             if (existing == null) {
                 byId[id] = restored
                 created += 1
@@ -1127,21 +1186,23 @@ object BackupMergeService {
         return (a + b).normalizedNames()
     }
 
-    private fun parseOptionalInstant(raw: String?): Instant? {
+    private fun parseOptionalInstant(raw: String?, exportedAt: Instant? = null): Instant? {
         val value = raw?.takeIf { it.isNotBlank() } ?: return null
-        return runCatching { BackupValidator.parseInstant(value, "timestamp") }.getOrNull()
+        return runCatching { BackupValidator.parseInstant(value, "timestamp", exportedAt) }.getOrNull()
     }
 
     /**
      * Ledger companion: `min(value, exportedAt)`, and drop timestamps more than
-     * 24h in the future so a forged clock cannot win LWW.
+     * 24h in the future so a forged clock cannot win LWW. [parseInstant] already
+     * rejects `> now+24h` at the decode boundary; this remains a second filter
+     * for callers that swallow [BackupError.InvalidDate].
      */
     internal fun sanitizeArchivedLastModifiedAt(
         raw: String?,
         exportedAt: Instant?,
         now: Instant
     ): Instant? {
-        val value = parseOptionalInstant(raw) ?: return null
+        val value = parseOptionalInstant(raw, exportedAt) ?: return null
         if (value.isAfter(now.plus(FUTURE_CLOCK_SKEW))) return null
         return if (exportedAt != null && value.isAfter(exportedAt)) exportedAt else value
     }
@@ -1162,7 +1223,7 @@ object BackupMergeService {
             return sanitizeArchivedLastModifiedAt(lastModifiedAt, exportedAt, now)
         }
         return sanitizeArchivedLastModifiedAt(dateAdded, exportedAt, now)
-            ?: parseOptionalInstant(dateAdded)
+            ?: parseOptionalInstant(dateAdded, exportedAt)
     }
 
     private fun minInstant(a: Instant, b: Instant): Instant = if (a.isBefore(b)) a else b
