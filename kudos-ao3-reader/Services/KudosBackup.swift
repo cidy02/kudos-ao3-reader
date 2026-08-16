@@ -1459,12 +1459,11 @@ enum KudosBackupService {
             let key = "\(archived.recordTypeRaw)|\(archived.recordID.uuidString.lowercased())"
             guard seenTombstoneKeys.insert(key).inserted else { continue }
             guard let adopted = makeTombstone(from: archived) else { continue }
-            // RC merge (G5): keep WP-A's clamp. `makeTombstone` copies
-            // `lastModifiedAt` verbatim, and a tombstone cannot legitimately be
-            // newer than the snapshot that carries it — without this, a forged
-            // tombstone dated "just now" outranks every genuine backup restored
-            // afterwards. (Review finding TOMB-1 additionally wants this pinned
-            // to the *signed* `createdAt`; tracked as a separate fix.)
+            // RC merge (G5) + TOMB-1: `makeTombstone` pins lastModifiedAt to the
+            // signed createdAt (lastModifiedAt is unsigned and is the
+            // suppression key). Keep WP-A's exportedAt clamp as defence in
+            // depth — a tombstone cannot legitimately be newer than the
+            // snapshot that carries it.
             adopted.lastModifiedAt = min(adopted.lastModifiedAt, contents.manifest.exportedAt)
             context.insert(adopted)
             batchTombstones.append(adopted)
@@ -1614,6 +1613,13 @@ enum KudosBackupService {
             let collection: WorkCollection
             let isNewCollection: Bool
             if let existing = collectionsByID[archived.id] {
+                // Mirror the work path: Merge must be able to undo a prior
+                // Replace that parked this collection in Recently Deleted.
+                if mode == .merge, existing.isPendingDeletion {
+                    existing.isPendingDeletion = false
+                    existing.deletedAt = nil
+                    existing.permanentDeletionScheduledAt = nil
+                }
                 collection = existing
                 isNewCollection = false
             } else {
@@ -1736,6 +1742,13 @@ enum KudosBackupService {
             if kind == .savedForLater {
                 queue = savedForLaterQueue
             } else if let existing = queuesByID[archived.id] {
+                // Mirror the work path: Merge must be able to undo a prior
+                // Replace that parked this queue in Recently Deleted.
+                if mode == .merge, existing.isPendingDeletion {
+                    existing.isPendingDeletion = false
+                    existing.deletedAt = nil
+                    existing.permanentDeletionScheduledAt = nil
+                }
                 queue = existing
             } else {
                 let archivedQueueID = archived.id.uuidString
@@ -2611,7 +2624,9 @@ enum KudosBackupService {
             signature: archived.signature
         )
         tombstone.id = archived.id
-        tombstone.lastModifiedAt = archived.lastModifiedAt
+        // Only createdAt is inside the signed payload. lastModifiedAt decides
+        // suppression, so never let an unsigned wire field set it.
+        tombstone.lastModifiedAt = archived.createdAt
         return tombstone
     }
 
