@@ -227,3 +227,65 @@ Full report: `/Users/cidy02/kudos-fix-wp-d-signing/REVIEW-CLAUDE-WPD.md`. **Verd
 | G6 bookmarks/saved-searches Replace | pending tombstone review |
 | G7 Replace 1.5s UI tests | SKIP per brief (no harness) |
 | G8 macOS Developer ID / notarization | pending WP-D review; expected environmental, not a code hole |
+
+---
+
+## Cycle 2 — RC stacking, gates, and the first fix round (2026-08-16)
+
+### RC assembled
+
+All 7 trees stacked on `security-fixes/rc` in the brief's order. Conflict resolutions and the two traps (F4, WPD-5) are documented in the merge commits and in `handoff.md`'s cycle log. Highlights:
+
+- **G4** (10 files / 33 hunks) resolved per WP-B review Part 3's per-item stricter-of table.
+- **G5** caught a real drop: `makeTombstone` had **no** `exportedAt` clamp while HEAD did, so taking the tombstone side wholesale would have silently removed it. Kept both.
+- **G9** hybridised: tombstone's mode/trust plumbing + WP-F's M21 font validation and M2b DAO type filter.
+- **WPC-1 / WP-C FIX-4** applied — removed `KudosBackup.swift.orig` and three mutation revert patches.
+
+### Gate failures — all three were merge artifacts, none were work-package defects
+
+Every one had the same shape: a declaration taken from one tree and its usage from the other.
+
+1. `KudosBackup.swift` — WP-A's M15 wrapper/inner split vs the tombstone tree's `mode:` parameter. 13 `cannot find 'mode' in scope`. Threaded through. **This is exactly the G5 collision the brief said could only be resolved at stack time.**
+2. `SettingsView.swift` — tombstone's three-mode import bodies with WP-A's two-field (`SecurityScopedURL` + manifest) state shape. Unified onto the tombstone model.
+3. `SettingsView.swift` — a leftover `_ = scopedURL` keep-alive with nothing left to keep alive.
+
+### ⚠️ Vacuous-gate trap found and fixed in the brief itself
+
+`-only-testing:KudosTests/FolderSyncTests` matches **0 cases and still exits 0**. `FolderSyncTests` is nested under `PersistenceGateSuites` exactly like `KudosBackupTests`, so the only valid path is `KudosTests/PersistenceGateSuites/FolderSyncTests` (27 cases). The brief documented this trap for `KudosBackupTests` but then used the bare form for FolderSync.
+
+**This mattered concretely**: FolderSync holds `coordinatedReadData`, i.e. the F4 symlink guard hand-merged in this cycle. Following the brief literally produces a green iOS gate that never exercises it. `handoff.md` corrected in `136dcae`. **Always confirm which suites ran, not merely that the run was green.**
+
+### Fix round 1 — tombstone batch (implementer Grok 4.6, reviewer Claude — split respected)
+
+Six commits (`02fa547`…`7433016`) plus `FIXES-GROK-TOMBSTONE.md`. **All six independently verified against the code by the conductor, not accepted on the report:**
+
+| Finding | Verified |
+|---|---|
+| TOMB-1 iOS | `makeTombstone`: `lastModifiedAt = archived.createdAt` (signed field); RC's `exportedAt` clamp still applied after adopt |
+| TOMB-1 Android | `.let { it.copy(lastModifiedAt = it.createdAt) }` before verify/trust |
+| TOMB-2 Android | `if (tombstonesById.containsKey(incomingKey)) return@forEach` — a trusted signature can no longer destroy a local tombstone row |
+| TOMB-3 iOS | collections **and** queues undelete on `.merge` (`:1618`, `:1747`), mirroring works |
+| TOMB-4 iOS | `TombstoneTrustStore.add(pub, defaults: defaults)` — the write is injectable |
+| TOMB-5 | flip branches on `if last == '0'`, matching the correct sibling |
+
+**Grok's evidence independently validated a conductor decision.** Its iOS TOMB-1 mutation went RED showing `lastModifiedAt → 2026-08-16`, which it correctly identified as the snapshot's `exportedAt` — proving the G5 clamp I preserved *was* engaging and still left TOMB-1 open. Keeping the clamp was right; it was necessary but not sufficient. It also hit the same 0-count filter trap on a single-test filter and reported it unprompted.
+
+### Gates after fix round 1
+
+- **Android: 848 tests / 0 failures / 0 errors / 0 skipped** — tallied by the conductor directly from the JUnit XML, not from Gradle's summary or Grok's report. Matches the claimed figure exactly.
+- **iOS:** re-running at time of writing (42/42 backup + 27/27 folder sync before this round).
+
+### STACK hazard from Grok's "not closed" list — CHECKED, clean
+
+Grok flagged that RC must keep WP-F's rejection of a blank `recordTypeRaw` and must not revert to the tombstone tree's `ifBlank { "savedWork" }`. Verified directly: `BackupMappers.toSyncTombstone` **throws** `IllegalArgumentException` on blank or unknown types (`:543`). The default would have been the dangerous outcome — any garbage type string in an untrusted archive becoming a *work* tombstone, and work tombstones are precisely what suppress a later restore. The remaining `ifBlank` calls are unrelated (`kindRaw` for queues/bookmarks).
+
+### Still open after cycle 2
+
+| Finding | Owner |
+|---|---|
+| TOMB-6 / G3 — no iCloud KVS entitlement; shipped Settings copy promises the feature | open |
+| TOMB-7 — Android Replace lets an adopted tombstone suppress in-snapshot; iOS does not | open |
+| TOMB-8 / G2 — Android annotation deletes mint no tombstone; folder sync resurrects deleted highlights | open |
+| WPD-1..8 — incl. **WPD-3, the iOS Keychain→plaintext-vault downgrade** | next |
+| WPC FIX-1/2/3/5, WPF-1, WPA-1/2, WPB-1..6 | queued |
+| RC pre-confirm laziness regression (tombstone `read` vs `preConfirmManifest`) | queued |
