@@ -459,9 +459,8 @@ private fun expiryCaption(scheduled: Instant?, deletedAt: Instant?): String? {
             "Expires in $days day${if (days == 1L) "" else "s"} ($dateLabel)"
         }
     }
-    if (deletedAt == null) return null
-    val dateLabel = EXPIRY_DATE_FORMAT.format(deletedAt.atZone(ZoneId.systemDefault()))
-    return "Deleted $dateLabel"
+    // D8: unsigned hides have no clock. Don't imply "0 days left".
+    return "Kept until you delete"
 }
 
 /**

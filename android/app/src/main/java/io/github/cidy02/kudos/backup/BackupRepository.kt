@@ -86,6 +86,10 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
+            UnsignedDeletionReview.record(
+                merge.summary,
+                BackupMergeService.unsignedHideSourceLabel(mode)
+            )
             merge.summary
         }
     }
@@ -100,7 +104,34 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
+            UnsignedDeletionReview.record(
+                merge.summary,
+                BackupMergeService.unsignedHideSourceLabel(mode)
+            )
             merge.summary
+        }
+    }
+
+    /**
+     * User-confirmed hold: hide without starting the clock and without
+     * minting a tombstone. Confirming a sync-folder hide is not the same
+     * as a local Delete tap.
+     */
+    suspend fun applyHeldUnsignedHides(workIds: List<String>) = persistenceGate.withLock {
+        withContext(Dispatchers.IO) {
+            val wanted = workIds.map(BackupPaths::normalizeIdForComparison).toSet()
+            if (wanted.isEmpty()) return@withContext
+            val now = clock()
+            database.workDao().getAllIncludingDeleted().forEach { entity ->
+                if (BackupPaths.normalizeIdForComparison(entity.id) !in wanted) return@forEach
+                database.workDao().upsert(
+                    entity.copy(
+                        isDeleted = true,
+                        deletedAt = entity.deletedAt ?: now,
+                        permanentDeletionScheduledAt = null
+                    )
+                )
+            }
         }
     }
 
@@ -383,6 +414,18 @@ fun BackupRestoreSummary.toUserMessage(): String {
         }
         if (annotationsSuppressed > 0) {
             add("$annotationsSuppressed deleted annotation(s) skipped")
+        }
+        if (unsignedHidesApplied > 0) {
+            add(
+                "$unsignedHidesApplied work(s) moved to Recently Deleted " +
+                    "without a permanent-deletion schedule"
+            )
+        }
+        if (unsignedHidesHeld > 0) {
+            add(
+                "$unsignedHidesHeld work(s) from this batch want to be hidden " +
+                    "and are waiting for review"
+            )
         }
     }
     return if (parts.isEmpty()) {

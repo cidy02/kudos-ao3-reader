@@ -56,9 +56,24 @@ notes/progress.
 
 ## Rejected legitimate input (Phase 1)
 
-Incoming deletion claims from a `.kudosbackup` or the Library Sync Folder are
-ignored. **Your deletes on phone A will not appear on phone B** until Phase 2
-signed tombstones. Owner accepted this short inconsistency.
+Incoming **signed tombstones** from a `.kudosbackup` or the Library Sync Folder
+are ignored in Phase 1. **Your deletes on phone A will not appear on phone B**
+until Phase 2 signed tombstones. Owner accepted this short inconsistency.
+
+An incoming work/collection/queue `isDeleted: true` flag still **hides** a
+local record (Recently Deleted). **Clock-gate rule (D8):** that hide must not
+start or keep a 90-day `permanentDeletionScheduledAt` unless a trusted/adopted
+tombstone already matches the record. Without the gate, `sweepExpiredSoftDeletes`
+would later call `hardDelete`, which mints a *signed* tombstone under this
+device's key — laundering unsigned folder write access into a Phase-2 suppressor.
+
+**Anomaly hold (D8):** if ≥ 10 unsigned work hides would apply in one
+`BackupMergeService.merge` pass, none of those hides are applied. Other merge
+work still proceeds. The hold is presented for review
+(`UnsignedDeletionReview`); confirming hides without minting a tombstone.
+Below the floor, hides apply normally and an informational digest is shown.
+First-sync-from-new-trust exemption is deferred (no cheap "just granted"
+signal; pairing UI is out of scope).
 
 Replace of an unsigned file cannot plant suppressors that block a later Merge
 of the user’s real backup. File Merge of an unsigned file cannot overwrite

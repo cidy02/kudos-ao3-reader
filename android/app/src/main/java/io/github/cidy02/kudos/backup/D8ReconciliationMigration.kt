@@ -3,11 +3,20 @@ package io.github.cidy02.kudos.backup
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
-import java.time.Instant
 
 /**
- * One-time reconciliation pass for rows affected by the D8 bug (unsigned tombstones
- * creating pending-deletion schedules instead of hiding instantly).
+ * One-time reconciliation for rows the D8 bug already scheduled.
+ *
+ * Pre-fix unsigned `isDeleted` merges left records in
+ * `isDeleted && permanentDeletionScheduledAt != null` with no local
+ * [io.github.cidy02.kudos.core.model.SyncTombstone]. Those clocks must be
+ * disarmed before [io.github.cidy02.kudos.works.WorkRepository.sweepExpiredSoftDeletes]
+ * can mint a signed tombstone from them.
+ *
+ * Identity match is the same fallback chain as tombstone retract /
+ * [TombstoneIndex]: AO3 work ID → canonical URL → record ID for works;
+ * record ID for collections and queues. Recency is not required — any
+ * matching local tombstone means a trusted delete was recorded here.
  */
 object D8ReconciliationMigration {
     suspend fun runIfNeeded(
@@ -17,43 +26,25 @@ object D8ReconciliationMigration {
         if (settingsRepository.isD8ReconciliationComplete()) return
 
         val tombstones = database.syncTombstoneDao().getAll().map { it.toDomain() }
-        val tombstoneIndex = TombstoneIndex(
-            tombstones = tombstones,
-            exportedAt = null,
-            now = Instant.now()
-        )
+        val tombstoneIndex = TombstoneIndex(tombstones = tombstones)
 
-        // 1. SavedWorks
         val workDao = database.workDao()
         for (work in workDao.getPendingDeletions().map { it.toDomain() }) {
-            val archived = work.toBackupWork()
-            // If it doesn't have a trusted tombstone, clear its schedule.
-            // (If it DOES have a trusted tombstone, it stays scheduled, matching Phase 1).
-            if (!tombstoneIndex.suppressesWorkResurrection(archived)) {
+            if (!tombstoneIndex.hasLocalWorkTombstone(work)) {
                 workDao.clearDeletionSchedule(work.id)
             }
         }
 
-        // 2. WorkCollections
         val collectionDao = database.collectionDao()
         for (collection in collectionDao.getPendingDeletions()) {
-            val hasTrustedTombstone = tombstoneIndex.collectionResolution(
-                collection.id,
-                Instant.MIN // MIN ensures an existing tombstone will suppress
-            ) == TombstoneResolution.SUPPRESS_STALE
-            if (!hasTrustedTombstone) {
+            if (!tombstoneIndex.hasLocalCollectionTombstone(collection.id)) {
                 collectionDao.clearDeletionSchedule(collection.id)
             }
         }
 
-        // 3. ReadingQueues
         val queueDao = database.readingQueueDao()
         for (queue in queueDao.getPendingDeletions()) {
-            val hasTrustedTombstone = tombstoneIndex.queueResolution(
-                queue.id,
-                Instant.MIN
-            ) == TombstoneResolution.SUPPRESS_STALE
-            if (!hasTrustedTombstone) {
+            if (!tombstoneIndex.hasLocalQueueTombstone(queue.id)) {
                 queueDao.clearDeletionSchedule(queue.id)
             }
         }

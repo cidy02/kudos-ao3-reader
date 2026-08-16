@@ -5,6 +5,7 @@ import android.app.Application
 import android.os.Bundle
 import androidx.work.Configuration
 import io.github.cidy02.kudos.app.KudosAppContainer
+import io.github.cidy02.kudos.backup.D8ReconciliationMigration
 import io.github.cidy02.kudos.backup.TombstoneLocalMigration
 import io.github.cidy02.kudos.backup.TombstoneSigning
 import io.github.cidy02.kudos.works.KudosWorkerFactory

@@ -85,7 +85,13 @@ data class BackupRestoreSummary(
     val membershipsSuppressed: Int = 0,
     val annotationsCreated: Int = 0,
     val annotationsUpdated: Int = 0,
-    val annotationsSuppressed: Int = 0
+    val annotationsSuppressed: Int = 0,
+    /** Unsigned `isDeleted` hides applied in this pass (below the hold floor). */
+    val unsignedHidesApplied: Int = 0,
+    /** Unsigned `isDeleted` hides held for review (≥ floor, none applied). */
+    val unsignedHidesHeld: Int = 0,
+    val unsignedHideTitles: List<String> = emptyList(),
+    val heldUnsignedHideWorkIDs: List<String> = emptyList()
 )
 
 data class BackupMergeResult(
