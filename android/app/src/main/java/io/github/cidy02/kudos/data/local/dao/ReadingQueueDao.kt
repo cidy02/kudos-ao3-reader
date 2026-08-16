@@ -89,4 +89,15 @@ interface ReadingQueueDao {
         """
     )
     suspend fun getActiveMembershipCountForWork(workId: String): Int
+
+    @Query(
+        """
+        SELECT * FROM reading_queues
+        WHERE isDeleted = 1 AND permanentDeletionScheduledAt IS NOT NULL
+        """
+    )
+    suspend fun getPendingDeletions(): List<ReadingQueueEntity>
+
+    @Query("UPDATE reading_queues SET permanentDeletionScheduledAt = NULL WHERE id = :id")
+    suspend fun clearDeletionSchedule(id: String)
 }

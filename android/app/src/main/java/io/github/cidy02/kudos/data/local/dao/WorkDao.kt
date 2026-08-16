@@ -78,6 +78,17 @@ interface WorkDao {
     @Query("DELETE FROM works WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    @Query(
+        """
+        SELECT * FROM works
+        WHERE isDeleted = 1 AND permanentDeletionScheduledAt IS NOT NULL
+        """
+    )
+    suspend fun getPendingDeletions(): List<WorkEntity>
+
+    @Query("UPDATE works SET permanentDeletionScheduledAt = NULL WHERE id = :id")
+    suspend fun clearDeletionSchedule(id: String)
+
     /** Works whose search index stamp is not [version] (includes never-indexed = 0). */
     @Query("SELECT * FROM works WHERE searchIndexVersion != :version")
     suspend fun getWithStaleSearchIndex(version: Int): List<WorkEntity>
