@@ -74,7 +74,11 @@ struct KudosBackupTests {
         #expect(decoded.manifest.settings.appTheme == "sepia")
         #expect(decoded.manifest.settings.readerFontPt == 21)
         #expect(decoded.epubData(for: work.id) == epub)
-        #expect(decoded.fontFiles[font.fileName] == fontData)
+        #expect(
+            decoded.fontFiles.isEmpty,
+            "ZIP fonts must stay unextracted at read; use fontData(for:)"
+        )
+        #expect(decoded.fontData(for: font.fileName) == fontData)
     }
 
     @Test func authorIdentityPersistsLocallyWithoutChangingBackupSchema() throws {
@@ -2298,15 +2302,21 @@ struct KudosBackupTests {
         
         let contents = try KudosBackupContents(zipData: zipData)
         #expect(contents.epubFiles.isEmpty, "Extraction is lazy: epubFiles dictionary should not be pre-populated")
+        #expect(
+            contents.extractedZipEntryNames == ["manifest.json"],
+            "init(zipData:) must extract only the manifest; Works/* stays unread"
+        )
         #expect(contents.epubData(for: workID) == epubData, "EPUB bytes should be retrievable on demand")
         // The accessor must not MEMOISE. Without this, a future "optimisation" that
         // caches each inflated entry into `epubFiles` would reintroduce F1 — the
         // unbounded [UUID: Data] growth this whole fix exists to remove — and both
         // assertions above would still pass, because they only observe the state
-        // BEFORE any call. This is the strongest laziness property observable without
-        // adding a seam to production code: it cannot rule out a private eager cache,
-        // but it does pin the one regression path that runs through the public field.
+        // BEFORE any call.
         #expect(contents.epubFiles.isEmpty, "epubData(for:) must not memoise into epubFiles")
+        #expect(
+            contents.extractedZipEntryNames.contains("Works/\(workID.uuidString).epub"),
+            "epubData(for:) is the first extract of the work payload"
+        )
     }
 
     @Test @MainActor func directoryPreConfirmDoesNotMaterializeEPUBs() throws {
