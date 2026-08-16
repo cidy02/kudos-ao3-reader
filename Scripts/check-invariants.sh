@@ -156,6 +156,23 @@ if [ -n "$LEAKED_IDENTITY" ]; then
     "Redact the team ID before committing (this repo is public). Offending: ${LEAKED_IDENTITY}"
 fi
 
+# Entitlements files must reference the team via the build-setting variable,
+# never a literal 10-char team ID (e.g. the ubiquity-kvstore-identifier entitlement
+# needs $(TeamIdentifierPrefix)$(CFBundleIdentifier), not a hardcoded value).
+BAD_ENTITLEMENT_TEAM="$(grep -rlnE '<string>[A-Z0-9]{10}\.' "$ROOT" --include='*.entitlements' \
+  --exclude-dir=.git 2>/dev/null || true)"
+if [ -n "$BAD_ENTITLEMENT_TEAM" ]; then
+  fail "an entitlements file has a literal team-ID prefix instead of \$(TeamIdentifierPrefix)" \
+    "Offending: ${BAD_ENTITLEMENT_TEAM}"
+fi
+
+# The local signing override must stay untracked. If it is ever force-added,
+# whatever team ID it holds becomes part of history the moment it's committed.
+if git -C "$ROOT" ls-files --error-unmatch "Config/LocalSigning.xcconfig" >/dev/null 2>&1; then
+  fail "Config/LocalSigning.xcconfig is tracked by git" \
+    "This file is gitignored on purpose — it holds the local (possibly paid) signing team ID. Untrack it: git rm --cached Config/LocalSigning.xcconfig."
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "check-invariants: FAILED"
   exit 1

@@ -1,0 +1,7 @@
+// Tracked. Included by the app target's build configurations.
+// The paid Apple Developer team ID must never live in a tracked file — see
+// Scripts/check-invariants.sh, which fails the build if it ever does.
+//
+// `?` makes this include optional: a fresh clone with no local file still
+// configures and builds (unsigned / CODE_SIGNING_ALLOWED=NO).
+#include? "LocalSigning.xcconfig"
