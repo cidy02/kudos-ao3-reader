@@ -1,13 +1,91 @@
 # Security + backup-trust handoff (Claude review)
 
 **Base commit:** `c241d2f` (`origin/hig-review`)  
-**Embargo:** local only. Do **not** push, merge, open a PR, or create a remote branch.  
-**Do not** run git in `/Users/cidy02/Documents/AO3_App_OpenSource`.  
-**Owner:** review first, then you merge. Agents stop short of merge.
+**You are Claude. You run this to completion.** Review, fix, commit as you go, loop until every tree is reviewed, every FIX/BLOCK is closed, and all work lives on **one local release-candidate branch**.  
+**Still forbidden:** `git push`, opening a PR, creating a **remote** branch, and any git in `/Users/cidy02/Documents/AO3_App_OpenSource`. Local branches, local merges, and local commits are required.
 
 **There is no Phase 3** of tombstone trust. Product is Phase 1 (drop unsigned incoming) + Phase 2 (Ed25519 so *trusted* deletes can cross devices).
 
-This file is the single review brief. Start here. Do not treat `GROK-REVIEW-IOS.md` as current (several FIX items were closed later).
+This file is the single brief. Start here. Do not treat `GROK-REVIEW-IOS.md` as current (several FIX items were closed later).
+
+---
+
+## Claude operating loop (mandatory)
+
+You are the conductor. **Do not solo the volume.** Delegate and parallelize. Keep this file’s **Progress tracker** (below) updated and **commit the tracker** whenever status changes.
+
+### Tools you must use
+
+| Tool | How | Use for |
+|---|---|---|
+| **Your own subagents** | `spawn_subagent`: `general-purpose` (implement), `explore` (read-only map), `plan` (stack strategy). Launch independent units **near the start**, not after you have already done the work. | Parallel tree reviews, isolated fixes, RC conflict resolution in a worktree |
+| **Grok plugin (`grok-cc`)** | Skill `grok-cli-runtime` / command `/grok-cc:rescue`. Companion: `node "…/grok-companion.mjs" task [--read] [--background] [--cwd <tree>] [--worktree] "<task>"`. Write by default; `--read` for review-only. | Implement or **review** (see model-split). `--cwd` to the owning worktree. |
+| **Antigravity (`agy`)** | Skill `antigravity` / `/antigravity:delegate`. `agy-delegate --tier pro --yolo --digest --dir <tree-root> "…"`. Long jobs: `agy-job start --tier pro --yolo --dir <tree> --model <slug> "…"`. | Bulk review, test generation, first-pass diffs, Android gradle volume. `--dir` so it reads `AGENTS.md`. Never trust self-reported GREEN — re-run the gate. |
+
+If Grok is missing, `/grok-cc:setup`. If `agy` is missing, `/antigravity:setup`. Do not silently skip a plugin.
+
+### Model split — reviewer ≠ implementer
+
+The review model **must be a different family** than who wrote the code. Same vendor reviewing itself is a fail.
+
+| If the implementer was | Reviewer must be |
+|---|---|
+| Claude (you or a Claude subagent) | **Grok** (`grok-cc --read`) **or** Antigravity Gemini (`agy-delegate --tier pro --model gemini-3.1-pro-high`) |
+| Grok | **You** and/or **Gemini** (`agy` pro). Not another Grok. |
+| Gemini / `agy` | **You** and/or **Grok**. Not another Gemini. |
+| Opus 4.6 via `agy --model claude-opus-4-6-thinking` | Treat as Claude family → review with **Grok or Gemini**, not Opus. |
+
+Record implementer model + reviewer model in the Progress tracker for every unit.
+
+### Loop (do not stop mid-cycle)
+
+Repeat until the **Definition of done** at the bottom of this section is true:
+
+1. **Update the Progress tracker** in this file (status, owner, implementer model, reviewer model, SHA). Commit: `handoff: progress — <what changed>`.
+2. **Fan out reviews** in parallel: one unit per tree (or per colliding file group). Different models than the implementers (table above).
+3. **Collect findings** into `/Users/cidy02/kudos-fix-tombstone/REVIEW-CLAUDE.md` (SHIP / FIX / BLOCK, `file:line`).
+4. **Fix FIX/BLOCK** in the owning tree (or on the RC branch once stacked). Delegate implementation to a **different** worker than the reviewer. Commit locally after each coherent fix.
+5. **Re-review** the fix with a model that is not the fixer.
+6. **Stack onto the RC branch** when a unit is SHIP (see merge order). Resolve conflicts. Commit the merge. Run the iOS + Android gates on the RC. If red, go to 4.
+7. **Loop.** Do not wait for the owner between cycles. Do not exit because a plugin quota-failed — switch worker and continue.
+
+### Release-candidate branch
+
+Create **locally** (no `git push`):
+
+```
+# from a clean throwaway clone or new worktree of hig-review
+git checkout -B security-fixes/rc c241d2f
+```
+
+Suggested stack (cherry-pick or merge each tree’s branch, fix conflicts, commit, test, next):
+
+1. `security-fixes/wp-c`
+2. `security-fixes/wp-a` (includes M15)
+3. `security-fixes/wp-b` (prefer A’s AppRouter/cookie code on conflict unless B’s test is stricter — keep the stricter test)
+4. `security-fixes/wp-d-signing`
+5. `security-fixes/tombstone-trust` (Phase 1+2 restore wins over A’s restore **except** keep M15 isolated-context discard-on-throw)
+6. `security-fixes/wp-e-android`
+7. `security-fixes/wp-f-android`
+
+Work in `/Users/cidy02/kudos-fix-tombstone` **or** a dedicated `/Users/cidy02/kudos-fix-rc` worktree. Do not use `/Users/cidy02/Documents/AO3_App_OpenSource`.
+
+On `KudosBackup.swift` conflicts: keep tombstone Phase 1/2 adopt/sign/identity-rematch **and** WP-A M15 isolated `ModelContext` / no intermediate `saveBestEffort`. If both cannot apply, BLOCK and say why — then implement the missing piece on RC.
+
+### Progress tracker (you maintain this)
+
+Keep the tables in **Progress for Claude** current. After every cycle append a short dated bullet under **Cycle log** (end of that section): what shipped, what is still FIX/BLOCK, RC SHA.
+
+### Definition of done (do not stop before this)
+
+- Every tree in §0 has a written review (SHIP or remaining FIX/BLOCK listed).
+- G1–G8 are **fixed or signed off** in `REVIEW-CLAUDE.md`.
+- No open BLOCK findings.
+- All source work is on **one** local branch `security-fixes/rc`.
+- RC iOS gate: `KudosTests/PersistenceGateSuites/KudosBackupTests` (and FolderSync if restore/sync touched) GREEN, `totalTestCount` ≠ 0.
+- RC Android gate: `:app:testDebugUnitTest` GREEN, count ≠ 0.
+- This `handoff.md` tracker says **RC READY**.
+- Still **not** pushed.
 
 ---
 
@@ -23,7 +101,7 @@ This file is the single review brief. Start here. Do not treat `GROK-REVIEW-IOS.
 | `/Users/cidy02/kudos-fix-wp-e` | `security-fixes/wp-e-android` | M1g-Android + restore-deadline tests |
 | `/Users/cidy02/kudos-fix-wp-f` | `security-fixes/wp-f-android` | M1a/M3 Android, M21/M2b fonts, revert-check evidence |
 
-**Collision:** WP-A, WP-B, WP-C, and tombstone all edit `KudosBackup.swift` / Settings / AppRouter. Do **not** rebase them onto each other in this review pass unless you are closing a specific gap. Report the stack order; owner merges.
+**Collision:** WP-A, WP-B, WP-C, and tombstone all edit `KudosBackup.swift` / Settings / AppRouter. You **will** reconcile these on `security-fixes/rc` (see operating loop). Until then, review each tree at its own HEAD.
 
 **Companion docs**
 
@@ -38,7 +116,7 @@ This file is the single review brief. Start here. Do not treat `GROK-REVIEW-IOS.
 
 ## Progress for Claude (2026-08-15)
 
-Owner: **Claude reviews the whole pile and closes remaining gaps.** Do not push. Do not merge.
+Owner: **You review, fix, and stack everything onto local `security-fixes/rc`.** Do not push. Do not stop mid-loop.
 
 ### Status key
 
@@ -76,15 +154,15 @@ Tombstone `git log --oneline origin/hig-review..HEAD` should include through `60
 
 ### Gaps Claude should close or explicitly sign off
 
-These are the remaining gaps. Fix in the **owning tree** if it is a real defect. Do not merge trees.
+These are the remaining gaps. Fix in the owning tree **or on `security-fixes/rc`**. G4/G5 are STACK: resolve them when you merge, do not leave them for the owner.
 
 | # | Gap | Own | Close how |
 |---|---|---|---|
 | G1 | **M8 device probe** | WP-B | Optional: run hostile EPUB on a physical device. If you cannot, **sign off** that unit isolation (non-persistent store ≠ default, cookies don’t leak, `javascript:`/`data:` cancelled) is enough to merge later. |
 | G2 | **Android annotation deletes do not mint tombstones** | tombstone | There was no Android insert path. Either add sign-on-delete for annotations to match iOS, or sign off as known parity gap (deletes of highlights won’t cross devices). |
 | G3 | **iOS iCloud KVS entitlement** | tombstone | Simulator: `Unable to find entitlement for KVS store`. Same-Apple-ID auto-trust of pubs needs the entitlement on a real device. Hex paste still works. Add entitlement **or** sign off as device-only follow-up. |
-| G4 | **WP-A vs WP-B overlap** | STACK | Both changed `AppRouter` / session cookies / M8. Do not reconcile in this pass unless a review finding requires one tree’s version. Record which tree should win at owner merge. |
-| G5 | **Tombstone vs WP-A `KudosBackup.swift`** | STACK | WP-A has M15 isolated restore context; tombstone has Phase 1/2 restore. Combining is owner merge work. Review each on its own HEAD. |
+| G4 | **WP-A vs WP-B overlap** | STACK | Both changed `AppRouter` / session cookies / M8. On RC: keep the stricter production check **and** the stricter test. |
+| G5 | **Tombstone vs WP-A `KudosBackup.swift`** | STACK | WP-A M15 isolated restore + tombstone Phase 1/2 adopt/sign. RC must have **both**. |
 | G6 | **Bookmarks/saved searches Replace** | tombstone | Hard-delete, no RD UI. Confirm later Merge can re-insert (no tombstone). Sign off or add RD if you judge it a product hole. |
 | G7 | **R6 Replace 1.5s UI tests** | SKIP | No harness. Do not invent one unless you already have a pattern. |
 | G8 | **macOS Developer ID / notarization** | WP-D | Machine has no distribution identity. Cannot close in code. |
@@ -134,16 +212,18 @@ cd android && ./gradlew :app:testDebugUnitTest
 
 ### Review output
 
-Write `/Users/cidy02/kudos-fix-tombstone/REVIEW-CLAUDE.md`:
+Maintain `/Users/cidy02/kudos-fix-tombstone/REVIEW-CLAUDE.md` across the loop (append, do not wipe):
 
 - SHIP / FIX / BLOCK per finding (`file:line`, spec clause, patch).
-- One subsection per tree.
-- Say whether G1–G8 are signed off or fixed.
-- Do not push. Do not merge. Local commits OK for gap fixes.
+- Implementer model and reviewer model per unit.
+- One subsection per tree, plus an **RC** subsection once stacking starts.
+- G1–G8: fixed or signed off.
 
-### Owner merge rule
+### Cycle log
 
-Claude reviews (and may fix G1–G3 / G6 in-tree) → owner merges. No agent push. No agent merge to `hig-review`. Suggested later stack (owner, not now): WP-C → WP-A (includes M15) → WP-B leftovers → WP-D → tombstone Phase 1+2 → Android E/F.
+- 2026-08-15 — Grok wrote this brief. RC not created yet. Claude starts the loop here.
+
+---
 
 ---
 
