@@ -289,3 +289,44 @@ Grok flagged that RC must keep WP-F's rejection of a blank `recordTypeRaw` and m
 | WPD-1..8 — incl. **WPD-3, the iOS Keychain→plaintext-vault downgrade** | next |
 | WPC FIX-1/2/3/5, WPF-1, WPA-1/2, WPB-1..6 | queued |
 | RC pre-confirm laziness regression (tombstone `read` vs `preConfirmManifest`) | queued |
+
+---
+
+## Cycle 3 — five parallel fix agents, reviewed and merged (2026-08-16)
+
+### Method
+
+Five Grok 4.6 agents at `--effort xhigh`, one per gap cluster, each in its own worktree branched off RC `e2c31b7`, each with its own simulator UDID and DerivedData path.
+
+**Partitioned by FILE, not by work package.** Several findings converge on `KudosBackup.swift` + `SettingsView.swift`, and two on Android's `BackupMergeService.kt`, so those were consolidated under single owners rather than split by finding. Each agent was told four others were running and that an out-of-scope need must be *reported*, not acted on.
+
+**Result: 29 files touched, every one uniquely owned, zero collisions** (verified empirically mid-run, not assumed). All five branches later merged into RC with **zero conflicts**.
+
+### What each unit closed — all verified against code by the conductor before merge
+
+| Unit | Verified |
+|---|---|
+| **signing** | WPD-3: pin is now `"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]"`, so iOS Release keeps Keychain instead of inheriting the macOS file and falling back to the plaintext vault. WPD-2: `build-macos.sh` now *builds Release* and hands the `.app` to the product half — previously **nothing in the repo built Release**, so those assertions had never executed. WPD-7: `mktemp -d` replaces the fixed `/tmp` path. |
+| **android** | WPF-1: `parseInstant` **throws** `BackupError.InvalidDate` past `now+24h` (was silently clamping *to* it) and returns `min(parsed, exportedAt)`; `exportedAt` threaded through `validateManifest` into every archive clock incl. `works[].lastModifiedAt`; injectable `now` makes it deterministic. TOMB-8: `deleteAnnotation` mints a **signed** tombstone with `lastModifiedAt == createdAt` (consistent with TOMB-1's pin). TOMB-7 + WPE FIX-1 covered. **854/0/0** (+6 vs baseline). |
+| **reader** | WPB-3: guard hooked at the `navigationDelegate` **setter** — the only point provably before `loadSpread()` in Readium 3.9.0's `EPUBSpreadView.init` order — and correctly scoped to `configuration.websiteDataStore === isolatedDataStore`, so AO3 login / Browse web views are untouched. Re-wrap of an existing guard short-circuits. |
+| **iostests** | WPB-1: the two `openAO3Link` tests now assert WP-A's stricter contract and pass (they were **failing on the RC**). WPA-1: `unguardedURLSinkIsClosed` now spies `UIApplication.open`. WPA-2/WPB-6: new `CookieAllowListTests` pins the M14 allow-list at `responseCookies`, `merging`, `install`, `capture`. WPB-5: `validationURL` init is `#if DEBUG`. **22/22.** |
+| **backup** | WP-C FIX-2 (the live M4 hole): directory import no longer materialises every EPUB — `epubData(for:)` / `fontData(for:)` read one file. FIX-3: ZIP fonts not inflated at `init(zipData:)`, caps still enforced from `uncompressedSize`. FIX-1: laziness now provable via a `ZipSource` box recording entry names. FIX-5 + the conductor's own pre-confirm regression: `PendingBackupImport` holds `SecurityScopedURL` + manifest + a `SourceIdentity` snapshot that refuses a file swapped between confirm and execute. |
+
+### Gates on the merged RC
+
+| Gate | Result |
+|---|---|
+| `swiftlint --strict` | **0 errors** |
+| `check-invariants.sh` | **OK** |
+| Android `:app:testDebugUnitTest` | **854 / 0 / 0 / 0** (tallied from JUnit XML) |
+| macOS build | **BUILD SUCCEEDED** (run pre-merge on `e2c31b7`) |
+| Full iOS suite | running at time of writing |
+
+### Method note — the anti-vacuous-gate check needs to handle display names
+
+Verifying "which suites actually ran" nearly produced a **false** alarm: `AppRouterM19Tests` declares `@Suite("AppRouter M19 Tests")` and `@Test("AppRouter externalizes non-HTTP and non-AO3 URLs")`, so it prints under those display names and an identifier-only regex (`Suite [A-Za-z]+ …`) misses it. It had run correctly. The guard against vacuous gates must itself match display names, or it invents gaps that do not exist.
+
+### Residuals explicitly carried forward (reported by agents, not hidden)
+
+- `FolderSyncService.readChangedRemoteAssets` still eagerly loads the *changed* subset — named in the WP-C review as a pre-existing residual; the file was outside the backup agent's scope.
+- TOMB-6 / G3 (no iCloud KVS entitlement while shipped Settings copy promises the feature) — deliberately not delegated: "add the entitlement" vs "change the copy" is an owner product decision.
