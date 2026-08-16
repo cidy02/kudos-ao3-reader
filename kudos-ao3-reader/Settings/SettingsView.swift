@@ -81,8 +81,11 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var backupExportURL: URL?
     @State private var isPreparingBackupExport = false
     @State private var isImportingBackup = false
-    @State private var pendingBackupURL: SecurityScopedURL?
-    @State private var pendingBackupManifest: KudosBackupManifest?
+    // RC merge: the import flow below is the tombstone tree's three-mode
+    // product, which holds the decoded contents. WP-A/WP-C's lazier
+    // (SecurityScopedURL + manifest) pre-confirm pair is tracked as an open
+    // RC fix; see the tombstone merge commit message.
+    @State private var pendingBackup: KudosBackupContents?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
     @State private var persistenceStatus = PersistenceStatusStore.snapshot()
@@ -535,7 +538,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     message: Text(notice.message),
                     dismissButton: .default(Text("OK"))
                 )
-            case let .confirmImport(scopedURL, manifest):
+            case let .confirmImport(backup):
                 Alert(
                     title: Text("Restore from Backup"),
                     message: Text(
@@ -547,8 +550,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         restorePendingBackup(backup, mode: .merge)
                     },
                     secondaryButton: .cancel {
-                        pendingBackupURL = nil
-                        pendingBackupManifest = nil
+                        pendingBackup = nil
                     }
                 )
             }
@@ -1075,7 +1077,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// (see the call site — SwiftUI drops all but one per view).
     private enum SettingsAlert: Identifiable {
         case notice(BackupNotice)
-        case confirmImport(SecurityScopedURL, KudosBackupManifest)
+        case confirmImport(KudosBackupContents)
 
         var id: String {
             switch self {
@@ -1092,8 +1094,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private var activeAlertBinding: Binding<SettingsAlert?> {
         Binding(
             get: {
-                if showImportConfirmation, let scopedURL = pendingBackupURL, let manifest = pendingBackupManifest {
-                    return .confirmImport(scopedURL, manifest)
+                if showImportConfirmation, let pendingBackup {
+                    return .confirmImport(pendingBackup)
                 }
                 if let backupNotice { return .notice(backupNotice) }
                 if let epubNotice { return .notice(epubNotice) }
@@ -1103,8 +1105,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 guard newValue == nil else { return }
                 if showImportConfirmation {
                     showImportConfirmation = false
-                    pendingBackupURL = nil
-                    pendingBackupManifest = nil
+                    pendingBackup = nil
                 } else if backupNotice != nil {
                     backupNotice = nil
                 } else {
