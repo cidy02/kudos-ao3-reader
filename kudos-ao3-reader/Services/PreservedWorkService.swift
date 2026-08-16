@@ -128,6 +128,78 @@ enum PreservedWorkService {
         }
     }
 
+    // MARK: - D8 reconciliation
+
+    /// Clears a destruction clock that is not backed by a local persisted
+    /// tombstone. Pre-fix unsigned `isDeleted` merges left records in
+    /// `isPendingDeletion && scheduledAt != nil`; those must be disarmed before
+    /// `sweepExpired` can mint a signed tombstone from them.
+    ///
+    /// Identity match is the same fallback chain as tombstone retract /
+    /// `TombstoneIndex`: AO3 work ID → canonical URL → record ID for works;
+    /// record ID for collections and queues. Recency is not required — any
+    /// matching local `SyncTombstone` means a trusted delete was recorded here.
+    @discardableResult
+    static func reconcileUnsignedDeletionSchedules(in context: ModelContext) -> Int {
+        let tombstones = (try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []
+        var cleared = 0
+
+        if let works = try? context.fetch(FetchDescriptor<SavedWork>()) {
+            for work in works {
+                guard work.isPendingDeletion, work.permanentDeletionScheduledAt != nil else { continue }
+                if hasLocalTombstone(matching: work, in: tombstones) { continue }
+                work.permanentDeletionScheduledAt = nil
+                cleared += 1
+            }
+        }
+        if let collections = try? context.fetch(FetchDescriptor<WorkCollection>()) {
+            for collection in collections {
+                guard collection.isPendingDeletion, collection.permanentDeletionScheduledAt != nil
+                else { continue }
+                let matched = tombstones.contains {
+                    $0.recordType == .workCollection && $0.recordID == collection.id
+                }
+                guard !matched else { continue }
+                collection.permanentDeletionScheduledAt = nil
+                cleared += 1
+            }
+        }
+        if let queues = try? context.fetch(FetchDescriptor<ReadingQueue>()) {
+            for queue in queues {
+                guard queue.isPendingDeletion, queue.permanentDeletionScheduledAt != nil else { continue }
+                let matched = tombstones.contains {
+                    $0.recordType == .readingQueue && $0.recordID == queue.id
+                }
+                guard !matched else { continue }
+                queue.permanentDeletionScheduledAt = nil
+                cleared += 1
+            }
+        }
+
+        if cleared > 0 {
+            context.saveBestEffort(reason: "Saving unsigned-deletion schedule reconciliation failed")
+            Log.library.notice(
+                "Cleared \(cleared, privacy: .public) unsigned deletion schedule(s) with no local tombstone"
+            )
+        }
+        return cleared
+    }
+
+    /// Same identity tiers as `retractTombstone` / `TombstoneIndex.suppressesResurrection`.
+    static func hasLocalTombstone(matching work: SavedWork, in tombstones: [SyncTombstone]) -> Bool {
+        let ao3WorkID = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+        let canonical = WorkTags.canonicalAO3WorkURL(from: work.sourceURL)
+        for tombstone in tombstones where tombstone.recordType == .savedWork {
+            if tombstone.recordID == work.id { return true }
+            if let ao3WorkID, tombstone.ao3WorkID == ao3WorkID { return true }
+            if let canonical,
+               WorkTags.canonicalAO3WorkURL(from: tombstone.sourceURL) == canonical {
+                return true
+            }
+        }
+        return false
+    }
+
     // MARK: - Permanent (hard) delete
 
     /// Permanently deletes a collection right away, skipping the rest of its
@@ -163,6 +235,11 @@ enum PreservedWorkService {
     @discardableResult
     static func sweepExpired(in context: ModelContext) -> Int {
         guard PersistenceOperationGate.active == nil else { return 0 }
+        // D8: disarm unsigned-origin clocks before anything can be swept. Must
+        // run on every sweep, including the launch path that just ran
+        // `PersistenceMigrationService` (whose pre-v7 backfill would otherwise
+        // re-arm a pending+nil record and hand it to this loop).
+        reconcileUnsignedDeletionSchedules(in: context)
         let now = Date()
         var count = 0
 

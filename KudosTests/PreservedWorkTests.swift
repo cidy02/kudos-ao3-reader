@@ -223,6 +223,11 @@ struct PreservedWorkTests {
         _ = try await FolderSyncService.syncUp(in: deviceAContext, defaults: deviceADefaults)
 
         // Device B syncs down: the work is in Recently Deleted, not gone.
+        // Same-process tests share the device signing key, so B adopts A's
+        // tombstone (`TombstoneTrustStore` always trusts the process pub). D8
+        // therefore still starts the clock — this is the trusted-tombstone
+        // path, not the unsigned attack. Unsigned hide-without-schedule is
+        // covered in ArchiveDeletionScheduleTests.
         _ = try await FolderSyncService.syncDown(in: deviceBContext, defaults: deviceBDefaults)
         let deviceBWork = try #require(try deviceBContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(deviceBWork.isPendingDeletion)

@@ -57,7 +57,7 @@ struct RecentlyDeletedView: View {
                                     title: work.title,
                                     subtitle: work.author,
                                     authorIdentities: work.verifiedAuthorIdentities,
-                                    daysRemaining: daysRemaining(work.permanentDeletionScheduledAt),
+                                    daysRemaining: daysRemainingLabel(work.permanentDeletionScheduledAt),
                                     onRestore: { PreservedWorkService.restore(work, in: context) },
                                     onDeletePermanently: { pendingPermanentWork = work }
                                 )
@@ -72,7 +72,7 @@ struct RecentlyDeletedView: View {
                                     title: collection.name,
                                     subtitle: "\(collection.works.count) work"
                                         + (collection.works.count == 1 ? "" : "s"),
-                                    daysRemaining: daysRemaining(collection.permanentDeletionScheduledAt),
+                                    daysRemaining: daysRemainingLabel(collection.permanentDeletionScheduledAt),
                                     onRestore: { PreservedWorkService.restore(collection, in: context) },
                                     onDeletePermanently: { pendingPermanentCollection = collection }
                                 )
@@ -87,7 +87,7 @@ struct RecentlyDeletedView: View {
                                     title: queue.displayName,
                                     subtitle: "\(queue.memberships.count) work"
                                         + (queue.memberships.count == 1 ? "" : "s"),
-                                    daysRemaining: daysRemaining(queue.permanentDeletionScheduledAt),
+                                    daysRemaining: daysRemainingLabel(queue.permanentDeletionScheduledAt),
                                     onRestore: { PreservedWorkService.restore(queue, in: context) },
                                     onDeletePermanently: { pendingPermanentQueue = queue }
                                 )
@@ -158,12 +158,12 @@ struct RecentlyDeletedView: View {
             }
     }
 
-    private func daysRemaining(_ date: Date?) -> Int {
-        guard let date else { return 0 }
+    private func daysRemainingLabel(_ date: Date?) -> String {
+        guard let date else { return "Kept until you delete" }
         // Round up: an hour after deleting, the honest answer is still "90 days left",
         // not the truncated 89.
-        let days = Int((date.timeIntervalSinceNow / 86_400).rounded(.up))
-        return max(0, days)
+        let days = max(0, Int((date.timeIntervalSinceNow / 86_400).rounded(.up)))
+        return days == 1 ? "1 day left" : "\(days) days left"
     }
 }
 
@@ -175,7 +175,7 @@ private struct RecentlyDeletedRow: View {
     let title: String
     let subtitle: String
     var authorIdentities: [AO3AuthorIdentity] = []
-    let daysRemaining: Int
+    let daysRemaining: String
     let onRestore: () -> Void
     let onDeletePermanently: () -> Void
 
@@ -237,7 +237,7 @@ private struct RecentlyDeletedRow: View {
                     )
                 }
             }
-            Text(daysRemaining == 1 ? "1 day left" : "\(daysRemaining) days left")
+            Text(daysRemaining)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

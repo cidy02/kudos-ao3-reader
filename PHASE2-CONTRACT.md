@@ -62,6 +62,14 @@ Old archives without these fields decode as empty → unsigned → drop. Room ne
 
 ## Tests (production entry: `restore` / `importPackage` / folder-sync ingest)
 
+## D8 — unsigned `isDeleted` must not mint a signed tombstone
+
+An adversary with unsigned write access to the sync folder can set `isDeleted: true` on an existing work. That hide is allowed (Recently Deleted). The **90-day destruction clock is not**. `KudosBackupService.archivedDeletionState` starts or keeps `permanentDeletionScheduledAt` only when `hasTrustedTombstone` is true, computed from the already-built `TombstoneIndex` (`suppressesResurrection` / collection and queue `.suppressStaleData`).
+
+This is sufficient to close the laundering path: `WorkLifecycle.hardDelete` is reachable only from `PreservedWorkService.sweepExpired` (which requires a non-nil past schedule) or an explicit user "Delete Permanently" tap. There is no third production caller. Gating the clock therefore prevents `hardDelete` from signing a tombstone that nobody authorized.
+
+Already-affected local rows (pending + scheduled, no matching local `SyncTombstone`) are disarmed by `PreservedWorkService.reconcileUnsignedDeletionSchedules` at the start of every `sweepExpired`. Ten or more unsigned hides in one restore batch are held for review; fewer apply and notify. First-sync-from-new-trust hold exemption is deferred (pairing/trust-store unit owns that signal).
+
 Do **not** weaken Phase 1 assertions (unsigned still drop).
 
 1. Unsigned incoming still not adopted (existing tests stay GREEN).

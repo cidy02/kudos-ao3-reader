@@ -1363,6 +1363,12 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     var removedWorks: Int = 0
     var removedCollections: Int = 0
     var removedQueues: Int = 0
+    /// Unsigned `isDeleted` hides actually applied this pass (below the hold floor).
+    var unsignedHidesApplied: Int = 0
+    /// Unsigned `isDeleted` hides held for review (batch ≥ hold floor).
+    var unsignedHidesHeld: Int = 0
+    var unsignedHideTitles: [String] = []
+    var heldUnsignedHideWorkIDs: [UUID] = []
 
     /// Everything the merge actually changed, one item per line, for the
     /// post-import confirmation. Separate from `conflictMessage`, which reports
@@ -1398,6 +1404,11 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
         if removedQueues > 0 {
             parts.append(line(removedQueues, "queue removed", "queues removed"))
         }
+        if unsignedHidesApplied > 0 {
+            parts.append(
+                line(unsignedHidesApplied, "work moved to Recently Deleted", "works moved to Recently Deleted")
+            )
+        }
         return parts.joined(separator: "\n")
     }
 
@@ -1432,6 +1443,17 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
         if ambiguousCollectionConflicts > 0 {
             parts.append("Preserved \(ambiguousCollectionConflicts) collection conflict"
                 + "\(ambiguousCollectionConflicts == 1 ? "" : "s") because the state was ambiguous.")
+        }
+        if unsignedHidesHeld > 0 {
+            parts.append(
+                "\(unsignedHidesHeld) work\(unsignedHidesHeld == 1 ? "" : "s") from your sync folder "
+                    + "want to be hidden — review before applying."
+            )
+        } else if unsignedHidesApplied > 0 {
+            parts.append(
+                "\(unsignedHidesApplied) work\(unsignedHidesApplied == 1 ? "" : "s") "
+                    + "moved to Recently Deleted by a sync folder or backup."
+            )
         }
         return parts.joined(separator: " ")
     }
@@ -1562,7 +1584,9 @@ enum KudosBackupService {
         defer { context.autosaveEnabled = callerAutosave }
 
         do {
-            return try restoreIsolatedContents(contents, into: context, defaults: defaults, mode: mode)
+            let summary = try restoreIsolatedContents(contents, into: context, defaults: defaults, mode: mode)
+            UnsignedDeletionReview.record(summary, source: Self.unsignedHideSourceLabel(mode: mode))
+            return summary
         } catch {
             context.rollback()
             throw error
@@ -1625,6 +1649,28 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
 
+        // D8 anomaly hold: count unsigned isDeleted hides that this pass would
+        // apply, before mutating anything. ≥ floor holds the whole unsigned-hide
+        // batch (other merge work still proceeds). Below the floor we apply and
+        // surface a digest. First-sync-from-new-trust exemption is deferred —
+        // TombstoneTrustStore has no cheap "just granted" signal, and pairing
+        // UI is out of scope for this unit.
+        var unsignedHideTitles: [String] = []
+        var unsignedHideWorkIDs: [UUID] = []
+        for archived in contents.manifest.works {
+            let existing = workIndex.existingWork(for: archived)
+            guard unsignedWorkHideWouldApply(
+                archived,
+                existing: existing,
+                tombstones: tombstones,
+                mode: mode
+            ) else { continue }
+            unsignedHideTitles.append(archived.title)
+            unsignedHideWorkIDs.append(existing?.id ?? archived.id)
+        }
+        let holdUnsignedHides = unsignedHideTitles.count >= unsignedHideHoldFloor
+        let applyUnsignedHides = !holdUnsignedHides
+
         // Asset writes are deliberately monotonic, not atomic with the database
         // save below. A crash can still leave the filesystem ahead of SwiftData
         // for a non-preserved work. That trade-off is intentional: re-running the
@@ -1677,7 +1723,13 @@ enum KudosBackupService {
                 context.insert(work)
                 isNewRecord = true
             }
-            apply(archived, to: work, isNewRecord: isNewRecord)
+            apply(
+                archived,
+                to: work,
+                isNewRecord: isNewRecord,
+                tombstones: tombstones,
+                applyUnsignedHides: applyUnsignedHides
+            )
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
 
@@ -1823,7 +1875,11 @@ enum KudosBackupService {
                 let deletion = Self.archivedDeletionState(
                     incomingIsDeleted: archived.isDeleted ?? false,
                     localIsPendingDeletion: collection.isPendingDeletion,
-                    localScheduledAt: collection.permanentDeletionScheduledAt
+                    localScheduledAt: collection.permanentDeletionScheduledAt,
+                    hasTrustedTombstone: tombstones.hasTrustedCollectionDeletion(
+                        id: archived.id,
+                        incomingModifiedAt: incomingModifiedAt
+                    )
                 )
                 collection.isPendingDeletion = deletion.isPendingDeletion
                 collection.permanentDeletionScheduledAt = deletion.scheduledAt
@@ -1972,7 +2028,11 @@ enum KudosBackupService {
                 let deletion = Self.archivedDeletionState(
                     incomingIsDeleted: archived.isDeleted ?? false,
                     localIsPendingDeletion: queue.isPendingDeletion,
-                    localScheduledAt: queue.permanentDeletionScheduledAt
+                    localScheduledAt: queue.permanentDeletionScheduledAt,
+                    hasTrustedTombstone: tombstones.hasTrustedQueueDeletion(
+                        id: archived.id,
+                        incomingModifiedAt: incomingModifiedAt
+                    )
                 )
                 queue.isPendingDeletion = deletion.isPendingDeletion
                 queue.permanentDeletionScheduledAt = deletion.scheduledAt
@@ -2359,7 +2419,11 @@ enum KudosBackupService {
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
             removedCollections: removedCollections,
-            removedQueues: removedQueues
+            removedQueues: removedQueues,
+            unsignedHidesApplied: holdUnsignedHides ? 0 : unsignedHideTitles.count,
+            unsignedHidesHeld: holdUnsignedHides ? unsignedHideTitles.count : 0,
+            unsignedHideTitles: unsignedHideTitles,
+            heldUnsignedHideWorkIDs: holdUnsignedHides ? unsignedHideWorkIDs : []
         )
     }
 
@@ -2699,6 +2763,20 @@ enum KudosBackupService {
             collectionMembershipTombstonesByID[id] = tombstone
         }
 
+        /// A trusted/adopted collection tombstone that is at least as new as the
+        /// incoming snapshot — the collection analog of `suppressesResurrection`.
+        /// `.suppressStaleData` is the only resolution that means "this deletion
+        /// is trusted and current"; an older tombstone (`.reviveNewerData`) does
+        /// not authorize starting a new destruction clock.
+        func hasTrustedCollectionDeletion(id: UUID, incomingModifiedAt: Date?) -> Bool {
+            collectionResolution(id: id, incomingModifiedAt: incomingModifiedAt) == .suppressStaleData
+        }
+
+        /// Queue analog of `hasTrustedCollectionDeletion`.
+        func hasTrustedQueueDeletion(id: UUID, incomingModifiedAt: Date?) -> Bool {
+            queueResolution(id: id, incomingModifiedAt: incomingModifiedAt) == .suppressStaleData
+        }
+
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
             let tombstone: SyncTombstone? = if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
@@ -2854,26 +2932,97 @@ enum KudosBackupService {
     /// `DATA_AND_PERSISTENCE_INVARIANTS.md` promises. No user interaction beyond having
     /// trusted the folder.
     ///
-    /// The countdown is therefore always this device's own: `now + recoveryWindow` when a
-    /// record enters Recently Deleted, `nil` when it leaves. Soft-delete still syncs in both
-    /// directions — only the *schedule* is refused.
+    /// **D8:** an unsigned `isDeleted` may still *hide* the record (Recently Deleted), but it
+    /// must not start or keep a destruction clock. `sweepExpired` only hard-deletes when
+    /// `permanentDeletionScheduledAt` is non-nil and in the past, and `WorkLifecycle.hardDelete`
+    /// then mints a *signed* tombstone under this device's key. Without this guard, an
+    /// adversary with unsigned write access to the sync folder launders `isDeleted: true`
+    /// into a Phase-2-trusted suppressor. Only a trusted/adopted tombstone may arm the clock.
     ///
     /// Pure and internal so the policy is unit-testable without a `ModelContext`.
     nonisolated static func archivedDeletionState(
         incomingIsDeleted: Bool,
         localIsPendingDeletion: Bool,
         localScheduledAt: Date?,
+        hasTrustedTombstone: Bool,
         now: Date = Date()
     ) -> (isPendingDeletion: Bool, scheduledAt: Date?) {
         guard incomingIsDeleted else { return (false, nil) }
-        // Already counting down on this device: keep that countdown. Restarting it every time
-        // the flag round-trips through sync would push the sweep date out forever and the
-        // record would never actually be swept.
+        guard hasTrustedTombstone else {
+            // Hidden, but the clock does not start (or keep running) on an
+            // unsigned say-so. Without this, sweepExpired can be driven by
+            // data nobody signed — see D8.
+            return (true, nil)
+        }
         if localIsPendingDeletion, let localScheduledAt { return (true, localScheduledAt) }
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
-    private static func apply(_ archived: KudosBackupWork, to work: SavedWork, isNewRecord: Bool) {
+    /// Floor for the D8 anomaly hold: this many unsigned `isDeleted` hides in one
+    /// restore/sync batch are held for review instead of applying silently.
+    static let unsignedHideHoldFloor = 10
+
+    private static func unsignedHideSourceLabel(mode: BackupImportMode) -> String {
+        switch mode {
+        case .reconcile:
+            "your Library Sync Folder"
+        case .merge, .replaceLibrary:
+            "a backup"
+        }
+    }
+
+    /// Whether this archived work would apply an unsigned hide under `mode`.
+    /// Mirrors the restore loop's skip/`incomingWins` rules so the hold count
+    /// matches what `apply` would actually do.
+    private static func unsignedWorkHideWouldApply(
+        _ archived: KudosBackupWork,
+        existing: SavedWork?,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) -> Bool {
+        guard archived.isDeleted ?? false else { return false }
+        guard !tombstones.suppressesResurrection(of: archived) else { return false }
+        if let existing {
+            if mode == .merge, !existing.isPendingDeletion {
+                return false
+            }
+            if mode == .replaceLibrary { return true }
+            return SyncMerge.shouldApplyIncoming(
+                localModifiedAt: existing.lastModifiedAt,
+                incomingModifiedAt: archived.lastModifiedAt ?? archived.dateAdded
+            )
+        }
+        if mode != .replaceLibrary, tombstones.suppressesResurrection(of: archived) {
+            return false
+        }
+        return true
+    }
+
+    /// Applies a user-confirmed hold: hide without starting the clock and
+    /// without minting a tombstone. Confirming a sync-folder hide is not the
+    /// same as a local Delete tap.
+    static func applyHeldUnsignedHides(
+        workIDs: [UUID],
+        in context: ModelContext
+    ) {
+        guard !workIDs.isEmpty else { return }
+        let wanted = Set(workIDs)
+        let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        for work in works where wanted.contains(work.id) {
+            work.isPendingDeletion = true
+            work.deletedAt = work.deletedAt ?? Date()
+            work.permanentDeletionScheduledAt = nil
+        }
+        context.saveBestEffort(reason: "Saving reviewed unsigned hides failed")
+    }
+
+    private static func apply(
+        _ archived: KudosBackupWork,
+        to work: SavedWork,
+        isNewRecord: Bool,
+        tombstones: TombstoneIndex,
+        applyUnsignedHides: Bool = true
+    ) {
         let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
         // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
         // always at least as new as any real archived snapshot — so incomingWins alone would
@@ -2925,13 +3074,21 @@ enum KudosBackupService {
         // is this device's own and is never taken from the archive: see
         // `archivedDeletionState`.
         if incomingWins {
-            let deletion = archivedDeletionState(
-                incomingIsDeleted: archived.isDeleted ?? false,
-                localIsPendingDeletion: work.isPendingDeletion,
-                localScheduledAt: work.permanentDeletionScheduledAt
-            )
-            work.isPendingDeletion = deletion.isPendingDeletion
-            work.permanentDeletionScheduledAt = deletion.scheduledAt
+            let incomingIsDeleted = archived.isDeleted ?? false
+            let hasTrustedTombstone = tombstones.suppressesResurrection(of: archived)
+            if incomingIsDeleted, !hasTrustedTombstone, !applyUnsignedHides {
+                // Batch hold: do not apply this unsigned hide. Other incoming
+                // fields still merge; deletion state stays as it was locally.
+            } else {
+                let deletion = archivedDeletionState(
+                    incomingIsDeleted: incomingIsDeleted,
+                    localIsPendingDeletion: work.isPendingDeletion,
+                    localScheduledAt: work.permanentDeletionScheduledAt,
+                    hasTrustedTombstone: hasTrustedTombstone
+                )
+                work.isPendingDeletion = deletion.isPendingDeletion
+                work.permanentDeletionScheduledAt = deletion.scheduledAt
+            }
         }
 
         work.wordCount = mergedPositive(

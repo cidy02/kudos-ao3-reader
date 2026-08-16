@@ -21,6 +21,7 @@ handoff channel between sessions and between agents.
 
 | ID | Task | Owner | Branch | Status | Next step / notes |
 |----|------|-------|--------|--------|-------------------|
+| T-198 | **D8 iOS: gate the Recently Deleted clock on a trusted/adopted tombstone.** Unsigned `isDeleted` may hide, but must not start (or keep) `permanentDeletionScheduledAt`. Reconciliation before `sweepExpired`; anomaly hold at 10 unsigned hides per batch. | Grok 4.6 | `d8-fix/ios` | 🔄 IN PROGRESS | Isolated worktree. Do not push. Android port is a separate worktree. |
 <!-- RC merge: WP-A/WP-C and WP-B independently used T-195/T-196 for different work. Both row sets kept verbatim below; IDs need renumbering by the owner (they are referenced from other docs). -->
 | T-196 | **Security Fixes WP-A: discard SwiftData restore mutations on failure (M15a/M20) and document monotonic asset-write crash trade-off (M15b).** Run every backup/folder-sync restore in an autosave-disabled context sharing the caller's container; save only after the full merge succeeds; add a late-failure persistence revert-check. | Codex | `security-fixes/wp-a` | ✅ DONE | `9070dd2` M15a/M20 discard-on-throw bar is in git log. Claude recorded Mutation A/B in discussions/security-audit-cross-review.md §20.4. |
 | T-195 | **Security Fixes WP-C**: Implement lazy loading of EPUBs from Zip and Directory backups to prevent memory exhaustion (M4) and accept M17 residual risk for `.mappedIfSafe` truncation SIGBUS. | Antigravity | `security-fixes/wp-c` | ✅ DONE | `Scripts/verify.sh` all green. |
