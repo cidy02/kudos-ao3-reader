@@ -73,7 +73,9 @@ enum ReaderWebIsolation {
     /// Installs a one-time hook so Readium's `WKWebViewConfiguration` (which
     /// registers the `readium` scheme handler and otherwise uses the default
     /// store) is forced onto `isolatedDataStore` *before* the web view is
-    /// created. Browse / login web views never register that scheme.
+    /// created, and so every isolated-store web view's `navigationDelegate`
+    /// is wrapped the moment it is assigned. Browse / login web views never
+    /// register that scheme and never use this store.
     static func installReadiumStoreIsolation() {
         ReadiumStoreHook.install()
     }
@@ -117,10 +119,24 @@ private enum ReadiumStoreHook {
         let cls: AnyClass = WKWebViewConfiguration.self
         let original = #selector(WKWebViewConfiguration.setURLSchemeHandler(_:forURLScheme:))
         let swizzled = #selector(WKWebViewConfiguration.kudos_setURLSchemeHandler(_:forURLScheme:))
-        guard let originalMethod = class_getInstanceMethod(cls, original),
-              let swizzledMethod = class_getInstanceMethod(cls, swizzled)
-        else { return }
-        method_exchangeImplementations(originalMethod, swizzledMethod)
+        if let originalMethod = class_getInstanceMethod(cls, original),
+           let swizzledMethod = class_getInstanceMethod(cls, swizzled) {
+            method_exchangeImplementations(originalMethod, swizzledMethod)
+        }
+
+        // WPB-3: wrap at `navigationDelegate` assignment. Readium's
+        // `EPUBSpreadView.init` sets the delegate and then `loadSpread()`
+        // before any view-tree sweep can see the web view.
+        let originalSetDelegate = #selector(setter: WKWebView.navigationDelegate)
+        let swizzledSetDelegate = #selector(WKWebView.kudos_setNavigationDelegate(_:))
+        if let originalSetter = class_getInstanceMethod(
+            WKWebView.self, originalSetDelegate
+        ),
+           let swizzledSetter = class_getInstanceMethod(
+            WKWebView.self, swizzledSetDelegate
+           ) {
+            method_exchangeImplementations(originalSetter, swizzledSetter)
+        }
     }
 }
 
@@ -133,6 +149,26 @@ extension WKWebViewConfiguration {
         if urlScheme == ReaderWebNavigationPolicy.readiumScheme {
             ReaderWebIsolation.applyIsolatedStore(to: self)
         }
+    }
+}
+
+extension WKWebView {
+    /// Every Readium spread sets its own delegate in `EPUBSpreadView.init`,
+    /// then loads the chapter. Wrapping here closes the window between a
+    /// preloaded spread's first script and the next `locationDidChange`.
+    @objc func kudos_setNavigationDelegate(_ delegate: (any WKNavigationDelegate)?) {
+        guard configuration.websiteDataStore === ReaderWebIsolation.isolatedDataStore,
+              !(delegate is ReaderWebNavigationGuard)
+        else {
+            kudos_setNavigationDelegate(delegate)
+            return
+        }
+        kudos_setNavigationDelegate(delegate)
+        NavigationGuardStore.forceInstall(
+            on: self,
+            origin: .readiumScheme,
+            onOpenExternalURL: ReaderWebIsolation.onReadiumOpenExternalURL
+        )
     }
 }
 
@@ -199,11 +235,34 @@ private enum NavigationGuardStore {
         origin: ReaderPublicationOrigin,
         onOpenExternalURL: ((URL) -> Void)?
     ) {
-        if let existing = guards.object(forKey: webView) {
-            existing.onOpenExternalURL = onOpenExternalURL
+        // Key off the live delegate, not the map. A stale map entry used
+        // to skip re-wrap after Readium reassigned `navigationDelegate`.
+        if webView.navigationDelegate is ReaderWebNavigationGuard {
+            if let existing = guards.object(forKey: webView) {
+                existing.onOpenExternalURL = onOpenExternalURL
+            }
             return
         }
-        if webView.navigationDelegate is ReaderWebNavigationGuard { return }
+        forceInstall(
+            on: webView,
+            origin: origin,
+            onOpenExternalURL: onOpenExternalURL
+        )
+    }
+
+    /// Wraps the live delegate. Does not trust a stale map entry — Readium
+    /// reassigns `navigationDelegate` when it builds a new `EPUBSpreadView`.
+    static func forceInstall(
+        on webView: WKWebView,
+        origin: ReaderPublicationOrigin,
+        onOpenExternalURL: ((URL) -> Void)?
+    ) {
+        if webView.navigationDelegate is ReaderWebNavigationGuard {
+            if let existing = guards.object(forKey: webView) {
+                existing.onOpenExternalURL = onOpenExternalURL
+            }
+            return
+        }
         let guardDelegate = ReaderWebNavigationGuard(
             original: webView.navigationDelegate,
             origin: origin,
