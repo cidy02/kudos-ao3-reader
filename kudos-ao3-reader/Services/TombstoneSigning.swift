@@ -15,7 +15,7 @@ enum TombstoneSigning {
 
     private static let lock = NSLock()
     private static var cachedDeviceKey: Curve25519.Signing.PrivateKey?
-    private static let keychainService = (Bundle.main.bundleIdentifier ?? "Kudos") + ".tombstone-signing"
+    static let keychainService = (Bundle.main.bundleIdentifier ?? "Kudos") + ".tombstone-signing"
     private static let keychainAccount = "ed25519-signing-key"
 
     private static let deletedAtFormatter: DateFormatter = {
@@ -260,10 +260,37 @@ enum TombstoneTrustStore {
     static let localKeysKey = "trustedTombstonePublicKeys"
     static let iCloudKeysKey = "tombstoneTrustedPublicKeys"
 
-    static var iCloudStore: NSUbiquitousKeyValueStore? = NSUbiquitousKeyValueStore.default
+    /// `nil` by default, not `NSUbiquitousKeyValueStore.default`: constructing that
+    /// store without the `com.apple.developer.ubiquity-kvstore-identifier`
+    /// entitlement (which this build does not have) doesn't just no-op — Security
+    /// logs "BUG IN CLIENT OF KVS: Trying to initialize NSUbiquitousKeyValueStore
+    /// without a store identifier", and every `SecItemAdd`/`SecItemCopyMatching`
+    /// call in the same process afterward starts failing (reproduced consistently:
+    /// the trust-store Keychain item round-trips fine until anything in-process
+    /// entitlement (which this build does not have, and per the design decision
+    /// in D9(b) must not get one until its own activation checklist is met).
+    /// Nothing currently sets this back to `.default`; that happens once the
+    /// entitlement is actually added.
+    static var iCloudStore: NSUbiquitousKeyValueStore?
 
     private static let lock = NSLock()
     private static var didRegisterObserver = false
+    private static let keychainAccount = "trusted-tombstone-pubs"
+
+    /// Tests set this to bypass the real Keychain, mirroring
+    /// `TombstoneSigning.keyOverride`. Necessary, not optional: unsigned test
+    /// builds (`CODE_SIGNING_ALLOWED=NO`) get `errSecMissingEntitlement` (-34018)
+    /// from `SecItemAdd`/`SecItemCopyMatching` for this app's keychain-access
+    /// group, the same status `TombstoneSigning.persistDeviceKey` already
+    /// anticipates for the private key. A production, properly signed build has
+    /// the group Xcode provisions automatically and does not need this — but a
+    /// production fallback (writing trust to a file if Keychain fails, the way
+    /// the private key does) would silently reopen the exact vulnerability
+    /// D9(a) exists to close, since a file is exactly as writable by an
+    /// unsandboxed same-user process as the `UserDefaults` plist this replaced.
+    /// So the override is test-only, in-memory, and `nil` means "use the real
+    /// Keychain" — never a disk fallback.
+    static var keychainOverride: Set<String>?
 
     static func isTrusted(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
@@ -273,8 +300,7 @@ enum TombstoneTrustStore {
 
     static func trustedPublicKeys(defaults: UserDefaults = .standard) -> Set<String> {
         refreshFromiCloudIfNeeded(defaults: defaults)
-        let stored = defaults.stringArray(forKey: localKeysKey) ?? []
-        return Set(stored.compactMap(normalizedPublicKey))
+        return loadKeys(defaults: defaults)
     }
 
     @discardableResult
@@ -282,10 +308,83 @@ enum TombstoneTrustStore {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
         var keys = trustedPublicKeys(defaults: defaults)
         if keys.insert(normalized).inserted {
-            defaults.set(keys.sorted(), forKey: localKeysKey)
+            saveKeys(keys, defaults: defaults)
             publishToiCloud(keys, defaults: defaults)
         }
         return true
+    }
+
+    @discardableResult
+    static func remove(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
+        guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
+        var keys = trustedPublicKeys(defaults: defaults)
+        if keys.remove(normalized) != nil {
+            saveKeys(keys, defaults: defaults)
+            removeFromiCloud(normalized, defaults: defaults)
+            return true
+        }
+        return false
+    }
+
+    private static func loadKeychainKeys() -> Set<String>? {
+        if let keychainOverride { return keychainOverride }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: TombstoneSigning.keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        guard let array = try? JSONDecoder().decode([String].self, from: data) else { return nil }
+        return Set(array)
+    }
+
+    private static func saveKeychainKeys(_ keys: Set<String>) {
+        if keychainOverride != nil {
+            keychainOverride = keys
+            return
+        }
+        guard let data = try? JSONEncoder().encode(Array(keys).sorted()) else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: TombstoneSigning.keychainService,
+            kSecAttrAccount as String: keychainAccount
+        ]
+        var attributes = query
+        attributes[kSecValueData as String] = data
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(attributes as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        }
+    }
+
+    private static func loadKeys(defaults: UserDefaults) -> Set<String> {
+        if defaults !== UserDefaults.standard {
+            let stored = defaults.stringArray(forKey: localKeysKey) ?? []
+            return Set(stored.compactMap(normalizedPublicKey))
+        }
+
+        if let legacy = defaults.stringArray(forKey: localKeysKey) {
+            var keys = loadKeychainKeys() ?? []
+            keys.formUnion(legacy.compactMap(normalizedPublicKey))
+            saveKeychainKeys(keys)
+            defaults.removeObject(forKey: localKeysKey)
+            return keys
+        }
+
+        return loadKeychainKeys() ?? []
+    }
+
+    private static func saveKeys(_ keys: Set<String>, defaults: UserDefaults) {
+        if defaults !== UserDefaults.standard {
+            defaults.set(Array(keys).sorted(), forKey: localKeysKey)
+            return
+        }
+        saveKeychainKeys(keys)
     }
 
     static func normalizedPublicKey(_ hex: String) -> String? {
@@ -307,7 +406,7 @@ enum TombstoneTrustStore {
         guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
         let remote = store.array(forKey: iCloudKeysKey) as? [String] ?? []
         guard !remote.isEmpty else { return }
-        var keys = Set((defaults.stringArray(forKey: localKeysKey) ?? []).compactMap(normalizedPublicKey))
+        var keys = loadKeys(defaults: defaults)
         var changed = false
         for hex in remote {
             if let normalized = normalizedPublicKey(hex), keys.insert(normalized).inserted {
@@ -315,7 +414,7 @@ enum TombstoneTrustStore {
             }
         }
         if changed {
-            defaults.set(keys.sorted(), forKey: localKeysKey)
+            saveKeys(keys, defaults: defaults)
         }
     }
 
@@ -326,6 +425,14 @@ enum TombstoneTrustStore {
         if let own = TombstoneSigning.normalizedPublicKey(TombstoneSigning.publicKeyHex()) {
             published.insert(own)
         }
+        store.set(published.sorted(), forKey: iCloudKeysKey)
+        store.synchronize()
+    }
+
+    private static func removeFromiCloud(_ normalized: String, defaults: UserDefaults) {
+        guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
+        var published = Set((store.array(forKey: iCloudKeysKey) as? [String] ?? []).compactMap(normalizedPublicKey))
+        published.remove(normalized)
         store.set(published.sorted(), forKey: iCloudKeysKey)
         store.synchronize()
     }
