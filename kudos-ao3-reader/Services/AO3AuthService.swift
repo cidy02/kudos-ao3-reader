@@ -86,21 +86,36 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
     /// account settings. `AO3Client` already routes both of its authenticated calls through
     /// this same relay; this was the one call site that did not.
     private let redirectCookieRelay = AO3RedirectCookieRelay()
-    /// Production hits AO3 home; tests inject a loopback URL so the relay
-    /// wire-up (M9) can be asserted without talking to the live site.
-    /// RC note (review finding F5): this seam is un-gated production API, unlike
-    /// WP-A's `#if DEBUG` precedent for `Storage.fontsDirectoryOverride`. Tracked
-    /// for gating; kept ungated here so the merge compiles unchanged.
+    /// Production hits AO3 home. The loopback override exists only in DEBUG
+    /// so a shipping binary cannot be pointed at an arbitrary URL that then
+    /// receives the session Cookie header (same rationale as
+    /// `Storage.fontsDirectoryOverride`).
     private let validationURL: URL
 
-    init(validationURL: URL = URL(string: "https://archiveofourown.org")!) {
+    private static let productionValidationURL = URL(string: "https://archiveofourown.org")!
+
+    private init(unsafeValidationURL: URL) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
         session = URLSession(configuration: configuration)
-        self.validationURL = validationURL
+        self.validationURL = unsafeValidationURL
     }
+
+    init() {
+        self.init(unsafeValidationURL: Self.productionValidationURL)
+    }
+
+    #if DEBUG
+    /// Test-only. Lets `LiveAO3SessionValidatorRelayTests` point the one
+    /// credential-bearing request at a loopback origin. Compiled out of
+    /// Release: a primitive that redirects where the session cookie goes
+    /// should not exist in a shipping binary.
+    init(validationURL: URL) {
+        self.init(unsafeValidationURL: validationURL)
+    }
+    #endif
 
     func validate(_ storedSession: AO3Session) async throws -> AO3SessionValidation {
         let url = validationURL
@@ -186,7 +201,10 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         return nil
     }
 
-    private static func responseCookies(from response: HTTPURLResponse, url: URL) -> [HTTPCookie] {
+    /// Package-visible so `CookieAllowListTests` can pin the M14 filters
+    /// `validate()` actually calls. A revert that drops the domain or name
+    /// check must turn those tests red.
+    static func responseCookies(from response: HTTPURLResponse, url: URL) -> [HTTPCookie] {
         var headers: [String: String] = [:]
         for (key, value) in response.allHeaderFields {
             headers[String(describing: key)] = String(describing: value)
@@ -198,7 +216,9 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
             }
     }
 
-    private static func merging(
+    /// Package-visible so `CookieAllowListTests` can pin WP-A's broader
+    /// stored-cookie prune (name allow-list on `validCookies`).
+    static func merging(
         _ refreshed: [HTTPCookie],
         into session: AO3Session,
         username: String

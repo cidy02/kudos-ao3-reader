@@ -169,18 +169,20 @@ struct AppRouterTests {
         let router = AppRouter()
         let bait = URL(string: "https://archiveofourown.org.evil.com/tags/Fluff/works")!
         router.openAO3Link(bait)
+        // The subject of this test is the native-tag gate, not the sheet.
         #expect(router.pendingTagWorks == nil)
-        #expect(router.pendingURL == bait)
-        #expect(router.isPresentingWebBrowser)
         #expect(router.selection == .home)
+        // A non-AO3 host must not reach the cookie-bearing in-app sheet at all.
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
     }
 
     @Test func httpAO3TagLinkIsNotTreatedAsTrusted() {
         let router = AppRouter()
-        let url = URL(string: "http://archiveofourown.org/tags/Fluff/works")!
-        router.openAO3Link(url)
+        router.openAO3Link(URL(string: "http://archiveofourown.org/tags/Fluff/works")!)
         #expect(router.pendingTagWorks == nil)
-        #expect(router.pendingURL == url)
+        #expect(router.pendingURL == nil)
+        #expect(router.isPresentingWebBrowser == false)
     }
 
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {
