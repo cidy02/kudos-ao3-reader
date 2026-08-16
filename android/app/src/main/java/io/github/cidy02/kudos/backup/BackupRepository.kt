@@ -83,7 +83,7 @@ class BackupRepository(
         withContext(Dispatchers.IO) {
             val pack = BackupImporter.importV2Zip(bytes)
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
-            val current = captureLibrarySnapshot()
+            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
             merge.summary
@@ -95,8 +95,9 @@ class BackupRepository(
         mode: BackupImportMode = BackupImportMode.RECONCILE
     ): BackupRestoreSummary = persistenceGate.withLock {
         withContext(Dispatchers.IO) {
+            BackupFontValidator.validate(pack.fontFilesByFileName)
             TombstoneLocalMigration.runIfNeeded(database, settingsRepository)
-            val current = captureLibrarySnapshot()
+            val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys)
             val merge = mergePackage(current, pack, mode)
             applyMergeResult(merge)
             merge.summary
@@ -129,7 +130,9 @@ class BackupRepository(
         return "Kudos-before-replace-$stamp.kudosbackup"
     }
 
-    suspend fun captureLibrarySnapshot(): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
+    suspend fun captureLibrarySnapshot(
+        incomingFontFileNames: Set<String> = emptySet()
+    ): BackupLibrarySnapshot = withContext(Dispatchers.IO) {
         // Include soft-deleted works so export carries Recently Deleted state.
         val works = database.workDao().getAllIncludingDeleted().map { it.toDomain() }
         val userTagsByWorkId = works.associate { work ->
@@ -153,9 +156,9 @@ class BackupRepository(
                 runCatching { Files.isRegularFile(workFileStore.workEpubPath(id)) }.getOrDefault(false)
             }
             .toSet()
-        val fontFiles = fonts.mapNotNull { font ->
-            fontFileStore.readFont(font.fileName)?.let { font.fileName to it }
-        }.toMap()
+        // Include orphan-but-valid local filenames in the collision set. Restore
+        // must never overwrite bytes merely because their DB row is missing.
+        val fontFiles = fontFileStore.readAllFontFiles(incomingFontFileNames)
 
         BackupLibrarySnapshot(
             works = works,
@@ -241,7 +244,21 @@ class BackupRepository(
         // Snapshot tombstones are the pre-import local set plus any incoming
         // rows that verified and were already trusted. Unsigned / untrusted
         // incoming never reach here. File import does not write the trust store.
-        snapshot.tombstones.forEach { database.syncTombstoneDao().upsert(it.toEntity()) }
+        // WP-F (M2b): additionally refuse to persist an unrecognised record
+        // type rather than letting it through to the DAO.
+        val knownTombstoneTypes = setOf(
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION
+        )
+        snapshot.tombstones.forEach { tombstone ->
+            if (tombstone.recordTypeRaw in knownTombstoneTypes) {
+                database.syncTombstoneDao().upsert(tombstone.toEntity())
+            }
+        }
 
         // Queues before memberships (FK).
         snapshot.readingQueues.forEach { database.readingQueueDao().upsertQueue(it.toEntity()) }
