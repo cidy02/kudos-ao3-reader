@@ -127,6 +127,35 @@ elif ! grep -q "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;" \
     "The asset exists but is not wired as the global accent, so the default tint is still the system blue."
 fi
 
+
+# --- Signing-identity leak guard (repo is PUBLIC) -----------------------------
+# The paid Apple Developer team ID must never be committed. This guard is an
+# ALLOW-list on purpose: it never names the private value, so the guard itself
+# cannot leak it. Anything that is not empty and not the historically-public
+# placeholder fails.
+#
+# How the last leak happened: `codesign -dv` and `security find-identity` output
+# was pasted verbatim into a Markdown report, which embedded
+# "Apple Development: <email> (<TEAMID>)". Docs are checked too, not just the
+# project file.
+PUBLIC_PLACEHOLDER_TEAM="NQH85H7343"   # already public in git history; not the paid team
+
+BAD_TEAM_LINES="$(grep -nE 'DEVELOPMENT_TEAM = [^";]' "$ROOT/AO3_App_OpenSource.xcodeproj/project.pbxproj" \
+  | grep -v "DEVELOPMENT_TEAM = ${PUBLIC_PLACEHOLDER_TEAM};" || true)"
+if [ -n "$BAD_TEAM_LINES" ]; then
+  fail "project.pbxproj pins a DEVELOPMENT_TEAM that is not the public placeholder" \
+    "Xcode writes the signing team here when you add a capability. Set it locally via an untracked xcconfig instead. Offending: ${BAD_TEAM_LINES}"
+fi
+
+# Any pasted codesign / security output that carries a 10-char team ID in parens.
+LEAKED_IDENTITY="$(grep -rInE 'Apple (Development|Distribution|Developer ID [A-Za-z]+): .*\([A-Z0-9]{10}\)' \
+  "$ROOT" --include='*.md' --include='*.sh' --include='*.swift' --include='*.kt' --include='*.yml' \
+  --exclude-dir=.git --exclude-dir=DerivedData --exclude-dir=build 2>/dev/null || true)"
+if [ -n "$LEAKED_IDENTITY" ]; then
+  fail "a signing identity with a team ID is embedded in a tracked file" \
+    "Redact the team ID before committing (this repo is public). Offending: ${LEAKED_IDENTITY}"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "check-invariants: FAILED"
   exit 1
