@@ -280,6 +280,29 @@ class BackupTrustPhase2Test {
     }
 
     @Test
+    fun replaceLibraryLoadsWorkEvenWhenFileCarriesTrustedTombstoneForIt() = runTest {
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        TombstoneTrustStore(settingsRepository).trust(pub)
+
+        val summary = backupRepository.importPackage(
+            packageWithSignedTombstone(peer.privateKey, pub, workId = WORK_K, ao3WorkId = 4242),
+            BackupImportMode.REPLACE_LIBRARY
+        )
+
+        assertEquals(
+            "Replace must ignore suppressors so a work present in the snapshot loads",
+            0,
+            summary.worksSuppressed
+        )
+        assertEquals(1, summary.worksCreated)
+        assertNotNull(
+            "Replace snapshot work must be present even when the file also carries a trusted tombstone for it",
+            database.workDao().getById(WORK_K)
+        )
+    }
+
+    @Test
     fun importPackageDoesNotOverwriteLocalTombstoneRowByUnsignedId() = runTest {
         val peer = Ed25519Sign.KeyPair.newKeyPair()
         val pub = peer.publicKey.toLowerHex()
