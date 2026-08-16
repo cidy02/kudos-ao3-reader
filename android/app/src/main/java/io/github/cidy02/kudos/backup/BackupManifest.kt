@@ -188,7 +188,9 @@ data class BackupTombstone(
     val sourceURL: String = "",
     val ao3WorkID: Int? = null,
     val deletedOnDeviceID: String = "",
-    val deletionReason: String = ""
+    val deletionReason: String = "",
+    val signerPublicKey: String = "",
+    val signature: String = ""
 )
 
 @Serializable

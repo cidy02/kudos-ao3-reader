@@ -124,6 +124,9 @@ enum PersistenceMigrationService {
         in context: ModelContext,
         defaults: UserDefaults = .standard
     ) async -> PersistenceMigrationState {
+        // Independent of the SwiftData prep flag: first Phase 2 launch re-signs
+        // local unsigned tombstones even when metadata migration already completed.
+        TombstoneSigning.resignLocalUnsignedIfNeeded(in: context, defaults: defaults)
         let current = PersistenceStatusStore.snapshot(defaults: defaults).migrationState
         guard current != .completed else { return current }
         return await run(in: context, defaults: defaults)
@@ -139,6 +142,7 @@ enum PersistenceMigrationService {
         }
         defer { PersistenceOperationGate.end(.migration) }
         do {
+            TombstoneSigning.resignLocalUnsignedIfNeeded(in: context, defaults: defaults)
             PersistenceStatusStore.setState(.inProgress, defaults: defaults)
             try await migrateMetadata(in: context, stage: "metadata migration")
             PersistenceStatusStore.setState(.metadataMigrated, defaults: defaults)
@@ -310,52 +314,72 @@ enum PersistenceMigrationService {
 @MainActor
 enum SyncTombstones {
     static func recordDeletion(of work: SavedWork, in context: ModelContext) {
-        context.insert(SyncTombstone(
-            recordID: work.id,
-            recordType: .savedWork,
-            sourceURL: work.sourceURL,
-            ao3WorkID: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL),
-            deletedOnDeviceID: PersistenceDevice.currentID(),
-            deletionReason: "workDeleted"
-        ))
+        insertSigned(
+            SyncTombstone(
+                recordID: work.id,
+                recordType: .savedWork,
+                sourceURL: WorkTags.canonicalAO3WorkURL(from: work.sourceURL) ?? work.sourceURL,
+                ao3WorkID: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL),
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "workDeleted"
+            ),
+            in: context
+        )
     }
 
     static func recordDeletion(of collection: WorkCollection, in context: ModelContext) {
-        context.insert(SyncTombstone(
-            recordID: collection.id,
-            recordType: .workCollection,
-            deletedOnDeviceID: PersistenceDevice.currentID(),
-            deletionReason: "collectionDeleted"
-        ))
+        insertSigned(
+            SyncTombstone(
+                recordID: collection.id,
+                recordType: .workCollection,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "collectionDeleted"
+            ),
+            in: context
+        )
     }
 
     static func recordDeletion(of queue: ReadingQueue, in context: ModelContext) {
-        context.insert(SyncTombstone(
-            recordID: queue.id,
-            recordType: .readingQueue,
-            deletedOnDeviceID: PersistenceDevice.currentID(),
-            deletionReason: "queueDeleted"
-        ))
+        insertSigned(
+            SyncTombstone(
+                recordID: queue.id,
+                recordType: .readingQueue,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "queueDeleted"
+            ),
+            in: context
+        )
     }
 
     static func recordDeletion(of membership: ReadingQueueMembership, in context: ModelContext) {
-        context.insert(SyncTombstone(
-            recordID: membership.id,
-            recordType: .readingQueueMembership,
-            deletedOnDeviceID: PersistenceDevice.currentID(),
-            deletionReason: "queueMembershipRemoved"
-        ))
+        insertSigned(
+            SyncTombstone(
+                recordID: membership.id,
+                recordType: .readingQueueMembership,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "queueMembershipRemoved"
+            ),
+            in: context
+        )
     }
 
     static func recordDeletion(
         of annotation: ReadingAnnotation, in context: ModelContext, reason: String = "workDeleted"
     ) {
-        context.insert(SyncTombstone(
-            recordID: annotation.id,
-            recordType: .readingAnnotation,
-            deletedOnDeviceID: PersistenceDevice.currentID(),
-            deletionReason: reason
-        ))
+        insertSigned(
+            SyncTombstone(
+                recordID: annotation.id,
+                recordType: .readingAnnotation,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: reason
+            ),
+            in: context
+        )
     }
 
     /// Records that `work` was explicitly removed from `collection`, so a stale sync
@@ -367,12 +391,21 @@ enum SyncTombstones {
         collection: WorkCollection,
         in context: ModelContext
     ) {
-        context.insert(SyncTombstone(
-            recordID: SyncTombstone.collectionMembershipID(collectionID: collection.id, workID: work.id),
-            recordType: .workCollectionMembership,
-            deletedOnDeviceID: PersistenceDevice.currentID(),
-            deletionReason: "collectionMembershipRemoved"
-        ))
+        insertSigned(
+            SyncTombstone(
+                recordID: SyncTombstone.collectionMembershipID(collectionID: collection.id, workID: work.id),
+                recordType: .workCollectionMembership,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "collectionMembershipRemoved"
+            ),
+            in: context
+        )
+    }
+
+    private static func insertSigned(_ tombstone: SyncTombstone, in context: ModelContext) {
+        context.insert(tombstone)
+        TombstoneSigning.sign(tombstone)
     }
 }
 

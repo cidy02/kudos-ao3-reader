@@ -18,6 +18,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * v7 → v8: EPUB preservation pass-through columns on works (nullable, no backfill).
  * Android stores and re-emits them only — it does not run a preservation feature.
+ *
+ * v8 → v9: Phase 2 Ed25519 tombstone fields. Old rows backfill as empty strings
+ * (unsigned) and are re-signed locally by [io.github.cidy02.kudos.backup.TombstoneLocalMigration].
  */
 object KudosDatabaseMigrations {
     val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -217,6 +220,17 @@ object KudosDatabaseMigrations {
             db.execSQL("ALTER TABLE works ADD COLUMN epubPreservationStatusRaw TEXT")
             db.execSQL("ALTER TABLE works ADD COLUMN preservedAt INTEGER")
             db.execSQL("ALTER TABLE works ADD COLUMN lastPreservationAttemptAt INTEGER")
+        }
+    }
+
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE sync_tombstones ADD COLUMN signerPublicKey TEXT NOT NULL DEFAULT ''"
+            )
+            db.execSQL(
+                "ALTER TABLE sync_tombstones ADD COLUMN signature TEXT NOT NULL DEFAULT ''"
+            )
         }
     }
 }

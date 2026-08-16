@@ -63,6 +63,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var ao3WorkID: Int?
     var deletedOnDeviceID: String = ""
     var deletionReason: String = ""
+    /// 64-char lowercase hex Ed25519 public key. Empty means unsigned.
+    var signerPublicKey: String = ""
+    /// 128-char lowercase hex Ed25519 signature. Empty means unsigned.
+    var signature: String = ""
 
     init(
         recordID: UUID,
@@ -71,7 +75,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         ao3WorkID: Int? = nil,
         createdAt: Date = Date(),
         deletedOnDeviceID: String = "",
-        deletionReason: String = ""
+        deletionReason: String = "",
+        signerPublicKey: String = "",
+        signature: String = ""
     ) {
         id = UUID()
         self.recordID = recordID
@@ -82,6 +88,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         lastModifiedAt = createdAt
         self.deletedOnDeviceID = deletedOnDeviceID
         self.deletionReason = deletionReason
+        self.signerPublicKey = signerPublicKey
+        self.signature = signature
     }
 
     var recordType: SyncTombstoneRecordType {

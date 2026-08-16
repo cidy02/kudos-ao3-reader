@@ -12,10 +12,22 @@ object WorkTags {
             .toLongOrNull()
     }
 
-    /** Apple `canonicalAO3WorkURL` — stable identity for merge/dedup. */
+    /**
+     * Apple `WorkTags.canonicalAO3WorkURL` — stable `/works/<id>` identity.
+     * Accepts work pages, chapter URLs, and `/downloads/<id>` variants.
+     */
     fun canonicalAO3WorkURL(url: String): String? {
-        val id = ao3WorkIdFromUrl(url) ?: return null
+        val id = ao3WorkIdFromUrl(url) ?: ao3WorkIdFromDownloadsUrl(url) ?: return null
         return AO3URLResolver.canonicalWorkUrl(id)
+    }
+
+    private fun ao3WorkIdFromDownloadsUrl(url: String): Long? {
+        val marker = "/downloads/"
+        val index = url.indexOf(marker, ignoreCase = true)
+        if (index < 0) return null
+        return url.substring(index + marker.length)
+            .takeWhile(Char::isDigit)
+            .toLongOrNull()
     }
 
     fun flattenedWorkTags(

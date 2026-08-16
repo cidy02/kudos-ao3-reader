@@ -183,6 +183,33 @@ class SettingsRepository(
         dataStore.edit { it[Keys.SyncHasPendingChanges] = hasPending }
     }
 
+    /**
+     * Device-local Phase 2 flag. Not part of [KudosSettings] / backup restore —
+     * a file import must never rewrite tombstone trust or this migration bit.
+     */
+    suspend fun isTombstoneMigrationComplete(): Boolean {
+        return dataStore.data.map { it[Keys.TombstoneMigrationComplete] ?: false }.first()
+    }
+
+    suspend fun setTombstoneMigrationComplete(complete: Boolean) {
+        dataStore.edit { it[Keys.TombstoneMigrationComplete] = complete }
+    }
+
+    val trustedTombstonePublicKeys: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[Keys.TrustedTombstonePublicKeys] ?: emptySet()
+    }
+
+    suspend fun trustedTombstonePublicKeysSnapshot(): Set<String> {
+        return trustedTombstonePublicKeys.first()
+    }
+
+    suspend fun trustTombstonePublicKey(hex: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.TrustedTombstonePublicKeys] ?: emptySet()
+            prefs[Keys.TrustedTombstonePublicKeys] = current + hex
+        }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -295,6 +322,8 @@ class SettingsRepository(
         val SyncFolderUri = stringPreferencesKey("syncFolderUri")
         val SyncLastSyncAt = androidx.datastore.preferences.core.longPreferencesKey("syncLastSyncAt")
         val SyncHasPendingChanges = booleanPreferencesKey("syncHasPendingChanges")
+        val TombstoneMigrationComplete = booleanPreferencesKey("tombstoneMigrationComplete")
+        val TrustedTombstonePublicKeys = stringSetPreferencesKey("trustedTombstonePublicKeys")
     }
 
     companion object {

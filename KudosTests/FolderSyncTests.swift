@@ -589,6 +589,35 @@ struct FolderSyncTests {
         #expect(Set(works.compactMap(\.ao3WorkID)) == [3001, 3002])
     }
 
+    @Test func foldConflictContentsDoesNotAdoptIncomingUnsignedTombstones() throws {
+        let defaults = try testDefaults()
+        let sourceContainer = try container()
+        let sourceContext = sourceContainer.mainContext
+        let work = try insertWork(into: sourceContext, title: "From remote", ao3WorkID: 4242)
+        let hostile = SyncTombstone(recordID: work.id, recordType: .savedWork, ao3WorkID: 4242)
+        sourceContext.insert(hostile)
+        try sourceContext.save()
+        let remote = try KudosBackupService.makeContents(
+            works: [work],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            tombstones: [hostile],
+            defaults: defaults
+        )
+        let targetContainer = try container()
+        let targetContext = targetContainer.mainContext
+        _ = try FolderSyncService.foldConflictContents([remote], into: targetContext, defaults: defaults)
+        #expect(
+            try targetContext.fetch(FetchDescriptor<SyncTombstone>()).isEmpty,
+            "folder-sync fold must not insert the remote unsigned tombstone"
+        )
+        #expect(
+            try targetContext.fetch(FetchDescriptor<SavedWork>()).contains { $0.ao3WorkID == 4242 },
+            "folder-sync fold must still insert a work present in the remote snapshot"
+        )
+    }
+
     /// `foldFileProviderConflicts` (the private, `performSyncDown`-only path) folds its
     /// own `FolderSyncResult` into the caller's via this overload rather than discarding
     /// it — regression coverage for the undercount §6.3 of the ponytail audit found:

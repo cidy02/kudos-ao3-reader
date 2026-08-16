@@ -23,5 +23,7 @@ data class SyncTombstoneEntity(
     val sourceURL: String = "",
     val ao3WorkID: Int? = null,
     val deletedOnDeviceID: String = "",
-    val deletionReason: String = ""
+    val deletionReason: String = "",
+    val signerPublicKey: String = "",
+    val signature: String = ""
 )

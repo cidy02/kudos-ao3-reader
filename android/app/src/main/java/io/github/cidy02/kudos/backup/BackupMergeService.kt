@@ -13,39 +13,64 @@ import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
+import io.github.cidy02.kudos.works.WorkIdentityIndex
+import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkTags
+import java.time.Duration
 import java.time.Instant
 
 /**
- * Merge-only restore semantics aligned with Apple `KudosBackup` + `SyncMerge`:
- * - LWW on work metadata via [lastModifiedAt]
- * - LWW on reading progress via [progressModifiedAt] / [lastReadDate]
- * - Tombstones suppress resurrection of deleted records
+ * Restore semantics aligned with Apple `KudosBackup` + `SyncMerge`:
+ * - [BackupImportMode.RECONCILE] (default / folder sync): LWW on work metadata
+ *   via [lastModifiedAt] and progress via [progressModifiedAt] / [lastReadDate]
+ * - [BackupImportMode.MERGE] (file Merge): add-only; keep existing overlap
+ * - Local Room tombstones suppress resurrection. Incoming unsigned tombstones
+ *   still drop (Phase 1). Incoming signed tombstones are adopted only when the
+ *   signature verifies and the signer public key is already trusted.
  * - Queues, memberships, annotations stored and restored by id (LWW)
  */
 object BackupMergeService {
     fun merge(
         current: BackupLibrarySnapshot,
-        backup: KudosBackupPackage
+        backup: KudosBackupPackage,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        now: Instant = Instant.now(),
+        trustedPublicKeys: Set<String> = emptySet()
     ): BackupMergeResult {
         val manifest = BackupValidator.validateManifest(backup.manifest)
+        val exportedAt = parseOptionalInstant(manifest.exportedAt)
         val epubFilesById = backup.epubFilesByWorkId.normalizedWorkFileMap()
         val currentEpubIds = current.epubWorkIds.map(BackupPaths::normalizeIdForComparison).toSet()
 
         var summary = BackupRestoreSummary()
         val epubFilesToWrite = linkedMapOf<String, ByteArray>()
 
-        // Merge archive tombstones into local set (id-keyed; newest lastModified wins).
+        // Phase 1: unsigned incoming still drop. Phase 2: verify + already-trusted
+        // signer → adopt into the local store and this batch's TombstoneIndex.
+        // A file never writes the trust store. Replace still does not mint
+        // tombstones for omitted works, and still ignores pre-existing local
+        // suppressors so the snapshot can load.
         val tombstonesById = current.tombstones
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
+        val adoptedIncoming = ArrayList<SyncTombstone>()
         manifest.tombstones.forEach { archived ->
-            val id = BackupPaths.canonicalUuid(archived.id, "tombstone.id")
-            val restored = archived.toSyncTombstone()
-            val existing = tombstonesById[id]
-            if (existing == null || restored.lastModifiedAt >= existing.lastModifiedAt) {
-                tombstonesById[id] = restored
+            val incoming = archived.toSyncTombstone()
+            if (!TombstoneSigning.verify(incoming)) return@forEach
+            if (!TombstoneSigning.isTrustedSigner(incoming.signerPublicKey, trustedPublicKeys)) {
+                return@forEach
             }
+            tombstonesById[BackupPaths.normalizeIdForComparison(incoming.id)] = incoming
+            adoptedIncoming += incoming
         }
-        val tombstoneIndex = TombstoneIndex(tombstonesById.values.toList())
+        val tombstoneIndex = TombstoneIndex(
+            tombstones = if (mode == BackupImportMode.REPLACE_LIBRARY) {
+                adoptedIncoming
+            } else {
+                tombstonesById.values.toList()
+            },
+            exportedAt = exportedAt,
+            now = now
+        )
 
         val worksById = current.works
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
@@ -53,28 +78,63 @@ object BackupMergeService {
             .mapKeys { BackupPaths.normalizeIdForComparison(it.key) }
             .mapValues { it.value.normalizedNames() }
             .toMutableMap()
+        val identity = WorkIdentityIndex.snapshot(current.works)
+        // Archived work UUID → local row UUID after ao3 / canonical-URL rematch.
+        val workIdRemap = linkedMapOf<String, String>()
 
         manifest.works.forEach { archived ->
-            val id = BackupPaths.canonicalUuid(archived.id, "work.id")
-            val existing = worksById[id]
+            val archivedId = BackupPaths.canonicalUuid(archived.id, "work.id")
+            val existing = identity.existingWork(
+                ao3WorkId = archived.ao3WorkID?.toLong(),
+                sourceUrl = archived.sourceURL,
+                recordId = archivedId
+            )
+            val targetId = existing?.let { BackupPaths.normalizeIdForComparison(it.id) } ?: archivedId
 
             if (existing == null && tombstoneIndex.suppressesWorkResurrection(archived)) {
                 summary = summary.copy(worksSuppressed = summary.worksSuppressed + 1)
                 return@forEach
             }
+            workIdRemap[archivedId] = targetId
 
-            val incomingEpub = epubFilesById[id]
-            val existingHasEpub = id in currentEpubIds || existing?.hasEpub == true
+            val incomingEpub = epubFilesById[archivedId] ?: epubFilesById[targetId]
+            val existingHasEpub = targetId in currentEpubIds || existing?.hasEpub == true
             val restoredHasEpub = incomingEpub != null || existingHasEpub
 
-            val restored = archived.toSavedWork(hasEpub = restoredHasEpub)
-            worksById[id] = if (existing == null) {
+            val incomingModifiedAt = resolveIncomingLastModifiedAt(
+                lastModifiedAt = archived.lastModifiedAt,
+                dateAdded = archived.dateAdded,
+                exportedAt = exportedAt,
+                now = now
+            )
+            val restoredBase = archived.toSavedWork(hasEpub = restoredHasEpub)
+            val restored = restoredBase.copy(
+                id = existing?.id ?: restoredBase.id,
+                lastModifiedAt = incomingModifiedAt ?: restoredBase.dateAdded
+            )
+            worksById[targetId] = if (existing == null) {
                 summary = summary.copy(worksCreated = summary.worksCreated + 1)
                 restored
+            } else if (mode == BackupImportMode.MERGE && existing.isDeleted) {
+                // Recently Deleted is not in the active library. File Merge
+                // adds it back without planting a tombstone, matching iOS.
+                summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
+                restored.copy(
+                    id = existing.id,
+                    isDeleted = false,
+                    deletedAt = null,
+                    permanentDeletionScheduledAt = null
+                )
+            } else if (mode == BackupImportMode.MERGE) {
+                existing
+            } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
+                summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
+                applyReplaceWork(existing, restored)
             } else {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
-                mergeWork(existing, restored, archived)
+                mergeWork(existing, restored, archived, incomingModifiedAt)
             }
+            identity.index(worksById.getValue(targetId))
 
             // Only replace a local EPUB when the archive's copy is genuinely the
             // newer one. Writing it whenever the archive carried a file — which is
@@ -87,21 +147,55 @@ object BackupMergeService {
             // clocks are equal and there is nothing to justify overwriting bytes
             // this device holds. The font merge already treats differing content as
             // something to preserve rather than clobber.
-            val incomingModifiedAt = parseOptionalInstant(archived.lastModifiedAt)
+            // Replace treats the snapshot as this device's library, so a file that
+            // actually carries the EPUB still wins even when clocks are equal.
             val incomingEpubWins = existing == null ||
+                mode == BackupImportMode.REPLACE_LIBRARY ||
+                (mode == BackupImportMode.MERGE && existing.isDeleted) ||
                 (
+                    mode != BackupImportMode.MERGE &&
                     incomingModifiedAt != null &&
                         existing.effectiveLastModifiedAt.isBefore(incomingModifiedAt)
                     )
             if (incomingEpub != null && (!existingHasEpub || incomingEpubWins)) {
-                epubFilesToWrite[id] = incomingEpub
+                epubFilesToWrite[targetId] = incomingEpub
             }
 
-            val mergedTags = (userTagsByWorkId[id].orEmpty() + archived.userTags).normalizedNames()
-            if (mergedTags.isNotEmpty()) userTagsByWorkId[id] = mergedTags
+            val mergedTags = if (mode == BackupImportMode.REPLACE_LIBRARY) {
+                archived.userTags.normalizedNames()
+            } else if (mode == BackupImportMode.MERGE && existing != null && !existing.isDeleted) {
+                userTagsByWorkId[targetId].orEmpty()
+            } else {
+                (userTagsByWorkId[targetId].orEmpty() + archived.userTags).normalizedNames()
+            }
+            if (mergedTags.isNotEmpty()) {
+                userTagsByWorkId[targetId] = mergedTags
+            } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
+                userTagsByWorkId.remove(targetId)
+            }
         }
 
-        val bookmarks = mergeBookmarks(current.bookmarks, manifest.bookmarks).also {
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            val keptWorkIds = workIdRemap.values.toSet()
+            worksById.keys.toList().forEach { id ->
+                if (id in keptWorkIds) return@forEach
+                val existing = worksById[id] ?: return@forEach
+                if (existing.isDeleted) return@forEach
+                // Recently Deleted, no SyncTombstone. Keep the EPUB and tags.
+                worksById[id] = existing.copy(
+                    isDeleted = true,
+                    deletedAt = now,
+                    permanentDeletionScheduledAt = now.plus(WorkRepository.RECOVERY_WINDOW)
+                )
+                summary = summary.copy(worksRemoved = summary.worksRemoved + 1)
+            }
+        }
+
+        val bookmarks = mergeBookmarks(
+            current.bookmarks,
+            manifest.bookmarks,
+            mode = mode
+        ).also {
             summary = summary.copy(
                 bookmarksCreated = it.created,
                 bookmarksUpdated = it.updated
@@ -119,18 +213,35 @@ object BackupMergeService {
             fontsUpdated = fontMerge.updated
         )
 
-        val collections = mergeCollections(
-            current.collections,
-            manifest.collections,
-            tombstoneIndex
-        ).also {
-            summary = summary.copy(
-                collectionsCreated = it.created,
-                collectionsUpdated = it.updated
-            )
-        }.items
+        val collections = if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            replaceCollections(current.collections, manifest.collections, workIdRemap).also {
+                summary = summary.copy(
+                    collectionsCreated = it.created,
+                    collectionsUpdated = it.updated
+                )
+            }.items
+        } else {
+            mergeCollections(
+                current.collections,
+                manifest.collections,
+                tombstoneIndex,
+                mode,
+                exportedAt,
+                now,
+                workIdRemap
+            ).also {
+                summary = summary.copy(
+                    collectionsCreated = it.created,
+                    collectionsUpdated = it.updated
+                )
+            }.items
+        }
 
-        val savedSearches = mergeSavedSearches(current.savedSearches, manifest.savedSearches).also {
+        val savedSearches = mergeSavedSearches(
+            current.savedSearches,
+            manifest.savedSearches,
+            mode = mode
+        ).also {
             summary = summary.copy(
                 savedSearchesCreated = it.created,
                 savedSearchesUpdated = it.updated
@@ -143,7 +254,11 @@ object BackupMergeService {
             incomingQueues = manifest.readingQueues,
             incomingMemberships = manifest.readingQueueMemberships,
             worksById = worksById,
-            tombstoneIndex = tombstoneIndex
+            tombstoneIndex = tombstoneIndex,
+            mode = mode,
+            exportedAt = exportedAt,
+            now = now,
+            workIdRemap = workIdRemap
         )
         summary = summary.copy(
             queuesCreated = queueMerge.queuesCreated,
@@ -157,7 +272,11 @@ object BackupMergeService {
             current = current.annotations,
             incoming = manifest.annotations,
             worksById = worksById,
-            tombstoneIndex = tombstoneIndex
+            tombstoneIndex = tombstoneIndex,
+            mode = mode,
+            exportedAt = exportedAt,
+            now = now,
+            workIdRemap = workIdRemap
         )
         summary = summary.copy(
             annotationsCreated = annotationMerge.created,
@@ -165,10 +284,14 @@ object BackupMergeService {
             annotationsSuppressed = annotationMerge.suppressed
         )
 
-        val settingsPayload = manifest.settings.retargetRenamedFont(fontMerge.renamedFonts)
-        val settings = BackupValidator
-            .normalizeSettings(settingsPayload, fontMerge.items.map { it.fileName }.toSet())
-            .toCoreBackupSettings()
+        val settings = if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            current.settings
+        } else {
+            val settingsPayload = manifest.settings.retargetRenamedFont(fontMerge.renamedFonts)
+            BackupValidator
+                .normalizeSettings(settingsPayload, fontMerge.items.map { it.fileName }.toSet())
+                .toCoreBackupSettings()
+        }
 
         return BackupMergeResult(
             snapshot = BackupLibrarySnapshot(
@@ -188,7 +311,42 @@ object BackupMergeService {
             ),
             summary = summary,
             epubFilesToWriteByWorkId = epubFilesToWrite,
-            fontFilesToWriteByFileName = fontMerge.filesToWrite
+            fontFilesToWriteByFileName = fontMerge.filesToWrite,
+            mode = mode
+        )
+    }
+
+    fun preview(
+        current: BackupLibrarySnapshot,
+        backup: KudosBackupPackage
+    ): BackupImportPreview {
+        val localActive = current.works.filterNot { it.isDeleted }
+        val index = WorkIdentityIndex.snapshot(localActive)
+        val fileIds = backup.manifest.works
+            .map { BackupPaths.canonicalUuid(it.id, "work.id") }
+            .toSet()
+        val matchedLocalIds = mutableSetOf<String>()
+        var willAdd = 0
+        backup.manifest.works.forEach { archived ->
+            val match = index.existingWork(
+                ao3WorkId = archived.ao3WorkID?.toLong(),
+                sourceUrl = archived.sourceURL,
+                recordId = BackupPaths.canonicalUuid(archived.id, "work.id")
+            )
+            if (match != null) {
+                matchedLocalIds += BackupPaths.normalizeIdForComparison(match.id)
+            } else {
+                willAdd += 1
+            }
+        }
+        return BackupImportPreview(
+            localWorkCount = localActive.size,
+            fileWorkCount = fileIds.size,
+            willAdd = willAdd,
+            willRemove = localActive.count {
+                BackupPaths.normalizeIdForComparison(it.id) !in matchedLocalIds
+            },
+            inBoth = matchedLocalIds.size
         )
     }
 
@@ -199,15 +357,17 @@ object BackupMergeService {
     internal fun mergeWork(
         existing: SavedWork,
         restored: SavedWork,
-        archived: BackupWork
+        archived: BackupWork,
+        incomingModifiedAtOverride: Instant? = null
     ): SavedWork {
-        val incomingModifiedAt = parseOptionalInstant(archived.lastModifiedAt)
-            ?: restored.dateAdded
+        // Null means the archive clock was missing or rejected as future skew.
+        val incomingModifiedAt = incomingModifiedAtOverride
         val localModifiedAt = existing.effectiveLastModifiedAt
         val incomingWins = SyncMerge.shouldApplyIncoming(localModifiedAt, incomingModifiedAt)
 
         val base = if (incomingWins) {
             restored.copy(
+                id = existing.id,
                 // Never lose a local EPUB just because the archive lacked one.
                 hasEpub = existing.hasEpub || restored.hasEpub,
                 // No hasEpub coercion: an EPUB on disk is what `isQueuedForLater`
@@ -332,7 +492,8 @@ object BackupMergeService {
 
     private fun mergeBookmarks(
         current: List<Bookmark>,
-        incoming: List<BackupBookmark>
+        incoming: List<BackupBookmark>,
+        mode: BackupImportMode = BackupImportMode.RECONCILE
     ): MergeItems<Bookmark> {
         val byUrl = current.associateByTo(linkedMapOf()) { it.urlString }
         var created = 0
@@ -348,6 +509,12 @@ object BackupMergeService {
                     title = archived.title,
                     dateAdded = BackupValidator.parseInstant(archived.dateAdded, "bookmark.dateAdded")
                 )
+            }
+        }
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            val incomingUrls = incoming.mapTo(mutableSetOf()) { it.urlString }
+            byUrl.keys.toList().forEach { url ->
+                if (url !in incomingUrls) byUrl.remove(url)
             }
         }
         return MergeItems(byUrl.values.sortedByDescending { it.dateAdded }, created, updated)
@@ -412,10 +579,54 @@ object BackupMergeService {
      * new-to-this-device deleted collection is suppressed by its own tombstone
      * rather than silently recreated.
      */
+    private fun applyReplaceWork(existing: SavedWork, restored: SavedWork): SavedWork {
+        return restored.copy(
+            id = existing.id,
+            hasEpub = existing.hasEpub || restored.hasEpub,
+            dateAdded = minInstant(existing.dateAdded, restored.dateAdded)
+        )
+    }
+
+    private fun remapWorkId(raw: String, workIdRemap: Map<String, String>): String {
+        val id = BackupPaths.normalizeIdForComparison(raw)
+        return workIdRemap[id] ?: id
+    }
+
+    private fun replaceCollections(
+        current: List<WorkCollection>,
+        incoming: List<BackupCollection>,
+        workIdRemap: Map<String, String> = emptyMap()
+    ): MergeItems<WorkCollection> {
+        val collectionsById = current.associateByTo(linkedMapOf()) {
+            BackupPaths.normalizeIdForComparison(it.id)
+        }
+        var created = 0
+        var updated = 0
+        val incomingIds = mutableSetOf<String>()
+        incoming.forEach { archived ->
+            val id = BackupPaths.canonicalUuid(archived.id, "collection.id")
+            incomingIds += id
+            val existing = collectionsById[id]
+            val restored = archived.toWorkCollection()
+            collectionsById[id] = restored.copy(
+                workIds = restored.workIds.map { remapWorkId(it, workIdRemap) }.distinct()
+            )
+            if (existing == null) created += 1 else updated += 1
+        }
+        collectionsById.keys.toList().forEach { id ->
+            if (id !in incomingIds) collectionsById.remove(id)
+        }
+        return MergeItems(collectionsById.values.sortedBy { it.name.lowercase() }, created, updated)
+    }
+
     private fun mergeCollections(
         current: List<WorkCollection>,
         incoming: List<BackupCollection>,
-        tombstoneIndex: TombstoneIndex
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now(),
+        workIdRemap: Map<String, String> = emptyMap()
     ): MergeItems<WorkCollection> {
         val collectionsById = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -426,8 +637,11 @@ object BackupMergeService {
 
         incoming.forEach { archived ->
             val id = BackupPaths.canonicalUuid(archived.id, "collection.id")
-            val incomingModified = parseOptionalInstant(archived.lastModifiedAt)
-                ?: parseOptionalInstant(archived.dateAdded)
+            val incomingModified = sanitizeArchivedLastModifiedAt(
+                archived.lastModifiedAt,
+                exportedAt,
+                now
+            ) ?: parseOptionalInstant(archived.dateAdded)
             val existing = collectionsById[id]
 
             if (existing == null) {
@@ -443,6 +657,26 @@ object BackupMergeService {
                 collectionsById[id] = restored
                 names += restoredName
                 created += 1
+            } else if (mode == BackupImportMode.MERGE) {
+                // Add-only: keep the local name/fields. Still attach incoming
+                // work IDs so a newly added work is not orphaned.
+                val incomingWorkIds = archived.workIDs
+                    .map { remapWorkId(it, workIdRemap) }
+                    .distinct()
+                    .filterNot { workId ->
+                        tombstoneIndex.collectionMembershipResolution(
+                            collectionMembershipRecordId(id, workId),
+                            incomingModified
+                        ) == TombstoneResolution.SUPPRESS_STALE
+                    }
+                val existingIds = existing.workIds
+                    .map { BackupPaths.normalizeIdForComparison(it) }
+                    .toSet()
+                val added = incomingWorkIds.filter { it !in existingIds }
+                if (added.isNotEmpty()) {
+                    collectionsById[id] = existing.copy(workIds = existing.workIds + added)
+                    updated += 1
+                }
             } else {
                 val localModified = existing.lastModifiedAt ?: existing.dateAdded
                 if (!SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
@@ -450,7 +684,7 @@ object BackupMergeService {
                 }
                 val archivedIsDeleted = archived.isDeleted == true
                 val mergedWorkIds = (existing.workIds + archived.workIDs)
-                    .map { BackupPaths.normalizeIdForComparison(it) }
+                    .map { remapWorkId(it, workIdRemap) }
                     .distinct()
                     // A work the user explicitly removed from this collection locally
                     // must not silently come back just because an older backup still
@@ -490,7 +724,8 @@ object BackupMergeService {
 
     private fun mergeSavedSearches(
         current: List<SavedSearch>,
-        incoming: List<BackupSavedSearch>
+        incoming: List<BackupSavedSearch>,
+        mode: BackupImportMode = BackupImportMode.RECONCILE
     ): MergeItems<SavedSearch> {
         val searchesById = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -518,6 +753,15 @@ object BackupMergeService {
             }
         }
 
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            val incomingIds = incoming.mapTo(mutableSetOf()) {
+                BackupPaths.canonicalUuid(it.id, "savedSearch.id")
+            }
+            searchesById.keys.toList().forEach { id ->
+                if (id !in incomingIds) searchesById.remove(id)
+            }
+        }
+
         return MergeItems(searchesById.values.sortedBy { it.name.lowercase() }, created, updated)
     }
 
@@ -527,7 +771,11 @@ object BackupMergeService {
         incomingQueues: List<BackupReadingQueue>,
         incomingMemberships: List<BackupReadingQueueMembership>,
         worksById: Map<String, SavedWork>,
-        tombstoneIndex: TombstoneIndex
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now(),
+        workIdRemap: Map<String, String> = emptyMap()
     ): QueueMerge {
         val queuesById = currentQueues.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -584,6 +832,8 @@ object BackupMergeService {
                 }
                 queuesById[id] = archived.toReadingQueue()
                 queuesCreated += 1
+            } else if (mode == BackupImportMode.MERGE) {
+                // Keep local queue name / fields. New memberships still insert below.
             } else {
                 val localModified = SyncMerge.effectiveQueueModifiedAt(
                     queueUpdatedAt = existing.dateUpdated,
@@ -629,12 +879,18 @@ object BackupMergeService {
             // Follow the system-queue remap above, or these memberships would point
             // at the *other* platform's queue UUID and be dropped on the next line.
             val queueId = queueIdRemap[incomingQueueId] ?: incomingQueueId
-            val workId = BackupPaths.canonicalUuid(archived.workID, "membership.workID")
+            val workId = remapWorkId(
+                BackupPaths.canonicalUuid(archived.workID, "membership.workID"),
+                workIdRemap
+            )
             if (queueId !in queuesById) return@forEach
             if (workId !in worksById) return@forEach
 
-            val incomingModified = parseOptionalInstant(archived.lastModifiedAt)
-                ?: parseOptionalInstant(archived.queuedAt.takeIf { it.isNotBlank() })
+            val incomingModified = sanitizeArchivedLastModifiedAt(
+                archived.lastModifiedAt,
+                exportedAt,
+                now
+            ) ?: parseOptionalInstant(archived.queuedAt.takeIf { it.isNotBlank() })
 
             when (tombstoneIndex.membershipResolution(id, incomingModified)) {
                 TombstoneResolution.SUPPRESS_STALE -> {
@@ -646,16 +902,34 @@ object BackupMergeService {
 
             val existing = membershipsById[id]
             val restored = archived.toReadingQueueMembership()
-                .let { if (queueId == incomingQueueId) it else it.copy(queueID = queueId) }
+                .copy(queueID = queueId, workID = workId)
             if (existing == null) {
                 membershipsById[id] = restored
                 membershipsCreated += 1
-            } else {
-                val localModified = existing.lastModifiedAt ?: existing.queuedAt
-                if (SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
-                    membershipsById[id] = restored
-                    membershipsUpdated += 1
-                }
+            } else if (mode != BackupImportMode.MERGE &&
+                SyncMerge.shouldApplyIncoming(existing.lastModifiedAt ?: existing.queuedAt, incomingModified)
+            ) {
+                membershipsById[id] = restored
+                membershipsUpdated += 1
+            }
+        }
+
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            val incomingQueueIds = incomingQueues.mapTo(mutableSetOf()) { archived ->
+                val incomingId = BackupPaths.canonicalUuid(archived.id, "queue.id")
+                queueIdRemap[incomingId] ?: incomingId
+            }
+            queuesById.keys.toList().forEach { id ->
+                if (id in incomingQueueIds) return@forEach
+                val existing = queuesById[id] ?: return@forEach
+                if (existing.kindRaw == ReadingQueueKind.SAVED_FOR_LATER) return@forEach
+                queuesById.remove(id)
+            }
+            val incomingMembershipIds = incomingMemberships.mapTo(mutableSetOf()) {
+                BackupPaths.canonicalUuid(it.id, "membership.id")
+            }
+            membershipsById.keys.toList().forEach { id ->
+                if (id !in incomingMembershipIds) membershipsById.remove(id)
             }
         }
 
@@ -674,7 +948,11 @@ object BackupMergeService {
         current: List<ReadingAnnotation>,
         incoming: List<BackupAnnotation>,
         worksById: Map<String, SavedWork>,
-        tombstoneIndex: TombstoneIndex
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode = BackupImportMode.RECONCILE,
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now(),
+        workIdRemap: Map<String, String> = emptyMap()
     ): AnnotationMerge {
         val byId = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -685,7 +963,10 @@ object BackupMergeService {
 
         incoming.forEach { archived ->
             val id = BackupPaths.canonicalUuid(archived.id, "annotation.id")
-            val workId = BackupPaths.canonicalUuid(archived.workID, "annotation.workID")
+            val workId = remapWorkId(
+                BackupPaths.canonicalUuid(archived.workID, "annotation.workID"),
+                workIdRemap
+            )
             // Never orphan annotations without a work in this restore.
             if (workId !in worksById) return@forEach
             // A pending-deletion annotation is a *tombstone*, not noise: dropping it
@@ -693,8 +974,11 @@ object BackupMergeService {
             // back on Android. iOS assigns `isPendingDeletion` through instead, and
             // the LWW check below decides whether the deletion actually wins.
 
-            val incomingModified = parseOptionalInstant(archived.lastModifiedAt)
-                ?: parseOptionalInstant(archived.createdAt.takeIf { it.isNotBlank() })
+            val incomingModified = sanitizeArchivedLastModifiedAt(
+                archived.lastModifiedAt,
+                exportedAt,
+                now
+            ) ?: parseOptionalInstant(archived.createdAt.takeIf { it.isNotBlank() })
                 ?: Instant.EPOCH
 
             when (tombstoneIndex.annotationResolution(id, incomingModified)) {
@@ -706,22 +990,28 @@ object BackupMergeService {
             }
 
             val existing = byId[id]
-            val restored = archived.toReadingAnnotation()
+            val restored = archived.toReadingAnnotation().copy(workID = workId)
             if (existing == null) {
                 byId[id] = restored
                 created += 1
-            } else {
-                if (!SyncMerge.shouldApplyIncoming(
-                        existing.effectiveLastModifiedAt,
-                        incomingModified
-                    )
-                ) {
-                    return@forEach
-                }
+            } else if (mode == BackupImportMode.MERGE) {
+                // Keep local note / locator / color. New ids still insert above.
+            } else if (mode == BackupImportMode.REPLACE_LIBRARY ||
+                SyncMerge.shouldApplyIncoming(existing.effectiveLastModifiedAt, incomingModified)
+            ) {
                 byId[id] = restored.copy(
                     createdAt = minInstant(existing.createdAt, restored.createdAt)
                 )
                 updated += 1
+            }
+        }
+
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            val incomingIds = incoming.mapTo(mutableSetOf()) {
+                BackupPaths.canonicalUuid(it.id, "annotation.id")
+            }
+            byId.keys.toList().forEach { id ->
+                if (id !in incomingIds) byId.remove(id)
             }
         }
 
@@ -765,6 +1055,39 @@ object BackupMergeService {
         return runCatching { BackupValidator.parseInstant(value, "timestamp") }.getOrNull()
     }
 
+    /**
+     * Ledger companion: `min(value, exportedAt)`, and drop timestamps more than
+     * 24h in the future so a forged clock cannot win LWW.
+     */
+    internal fun sanitizeArchivedLastModifiedAt(
+        raw: String?,
+        exportedAt: Instant?,
+        now: Instant
+    ): Instant? {
+        val value = parseOptionalInstant(raw) ?: return null
+        if (value.isAfter(now.plus(FUTURE_CLOCK_SKEW))) return null
+        return if (exportedAt != null && value.isAfter(exportedAt)) exportedAt else value
+    }
+
+    /**
+     * Prefer a sanitized `lastModifiedAt`. A present-but-rejected future clock
+     * does not fall back to `dateAdded` (that would still let the attacker win).
+     * A missing `lastModifiedAt` falls back to `dateAdded` so existing archives
+     * keep their previous LWW behaviour.
+     */
+    private fun resolveIncomingLastModifiedAt(
+        lastModifiedAt: String?,
+        dateAdded: String?,
+        exportedAt: Instant?,
+        now: Instant
+    ): Instant? {
+        if (!lastModifiedAt.isNullOrBlank()) {
+            return sanitizeArchivedLastModifiedAt(lastModifiedAt, exportedAt, now)
+        }
+        return sanitizeArchivedLastModifiedAt(dateAdded, exportedAt, now)
+            ?: parseOptionalInstant(dateAdded)
+    }
+
     private fun minInstant(a: Instant, b: Instant): Instant = if (a.isBefore(b)) a else b
 
     private fun maxInstant(a: Instant?, b: Instant?): Instant? {
@@ -806,6 +1129,8 @@ object BackupMergeService {
         val updated: Int,
         val suppressed: Int
     )
+
+    private val FUTURE_CLOCK_SKEW: Duration = Duration.ofHours(24)
 }
 
 /** Apple `SyncMerge` helpers used by backup restore. */
@@ -850,7 +1175,11 @@ enum class TombstoneResolution {
  * Indexes local + archive tombstones for suppress/revive decisions.
  * Newest tombstone wins when several share an identity.
  */
-internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
+internal class TombstoneIndex(
+    tombstones: List<SyncTombstone>,
+    private val exportedAt: Instant? = null,
+    private val now: Instant = Instant.now()
+) {
     private val workById = mutableMapOf<String, SyncTombstone>()
     private val workByAo3Id = mutableMapOf<Int, SyncTombstone>()
     private val workBySourceUrl = mutableMapOf<String, SyncTombstone>()
@@ -868,8 +1197,9 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
                 SyncTombstoneRecordType.SAVED_WORK -> {
                     indexNewest(workById, recordId, tombstone)
                     tombstone.ao3WorkID?.let { indexNewest(workByAo3Id, it, tombstone) }
-                    val url = tombstone.sourceURL.trim().lowercase()
-                    if (url.isNotEmpty()) indexNewest(workBySourceUrl, url, tombstone)
+                    canonicalSourceUrl(tombstone.sourceURL)?.let { url ->
+                        indexNewest(workBySourceUrl, url, tombstone)
+                    }
                 }
                 SyncTombstoneRecordType.READING_QUEUE ->
                     indexNewest(queueById, recordId, tombstone)
@@ -898,20 +1228,22 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
 
     fun suppressesWorkResurrection(archived: BackupWork): Boolean {
         val byAo3 = archived.ao3WorkID?.let { workByAo3Id[it] }
-        val byUrl = archived.sourceURL.trim().lowercase().takeIf { it.isNotEmpty() }
-            ?.let { workBySourceUrl[it] }
+        val byUrl = canonicalSourceUrl(archived.sourceURL)?.let { workBySourceUrl[it] }
         val byId = workById[BackupPaths.normalizeIdForComparison(archived.id)]
         val tombstone = byAo3 ?: byUrl ?: byId ?: return false
-        val archivedModified = runCatching {
-            archived.lastModifiedAt?.takeIf { it.isNotBlank() }
-                ?.let { BackupValidator.parseInstant(it, "work.lastModifiedAt") }
-        }.getOrNull() ?: runCatching {
-            if (archived.dateAdded.isNotBlank()) {
-                BackupValidator.parseInstant(archived.dateAdded, "work.dateAdded")
-            } else {
-                null
-            }
-        }.getOrNull() ?: Instant.EPOCH
+        val archivedModified = if (!archived.lastModifiedAt.isNullOrBlank()) {
+            BackupMergeService.sanitizeArchivedLastModifiedAt(
+                archived.lastModifiedAt,
+                exportedAt,
+                now
+            ) ?: Instant.EPOCH
+        } else {
+            BackupMergeService.sanitizeArchivedLastModifiedAt(
+                archived.dateAdded,
+                exportedAt,
+                now
+            ) ?: Instant.EPOCH
+        }
         return !tombstone.lastModifiedAt.isBefore(archivedModified)
     }
 
@@ -957,6 +1289,12 @@ internal class TombstoneIndex(tombstones: List<SyncTombstone>) {
             tombstoneDeletedAt = collectionById[BackupPaths.normalizeIdForComparison(id)]
                 ?.lastModifiedAt
         )
+    }
+
+    private fun canonicalSourceUrl(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        return WorkTags.canonicalAO3WorkURL(trimmed) ?: trimmed.lowercase()
     }
 
     private fun <K> indexNewest(

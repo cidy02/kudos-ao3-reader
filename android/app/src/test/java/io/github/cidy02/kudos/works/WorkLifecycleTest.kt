@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.SyncTombstone
+import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.network.ao3.AO3BinaryResponse
 import io.github.cidy02.kudos.network.ao3.AO3Client
@@ -268,8 +271,35 @@ class WorkLifecycleRepositoryTest {
         assertTrue(
             database.syncTombstoneDao().getByRecord(
                 workUuid,
-                io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_WORK
+                SyncTombstoneRecordType.SAVED_WORK
             ).isEmpty()
+        )
+    }
+
+    @Test
+    fun retractWorkTombstoneMatchesAo3OrCanonicalUrlNotOnlyRecordId() = runTest {
+        val otherId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        database.syncTombstoneDao().upsert(
+            SyncTombstone(
+                id = "33333333-3333-4333-8333-333333333333",
+                recordID = otherId,
+                recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                createdAt = clockNow,
+                lastModifiedAt = clockNow,
+                sourceURL = "https://archiveofourown.org/works/123",
+                ao3WorkID = 123
+            ).toEntity()
+        )
+
+        repository.retractWorkTombstone(
+            recordId = workUuid,
+            ao3WorkId = 123,
+            sourceUrl = "https://archiveofourown.org/works/123/chapters/9"
+        )
+
+        assertTrue(
+            "retract by ao3 / URL must drop the savedWork tombstone",
+            database.syncTombstoneDao().getAll().isEmpty()
         )
     }
 

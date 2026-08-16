@@ -22,6 +22,7 @@ readium = "3.3.0"
 robolectric = "4.16.1"
 room = "2.8.4"
 securityCrypto = "1.1.0"
+tink = "1.16.0"
 work = "2.11.2"
 
 [libraries]
@@ -63,6 +64,7 @@ readium-navigator = { module = "org.readium.kotlin-toolkit:readium-navigator", v
 readium-shared = { module = "org.readium.kotlin-toolkit:readium-shared", version.ref = "readium" }
 readium-streamer = { module = "org.readium.kotlin-toolkit:readium-streamer", version.ref = "readium" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
 androidx-work = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 
 [plugins]
