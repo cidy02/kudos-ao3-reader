@@ -144,8 +144,74 @@ This corroborates, from a second direction, the gap recorded in the pre-existing
 
 **Action at merge:** verify the tombstone tree's clamp actually lands and supersedes WP-F's weaker one, and that the combined result **rejects** `> now + 24h` rather than clamping it. If the tombstone version also only clamps, WPF-1 must be fixed on RC. Do not assume the later merge silently fixes it — diff the final `parseInstant`/`parseOptionalInstant` on RC and re-run the Android gate.
 
-### WP-D — reviewed by Claude Opus 5 (report written, not yet read into this log)
-### WP-B, tombstone — reviews still in flight (Claude Opus 5, via Workflow `wv60qb8dd`)
+### tombstone — reviewed by **Claude Opus 5** (R0 merge gate; implementers Grok + Opus 4.6 + Gemini design)
+
+Full report: `/Users/cidy02/kudos-fix-tombstone/REVIEW-CLAUDE-TOMBSTONE.md`. **Verdict: FIX — 9 findings, 15 items confirmed correct, 0 BLOCK.** Two of these defeat the Phase 2 model and are the most serious findings of the entire cycle.
+
+- **TOMB-1 (FIX, both platforms) — `lastModifiedAt` is authorization-bearing but is NOT in the signed payload.**
+  `PHASE2-CONTRACT.md` signs six fields; `lastModifiedAt` is not one of them. Yet `lastModifiedAt` is the **only** field that decides suppression (`KudosBackup.swift:2079-2080` `tombstone.lastModifiedAt >= archivedModifiedAt`; `BackupMergeService.kt:1247`). Both platforms copy the incoming value verbatim into the adopted row, and R-P2-7's 24h clamp is applied only to the archived *work's* timestamp, never the tombstone's (iOS has no clamp on this path at all). An attacker holding one of the user's own `.kudosbackup` files takes a stale but **validly signed** tombstone, leaves all six signed fields byte-identical so Ed25519 still verifies and the signer is still trusted, and rewrites `lastModifiedAt` to 2099 — suppressing that work forever against every future snapshot. **This re-creates the exact "never expires" property that handoff §1 exists to kill, now with a valid signature.** Patch is small and lossless (`lastModifiedAt == createdAt` at every minting site already): pin to `archived.createdAt` on iOS (`KudosBackup.swift:2140`) and `.copy(lastModifiedAt = it.createdAt)` on Android (`BackupMergeService.kt:57`).
+- **TOMB-2 (FIX, Android only) — a trusted signature can DELETE a local tombstone.** The adopt loop keys the working map by the row's own `id` (`BackupMergeService.kt:62`), which is **not** a signed field. That map is seeded from local Room rows and written back via `syncTombstoneDao().upsert()` against `@PrimaryKey val id`. An attacker copies a validly-signed tombstone's six signed fields verbatim, sets `id = T2.id` where T2 is the local tombstone suppressing a work the user deliberately deleted (both values readable from the same file) — T2 is destroyed and the work it suppressed is resurrected permanently. Violates locked spec §2 / B.2 clause 3. iOS is **not** vulnerable (dedupes on `recordTypeRaw|recordID`, insert-if-absent, `id` not `.unique`). Patch: skip if the key already exists.
+- **TOMB-3 (FIX, iOS) — Replace leaves collections and queues permanently un-undeletable.** Locked spec §2 promises a later Merge can bring back what Replace removed. Works do undelete (`:1279-1281`), but collections and queues pin `incomingWins = false` on `.merge` (`:1420`, `:1554`) so `isPendingDeletion` stays true forever (`:1442`, `:1579`) — they silently accumulate restored works as members and are hard-deleted by the 90-day sweep. Android does **not** have this hole, so it is an iOS-only divergence from the owner's R9 parity ruling.
+- **TOMB-4 (FIX) — the "a backup never writes the trust store" test survives a revert.** Every trust-store *read* in restore is defaults-injected; the one *write* (`TombstoneSigning.swift:97`) uses default `.standard`. Reintroducing TOFU the natural way would write to `UserDefaults.standard` while the test asserts against the injected suite — both assertions still pass, regression ships silently. (Also leaks the host device pub into real user defaults on every test run.)
+- **TOMB-5 (FIX) — `TombstoneSigningTest.signThenVerifyRoundTrip` is 1-in-16 flaky.** The forgery appends a literal `"0"` to a truncated signature; with a fresh random keypair per run the last hex char is `'0'` ~6% of the time, reproducing the *valid* signature and failing the assertion. Would turn the Android gate red on a correct tree — directly threatens "GREEN last" (DoD #4). Both sibling forgery tests already do this correctly.
+- **TOMB-6 (FIX) = G3** — no iCloud KVS entitlement anywhere in the project, yet shipped Settings copy (`SettingsView.swift:1244`) promises the feature works. Reviewer's position: this is **more than a device-only follow-up** because the UI makes a promise the build cannot keep.
+- **TOMB-7 (FIX, Android)** — Replace lets an adopted tombstone suppress a work in the same snapshot; iOS Replace does not (`BackupMergeService.kt:66`).
+- **TOMB-8 (FIX) = G2** — Android annotation deletes mint no tombstone, so deleted highlights are **resurrected by the next folder sync**. Reviewer argues this is a real data-integrity bug, not merely a parity gap to sign off.
+- **TOMB-9 (FIX)** — two added Swift lines exceed the 120-char lint ceiling; CI runs `swiftlint --strict`, so this alone fails the gate.
+
+### WP-B — reviewed by **Claude Opus 5** (implementer: Grok 4.6)
+
+Full report: `/Users/cidy02/kudos-fix-wp-b/REVIEW-CLAUDE-WPB.md`. **Verdict: FIX — 6 findings, 2 merge instructions, 19 items confirmed correct, 0 BLOCK.** This is the G4 input I was waiting for.
+
+- **WPB-1 (FIX) — decisive for G4:** WP-B's two new `openAO3Link` tests (`KudosTests/AppRouterTests.swift:158`, `:168`) **assert the looser behaviour** and will go **RED** as soon as WP-A's stricter `AppRouter.open` wins the merge. Confirms my independent determination that WP-A is stricter here; the tests must be updated, not the production code.
+- **WPB-2 (FIX)** — the M9 relay test (`LiveAO3SessionValidatorRelayTests.swift:33-36`) has **no positive control**: it passes vacuously if the redirect never reaches the attacker at all.
+- **WPB-3 (FIX)** — the Readium navigation guard is installed *opportunistically*, so a freshly **preloaded spread runs unguarded** (`ReadiumBook.swift:512`, `:648`; `ReadiumNavigatorContainer.swift:136`). This re-scopes G1.
+- **WPB-4 (FIX) — second RC merge trap:** `coordinatedReadData` is edited incompatibly by WP-A and WP-B, and **the plausible merge resolution silently drops M12 on the font path** (`FolderSyncService.swift:562-571` vs WP-A's `:581-597`).
+- **WPB-5 (FIX)** — the M9 test seam is un-gated production API, against WP-A's own `#if DEBUG` precedent in the same work.
+- **WPB-6 (FIX)** — WP-A's stricter M14 filtering of `install()`/`merging()` is untested in **both** trees; deleting it leaves the suite green. (Converges with Gemini's WPA-2 from a different direction.)
+- **Merge instruction (SHIP):** `ReaderController.swift` needs a **hybrid, not a pick** — each tree is stricter in a different place (`:191-205`).
+- **G1:** sign off, re-scoped to the preloaded-spread case (WPB-3).
+
+### WP-D — reviewed by **Claude Opus 5** (implementer: Grok 4.6)
+
+Full report: `/Users/cidy02/kudos-fix-wp-d-signing/REVIEW-CLAUDE-WPD.md`. **Verdict: FIX — 8 findings + 2 SHIP, 10 items confirmed correct, 0 BLOCK.** For a 2-commit tree this is the heaviest result of the cycle: **the macOS signing guard is largely non-functional, and one change actively weakens iOS.**
+
+- **WPD-3 (FIX) — actively harmful:** the entitlement pin is **unqualified on a five-platform target** (`project.pbxproj:605-606`), which **weakens iOS Release from Keychain to the plaintext file vault** (`AO3SessionVault.swift:271-281`). A signing-hardening change that downgrades session storage on the main platform.
+- **WPD-5 (FIX) — third RC merge trap:** taking WP-D's `AO3SessionVault.swift` on conflict **silently reverts WP-A's M14 and M16**. RC stack order puts WP-A at #2 and WP-D at #4, so the naive resolution loses two confirmed fixes.
+- **WPD-1/2/4/6/7 (FIX) — the guard does not guard:** the check never reads the file that now *is* the entire Release entitlement set, so `get-task-allow` written into `Kudos.entitlements` **passes with exit 0** (`:36-47`); the product assertion is **never invoked anywhere** and no script in the repo builds Release (`ci.yml:38`, `verify.sh:26-35`, `build-macos.sh:27-30`); hardened runtime can be disabled and ad-hoc signing re-added while still passing (**mutation-proven**); `set -e` aborts the product half at `:64` before the `get-task-allow`/sandbox/hardened-runtime assertions run; and it writes working data to a fixed, predictable `/tmp` path.
+- **WPD-8 (FIX)** — the newly-pinned `Kudos.entitlements` **under-declares** what shipped macOS folder-sync code needs (`FolderSyncService.swift:490, 507, 688, 719, 738`) — a functional break, not just a security one.
+- **SHIP:** M13 is byte-identical to WP-A's `c701bdb` (neither stricter; the test is a genuine revert-catcher) → resolves that half of the G4/WP-D overlap. **G8 signed off** as a genuine environmental limit.
+
+---
+
+## Cycle 1 totals
+
+**6 trees reviewed by 3 model families. 0 BLOCK. ~30 FIX findings.** Nothing prevents stacking, but four findings must be fixed *on RC* rather than merged past, and three are RC merge traps where the obvious conflict resolution silently reverts a confirmed fix.
+
+**Highest severity, in order:**
+1. **TOMB-1** — signed tombstones carry an unsigned field that alone decides suppression (both platforms). Defeats Phase 2.
+2. **TOMB-2** — a trusted signature can erase a local tombstone on Android and resurrect a deliberately deleted work.
+3. **WPD-3** — WP-D's entitlement pin downgrades iOS session storage from Keychain to the plaintext file vault.
+4. **WPC-FIX-2** — M4 is unfixed on the directory-import path; T-195's "DONE" is an overclaim.
+5. **WPF-1** — the M1a clamp clamps instead of rejecting, `exportedAt` is absent, and its own mutation evidence certifies the bug.
+
+**Three RC merge traps to honour when stacking:** WPD-5 (`AO3SessionVault.swift` — must not take WP-D's), WPB-4 (`coordinatedReadData` — must not drop M12 on the font path), WPB-1 (WP-B's `openAO3Link` tests must be updated to WP-A's stricter behaviour, not the reverse). Plus WPB's instruction that `ReaderController.swift` needs a **hybrid**, not a pick.
+
+### G1–G9 status after cycle 1
+
+| # | Status |
+|---|---|
+| G1 M8 device probe | **signed off**, re-scoped to the preloaded-spread case → now tracked as WPB-3 |
+| G2 Android annotation tombstones | **escalated** — reviewer says deleted highlights are resurrected by folder sync (TOMB-8), not a benign parity gap |
+| G3 iOS iCloud KVS entitlement | **escalated** — shipped UI promises a feature the build cannot deliver (TOMB-6) |
+| G4 WP-A vs WP-B overlap | 2 of 10 files adjudicated + WPB-1/WPB-4 + ReaderController hybrid instruction now in hand; remainder mechanical |
+| G5 tombstone vs WP-A `KudosBackup.swift` | not yet reached (merge step 5) |
+| G6 bookmarks/saved-searches Replace | superseded in part by TOMB-3 (collections/queues have the same undelete hole) |
+| G7 Replace 1.5s UI tests | SKIP per brief |
+| G8 macOS Developer ID / notarization | **signed off** — genuine environmental limit |
+| G9 Android `exportedAt` clamp collision | open; now compounded by WPF-1 and TOMB-1 (all three touch Android tombstone/date handling) |
+
+**Paused here at the owner's request.** All six reviews complete and recorded; no agents running. Nothing pushed.
 
 ---
 
