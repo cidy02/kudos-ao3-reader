@@ -1,119 +1,149 @@
-# Backup trust — handoff
+# Security + backup-trust handoff (Claude review)
 
-**Workspace:** `/Users/cidy02/kudos-fix-tombstone`  
-**Branch:** `security-fixes/tombstone-trust` (from `c241d2f` / `origin/hig-review`)  
-**HEAD:** branch tip of `security-fixes/tombstone-trust` — local only, nothing pushed. Run `git log --oneline origin/hig-review..HEAD` and `git status`.  
+**Base commit:** `c241d2f` (`origin/hig-review`)  
 **Embargo:** local only. Do **not** push, merge, open a PR, or create a remote branch.  
 **Do not** run git in `/Users/cidy02/Documents/AO3_App_OpenSource`.  
-**Discussion:** `/Users/cidy02/kudos-fix-tombstone/backup-trust-design-discussion.md`  
-**iOS notes:** `/Users/cidy02/kudos-fix-tombstone/IMPLEMENTATION-NOTES.md`  
-**Android notes:** `/Users/cidy02/kudos-fix-tombstone/android/PHASE1-NOTES.md` · `/Users/cidy02/kudos-fix-tombstone/android/PHASE2-NOTES.md`  
-**Phase 2 contract:** `/Users/cidy02/kudos-fix-tombstone/PHASE2-CONTRACT.md`  
-**Prior iOS review:** `/Users/cidy02/kudos-fix-tombstone/GROK-REVIEW-IOS.md` (partly stale — items 1, 2, 4 were fixed in `7b77316` / `14267e5`)
+**Owner:** review first, then you merge. Agents stop short of merge.
 
-This document is five things:
+**There is no Phase 3** of tombstone trust. Product is Phase 1 (drop unsigned incoming) + Phase 2 (Ed25519 so *trusted* deletes can cross devices).
 
-1. **Progress for Claude** (review map — start here).
-2. **Accomplishment report** (what this session actually shipped).
-3. **Review brief** for the Phase 1 core (§B).
-4. **Remaining work** with implement vs review owners (§C).
-5. **Locked Phase 1 spec** (§1–§5). The earlier “trust tombstones only on first empty-device restore” design is rejected.
+This file is the single review brief. Start here. Do not treat `GROK-REVIEW-IOS.md` as current (several FIX items were closed later).
 
 ---
 
-## Progress for Claude (2026-08-15, live)
+## 0. Map of trees (all unmerged)
 
-Owner wants **Phase 1 merge-ready in this worktree**, then **Claude reviews the whole pile before any merge**. Do **not** push. Do **not** merge. Phase 2 crypto is **not** in this merge.
+| Tree | Branch | What it is |
+|---|---|---|
+| `/Users/cidy02/kudos-fix-tombstone` | `security-fixes/tombstone-trust` (~20 ahead) | Backup tombstone trust Phase 1 + 2 (iOS + Android) |
+| `/Users/cidy02/kudos-fix-wp-a` | `security-fixes/wp-a` | Original audit WP-A (M1*, M8/M10/M11/M14/M16/M19 remediations, M15/M20, M21 fonts, M13 file-exclude) |
+| `/Users/cidy02/kudos-fix-wp-b` | `security-fixes/wp-b` | WP-B (M6–M12, second M19/M10/M14, M8 isolation tests) |
+| `/Users/cidy02/kudos-fix-wp-c` | `security-fixes/wp-c` | WP-C (M4 lazy EPUB, M5 zip) |
+| `/Users/cidy02/kudos-fix-wp-d-signing` | `security-fixes/wp-d-signing` | WP-D signing/entitlements + M13 file-exclude copy |
+| `/Users/cidy02/kudos-fix-wp-e` | `security-fixes/wp-e-android` | M1g-Android + restore-deadline tests |
+| `/Users/cidy02/kudos-fix-wp-f` | `security-fixes/wp-f-android` | M1a/M3 Android, M21/M2b fonts, revert-check evidence |
 
-**Review the branch** `security-fixes/tombstone-trust` vs `origin/hig-review` (`c241d2f`). Working tree should be clean except untracked `OPUS-IMPLEMENT.md` / `OPUS-REVIEW-GROK.md` (agent prompts, not product). **19+ local commits**, nothing pushed. Run `git log --oneline origin/hig-review..HEAD`.
+**Collision:** WP-A, WP-B, WP-C, and tombstone all edit `KudosBackup.swift` / Settings / AppRouter. Do **not** rebase them onto each other in this review pass unless you are closing a specific gap. Report the stack order; owner merges.
+
+**Companion docs**
+
+- Tombstone discussion: `/Users/cidy02/kudos-fix-tombstone/backup-trust-design-discussion.md`
+- Phase 2 wire: `/Users/cidy02/kudos-fix-tombstone/PHASE2-CONTRACT.md`
+- iOS notes: `/Users/cidy02/kudos-fix-tombstone/IMPLEMENTATION-NOTES.md`
+- Android notes: `android/PHASE1-NOTES.md`, `android/PHASE2-NOTES.md`
+- WP-F mutations: `/Users/cidy02/kudos-fix-wp-f/android/WP-F-REVERT-CHECKS.md`
+- Original audit: `/Users/cidy02/Documents/AO3_App_OpenSource/discussions/security-audit-cross-review.md` (read-only; do not git there)
+
+---
+
+## Progress for Claude (2026-08-15)
+
+Owner: **Claude reviews the whole pile and closes remaining gaps.** Do not push. Do not merge.
 
 ### Status key
 
-`DONE` committed · `WIP` implemented, not yet GREEN/committed · `OPEN` not started · `SKIP` owner/out of scope for this merge · `REVIEW` waiting for Claude
+`DONE` committed locally · `GAP` Claude should fix or sign off · `SKIP` out of scope · `STACK` only solvable at merge time
 
-| ID | Status | What | Where to look |
+### Tombstone tree (`kudos-fix-tombstone`)
+
+| ID | Status | What | Where |
 |---|---|---|---|
-| Core tombstone drop + 3 modes | **DONE** | Incoming unsigned tombstones dropped on Merge / Replace / reconcile. Folder sync uses default reconcile. | `a1aa83f` `a0533c1` `ab04d64` |
-| iOS Replace extra step + snapshot-wins | **DONE** | Pause-sync `setAutoSyncEnabled`; ignore local suppressors; no appearance apply. | `7b77316` |
-| Android RECONCILE vs add-only MERGE + undelete | **DONE** | File UI passes MERGE. Folder sync default RECONCILE. MERGE undeletes `isDeleted`. | `ab04d64` `bf81772` |
-| Tests + Mutation A/B (core) | **DONE** | iOS 30/0/30 (`/tmp/tomb-ios-rerun.xcresult`). Android 787/0/0 then 10/0/0 undelete. | `14267e5` `IMPLEMENTATION-NOTES.md` `android/PHASE1-NOTES.md` |
-| **R0** independent Opus review of shipped Phase 1 | **OPEN** | Opus quota blocked. Claude is the review gate before merge. | §B |
-| **R1** identity-aware Replace counts | **DONE** both | iOS: `BackupReplaceWorkDelta`. Android: `WorkIdentitySnapshot` + `BackupMergeService.preview`. | `SettingsView.swift`; `BackupMergeService.preview` |
-| **R2+R10** Merge add-only notes; insert new annotation ids | **DONE** both | iOS `restoreAnnotations` / collection / queue / membership. Android `mergeAnnotations` / collections / queues. | `KudosBackup.swift`; `BackupMergeService.kt` |
-| **R3** iOS folder-sync ingest test | **DONE** | `foldConflictContentsDoesNotAdoptIncomingUnsignedTombstones` GREEN. | `KudosTests/FolderSyncTests.swift` |
-| **R4** stale Android PHASE1-NOTES | **DONE** | Gaps rewritten; Merge undelete + R8/R9 documented. | `android/PHASE1-NOTES.md` |
-| **R5** iOS Merge undelete test | **DONE** | `fileMergeUndeletesPendingDeletion` GREEN. | `KudosBackupTests.swift` |
-| **R6** Replace UI arming tests | **SKIP** | No SwiftUI/Compose harness. Do not invent one for this merge. | — |
-| **R7** GREEN last after close-out | **DONE** both | iOS close-out **54 / 0 / 54**; iOS Phase 2 **39 / 0 / 39**. Android Phase 2 suite **814 / 0 / 0**. | Filters in notes |
-| **R8** Replace snapshots links + saved searches | **DONE** both | iOS `context.delete`; Android drop omitted bookmarks (URL) and searches (id). No tombstones. | `KudosBackup.swift`; `BackupMergeService` / `BackupRepository` |
-| **R9** Android Replace → Recently Deleted | **DONE** | Soft-delete omitted works (`isDeleted`, 90-day window). EPUB kept. No `deleteById`. No tombstone. Later MERGE undeletes. | `BackupRepository.removeRecordsAbsentFromReplaceSnapshot`; merge snapshot path |
-| **R-P2-*** Phase 2 Ed25519 | **DONE** both | **No Phase 3.** Contract `PHASE2-CONTRACT.md`. iOS `e4c9278` GREEN **39 / 0 / 39**. Android `71f72fc` GREEN **814 / 0 / 0**. Unsigned still drop. Adopt only verify+trusted. File never adds a key. Replace still does not mint tombstones. | iOS `TombstoneSigning.swift`; Android `TombstoneSigning.kt` / `PHASE2-NOTES.md` |
-| Original audit WPs A–F | **OUT OF THIS BRANCH** | Separate worktrees (`kudos-fix-wp-*`). Not part of this merge. | Do not review those files here unless owner expands scope |
+| Phase 1 drop + 3 modes | **DONE** | Unsigned incoming tombstones dropped on Merge / Replace / reconcile. Folder sync = default reconcile. | `a1aa83f` `a0533c1` `ab04d64` |
+| Replace extra step / snapshot-wins | **DONE** | iOS pause-sync is `setAutoSyncEnabled`. Replace ignores local suppressors; no appearance apply. | `7b77316` |
+| RECONCILE vs add-only MERGE | **DONE** | File UI MERGE; folder sync RECONCILE; MERGE undeletes Recently Deleted. | `ab04d64` `bf81772` |
+| R1 identity-aware Replace counts | **DONE** | iOS `BackupReplaceWorkDelta`; Android `WorkIdentitySnapshot` + preview. | `SettingsView.swift`; `BackupMergeService.preview` |
+| R2+R10 Merge add-only notes | **DONE** | Existing annotation ids kept; **new ids inserted**. Collection/queue name LWW skipped on Merge. | `KudosBackup.swift`; `BackupMergeService.kt` |
+| R3 folder-sync ingest test | **DONE** | `foldConflictContentsDoesNotAdoptIncomingUnsignedTombstones` | `FolderSyncTests.swift` |
+| R5 Merge undelete test | **DONE** | `fileMergeUndeletesPendingDeletion` | `KudosBackupTests.swift` |
+| R6 UI arming tests | **SKIP** | No SwiftUI/Compose harness. | — |
+| R8 Replace snapshots links/searches | **DONE** | Hard-delete without tombstone (those models have no Recently Deleted UI). | both restore paths |
+| R9 Android Replace → Recently Deleted | **DONE** | Soft-delete works, keep EPUB, no tombstone. | `BackupRepository` |
+| Identity rematch on Android apply | **DONE** | `ee84fad` — same ao3/URL/UUID as iOS. GREEN **797** then **814** after P2. | `BackupMergeService.merge` |
+| Phase 2 Ed25519 | **DONE** both | **No Phase 3.** Contract `PHASE2-CONTRACT.md`. iOS `e4c9278` **39/0/39**. Android `71f72fc` **814/0/0**. | `TombstoneSigning.swift` / `.kt` |
 
-### Close-out commits (this session)
+Tombstone `git log --oneline origin/hig-review..HEAD` should include through `60be1ea` plus later handoff commits. Untracked `OPUS-IMPLEMENT.md` / `OPUS-REVIEW-GROK.md` are agent prompts, not product.
 
-| Commit | Platform |
-|---|---|
-| `99c8cae` | iOS R1/R2/R3/R5/R8/R10 + this progress section |
-| `293aa1b` | Android R1/R2/R4/R8/R9/R10 + tests |
-| `ee84fad` | Android restore rematch by ao3/canonical URL (parity with iOS). GREEN **797 / 0 / 0** |
-| `2f5579c` | Shared Phase 2 contract (no Phase 3) |
-| `e4c9278` | iOS Phase 2 Ed25519 sign/verify/trust/re-sign. GREEN **39 / 0 / 39** |
-| `15b1230` | Handoff: iOS P2 landed, Android still in flight |
-| `71f72fc` | Android Phase 2 Tink Ed25519 + Room v9 + trust store. GREEN **814 / 0 / 0** |
+### Original audit trees (`kudos-fix-wp-*`)
 
-### Known leftover for Claude (not a reopen of tombstone-drop)
+| WP | Status | Latest hole-close | Notes |
+|---|---|---|---|
+| **A** | **DONE in-tree** | `c701bdb` M13 file-vault `isExcludedFromBackup` | Also M1*, M8/M10/M11/M14/M16/M19 remediations, M15a/M20 `9070dd2` (T-196 marked done). Overlaps B on AppRouter/cookies. |
+| **B** | **DONE in-tree** except one manual | `1097316` M8 store isolation + cookie leak tests **53/53** | **GAP:** hostile-EPUB JS on a **real device** (`window.location` + in-page cookie probe). Unit tests cannot execute script inside a live Readium spread. |
+| **C** | **DONE in-tree** | `1ee0ade` | M4/M5. Tests were re-fixtured after an unsound first pass. |
+| **D** | **DONE in-tree** for assigned halves | `1c5614d` signing; `0549539` M13 exclude | No Developer ID / notarization on this machine — **GAP:** distribution signing UTD, not a code hole. |
+| **E** | **DONE in-tree** | `91195cc` | T1 now asserts ~`now+90d`. T2 merge overlay does not apply a past wipe date. |
+| **F** | **DONE in-tree** | `daf3f25` | M1a/M3 mutations RED then GREEN **798/0/0**. Evidence `android/WP-F-REVERT-CHECKS.md`. M2b mapper rejects blank `recordTypeRaw`. |
 
-**None for Phase 1 identity rematch.** Android restore apply now uses the same
-`ao3WorkID` → canonical URL → UUID order as iOS (`WorkIdentitySnapshot` +
-`workIdRemap`). Local id is kept; annotations/memberships/collection work IDs
-remap. Tests: `importPackageReconcileMergesByAo3IdentityNotUuid`,
-`importPackageMergeDoesNotDuplicateSameAo3Work`,
-`importPackageReplaceRematchesAo3IdentityInsteadOfSoftDeleting`. GREEN last
-Android **797 / 0 / 0**.
+### Gaps Claude should close or explicitly sign off
 
-Still **SKIP** this merge: R6 UI arming tests; other security worktrees (`kudos-fix-wp-*`).
-Bookmarks/saved searches on Replace are hard-deleted without a tombstone (those
-models have no Recently Deleted UI) on both platforms. Android trust is
-device-local hex paste (no QR lib, no iCloud). iOS same-Apple-ID KVS needs the
-KVS entitlement on device; simulator falls back to local persist + hex paste.
+These are the remaining gaps. Fix in the **owning tree** if it is a real defect. Do not merge trees.
 
-Phase 2 leftover (not BLOCK unless review finds a verify hole): annotation
-deletes on Android still do not mint tombstones (there was no insert path).
-iOS signs all `recordDeletion` types.
+| # | Gap | Own | Close how |
+|---|---|---|---|
+| G1 | **M8 device probe** | WP-B | Optional: run hostile EPUB on a physical device. If you cannot, **sign off** that unit isolation (non-persistent store ≠ default, cookies don’t leak, `javascript:`/`data:` cancelled) is enough to merge later. |
+| G2 | **Android annotation deletes do not mint tombstones** | tombstone | There was no Android insert path. Either add sign-on-delete for annotations to match iOS, or sign off as known parity gap (deletes of highlights won’t cross devices). |
+| G3 | **iOS iCloud KVS entitlement** | tombstone | Simulator: `Unable to find entitlement for KVS store`. Same-Apple-ID auto-trust of pubs needs the entitlement on a real device. Hex paste still works. Add entitlement **or** sign off as device-only follow-up. |
+| G4 | **WP-A vs WP-B overlap** | STACK | Both changed `AppRouter` / session cookies / M8. Do not reconcile in this pass unless a review finding requires one tree’s version. Record which tree should win at owner merge. |
+| G5 | **Tombstone vs WP-A `KudosBackup.swift`** | STACK | WP-A has M15 isolated restore context; tombstone has Phase 1/2 restore. Combining is owner merge work. Review each on its own HEAD. |
+| G6 | **Bookmarks/saved searches Replace** | tombstone | Hard-delete, no RD UI. Confirm later Merge can re-insert (no tombstone). Sign off or add RD if you judge it a product hole. |
+| G7 | **R6 Replace 1.5s UI tests** | SKIP | No harness. Do not invent one unless you already have a pattern. |
+| G8 | **macOS Developer ID / notarization** | WP-D | Machine has no distribution identity. Cannot close in code. |
 
-### What Claude should hunt (close-out + core)
+### What Claude should hunt (load-bearing)
 
-Same §B list, plus:
+**Tombstone Phase 1+2** (`git diff c241d2f...HEAD` in `kudos-fix-tombstone`):
 
-1. Bookmark / SavedSearch Replace is **hard delete without tombstone** (no `isPendingDeletion` on those models). Confirm that cannot plant a suppressor and that later Merge can re-insert.
-2. `BackupReplaceWorkDelta` uses `WorkIdentityIndex` (ao3 → canonical URL → UUID).
-3. Merge still **inserts** new annotation ids on an existing work (`R10`).
-4. Folder-sync test hits `foldConflictContents`, not only default `restore`.
-5. Android R9 must leave a soft-deleted **work row** so later MERGE undelete works.
-6. Android restore apply rematches ao3 / canonical URL / UUID (same as iOS). Confirm no duplicate row on a cross-device same-AO3 Replace.
-7. Phase 2: unsigned still drop; trusted+valid adopted; untrusted valid dropped; forged dropped; file never writes the trust store. Payload matches `PHASE2-CONTRACT.md` on both platforms (hex pub + hex sig, UTC `yyyy-MM-dd'T'HH:mm:ss'Z'`).
-8. Replace still does not mint signed tombstones for omitted works.
+1. Unsigned incoming never persist, never suppress (file Merge, Replace, folder-sync / default restore).
+2. Trusted + valid signature **is** adopted and can suppress; untrusted valid and forged drop.
+3. A `.kudosbackup` never writes the trust store.
+4. Replace never mints `SyncTombstone` (signed or not) for omitted works.
+5. Restore identity is ao3 → canonical URL → UUID on **both** apply and Replace counts.
+6. Payload matches `PHASE2-CONTRACT.md` (hex pub 64, hex sig 128, UTC `yyyy-MM-dd'T'HH:mm:ss'Z'`).
+7. Private key never in the backup / iCloud blob (pubs only).
+8. Existing Phase 1 tests were not weakened.
+
+**WP-A:** M11 reject-not-rewrite; M19 refuse non-http(s); M14 allow-list includes remember-me and validator doesn’t re-widen; M16 `SecItemUpdate` re-asserts accessibility; M8 isolated store; M15 discard-on-throw; M13 file `isExcludedFromBackup`.
+
+**WP-B:** M6 host gate; M12 symlink test uses a *valid* EPUB target; M8 tests 11/11 isolation.
+
+**WP-E:** hostile past `permanentDeletionScheduledAt` cannot schedule immediate wipe at **merge**, not only mapper.
+
+**WP-F:** clamp and stricter-of still production-entry; `WP-F-REVERT-CHECKS.md` mutations quoted.
+
+### How to run tests (if you re-run)
+
+iOS (never `-sdk iphonesimulator` with a UDID):
+
+```
+UDID=C71780B1-35DE-4E5E-ABCD-2AB66BCB28B0
+xcodebuild test -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
+  -destination "id=$UDID" \
+  -only-testing:KudosTests/PersistenceGateSuites/KudosBackupTests \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+`KudosTests/KudosBackupTests` matches **0** Swift Testing cases. Use the `PersistenceGateSuites` filter. `totalTestCount` 0 is a fail.
+
+Android:
+
+```
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+cd android && ./gradlew :app:testDebugUnitTest
+```
+
+### Review output
+
+Write `/Users/cidy02/kudos-fix-tombstone/REVIEW-CLAUDE.md`:
+
+- SHIP / FIX / BLOCK per finding (`file:line`, spec clause, patch).
+- One subsection per tree.
+- Say whether G1–G8 are signed off or fixed.
+- Do not push. Do not merge. Local commits OK for gap fixes.
 
 ### Owner merge rule
 
-Claude reviews → owner merges. No agent push. No agent merge to `hig-review`.
-
-### Agent roles (standing)
-
-**Opus 5 and Opus 4.6 are the same role.** Prefer **Opus 5** if that model is available. If it is not (quota, plan, routing), use **Opus 4.6**. Do not wait for 5 if 4.6 can start. Do not run both as implementers on the same files.
-
-| Role | Who | Default platform |
-|---|---|---|
-| **Opus** (5, else 4.6) | Implement remaining **iOS/macOS**. Review Grok’s Android. | iOS |
-| **Grok 4.6** | Implement remaining **Android**. Review Opus’s iOS. | Android |
-| **Codex Sol 5.6** | Optional **independent** read-only review of the whole Phase 1 (same brief as §B). Not an implementer unless the owner says so. | both, review-only |
-
-Cross-review after every implement pass: the implementer does not review their own patch. Opus reviews Grok; Grok reviews Opus. Codex may add a third pass.
-
-**There is no Phase 3.** Tombstone trust is Phase 1 (drop unsigned) + Phase 2 (sign so deletes can cross devices). After Phase 2 the remaining product work is **Claude review + owner merge**, not another crypto phase.
-
-Phase 2 is implemented on both platforms. Shared wire contract: `PHASE2-CONTRACT.md`.
+Claude reviews (and may fix G1–G3 / G6 in-tree) → owner merges. No agent push. No agent merge to `hig-review`. Suggested later stack (owner, not now): WP-C → WP-A (includes M15) → WP-B leftovers → WP-D → tombstone Phase 1+2 → Android E/F.
 
 ---
 
