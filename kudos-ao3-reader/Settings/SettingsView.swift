@@ -1620,7 +1620,8 @@ struct ReplaceLibraryConfirmationView: View {
                             .foregroundStyle(.red)
                     }
                 } footer: {
-                    Text("Replace Library only changes this device. It does not plant deletion records that would block a later Merge of your own backup.")
+                    Text("Replace Library only changes this device. It does not plant "
+                        + "deletion records that would block a later Merge of your own backup.")
                 }
             }
             .navigationTitle("Replace Library")
