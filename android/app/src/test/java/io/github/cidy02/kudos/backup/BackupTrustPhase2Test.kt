@@ -207,6 +207,137 @@ class BackupTrustPhase2Test {
     }
 
     @Test
+    fun importPackagePinsAdoptedTombstoneLastModifiedAtToSignedCreatedAt() = runTest {
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        TombstoneTrustStore(settingsRepository).trust(pub)
+
+        val created = "2026-01-01T00:00:00Z"
+        val forgedLastModified = "2099-01-01T00:00:00Z"
+        val signed = signedBackupTombstoneFor(
+            recordId = WORK_K,
+            ao3WorkId = 4242,
+            privateKey = peer.privateKey,
+            publicKeyHex = pub
+        ).copy(lastModifiedAt = forgedLastModified)
+
+        backupRepository.importPackage(
+            KudosBackupPackage(
+                manifest = KudosBackupManifest(
+                    version = BackupVersion.CURRENT,
+                    exportedAt = "2026-06-26T12:00:00Z",
+                    exportedBy = BackupExportedBy(
+                        platform = "android",
+                        appVersion = "test",
+                        schemaVersion = BackupVersion.CURRENT
+                    ),
+                    tombstones = listOf(signed),
+                    settings = BackupSettingsPayload()
+                )
+            )
+        )
+
+        val stored = database.syncTombstoneDao().getAll().single()
+        assertEquals(
+            "Adopted lastModifiedAt must be pinned to the signed createdAt",
+            Instant.parse(created),
+            stored.lastModifiedAt
+        )
+        assertEquals(Instant.parse(created), stored.createdAt)
+
+        val later = backupRepository.importPackage(
+            packageWithWorkAndTombstone(
+                workId = WORK_K,
+                title = "Re-saved after delete",
+                tombstone = BackupTombstone(
+                    id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    recordID = WORK_K,
+                    recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                    createdAt = created,
+                    lastModifiedAt = "2026-03-01T00:00:00Z",
+                    sourceURL = "https://archiveofourown.org/works/4242",
+                    ao3WorkID = 4242
+                )
+            ).let { pack ->
+                pack.copy(
+                    manifest = pack.manifest.copy(
+                        works = pack.manifest.works.map {
+                            it.copy(lastModifiedAt = "2026-03-01T00:00:00Z")
+                        },
+                        tombstones = emptyList()
+                    )
+                )
+            }
+        )
+
+        assertEquals(
+            "Forged unsigned lastModifiedAt must not permanently suppress a later snapshot",
+            0,
+            later.worksSuppressed
+        )
+        assertEquals(1, later.worksCreated)
+        assertNotNull(database.workDao().getById(WORK_K))
+    }
+
+    @Test
+    fun importPackageDoesNotOverwriteLocalTombstoneRowByUnsignedId() = runTest {
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+        TombstoneTrustStore(settingsRepository).trust(pub)
+
+        val localRecord = WORK_K
+        database.syncTombstoneDao().upsert(
+            SyncTombstone(
+                id = TOMBSTONE_ID,
+                recordID = localRecord,
+                recordTypeRaw = SyncTombstoneRecordType.SAVED_WORK,
+                createdAt = CLOCK,
+                lastModifiedAt = CLOCK,
+                sourceURL = "https://archiveofourown.org/works/4242",
+                ao3WorkID = 4242,
+                deletionReason = "workDeleted"
+            ).toEntity()
+        )
+
+        val incoming = signedBackupTombstoneFor(
+            recordId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            ao3WorkId = 9999,
+            privateKey = peer.privateKey,
+            publicKeyHex = pub
+        ).copy(id = TOMBSTONE_ID)
+
+        val summary = backupRepository.importPackage(
+            packageWithWorkAndTombstone(WORK_K, "Must stay suppressed", incoming).let { pack ->
+                pack.copy(
+                    manifest = pack.manifest.copy(
+                        works = pack.manifest.works.map {
+                            it.copy(
+                                sourceURL = "https://archiveofourown.org/works/4242",
+                                ao3WorkID = 4242,
+                                lastModifiedAt = "2026-01-01T00:00:00Z"
+                            )
+                        }
+                    )
+                )
+            }
+        )
+
+        val stored = database.syncTombstoneDao().getAll().single { it.id == TOMBSTONE_ID }
+        assertEquals(
+            "incoming signed tombstone must not overwrite a local row by unsigned id",
+            localRecord,
+            stored.recordID
+        )
+        assertEquals(4242, stored.ao3WorkID)
+        assertEquals(0, summary.worksCreated)
+        assertEquals(1, summary.worksSuppressed)
+        assertNull(
+            "local tombstone must still suppress the work it was minted for",
+            database.workDao().getById(WORK_K)
+        )
+    }
+
+    @Test
     fun retractWorkTombstoneMatchesAo3AndCanonicalUrl() = runTest {
         val otherRecord = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
         database.syncTombstoneDao().upsert(

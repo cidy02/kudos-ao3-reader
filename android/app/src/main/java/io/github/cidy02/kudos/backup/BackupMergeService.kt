@@ -54,12 +54,19 @@ object BackupMergeService {
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
         val adoptedIncoming = ArrayList<SyncTombstone>()
         manifest.tombstones.forEach { archived ->
+            // Only createdAt is inside the signed payload. lastModifiedAt
+            // decides suppression, so never let an unsigned wire field set it.
             val incoming = archived.toSyncTombstone()
+                .let { it.copy(lastModifiedAt = it.createdAt) }
             if (!TombstoneSigning.verify(incoming)) return@forEach
             if (!TombstoneSigning.isTrustedSigner(incoming.signerPublicKey, trustedPublicKeys)) {
                 return@forEach
             }
-            tombstonesById[BackupPaths.normalizeIdForComparison(incoming.id)] = incoming
+            val incomingKey = BackupPaths.normalizeIdForComparison(incoming.id)
+            // `id` is not in the signed payload — a trusted signature must never
+            // overwrite a local tombstone row (spec §2: local deletes still suppress).
+            if (tombstonesById.containsKey(incomingKey)) return@forEach
+            tombstonesById[incomingKey] = incoming
             adoptedIncoming += incoming
         }
         val tombstoneIndex = TombstoneIndex(
