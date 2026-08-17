@@ -23,11 +23,18 @@ struct FilterButton: View {
 
     var body: some View {
         Button { showingFilters = true } label: {
-            // Plain funnel, not the circled variant — the glass button
-            // already draws its own circle, so a circled symbol doubled it up
-            // (same reasoning as WorkListMoreMenu's ellipsis fix above).
-            Label("Filter", systemImage: filtersActive ? "funnel.fill" : "funnel")
+            // "line.3.horizontal.decrease" — the funnel-shaped filter glyph
+            // without a circle around it (there is no plain "funnel" SF
+            // Symbol; confirmed via NSImage(systemSymbolName:), the literal
+            // name silently fails to resolve and Label/Button falls back to
+            // showing the text title instead of a broken icon, which is
+            // exactly the bug this replaces). No circle: the glass button
+            // already draws its own (same reasoning as the ellipsis fix).
+            // No dedicated ".fill" asset for this glyph either, so the
+            // active state comes from .symbolVariant instead of a second name.
+            Label("Filter", systemImage: "line.3.horizontal.decrease")
         }
+        .symbolVariant(filtersActive ? .fill : .none)
         .labelStyle(.iconOnly)
         .help(filterHelp)
         .contextMenu {
