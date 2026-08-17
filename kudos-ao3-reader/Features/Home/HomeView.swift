@@ -337,21 +337,35 @@ struct HomeView: View {
                     .padding(.horizontal, 16)
 
                     if !stripWorks.isEmpty, !stripCollapsed {
-                        // HomeResumeStripCard wraps its own NavigationLink/
-                        // selection/blur handling internally (same pattern as
-                        // HomeResumeHero above), so unlike SensitiveWorkCoverCard
-                        // it doesn't need the isSelecting branch or an external
-                        // NavigationLink wrapper at the call site.
+                        // Same compact portrait card every other Home carousel uses
+                        // (see localSection below), not the wide book-row strip this
+                        // used to be. SensitiveWorkCoverCard doesn't wrap its own
+                        // NavigationLink/selection handling, so both branches are
+                        // spelled out here, matching localSection's pattern exactly.
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 14) {
                                 ForEach(stripWorks) { work in
-                                    HomeResumeStripCard(
-                                        work: work,
-                                        isSelecting: isSelecting,
-                                        isSelected: selection.contains(work.id),
-                                        onToggleSelection: { toggleSelection(work) },
-                                        onSelect: selectAction(for: work)
-                                    )
+                                    if isSelecting {
+                                        SensitiveWorkCoverCard(
+                                            work: work,
+                                            footer: footer(.readingNow, work),
+                                            progress: progress(.readingNow, work),
+                                            isSelecting: true,
+                                            isSelected: selection.contains(work.id),
+                                            onToggleSelection: { toggleSelection(work) }
+                                        )
+                                        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                                    } else {
+                                        NavigationLink(value: LocalWorkDestination.reader(work)) {
+                                            SensitiveWorkCoverCard(
+                                                work: work,
+                                                footer: footer(.readingNow, work),
+                                                progress: progress(.readingNow, work)
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                                    }
                                 }
                             }
                             .uniformWorkCardHeights()
