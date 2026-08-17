@@ -253,7 +253,26 @@ struct WorkTopStatsRow: View {
     var body: some View {
         if stacked {
             VStack(alignment: .leading, spacing: 5) {
-                ForEach(Array(topItems.enumerated()), id: \.offset) { _, item in
+                // Rating and category share a row — both are short tags
+                // ("T", "M/M") that comfortably fit side by side, unlike
+                // Warnings/Completion, which run longer ("Not Disclosed",
+                // "In Progress"). A FlowLayout, not an HStack, only so a rare
+                // expanded/long combination still wraps instead of
+                // overflowing the card.
+                let ratingAndCategory = topItems.filter {
+                    $0.symbol == "checkmark.shield" || $0.symbol == "person.2.fill"
+                }
+                let rest = topItems.filter {
+                    $0.symbol != "checkmark.shield" && $0.symbol != "person.2.fill"
+                }
+                if !ratingAndCategory.isEmpty {
+                    FlowLayout(spacing: 6, rowSpacing: 5) {
+                        ForEach(Array(ratingAndCategory.enumerated()), id: \.offset) { _, item in
+                            statusChip(item)
+                        }
+                    }
+                }
+                ForEach(Array(rest.enumerated()), id: \.offset) { _, item in
                     statusChip(item)
                 }
             }
