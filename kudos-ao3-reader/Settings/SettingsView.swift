@@ -1262,52 +1262,6 @@ struct BackupSettingsSection: View {
     }
 }
 
-struct TombstoneTrustSettingsSection: View {
-    @State private var pastedKey = ""
-    @State private var addMessage: String?
-
-    var body: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("This device")
-                Text(TombstoneSigning.publicKeyHex())
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-            }
-            TextField("Paste another device's public key", text: $pastedKey)
-                .font(.system(.caption, design: .monospaced))
-                #if canImport(UIKit)
-                .textInputAutocapitalization(.never)
-                #endif
-                .autocorrectionDisabled()
-            Button("Trust this key") {
-                let trimmed = pastedKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                if TombstoneTrustStore.add(trimmed) {
-                    pastedKey = ""
-                    addMessage = "Trusted."
-                } else {
-                    addMessage = "Need a 64-character hex public key."
-                }
-            }
-            .disabled(pastedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            if let addMessage {
-                Text(addMessage)
-                    .font(.footnote)
-                    .foregroundStyle(addMessage == "Trusted." ? Color.secondary : Color.red)
-            }
-        } header: {
-            Text("Deletion signing")
-        } footer: {
-            Text("Deletes are signed on this device. Other devices with the same Apple ID "
-                + "pick up this public key automatically. To trust a phone on another "
-                + "account, paste its public key. Backup files never add a trusted key.")
-        }
-        .onAppear {
-            TombstoneTrustStore.add(TombstoneSigning.publicKeyHex())
-        }
-    }
-}
-
 struct FolderSyncSettingsSection: View {
     let persistenceStatus: PersistenceStatusSnapshot
     let folderStatus: FolderSyncSnapshot
