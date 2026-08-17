@@ -1,0 +1,5 @@
+// Copy this file to LocalSigning.xcconfig (same directory) and fill in your
+// own team ID. LocalSigning.xcconfig is gitignored — it must never be
+// committed. Find your team ID in Xcode > Settings > Accounts > (your Apple
+// ID) > (your team) > Team ID, or on developer.apple.com/account.
+DEVELOPMENT_TEAM =

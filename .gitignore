@@ -53,3 +53,8 @@ build-mupdf/
 
 # Vendored MuPDF binaries — build with Scripts/build-mupdf.sh (~48 MB).
 Vendor/
+
+# Local signing override (paid Apple Developer team ID). Copy
+# Config/LocalSigning.xcconfig.example to Config/LocalSigning.xcconfig and
+# fill in your own team ID — never commit the copy.
+Config/LocalSigning.xcconfig
