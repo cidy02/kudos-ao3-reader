@@ -253,20 +253,90 @@ enum TombstoneSigning {
     }
 }
 
+/// The exact surface `TombstoneTrustStore` needs from `NSUbiquitousKeyValueStore`
+/// — real key-value sync cannot be exercised in a unit test (there is no
+/// signed-in-iCloud simulator), so tests substitute `InMemoryKeyValueStore`
+/// against this protocol instead of the real class.
+protocol KeyValueStoring: AnyObject {
+    var dictionaryRepresentation: [String: Any] { get }
+    func array(forKey defaultName: String) -> [Any]?
+    func set(_ value: Any?, forKey defaultName: String)
+    func removeObject(forKey defaultName: String)
+    @discardableResult func synchronize() -> Bool
+}
+
+extension NSUbiquitousKeyValueStore: KeyValueStoring {}
+
+#if DEBUG
+/// Test-only in-memory stand-in for `NSUbiquitousKeyValueStore`. Compiled out
+/// of Release, same rationale as `TombstoneTrustStore.KeychainOverride`. Does
+/// not post `didChangeExternallyNotification` — nothing in this file's tests
+/// depends on that notification firing, only on `mergeFromiCloud` being
+/// called directly, which is how every existing call site already tests it.
+final class InMemoryKeyValueStore: KeyValueStoring {
+    private var storage: [String: Any] = [:]
+    var dictionaryRepresentation: [String: Any] { storage }
+    func array(forKey defaultName: String) -> [Any]? { storage[defaultName] as? [Any] }
+    func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
+    func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
+    func synchronize() -> Bool { true }
+}
+#endif
+
+/// Why a device's key is being revoked — the reason picks the default so the
+/// lazy path is the safe one. Stolen purges the key from the trust store and
+/// the KVS-published trust set, and denylists it so a stale republish from a
+/// still-running attacker cannot re-import it. Retired/sold just untrusts —
+/// the device isn't hostile, there is nothing to defend against re-publishing.
+enum TombstoneRevokeReason {
+    case stolenOrCompromised
+    case retiredOrSold
+}
+
 /// Local trusted Ed25519 public keys. Own device pub is always trusted.
-/// `NSUbiquitousKeyValueStore` publishes pubs for the same Apple ID only.
-/// A `.kudosbackup` must never write this store.
+///
+/// KVS schema (D9(b)): each device publishes ONLY its own pub, under its own
+/// top-level key `"pub.<deviceID>"` — never the whole local trusted set as one
+/// blob. `NSUbiquitousKeyValueStore` resolves concurrent writes to DIFFERENT
+/// keys independently, so two devices publishing at once cannot race each
+/// other the way a shared-array "last writer wins" scheme would (this was a
+/// real defect in the pre-D9(b) `publishToiCloud`, never shipped active since
+/// the entitlement stayed off). The full remote trusted set is the union of
+/// every `"pub.*"` entry in `store.dictionaryRepresentation`, computed on
+/// read — there is no single "the trusted array" KVS value anymore.
+///
+/// Revocation is a second, separate KVS record (`iCloudRevokedKey`, a
+/// union-only array) so a revoke made on one device reaches every other
+/// device on the same Apple ID, not just the one that clicked Revoke.
+///
+/// A `.kudosbackup` must never write this store — see `KudosBackup.swift`'s
+/// restore/apply paths, which only ever call `isTrusted`/`shouldAdopt`.
 enum TombstoneTrustStore {
     static let localKeysKey = "trustedTombstonePublicKeys"
+    /// Legacy whole-set KVS key from the pre-D9(b) design. No longer written.
+    /// Still read once, defensively, in case an entitlement was briefly
+    /// active on some build between D9(a) and D9(b) landing — see `mergeFromiCloud`.
     static let iCloudKeysKey = "tombstoneTrustedPublicKeys"
+    /// Stolen/compromised revocations — merging this denylists the key.
+    private static let iCloudRevokedKey = "tombstoneRevokedPublicKeys"
+    /// Retired/sold revocations — merging this untrusts the key WITHOUT
+    /// denylisting it. A separate KVS record, not a shared one with a reason
+    /// flag inside it, because `array(forKey:)` gives back `[Any]`/`[String]`
+    /// cheaply; a reason-tagged shape would need a dictionary array and more
+    /// validation surface for the same result.
+    private static let iCloudUntrustedKey = "tombstoneUntrustedPublicKeys"
+    private static let localRevokedKeysKey = "tombstoneRevokedPublicKeysDenylist"
 
-    /// `nil` by default, not `NSUbiquitousKeyValueStore.default`. Constructing
-    /// that store without `com.apple.developer.ubiquity-kvstore-identifier`
-    /// (this build does not have it; D9(b) must not add it until its activation
-    /// checklist is met) logs "BUG IN CLIENT OF KVS" and, in this process, makes
-    /// subsequent `SecItemAdd`/`SecItemCopyMatching` fail. Nothing sets this
-    /// back to `.default` yet; that lands with the entitlement.
-    static var iCloudStore: NSUbiquitousKeyValueStore?
+    private static func iCloudPubKey(forDevice deviceID: String) -> String { "pub.\(deviceID)" }
+
+    /// `nil` by default, not `.default`. Constructing the real store without
+    /// `com.apple.developer.ubiquity-kvstore-identifier` (unsigned test builds
+    /// do not have it — see `Kudos-iOS.entitlements` for the production
+    /// entitlement) logs "BUG IN CLIENT OF KVS" and, in this process, makes
+    /// subsequent `SecItemAdd`/`SecItemCopyMatching` fail. `KudosApplication`
+    /// assigns `.default` once at launch in production; tests assign a
+    /// `KeyValueStoring` fake instead.
+    static var iCloudStore: (any KeyValueStoring)?
 
     private static let lock = NSRecursiveLock()
     private static var didRegisterObserver = false
@@ -311,26 +381,80 @@ enum TombstoneTrustStore {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
         lock.lock()
         defer { lock.unlock() }
+        // A denylisted (revoked-as-stolen) key must never be re-trusted by a
+        // local add — including this device's own re-publish of its trusted
+        // set, and including a stale QR/paste of a key someone already
+        // marked stolen on another device.
+        guard !isDenylisted(normalized, defaults: defaults) else { return false }
         var keys = trustedPublicKeys(defaults: defaults)
         if keys.insert(normalized).inserted {
             saveKeys(keys, defaults: defaults)
-            publishToiCloud(keys, defaults: defaults)
+            publishOwnPubToiCloud(defaults: defaults)
+            // A prior "retired" revocation of THIS key must not keep
+            // re-untrusting it on every future merge now that someone
+            // legitimately re-trusted it (new owner re-pairs, or the
+            // original owner un-retires it) — unlike the denylist, which is
+            // intentionally permanent, this record has nothing else that
+            // would ever clear it. Stolen revocations are not cleared here:
+            // `isDenylisted` above already refuses the add outright for those.
+            clearFromRemoteUntrusted(normalized, defaults: defaults)
         }
         return true
     }
 
+    /// - Parameter reason: Picks the default so the lazy path is the safe
+    ///   one. `.stolenOrCompromised` denylists the key (never re-importable
+    ///   from KVS, even from a stale republish) and publishes the revoke so
+    ///   every other device on the same Apple ID also drops it, not just this
+    ///   one. `.retiredOrSold` only removes local trust — the device is not
+    ///   assumed hostile, so there is nothing to defend a republish against.
     @discardableResult
-    static func remove(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
+    static func remove(
+        _ publicKeyHex: String,
+        reason: TombstoneRevokeReason = .stolenOrCompromised,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
         lock.lock()
         defer { lock.unlock() }
         var keys = trustedPublicKeys(defaults: defaults)
-        if keys.remove(normalized) != nil {
+        let removed = keys.remove(normalized) != nil
+        if removed {
             saveKeys(keys, defaults: defaults)
-            removeFromiCloud(normalized, defaults: defaults)
-            return true
         }
-        return false
+        switch reason {
+        case .stolenOrCompromised:
+            addToDenylist(normalized, defaults: defaults)
+        case .retiredOrSold:
+            break
+        }
+        // The reason must survive the round-trip through KVS, or a later
+        // mergeFromiCloud reading this device's own just-published record
+        // back would denylist a retired-not-stolen key: two records, not one
+        // flat set, so a merging device can tell which happened.
+        publishRevocationToiCloud(normalized, reason: reason, defaults: defaults)
+        return removed
+    }
+
+    /// The denylist: keys revoked as stolen, which must never be re-imported
+    /// from KVS or a local `add`, however they arrive. Local `UserDefaults`,
+    /// not Keychain — this is a "don't re-add" marker, not the authorization
+    /// list itself (that stays Keychain-protected, per D9(a)). Worst case if
+    /// an unsandboxed process clears this marker is the pre-D9(b) status quo
+    /// (the key could be re-imported), not a new hole.
+    static func isDenylisted(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
+        guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
+        return denylistedKeys(defaults: defaults).contains(normalized)
+    }
+
+    private static func denylistedKeys(defaults: UserDefaults) -> Set<String> {
+        Set((defaults.stringArray(forKey: localRevokedKeysKey) ?? []).compactMap(normalizedPublicKey))
+    }
+
+    private static func addToDenylist(_ normalized: String, defaults: UserDefaults) {
+        var denylist = denylistedKeys(defaults: defaults)
+        guard denylist.insert(normalized).inserted else { return }
+        defaults.set(denylist.sorted(), forKey: localRevokedKeysKey)
     }
 
     private enum KeychainRead {
@@ -461,16 +585,54 @@ enum TombstoneTrustStore {
         mergeFromiCloud(defaults: defaults)
     }
 
+    /// Union of every `"pub.*"` entry in the store, plus (defensively) the
+    /// legacy whole-set key from before D9(b), minus whatever this device has
+    /// denylisted. Never removes a locally-trusted key just because its
+    /// `"pub.*"` entry disappeared — only an explicit entry in the revoked
+    /// record does that. `store.dictionaryRepresentation` is a local,
+    /// already-synchronized snapshot; this performs no network I/O itself.
+    private static func remotePublishedPubs(from store: any KeyValueStoring) -> Set<String> {
+        var pubs = Set<String>()
+        for (key, value) in store.dictionaryRepresentation where key.hasPrefix("pub.") {
+            if let hex = value as? String, let normalized = normalizedPublicKey(hex) {
+                pubs.insert(normalized)
+            }
+        }
+        for hex in (store.array(forKey: iCloudKeysKey) as? [String] ?? []) {
+            if let normalized = normalizedPublicKey(hex) {
+                pubs.insert(normalized)
+            }
+        }
+        return pubs
+    }
+
+    private static func remoteHexSet(from store: any KeyValueStoring, key: String) -> Set<String> {
+        Set((store.array(forKey: key) as? [String] ?? []).compactMap(normalizedPublicKey))
+    }
+
     static func mergeFromiCloud(defaults: UserDefaults = .standard) {
         guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
         lock.lock()
         defer { lock.unlock() }
-        let remote = store.array(forKey: iCloudKeysKey) as? [String] ?? []
+
+        // Revocations first, both kinds, before considering what to add — a
+        // key revoked and (by a race, or a hostile republish) still present
+        // in "pub.*" this same pass must not be imported a moment after
+        // being dropped.
+        applyRemoteRevocations(
+            remoteHexSet(from: store, key: iCloudRevokedKey), denylist: true, defaults: defaults
+        )
+        applyRemoteRevocations(
+            remoteHexSet(from: store, key: iCloudUntrustedKey), denylist: false, defaults: defaults
+        )
+
+        let remote = remotePublishedPubs(from: store)
         guard !remote.isEmpty else { return }
+        let denylist = denylistedKeys(defaults: defaults)
         var keys = loadKeys(defaults: defaults)
         var changed = false
-        for hex in remote {
-            if let normalized = normalizedPublicKey(hex), keys.insert(normalized).inserted {
+        for hex in remote where !denylist.contains(hex) {
+            if keys.insert(hex).inserted {
                 changed = true
             }
         }
@@ -479,22 +641,70 @@ enum TombstoneTrustStore {
         }
     }
 
-    private static func publishToiCloud(_ keys: Set<String>, defaults: UserDefaults) {
-        guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
-        var published = Set((store.array(forKey: iCloudKeysKey) as? [String] ?? []).compactMap(normalizedPublicKey))
-        published.formUnion(keys)
-        if let own = TombstoneSigning.normalizedPublicKey(TombstoneSigning.publicKeyHex()) {
-            published.insert(own)
+    /// Shared by both revocation records: untrust locally, and — only for the
+    /// denylisting (stolen) record — add to the local denylist too.
+    private static func applyRemoteRevocations(_ hexes: Set<String>, denylist: Bool, defaults: UserDefaults) {
+        guard !hexes.isEmpty else { return }
+        var keys = loadKeys(defaults: defaults)
+        var denylisted = denylistedKeys(defaults: defaults)
+        var keysChanged = false
+        var denylistChanged = false
+        for hex in hexes {
+            if keys.remove(hex) != nil { keysChanged = true }
+            if denylist, denylisted.insert(hex).inserted { denylistChanged = true }
         }
-        store.set(published.sorted(), forKey: iCloudKeysKey)
+        if keysChanged { saveKeys(keys, defaults: defaults) }
+        if denylistChanged { defaults.set(denylisted.sorted(), forKey: localRevokedKeysKey) }
+    }
+
+    /// Publishes only this device's own pub, under its own key — never the
+    /// whole local trusted set. Called after a successful local `add`, so the
+    /// set of devices that ever call this is exactly the set of devices that
+    /// have trusted at least one peer (including the always-true "trust my
+    /// own key" case handled by `SettingsView`'s `.onAppear`).
+    private static func publishOwnPubToiCloud(defaults: UserDefaults) {
+        guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
+        guard let own = TombstoneSigning.normalizedPublicKey(TombstoneSigning.publicKeyHex()) else { return }
+        store.set(own, forKey: iCloudPubKey(forDevice: PersistenceDevice.currentID(defaults: defaults)))
         store.synchronize()
     }
 
-    private static func removeFromiCloud(_ normalized: String, defaults: UserDefaults) {
+    /// The inverse of publishing a "retired" revocation: called on a
+    /// successful local `add`, so a stale "untrusted" record entry from a
+    /// previous retirement cannot keep re-untrusting a key someone has since
+    /// legitimately re-trusted. Never touches the denylist record — that one
+    /// is intentionally not clearable this way.
+    private static func clearFromRemoteUntrusted(_ normalized: String, defaults: UserDefaults) {
         guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
-        var published = Set((store.array(forKey: iCloudKeysKey) as? [String] ?? []).compactMap(normalizedPublicKey))
-        published.remove(normalized)
-        store.set(published.sorted(), forKey: iCloudKeysKey)
+        var untrusted = remoteHexSet(from: store, key: iCloudUntrustedKey)
+        guard untrusted.remove(normalized) != nil else { return }
+        store.set(untrusted.sorted(), forKey: iCloudUntrustedKey)
+        store.synchronize()
+    }
+
+    /// Publishes a revocation so every device on the same Apple ID drops the
+    /// key, not just this one — to whichever of the two records matches
+    /// `reason`, so a device merging it back knows whether to denylist. Also
+    /// best-effort clears a matching `"pub.*"` entry if one exists, so a
+    /// fresh `mergeFromiCloud` elsewhere does not even see it as a candidate
+    /// — the revoked-record check above is the actual enforcement point,
+    /// this is belt-and-suspenders cleanup.
+    private static func publishRevocationToiCloud(
+        _ normalized: String,
+        reason: TombstoneRevokeReason,
+        defaults: UserDefaults
+    ) {
+        guard defaults === UserDefaults.standard, let store = iCloudStore else { return }
+        let key = reason == .stolenOrCompromised ? iCloudRevokedKey : iCloudUntrustedKey
+        var revoked = remoteHexSet(from: store, key: key)
+        if revoked.insert(normalized).inserted {
+            store.set(revoked.sorted(), forKey: key)
+        }
+        if let staleKey = store.dictionaryRepresentation.first(where: {
+            $0.key.hasPrefix("pub.") && ($0.value as? String).flatMap(normalizedPublicKey) == normalized
+        })?.key {
+            store.removeObject(forKey: staleKey)
+        }
         store.synchronize()
     }
 
