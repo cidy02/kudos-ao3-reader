@@ -99,6 +99,12 @@ struct WorkTopStatsRow: View {
     /// does, expanded it names each one. Defaults to compact, which is what every
     /// list wants.
     var isExpanded: Bool = false
+    /// True gives each chip its own row instead of wrapping several onto one
+    /// line — the compact cover cards, narrow enough that a wrapping row
+    /// often only fit one or two chips per line anyway. Search/library rows
+    /// and the hero cards have the width for several per line, so they keep
+    /// the default wrapping `FlowLayout`.
+    var stacked: Bool = false
 
     struct Item {
         let text: String
@@ -245,9 +251,17 @@ struct WorkTopStatsRow: View {
     /// chips genuinely don't fit — they are all `fixedSize`, so a too-long single
     /// row would otherwise stretch the card past its own padding.
     var body: some View {
-        FlowLayout(spacing: 6, rowSpacing: 5, rowAlignment: .center) {
-            ForEach(Array(topItems.enumerated()), id: \.offset) { _, item in
-                statusChip(item)
+        if stacked {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(topItems.enumerated()), id: \.offset) { _, item in
+                    statusChip(item)
+                }
+            }
+        } else {
+            FlowLayout(spacing: 6, rowSpacing: 5, rowAlignment: .center) {
+                ForEach(Array(topItems.enumerated()), id: \.offset) { _, item in
+                    statusChip(item)
+                }
             }
         }
     }
