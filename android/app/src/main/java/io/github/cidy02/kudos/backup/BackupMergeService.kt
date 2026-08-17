@@ -52,6 +52,12 @@ object BackupMergeService {
         // suppressors so the snapshot can load.
         val tombstonesById = current.tombstones
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
+        val adoptedIncoming = ArrayList<SyncTombstone>()
+        // Count-only unknown-signer badge source (D9b Android pairing UI): ids
+        // whose signature verified but whose signer isn't trusted yet. Not
+        // persisted here — BackupRepository.mergePackage feeds this into
+        // SettingsRepository.recordUnknownSignerTombstoneIds after the merge.
+        val unknownSignerIds = linkedSetOf<String>()
         manifest.tombstones.forEach { archived ->
             // Only createdAt is inside the signed payload. lastModifiedAt
             // decides suppression, so never let an unsigned wire field set it.
@@ -68,6 +74,7 @@ object BackupMergeService {
                 }
             if (!TombstoneSigning.verify(incoming)) return@forEach
             if (!TombstoneSigning.isTrustedSigner(incoming.signerPublicKey, trustedPublicKeys)) {
+                unknownSignerIds += BackupPaths.normalizeIdForComparison(incoming.id)
                 return@forEach
             }
             val incomingKey = BackupPaths.normalizeIdForComparison(incoming.id)
@@ -75,6 +82,7 @@ object BackupMergeService {
             // overwrite a local tombstone row (spec §2: local deletes still suppress).
             if (tombstonesById.containsKey(incomingKey)) return@forEach
             tombstonesById[incomingKey] = incoming
+            adoptedIncoming += incoming
         }
         // Replace ignores every suppressor (local or adopted) so the snapshot
         // can load. Adopted trusted rows still write back via tombstonesById.
@@ -337,7 +345,11 @@ object BackupMergeService {
             summary = summary,
             epubFilesToWriteByWorkId = epubFilesToWrite,
             fontFilesToWriteByFileName = fontMerge.filesToWrite,
-            mode = mode
+            mode = mode,
+            unknownSignerTombstoneIds = unknownSignerIds,
+            adoptedIncomingTombstoneIds = adoptedIncoming
+                .map { BackupPaths.normalizeIdForComparison(it.id) }
+                .toSet()
         )
     }
 

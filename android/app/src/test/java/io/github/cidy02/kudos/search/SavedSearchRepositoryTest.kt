@@ -139,6 +139,9 @@ private class FakeSyncTombstoneDao : io.github.cidy02.kudos.data.local.dao.SyncT
             .forEach { store.remove(it.id) }
     }
 
+    override suspend fun getBySigner(signerPublicKey: String, recordType: String) =
+        store.values.filter { it.signerPublicKey == signerPublicKey && it.recordTypeRaw == recordType }
+
     override suspend fun deleteSavedWorkByIdentity(
         recordId: String,
         ao3WorkId: Int?,

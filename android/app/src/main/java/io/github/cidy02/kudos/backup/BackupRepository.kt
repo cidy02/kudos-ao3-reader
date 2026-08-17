@@ -110,12 +110,19 @@ class BackupRepository(
         mode: BackupImportMode
     ): BackupMergeResult {
         val trusted = TombstoneTrustStore(settingsRepository).trustedPublicKeys()
-        return BackupMergeService.merge(
+        val result = BackupMergeService.merge(
             current = current,
             backup = pack,
             mode = mode,
             trustedPublicKeys = trusted
         )
+        // Feeds the pairing sheet's count-only unknown-signer badge. See
+        // SettingsRepository.recordUnknownSignerTombstoneIds.
+        settingsRepository.recordUnknownSignerTombstoneIds(
+            newIds = result.unknownSignerTombstoneIds,
+            adoptedIds = result.adoptedIncomingTombstoneIds
+        )
+        return result
     }
 
     suspend fun previewImport(pack: KudosBackupPackage): BackupImportPreview {

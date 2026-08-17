@@ -690,7 +690,9 @@ fun AppNavHost(
         sharedComposable(Routes.Backup) {
             BackupScreen(
                 repository = container.backupRepository,
-                settingsRepository = container.settingsRepository
+                settingsRepository = container.settingsRepository,
+                database = container.database,
+                workRepository = container.workRepository
             )
         }
 

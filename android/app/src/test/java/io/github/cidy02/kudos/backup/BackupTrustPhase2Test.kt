@@ -126,6 +126,42 @@ class BackupTrustPhase2Test {
         assertTrue(settingsRepository.trustedTombstonePublicKeysSnapshot().isEmpty())
     }
 
+    // --- Keysync v1 pairing UI: count-only unknown-signer badge (D9b) ---
+
+    @Test
+    fun importPackageRecordsUnknownSignerTombstoneIdForTheCountOnlyBadge() = runTest {
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+
+        backupRepository.importPackage(
+            packageWithSignedTombstone(peer.privateKey, pub, workId = WORK_K, ao3WorkId = 4242)
+        )
+
+        val pending = settingsRepository.unknownSignerTombstoneIdsSnapshot()
+        assertEquals(1, pending.size)
+        assertTrue(pending.contains(BackupPaths.normalizeIdForComparison(TOMBSTONE_ID)))
+        assertEquals(1, TombstoneTrustStore(settingsRepository).unknownSignerCount())
+    }
+
+    @Test
+    fun importPackageClearsUnknownSignerIdOnceSignerBecomesTrusted() = runTest {
+        val peer = Ed25519Sign.KeyPair.newKeyPair()
+        val pub = peer.publicKey.toLowerHex()
+
+        backupRepository.importPackage(
+            packageWithSignedTombstone(peer.privateKey, pub, workId = WORK_K, ao3WorkId = 4242)
+        )
+        assertEquals(1, settingsRepository.unknownSignerTombstoneIdsSnapshot().size)
+
+        TombstoneTrustStore(settingsRepository).trust(pub)
+        // Re-syncing the same tombstone now adopts it — the badge self-heals.
+        backupRepository.importPackage(
+            packageWithSignedTombstone(peer.privateKey, pub, workId = WORK_K, ao3WorkId = 4242)
+        )
+
+        assertTrue(settingsRepository.unknownSignerTombstoneIdsSnapshot().isEmpty())
+    }
+
     @Test
     fun importPackageDropsForgedSignature() = runTest {
         val peer = Ed25519Sign.KeyPair.newKeyPair()

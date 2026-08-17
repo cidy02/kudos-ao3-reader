@@ -93,5 +93,9 @@ data class BackupMergeResult(
     val summary: BackupRestoreSummary,
     val epubFilesToWriteByWorkId: Map<String, ByteArray> = emptyMap(),
     val fontFilesToWriteByFileName: Map<String, ByteArray> = emptyMap(),
-    val mode: BackupImportMode = BackupImportMode.RECONCILE
+    val mode: BackupImportMode = BackupImportMode.RECONCILE,
+    /** Verified-but-untrusted-signer tombstone ids from this merge — count-only badge source. */
+    val unknownSignerTombstoneIds: Set<String> = emptySet(),
+    /** Ids adopted this run (signer now trusted) — clears matching pending ids. */
+    val adoptedIncomingTombstoneIds: Set<String> = emptySet()
 )
