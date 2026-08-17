@@ -534,10 +534,7 @@ struct AccountWorksCompactGrid: View {
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
-            NavigationLink(value: WorkCardTap.destination(for: remote)) {
-                AO3WorkCoverCard(work: remote)
-            }
-            .buttonStyle(.plain)
+            EnrichingAO3WorkCoverCard(work: remote)
         }
     }
 }

@@ -24,15 +24,20 @@ struct CanonicalWorkCoverCard: View {
     }
 }
 
-/// Fills a `CanonicalWorkCoverCard`'s remote branch in when its listing was sparse —
-/// same mechanism, same reasoning as `AO3AccountWorksList`'s `EnrichingAO3WorkRow`.
-/// Subscriptions is this carousel's own sparse source: AO3's subscriptions page
-/// lists only title, id and author, so these cards would otherwise carry no tags,
-/// no stats and no completion chip while every other Home carousel shows all three.
+/// Fills a remote work's cover card in when its listing was sparse — same
+/// mechanism, same reasoning as `AO3AccountWorksList`'s `EnrichingAO3WorkRow`.
+/// Subscriptions is the sparse source this exists for: AO3's subscriptions page
+/// lists only title, id and author, so a card built straight off that listing
+/// would otherwise carry no tags, no stats and no completion chip while every
+/// other card in the app shows all three. `AO3SparseWorkEnricher.enrich` no-ops
+/// immediately for an already-complete summary, so this is safe to use for every
+/// remote cover card, not just ones known to come from Subscriptions — shared by
+/// `CanonicalWorkCoverCard` (Home) and `AccountWorksCompactGrid` (Account/
+/// Bookmarks' compact grid, including "My Subscriptions" itself).
 ///
 /// The enriched summary (once fetched) is what gets pushed on tap too, so opening
 /// the work doesn't cost Work Details a second fetch for data this card already has.
-private struct EnrichingAO3WorkCoverCard: View {
+struct EnrichingAO3WorkCoverCard: View {
     let work: AO3WorkSummary
 
     @State private var enriched: AO3WorkSummary?
