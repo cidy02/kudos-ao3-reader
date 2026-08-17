@@ -523,14 +523,14 @@ struct ReadingQueueBrowserView: View {
                 }
                 #endif
             } else {
-                ActionToolbar {
-                    FilterButton(
+                ActionToolbar(items: [
+                    AnyView(FilterButton(
                         filtersActive: filters.hasActiveFilters,
                         showingFilters: $showingFilters,
                         filterHelp: "Filter the works in this queue",
                         onClearFilters: { filters = LibraryFilters() }
-                    )
-                    WorkListMoreMenu {
+                    )),
+                    AnyView(WorkListMoreMenu {
                         Button {
                             setReordering(true)
                         } label: {
@@ -563,8 +563,8 @@ struct ReadingQueueBrowserView: View {
                                 Label("Delete Queue", systemImage: "trash")
                             }
                         }
-                    }
-                }
+                    })
+                ])
             }
         } else if let queue = selectedQueue, queue.kind == .custom {
             // Empty custom queue: still allow rename/delete from the toolbar.

@@ -632,24 +632,17 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // toolbar slot, which is exactly what showed a blank "..." button when
             // the Library was empty.
             if showsMature || !works.isEmpty || showsMoreMenu {
-                // A single item holding a tight HStack — separate ToolbarItems (and
-                // even a ToolbarItemGroup) get the system's wide spacing, which
-                // squeezes the large "Library" title. Icon-only so they read as a
-                // compact cluster.
-                ActionToolbar {
-                    if showsMature {
-                        MatureRevealToggle()
-                    }
-                    // Filter sits directly visible, right after Privacy —
-                    // everything else (Reading Insights, Select) lives behind
-                    // the "..." menu.
-                    if !works.isEmpty {
-                        FilterButton(filtersActive: filters.hasActiveFilters,
-                                     showingFilters: router.isShowing(.libraryFilters),
-                                     onClearFilters: { filters = LibraryFilters() })
-                    }
-                    if showsMoreMenu {
-                        WorkListMoreMenu {
+                // Filter sits directly visible, right after Privacy — everything
+                // else (Reading Insights, Select) lives behind the "..." menu.
+                ActionToolbar(items: [
+                    showsMature ? AnyView(MatureRevealToggle()) : nil,
+                    !works.isEmpty
+                        ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                showingFilters: router.isShowing(.libraryFilters),
+                                                onClearFilters: { filters = LibraryFilters() }))
+                        : nil,
+                    showsMoreMenu
+                        ? AnyView(WorkListMoreMenu {
                             if showsStatistics {
                                 NavigationLink {
                                     ReadingStatisticsView(works: statisticsWorks)
@@ -664,9 +657,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                                     Label("Select", systemImage: "checklist")
                                 }
                             }
-                        }
-                    }
-                }
+                        })
+                        : nil
+                ].compactMap { $0 })
             }
         }
     }

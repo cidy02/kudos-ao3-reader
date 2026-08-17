@@ -1,19 +1,44 @@
 import SwiftUI
 
-/// Each top-level view in `content` becomes its own Liquid Glass toolbar
-/// pill — `ToolbarItemGroup` (unlike a single `ToolbarItem`) splits multiple
-/// children into separate, individually-glassed, system-spaced items, which
-/// is what makes Filter/More/the privacy eye read as three distinct buttons
-/// instead of one fused pill. A single `ToolbarItem` wrapping a manual
-/// `HStack` (the previous approach here) glasses the *whole HStack* as one
-/// pill no matter what each child's own `.tint()` is set to.
-struct ActionToolbar<Content: View>: ToolbarContent {
-    @ViewBuilder var content: () -> Content
+/// Renders each entry in `items` (front to back) as its own Liquid Glass
+/// toolbar pill.
+///
+/// iOS 26 auto-merges every adjacent item in the same placement into one
+/// shared glass pill regardless of `ToolbarItem` vs `ToolbarItemGroup` and
+/// regardless of each item's own `.tint()` — confirmed against a live device
+/// (both were tried here first and neither split the group). The only real
+/// separator is `ToolbarSpacer(.fixed)` placed *between* items — see
+/// https://developer.apple.com/forums/thread/788446.
+///
+/// Not a `ForEach` over `items`: `ForEach` inside a `@ToolbarContentBuilder`
+/// requires its per-row content to conform to `CustomizableToolbarContent`,
+/// which a conditional `ToolbarSpacer` + `ToolbarItem` pair doesn't (confirmed
+/// by a real build failure) — so this unrolls 5 fixed optional slots by hand
+/// instead (the widest call site, AccountInboxViews, uses up to 5), each
+/// gated by plain `if` (which `@ToolbarContentBuilder` does support,
+/// mirroring `@ViewBuilder`).
+struct ActionToolbar: ToolbarContent {
+    var items: [AnyView]
 
     var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            content()
-                .labelStyle(.iconOnly)
+        if !items.isEmpty {
+            ToolbarItem(placement: .primaryAction) { items[0].labelStyle(.iconOnly) }
+        }
+        if items.count > 1 {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) { items[1].labelStyle(.iconOnly) }
+        }
+        if items.count > 2 {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) { items[2].labelStyle(.iconOnly) }
+        }
+        if items.count > 3 {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) { items[3].labelStyle(.iconOnly) }
+        }
+        if items.count > 4 {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) { items[4].labelStyle(.iconOnly) }
         }
     }
 }

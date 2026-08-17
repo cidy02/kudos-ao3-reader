@@ -166,19 +166,19 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         ToolbarItem(placement: .principal) { searchField }
                         // Filter sits directly visible, right after the search field —
                         // everything else (Select, Expand/Collapse) lives behind "...".
-                        ActionToolbar {
-                            FilterButton(filtersActive: filters.hasActiveFilters,
-                                         showingFilters: router.isShowing(.searchFilters),
-                                         onClearFilters: clearAllFilters)
-                            if phase == .loaded, !results.isEmpty {
-                                WorkListMoreMenu {
+                        ActionToolbar(items: [
+                            AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                  showingFilters: router.isShowing(.searchFilters),
+                                                  onClearFilters: clearAllFilters)),
+                            (phase == .loaded && !results.isEmpty)
+                                ? AnyView(WorkListMoreMenu {
                                     Button { bulkSelection.isSelecting = true } label: {
                                         Label("Select", systemImage: "checklist")
                                     }
                                     ExpandAllMenuItem(expandAll: $expandAllCards)
-                                }
-                            }
-                        }
+                                })
+                                : nil
+                        ].compactMap { $0 })
                     }
                 }
             #if os(iOS)

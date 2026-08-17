@@ -179,26 +179,26 @@ struct AO3AccountWorksList: View {
                 // since nothing's loaded yet).
                 if (hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true }))
                     || (auth.isLoggedIn && phase == .loaded && !works.isEmpty) {
-                    // One item holding a tight HStack — separate ToolbarItems get the
-                    // system's wide spacing, which reads as inconsistent between the
-                    // privacy toggle and the expand/filter cluster. Matches the pattern
-                    // already established in LibraryView.swift's dashboard toolbar.
-                    ActionToolbar {
-                        if hideMature, visibleEntries.contains(where: { $0.local?.isAdult == true }) {
-                            MatureRevealToggle()
-                        }
-                        if auth.isLoggedIn, phase == .loaded, !works.isEmpty {
-                            FilterButton(filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         onClearFilters: { filters = AO3SearchFilters() })
-                            WorkListMoreMenu {
+                    // Matches the pattern already established in LibraryView.swift's
+                    // dashboard toolbar.
+                    ActionToolbar(items: [
+                        (hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true }))
+                            ? AnyView(MatureRevealToggle())
+                            : nil,
+                        (auth.isLoggedIn && phase == .loaded && !works.isEmpty)
+                            ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                    showingFilters: $showingFilters,
+                                                    onClearFilters: { filters = AO3SearchFilters() }))
+                            : nil,
+                        (auth.isLoggedIn && phase == .loaded && !works.isEmpty)
+                            ? AnyView(WorkListMoreMenu {
                                 DisplayModeMenuPicker(mode: $displayMode)
                                 if displayMode == .detailed {
                                     ExpandAllMenuItem(expandAll: $expandAll)
                                 }
-                            }
-                        }
-                    }
+                            })
+                            : nil
+                    ].compactMap { $0 })
                 }
             }
             .filterPanelPresentation(isPresented: $showingFilters) {
