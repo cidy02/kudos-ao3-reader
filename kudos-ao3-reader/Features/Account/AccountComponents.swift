@@ -715,7 +715,7 @@ struct AccountWorksInlineSection: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Button(action: onRefine) {
-                Label("Filters", systemImage: "funnel")
+                Label("Filters", systemImage: "line.3.horizontal.decrease")
                     .font(.footnote)
                     .labelStyle(.titleAndIcon)
             }
