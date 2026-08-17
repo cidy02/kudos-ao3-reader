@@ -67,12 +67,15 @@ struct ReaderNoteEditor: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button {
                         annotation.note = draft.trimmingCharacters(in: .whitespacesAndNewlines)
                         annotation.markModified()
                         onCommit()
                         dismiss()
+                    } label: {
+                        Image(systemName: "checkmark")
                     }
+                    .accessibilityLabel("Done")
                 }
             }
         }

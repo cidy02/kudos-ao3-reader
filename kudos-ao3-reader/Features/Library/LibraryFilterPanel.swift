@@ -261,7 +261,10 @@ private struct LibraryOptionPicker: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
+                        Button { dismiss() } label: {
+                            Image(systemName: "checkmark")
+                        }
+                        .accessibilityLabel("Done")
                     }
                 }
         }

@@ -1519,7 +1519,10 @@ extension ReadiumReaderView {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { router.panel = .none }
+                    Button { router.panel = .none } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .accessibilityLabel("Done")
                 }
             }
         }
