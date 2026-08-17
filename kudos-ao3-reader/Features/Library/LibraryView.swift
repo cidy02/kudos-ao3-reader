@@ -26,8 +26,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         sort: \WorkCollection.dateAdded, order: .reverse
     )
     private var collections: [WorkCollection]
-    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
-    private var readingQueues: [ReadingQueue]
     // Counts only — RecentlyDeletedView does its own full @Query for the actual list.
     @Query(filter: #Predicate<SavedWork> { $0.isPendingDeletion }) private var deletedWorks: [SavedWork]
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
@@ -44,8 +42,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var isLoadingMarkedForLater = false
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
-    @State private var showingNewQueue = false
-    @State private var newQueueName = ""
 
     // MARK: Section cache
     //
@@ -150,15 +146,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
-                .navigationDestination(for: AllReadingQueuesDestination.self) { destination in
-                    // Chevron passes nil → stack grid (owns its own New Queue sheet).
-                    // A specific queue id opens the Safari-style browser.
-                    if destination.initialQueueID == nil {
-                        AllReadingQueuesGridView()
-                    } else {
-                        ReadingQueueBrowserView(initialQueueID: destination.initialQueueID)
-                    }
-                }
                 .toolbar { toolbarContent }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; the
@@ -175,38 +162,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     Button("Cancel", role: .cancel) { newCollectionName = "" }
                 } message: {
                     Text("Name your collection.")
-                }
-                // Sheet for the dashboard carousel's New Queue card — same reliability
-                // reasons as AllReadingQueuesGridView / ReadingQueueBrowserView.
-                .sheet(isPresented: $showingNewQueue) {
-                    NavigationStack {
-                        Form {
-                            TextField("Name", text: $newQueueName)
-                                #if os(iOS)
-                                .textInputAutocapitalization(.words)
-                                #endif
-                        }
-                        .navigationTitle("New Queue")
-                        #if !os(macOS)
-                        .navigationBarTitleDisplayMode(.inline)
-                        #endif
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Cancel") {
-                                    newQueueName = ""
-                                    showingNewQueue = false
-                                }
-                            }
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Create") { createQueue() }
-                                    .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                    }
-                    #if os(iOS)
-                    .presentationDetents([.medium])
-                    .presentationDragIndicator(.visible)
-                    #endif
                 }
                 .inspector(isPresented: router.isShowing(.libraryFilters)) {
                     LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
@@ -355,7 +310,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 TabDashboardShell(
                     sectionTitles: [
                         "Reading Now", "Saved for Later", "Finished",
-                        "Reading Queues", "Collections", "Downloaded"
+                        "Collections", "Downloaded"
                     ],
                     showFilterChips: true
                 )
@@ -370,7 +325,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 localCarousel(.readingNow)
                 savedForLaterCarousel
                 localCarousel(.finished)
-                readingQueuesCarousel
                 collectionsCarousel
                 localCarousel(.downloaded)
                 localCarousel(.history)
@@ -485,37 +439,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             ForEach(collections.prefix(12)) { collection in
                 NavigationLink(value: collection) {
                     CollectionCard(collection: collection)
-                }
-                .buttonStyle(.plain)
-            }
-        } emptyState: {
-            EmptyView()
-        }
-    }
-
-    private var readingQueuesCarousel: some View {
-        let customQueues = readingQueues
-            .filter { $0.kind == .custom }
-            .sorted { $0.sortOrder < $1.sortOrder }
-        return WorkCarouselSection(
-            title: "Reading Queues",
-            collapseKey: "library.readingQueues",
-            hasItems: true,
-            onSeeAll: !customQueues.isEmpty
-                ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
-                : nil
-        ) {
-            Button {
-                newQueueName = ""
-                showingNewQueue = true
-            } label: {
-                NewReadingQueueCard()
-            }
-            .buttonStyle(.plain)
-
-            ForEach(customQueues.prefix(12)) { queue in
-                NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
-                    ReadingQueueCard(queue: queue)
                 }
                 .buttonStyle(.plain)
             }
@@ -713,14 +636,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         guard !trimmed.isEmpty else { return }
         context.insert(WorkCollection(name: trimmed))
         try? context.save()
-    }
-
-    private func createQueue() {
-        let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        newQueueName = ""
-        showingNewQueue = false
-        _ = ReadingQueueService.createQueue(named: trimmed, in: context)
     }
 
     // MARK: Multi-select / bulk actions
