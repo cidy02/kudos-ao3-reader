@@ -293,6 +293,25 @@ enum TombstoneRevokeReason {
     case retiredOrSold
 }
 
+/// One paired device as the pairing UI shows it — local label, never a
+/// wire-supplied name. Mirrors Android's `TrustedDevice` data class.
+struct TrustedDevice: Equatable, Identifiable {
+    var id: String { publicKeyHex }
+    let publicKeyHex: String
+    var label: String
+    let trustedAt: Date
+}
+
+/// Codable storage shape for `TrustedDevice` metadata, keyed by normalized
+/// public key hex. Kept in UserDefaults, not Keychain: unlike the trusted-key
+/// set itself, a label/timestamp does not gate whether a signature is
+/// honored — it only drives display and the Undo Trust window, so an
+/// unsandboxed process tampering with it has no trust-bypass consequence.
+private struct StoredDeviceMetadata: Codable {
+    var label: String
+    var trustedAt: Date
+}
+
 /// Local trusted Ed25519 public keys. Own device pub is always trusted.
 ///
 /// KVS schema (D9(b)): each device publishes ONLY its own pub, under its own
@@ -311,6 +330,33 @@ enum TombstoneRevokeReason {
 ///
 /// A `.kudosbackup` must never write this store — see `KudosBackup.swift`'s
 /// restore/apply paths, which only ever call `isTrusted`/`shouldAdopt`.
+/// Count-only source for the Settings "N deletes from unknown devices were
+/// ignored" badge. Deliberately a bare count, never a key or a device name —
+/// the badge's only action is opening the pairing sheet (Scan QR), never a
+/// per-key "Trust this" affordance fed by a file. A `.kudosbackup`/sync-folder
+/// write must never be able to plant something that shows a Trust button;
+/// this type cannot represent that even by mistake, since it has no key-list
+/// API at all.
+enum UnknownSignerTracker {
+    private static let countKey = "unknownSignerTombstoneCount"
+
+    static func recordEncounter(defaults: UserDefaults = .standard) {
+        defaults.set(count(defaults: defaults) + 1, forKey: countKey)
+    }
+
+    static func count(defaults: UserDefaults = .standard) -> Int {
+        defaults.integer(forKey: countKey)
+    }
+
+    /// Called when the user opens the pairing sheet from the badge — this
+    /// marks the prompt as acted on. It does not itself re-adopt anything;
+    /// the next sync after a successful pair does that normally through the
+    /// existing `shouldAdopt` path.
+    static func reset(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: countKey)
+    }
+}
+
 enum TombstoneTrustStore {
     static let localKeysKey = "trustedTombstonePublicKeys"
     /// Legacy whole-set KVS key from the pre-D9(b) design. No longer written.
@@ -326,6 +372,9 @@ enum TombstoneTrustStore {
     /// validation surface for the same result.
     private static let iCloudUntrustedKey = "tombstoneUntrustedPublicKeys"
     private static let localRevokedKeysKey = "tombstoneRevokedPublicKeysDenylist"
+    private static let deviceMetadataKey = "trustedTombstoneDeviceMetadata"
+    /// Undo Trust only reverts a decision made moments ago on THIS device.
+    static let undoTrustWindow: TimeInterval = 24 * 60 * 60
 
     private static func iCloudPubKey(forDevice deviceID: String) -> String { "pub.\(deviceID)" }
 
@@ -377,7 +426,11 @@ enum TombstoneTrustStore {
     }
 
     @discardableResult
-    static func add(_ publicKeyHex: String, defaults: UserDefaults = .standard) -> Bool {
+    static func add(
+        _ publicKeyHex: String,
+        label: String = "",
+        defaults: UserDefaults = .standard
+    ) -> Bool {
         guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
         lock.lock()
         defer { lock.unlock() }
@@ -398,6 +451,7 @@ enum TombstoneTrustStore {
             // would ever clear it. Stolen revocations are not cleared here:
             // `isDenylisted` above already refuses the add outright for those.
             clearFromRemoteUntrusted(normalized, defaults: defaults)
+            recordNewTrust(normalized, label: label, defaults: defaults)
         }
         return true
     }
@@ -421,6 +475,7 @@ enum TombstoneTrustStore {
         let removed = keys.remove(normalized) != nil
         if removed {
             saveKeys(keys, defaults: defaults)
+            removeDeviceMetadata(normalized, defaults: defaults)
         }
         switch reason {
         case .stolenOrCompromised:
@@ -455,6 +510,94 @@ enum TombstoneTrustStore {
         var denylist = denylistedKeys(defaults: defaults)
         guard denylist.insert(normalized).inserted else { return }
         defaults.set(denylist.sorted(), forKey: localRevokedKeysKey)
+    }
+
+    // MARK: - Per-device metadata (label, trustedAt)
+
+    /// Trusted, non-own devices for the pairing UI's "Trusted Devices" list,
+    /// newest-trusted first. The own device never appears here — it's not
+    /// something the user "pairs with," it's implicitly trusted (see
+    /// `isTrusted`).
+    static func trustedDevices(defaults: UserDefaults = .standard) -> [TrustedDevice] {
+        let keys = trustedPublicKeys(defaults: defaults)
+        let ownKey = TombstoneSigning.publicKeyHex()
+        let metadata = loadDeviceMetadata(defaults: defaults)
+        return keys
+            .filter { $0 != ownKey }
+            .map { hex in
+                let meta = metadata[hex]
+                return TrustedDevice(
+                    publicKeyHex: hex,
+                    label: meta?.label ?? "",
+                    trustedAt: meta?.trustedAt ?? .distantPast
+                )
+            }
+            .sorted { $0.trustedAt > $1.trustedAt }
+    }
+
+    /// User names a device locally, after trusting it. Never fed a
+    /// wire-supplied name — the pairing sheet only offers this after a local
+    /// Trust action succeeds.
+    @discardableResult
+    static func rename(_ publicKeyHex: String, label: String, defaults: UserDefaults = .standard) -> Bool {
+        guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
+        lock.lock()
+        defer { lock.unlock() }
+        var metadata = loadDeviceMetadata(defaults: defaults)
+        guard var existing = metadata[normalized] else { return false }
+        existing.label = label
+        metadata[normalized] = existing
+        saveDeviceMetadata(metadata, defaults: defaults)
+        return true
+    }
+
+    /// Reverts a just-trusted key back to untrusted, only within
+    /// `undoTrustWindow` of the moment it was trusted. Does not denylist —
+    /// this is "I made a mistake," not "this key is hostile," so it goes
+    /// through `remove(reason: .retiredOrSold)`.
+    @discardableResult
+    static func undoTrust(
+        _ publicKeyHex: String,
+        window: TimeInterval = undoTrustWindow,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard let normalized = normalizedPublicKey(publicKeyHex) else { return false }
+        lock.lock()
+        defer { lock.unlock() }
+        guard let meta = loadDeviceMetadata(defaults: defaults)[normalized] else { return false }
+        guard TombstoneSigning.now().timeIntervalSince(meta.trustedAt) <= window else { return false }
+        return remove(normalized, reason: .retiredOrSold, defaults: defaults)
+    }
+
+    /// Only called on a NEWLY inserted key (never overwrites an existing
+    /// record) — re-merging an already-trusted "pub.*" entry must not reset
+    /// `trustedAt` (would break the Undo Trust window) or clobber a label the
+    /// user already set. The own device's key never gets a record; it isn't
+    /// a "paired device."
+    private static func recordNewTrust(_ normalized: String, label: String, defaults: UserDefaults) {
+        guard normalized != TombstoneSigning.publicKeyHex() else { return }
+        var metadata = loadDeviceMetadata(defaults: defaults)
+        guard metadata[normalized] == nil else { return }
+        metadata[normalized] = StoredDeviceMetadata(label: label, trustedAt: TombstoneSigning.now())
+        saveDeviceMetadata(metadata, defaults: defaults)
+    }
+
+    private static func removeDeviceMetadata(_ normalized: String, defaults: UserDefaults) {
+        var metadata = loadDeviceMetadata(defaults: defaults)
+        guard metadata.removeValue(forKey: normalized) != nil else { return }
+        saveDeviceMetadata(metadata, defaults: defaults)
+    }
+
+    private static func loadDeviceMetadata(defaults: UserDefaults) -> [String: StoredDeviceMetadata] {
+        guard let data = defaults.data(forKey: deviceMetadataKey),
+              let decoded = try? JSONDecoder().decode([String: StoredDeviceMetadata].self, from: data)
+        else { return [:] }
+        return decoded
+    }
+
+    private static func saveDeviceMetadata(_ metadata: [String: StoredDeviceMetadata], defaults: UserDefaults) {
+        guard let data = try? JSONEncoder().encode(metadata) else { return }
+        defaults.set(data, forKey: deviceMetadataKey)
     }
 
     private enum KeychainRead {
@@ -634,6 +777,11 @@ enum TombstoneTrustStore {
         for hex in remote where !denylist.contains(hex) {
             if keys.insert(hex).inserted {
                 changed = true
+                // Same-Apple-ID auto-pickup: this device never called `add`
+                // for a peer merged straight from KVS, so it needs the same
+                // metadata bookkeeping `add` does or it would be trusted but
+                // invisible in the Trusted Devices list.
+                recordNewTrust(hex, label: "", defaults: defaults)
             }
         }
         if changed {
@@ -652,6 +800,10 @@ enum TombstoneTrustStore {
         for hex in hexes {
             if keys.remove(hex) != nil { keysChanged = true }
             if denylist, denylisted.insert(hex).inserted { denylistChanged = true }
+            // A device revoked on another device on the same Apple ID must
+            // also drop out of THIS device's Trusted Devices list, not just
+            // its trusted-keys set.
+            removeDeviceMetadata(hex, defaults: defaults)
         }
         if keysChanged { saveKeys(keys, defaults: defaults) }
         if denylistChanged { defaults.set(denylisted.sorted(), forKey: localRevokedKeysKey) }

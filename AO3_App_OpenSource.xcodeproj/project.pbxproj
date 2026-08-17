@@ -573,6 +573,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -634,6 +635,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
