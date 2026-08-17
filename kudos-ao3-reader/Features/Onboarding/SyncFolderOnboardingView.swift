@@ -71,6 +71,12 @@ struct SyncFolderOnboardingView: View {
                 message: "This uses the existing Kudos backup format written to a folder you choose — "
                     + "it's folder-based sync, not real-time CloudKit sync."
             )
+            OnboardingPointRow(
+                symbol: "signature", title: "Using More Than One Device?",
+                message: "Deletes are signed on each device so only devices you've paired can remove "
+                    + "things from your library. Pair your devices anytime in Settings → Deletion "
+                    + "signing — it takes a few seconds."
+            )
             if let connectionError {
                 OnboardingPointRow(
                     symbol: "exclamationmark.triangle", title: "Couldn't Connect", message: connectionError

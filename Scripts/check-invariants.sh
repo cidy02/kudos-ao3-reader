@@ -129,16 +129,22 @@ fi
 
 
 # --- Signing-identity leak guard (repo is PUBLIC) -----------------------------
-# The paid Apple Developer team ID must never be committed. This guard is an
-# ALLOW-list on purpose: it never names the private value, so the guard itself
-# cannot leak it. Anything that is not empty and not the historically-public
-# placeholder fails.
+# NQH85H7343 is the owner's real Apple Developer team ID (confirmed via issued
+# Apple Distribution / Developer ID Application certs, 2026-08-16) and the
+# owner has explicitly decided it is fine to keep tracked in project.pbxproj —
+# a team ID isn't a credential, it can't authenticate or authorize anything on
+# its own, and it's already embedded in every shipped build's provisioning
+# profile. Do not "fix" this by scrubbing it; that decision was made
+# deliberately, not by oversight.
 #
-# How the last leak happened: `codesign -dv` and `security find-identity` output
-# was pasted verbatim into a Markdown report, which embedded
-# "Apple Development: <email> (<TEAMID>)". Docs are checked too, not just the
-# project file.
-PUBLIC_PLACEHOLDER_TEAM="NQH85H7343"   # already public in git history; not the paid team
+# What this guard actually protects against: a DIFFERENT, unreviewed signing
+# identity ending up in a tracked file. That did happen once — `codesign -dv`
+# / `security find-identity` output was pasted verbatim into a Markdown
+# report, embedding "Apple Development: <email> (<TEAMID>)" for a *different*
+# team than the one below. Docs are checked too, not just the project file.
+# This is an ALLOW-list on purpose: it never names a value being protected, so
+# the guard itself cannot leak anything new.
+PUBLIC_PLACEHOLDER_TEAM="NQH85H7343"   # the real team ID; owner-approved to stay public
 
 BAD_TEAM_LINES="$(grep -nE 'DEVELOPMENT_TEAM = [^";]' "$ROOT/AO3_App_OpenSource.xcodeproj/project.pbxproj" \
   | grep -v "DEVELOPMENT_TEAM = ${PUBLIC_PLACEHOLDER_TEAM};" || true)"
