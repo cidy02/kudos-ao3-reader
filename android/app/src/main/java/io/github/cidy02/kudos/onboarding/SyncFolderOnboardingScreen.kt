@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -235,6 +236,13 @@ private fun SyncFolderPoints(error: String?) {
             title = "Not Real-Time Cloud Sync",
             body = "This uses the existing Kudos backup format written to a folder you choose — " +
                 "it's folder-based sync, not real-time cloud sync."
+        )
+        SyncFolderPoint(
+            icon = Icons.Outlined.VerifiedUser,
+            title = "Using More Than One Device?",
+            body = "Deletes are signed on each device so only devices you've paired can remove " +
+                "things from your library. Pair your devices anytime in Settings → Deletion " +
+                "signing — it takes a few seconds."
         )
         if (error != null) {
             SyncFolderPoint(
