@@ -29,6 +29,7 @@
 		000000000000000000000520 /* KudosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KudosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000400000000 /* MuPDF.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MuPDF.xcframework; path = Vendor/MuPDF.xcframework; sourceTree = "<group>"; };
 		000000000000000000000900 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
+		000000000000000000000901 /* Kudos-iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "kudos-ao3-reader/Kudos-iOS.entitlements"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -70,6 +71,7 @@
 				000000000000000000000510 /* KudosTests */,
 				000000000000000000000020 /* Products */,
 				000000000000000000000900 /* Shared.xcconfig */,
+				000000000000000000000901 /* Kudos-iOS.entitlements */,
 			);
 			sourceTree = "<group>";
 		};
@@ -548,6 +550,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Kudos;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "kudos-ao3-reader/Kudos-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "kudos-ao3-reader/Kudos-iOS.entitlements";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -569,6 +573,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -605,6 +610,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Kudos;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "kudos-ao3-reader/Kudos-iOS.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "kudos-ao3-reader/Kudos-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "kudos-ao3-reader/Kudos.entitlements";
 				"CODE_SIGN_INJECT_BASE_ENTITLEMENTS[sdk=macosx*]" = NO;
 				CODE_SIGN_STYLE = Automatic;
@@ -628,6 +635,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "kudos-ao3-reader/Kudos-Bridging-Header.h";
 				INFOPLIST_KEY_CFBundleDisplayName = Kudos;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock to reveal hidden mature works.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan another device's pairing code to trust its deletions.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

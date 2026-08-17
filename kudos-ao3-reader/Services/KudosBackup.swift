@@ -1622,7 +1622,22 @@ enum KudosBackupService {
             localTombstones.map { "\($0.recordTypeRaw)|\($0.recordID.uuidString.lowercased())" }
         )
         for archived in contents.manifest.tombstones {
-            guard TombstoneSigning.shouldAdopt(archived, defaults: defaults) else { continue }
+            guard TombstoneSigning.shouldAdopt(archived, defaults: defaults) else {
+                // A verified-but-untrusted signer is the count-only Settings
+                // badge's data source — the moment a delete failed to land
+                // because nobody paired that device yet. Not the same case as
+                // a forged/invalid signature (verify() false): that is not
+                // "someone I haven't met," it is not a signature at all, and
+                // surfacing it would just be noise a user can do nothing
+                // about. Count only, never a key or name — the badge's own
+                // action is "Scan QR," never "Trust this key from a file."
+                if !archived.signature.isEmpty, !archived.signerPublicKey.isEmpty,
+                   TombstoneSigning.verify(archived),
+                   !TombstoneTrustStore.isTrusted(archived.signerPublicKey, defaults: defaults) {
+                    UnknownSignerTracker.recordEncounter(defaults: defaults)
+                }
+                continue
+            }
             let key = "\(archived.recordTypeRaw)|\(archived.recordID.uuidString.lowercased())"
             guard seenTombstoneKeys.insert(key).inserted else { continue }
             guard let adopted = makeTombstone(from: archived) else { continue }
