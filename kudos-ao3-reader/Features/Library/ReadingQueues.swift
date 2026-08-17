@@ -103,11 +103,10 @@ struct ReadingQueueCard: View {
         self.queue = queue
     }
 
-    // Ordered the same way the queue's own detail view is (sortOrderInQueue) — the
-    // stack's first ≤3 faces should be the queue's actual first ≤3 works, not an
-    // arbitrary membership order. Memberships of a soft-deleted work survive (so
-    // restoring it re-joins its queues), but the work itself belongs to Recently
-    // Deleted, not this card — orderedWorks already excludes it.
+    // Ordered the same way the queue's own detail view is (sortOrderInQueue).
+    // Memberships of a soft-deleted work survive (so restoring it re-joins its
+    // queues), but the work itself belongs to Recently Deleted, not this card —
+    // orderedWorks already excludes it.
     private var works: [SavedWork] {
         ReadingQueueService.orderedWorks(in: queue)
     }
@@ -117,10 +116,6 @@ struct ReadingQueueCard: View {
             tile
                 .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
                        minHeight: cardSize.height)
-            Text(queue.displayName)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
             Text("\(works.count) work\(works.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -129,51 +124,42 @@ struct ReadingQueueCard: View {
         .frame(width: cardSize.width, alignment: .leading)
     }
 
-    // Any non-empty queue reads as a 3-deep shelf — padToThree cycles the titles
-    // that do exist so a 1-work queue still shows the same stack depth as every
-    // other queue card, for consistency across the carousel. An empty queue keeps
-    // the abstract name-hued tile — there's no title to hue any face with.
-    @ViewBuilder
+    // One tile, not a stack of the works inside — the queue's own icon and name
+    // are its identity, not a preview of its contents. Same gradient-fill +
+    // centered-icon treatment CollectionCard's own tile uses, so both read as
+    // the same family of "named shelf" card; the name overlays the tile itself
+    // (top edge) instead of sitting in its own row below, since this tile has
+    // no separate title text underneath it the way CollectionCard's does.
     private var tile: some View {
-        if !works.isEmpty {
-            StackedWorkCover(
-                workTitles: works.map(\.title), cardSize: cardSize,
-                axis: .horizontal, padToThree: true
-            )
-        } else {
-            singleTile
-        }
-    }
-
-    private var singleTile: some View {
         let hue = CoverArt.hue(for: queue.displayName)
+        let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue)
         return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-            .fill(.regularMaterial)
+            .fill(LinearGradient(
+                colors: [gradient.start, gradient.end],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            ))
             .overlay {
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                    .fill(themeManager.appTheme.carouselQueueTint(hue: hue))
+                Image(systemName: queue.kind == .savedForLater
+                        ? WorkActionLabels.savedForLaterSymbol
+                        : "list.bullet.rectangle")
+                    .font(.system(size: 38))
+                    .foregroundStyle(.white.opacity(0.6))
             }
-            .overlay(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: queue.kind == .savedForLater
-                            ? WorkActionLabels.savedForLaterSymbol
-                            : "list.bullet.rectangle")
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(.tint)
-                    Spacer()
-                    Text(queue.displayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(4)
-                        .multilineTextAlignment(.leading)
-                }
-                .padding(12)
+            .overlay(alignment: .top) {
+                Text(queue.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    // A plain shadow, not a scrim rectangle — legible over every
+                    // hue `carouselCollectionGradient` can produce, including the
+                    // brightest (Light theme's gradient start) without dimming
+                    // the gradient itself the way a background fill would.
+                    .shadow(color: .black.opacity(0.35), radius: 3)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 12)
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(.quaternary, lineWidth: 0.75)
-            }
-            .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
+            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
     }
 }
 
