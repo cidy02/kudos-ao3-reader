@@ -361,6 +361,79 @@ class BackupTrustPhase2Test {
     }
 
     @Test
+    fun importPackageMergeDoesNotResurrectBookmarkOrSavedSearchSuppressedByIncomingTrustedTombstone() =
+        runTest {
+            val peer = Ed25519Sign.KeyPair.newKeyPair()
+            val pub = peer.publicKey.toLowerHex()
+            TombstoneTrustStore(settingsRepository).trust(pub)
+
+            val bookmarkId = "77777777-7777-4777-8777-777777777777"
+            val searchId = "55555555-5555-4555-8555-555555555555"
+            val bookmarkTomb = signedTypedTombstone(
+                recordId = bookmarkId,
+                recordType = SyncTombstoneRecordType.BOOKMARK,
+                privateKey = peer.privateKey,
+                publicKeyHex = pub,
+                tombstoneId = "aaaa1111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            )
+            val searchTomb = signedTypedTombstone(
+                recordId = searchId,
+                recordType = SyncTombstoneRecordType.SAVED_SEARCH,
+                privateKey = peer.privateKey,
+                publicKeyHex = pub,
+                tombstoneId = "bbbb2222-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+            )
+
+            backupRepository.importPackage(
+                KudosBackupPackage(
+                    manifest = KudosBackupManifest(
+                        version = BackupVersion.CURRENT,
+                        exportedAt = "2026-06-26T12:00:00Z",
+                        exportedBy = BackupExportedBy(
+                            platform = "android",
+                            appVersion = "test",
+                            schemaVersion = BackupVersion.CURRENT
+                        ),
+                        bookmarks = listOf(
+                            BackupBookmark(
+                                title = "Peer deleted",
+                                urlString = "https://example.com/deleted",
+                                dateAdded = "2026-01-01T00:00:00Z",
+                                id = bookmarkId
+                            )
+                        ),
+                        savedSearches = listOf(
+                            BackupSavedSearch(
+                                id = searchId,
+                                name = "Peer deleted search",
+                                dateAdded = "2026-01-01T00:00:00Z"
+                            )
+                        ),
+                        tombstones = listOf(bookmarkTomb, searchTomb),
+                        settings = BackupSettingsPayload()
+                    )
+                ),
+                BackupImportMode.MERGE
+            )
+
+            assertTrue(database.bookmarkDao().getAll().none { it.id == bookmarkId })
+            assertNull(database.savedSearchDao().getById(searchId))
+            val stored = database.syncTombstoneDao().getAll()
+            assertTrue(
+                stored.any {
+                    it.recordTypeRaw == SyncTombstoneRecordType.BOOKMARK &&
+                        it.recordID == bookmarkId
+                }
+            )
+            assertTrue(
+                stored.any {
+                    it.recordTypeRaw == SyncTombstoneRecordType.SAVED_SEARCH &&
+                        it.recordID == searchId
+                }
+            )
+        }
+
+    @Test
     fun retractWorkTombstoneMatchesAo3AndCanonicalUrl() = runTest {
         val otherRecord = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
         database.syncTombstoneDao().upsert(
@@ -421,6 +494,32 @@ class BackupTrustPhase2Test {
             workId,
             "Should be suppressed",
             signedBackupTombstoneFor(workId, ao3WorkId, privateKey, publicKeyHex)
+        )
+    }
+
+    private fun signedTypedTombstone(
+        recordId: String,
+        recordType: String,
+        privateKey: ByteArray,
+        publicKeyHex: String,
+        tombstoneId: String
+    ): BackupTombstone {
+        val created = "2026-01-01T00:00:00Z"
+        val unsigned = BackupTombstone(
+            id = tombstoneId,
+            recordID = recordId,
+            recordTypeRaw = recordType,
+            createdAt = created,
+            lastModifiedAt = created
+        )
+        val signed = TombstoneSigning.signWithRawKey(
+            unsigned.copy(signerPublicKey = publicKeyHex).toSyncTombstone(),
+            privateKey,
+            publicKeyHex
+        )
+        return unsigned.copy(
+            signerPublicKey = signed.signerPublicKey,
+            signature = signed.signature
         )
     }
 
