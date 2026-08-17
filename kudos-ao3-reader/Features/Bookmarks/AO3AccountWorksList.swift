@@ -377,6 +377,18 @@ struct AO3AccountWorksList: View {
             guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             works = []
             phase = .idle // back to the signed-out prompt
+        } catch is CancellationError {
+            // This view's own `.task(id: auth.isLoggedIn)` restarts (cancelling
+            // whatever load was in flight) on any transient flip of that flag —
+            // e.g. a background session check. That's not a failure the user
+            // caused or can fix with "Try Again": either the flag settles back
+            // and the restarted task's own `load` call replaces this one, or the
+            // view is already gone and nothing is watching `phase` anymore.
+            // Leaving `phase` alone (instead of surfacing the raw system error)
+            // avoids showing a permanent-looking "Swift.CancellationError" card
+            // for what is, from the user's side, nothing happening at all.
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // Same reasoning as the CancellationError case above.
         } catch let error as AO3Error {
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
