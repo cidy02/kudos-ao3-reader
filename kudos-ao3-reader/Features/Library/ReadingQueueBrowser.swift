@@ -355,15 +355,29 @@ struct ReadingQueueBrowserView: View {
         }
         .presentationDetents(switcherDetents)
         .presentationDragIndicator(.visible)
+        // Liquid Glass, matching the reader's Contents sheet: that sheet never
+        // overrides its presentation background, so it keeps the system's
+        // translucent glass sheet material — visible there because a reader
+        // page (white/sepia/etc.) shows blurred behind it. This app's own
+        // backdrop is dark enough in Dark/OLED that the same default glass
+        // read as flat black, so it's requested explicitly here instead of
+        // left to the (in this context, indistinguishable) system default.
+        .presentationBackground(.regularMaterial)
     }
 
     /// Title bar + rows, no footer — same reasoning as CommentsView's
     /// chapterPickerDetents ("Title + rows + footer note"), minus the base
     /// height a footer would add, since this list doesn't have one.
+    ///
+    /// Unlike chapterPickerDetents, always pairs the fitted height with
+    /// `.large` rather than using it alone: a fixed single detent has no
+    /// larger stop to drag to at all, which read as the sheet being stuck
+    /// too short. The fitted height is still the default/initial detent —
+    /// this only adds the option to expand, not a taller starting point.
     private var switcherDetents: Set<PresentationDetent> {
         if orderedQueues.count <= 6 {
             let rowCount = CGFloat(orderedQueues.count)
-            return [.height(90 + rowCount * 52)]
+            return [.height(90 + rowCount * 52), .large]
         }
         return [.medium, .large]
     }
