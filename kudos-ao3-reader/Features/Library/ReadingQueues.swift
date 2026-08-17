@@ -133,12 +133,13 @@ struct ReadingQueueCard: View {
 
     // Safari Tab-Groups style: a 2×2 grid of the queue's own first 4 works (each
     // its own hued title/author cell), reading as a peek at what's actually
-    // queued rather than an abstract icon. Falls back to the icon tile only when
-    // there's truly nothing to preview — an empty queue has no titles to show.
+    // queued rather than an abstract icon. An empty queue has no titles to
+    // preview, so it shows 4 skeleton cells in the same grid shape instead —
+    // "a place for works to land" rather than a dead, contentless tile.
     @ViewBuilder
     private var tile: some View {
         if works.isEmpty {
-            emptyTile
+            skeletonGrid
         } else {
             tabGroupGrid
         }
@@ -146,7 +147,7 @@ struct ReadingQueueCard: View {
 
     private var tabGroupGrid: some View {
         let cells = Array(works.prefix(4))
-        return VStack(spacing: 4) {
+        return gridFrame {
             HStack(spacing: 4) {
                 gridCell(!cells.isEmpty ? cells[0] : nil)
                 gridCell(cells.count > 1 ? cells[1] : nil)
@@ -156,17 +157,54 @@ struct ReadingQueueCard: View {
                 gridCell(cells.count > 3 ? cells[3] : nil)
             }
         }
-        .padding(6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            .regularMaterial,
-            in: RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(.quaternary, lineWidth: 0.75)
+    }
+
+    private var skeletonGrid: some View {
+        gridFrame {
+            HStack(spacing: 4) {
+                skeletonCell()
+                skeletonCell()
+            }
+            HStack(spacing: 4) {
+                skeletonCell()
+                skeletonCell()
+            }
         }
-        .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
+        .skeletonShimmer()
+    }
+
+    /// Shared 2×2 grid chrome (padding, material background, border, shadow) —
+    /// both `tabGroupGrid` and `skeletonGrid` are just this frame around
+    /// different row content.
+    private func gridFrame(@ViewBuilder rows: () -> some View) -> some View {
+        VStack(spacing: 4, content: rows)
+            .padding(6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                .regularMaterial,
+                in: RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(.quaternary, lineWidth: 0.75)
+            }
+            .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
+    }
+
+    /// One skeleton cell — title/author placeholder lines, matching `gridCell`'s
+    /// real layout so an empty queue previews the same shape it'll fill into.
+    private func skeletonCell() -> some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        return VStack(alignment: .leading, spacing: 4) {
+            SkeletonTextLine(height: 7, width: 40)
+            SkeletonTextLine(height: 6, width: 28)
+            Spacer(minLength: 0)
+            SkeletonTextLine(height: 6, width: 32)
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.primary.opacity(0.05))
+        .clipShape(shape)
     }
 
     /// One grid cell: `work`'s title/author over its own title-hued tint, or an
@@ -198,28 +236,6 @@ struct ReadingQueueCard: View {
             }
         }
         .clipShape(shape)
-    }
-
-    private var emptyTile: some View {
-        let hue = CoverArt.hue(for: queue.displayName)
-        return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-            .fill(.regularMaterial)
-            .overlay {
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                    .fill(themeManager.appTheme.carouselQueueTint(hue: hue))
-            }
-            .overlay {
-                Image(systemName: queue.kind == .savedForLater
-                        ? WorkActionLabels.savedForLaterSymbol
-                        : "list.bullet.rectangle")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(.tint)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(.quaternary, lineWidth: 0.75)
-            }
-            .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
     }
 }
 
