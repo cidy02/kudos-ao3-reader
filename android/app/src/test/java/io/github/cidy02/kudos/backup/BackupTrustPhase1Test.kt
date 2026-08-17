@@ -16,6 +16,7 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.TagEntity
 import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toEntity
+import io.github.cidy02.kudos.search.SavedSearchRepository
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.FontFileStore
 import io.github.cidy02.kudos.files.WorkFileStore
@@ -438,7 +439,166 @@ class BackupTrustPhase1Test {
 
         assertTrue(database.bookmarkDao().getAll().none { it.urlString == "https://example.com/local-only" })
         assertNull(database.savedSearchDao().getById(SEARCH_LOCAL))
-        assertTrue(database.syncTombstoneDao().getAll().isEmpty())
+        val minted = database.syncTombstoneDao().getAll()
+        assertTrue(
+            minted.any {
+                it.recordTypeRaw == SyncTombstoneRecordType.BOOKMARK &&
+                    it.recordID == BOOKMARK_LOCAL &&
+                    it.signature.isNotEmpty()
+            }
+        )
+        assertTrue(
+            minted.any {
+                it.recordTypeRaw == SyncTombstoneRecordType.SAVED_SEARCH &&
+                    it.recordID == SEARCH_LOCAL &&
+                    it.signature.isNotEmpty()
+            }
+        )
+    }
+
+    @Test
+    fun importPackageReplaceThenMergeDoesNotResurrectBookmarkOrSavedSearch() = runTest {
+        database.workDao().upsert(savedWork(WORK_K, "Keep").toEntity())
+        database.bookmarkDao().upsert(
+            Bookmark(
+                id = BOOKMARK_LOCAL,
+                title = "Local only",
+                urlString = "https://example.com/local-only",
+                dateAdded = FIXED_CLOCK
+            ).toEntity()
+        )
+        database.savedSearchDao().upsert(
+            SavedSearch(
+                id = SEARCH_LOCAL,
+                name = "Local only search",
+                dateAdded = FIXED_CLOCK
+            ).toEntity()
+        )
+
+        val replacePack = packageWithWorkAndTombstone(
+            workId = WORK_K,
+            workTitle = "Snapshot K",
+            tombstoneRecordId = TOMBSTONE_ID,
+            ao3WorkId = 4242
+        )
+        backupRepository.importPackage(replacePack, BackupImportMode.REPLACE_LIBRARY)
+
+        val stale = packageWithBookmarksAndSearches(
+            workId = WORK_K,
+            bookmarks = listOf(
+                BackupBookmark(
+                    title = "Local only",
+                    urlString = "https://example.com/local-only",
+                    dateAdded = "2026-01-01T00:00:00Z",
+                    id = BOOKMARK_LOCAL
+                )
+            ),
+            searches = listOf(
+                BackupSavedSearch(
+                    id = SEARCH_LOCAL,
+                    name = "Local only search",
+                    dateAdded = "2026-01-01T00:00:00Z"
+                )
+            )
+        )
+        backupRepository.importPackage(stale, BackupImportMode.MERGE)
+
+        assertTrue(database.bookmarkDao().getAll().none { it.urlString == "https://example.com/local-only" })
+        assertNull(database.savedSearchDao().getById(SEARCH_LOCAL))
+    }
+
+    @Test
+    fun importPackageMergeDoesNotResurrectBookmarkOrSavedSearchWithLocalTombstone() = runTest {
+        val now = Instant.parse("2026-06-01T00:00:00Z")
+        database.syncTombstoneDao().upsert(
+            TombstoneSigning.sign(
+                SyncTombstone(
+                    recordID = BOOKMARK_LOCAL,
+                    recordTypeRaw = SyncTombstoneRecordType.BOOKMARK,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletionReason = "bookmarkDeleted"
+                )
+            ).toEntity()
+        )
+        database.syncTombstoneDao().upsert(
+            TombstoneSigning.sign(
+                SyncTombstone(
+                    recordID = SEARCH_LOCAL,
+                    recordTypeRaw = SyncTombstoneRecordType.SAVED_SEARCH,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletionReason = "savedSearchDeleted"
+                )
+            ).toEntity()
+        )
+
+        backupRepository.importPackage(
+            packageWithBookmarksAndSearches(
+                workId = WORK_K,
+                bookmarks = listOf(
+                    BackupBookmark(
+                        title = "Deleted link",
+                        urlString = "https://example.com/deleted",
+                        dateAdded = "2026-01-01T00:00:00Z",
+                        id = BOOKMARK_LOCAL
+                    )
+                ),
+                searches = listOf(
+                    BackupSavedSearch(
+                        id = SEARCH_LOCAL,
+                        name = "Deleted search",
+                        dateAdded = "2026-01-01T00:00:00Z"
+                    )
+                )
+            ),
+            BackupImportMode.MERGE
+        )
+
+        assertTrue(database.bookmarkDao().getAll().none { it.id == BOOKMARK_LOCAL })
+        assertNull(database.savedSearchDao().getById(SEARCH_LOCAL))
+    }
+
+    @Test
+    fun importPackageInAppDeleteThenMergeDoesNotResurrectSavedSearch() = runTest {
+        val repo = SavedSearchRepository(
+            database.savedSearchDao(),
+            clock = { FIXED_CLOCK },
+            tombstoneDao = database.syncTombstoneDao(),
+            uuidFactory = { "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }
+        )
+        database.savedSearchDao().upsert(
+            SavedSearch(
+                id = SEARCH_LOCAL,
+                name = "Mine",
+                dateAdded = Instant.parse("2026-01-01T00:00:00Z")
+            ).toEntity()
+        )
+        repo.delete(SEARCH_LOCAL)
+        assertNull(database.savedSearchDao().getById(SEARCH_LOCAL))
+
+        backupRepository.importPackage(
+            packageWithBookmarksAndSearches(
+                workId = WORK_K,
+                bookmarks = emptyList(),
+                searches = listOf(
+                    BackupSavedSearch(
+                        id = SEARCH_LOCAL,
+                        name = "Mine",
+                        dateAdded = "2026-01-01T00:00:00Z"
+                    )
+                )
+            ),
+            BackupImportMode.MERGE
+        )
+        assertNull(database.savedSearchDao().getById(SEARCH_LOCAL))
+        assertTrue(
+            database.syncTombstoneDao().getAll().any {
+                it.recordTypeRaw == SyncTombstoneRecordType.SAVED_SEARCH &&
+                    it.recordID == SEARCH_LOCAL &&
+                    it.signature.isNotEmpty()
+            }
+        )
     }
 
     @Test
@@ -731,6 +891,28 @@ class BackupTrustPhase1Test {
                 settings = BackupSettingsPayload()
             ),
             epubFilesByWorkId = mapOf(WORK_K to epubBytes)
+        )
+    }
+
+    private fun packageWithBookmarksAndSearches(
+        workId: String,
+        bookmarks: List<BackupBookmark>,
+        searches: List<BackupSavedSearch>
+    ): KudosBackupPackage {
+        return KudosBackupPackage(
+            manifest = KudosBackupManifest(
+                version = BackupVersion.CURRENT,
+                exportedAt = "2026-06-26T12:00:00Z",
+                exportedBy = BackupExportedBy(
+                    platform = "android",
+                    appVersion = "test",
+                    schemaVersion = BackupVersion.CURRENT
+                ),
+                works = listOf(backupWork(workId, "Keep", 4242)),
+                bookmarks = bookmarks,
+                savedSearches = searches,
+                settings = BackupSettingsPayload()
+            )
         )
     }
 

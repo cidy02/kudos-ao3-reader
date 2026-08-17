@@ -6,7 +6,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 
 - A saved work's **EPUB file**, **reading progress** (`readiumLocator`, `lastSpineIndex`, `lastScrollFraction`, `progressModifiedAt`), user flags (`isFavorite`/`isSaved`/`isFinished`), tags, queues, collections, bookmarks, **in-book annotations** (`ReadingAnnotation`: bookmarks/highlights/notes, anchored by a Readium `Locator` string plus a `selectedText` snapshot so the mark survives a dangling anchor).
 - **No network outcome may delete local data.** AO3 404 → set `ao3Unavailable = true`, keep everything (`WorkTags.refreshFromAO3`). 429/403/5xx/offline → keep prior state; list refreshes keep previously loaded content on failure.
-- Deletion is user-initiated only, and lands in **Recently Deleted for 90 days** first (`PreservedWorkService.softDelete` — sets `isPendingDeletion`/`deletedAt`/`permanentDeletionScheduledAt`, records a tombstone, keeps the EPUB). Only `sweepExpired`/explicit "Delete Permanently" hard-deletes (`WorkLifecycle.hardDelete`). Sweep is gated behind `PersistenceOperationGate`.
+- Deletion is user-initiated only. Works, collections, and queues land in **Recently Deleted for 90 days** first (`PreservedWorkService.softDelete` — sets `isPendingDeletion`/`deletedAt`/`permanentDeletionScheduledAt`, records a tombstone, keeps the EPUB). Only `sweepExpired`/explicit "Delete Permanently" hard-deletes (`WorkLifecycle.hardDelete`). Sweep is gated behind `PersistenceOperationGate`. In-book annotations, saved AO3 links (`Bookmark`), and named searches (`SavedSearch`) are the other class: immediate hard-delete plus a signed tombstone, no RD UI.
 
 ## Source of truth vs derived vs transport
 
@@ -30,7 +30,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 - Timestamp-aware: `incomingWins` = `SyncMerge.shouldApplyIncoming(local:incoming:)`; new records always adopt archive values.
 - Booleans (`isFavorite`, `isSaved`, `isFinished`, `isComplete`, `isPendingDeletion`) are `incomingWins`-gated — never OR/AND-merged blindly.
 - Tombstones travel in the manifest, merge before conflict resolution, suppress resurrection with a newer-snapshot escape hatch; `restore()` **retracts** the tombstone rather than racing timestamps.
-- Membership removal has tombstones too (`.readingQueueMembership`, `.workCollectionMembership` with composite ID `SyncTombstone.collectionMembershipID`). Deleting an in-book annotation tombstones it as `.readingAnnotation`, so an older archive cannot resurrect it.
+- Membership removal has tombstones too (`.readingQueueMembership`, `.workCollectionMembership` with composite ID `SyncTombstone.collectionMembershipID`). Deleting an in-book annotation tombstones it as `.readingAnnotation`, so an older archive cannot resurrect it. Saved AO3 links (`.bookmark`) and named searches (`.savedSearch`) are the same immediate-delete class: hard-delete plus a signed tombstone at that moment, no Recently Deleted UI, no 90-day clock. Replace-mode omission of either type mints that tombstone too (explicit "Replace Library" only — never folder sync).
 - Annotations merge by record id under the same `SyncMerge.shouldApplyIncoming` rule; one whose work is absent from the restore is skipped, never orphaned (its anchor is meaningless without the book).
 - Restore reindexes each restored work; suppressed works' EPUBs are never written (no orphans from suppression).
 

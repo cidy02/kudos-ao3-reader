@@ -284,4 +284,29 @@ struct SearchFiltersTests {
         #expect(reloaded.filters.language.id == "fr")
         #expect(reloaded.filters.warnings == [.noWarnings])
     }
+
+    @Test func aBookmarkIDSurvivesARealSwiftDataRoundTrip() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+
+        let writeContext = ModelContext(container)
+        let bookmark = Bookmark(
+            title: "AO3 work",
+            urlString: "https://archiveofourown.org/works/42"
+        )
+        let assignedID = bookmark.id
+        writeContext.insert(bookmark)
+        try writeContext.save()
+
+        let readContext = ModelContext(container)
+        let reloaded = try #require(try readContext.fetch(FetchDescriptor<Bookmark>()).first)
+        #expect(reloaded.id == assignedID)
+        #expect(reloaded.title == "AO3 work")
+        #expect(reloaded.urlString == "https://archiveofourown.org/works/42")
+    }
 }

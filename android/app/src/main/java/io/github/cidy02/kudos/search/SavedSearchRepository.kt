@@ -1,9 +1,14 @@
 package io.github.cidy02.kudos.search
 
+import io.github.cidy02.kudos.backup.TombstoneSigning
 import io.github.cidy02.kudos.core.model.SavedSearch
+import io.github.cidy02.kudos.core.model.SyncTombstone
+import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.data.local.dao.SavedSearchDao
+import io.github.cidy02.kudos.data.local.dao.SyncTombstoneDao
 import io.github.cidy02.kudos.data.local.entity.SavedSearchEntity
 import io.github.cidy02.kudos.data.local.entity.toDomain
+import io.github.cidy02.kudos.data.local.entity.toEntity
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import java.time.Instant
 import java.util.UUID
@@ -13,6 +18,8 @@ import java.util.UUID
  */
 class SavedSearchRepository(
     private val dao: SavedSearchDao,
+    private val tombstoneDao: SyncTombstoneDao? = null,
+    private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
     private val clock: () -> Instant = Instant::now
 ) {
     suspend fun getAll(): List<SavedSearch> {
@@ -39,6 +46,22 @@ class SavedSearchRepository(
     }
 
     suspend fun delete(id: String) {
+        val existing = dao.getById(id)
+        if (existing != null && tombstoneDao != null) {
+            val now = clock()
+            tombstoneDao.upsert(
+                TombstoneSigning.sign(
+                    SyncTombstone(
+                        id = uuidFactory(),
+                        recordID = id.lowercase(),
+                        recordTypeRaw = SyncTombstoneRecordType.SAVED_SEARCH,
+                        createdAt = now,
+                        lastModifiedAt = now,
+                        deletionReason = "savedSearchDeleted"
+                    )
+                ).toEntity()
+            )
+        }
         dao.deleteById(id)
     }
 

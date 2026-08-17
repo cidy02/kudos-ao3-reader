@@ -100,7 +100,8 @@ data class BackupWork(
 data class BackupBookmark(
     val title: String,
     val urlString: String,
-    val dateAdded: String
+    val dateAdded: String,
+    val id: String? = null
 )
 
 @Serializable

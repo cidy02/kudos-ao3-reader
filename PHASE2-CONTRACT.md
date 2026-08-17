@@ -2,7 +2,12 @@
 
 There is **no Phase 3**. This is the last locked tombstone-trust phase.
 
-Local commits only. Do **not** push. Do not mint signed tombstones from Replace.
+Local commits only. Do **not** push. Do not mint signed tombstones from Replace
+for the Recently Deleted class (works / collections / queues). Immediate-delete
+types (`readingAnnotation`, `bookmark`, `savedSearch`) mint a signed tombstone
+at the same moment as the hard-delete — including Replace-mode omission of
+bookmarks and saved searches, which is an explicit user-confirmed Settings
+action, not background folder sync.
 
 ## Payload (UTF-8, `\n` between fields, no trailing newline after last field)
 
@@ -35,7 +40,10 @@ Private key never leaves the device. Algorithm: Ed25519 (iOS `CryptoKit.Curve255
 3. `signerPublicKey` must already be in the device trust store. **Own device pub is always trusted.** A file / ZIP / sync folder **never** adds a trusted key.
 4. Forged or untrusted signatures drop. Do not insert. Do not suppress from them.
 5. Verified + trusted: insert into the local tombstone store **and** include in this batch’s `TombstoneIndex` (deletes cross devices again).
-6. Replace still does **not** mint tombstones for omitted works.
+6. Replace still does **not** mint tombstones for omitted works (or collections /
+   queues). It **does** mint immediate-delete tombstones for omitted bookmarks
+   and saved searches — same class as in-app delete of those types, not a
+   standing unsigned clock.
 7. 24h `lastModifiedAt` clamp stays a pre-filter, not authorization.
 
 ## Trust store

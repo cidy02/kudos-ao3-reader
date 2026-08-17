@@ -51,7 +51,13 @@ class SavedSearchRepositoryTest {
     @Test
     fun deleteRemovesSavedSearch() = runBlocking {
         val dao = FakeSavedSearchDao()
-        val repo = SavedSearchRepository(dao) { Instant.parse("2026-07-01T12:00:00Z") }
+        val tombs = FakeSyncTombstoneDao()
+        val repo = SavedSearchRepository(
+            dao,
+            clock = { Instant.parse("2026-07-01T12:00:00Z") },
+            tombstoneDao = tombs,
+            uuidFactory = { "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }
+        )
 
         val saved = repo.save("Keep me", AO3SearchFilters(query = "keep"))
         assertEquals(1, repo.getAll().size)
@@ -59,6 +65,14 @@ class SavedSearchRepositoryTest {
         repo.delete(saved.id)
         assertTrue(repo.getAll().isEmpty())
         assertTrue(dao.store.isEmpty())
+        assertEquals(1, tombs.store.size)
+        val minted = tombs.store.values.single()
+        assertEquals(saved.id.lowercase(), minted.recordID)
+        assertEquals(
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH,
+            minted.recordTypeRaw
+        )
+        assertTrue(minted.signature.isNotEmpty())
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -94,4 +108,42 @@ private class FakeSavedSearchDao : SavedSearchDao {
     override suspend fun deleteById(id: String) {
         store.remove(id)
     }
+}
+
+private class FakeSyncTombstoneDao : io.github.cidy02.kudos.data.local.dao.SyncTombstoneDao {
+    val store = linkedMapOf<String, io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity>()
+
+    override suspend fun upsert(
+        tombstone: io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity
+    ) {
+        store[tombstone.id] = tombstone
+    }
+
+    override suspend fun upsertAll(
+        tombstones: List<io.github.cidy02.kudos.data.local.entity.SyncTombstoneEntity>
+    ) {
+        tombstones.forEach { upsert(it) }
+    }
+
+    override suspend fun getAll() = store.values.toList()
+
+    override suspend fun getByRecord(recordId: String, recordType: String) =
+        store.values.filter { it.recordID == recordId && it.recordTypeRaw == recordType }
+
+    override suspend fun deleteById(id: String) {
+        store.remove(id)
+    }
+
+    override suspend fun deleteByRecord(recordId: String, recordType: String) {
+        store.values.filter { it.recordID == recordId && it.recordTypeRaw == recordType }
+            .forEach { store.remove(it.id) }
+    }
+
+    override suspend fun deleteSavedWorkByIdentity(
+        recordId: String,
+        ao3WorkId: Int?,
+        canonicalSourceUrl: String,
+        sourceUrl: String,
+        recordType: String
+    ) = Unit
 }

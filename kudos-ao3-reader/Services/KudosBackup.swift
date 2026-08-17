@@ -881,15 +881,32 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
 }
 
 nonisolated struct KudosBackupBookmark: Codable, Equatable {
+    let id: UUID
     let title: String
     let urlString: String
     let dateAdded: Date
 
+    private enum CodingKeys: String, CodingKey {
+        case id, title, urlString, dateAdded
+    }
+
     @MainActor
     init(bookmark: Bookmark) {
+        id = bookmark.id
         title = bookmark.title
         urlString = bookmark.urlString
         dateAdded = bookmark.dateAdded
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Pre-G6 archives have no bookmark id. A fresh UUID cannot match a
+        // local tombstone, so those older snapshots still cannot be
+        // suppressed by id — only archives written after this field exist.
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        urlString = try container.decode(String.self, forKey: .urlString)
+        dateAdded = try container.decode(Date.self, forKey: .dateAdded)
     }
 }
 
@@ -1465,7 +1482,8 @@ nonisolated enum KudosBackupError: LocalizedError, Equatable {
 /// - `replaceLibrary`: This device's works, progress, collections, queues,
 ///   and annotations become the snapshot. Works absent from the backup are
 ///   soft-deleted (without creating tombstones) so a later merge can still
-///   re-add them.
+///   re-add them. Omitted bookmarks and saved searches are hard-deleted
+///   and get an immediate-delete tombstone (annotation pattern).
 nonisolated enum BackupImportMode {
     case reconcile
     case merge
@@ -2077,6 +2095,17 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
         for archived in contents.manifest.savedSearches {
+            if mode != .replaceLibrary {
+                switch tombstones.savedSearchResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.dateAdded
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
             if let existing = savedSearchesByID[archived.id] {
                 existing.name = archived.name
                 existing.dateAdded = archived.dateAdded
@@ -2092,6 +2121,7 @@ enum KudosBackupService {
         if mode == .replaceLibrary {
             let snapshotSearchIDs = Set(contents.manifest.savedSearches.map(\.id))
             for search in existingSavedSearches where !snapshotSearchIDs.contains(search.id) {
+                SyncTombstones.recordDeletion(of: search, in: context)
                 context.delete(search)
             }
         }
@@ -2102,11 +2132,23 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
         for archived in contents.manifest.bookmarks {
+            if mode != .replaceLibrary {
+                switch tombstones.bookmarkResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.dateAdded
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
             let bookmark: Bookmark
             if let existing = bookmarksByURL[archived.urlString] {
                 bookmark = existing
             } else {
                 bookmark = Bookmark(title: archived.title, urlString: archived.urlString)
+                bookmark.id = archived.id
                 context.insert(bookmark)
                 bookmarksByURL[archived.urlString] = bookmark
             }
@@ -2114,10 +2156,11 @@ enum KudosBackupService {
             bookmark.dateAdded = archived.dateAdded
         }
         if mode == .replaceLibrary {
-            // Bookmarks have no Recently Deleted UI. Drop omissions without a
-            // tombstone so a later Merge can insert them again.
+            // Immediate-delete class, same as ReadingAnnotation: mint a
+            // signed tombstone then hard-delete. No Recently Deleted UI.
             let snapshotURLs = Set(contents.manifest.bookmarks.map(\.urlString))
             for bookmark in existingBookmarks where !snapshotURLs.contains(bookmark.urlString) {
+                SyncTombstones.recordDeletion(of: bookmark, in: context)
                 context.delete(bookmark)
             }
         }
@@ -2609,6 +2652,8 @@ enum KudosBackupService {
         private var membershipTombstonesByID: [UUID: SyncTombstone] = [:]
         private var collectionMembershipTombstonesByID: [UUID: SyncTombstone] = [:]
         private var annotationTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var bookmarkTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var savedSearchTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -2634,6 +2679,10 @@ enum KudosBackupService {
                     indexNewest(tombstone, byCollectionMembershipID: tombstone.recordID)
                 case .readingAnnotation:
                     indexNewest(tombstone, byAnnotationID: tombstone.recordID)
+                case .bookmark:
+                    indexNewest(tombstone, byBookmarkID: tombstone.recordID)
+                case .savedSearch:
+                    indexNewest(tombstone, bySavedSearchID: tombstone.recordID)
                 }
             }
         }
@@ -2699,6 +2748,22 @@ enum KudosBackupService {
             collectionMembershipTombstonesByID[id] = tombstone
         }
 
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byBookmarkID id: UUID) {
+            if let existing = bookmarkTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            bookmarkTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, bySavedSearchID id: UUID) {
+            if let existing = savedSearchTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            savedSearchTombstonesByID[id] = tombstone
+        }
+
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
             let tombstone: SyncTombstone? = if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
@@ -2733,6 +2798,20 @@ enum KudosBackupService {
             SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
                 tombstoneDeletedAt: annotationTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func bookmarkResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: bookmarkTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func savedSearchResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: savedSearchTombstonesByID[id]?.lastModifiedAt
             )
         }
 
