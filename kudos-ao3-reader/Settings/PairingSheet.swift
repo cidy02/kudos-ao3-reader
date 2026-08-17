@@ -256,15 +256,12 @@ struct PairingSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let justTrustedHex {
-                        trustedNameStep(justTrustedHex)
-                    } else {
-                        pairingStep
-                    }
+            Group {
+                if let justTrustedHex {
+                    trustedNameStep(justTrustedHex)
+                } else {
+                    pairingForm
                 }
-                .padding()
             }
             .navigationTitle("Pair a Device")
             #if os(iOS)
@@ -286,48 +283,50 @@ struct PairingSheet: View {
         #endif
     }
 
-    private var pairingStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Scan another device's code, or share yours, to trust its deletions.")
-                .foregroundStyle(.secondary)
-
-            #if os(iOS)
-            Button {
-                showScanner = true
-            } label: {
-                Label("Scan a QR Code", systemImage: "qrcode.viewfinder")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            #endif
-
-            Button {
-                showQR.toggle()
-            } label: {
-                Label(showQR ? "Hide My QR Code" : "Show My QR Code", systemImage: "qrcode")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
-            if showQR, let image = QRCodeGenerator.image(for: PairingKeyCodec.encode(deviceHex)) {
-                image
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 240)
-                    .frame(maxWidth: .infinity)
+    private var pairingForm: some View {
+        Form {
+            Section {
+                Text("Scan another device's code, or share yours, to trust its deletions.")
+                    .foregroundStyle(.secondary)
             }
 
-            Button {
-                copyKey()
-            } label: {
-                Label("Copy My Key", systemImage: "doc.on.doc")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
+            Section {
+                #if os(iOS)
+                Button {
+                    showScanner = true
+                } label: {
+                    Label("Scan a QR Code", systemImage: "qrcode.viewfinder")
+                }
+                #endif
 
-            DisclosureGroup("Advanced: paste a key manually", isExpanded: $showAdvanced) {
-                VStack(alignment: .leading, spacing: 10) {
+                Button {
+                    showQR.toggle()
+                } label: {
+                    Label(showQR ? "Hide My QR Code" : "Show My QR Code", systemImage: "qrcode")
+                }
+
+                if showQR, let image = QRCodeGenerator.image(for: PairingKeyCodec.encode(deviceHex)) {
+                    HStack {
+                        Spacer()
+                        image
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 220, maxHeight: 220)
+                            .padding(.vertical, 4)
+                        Spacer()
+                    }
+                }
+
+                Button {
+                    copyKey()
+                } label: {
+                    Label("Copy My Key", systemImage: "doc.on.doc")
+                }
+            }
+
+            Section {
+                DisclosureGroup("Advanced: paste a key manually", isExpanded: $showAdvanced) {
                     TextField("Other device's key", text: $pasteText)
                         .font(.system(.caption, design: .monospaced))
                         #if canImport(UIKit)
@@ -343,28 +342,32 @@ struct PairingSheet: View {
                         confirmedFromOwnDevice: confirmedFromOwnDevice
                     ))
                 }
-                .padding(.top, 6)
             }
 
             if let errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+                Section {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                }
             }
         }
     }
 
     private func trustedNameStep(_ hex: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Trusted. Name this device so you recognize it later.")
-            TextField("e.g. Sam's iPhone", text: $trustLabel)
-            Button("Done") {
-                if !trustLabel.isEmpty {
-                    TombstoneTrustStore.rename(hex, label: trustLabel)
-                }
-                dismiss()
+        Form {
+            Section {
+                Text("Trusted. Name this device so you recognize it later.")
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderedProminent)
+            Section {
+                TextField("e.g. Sam's iPhone", text: $trustLabel)
+                Button("Done") {
+                    if !trustLabel.isEmpty {
+                        TombstoneTrustStore.rename(hex, label: trustLabel)
+                    }
+                    dismiss()
+                }
+            }
         }
     }
 
