@@ -330,9 +330,5 @@ struct MatureRevealToggle: View {
             Label(gate.revealAll ? "Hide mature" : "Show mature",
                   systemImage: gate.revealAll ? "eye.slash" : "eye")
         }
-        // Explicit nil: isolates this into its own glass pill instead of
-        // merging with adjacent untinted toolbar buttons — see
-        // FilterButton's identical comment for this mechanism.
-        .tint(nil)
     }
 }
