@@ -173,15 +173,15 @@ private struct UnblurredHomeResumeHero: View {
             .foregroundStyle(.secondary)
             .accessibilityElement(children: .combine)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(chapterLabel ?? "Reading")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     Text("\(percent)%")
-                        .font(.subheadline.monospacedDigit())
+                        .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
 
@@ -192,7 +192,7 @@ private struct UnblurredHomeResumeHero: View {
                             .frame(width: geo.size.width * max(0.03, progressValue))
                     }
                 }
-                .frame(height: 6)
+                .frame(height: 4)
             }
         }
         .padding(16)
