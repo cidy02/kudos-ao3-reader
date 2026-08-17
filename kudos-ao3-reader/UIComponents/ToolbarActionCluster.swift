@@ -1,17 +1,19 @@
 import SwiftUI
 
-/// Formalizes the `ToolbarItem(.primaryAction) { HStack(spacing: 2) { ... }.labelStyle(.iconOnly) }`
-/// pattern repeated across the app, so adjacent icon buttons/menus sit tight instead of inheriting
-/// the system's wide inter-item toolbar spacing.
+/// Each top-level view in `content` becomes its own Liquid Glass toolbar
+/// pill — `ToolbarItemGroup` (unlike a single `ToolbarItem`) splits multiple
+/// children into separate, individually-glassed, system-spaced items, which
+/// is what makes Filter/More/the privacy eye read as three distinct buttons
+/// instead of one fused pill. A single `ToolbarItem` wrapping a manual
+/// `HStack` (the previous approach here) glasses the *whole HStack* as one
+/// pill no matter what each child's own `.tint()` is set to.
 struct ActionToolbar<Content: View>: ToolbarContent {
     @ViewBuilder var content: () -> Content
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 2) {
-                content()
-            }
-            .labelStyle(.iconOnly)
+        ToolbarItemGroup(placement: .primaryAction) {
+            content()
+                .labelStyle(.iconOnly)
         }
     }
 }
