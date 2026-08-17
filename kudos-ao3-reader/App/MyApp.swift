@@ -29,6 +29,11 @@ import SwiftUI
     init() {
         #if os(iOS)
         FolderSyncBackgroundTask.register(container: Self.sharedModelContainer)
+        // iOS-only: `Kudos-iOS.entitlements` carries the KVS identifier,
+        // `Kudos.entitlements` (macOS) does not. Constructing the real store
+        // without that entitlement logs "BUG IN CLIENT OF KVS" and breaks
+        // Keychain access in-process — see `TombstoneTrustStore.iCloudStore`.
+        TombstoneTrustStore.iCloudStore = NSUbiquitousKeyValueStore.default
         #endif
     }
 

@@ -124,8 +124,9 @@ struct TombstoneTrustSettingsSection: View {
         } header: {
             Text("Deletion signing")
         } footer: {
-            Text("Deletes are signed on this device. Pair another device — by scanning its QR "
-                + "code or sharing its key — so its deletions sync here too. A backup file can "
+            Text("Deletes are signed on this device. Other devices signed into the same Apple "
+                + "ID pick up this device's key automatically. To trust a device on a different "
+                + "account, pair it — scan its QR code or share its key. A backup file can "
                 + "never add a trusted device.")
         }
         .onAppear {
