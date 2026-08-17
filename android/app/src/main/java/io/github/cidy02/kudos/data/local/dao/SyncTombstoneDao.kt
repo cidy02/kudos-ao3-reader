@@ -27,6 +27,13 @@ interface SyncTombstoneDao {
     suspend fun deleteByRecord(recordId: String, recordType: String)
 
     /**
+     * Rows this signer key deleted — the per-record provenance field the
+     * keysync v1 "Stolen or compromised" revoke flow offers to restore from.
+     */
+    @Query("SELECT * FROM sync_tombstones WHERE signerPublicKey = :signerPublicKey AND recordTypeRaw = :recordType")
+    suspend fun getBySigner(signerPublicKey: String, recordType: String): List<SyncTombstoneEntity>
+
+    /**
      * Identity-aware retract for savedWork: record UUID, ao3WorkID, or source URL
      * (canonical or the original stored value).
      */
