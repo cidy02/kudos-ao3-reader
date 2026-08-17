@@ -252,7 +252,9 @@ class BackupRepository(
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE,
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
-            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.BOOKMARK,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH
         )
         snapshot.tombstones.forEach { tombstone ->
             if (tombstone.recordTypeRaw in knownTombstoneTypes) {
@@ -285,9 +287,10 @@ class BackupRepository(
 
     /**
      * Replace is this-device-only. Works omitted from the snapshot go to
-     * Recently Deleted (no EPUB delete, no SyncTombstone). Bookmarks / saved
-     * searches / collections / queues / annotations without a Recently Deleted
-     * persist path are DAO-deleted — do not mint tombstones.
+     * Recently Deleted (no EPUB delete, no SyncTombstone). Bookmarks and
+     * saved searches are hard-deleted after merge has minted immediate-delete
+     * tombstones (annotation pattern). Collections / queues / annotations
+     * without a Recently Deleted persist path stay DAO-deleted here.
      */
     private suspend fun removeRecordsAbsentFromReplaceSnapshot(snapshot: BackupLibrarySnapshot) {
         val now = clock()

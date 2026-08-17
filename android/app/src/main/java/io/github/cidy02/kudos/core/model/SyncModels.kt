@@ -11,6 +11,8 @@ object SyncTombstoneRecordType {
     const val READING_QUEUE_MEMBERSHIP = "readingQueueMembership"
     const val WORK_COLLECTION_MEMBERSHIP = "workCollectionMembership"
     const val READING_ANNOTATION = "readingAnnotation"
+    const val BOOKMARK = "bookmark"
+    const val SAVED_SEARCH = "savedSearch"
 }
 
 /**

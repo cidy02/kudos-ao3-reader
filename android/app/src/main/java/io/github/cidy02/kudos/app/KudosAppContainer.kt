@@ -291,7 +291,10 @@ class KudosAppContainer(context: Context) {
     }
 
     val savedSearchRepository: SavedSearchRepository by lazy {
-        SavedSearchRepository(database.savedSearchDao())
+        SavedSearchRepository(
+            database.savedSearchDao(),
+            tombstoneDao = database.syncTombstoneDao()
+        )
     }
 
     val gitHubReleaseClient: GitHubReleaseClient by lazy {
