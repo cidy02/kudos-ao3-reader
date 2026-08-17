@@ -195,7 +195,7 @@ struct ReadingQueueBrowserView: View {
             .popover(isPresented: $showingSwitcher, arrowEdge: .bottom) {
                 switcherList
                     .presentationCompactAdaptation(.sheet)
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents(switcherDetents)
             }
 
             Button { showingSwitcher = true } label: {
@@ -316,6 +316,18 @@ struct ReadingQueueBrowserView: View {
         }
         .listStyle(.plain)
         .appThemedScroll()
+        .presentationDragIndicator(.visible)
+    }
+
+    /// Fitted to the actual row count so a couple of queues get a compact
+    /// sheet instead of a mostly-empty half screen — same pattern as
+    /// CommentsView's chapter-picker detents, for the same reason.
+    private var switcherDetents: Set<PresentationDetent> {
+        if orderedQueues.count <= 6 {
+            let rowCount = CGFloat(orderedQueues.count)
+            return [.height(24 + rowCount * 52)]
+        }
+        return [.medium, .large]
     }
 
     private func queueRow(_ queue: ReadingQueue) -> some View {
