@@ -1,74 +1,6 @@
 import SwiftData
 import SwiftUI
 
-/// The rating/chapters/completion/word-count stats on a compact cover card.
-/// Shared by `WorkCoverCard` (local `SavedWork`) and `AO3WorkCoverCard` (remote
-/// `AO3WorkSummary`) — each derives these already-formatted, already-nil-checked
-/// values from its own model shape and hands them here.
-///
-/// **One stat per row.** This was a `FlowLayout` that packed as many stats onto a line
-/// as fit, which is why the values were abbreviated to the point of being cryptic ("M",
-/// "112K", "WIP"). A column gives each stat room to say what it means, and removes
-/// the two-pass sizing hazard `WorkSummaryCardSurface` documents: a `VStack`'s height
-/// does not depend on the width it is proposed, so it cannot wrap differently between
-/// the ideal-size query and placement.
-struct CoverCardStatsRow: View {
-    var ratingName: String?
-    /// The full AO3 rating ("Teen And Up Audiences"), announced in place of the visible
-    /// shortened name.
-    var ratingFull: String?
-    var chapters: String?
-    var completion: WorkCompletionStatus?
-    var wordCount: Int?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            if let ratingName {
-                WorkStatLabel(
-                    text: ratingName,
-                    symbol: "checkmark.shield",
-                    accessibilityLabel: ratingFull ?? ratingName,
-                    iconColor: ratingFull.flatMap(WorkStat.ratingColor)
-                )
-            }
-            if let chapters {
-                WorkStatLabel(
-                    text: chapterText(chapters),
-                    symbol: "book",
-                    accessibilityLabel: "Chapters \(chapters)"
-                )
-            }
-            if let completion {
-                WorkStatLabel(
-                    text: completion.text,
-                    symbol: completion.symbol,
-                    accessibilityLabel: "Status: \(completion.text)",
-                    iconColor: completion.color
-                )
-            }
-            if let wordCount {
-                WorkStatLabel(
-                    text: wordText(wordCount),
-                    symbol: "textformat.size",
-                    accessibilityLabel: "\(wordCount.formatted()) words"
-                )
-            }
-        }
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
-    }
-
-    /// A bare "31/31" or "112K" leaves the icon as the only clue to what is being
-    /// counted. The noun is cheap now that the row is not shared.
-    private func chapterText(_ chapters: String) -> String {
-        chapters == "1" ? "1 chapter" : "\(chapters) chapters"
-    }
-
-    private func wordText(_ count: Int) -> String {
-        count == 1 ? "1 word" : "\(count.formatted(.number.notation(.compactName))) words"
-    }
-}
-
 /// A short centred hairline between a card's attribution (author, fandom) and its
 /// counted stats.
 ///
@@ -160,13 +92,14 @@ struct WorkCoverCard: View {
     }
 
     private var cardStats: some View {
-        CoverCardStatsRow(
-            ratingName: WorkStat.ratingName(work.rating),
-            ratingFull: work.rating.isEmpty ? nil : work.rating,
-            chapters: work.chapters.isEmpty ? nil : work.chapters,
-            completion: work.completionStatus,
-            wordCount: work.wordCount > 0 ? work.wordCount : nil
+        WorkTopStatsRow(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.workCategories,
+            warnings: work.workWarnings,
+            completion: work.completionStatus
         )
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
     }
 
     private var progressValue: Double? {
@@ -266,13 +199,14 @@ struct AO3WorkCoverCard: View {
     }
 
     private var cardStats: some View {
-        CoverCardStatsRow(
-            ratingName: WorkStat.ratingName(work.rating),
-            ratingFull: work.rating.isEmpty ? nil : work.rating,
-            chapters: work.chapters.isEmpty ? nil : work.chapters,
-            completion: WorkCompletionStatus(isComplete: work.isComplete),
-            wordCount: work.words
+        WorkTopStatsRow(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.categories,
+            warnings: work.warnings,
+            completion: WorkCompletionStatus(isComplete: work.isComplete)
         )
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
     }
 }
 
