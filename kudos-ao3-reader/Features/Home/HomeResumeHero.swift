@@ -115,14 +115,28 @@ private struct UnblurredHomeResumeHero: View {
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            // Author/fandom share the stat row's own component (not
+            // CardMetaLabel) so their text and icons read at exactly the same
+            // size as the rating/chapters/completion/word-count row below —
+            // one metadata family, not two different scales.
             if !work.author.isEmpty {
-                CardMetaLabel(text: work.author, symbol: "person", accessibilityLabel: "Author: \(work.author)")
-                    .font(.subheadline)
+                WorkStatLabel(
+                    text: work.author,
+                    symbol: "person",
+                    accessibilityLabel: "Author: \(work.author)",
+                    iconColor: themeManager.effectiveTint
+                )
+                .font(.caption)
             }
 
             if let fandom = work.workFandoms.first, !fandom.isEmpty {
-                CardMetaLabel(text: fandom, symbol: "books.vertical", accessibilityLabel: "Fandom: \(fandom)")
-                    .font(.caption)
+                WorkStatLabel(
+                    text: fandom,
+                    symbol: "books.vertical",
+                    accessibilityLabel: "Fandom: \(fandom)",
+                    iconColor: themeManager.effectiveTint
+                )
+                .font(.caption)
             }
 
             // Same metadata every carousel card shows, just laid out like
@@ -130,10 +144,6 @@ private struct UnblurredHomeResumeHero: View {
             // WorkStatLabels, not CoverCardStatsRow's one-stat-per-line column.
             // The hero is this page's own "detail card" moment, so it should
             // read like one, not like a bigger carousel tile.
-            if !work.author.isEmpty || !(work.workFandoms.first ?? "").isEmpty {
-                CardMetaSeparator()
-            }
-
             FlowLayout(spacing: 10, rowSpacing: 6) {
                 let ratingName = WorkStat.ratingName(work.rating)
                 if let ratingName {
@@ -162,8 +172,6 @@ private struct UnblurredHomeResumeHero: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .accessibilityElement(children: .combine)
-
-            Spacer(minLength: 16)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
