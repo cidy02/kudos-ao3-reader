@@ -119,6 +119,11 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.okhttp)
     implementation(libs.tink.android)
+    // QR **generation only** for the keysync pairing sheet (Android shows its
+    // pubkey; iOS scans — see PairingKeyCodec doc comment). zxing:core is the
+    // dependency-free (zero transitive deps) writer+reader-only "core" jar —
+    // deliberately not zxing-android-embedded or any camera/scanning artifact.
+    implementation(libs.zxing.core)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.readium.shared)
