@@ -53,10 +53,16 @@ object BackupMergeService {
         val tombstonesById = current.tombstones
             .associateByTo(linkedMapOf()) { BackupPaths.normalizeIdForComparison(it.id) }
         val adoptedIncoming = ArrayList<SyncTombstone>()
+        // Count-only unknown-signer badge source (D9b Android pairing UI): ids
+        // whose signature verified but whose signer isn't trusted yet. Not
+        // persisted here — BackupRepository.mergePackage feeds this into
+        // SettingsRepository.recordUnknownSignerTombstoneIds after the merge.
+        val unknownSignerIds = linkedSetOf<String>()
         manifest.tombstones.forEach { archived ->
             val incoming = archived.toSyncTombstone()
             if (!TombstoneSigning.verify(incoming)) return@forEach
             if (!TombstoneSigning.isTrustedSigner(incoming.signerPublicKey, trustedPublicKeys)) {
+                unknownSignerIds += BackupPaths.normalizeIdForComparison(incoming.id)
                 return@forEach
             }
             tombstonesById[BackupPaths.normalizeIdForComparison(incoming.id)] = incoming
@@ -312,7 +318,11 @@ object BackupMergeService {
             summary = summary,
             epubFilesToWriteByWorkId = epubFilesToWrite,
             fontFilesToWriteByFileName = fontMerge.filesToWrite,
-            mode = mode
+            mode = mode,
+            unknownSignerTombstoneIds = unknownSignerIds,
+            adoptedIncomingTombstoneIds = adoptedIncoming
+                .map { BackupPaths.normalizeIdForComparison(it.id) }
+                .toSet()
         )
     }
 
