@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// ## Why a container decides this, not a card
 ///
-/// A card is a fixed 164×228 tile (scaled by Dynamic Type — `ScaledCarouselCardSize`),
+/// A card is a fixed sqrt(2):1 tile (scaled by Dynamic Type — `ScaledCarouselCardSize`),
 /// and its content sometimes needs more than that. Left alone, each card grows on its
 /// own, so a carousel ends up with ragged bottoms and a grid row's cards don't line up.
 /// Height is a property of the *set* of cards on screen, so the set is what resolves it.
@@ -13,7 +13,7 @@ import SwiftUI
 /// `CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)`, so a card that
 /// grew wider than that constant would overlap its neighbour — the exact bug that
 /// helper's own comment documents. Keeping width fixed makes that impossible by
-/// construction. (If cards should also widen to hold the 164:228 proportion, the
+/// construction. (If cards should also widen to hold the sqrt(2):1 proportion, the
 /// column math has to be fed the resolved width in the same change.)
 ///
 /// ## Why this needs no hidden measuring copy
