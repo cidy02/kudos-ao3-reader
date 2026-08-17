@@ -217,7 +217,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 identities: displayAuthorIdentities,
                 fandoms: displayFandoms,
                 rating: displayRating,
-                status: displayStatus,
+                categories: displayCategories,
+                warnings: displayWarnings,
+                completion: displayCompletionStatus,
+                language: displayLanguage,
                 chapters: displayChapters,
                 words: displayWords,
                 readingProgress: localWork?.readingProgress,
@@ -442,6 +445,18 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         if let complete = remote?.isComplete { return complete ? "Complete" : "Work in Progress" }
         return nil
+    }
+
+    /// Same rule as `displayStatus`, typed as `WorkCompletionStatus` instead
+    /// of a pre-formatted string — for `WorkTopStatsRow`, which needs the
+    /// real enum to color/symbol-code the completion chip.
+    var displayCompletionStatus: WorkCompletionStatus {
+        if let work = localWork,
+           work.ao3WorkID != nil || WorkTags.ao3WorkID(from: work.sourceURL) != nil {
+            return WorkCompletionStatus(isComplete: work.isComplete)
+        }
+        if let complete = remote?.isComplete { return WorkCompletionStatus(isComplete: complete) }
+        return .unknown
     }
 
     var displayKudos: Int? {

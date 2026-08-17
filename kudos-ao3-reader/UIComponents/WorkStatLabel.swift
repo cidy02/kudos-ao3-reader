@@ -79,112 +79,34 @@ struct WorkUpdatedDateBadge: View {
     }
 }
 
-/// The rating/word-count/chapters/kudos stat row on a detailed list row. Shared
-/// by `WorkRow` (local `SavedWork`) and `AO3WorkRow` (remote `AO3WorkSummary`)
-/// — each derives these already-formatted, already-nil-checked values from its
-/// own model shape and hands them here, so the two never drift out of layout
-/// sync with each other.
-struct WorkListStatsRow: View {
+/// Rating, category, warnings, and completion status as color-coded capsule
+/// chips — the four fields AO3 itself always surfaces up front on a work.
+/// Every badge always shows something, even "Uncategorized"/"No Warnings" —
+/// a blank slot reads as a layout gap rather than a real state on device.
+///
+/// Shared by `WorkListStatsRow` (search/library list rows, paired with its
+/// own longer secondary-facts row below) and the resume hero cards
+/// (`HomeResumeHero`/`WorkDetailHeroCard`, paired with a shorter
+/// Language/Words/Chapters row instead) — both need this exact same row of
+/// chips, just different company underneath.
+struct WorkTopStatsRow: View {
     var rating: String?
     var categories: [String] = []
     var warnings: [String] = []
     var completion: WorkCompletionStatus = .unknown
-    var language: String?
-    var wordCount: Int?
-    var chapters: String?
-    var comments: Int?
-    var kudos: Int?
-    /// The work's AO3 bookmark count — not the in-book bookmarks/highlights
-    /// that `KudosBackupBookmark` and the reader mean by the same word.
-    var bookmarks: Int?
-    var hits: Int?
-    /// Published only — the updated date lives in the card's top-right corner
-    /// (`WorkUpdatedDateBadge`), not down here with the rest of the stats.
-    var datePublished: String?
     /// The host card is showing its full detail. Only the category chip changes:
     /// collapsed it folds several categories into "Multi" the way AO3's own blurb
     /// does, expanded it names each one. Defaults to compact, which is what every
     /// list wants.
     var isExpanded: Bool = false
 
-    /// Settings → Library → "Show zero counts". On (the default) every stat
-    /// keeps its place even at zero, so a card's stat row has the same shape
-    /// whatever the work; off drops the empty ones for a terser row.
-    @AppStorage("showsZeroStats") private var showsZeroStats = true
-
-    private var showsPublished: Bool {
-        guard let datePublished else { return false }
-        return !datePublished.isEmpty
-    }
-
-    private struct Item {
+    struct Item {
         let text: String
         let symbol: String
         let accessibilityLabel: String
         var iconColor: Color?
     }
 
-    /// A count stat, treating "AO3 didn't print it" as the zero it means.
-    /// Returns nil — dropping the badge — only when the count is zero and the
-    /// user has turned "Show zero counts" off.
-    private func count(_ value: Int?, symbol: String, noun: String) -> Item? {
-        let count = value ?? 0
-        guard count > 0 || showsZeroStats else { return nil }
-        let formatted = count.formatted()
-        return Item(text: formatted, symbol: symbol, accessibilityLabel: "\(formatted) \(noun)")
-    }
-
-    /// Language / words / chapters / engagement counts / published date, below
-    /// the justified row.
-    ///
-    /// With "Show zero counts" on (the default) every stat holds its place,
-    /// zeros included: AO3 omits a `dd` entirely when its count is zero, so a
-    /// nil here means "AO3 said nothing", which for a count means zero — and
-    /// dropping those badges made a card's stat row change shape for no reason
-    /// a reader could see. The two text stats (language, chapters) can be
-    /// genuinely absent rather than zero, so they fall back to an em dash.
-    private var secondaryItems: [Item] {
-        let unknownText = "—"
-        let language = language.flatMap { $0.isEmpty ? nil : $0 }
-        let chapters = chapters.flatMap { $0.isEmpty ? nil : $0 }
-        var result: [Item] = []
-        if language != nil || showsZeroStats {
-            // AO3 scrapes `dd.language` as a display name already ("English",
-            // "Español"), so there is no code to map here.
-            result.append(Item(
-                text: language ?? unknownText,
-                symbol: "globe",
-                accessibilityLabel: language.map { "Language: \($0)" } ?? "Language unknown"
-            ))
-        }
-        result.append(contentsOf: [
-            count(wordCount, symbol: "textformat.size", noun: "words")
-        ].compactMap(\.self))
-        if chapters != nil || showsZeroStats {
-            result.append(Item(
-                text: chapters ?? unknownText,
-                symbol: "book",
-                accessibilityLabel: chapters.map { "Chapters \($0)" } ?? "Chapter count unknown"
-            ))
-        }
-        result.append(contentsOf: [
-            count(comments, symbol: "bubble.left", noun: "comments"),
-            count(kudos, symbol: "heart", noun: "kudos"),
-            count(bookmarks, symbol: "bookmark", noun: "bookmarks"),
-            count(hits, symbol: "eye", noun: "hits")
-        ].compactMap(\.self))
-        if showsPublished, let datePublished {
-            let display = WorkStat.displayDate(datePublished)
-            result.append(Item(text: display, symbol: "calendar", accessibilityLabel: "Published \(display)"))
-        }
-        return result
-    }
-
-    /// Rating, category, warnings, and completion status — the four fields AO3
-    /// itself always surfaces up front on a work. Every badge always shows
-    /// something, even "Uncategorized"/"No Warnings" — a blank slot reads as a
-    /// layout gap rather than a real state on device.
-    ///
     /// Checking `categories` for emptiness isn't enough: an unrecognized
     /// category string would pass `!isEmpty` but still render nothing, leaving
     /// the slot silently blank. Filter to recognized values first.
@@ -193,7 +115,7 @@ struct WorkListStatsRow: View {
     /// just how many apply — so the visible warning text stays short; the full
     /// list still reaches VoiceOver through the accessibility label.
     /// The category chips only, for tests: the collapse rule is the thing worth
-    /// pinning and `topItems` is private (and mixes in three other facets).
+    /// pinning and `topItems` mixes in three other facets.
     var categoryChipTexts: [String] {
         topItems.filter { $0.symbol == "person.2.fill" }.map(\.text)
     }
@@ -205,7 +127,7 @@ struct WorkListStatsRow: View {
         topItems.filter { $0.symbol == "exclamationmark.circle.fill" }.map(\.text)
     }
 
-    private var topItems: [Item] {
+    var topItems: [Item] {
         var result: [Item] = []
         if let rating {
             result.append(Item(
@@ -278,26 +200,6 @@ struct WorkListStatsRow: View {
         return result
     }
 
-    /// Centred, with the bullets kept as separators. Justification stretched the
-    /// gaps to square the row's edges with the counts underneath, which only
-    /// works while both rows are full — a two-chip work got two capsules pinned to
-    /// opposite edges of the card with a canyon between them. Centring keeps the
-    /// natural gaps at any chip count and still reads as a deliberate row.
-    ///
-    /// `FlowLayout` rather than an `HStack` inside a `ViewThatFits`: that sizes its
-    /// chosen candidate to the candidate's *ideal* width, never the width on offer,
-    /// so there was nothing to centre within. FlowLayout also still wraps when the
-    /// chips genuinely don't fit — they are all `fixedSize`, so a too-long single
-    /// row would otherwise stretch the card past its own padding.
-    private var topRow: some View {
-        FlowLayout(spacing: 6, rowSpacing: 5, rowAlignment: .center) {
-            ForEach(Array(topItems.enumerated()), id: \.offset) { index, item in
-                if index > 0 { bullet }
-                statusChip(item)
-            }
-        }
-    }
-
     /// `.fixedSize()` matters here: every chip beside it already refuses to
     /// compress, so a bare `Text` is the only flexible child left when the row runs
     /// long (e.g. "Uncategorized" next to "Not Disclosed") — the layout squeezes all
@@ -338,9 +240,132 @@ struct WorkListStatsRow: View {
         return AnyShapeStyle(color.opacity(0.22))
     }
 
+    /// Centred, with the bullets kept as separators. Justification stretched the
+    /// gaps to square the row's edges with the counts underneath, which only
+    /// works while both rows are full — a two-chip work got two capsules pinned to
+    /// opposite edges of the card with a canyon between them. Centring keeps the
+    /// natural gaps at any chip count and still reads as a deliberate row.
+    ///
+    /// `FlowLayout` rather than an `HStack` inside a `ViewThatFits`: that sizes its
+    /// chosen candidate to the candidate's *ideal* width, never the width on offer,
+    /// so there was nothing to centre within. FlowLayout also still wraps when the
+    /// chips genuinely don't fit — they are all `fixedSize`, so a too-long single
+    /// row would otherwise stretch the card past its own padding.
+    var body: some View {
+        FlowLayout(spacing: 6, rowSpacing: 5, rowAlignment: .center) {
+            ForEach(Array(topItems.enumerated()), id: \.offset) { index, item in
+                if index > 0 { bullet }
+                statusChip(item)
+            }
+        }
+    }
+}
+
+/// The rating/word-count/chapters/kudos stat row on a detailed list row. Shared
+/// by `WorkRow` (local `SavedWork`) and `AO3WorkRow` (remote `AO3WorkSummary`)
+/// — each derives these already-formatted, already-nil-checked values from its
+/// own model shape and hands them here, so the two never drift out of layout
+/// sync with each other.
+struct WorkListStatsRow: View {
+    var rating: String?
+    var categories: [String] = []
+    var warnings: [String] = []
+    var completion: WorkCompletionStatus = .unknown
+    var language: String?
+    var wordCount: Int?
+    var chapters: String?
+    var comments: Int?
+    var kudos: Int?
+    /// The work's AO3 bookmark count — not the in-book bookmarks/highlights
+    /// that `KudosBackupBookmark` and the reader mean by the same word.
+    var bookmarks: Int?
+    var hits: Int?
+    /// Published only — the updated date lives in the card's top-right corner
+    /// (`WorkUpdatedDateBadge`), not down here with the rest of the stats.
+    var datePublished: String?
+    var isExpanded: Bool = false
+
+    /// Settings → Library → "Show zero counts". On (the default) every stat
+    /// keeps its place even at zero, so a card's stat row has the same shape
+    /// whatever the work; off drops the empty ones for a terser row.
+    @AppStorage("showsZeroStats") private var showsZeroStats = true
+
+    private var showsPublished: Bool {
+        guard let datePublished else { return false }
+        return !datePublished.isEmpty
+    }
+
+    private typealias Item = WorkTopStatsRow.Item
+
+    /// A count stat, treating "AO3 didn't print it" as the zero it means.
+    /// Returns nil — dropping the badge — only when the count is zero and the
+    /// user has turned "Show zero counts" off.
+    private func count(_ value: Int?, symbol: String, noun: String) -> Item? {
+        let count = value ?? 0
+        guard count > 0 || showsZeroStats else { return nil }
+        let formatted = count.formatted()
+        return Item(text: formatted, symbol: symbol, accessibilityLabel: "\(formatted) \(noun)")
+    }
+
+    /// Language / words / chapters / engagement counts / published date, below
+    /// the justified row.
+    ///
+    /// With "Show zero counts" on (the default) every stat holds its place,
+    /// zeros included: AO3 omits a `dd` entirely when its count is zero, so a
+    /// nil here means "AO3 said nothing", which for a count means zero — and
+    /// dropping those badges made a card's stat row change shape for no reason
+    /// a reader could see. The two text stats (language, chapters) can be
+    /// genuinely absent rather than zero, so they fall back to an em dash.
+    private var secondaryItems: [Item] {
+        let unknownText = "—"
+        let language = language.flatMap { $0.isEmpty ? nil : $0 }
+        let chapters = chapters.flatMap { $0.isEmpty ? nil : $0 }
+        var result: [Item] = []
+        if language != nil || showsZeroStats {
+            // AO3 scrapes `dd.language` as a display name already ("English",
+            // "Español"), so there is no code to map here.
+            result.append(Item(
+                text: language ?? unknownText,
+                symbol: "globe",
+                accessibilityLabel: language.map { "Language: \($0)" } ?? "Language unknown"
+            ))
+        }
+        result.append(contentsOf: [
+            count(wordCount, symbol: "textformat.size", noun: "words")
+        ].compactMap(\.self))
+        if chapters != nil || showsZeroStats {
+            result.append(Item(
+                text: chapters ?? unknownText,
+                symbol: "book",
+                accessibilityLabel: chapters.map { "Chapters \($0)" } ?? "Chapter count unknown"
+            ))
+        }
+        result.append(contentsOf: [
+            count(comments, symbol: "bubble.left", noun: "comments"),
+            count(kudos, symbol: "heart", noun: "kudos"),
+            count(bookmarks, symbol: "bookmark", noun: "bookmarks"),
+            count(hits, symbol: "eye", noun: "hits")
+        ].compactMap(\.self))
+        if showsPublished, let datePublished {
+            let display = WorkStat.displayDate(datePublished)
+            result.append(Item(text: display, symbol: "calendar", accessibilityLabel: "Published \(display)"))
+        }
+        return result
+    }
+
+    private var topStatsRow: WorkTopStatsRow {
+        WorkTopStatsRow(rating: rating, categories: categories, warnings: warnings,
+                         completion: completion, isExpanded: isExpanded)
+    }
+
+    /// For tests: the collapse rule is the thing worth pinning. See
+    /// `WorkTopStatsRow.categoryChipTexts`/`.warningChipTexts`.
+    var categoryChipTexts: [String] { topStatsRow.categoryChipTexts }
+    var warningChipTexts: [String] { topStatsRow.warningChipTexts }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            topRow
+            topStatsRow
             if !secondaryItems.isEmpty {
                 FlowLayout(spacing: 8, rowSpacing: 5) {
                     ForEach(Array(secondaryItems.enumerated()), id: \.offset) { index, item in
