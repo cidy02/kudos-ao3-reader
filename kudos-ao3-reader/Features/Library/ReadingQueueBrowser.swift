@@ -325,18 +325,20 @@ struct ReadingQueueBrowserView: View {
             List {
                 ForEach(orderedQueues) { queue in
                     queueRow(queue)
+                        .cardRow(isSelected: queue.id == selectedQueue?.id)
                 }
-                .appThemedRows()
             }
-            .listStyle(.plain)
-            .appThemedScroll()
+            .cardList()
             .navigationTitle("Reading Queues")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showingSwitcher = false }
+                    Button { showingSwitcher = false } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .accessibilityLabel("Done")
                 }
             }
         }
@@ -532,7 +534,10 @@ struct ReadingQueueBrowserView: View {
         if !works.isEmpty {
             if isReordering {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Done") { setReordering(false) }
+                    Button { setReordering(false) } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .accessibilityLabel("Done")
                 }
             } else if isSelecting {
                 ToolbarItem(placement: .confirmationAction) {
