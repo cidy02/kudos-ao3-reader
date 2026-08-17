@@ -320,15 +320,26 @@ struct ReadingQueueBrowserView: View {
     /// all applied to the sheet's own content — not a bare `List` handed to
     /// `.popover(...).presentationCompactAdaptation(.sheet)`, which is what
     /// clipped the sheet's top chrome in two earlier attempts here.
+    ///
+    /// Plain rows, not `.cardRow()`/`.cardList()`: the reader's own Contents/
+    /// Bookmarks/Highlights sheet (`ReaderContentsSheet.chapterList`) — the
+    /// reference this is matching — is a flat `.listStyle(.plain)` list with
+    /// default hairline separators, not floating rounded cards. Rounded cards
+    /// read as a completely different surface next to that reference, which is
+    /// what "doesn't look anything like the reader contents page" was about;
+    /// `.appThemedRows()`/`.appThemedScroll()` stay, since unlike `.cardRow()`
+    /// they're a no-op outside Sepia and only exist to keep this row's colors
+    /// consistent with the app's Sepia theme, not to add card chrome.
     private var switcherList: some View {
         NavigationStack {
             List {
                 ForEach(orderedQueues) { queue in
                     queueRow(queue)
-                        .cardRow(isSelected: queue.id == selectedQueue?.id)
                 }
+                .appThemedRows()
             }
-            .cardList()
+            .listStyle(.plain)
+            .appThemedScroll()
             .navigationTitle("Reading Queues")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
