@@ -15,6 +15,11 @@ struct HomeView: View {
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    /// Same key `WorkCarouselSection` used to persist this strip's collapse
+    /// state, kept unchanged — only the toggle affordance moved (onto
+    /// "Continue Reading"), not the state itself.
+    @AppStorage("section.collapsed.home.readingNow.strip") private var stripCollapsed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
@@ -273,10 +278,54 @@ struct HomeView: View {
                 let stripWorks = Array(readingNow.dropFirst().prefix(4))
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Continue Reading")
+                    HStack(spacing: 8) {
+                        // The "More In Progress" strip's own collapse toggle moved
+                        // here — it's this row's chevron now, not a separate
+                        // header sitting between the hero and the strip.
+                        Group {
+                            if stripWorks.isEmpty {
+                                Text("Continue Reading")
+                            } else {
+                                Button {
+                                    withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
+                                        stripCollapsed.toggle()
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text("Continue Reading")
+                                        Image(systemName: "chevron.down")
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundStyle(.tertiary)
+                                            .rotationEffect(.degrees(stripCollapsed ? -90 : 0))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .minimumHitTarget()
+                                .accessibilityLabel(
+                                    stripCollapsed ? "Expand More In Progress" : "Collapse More In Progress"
+                                )
+                            }
+                        }
                         .font(.title2.bold())
                         .foregroundStyle(.primary)
-                        .padding(.horizontal, 16)
+
+                        Spacer(minLength: 8)
+
+                        if readingNow.count > 5 {
+                            Button {
+                                router.showLibrarySection(.readingNow)
+                            } label: {
+                                Image(systemName: "chevron.right")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                            .minimumHitTarget()
+                            .accessibilityLabel("See all in progress")
+                        }
+                    }
+                    .padding(.horizontal, 16)
 
                     HomeResumeHero(
                         work: heroWork,
@@ -287,35 +336,27 @@ struct HomeView: View {
                     )
                     .padding(.horizontal, 16)
 
-                    if !stripWorks.isEmpty {
-                        // Smaller title than a normal section header — this strip
-                        // is a subsection of "Continue Reading" above, not a peer
-                        // top-level row, so it shouldn't compete at the same weight.
-                        WorkCarouselSection(
-                            title: "More In Progress",
-                            titleFont: .subheadline.weight(.semibold),
-                            collapseKey: "home.readingNow.strip",
-                            hasItems: true,
-                            onSeeAll: readingNow.count > 5
-                                ? { router.showLibrarySection(.readingNow) }
-                                : nil
-                        ) {
-                            // HomeResumeStripCard wraps its own NavigationLink/
-                            // selection/blur handling internally (same pattern as
-                            // HomeResumeHero above), so unlike SensitiveWorkCoverCard
-                            // it doesn't need the isSelecting branch or an external
-                            // NavigationLink wrapper at the call site.
-                            ForEach(stripWorks) { work in
-                                HomeResumeStripCard(
-                                    work: work,
-                                    isSelecting: isSelecting,
-                                    isSelected: selection.contains(work.id),
-                                    onToggleSelection: { toggleSelection(work) },
-                                    onSelect: selectAction(for: work)
-                                )
+                    if !stripWorks.isEmpty, !stripCollapsed {
+                        // HomeResumeStripCard wraps its own NavigationLink/
+                        // selection/blur handling internally (same pattern as
+                        // HomeResumeHero above), so unlike SensitiveWorkCoverCard
+                        // it doesn't need the isSelecting branch or an external
+                        // NavigationLink wrapper at the call site.
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .top, spacing: 14) {
+                                ForEach(stripWorks) { work in
+                                    HomeResumeStripCard(
+                                        work: work,
+                                        isSelecting: isSelecting,
+                                        isSelected: selection.contains(work.id),
+                                        onToggleSelection: { toggleSelection(work) },
+                                        onSelect: selectAction(for: work)
+                                    )
+                                }
                             }
-                        } emptyState: {
-                            EmptyView()
+                            .uniformWorkCardHeights()
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
                         }
                     }
                 }
