@@ -23,7 +23,15 @@ enum CoverArt {
 /// so they read as the same visual weight side by side.
 enum CarouselCardMetrics {
     static let width: CGFloat = 164
-    static let height: CGFloat = 228
+    /// sqrt(2):1 — the ISO 216 "A-series" paper ratio (A4, A5, …) — computed from
+    /// `width` rather than a rounded literal, so the two can never silently drift
+    /// out of exact ratio. Every compact card (Work, Reading Queue, Collection)
+    /// shares this one proportion via `ScaledCarouselCardSize`, which already
+    /// preserves whatever ratio these two constants define through both Dynamic
+    /// Type scaling and the screen-width clamp — so a future layout that mixes
+    /// card types (e.g. a TabView of multiple cards) reads as one consistent
+    /// shape instead of several near-but-not-quite-matching proportions.
+    static let height: CGFloat = width * CGFloat(2).squareRoot()
     static let cornerRadius: CGFloat = CardRadius.tile
     /// Shared gap for compact cover grids — used as both inter-column spacing
     /// (`GridItem.spacing`) and inter-row spacing (`LazyVGrid.spacing`) so
@@ -32,7 +40,7 @@ enum CarouselCardMetrics {
     static let compactGridSpacing: CGFloat = 16
 }
 
-/// Scales `CarouselCardMetrics`'s fixed 164×228 tile size in proportion to the
+/// Scales `CarouselCardMetrics`'s fixed sqrt(2):1 tile size in proportion to the
 /// user's Dynamic Type setting, preserving its aspect ratio — every compact
 /// carousel card (Work, Reading Queue, Collection) embeds one of these so the
 /// whole card grows together at large accessibility text sizes instead of
@@ -41,7 +49,7 @@ enum CarouselCardMetrics {
 /// exceed the device width, clipping the card's trailing edge (confirmed live
 /// on iPhone 17 at accessibility-XXXL). `width`/`height` scale from the same
 /// `relativeTo: .body` curve *before* clamping, then both are multiplied by
-/// the identical `clampRatio` — so the 164:228 ratio holds exactly whether or
+/// the identical `clampRatio` — so the sqrt(2):1 ratio holds exactly whether or
 /// not the clamp is actually engaged, rather than only being preserved in the
 /// unclamped case. `@ScaledMetric` only tracks environment changes when
 /// declared directly on a `DynamicProperty`-conforming type — it can't be
