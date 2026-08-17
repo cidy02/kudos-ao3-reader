@@ -23,9 +23,10 @@ struct FilterButton: View {
 
     var body: some View {
         Button { showingFilters = true } label: {
-            Label("Filter", systemImage: filtersActive
-                ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle")
+            // Plain funnel, not the circled variant — the glass button
+            // already draws its own circle, so a circled symbol doubled it up
+            // (same reasoning as WorkListMoreMenu's ellipsis fix above).
+            Label("Filter", systemImage: filtersActive ? "funnel.fill" : "funnel")
         }
         .labelStyle(.iconOnly)
         .help(filterHelp)

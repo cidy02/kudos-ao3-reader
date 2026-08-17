@@ -78,7 +78,7 @@ struct AccountToolbarContent: ToolbarContent {
                 (isInboxVisible && model.canFilter)
                     ? AnyView(ToolbarIconButton(
                         title: "Inbox Filters",
-                        systemImage: "line.3.horizontal.decrease.circle"
+                        systemImage: "funnel"
                     ) {
                         showingInboxFilters = true
                     })
