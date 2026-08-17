@@ -288,7 +288,7 @@ final class InMemoryKeyValueStore: KeyValueStoring {
 /// the KVS-published trust set, and denylists it so a stale republish from a
 /// still-running attacker cannot re-import it. Retired/sold just untrusts —
 /// the device isn't hostile, there is nothing to defend against re-publishing.
-enum TombstoneRevokeReason {
+enum TombstoneRevokeReason: Hashable {
     case stolenOrCompromised
     case retiredOrSold
 }
