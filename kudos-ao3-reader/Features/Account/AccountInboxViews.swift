@@ -65,39 +65,37 @@ struct AccountToolbarContent: ToolbarContent {
                 }
             #endif
         } else {
-            // One tight cluster — matches Library/Home so controls don't inherit
-            // the wide system spacing of separate toolbar items.
-            ActionToolbar {
-                if showsMatureRevealControl {
-                    MatureRevealToggle()
-                }
-                if showsWorkListControls {
-                    WorkListMoreMenu {
+            ActionToolbar(items: [
+                showsMatureRevealControl ? AnyView(MatureRevealToggle()) : nil,
+                showsWorkListControls
+                    ? AnyView(WorkListMoreMenu {
                         DisplayModeMenuPicker(mode: $displayMode)
                         if displayMode == .detailed {
                             ExpandAllMenuItem(expandAll: $expandAll)
                         }
-                    }
-                }
-                if isInboxVisible, model.canFilter {
-                    ToolbarIconButton(
+                    })
+                    : nil,
+                (isInboxVisible && model.canFilter)
+                    ? AnyView(ToolbarIconButton(
                         title: "Inbox Filters",
                         systemImage: "line.3.horizontal.decrease.circle"
                     ) {
                         showingInboxFilters = true
-                    }
-                }
-                if isInboxVisible, model.canSelectItems {
-                    ToolbarIconButton(
+                    })
+                    : nil,
+                (isInboxVisible && model.canSelectItems)
+                    ? AnyView(ToolbarIconButton(
                         title: "Select Inbox Items",
                         systemImage: "checklist",
                         action: model.beginSelection
-                    )
-                }
-                NavigationLink(value: AccountView.Route.settings) {
-                    Label("Settings", systemImage: "gearshape")
-                }
-            }
+                    ))
+                    : nil,
+                AnyView(
+                    NavigationLink(value: AccountView.Route.settings) {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                )
+            ].compactMap { $0 })
         }
     }
 }

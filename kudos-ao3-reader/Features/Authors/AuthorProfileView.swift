@@ -441,9 +441,7 @@ private extension AuthorProfileView {
                 bulkSelection.selected(in: model.works)
             }
         } else {
-            ActionToolbar {
-                profileMenu
-            }
+            ActionToolbar(items: [AnyView(profileMenu)])
         }
     }
 
@@ -472,7 +470,7 @@ private extension AuthorProfileView {
                 ExpandAllMenuItem(expandAll: $expandAll)
             }
         } label: {
-            Label("Author actions", systemImage: "ellipsis.circle")
+            Label("Author actions", systemImage: "ellipsis")
         }
     }
 

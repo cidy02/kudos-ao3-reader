@@ -308,30 +308,33 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        ActionToolbar {
-            let fav = localWork?.isFavorite ?? false
-            ToolbarIconButton(
-                title: fav ? "Unfavorite" : "Favorite",
-                systemImage: fav ? "star.fill" : "star",
-                tint: fav ? .yellow : nil
-            ) {
-                withLocalWork { work in
-                    work.isFavorite.toggle()
-                    work.markModified()
-                    context.saveBestEffort(reason: "Saving favorite state failed")
+        let fav = localWork?.isFavorite ?? false
+        ActionToolbar(items: [
+            AnyView(
+                ToolbarIconButton(
+                    title: fav ? "Unfavorite" : "Favorite",
+                    systemImage: fav ? "star.fill" : "star",
+                    tint: fav ? .yellow : nil
+                ) {
+                    withLocalWork { work in
+                        work.isFavorite.toggle()
+                        work.markModified()
+                        context.saveBestEffort(reason: "Saving favorite state failed")
+                    }
                 }
-            }
-
-            Menu {
-                if let id = ao3WorkID {
-                    AO3WorkActionsMenu(workID: id, actions: workActions,
-                                       workContext: commentsWorkContext)
+            ),
+            AnyView(
+                Menu {
+                    if let id = ao3WorkID {
+                        AO3WorkActionsMenu(workID: id, actions: workActions,
+                                           workContext: commentsWorkContext)
+                    }
+                } label: {
+                    Label("More actions", systemImage: "ellipsis")
                 }
-            } label: {
-                Label("More actions", systemImage: "ellipsis.circle")
-            }
-            .disabled(ao3WorkID == nil)
-        }
+                .disabled(ao3WorkID == nil)
+            )
+        ])
     }
 
     // MARK: - Display values (local record first, remote summary fallback)

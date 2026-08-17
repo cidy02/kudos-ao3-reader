@@ -145,24 +145,26 @@ struct ReaderView: View {
         .ao3WorkActions(workActions, workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0, auth: auth)
         .navigationTitle(work.title)
             .toolbar {
-                ActionToolbar {
-                    ToolbarIconButton(title: "Chapters", systemImage: "list.bullet") {
+                ActionToolbar(items: [
+                    AnyView(ToolbarIconButton(title: "Chapters", systemImage: "list.bullet") {
                         router.toggle(.readerChapters)
-                    }
-                    ToolbarIconButton(title: "Display Options", systemImage: "textformat.size") {
+                    }),
+                    AnyView(ToolbarIconButton(title: "Display Options", systemImage: "textformat.size") {
                         router.toggle(.readerDisplay)
-                    }
-                    Menu {
-                        if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
-                            AO3WorkActionsMenu(workID: id, actions: workActions,
-                                               workContext: .init(savedWork: work),
-                                               commentsInitialChapterPosition: currentAO3Chapter)
+                    }),
+                    AnyView(
+                        Menu {
+                            if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
+                                AO3WorkActionsMenu(workID: id, actions: workActions,
+                                                   workContext: .init(savedWork: work),
+                                                   commentsInitialChapterPosition: currentAO3Chapter)
+                            }
+                        } label: {
+                            Label("More actions", systemImage: "ellipsis")
                         }
-                    } label: {
-                        Label("More actions", systemImage: "ellipsis.circle")
-                    }
-                    .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
-                }
+                        .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
+                    )
+                ])
             }
             .inspector(isPresented: readerInspectorBinding) {
                 Group {

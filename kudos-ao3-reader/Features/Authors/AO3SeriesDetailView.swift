@@ -55,21 +55,23 @@ struct AO3SeriesDetailView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar {
-                ActionToolbar {
-                    Menu {
-                        Button { router.open(series.url) } label: {
-                            Label("Open on AO3", systemImage: "safari")
+                ActionToolbar(items: [
+                    AnyView(
+                        Menu {
+                            Button { router.open(series.url) } label: {
+                                Label("Open on AO3", systemImage: "safari")
+                            }
+                            ShareLink(item: series.url) {
+                                Label("Share Series", systemImage: "square.and.arrow.up")
+                            }
+                            if !works.isEmpty {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                            }
+                        } label: {
+                            Label("Series actions", systemImage: "ellipsis")
                         }
-                        ShareLink(item: series.url) {
-                            Label("Share Series", systemImage: "square.and.arrow.up")
-                        }
-                        if !works.isEmpty {
-                            ExpandAllMenuItem(expandAll: $expandAll)
-                        }
-                    } label: {
-                        Label("Series actions", systemImage: "ellipsis.circle")
-                    }
-                }
+                    )
+                ])
             }
             .refreshable {
                 // bypassCache clears the app-level AO3AuthorPageCache; this clears the

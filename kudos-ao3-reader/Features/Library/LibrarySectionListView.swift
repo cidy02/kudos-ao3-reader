@@ -145,20 +145,20 @@ struct LibrarySectionListView: View {
                     // still reserves an (empty-looking) toolbar slot when the section
                     // has no works and no mature works to reveal.
                     //
-                    // One item holding a tight HStack — separate ToolbarItems get the
-                    // system's wide spacing, which reads as inconsistent between the
-                    // privacy toggle and the expand/filter cluster. Matches the pattern
-                    // already established in LibraryView.swift's dashboard toolbar.
-                    ActionToolbar {
-                        if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) {
-                            MatureRevealToggle()
-                        }
-                        if hasAnyContent {
-                            FilterButton(filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter the works in this section",
-                                         onClearFilters: { filters = LibraryFilters() })
-                            WorkListMoreMenu {
+                    // Matches the pattern already established in LibraryView.swift's
+                    // dashboard toolbar.
+                    ActionToolbar(items: [
+                        PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature)
+                            ? AnyView(MatureRevealToggle())
+                            : nil,
+                        hasAnyContent
+                            ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                    showingFilters: $showingFilters,
+                                                    filterHelp: "Filter the works in this section",
+                                                    onClearFilters: { filters = LibraryFilters() }))
+                            : nil,
+                        hasAnyContent
+                            ? AnyView(WorkListMoreMenu {
                                 if !items.isEmpty {
                                     Button {
                                         isSelecting = true
@@ -171,9 +171,9 @@ struct LibrarySectionListView: View {
                                 if displayMode == .detailed {
                                     ExpandAllMenuItem(expandAll: $expandAll)
                                 }
-                            }
-                        }
-                    }
+                            })
+                            : nil
+                    ].compactMap { $0 })
                 }
             }
         #if os(iOS)

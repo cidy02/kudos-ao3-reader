@@ -254,17 +254,17 @@ struct CollectionDetailView: View {
                     }
                     #endif
                 } else {
-                    ActionToolbar {
-                        ToolbarIconButton(title: "Add Works", systemImage: "plus") {
+                    ActionToolbar(items: [
+                        AnyView(ToolbarIconButton(title: "Add Works", systemImage: "plus") {
                             showingAddWorks = true
-                        }
-                        if !works.isEmpty {
-                            FilterButton(filtersActive: filters.hasActiveFilters,
-                                         showingFilters: $showingFilters,
-                                         filterHelp: "Filter the works in this collection",
-                                         onClearFilters: { filters = LibraryFilters() })
-                        }
-                        WorkListMoreMenu {
+                        }),
+                        !works.isEmpty
+                            ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                    showingFilters: $showingFilters,
+                                                    filterHelp: "Filter the works in this collection",
+                                                    onClearFilters: { filters = LibraryFilters() }))
+                            : nil,
+                        AnyView(WorkListMoreMenu {
                             if !works.isEmpty {
                                 ExpandAllMenuItem(expandAll: $expandAll)
                                 Button {
@@ -285,8 +285,8 @@ struct CollectionDetailView: View {
                             } label: {
                                 Label("Delete Collection", systemImage: "trash")
                             }
-                        }
-                    }
+                        })
+                    ].compactMap { $0 })
                 }
             }
             #if os(iOS)

@@ -273,18 +273,18 @@ struct FandomWorksView: View {
                 bulkSelection.selected(in: results)
             }
         } else if phase == .loaded, !results.isEmpty {
-            ActionToolbar {
-                FilterButton(filtersActive: hasExtraFilters,
-                             showingFilters: $showingFilters,
-                             filterHelp: "Filter works in this fandom",
-                             onClearFilters: resetFilters)
-                WorkListMoreMenu {
+            ActionToolbar(items: [
+                AnyView(FilterButton(filtersActive: hasExtraFilters,
+                                      showingFilters: $showingFilters,
+                                      filterHelp: "Filter works in this fandom",
+                                      onClearFilters: resetFilters)),
+                AnyView(WorkListMoreMenu {
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
                     }
                     ExpandAllMenuItem(expandAll: $expandAll)
-                }
-            }
+                })
+            ])
         }
     }
 }
@@ -399,17 +399,17 @@ struct TagWorksView: View {
                 bulkSelection.selected(in: results)
             }
         } else if phase == .loaded, !results.isEmpty {
-            ActionToolbar {
-                FilterButton(filtersActive: hasExtraFilters,
-                             showingFilters: $showingFilters,
-                             onClearFilters: resetFilters)
-                WorkListMoreMenu {
+            ActionToolbar(items: [
+                AnyView(FilterButton(filtersActive: hasExtraFilters,
+                                      showingFilters: $showingFilters,
+                                      onClearFilters: resetFilters)),
+                AnyView(WorkListMoreMenu {
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
                     }
                     ExpandAllMenuItem(expandAll: $expandAll)
-                }
-            }
+                })
+            ])
         }
     }
 
