@@ -6,8 +6,9 @@ import SwiftUI
 /// horizontal card carousel with a `>` chevron that opens its full vertical list.
 /// Tapping a local card opens the reader; long-press opens management actions,
 /// including Work Details. Remote cards still tap through to Work Details.
-/// Sections, in order: Resume (hero+strip), Recently Updated, Subscriptions.
-struct HomeView: View {
+/// Sections, in order: Resume (hero+strip), Reading Queues, Recently Updated,
+/// Subscriptions.
+struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -23,12 +24,16 @@ struct HomeView: View {
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
+    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
+    private var readingQueues: [ReadingQueue]
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
     /// True only while the remote subscriptions request is actually in flight, so the
     /// carousel can show cover skeletons instead of briefly flashing its empty state.
     @State private var isLoadingSubscriptions = false
+    @State private var showingNewQueue = false
+    @State private var newQueueName = ""
 
     // Multi-select / bulk actions, mirroring LibraryView's carousel selection.
     // Scoped to local works (Resume hero+strip + Recently Updated) — Subscriptions
@@ -133,6 +138,7 @@ struct HomeView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
                             resumeSection
+                            readingQueuesCarousel
                             localSection(.recentlyUpdated, works: recentlyUpdated)
                             subscriptionsSection
                         }
@@ -142,7 +148,7 @@ struct HomeView: View {
                 } else {
                     TabDashboardShell(
                         sectionTitles: [
-                            "Reading Now", "Recently Updated",
+                            "Reading Now", "Reading Queues", "Recently Updated",
                             "Subscriptions"
                         ]
                     )
@@ -168,6 +174,15 @@ struct HomeView: View {
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
+                .navigationDestination(for: AllReadingQueuesDestination.self) { destination in
+                    // Chevron passes nil → stack grid (owns its own New Queue sheet).
+                    // A specific queue id opens the Safari-style browser.
+                    if destination.initialQueueID == nil {
+                        AllReadingQueuesGridView()
+                    } else {
+                        ReadingQueueBrowserView(initialQueueID: destination.initialQueueID)
+                    }
+                }
                 .ao3AuthorNavigation(path: $path, tab: .home)
                 .task(id: homeSectionsRevision) {
                     await Task.yield()
@@ -227,6 +242,38 @@ struct HomeView: View {
                                 : nil
                         ].compactMap { $0 })
                     }
+                }
+                // Sheet for the dashboard carousel's New Queue card — same reliability
+                // reasons as AllReadingQueuesGridView / ReadingQueueBrowserView.
+                .sheet(isPresented: $showingNewQueue) {
+                    NavigationStack {
+                        Form {
+                            TextField("Name", text: $newQueueName)
+                                #if os(iOS)
+                                .textInputAutocapitalization(.words)
+                                #endif
+                        }
+                        .navigationTitle("New Queue")
+                        #if !os(macOS)
+                        .navigationBarTitleDisplayMode(.inline)
+                        #endif
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel") {
+                                    newQueueName = ""
+                                    showingNewQueue = false
+                                }
+                            }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Create") { createQueue() }
+                                    .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                        }
+                    }
+                    #if os(iOS)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+                    #endif
                 }
         }
         // Declared on the stack itself so the cards inside it and the screens
@@ -378,6 +425,41 @@ struct HomeView: View {
         }
     }
 
+    /// Moved here from the Library dashboard — Reading Queues sits right under
+    /// Continue Reading rather than several sections down Library, since a queue
+    /// is itself a reading plan (what to read next), the same territory as the
+    /// hero above it.
+    private var readingQueuesCarousel: some View {
+        let customQueues = readingQueues
+            .filter { $0.kind == .custom }
+            .sorted { $0.sortOrder < $1.sortOrder }
+        return WorkCarouselSection(
+            title: "Reading Queues",
+            collapseKey: "home.readingQueues",
+            hasItems: true,
+            onSeeAll: !customQueues.isEmpty
+                ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+                : nil
+        ) {
+            Button {
+                newQueueName = ""
+                showingNewQueue = true
+            } label: {
+                NewReadingQueueCard()
+            }
+            .buttonStyle(.plain)
+
+            ForEach(customQueues.prefix(12)) { queue in
+                NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
+                    ReadingQueueCard(queue: queue)
+                }
+                .buttonStyle(.plain)
+            }
+        } emptyState: {
+            EmptyView()
+        }
+    }
+
     private func localSection(_ kind: HomeSectionKind, works sectionWorks: [SavedWork]) -> some View {
         WorkCarouselSection(
             title: kind.title,
@@ -490,6 +572,14 @@ struct HomeView: View {
         guard work.hasUpdate else { return }
         work.knownChapterCount = work.postedChapterCount
         try? context.save()
+    }
+
+    private func createQueue() {
+        let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        newQueueName = ""
+        showingNewQueue = false
+        _ = ReadingQueueService.createQueue(named: trimmed, in: context)
     }
 
     // MARK: Card details
