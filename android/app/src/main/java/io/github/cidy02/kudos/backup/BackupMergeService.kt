@@ -210,8 +210,11 @@ object BackupMergeService {
         val bookmarks = mergeBookmarks(
             current.bookmarks,
             manifest.bookmarks,
+            tombstoneIndex = tombstoneIndex,
             mode = mode,
-            exportedAt = exportedAt
+            exportedAt = exportedAt,
+            now = now,
+            tombstonesById = tombstonesById
         ).also {
             summary = summary.copy(
                 bookmarksCreated = it.created,
@@ -258,8 +261,11 @@ object BackupMergeService {
         val savedSearches = mergeSavedSearches(
             current.savedSearches,
             manifest.savedSearches,
+            tombstoneIndex = tombstoneIndex,
             mode = mode,
-            exportedAt = exportedAt
+            exportedAt = exportedAt,
+            now = now,
+            tombstonesById = tombstonesById
         ).also {
             summary = summary.copy(
                 savedSearchesCreated = it.created,
@@ -514,13 +520,31 @@ object BackupMergeService {
     private fun mergeBookmarks(
         current: List<Bookmark>,
         incoming: List<BackupBookmark>,
+        tombstoneIndex: TombstoneIndex,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
-        exportedAt: Instant? = null
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now(),
+        tombstonesById: MutableMap<String, SyncTombstone>
     ): MergeItems<Bookmark> {
         val byUrl = current.associateByTo(linkedMapOf()) { it.urlString }
         var created = 0
         var updated = 0
         incoming.forEach { archived ->
+            val archivedId = archived.id?.takeIf { it.isNotBlank() }?.let {
+                BackupPaths.canonicalUuid(it, "bookmark.id")
+            }
+            if (mode != BackupImportMode.REPLACE_LIBRARY && archivedId != null) {
+                val incomingModified = BackupValidator.parseInstant(
+                    archived.dateAdded,
+                    "bookmark.dateAdded",
+                    exportedAt
+                )
+                if (tombstoneIndex.bookmarkResolution(archivedId, incomingModified) ==
+                    TombstoneResolution.SUPPRESS_STALE
+                ) {
+                    return@forEach
+                }
+            }
             val existing = byUrl[archived.urlString]
             byUrl[archived.urlString] = if (existing == null) {
                 created += 1
@@ -540,7 +564,16 @@ object BackupMergeService {
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             val incomingUrls = incoming.mapTo(mutableSetOf()) { it.urlString }
             byUrl.keys.toList().forEach { url ->
-                if (url !in incomingUrls) byUrl.remove(url)
+                if (url !in incomingUrls) {
+                    val omitted = byUrl.remove(url) ?: return@forEach
+                    mintImmediateTombstone(
+                        recordId = omitted.id,
+                        recordType = SyncTombstoneRecordType.BOOKMARK,
+                        deletionReason = "bookmarkDeleted",
+                        now = now,
+                        tombstonesById = tombstonesById
+                    )
+                }
             }
         }
         return MergeItems(byUrl.values.sortedByDescending { it.dateAdded }, created, updated)
@@ -846,8 +879,11 @@ object BackupMergeService {
     private fun mergeSavedSearches(
         current: List<SavedSearch>,
         incoming: List<BackupSavedSearch>,
+        tombstoneIndex: TombstoneIndex,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
-        exportedAt: Instant? = null
+        exportedAt: Instant? = null,
+        now: Instant = Instant.now(),
+        tombstonesById: MutableMap<String, SyncTombstone>
     ): MergeItems<SavedSearch> {
         val searchesById = current.associateByTo(linkedMapOf()) {
             BackupPaths.normalizeIdForComparison(it.id)
@@ -858,6 +894,18 @@ object BackupMergeService {
 
         incoming.forEach { archived ->
             val id = BackupPaths.canonicalUuid(archived.id, "savedSearch.id")
+            if (mode != BackupImportMode.REPLACE_LIBRARY) {
+                val incomingModified = BackupValidator.parseInstant(
+                    archived.dateAdded,
+                    "savedSearch.dateAdded",
+                    exportedAt
+                )
+                if (tombstoneIndex.savedSearchResolution(id, incomingModified) ==
+                    TombstoneResolution.SUPPRESS_STALE
+                ) {
+                    return@forEach
+                }
+            }
             val existing = searchesById[id]
             if (existing == null) {
                 val restoredName = archived.name.uniqueName(names)
@@ -887,11 +935,39 @@ object BackupMergeService {
                 BackupPaths.canonicalUuid(it.id, "savedSearch.id")
             }
             searchesById.keys.toList().forEach { id ->
-                if (id !in incomingIds) searchesById.remove(id)
+                if (id !in incomingIds) {
+                    val omitted = searchesById.remove(id) ?: return@forEach
+                    mintImmediateTombstone(
+                        recordId = omitted.id,
+                        recordType = SyncTombstoneRecordType.SAVED_SEARCH,
+                        deletionReason = "savedSearchDeleted",
+                        now = now,
+                        tombstonesById = tombstonesById
+                    )
+                }
             }
         }
 
         return MergeItems(searchesById.values.sortedBy { it.name.lowercase() }, created, updated)
+    }
+
+    private fun mintImmediateTombstone(
+        recordId: String,
+        recordType: String,
+        deletionReason: String,
+        now: Instant,
+        tombstonesById: MutableMap<String, SyncTombstone>
+    ) {
+        val signed = TombstoneSigning.sign(
+            SyncTombstone(
+                recordID = BackupPaths.normalizeIdForComparison(recordId),
+                recordTypeRaw = recordType,
+                createdAt = now,
+                lastModifiedAt = now,
+                deletionReason = deletionReason
+            )
+        )
+        tombstonesById[BackupPaths.normalizeIdForComparison(signed.id)] = signed
     }
 
     private fun mergeQueues(
@@ -1326,6 +1402,8 @@ internal class TombstoneIndex(
     private val annotationById = mutableMapOf<String, SyncTombstone>()
     private val collectionById = mutableMapOf<String, SyncTombstone>()
     private val collectionMembershipById = mutableMapOf<String, SyncTombstone>()
+    private val bookmarkById = mutableMapOf<String, SyncTombstone>()
+    private val savedSearchById = mutableMapOf<String, SyncTombstone>()
 
     init {
         tombstones.forEach { tombstone ->
@@ -1359,6 +1437,10 @@ internal class TombstoneIndex(
                     }
                     indexNewest(collectionMembershipById, membershipKey, tombstone)
                 }
+                SyncTombstoneRecordType.BOOKMARK ->
+                    indexNewest(bookmarkById, recordId, tombstone)
+                SyncTombstoneRecordType.SAVED_SEARCH ->
+                    indexNewest(savedSearchById, recordId, tombstone)
                 else -> Unit
             }
         }
@@ -1425,6 +1507,22 @@ internal class TombstoneIndex(
         return SyncMerge.tombstoneResolution(
             incomingModifiedAt = incomingModifiedAt,
             tombstoneDeletedAt = collectionById[BackupPaths.normalizeIdForComparison(id)]
+                ?.lastModifiedAt
+        )
+    }
+
+    fun bookmarkResolution(id: String, incomingModifiedAt: Instant?): TombstoneResolution {
+        return SyncMerge.tombstoneResolution(
+            incomingModifiedAt = incomingModifiedAt,
+            tombstoneDeletedAt = bookmarkById[BackupPaths.normalizeIdForComparison(id)]
+                ?.lastModifiedAt
+        )
+    }
+
+    fun savedSearchResolution(id: String, incomingModifiedAt: Instant?): TombstoneResolution {
+        return SyncMerge.tombstoneResolution(
+            incomingModifiedAt = incomingModifiedAt,
+            tombstoneDeletedAt = savedSearchById[BackupPaths.normalizeIdForComparison(id)]
                 ?.lastModifiedAt
         )
     }

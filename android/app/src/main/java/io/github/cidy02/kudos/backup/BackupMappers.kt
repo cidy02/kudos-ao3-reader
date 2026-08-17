@@ -248,12 +248,16 @@ fun Bookmark.toBackupBookmark(): BackupBookmark {
     return BackupBookmark(
         title = title,
         urlString = urlString,
-        dateAdded = BackupValidator.formatInstant(dateAdded)
+        dateAdded = BackupValidator.formatInstant(dateAdded),
+        id = BackupPaths.canonicalUuid(id, "bookmark.id")
     )
 }
 
 fun BackupBookmark.toBookmark(exportedAt: Instant? = null): Bookmark {
     return Bookmark(
+        id = id?.takeIf { it.isNotBlank() }?.let {
+            BackupPaths.canonicalUuid(it, "bookmark.id")
+        } ?: java.util.UUID.randomUUID().toString(),
         title = title,
         urlString = urlString,
         dateAdded = BackupValidator.parseInstant(dateAdded, "bookmark.dateAdded", exportedAt)
@@ -569,7 +573,9 @@ fun BackupTombstone.toSyncTombstone(exportedAt: Instant? = null): SyncTombstone 
         io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE,
         io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
         io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.BOOKMARK,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH
     )
     if (type.isEmpty() || type !in knownTypes) {
         throw IllegalArgumentException("Invalid or unknown tombstone recordTypeRaw: $recordTypeRaw")

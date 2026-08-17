@@ -382,6 +382,32 @@ enum SyncTombstones {
         )
     }
 
+    static func recordDeletion(of bookmark: Bookmark, in context: ModelContext) {
+        insertSigned(
+            SyncTombstone(
+                recordID: bookmark.id,
+                recordType: .bookmark,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "bookmarkDeleted"
+            ),
+            in: context
+        )
+    }
+
+    static func recordDeletion(of savedSearch: SavedSearch, in context: ModelContext) {
+        insertSigned(
+            SyncTombstone(
+                recordID: savedSearch.id,
+                recordType: .savedSearch,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "savedSearchDeleted"
+            ),
+            in: context
+        )
+    }
+
     /// Records that `work` was explicitly removed from `collection`, so a stale sync
     /// file (an older manifest that still lists this work in the collection) can't
     /// silently re-add it on the next merge — the same class of bug tombstones already

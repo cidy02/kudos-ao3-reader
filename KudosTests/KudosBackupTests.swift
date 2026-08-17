@@ -70,6 +70,7 @@ struct KudosBackupTests {
         #expect(decoded.manifest.works.first?.kudos == 890)
         #expect(decoded.manifest.works.first?.bookmarks == 56)
         #expect(decoded.manifest.bookmarks.first?.urlString == bookmark.urlString)
+        #expect(decoded.manifest.bookmarks.first?.id == bookmark.id)
         #expect(decoded.manifest.fonts.first?.fileName == font.fileName)
         #expect(decoded.manifest.settings.appTheme == "sepia")
         #expect(decoded.manifest.settings.readerFontPt == 21)
@@ -1923,12 +1924,14 @@ struct KudosBackupTests {
 
         let keepWork = SavedWork(id: UUID(), title: "Keep", author: "A")
         context.insert(keepWork)
-        context.insert(Bookmark(title: "Local only", urlString: "https://archiveofourown.org/works/1"))
+        let dropLink = Bookmark(title: "Local only", urlString: "https://archiveofourown.org/works/1")
+        context.insert(dropLink)
         let keepLink = Bookmark(title: "In both", urlString: "https://archiveofourown.org/works/2")
         context.insert(keepLink)
         let dropSearch = SavedSearch(name: "Local search", filters: AO3SearchFilters())
         context.insert(dropSearch)
         try context.save()
+        let dropLinkID = dropLink.id
 
         let fileLink = Bookmark(title: "From file", urlString: "https://archiveofourown.org/works/2")
         let fileSearch = SavedSearch(name: "File search", filters: AO3SearchFilters())
@@ -1948,6 +1951,261 @@ struct KudosBackupTests {
         let searches = try context.fetch(FetchDescriptor<SavedSearch>())
         #expect(searches.map(\.id) == [fileSearch.id])
         #expect(searches.map(\.name) == ["File search"])
+        let minted = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(minted.contains {
+            $0.recordType == .bookmark && $0.recordID == dropLinkID && !$0.signature.isEmpty
+        })
+        #expect(minted.contains {
+            $0.recordType == .savedSearch && $0.recordID == dropSearch.id && !$0.signature.isEmpty
+        })
+    }
+
+    /// Production entry: `restore(.replaceLibrary)` then `restore(.merge)`.
+    /// The omitted bookmark/search must stay gone after a later Merge of the
+    /// pre-Replace snapshot. Reverting the Replace-mode `recordDeletion` call
+    /// makes this assertion fail.
+    @Test func replaceThenMergeDoesNotResurrectOmittedBookmarkOrSavedSearch() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let keepWork = SavedWork(id: UUID(), title: "Keep", author: "A")
+        context.insert(keepWork)
+        let dropLink = Bookmark(title: "Local only", urlString: "https://archiveofourown.org/works/1")
+        let dropSearch = SavedSearch(name: "Local search", filters: AO3SearchFilters())
+        context.insert(dropLink)
+        context.insert(dropSearch)
+        try context.save()
+        let dropLinkID = dropLink.id
+        let dropSearchID = dropSearch.id
+
+        let stale = try KudosBackupService.makeContents(
+            works: [keepWork],
+            bookmarks: [dropLink],
+            fonts: [],
+            readingQueues: [],
+            savedSearches: [dropSearch],
+            defaults: try testDefaults()
+        )
+        let replaceSnapshot = try KudosBackupService.makeContents(
+            works: [keepWork],
+            bookmarks: [],
+            fonts: [],
+            readingQueues: [],
+            savedSearches: [],
+            defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(
+            replaceSnapshot, into: context, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        _ = try KudosBackupService.restore(
+            stale, into: context, defaults: try testDefaults(), mode: .merge
+        )
+
+        #expect(try context.fetch(FetchDescriptor<Bookmark>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<SavedSearch>()).isEmpty)
+        let tombs = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombs.contains { $0.recordType == .bookmark && $0.recordID == dropLinkID })
+        #expect(tombs.contains { $0.recordType == .savedSearch && $0.recordID == dropSearchID })
+    }
+
+    @Test func mergeDoesNotResurrectBookmarkOrSavedSearchWithLocalTombstone() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let bookmarkID = UUID()
+        let searchID = UUID()
+        let bookmark = Bookmark(title: "Deleted link", urlString: "https://archiveofourown.org/works/9")
+        bookmark.id = bookmarkID
+        bookmark.dateAdded = Date(timeIntervalSince1970: 100)
+        let search = SavedSearch(name: "Deleted search", filters: AO3SearchFilters())
+        search.id = searchID
+        search.dateAdded = Date(timeIntervalSince1970: 100)
+        let stale = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [bookmark],
+            fonts: [],
+            readingQueues: [],
+            savedSearches: [search],
+            defaults: try testDefaults()
+        )
+
+        let bookmarkTomb = SyncTombstone(
+            recordID: bookmarkID,
+            recordType: .bookmark,
+            createdAt: Date(timeIntervalSince1970: 9_000)
+        )
+        let searchTomb = SyncTombstone(
+            recordID: searchID,
+            recordType: .savedSearch,
+            createdAt: Date(timeIntervalSince1970: 9_000)
+        )
+        TombstoneSigning.sign(bookmarkTomb, defaults: try testDefaults())
+        TombstoneSigning.sign(searchTomb, defaults: try testDefaults())
+        context.insert(bookmarkTomb)
+        context.insert(searchTomb)
+        try context.save()
+
+        _ = try KudosBackupService.restore(
+            stale, into: context, defaults: try testDefaults(), mode: .merge
+        )
+        #expect(try context.fetch(FetchDescriptor<Bookmark>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<SavedSearch>()).isEmpty)
+    }
+
+    @Test func mergeDoesNotResurrectBookmarkOrSavedSearchSuppressedByIncomingTrustedTombstone() throws {
+        let defaults = try testDefaults()
+        let peer = TombstoneSigning.makePrivateKey()
+        let peerPub = TombstoneSigning.publicKeyHex(of: peer)
+        #expect(TombstoneTrustStore.add(peerPub, defaults: defaults))
+
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let bookmarkID = UUID()
+        let searchID = UUID()
+        let bookmark = Bookmark(title: "Peer deleted", urlString: "https://archiveofourown.org/works/8")
+        bookmark.id = bookmarkID
+        bookmark.dateAdded = Date(timeIntervalSince1970: 100)
+        let search = SavedSearch(name: "Peer deleted search", filters: AO3SearchFilters())
+        search.id = searchID
+        search.dateAdded = Date(timeIntervalSince1970: 100)
+        let bookmarkTomb = SyncTombstone(
+            recordID: bookmarkID,
+            recordType: .bookmark,
+            createdAt: Date(timeIntervalSince1970: 400)
+        )
+        let searchTomb = SyncTombstone(
+            recordID: searchID,
+            recordType: .savedSearch,
+            createdAt: Date(timeIntervalSince1970: 400)
+        )
+        TombstoneSigning.sign(bookmarkTomb, key: peer)
+        TombstoneSigning.sign(searchTomb, key: peer)
+
+        let snapshot = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [bookmark],
+            fonts: [],
+            readingQueues: [],
+            savedSearches: [search],
+            tombstones: [bookmarkTomb, searchTomb],
+            defaults: defaults
+        )
+        _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .merge)
+
+        #expect(try context.fetch(FetchDescriptor<Bookmark>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<SavedSearch>()).isEmpty)
+        let stored = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(stored.contains { $0.recordType == .bookmark && $0.recordID == bookmarkID })
+        #expect(stored.contains { $0.recordType == .savedSearch && $0.recordID == searchID })
+    }
+
+    @Test func inAppDeleteThenMergeDoesNotResurrectBookmarkOrSavedSearch() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        let bookmark = Bookmark(title: "Mine", urlString: "https://archiveofourown.org/works/3")
+        let search = SavedSearch(name: "Mine", filters: AO3SearchFilters())
+        context.insert(bookmark)
+        context.insert(search)
+        try context.save()
+        let bookmarkID = bookmark.id
+        let searchID = search.id
+
+        let stale = try KudosBackupService.makeContents(
+            works: [],
+            bookmarks: [bookmark],
+            fonts: [],
+            readingQueues: [],
+            savedSearches: [search],
+            defaults: try testDefaults()
+        )
+
+        // Same sequence SearchView.deleteSavedSearches now uses (and the
+        // bookmark helper that any future in-app delete must call).
+        SyncTombstones.recordDeletion(of: bookmark, in: context)
+        context.delete(bookmark)
+        SyncTombstones.recordDeletion(of: search, in: context)
+        context.delete(search)
+        try context.save()
+
+        _ = try KudosBackupService.restore(
+            stale, into: context, defaults: try testDefaults(), mode: .merge
+        )
+        #expect(try context.fetch(FetchDescriptor<Bookmark>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<SavedSearch>()).isEmpty)
+        let tombs = try context.fetch(FetchDescriptor<SyncTombstone>())
+        #expect(tombs.contains { $0.recordType == .bookmark && $0.recordID == bookmarkID })
+        #expect(tombs.contains { $0.recordType == .savedSearch && $0.recordID == searchID })
+    }
+
+    @Test func preG6BookmarkJSONWithoutIDStillDecodes() throws {
+        let json = """
+        {
+          "version": 8,
+          "exportedAt": "2026-01-01T00:00:00Z",
+          "works": [],
+          "bookmarks": [
+            {
+              "title": "Legacy link",
+              "urlString": "https://archiveofourown.org/works/1",
+              "dateAdded": "2026-01-01T00:00:00Z"
+            }
+          ],
+          "fonts": [],
+          "settings": {
+            "readerFontID": "system",
+            "readerMode": "scroll",
+            "readerTwoPage": false,
+            "readerCustomize": false,
+            "readerBoldText": false,
+            "readerFontPt": 18,
+            "readerLineHeight": 1.65,
+            "readerLetterSpacing": 0,
+            "readerWordSpacing": 0,
+            "readerMargin": 28,
+            "readerJustify": false,
+            "confirmBeforeDelete": true,
+            "hideMatureContent": true,
+            "matureContentMode": "obscure",
+            "requireBiometricToReveal": false,
+            "appTheme": "light",
+            "readerTheme": "light",
+            "matchAppReaderTheme": true,
+            "accentColorHex": "#990000",
+            "autoPreserveSmallSeriesOnSaveForLater": false,
+            "autoPreserveSeriesWorkThreshold": 5
+          }
+        }
+        """
+        let manifest = try decodeManifestJSON(json)
+        #expect(manifest.bookmarks.count == 1)
+        #expect(manifest.bookmarks.first?.title == "Legacy link")
+        #expect(manifest.bookmarks.first?.urlString == "https://archiveofourown.org/works/1")
     }
 
     @Test func trustedSignedIncomingTombstoneIsAdoptedAndSuppressesWork() throws {
