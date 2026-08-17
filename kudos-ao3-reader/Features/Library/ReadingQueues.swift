@@ -159,6 +159,9 @@ struct ReadingQueueCard: View {
         }
     }
 
+    // No `.skeletonShimmer()` — this isn't a loading state waiting on a request
+    // (that's what the shimmer promises elsewhere), just a static placeholder
+    // shape showing where works will land once the queue has some.
     private var skeletonGrid: some View {
         gridFrame {
             HStack(spacing: 4) {
@@ -170,7 +173,6 @@ struct ReadingQueueCard: View {
                 skeletonCell()
             }
         }
-        .skeletonShimmer()
     }
 
     /// Shared 2×2 grid chrome (padding, material background, border, shadow) —
