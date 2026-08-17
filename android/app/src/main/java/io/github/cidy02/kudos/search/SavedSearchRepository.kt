@@ -18,9 +18,9 @@ import java.util.UUID
  */
 class SavedSearchRepository(
     private val dao: SavedSearchDao,
-    private val clock: () -> Instant = Instant::now,
     private val tombstoneDao: SyncTombstoneDao? = null,
-    private val uuidFactory: () -> String = { UUID.randomUUID().toString() }
+    private val uuidFactory: () -> String = { UUID.randomUUID().toString() },
+    private val clock: () -> Instant = Instant::now
 ) {
     suspend fun getAll(): List<SavedSearch> {
         return dao.getAll().map { it.toDomain() }
