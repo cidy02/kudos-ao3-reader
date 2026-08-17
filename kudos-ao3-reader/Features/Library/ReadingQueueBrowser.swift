@@ -185,6 +185,7 @@ struct ReadingQueueBrowserView: View {
             Button { showingSwitcher = true } label: {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(themeManager.effectiveTint)
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }
@@ -223,6 +224,7 @@ struct ReadingQueueBrowserView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(themeManager.effectiveTint)
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }
