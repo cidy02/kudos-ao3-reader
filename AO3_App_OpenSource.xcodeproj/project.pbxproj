@@ -28,6 +28,7 @@
 		000000000000000000000120 /* Kudos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000520 /* KudosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KudosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000400000000 /* MuPDF.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MuPDF.xcframework; path = Vendor/MuPDF.xcframework; sourceTree = "<group>"; };
+		000000000000000000000900 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -68,6 +69,7 @@
 				000000000000000000000010 /* kudos-ao3-reader */,
 				000000000000000000000510 /* KudosTests */,
 				000000000000000000000020 /* Products */,
+				000000000000000000000900 /* Shared.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -542,13 +544,13 @@
 		};
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "AO3_App_OpenSource" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000900 /* Shared.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Kudos;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = NQH85H7343;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -599,6 +601,7 @@
 		};
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "AO3_App_OpenSource" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000900 /* Shared.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Kudos;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -606,7 +609,6 @@
 				"CODE_SIGN_INJECT_BASE_ENTITLEMENTS[sdk=macosx*]" = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = NQH85H7343;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
