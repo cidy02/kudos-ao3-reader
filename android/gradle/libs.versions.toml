@@ -24,6 +24,7 @@ room = "2.8.4"
 securityCrypto = "1.1.0"
 tink = "1.16.0"
 work = "2.11.2"
+zxingCore = "3.5.4"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -66,6 +67,7 @@ readium-streamer = { module = "org.readium.kotlin-toolkit:readium-streamer", ver
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
 androidx-work = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxingCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

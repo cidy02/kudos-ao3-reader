@@ -197,10 +197,25 @@ UDID=C71780B1-35DE-4E5E-ABCD-2AB66BCB28B0
 xcodebuild test -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
   -destination "id=$UDID" \
   -only-testing:KudosTests/PersistenceGateSuites/KudosBackupTests \
+  -only-testing:KudosTests/PersistenceGateSuites/FolderSyncTests \
   CODE_SIGNING_ALLOWED=NO
 ```
 
 `KudosTests/KudosBackupTests` matches **0** Swift Testing cases. Use the `PersistenceGateSuites` filter. `totalTestCount` 0 is a fail.
+
+**⚠️ The same trap applies to FolderSync — corrected 2026-08-16.** This section
+previously said to gate FolderSync but gave no path, and the obvious
+`-only-testing:KudosTests/FolderSyncTests` **matches 0 cases and still exits 0**
+(verified on the RC: `totalTestCount: 0`, exit 0, no suites reported). `FolderSyncTests`
+is nested exactly like `KudosBackupTests` —
+`extension PersistenceGateSuites { @Suite(.serialized) struct FolderSyncTests }` — so the
+only correct path is `KudosTests/PersistenceGateSuites/FolderSyncTests` (27 cases).
+Following the old form gives a green iOS gate that never exercised folder sync at all,
+including the F4 symlink guard in `coordinatedReadData`.
+
+**Do not trust "green" alone — confirm what ran.** `grep -oE "Suite [A-Za-z]+ (passed|failed)"`
+over the xcodebuild log, and read `totalTestCount` from the result bundle rather than
+xcodebuild's exit code.
 
 Android:
 
@@ -222,6 +237,41 @@ Maintain `/Users/cidy02/kudos-fix-tombstone/REVIEW-CLAUDE.md` across the loop (a
 ### Cycle log
 
 - 2026-08-15 — Grok wrote this brief. RC not created yet. Claude starts the loop here.
+
+## ✅ RC READY — 2026-08-16
+
+`security-fixes/rc` (local only, never pushed). All 7 trees stacked, all reviews done, all gates green.
+
+| Gate | Result |
+|---|---|
+| Full iOS suite | **1111 / 1111**, 0 failed, 0 skipped |
+| Android `:app:testDebugUnitTest` | **854 / 0 / 0 / 0** (tallied from JUnit XML) |
+| `swiftlint --strict` | **0 errors** |
+| `check-invariants.sh` | **OK** |
+| macOS build | **BUILD SUCCEEDED** |
+
+Definition of done: 7/8 met. The eighth (G1–G8 all fixed or signed off) is met **except G3**, held deliberately for the owner — see below.
+
+**Open, deliberately, for the owner:**
+1. **G3 / TOMB-6** — no iCloud KVS entitlement exists anywhere in the project, yet shipped Settings copy promises same-Apple-ID public-key pickup. Add the entitlement *or* change the copy: a product decision, not an implementation one.
+2. **`FolderSyncService.readChangedRemoteAssets`** still eagerly loads the changed subset (pre-existing residual named in the WP-C review; was outside the assigned file scope).
+
+Everything else from the ~30 FIX findings is closed and verified. Still **not pushed** — that remains owner-only.
+- 2026-08-15 (Claude Opus 5, cycle 1) — **RC created: `security-fixes/rc` at `/Users/cidy02/kudos-fix-rc`.** Blocker found and solved first: the 7 trees span **two repos** (tombstone hangs off the forbidden main checkout; all 6 `wp-*` hang off `kudos-security-audit-1-claude`) and shared no objects, so a single RC was impossible by merging. Bridged with `git bundle` created *from inside the tombstone worktree* (permitted) and fetched into the audit repo — no git run in `/Users/cidy02/Documents/AO3_App_OpenSource`. RC provisioned with the gitignored `Vendor/MuPDF.xcframework` + `android/local.properties`.
+  **Stacked:** wp-c ✅ clean → wp-a ✅ clean (RC `e9f2110`). **wp-b ❌ 10 files / 33 hunks conflict (G4)** — aborted rather than guess; resolving with the WP-B review's stricter-of input.
+  **G4 partial adjudication (2 of 10 files):** `AppRouter.open(_:)` → **keep WP-A**, it has both the scheme gate *and* the host gate that WP-B's side is missing entirely (taking WP-B would regress M19 and let `https://evil.example` into the in-app browser). `openAO3Link` predicate → `isAO3URL` and `isTrustedURL` verified byte-equivalent (https-only, apex-or-subdomain), free choice.
+  **New finding WPC-1 (FIX):** WP-C committed dev detritus incl. `kudos-ao3-reader/Services/KudosBackup.swift.orig` — a stale uncompiled duplicate of the restore/tombstone file — plus 3 `.patch` files. To be `git rm`'d on RC.
+  **Reviews:** WP-A done (Gemini 3.1 Pro: 6 SHIP / 2 FIX / 0 BLOCK — both FIX are revert-loopholes where the production fix is correct but no test would go RED if it were removed: M19's `unguardedURLSinkIsClosed`, and M14's untested `LiveAO3SessionValidator.responseCookies`/`merging`). WP-C + WP-E (Grok), WP-F (Gemini), tombstone + WP-B + WP-D (Claude Opus 5 via Workflow) all still in flight.
+  Findings collected in `REVIEW-CLAUDE.md`. **Paused here at the owner's request** (owner leaving; session kept alive on a phone hotspot) — no further agents to be spawned; in-flight reviews to be collected on resume.
+- 2026-08-15 (Claude Opus 5, cycle 1 cont.) — **ALL 7 TREES STACKED ON `security-fixes/rc`.** Order per the brief: wp-c → wp-a → wp-b → wp-d → tombstone → wp-e → wp-f. Every conflict resolved against the reviews' stricter-of adjudication, never by guessing.
+  **G4 (wp-b, 10 files/33 hunks) — CLOSED.** Took WP-B whole for `ReaderWebIsolation.swift` (origin-independent forbidden-scheme deny-list, evaluated *before* the origin switch) and its 11-case test file (strict superset of WP-A's 5). Took WP-A whole for `AppRouter.swift` (scheme gate **plus** host gate; WP-B's side lacks the host gate entirely), `Storage.swift` + `StorageTests.swift` (also rejects control chars and >255-byte names). Hybrids: `ReaderController.swift` got WP-B's stricter `.linkActivated` guard **and** WP-A's cross-spine cancel — both verified present post-merge; `AO3AuthService.swift` kept WP-A's AUDIT-2 rationale plus WP-B's `validationURL` seam and testable `performRequest` (which still attaches `redirectCookieRelay`, so M9 survives).
+  **F4 (the trap the review warned about) — handled correctly.** In `coordinatedReadData` the symlink guard went **above** the branch, not inside the `else`. `FileHandle(forReadingFrom:)` follows symlinks exactly as `Data(contentsOf:)` does, so the plausible-looking resolution would have left the font read following a link out of the sync folder into `Storage.fontsDirectory`, uncovered by any test in either tree.
+  **WPD-5 trap — did not fire, verified not assumed.** `AO3SessionVault.swift` auto-merged; confirmed M16 (`kSecAttrAccessible` in `updateItemAttributes`), M14 (allow-list at both install and capture) and M13 (`isExcludedFromBackup`) all still present afterwards.
+  **G5 — CLOSED, and it caught a real drop.** `makeTombstone` (`KudosBackup.swift:2140` — the exact line TOMB-1 flags) copies `lastModifiedAt` verbatim and has **no** `exportedAt` clamp, while HEAD did. Taking the tombstone side wholesale would have silently dropped that clamp. Resolved to keep **both**: Phase 1/2 signing gate admits the tombstone, then `min(adopted.lastModifiedAt, exportedAt)`. WP-A's M15 (`autosaveEnabled=false` + `rollback()`) verified intact at `:1416-1423`.
+  **G9 (wp-f Android) — CLOSED as a hybrid:** tombstone's `TombstoneLocalMigration` + `mergePackage(…, mode)` (three-mode + trusted keys) **plus** WP-F's `BackupFontValidator.validate` (M21), font-aware `captureLibrarySnapshot(incomingFontFileNames)`, and the `knownTombstoneTypes` DAO filter (M2b).
+  **WPC-1 / WP-C FIX-4 applied:** removed `KudosBackup.swift.orig` (stale uncompiled duplicate of the restore/tombstone file) and three mutation revert patches.
+  **Known regression, recorded not hidden:** tombstone's pre-confirm calls `KudosBackupContents.read(from:)` where WP-A/WP-C used lazy `preConfirmManifest(from:)`. Bounded (ZIP EPUB decode is still lazy via the accessor per WP-C SHIP-1) but worse on the directory path, which is already open as WP-C FIX-2. Fix is to hold `SecurityScopedURL` + manifest instead of full contents — `BackupReplaceWorkDelta.classify` only needs `manifest.works`. ~10 call sites; delegated, not done inline.
+  RC now at `15c6621`+. Gates running next; ~30 FIX findings still to be delegated per the model-split rule.
 
 ---
 

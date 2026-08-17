@@ -19,7 +19,35 @@ import io.github.cidy02.kudos.core.model.SyncSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import java.time.Instant
+
+/**
+ * Keysync v1 pairing metadata for one trusted Ed25519 public key. [label] is
+ * always set locally by the user after trusting a key — never populated from
+ * a QR payload, pasted text, or a backup file (see [TombstoneTrustStore]).
+ */
+@Serializable
+data class TrustedDeviceRecord(
+    val publicKeyHex: String,
+    val label: String = "",
+    val trustedAtEpochMs: Long
+)
+
+private fun decodeTrustedDeviceRecords(json: String?): List<TrustedDeviceRecord> {
+    if (json.isNullOrBlank()) return emptyList()
+    return try {
+        Json.decodeFromString(ListSerializer(TrustedDeviceRecord.serializer()), json)
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+private fun encodeTrustedDeviceRecords(records: List<TrustedDeviceRecord>): String {
+    return Json.encodeToString(ListSerializer(TrustedDeviceRecord.serializer()), records)
+}
 
 class SettingsRepository(
     private val dataStore: DataStore<Preferences>
@@ -210,6 +238,97 @@ class SettingsRepository(
         }
     }
 
+    suspend fun untrustTombstonePublicKey(hex: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.TrustedTombstonePublicKeys] ?: emptySet()
+            prefs[Keys.TrustedTombstonePublicKeys] = current - hex
+        }
+    }
+
+    /**
+     * Keysync v1 pairing UI metadata (label the user assigns locally + the
+     * local trust timestamp for the 24h Undo Trust window). Never populated
+     * from a file/wire source — [io.github.cidy02.kudos.backup.TombstoneTrustStore.trust]
+     * is the only writer, and it only runs from the paste-and-confirm pairing
+     * flow or the QR-pairing acceptance, both local user actions.
+     */
+    val trustedTombstoneDeviceRecords: Flow<List<TrustedDeviceRecord>> = dataStore.data.map { prefs ->
+        decodeTrustedDeviceRecords(prefs[Keys.TrustedTombstoneDeviceRecords])
+    }
+
+    suspend fun trustedTombstoneDeviceRecordsSnapshot(): List<TrustedDeviceRecord> {
+        return trustedTombstoneDeviceRecords.first()
+    }
+
+    suspend fun upsertTrustedTombstoneDeviceRecord(record: TrustedDeviceRecord) {
+        dataStore.edit { prefs ->
+            val current = decodeTrustedDeviceRecords(prefs[Keys.TrustedTombstoneDeviceRecords])
+            val updated = current.filterNot { it.publicKeyHex == record.publicKeyHex } + record
+            prefs[Keys.TrustedTombstoneDeviceRecords] = encodeTrustedDeviceRecords(updated)
+        }
+    }
+
+    suspend fun removeTrustedTombstoneDeviceRecord(hex: String) {
+        dataStore.edit { prefs ->
+            val current = decodeTrustedDeviceRecords(prefs[Keys.TrustedTombstoneDeviceRecords])
+            prefs[Keys.TrustedTombstoneDeviceRecords] = encodeTrustedDeviceRecords(
+                current.filterNot { it.publicKeyHex == hex }
+            )
+        }
+    }
+
+    suspend fun renameTrustedTombstoneDevice(hex: String, label: String) {
+        dataStore.edit { prefs ->
+            val current = decodeTrustedDeviceRecords(prefs[Keys.TrustedTombstoneDeviceRecords])
+            prefs[Keys.TrustedTombstoneDeviceRecords] = encodeTrustedDeviceRecords(
+                current.map { if (it.publicKeyHex == hex) it.copy(label = label) else it }
+            )
+        }
+    }
+
+    /**
+     * Keys revoked as "Stolen or compromised" land here so a re-paste of the
+     * same key can never silently re-trust it (D9(a)-equivalent denylist —
+     * see [io.github.cidy02.kudos.backup.TombstoneTrustStore.trust]).
+     * "Retired or sold" revokes do not add to this set.
+     */
+    val revokedTombstonePublicKeys: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[Keys.RevokedTombstonePublicKeys] ?: emptySet()
+    }
+
+    suspend fun revokedTombstonePublicKeysSnapshot(): Set<String> {
+        return revokedTombstonePublicKeys.first()
+    }
+
+    suspend fun addRevokedTombstonePublicKey(hex: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.RevokedTombstonePublicKeys] ?: emptySet()
+            prefs[Keys.RevokedTombstonePublicKeys] = current + hex
+        }
+    }
+
+    /**
+     * Ids of tombstones a merge/reconcile pass saw with a signature that
+     * verified but whose signer is not (yet) trusted — feeds the count-only
+     * unknown-signer badge. Self-heals: [recordUnknownSignerTombstoneIds]
+     * removes an id once a later pass adopts it (signer became trusted).
+     */
+    val unknownSignerTombstoneIds: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[Keys.UnknownSignerTombstoneIds] ?: emptySet()
+    }
+
+    suspend fun unknownSignerTombstoneIdsSnapshot(): Set<String> {
+        return unknownSignerTombstoneIds.first()
+    }
+
+    suspend fun recordUnknownSignerTombstoneIds(newIds: Set<String>, adoptedIds: Set<String>) {
+        if (newIds.isEmpty() && adoptedIds.isEmpty()) return
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.UnknownSignerTombstoneIds] ?: emptySet()
+            prefs[Keys.UnknownSignerTombstoneIds] = (current + newIds) - adoptedIds
+        }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { it.clear() }
     }
@@ -333,6 +452,9 @@ class SettingsRepository(
         val SyncHasPendingChanges = booleanPreferencesKey("syncHasPendingChanges")
         val TombstoneMigrationComplete = booleanPreferencesKey("tombstoneMigrationComplete")
         val TrustedTombstonePublicKeys = stringSetPreferencesKey("trustedTombstonePublicKeys")
+        val TrustedTombstoneDeviceRecords = stringPreferencesKey("trustedTombstoneDeviceRecords")
+        val RevokedTombstonePublicKeys = stringSetPreferencesKey("revokedTombstonePublicKeys")
+        val UnknownSignerTombstoneIds = stringSetPreferencesKey("unknownSignerTombstoneIds")
     }
 
     companion object {
