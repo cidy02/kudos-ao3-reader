@@ -192,10 +192,17 @@ struct ReadingQueueBrowserView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("All Queues")
-            .popover(isPresented: $showingSwitcher, arrowEdge: .bottom) {
+            // A direct .sheet, not .popover + .presentationCompactAdaptation(.sheet):
+            // this bar only ever renders in compactLayout (iPhone) — regularLayout
+            // (iPad/Mac) is a completely different sidebar List and never shows
+            // this switcher at all — so there's no real popover behavior being
+            // adapted from. Going through the popover-adaptation path was the
+            // likely cause of two earlier attempts' clipped top chrome — see
+            // switcherList's own doc comment for the full reasoning and the
+            // working reference patterns (this file's newQueueSheet,
+            // CommentsView's chapter picker) this now matches.
+            .sheet(isPresented: $showingSwitcher) {
                 switcherList
-                    .presentationCompactAdaptation(.sheet)
-                    .presentationSizing(.fitted)
             }
 
             Button { showingSwitcher = true } label: {
@@ -307,16 +314,40 @@ struct ReadingQueueBrowserView: View {
 
     // MARK: - Switcher list
 
+    /// Same shape as this file's own `newQueueSheet` and CommentsView's chapter
+    /// picker (`chapterPickerDetents`): a real `NavigationStack` + title, a
+    /// content-fitted `.presentationDetents`, and `.presentationDragIndicator`
+    /// all applied to the sheet's own content — not a bare `List` handed to
+    /// `.popover(...).presentationCompactAdaptation(.sheet)`, which is what
+    /// clipped the sheet's top chrome in two earlier attempts here.
     private var switcherList: some View {
-        List {
-            ForEach(orderedQueues) { queue in
-                queueRow(queue)
+        NavigationStack {
+            List {
+                ForEach(orderedQueues) { queue in
+                    queueRow(queue)
+                }
+                .appThemedRows()
             }
-            .appThemedRows()
+            .listStyle(.plain)
+            .appThemedScroll()
+            .navigationTitle("Reading Queues")
+            #if !os(macOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
         }
-        .listStyle(.plain)
-        .appThemedScroll()
+        .presentationDetents(switcherDetents)
         .presentationDragIndicator(.visible)
+    }
+
+    /// Title bar + rows, no footer — same reasoning as CommentsView's
+    /// chapterPickerDetents ("Title + rows + footer note"), minus the base
+    /// height a footer would add, since this list doesn't have one.
+    private var switcherDetents: Set<PresentationDetent> {
+        if orderedQueues.count <= 6 {
+            let rowCount = CGFloat(orderedQueues.count)
+            return [.height(90 + rowCount * 52)]
+        }
+        return [.medium, .large]
     }
 
     private func queueRow(_ queue: ReadingQueue) -> some View {
