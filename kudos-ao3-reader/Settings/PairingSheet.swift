@@ -60,6 +60,7 @@ enum QRCodeGenerator {
 }
 
 struct TombstoneTrustSettingsSection: View {
+    @Environment(ThemeManager.self) private var themeManager
     @State private var showPairingSheet = false
     @State private var unknownSignerCount = 0
     @State private var trustedDevices: [TrustedDevice] = []
@@ -136,6 +137,8 @@ struct TombstoneTrustSettingsSection: View {
         }
         .sheet(isPresented: $showPairingSheet, onDismiss: refresh) {
             PairingSheet()
+                .environment(themeManager)
+                .tint(themeManager.effectiveTint)
         }
         .sheet(item: $revokeTarget) { device in
             RevokeDeviceSheet(device: device) { reason in
@@ -143,6 +146,8 @@ struct TombstoneTrustSettingsSection: View {
                 refresh()
                 statusMessage = "Revoked that device."
             }
+            .environment(themeManager)
+            .tint(themeManager.effectiveTint)
         }
     }
 
