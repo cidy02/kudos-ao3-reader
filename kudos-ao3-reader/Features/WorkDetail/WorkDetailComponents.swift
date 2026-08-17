@@ -36,17 +36,30 @@ struct WorkDetailHeroCard: View {
     let status: String?
     let chapters: String
     let words: Int?
+    /// Progress bar shown only when set — a work with no local reading state
+    /// (remote-only, never opened) has nothing to show here, exactly like
+    /// HomeResumeHero's own clamping only ever runs for a real `SavedWork`.
+    var readingProgress: Double?
+    var lastSpineIndex: Int = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // Byte-for-byte the same card as HomeResumeHero.swift's
+        // UnblurredHomeResumeHero — same background/border/shadow, same
+        // VStack spacing and padding, same title/stat-row treatment — per
+        // the owner's explicit "copy it exactly" request. This supersedes
+        // the file header comment above (work-content cards keeping the
+        // Library's `.cardRow()` geometry): that was a *prior* design
+        // decision, not a hard constraint, and the owner asked for this one
+        // specifically. `.cardRow()` was removed from this card's call site
+        // in WorkDetailView.swift for the same reason — a self-contained
+        // card inside another card's chrome would double up the background.
+        let hue = CoverArt.hue(for: title)
+        return VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                // `.title3`, matching the Comments info card that mirrors this
-                // same overview-card pattern — `.title2` sat a full step above
-                // every other screen's card heading. `.bold` (not `.semibold`)
-                // to match the Home "Continue Reading" hero's title weight.
                 .font(.title3.weight(.bold))
+                .lineLimit(2)
                 .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
 
             // `.caption`-sized, matching the "Continue Reading" hero's
@@ -120,8 +133,52 @@ struct WorkDetailHeroCard: View {
             // itself must stay `.contain` so the byline's individually routed
             // co-author buttons remain separately focusable/activatable.
             .accessibilityElement(children: .combine)
+
+            if let readingProgress {
+                let progressValue = min(1, max(0, readingProgress))
+                let percent = Int((progressValue * 100).rounded())
+                let chapterLabel: String? = lastSpineIndex > 0 ? "Ch \(lastSpineIndex + 1)" : nil
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(chapterLabel ?? "Reading")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text("\(percent)%")
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.quaternary)
+                            Capsule().fill(.tint)
+                                .frame(width: geo.size.width * max(0.03, progressValue))
+                        }
+                    }
+                    .frame(height: 6)
+                }
+            }
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                .fill(themeManager.appTheme.carouselCardSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                        .fill(themeManager.appTheme.carouselCardTint(hue: hue))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(themeManager.appTheme.carouselCardBorder(hue: hue), lineWidth: 0.5)
+                )
+                .shadow(color: themeManager.appTheme.carouselCardShadow.color,
+                        radius: themeManager.appTheme.carouselCardShadow.radius,
+                        x: 0,
+                        y: themeManager.appTheme.carouselCardShadow.y)
+        )
     }
 }
 

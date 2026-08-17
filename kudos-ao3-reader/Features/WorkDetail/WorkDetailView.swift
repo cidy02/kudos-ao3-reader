@@ -219,9 +219,24 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 rating: displayRating,
                 status: displayStatus,
                 chapters: displayChapters,
-                words: displayWords
+                words: displayWords,
+                readingProgress: localWork?.readingProgress,
+                lastSpineIndex: localWork?.lastSpineIndex ?? 0
             )
-            .cardRow()
+            // Not .cardRow() (double chrome — the hero now draws its own
+            // complete card, copied byte-for-byte from HomeResumeHero) and
+            // not .bareListRow() either (its innerHorizontal inset would
+            // stack with the hero's own internal 16pt padding, making it
+            // narrower than the same card looks in Home). Only the screen-edge
+            // margin the hero actually sits at, nothing more.
+            .listRowInsets(EdgeInsets(
+                top: CardListMetrics.interCardSpacing / 2,
+                leading: CardListMetrics.sideMargin,
+                bottom: CardListMetrics.interCardSpacing / 2,
+                trailing: CardListMetrics.sideMargin
+            ))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
     }
 
