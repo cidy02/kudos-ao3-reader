@@ -114,15 +114,15 @@ struct ReadingQueueCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
-                // Exact, not `minHeight:` — this card now has only one caption
-                // line below its tile (the name moved onto the tile itself),
-                // one fewer than NewReadingQueueCard's two in the same carousel
-                // row. A `minHeight`-only frame around a flexible `Shape` fill
-                // (RoundedRectangle) grows to soak up whatever extra height the
-                // row proposes to match its taller sibling, which stretched this
-                // tile past its sqrt(2):1 ratio. Pinning both dimensions makes
-                // that impossible regardless of what the row offers.
+                // Exact, not `minHeight:` — a flexible `Shape`/grid fill given only
+                // a floor grows to soak up whatever extra height the row proposes
+                // to match a taller sibling. Pinning both dimensions keeps this
+                // tile at its sqrt(2):1 ratio regardless of what the row offers.
                 .frame(width: cardSize.width, height: cardSize.height)
+            Text(queue.displayName)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .foregroundStyle(.primary)
             Text("\(works.count) work\(works.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -131,42 +131,95 @@ struct ReadingQueueCard: View {
         .frame(width: cardSize.width, alignment: .leading)
     }
 
-    // One tile, not a stack of the works inside — the queue's own icon and name
-    // are its identity, not a preview of its contents. Same gradient-fill +
-    // centered-icon treatment CollectionCard's own tile uses, so both read as
-    // the same family of "named shelf" card; the name overlays the tile itself
-    // (top edge) instead of sitting in its own row below, since this tile has
-    // no separate title text underneath it the way CollectionCard's does.
+    // Safari Tab-Groups style: a 2×2 grid of the queue's own first 4 works (each
+    // its own hued title/author cell), reading as a peek at what's actually
+    // queued rather than an abstract icon. Falls back to the icon tile only when
+    // there's truly nothing to preview — an empty queue has no titles to show.
+    @ViewBuilder
     private var tile: some View {
+        if works.isEmpty {
+            emptyTile
+        } else {
+            tabGroupGrid
+        }
+    }
+
+    private var tabGroupGrid: some View {
+        let cells = Array(works.prefix(4))
+        return VStack(spacing: 4) {
+            HStack(spacing: 4) {
+                gridCell(!cells.isEmpty ? cells[0] : nil)
+                gridCell(cells.count > 1 ? cells[1] : nil)
+            }
+            HStack(spacing: 4) {
+                gridCell(cells.count > 2 ? cells[2] : nil)
+                gridCell(cells.count > 3 ? cells[3] : nil)
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            .regularMaterial,
+            in: RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(.quaternary, lineWidth: 0.75)
+        }
+        .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
+    }
+
+    /// One grid cell: `work`'s title/author over its own title-hued tint, or an
+    /// empty placeholder when the queue has fewer than 4 works.
+    @ViewBuilder
+    private func gridCell(_ work: SavedWork?) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        Group {
+            if let work {
+                let hue = CoverArt.hue(for: work.title)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(work.title)
+                        .font(.system(size: 9, weight: .semibold))
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    if !work.author.isEmpty {
+                        Text(work.author)
+                            .font(.system(size: 8))
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(themeManager.appTheme.carouselCardTint(hue: hue))
+            } else {
+                Color.clear
+            }
+        }
+        .clipShape(shape)
+    }
+
+    private var emptyTile: some View {
         let hue = CoverArt.hue(for: queue.displayName)
-        let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue)
         return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-            .fill(LinearGradient(
-                colors: [gradient.start, gradient.end],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            ))
+            .fill(.regularMaterial)
+            .overlay {
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                    .fill(themeManager.appTheme.carouselQueueTint(hue: hue))
+            }
             .overlay {
                 Image(systemName: queue.kind == .savedForLater
                         ? WorkActionLabels.savedForLaterSymbol
                         : "list.bullet.rectangle")
-                    .font(.system(size: 38))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(.tint)
             }
-            .overlay(alignment: .top) {
-                Text(queue.displayName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    // A plain shadow, not a scrim rectangle — legible over every
-                    // hue `carouselCollectionGradient` can produce, including the
-                    // brightest (Light theme's gradient start) without dimming
-                    // the gradient itself the way a background fill would.
-                    .shadow(color: .black.opacity(0.35), radius: 3)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 12)
+            .overlay {
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(.quaternary, lineWidth: 0.75)
             }
-            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+            .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
     }
 }
 
