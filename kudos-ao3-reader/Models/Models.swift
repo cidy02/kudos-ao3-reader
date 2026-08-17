@@ -48,6 +48,13 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// restore from an older archive would silently resurrect it, the same way
     /// queue memberships needed their own tombstones.
     case readingAnnotation
+    /// A saved AO3 link the user deleted. There is no Recently Deleted UI;
+    /// the row is hard-deleted immediately and this tombstone is what stops
+    /// a later Merge of an older archive from putting it back.
+    case bookmark
+    /// A named AO3 search the user deleted. Same immediate-delete class as
+    /// `.bookmark` and `.readingAnnotation` — no recovery window, no RD UI.
+    case savedSearch
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat
@@ -547,6 +554,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
 /// A saved AO3 link the user can reopen in the Browse tab.
 @Model final class Bookmark {
+    /// Stable identity for tombstones only. Merge/import still dedupes by
+    /// `urlString`; nothing else keys off this UUID today.
+    var id: UUID = UUID()
     var title: String = ""
     var urlString: String = ""
     var dateAdded: Date = Date()
