@@ -334,6 +334,11 @@ struct ReadingQueueBrowserView: View {
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showingSwitcher = false }
+                }
+            }
         }
         .presentationDetents(switcherDetents)
         .presentationDragIndicator(.visible)
