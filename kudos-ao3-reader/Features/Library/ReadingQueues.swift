@@ -129,13 +129,17 @@ struct ReadingQueueCard: View {
         .frame(width: cardSize.width, alignment: .leading)
     }
 
-    // 2+ works reads as a shelf of the actual works inside; 0-1 keeps the abstract
-    // name-hued tile — a single face would just be a worse-looking work card, and an
-    // empty stack has no titles to hue.
+    // Any non-empty queue reads as a 3-deep shelf — padToThree cycles the titles
+    // that do exist so a 1-work queue still shows the same stack depth as every
+    // other queue card, for consistency across the carousel. An empty queue keeps
+    // the abstract name-hued tile — there's no title to hue any face with.
     @ViewBuilder
     private var tile: some View {
-        if works.count >= 2 {
-            StackedWorkCover(workTitles: works.map(\.title), cardSize: cardSize)
+        if !works.isEmpty {
+            StackedWorkCover(
+                workTitles: works.map(\.title), cardSize: cardSize,
+                axis: .horizontal, padToThree: true
+            )
         } else {
             singleTile
         }
