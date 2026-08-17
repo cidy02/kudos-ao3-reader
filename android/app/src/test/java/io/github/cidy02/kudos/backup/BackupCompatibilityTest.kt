@@ -1492,6 +1492,20 @@ class BackupTombstoneTrustPhase1MergeTest {
         assertTrue(result.snapshot.bookmarks.any { it.urlString == "https://archiveofourown.org/works/123" })
         assertTrue(result.snapshot.savedSearches.none { it.id == OTHER_SEARCH_ID })
         assertTrue(result.snapshot.savedSearches.any { it.id == SEARCH_ID })
+        assertTrue(
+            result.snapshot.tombstones.any {
+                it.recordTypeRaw ==
+                    io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.BOOKMARK &&
+                    it.recordID == localOnlyBookmark.id
+            }
+        )
+        assertTrue(
+            result.snapshot.tombstones.any {
+                it.recordTypeRaw ==
+                    io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH &&
+                    it.recordID == OTHER_SEARCH_ID
+            }
+        )
     }
 }
 
