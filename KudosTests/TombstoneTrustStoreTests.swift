@@ -20,6 +20,7 @@ struct TombstoneTrustStoreTests {
         UserDefaults.standard.removeObject(forKey: TombstoneTrustStore.localKeysKey)
         UserDefaults.standard.removeObject(forKey: "tombstoneRevokedPublicKeysDenylist")
         UserDefaults.standard.removeObject(forKey: "persistenceSyncDeviceID")
+        UserDefaults.standard.removeObject(forKey: "trustedTombstoneDeviceMetadata")
     }
 
     @Test func testRoundTripAddRemove() {
@@ -298,11 +299,130 @@ struct TombstoneTrustStoreTests {
 
         #expect(TombstoneTrustStore.trustedPublicKeys().isEmpty)
     }
+
+    // MARK: - Per-device metadata
+
+    /// A newly-added peer shows up in the Trusted Devices list with the
+    /// label passed to `add`, but the own device never appears there — it's
+    /// implicitly trusted, not something the user "paired."
+    @Test func testTrustedDevicesListsOnlyPeersWithLabel() {
+        let peerPub = String(repeating: "9", count: 64)
+        #expect(TombstoneTrustStore.add(peerPub, label: "Sam's iPad"))
+
+        let devices = TombstoneTrustStore.trustedDevices()
+        #expect(devices.count == 1)
+        #expect(devices.first?.publicKeyHex == peerPub)
+        #expect(devices.first?.label == "Sam's iPad")
+        #expect(!devices.contains { $0.publicKeyHex == TombstoneSigning.publicKeyHex() })
+    }
+
+    /// `rename` updates the label without touching trust or `trustedAt`, and
+    /// fails for a key that was never trusted (nothing to rename).
+    @Test func testRenameUpdatesLabelOnly() {
+        let peerPub = String(repeating: "a1", count: 32)
+        TombstoneTrustStore.add(peerPub)
+        let before = TombstoneTrustStore.trustedDevices().first { $0.publicKeyHex == peerPub }
+
+        #expect(TombstoneTrustStore.rename(peerPub, label: "New name"))
+        let after = TombstoneTrustStore.trustedDevices().first { $0.publicKeyHex == peerPub }
+        #expect(after?.label == "New name")
+        #expect(after?.trustedAt == before?.trustedAt)
+
+        #expect(!TombstoneTrustStore.rename(String(repeating: "b2", count: 32), label: "Ghost"))
+    }
+
+    /// Revoking a key removes its metadata too, so it drops out of the
+    /// Trusted Devices list, not just the raw trusted-keys set.
+    @Test func testRemoveClearsMetadata() {
+        let peerPub = String(repeating: "c3", count: 32)
+        TombstoneTrustStore.add(peerPub, label: "Old phone")
+        #expect(TombstoneTrustStore.trustedDevices().count == 1)
+
+        TombstoneTrustStore.remove(peerPub, reason: .retiredOrSold)
+        #expect(TombstoneTrustStore.trustedDevices().isEmpty)
+    }
+
+    /// Undo Trust reverts a just-trusted key within the window, without
+    /// denylisting it (same key can be re-trusted afterward) — and refuses
+    /// once the window has passed.
+    @Test func testUndoTrustRevertsWithinWindowButNotAfter() {
+        let peerPub = String(repeating: "d4", count: 32)
+        var now = Date(timeIntervalSince1970: 1_000_000)
+        TombstoneSigning.now = { now }
+        defer { TombstoneSigning.now = Date.init }
+
+        TombstoneTrustStore.add(peerPub)
+        #expect(TombstoneTrustStore.isTrusted(peerPub))
+
+        now = now.addingTimeInterval(25 * 60 * 60)
+        #expect(!TombstoneTrustStore.undoTrust(peerPub))
+        #expect(TombstoneTrustStore.isTrusted(peerPub))
+
+        now = now.addingTimeInterval(-24 * 60 * 60)
+        #expect(TombstoneTrustStore.undoTrust(peerPub))
+        #expect(!TombstoneTrustStore.isTrusted(peerPub))
+        #expect(!TombstoneTrustStore.isDenylisted(peerPub))
+
+        // Undo is not "stolen" — the key can be trusted again afterward.
+        #expect(TombstoneTrustStore.add(peerPub))
+    }
+
+    /// A peer merged straight from KVS (same Apple ID, this device never
+    /// called `add`) still gets a metadata record so it's visible in the
+    /// Trusted Devices list, not trusted-but-invisible.
+    @Test func testMergedPeerGetsMetadataToo() {
+        let store = InMemoryKeyValueStore()
+        let peerPub = String(repeating: "e5", count: 32)
+        store.set(peerPub, forKey: "pub.peer-device-5")
+        TombstoneTrustStore.iCloudStore = store
+
+        TombstoneTrustStore.mergeFromiCloud()
+
+        let devices = TombstoneTrustStore.trustedDevices()
+        #expect(devices.contains { $0.publicKeyHex == peerPub })
+    }
+
+    /// A remote revocation merged from another device must also drop the
+    /// peer out of THIS device's Trusted Devices list, not just its
+    /// trusted-keys set.
+    @Test func testRemoteRevocationClearsMetadataOnMerge() {
+        let store = InMemoryKeyValueStore()
+        let peerPub = String(repeating: "f6", count: 32)
+        store.set(peerPub, forKey: "pub.peer-device-6")
+        TombstoneTrustStore.iCloudStore = store
+        TombstoneTrustStore.mergeFromiCloud()
+        #expect(TombstoneTrustStore.trustedDevices().contains { $0.publicKeyHex == peerPub })
+
+        store.set([peerPub], forKey: "tombstoneRevokedPublicKeys")
+        TombstoneTrustStore.mergeFromiCloud()
+
+        #expect(!TombstoneTrustStore.trustedDevices().contains { $0.publicKeyHex == peerPub })
+    }
+
+    /// Re-merging an already-trusted "pub.*" entry must not reset
+    /// `trustedAt` (would silently reopen the Undo Trust window) or clobber
+    /// a label the user already set.
+    @Test func testReMergeDoesNotResetExistingMetadata() {
+        let store = InMemoryKeyValueStore()
+        let peerPub = String(repeating: "a7", count: 32)
+        store.set(peerPub, forKey: "pub.peer-device-7")
+        TombstoneTrustStore.iCloudStore = store
+        TombstoneTrustStore.mergeFromiCloud()
+        TombstoneTrustStore.rename(peerPub, label: "Renamed")
+        let before = TombstoneTrustStore.trustedDevices().first { $0.publicKeyHex == peerPub }
+
+        TombstoneTrustStore.mergeFromiCloud()
+
+        let after = TombstoneTrustStore.trustedDevices().first { $0.publicKeyHex == peerPub }
+        #expect(after?.label == "Renamed")
+        #expect(after?.trustedAt == before?.trustedAt)
+    }
 }
 
 private final class KeychainOverrideReset {
     deinit {
         TombstoneTrustStore.keychainOverride = nil
         UserDefaults.standard.removeObject(forKey: TombstoneTrustStore.localKeysKey)
+        UserDefaults.standard.removeObject(forKey: "trustedTombstoneDeviceMetadata")
     }
 }
