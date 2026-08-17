@@ -84,7 +84,10 @@ struct AboutView: View {
         #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .accessibilityLabel("Done")
                 }
             }
             .presentationDragIndicator(.visible)

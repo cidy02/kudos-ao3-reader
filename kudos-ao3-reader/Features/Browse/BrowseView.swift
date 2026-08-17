@@ -79,7 +79,10 @@ struct AO3WebBrowserView: View {
         }
 
         ToolbarItem(placement: .confirmationAction) {
-            Button("Done") { dismiss() }
+            Button { dismiss() } label: {
+                Image(systemName: "checkmark")
+            }
+            .accessibilityLabel("Done")
         }
     }
 

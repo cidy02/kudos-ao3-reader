@@ -79,7 +79,10 @@ struct WhatsNewView: View {
             #endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done", action: onDone)
+                        Button(action: onDone) {
+                            Image(systemName: "checkmark")
+                        }
+                        .accessibilityLabel("Done")
                     }
                 }
         }

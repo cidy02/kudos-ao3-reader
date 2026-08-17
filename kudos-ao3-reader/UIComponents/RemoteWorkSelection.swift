@@ -96,7 +96,10 @@ struct RemoteWorkSelectionToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .confirmationAction) {
-            Button("Done") { controller.exitSelectMode() }
+            Button { controller.exitSelectMode() } label: {
+                Image(systemName: "checkmark")
+            }
+            .accessibilityLabel("Done")
         }
         #if os(iOS)
         ToolbarItemGroup(placement: .bottomBar) {

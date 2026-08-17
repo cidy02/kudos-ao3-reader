@@ -232,7 +232,10 @@ struct AO3PreferencesView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { helpSheet = nil }
+                    Button { helpSheet = nil } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .accessibilityLabel("Done")
                 }
             }
         }
