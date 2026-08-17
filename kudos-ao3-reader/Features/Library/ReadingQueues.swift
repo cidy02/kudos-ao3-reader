@@ -114,8 +114,15 @@ struct ReadingQueueCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             tile
-                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
-                       minHeight: cardSize.height)
+                // Exact, not `minHeight:` — this card now has only one caption
+                // line below its tile (the name moved onto the tile itself),
+                // one fewer than NewReadingQueueCard's two in the same carousel
+                // row. A `minHeight`-only frame around a flexible `Shape` fill
+                // (RoundedRectangle) grows to soak up whatever extra height the
+                // row proposes to match its taller sibling, which stretched this
+                // tile past its sqrt(2):1 ratio. Pinning both dimensions makes
+                // that impossible regardless of what the row offers.
+                .frame(width: cardSize.width, height: cardSize.height)
             Text("\(works.count) work\(works.count == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -175,8 +182,10 @@ struct NewReadingQueueCard: View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
-                       minHeight: cardSize.height)
+                // Exact, not `minHeight:` — see ReadingQueueCard's own tile frame
+                // for why a flexible `Shape` fill can't be bounded by a minimum
+                // alone in a row where a sibling card might end up taller.
+                .frame(width: cardSize.width, height: cardSize.height)
                 .overlay {
                     Image(systemName: "plus")
                         .font(.system(size: 34, weight: .medium))
