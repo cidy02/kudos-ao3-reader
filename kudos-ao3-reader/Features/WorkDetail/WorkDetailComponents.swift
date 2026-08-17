@@ -27,6 +27,7 @@ enum WorkDetailTab: String, CaseIterable, Identifiable {
 /// chips, and personal library state live in their sections, not here.
 struct WorkDetailHeroCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ThemeManager.self) private var themeManager
     let title: String
     let authors: [String]
     let identities: [AO3AuthorIdentity]
@@ -41,12 +42,20 @@ struct WorkDetailHeroCard: View {
             Text(title)
                 // `.title3`, matching the Comments info card that mirrors this
                 // same overview-card pattern — `.title2` sat a full step above
-                // every other screen's card heading.
-                .font(.title3.weight(.semibold))
+                // every other screen's card heading. `.bold` (not `.semibold`)
+                // to match the Home "Continue Reading" hero's title weight.
+                .font(.title3.weight(.bold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
+            // `.caption`-sized, matching the "Continue Reading" hero's
+            // author/fandom (WorkStatLabel) so the metadata reads as one
+            // family instead of running a size larger here — see
+            // HomeResumeHero.swift. Still a real Label (not WorkStatLabel):
+            // author needs AO3AuthorBylineView's per-co-author tap
+            // navigation, and fandoms need multi-line wrap (WorkStatLabel
+            // forces a single fixed line).
             if !authors.isEmpty {
                 // A real Label (not a hand-rolled HStack) so the icon lines up
                 // with the Fandoms Label right below it — a raw HStack can't
@@ -54,23 +63,23 @@ struct WorkDetailHeroCard: View {
                 //
                 // The `.font` has to be on the Label, not just inside the
                 // byline: a Label sizes its icon from the *ambient* font, so
-                // passing `.subheadline` only to `AO3AuthorBylineView` left this
+                // passing the font only to `AO3AuthorBylineView` left this
                 // icon rendering at `.body` while the Fandoms icon below used
-                // `.subheadline` — two different glyph sizes on two different
-                // baselines, which is exactly the column alignment the comment
-                // above was trying to guarantee.
+                // the Label's own font — two different glyph sizes on two
+                // different baselines, which is exactly the column alignment
+                // the comment above was trying to guarantee.
                 Label {
                     AO3AuthorBylineView(
                         names: authors,
                         identities: identities,
                         includesBy: false,
-                        font: .subheadline
+                        font: .caption
                     )
                 } icon: {
                     Image(systemName: "person")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(themeManager.effectiveTint)
                 }
-                .font(.subheadline)
+                .font(.caption)
             }
 
             if !fandoms.isEmpty {
@@ -79,7 +88,7 @@ struct WorkDetailHeroCard: View {
                 // already wraps unlimited, and a 3-line clamp on scaled-up text
                 // truncates fandom names to uselessness (HIG review UI-4, §5).
                 Label(fandoms.joined(separator: ", "), systemImage: "books.vertical")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
             }
