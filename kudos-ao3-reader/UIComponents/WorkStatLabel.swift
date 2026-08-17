@@ -200,16 +200,6 @@ struct WorkTopStatsRow: View {
         return result
     }
 
-    /// `.fixedSize()` matters here: every chip beside it already refuses to
-    /// compress, so a bare `Text` is the only flexible child left when the row runs
-    /// long (e.g. "Uncategorized" next to "Not Disclosed") — the layout squeezes all
-    /// the slack onto it first, sometimes down to invisible.
-    private var bullet: some View {
-        Text("•")
-            .fixedSize()
-            .accessibilityHidden(true)
-    }
-
     /// One AO3 status as a capsule. The *capsule* carries AO3's rating/category
     /// colour coding now, not the glyph — a chip is a block of colour, so painting
     /// it is what the colour coding is for. The glyph and text stay on the row's
@@ -240,11 +230,14 @@ struct WorkTopStatsRow: View {
         return AnyShapeStyle(color.opacity(0.22))
     }
 
-    /// Centred, with the bullets kept as separators. Justification stretched the
-    /// gaps to square the row's edges with the counts underneath, which only
-    /// works while both rows are full — a two-chip work got two capsules pinned to
-    /// opposite edges of the card with a canyon between them. Centring keeps the
-    /// natural gaps at any chip count and still reads as a deliberate row.
+    /// Centred. Justification stretched the gaps to square the row's edges
+    /// with the counts underneath, which only works while both rows are
+    /// full — a two-chip work got two capsules pinned to opposite edges of
+    /// the card with a canyon between them. Centring keeps the natural gaps
+    /// at any chip count and still reads as a deliberate row. No bullet
+    /// separators between chips — each capsule already has its own colored
+    /// background, so a bullet was redundant separation, and dropping it
+    /// lets more chips fit on one row before wrapping.
     ///
     /// `FlowLayout` rather than an `HStack` inside a `ViewThatFits`: that sizes its
     /// chosen candidate to the candidate's *ideal* width, never the width on offer,
@@ -253,8 +246,7 @@ struct WorkTopStatsRow: View {
     /// row would otherwise stretch the card past its own padding.
     var body: some View {
         FlowLayout(spacing: 6, rowSpacing: 5, rowAlignment: .center) {
-            ForEach(Array(topItems.enumerated()), id: \.offset) { index, item in
-                if index > 0 { bullet }
+            ForEach(Array(topItems.enumerated()), id: \.offset) { _, item in
                 statusChip(item)
             }
         }
