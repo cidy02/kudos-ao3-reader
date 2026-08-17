@@ -15,9 +15,17 @@
 # be [sdk=macosx*] qualified. Unqualified, they apply to the five-platform
 # target and strip iOS Release of its Keychain entitlements (WPD-3).
 #
-# A passing local product still is not a distribution sign: this machine
-# has Apple Development, not Developer ID Application. Notarization and
-# off-team distribution still need a Developer ID identity. Do not invent
+# A passing local product from a plain `xcodebuild build`/archive is still
+# not a distribution sign: Xcode's automatic-signing archive step resolves
+# to a development-class identity regardless of team. A real Developer ID
+# Application identity now exists on this machine (team NQH85H7343,
+# confirmed 2026-08-16), but it only gets used by the separate `-exportArchive
+# -exportOptionsPlist <method=developer-id>` step — see Scripts/notarize-macos.sh,
+# which runs archive, export, notarytool submit, and staple in that order and
+# has been verified end to end through export (`codesign -dv` on the result
+# shows `Authority=Developer ID Application: Yan Cid (NQH85H7343)`). Actual
+# notarization submission needs a one-time interactive credential setup this
+# script cannot do on your behalf — see that script's own comments. Do not invent
 # one; do not force CODE_SIGN_IDENTITY to "-" to make Release green.
 set -eu
 
