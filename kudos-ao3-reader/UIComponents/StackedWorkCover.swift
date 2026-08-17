@@ -41,19 +41,32 @@ struct StackedWorkCover: View {
 
     /// Relative to `cardSize` — front is already slightly inset from the full
     /// footprint so there's headroom for back faces to peek past its front edge.
+    /// `.vertical` only: `.horizontal` faces are all the same size (see `face`).
     private static let faceScales: [CGFloat] = [0.97, 0.90, 0.83]
-    /// Front's own nudge (down for `.vertical`, sideways for `.horizontal`), leaving
-    /// room on the opposite edge for the stack to peek into.
+    /// Front's own downward nudge for `.vertical`, leaving room above it for the
+    /// stack to peek into.
     private static let frontOffset: CGFloat = 8
+    /// `.horizontal` only: how much of each back face shows past the one in front
+    /// of it, as a fraction of the card's own width. Faces are full-size (unlike
+    /// `.vertical`'s shrink-for-headroom trick), so this is a plain fixed peek
+    /// rather than something computed from a size delta — big enough to read as a
+    /// deliberate stack of same-size books, not a hairline sliver.
+    private static let horizontalPeekFraction: CGFloat = 0.15
 
     /// Front-to-back offsets along `axis`, as positive magnitudes growing from the
-    /// front face outward — sign and axis are resolved by `face(title:depth:)`. The
-    /// usable headroom is constrained by both the stack footprint's own edge and the
-    /// full front-to-back extent, then divided among the back faces at every count.
+    /// front face outward — sign and axis are resolved by `face(title:depth:)`.
     private var faceOffsets: [CGFloat] {
+        if axis == .horizontal {
+            let peek = cardSize.width * Self.horizontalPeekFraction
+            return (0..<faces.count).map { CGFloat($0) * peek }
+        }
+
         guard faces.count > 1 else { return [Self.frontOffset] }
 
-        let extent = axis == .vertical ? cardSize.height : cardSize.width
+        // `.vertical`: the usable headroom is constrained by both the stack
+        // footprint's own edge and the full front-to-back extent, then divided
+        // among the back faces at every count.
+        let extent = cardSize.height
         let frontHalfExtent = extent * Self.faceScales[0] / 2
         let totalExtentHeadroom = extent - 2 * frontHalfExtent
         let edgeHeadroom = extent / 2 + Self.frontOffset - frontHalfExtent
@@ -87,14 +100,15 @@ struct StackedWorkCover: View {
     private func face(title: String, depth: Int, offset: CGFloat) -> some View {
         let hue = CoverArt.hue(for: title)
         let isFront = depth == 0
-        let scale = Self.faceScales[depth]
         let shape = RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-        // `.vertical` peeks upward (screen-space, so no RTL concern). `.horizontal`
-        // peeks toward the trailing edge — negated from `faceOffsets`' raw magnitude
-        // (which grows in the same "away from front" direction `.vertical` uses,
-        // i.e. negative) and mirrored for RTL so back faces still peek toward
-        // reading-trailing, not a fixed screen side.
+        // `.horizontal` peeks toward the trailing edge, mirrored for RTL so back
+        // faces still peek toward reading-trailing, not a fixed screen side.
+        // `.vertical` peeks upward (screen-space, so no RTL concern).
         let trailingSign: CGFloat = layoutDirection == .rightToLeft ? -1 : 1
+        // `.horizontal` faces are all the same size — offset alone creates the
+        // peek, the way same-size books stacked side by side would. `.vertical`
+        // keeps its original shrink-for-headroom look (unchanged).
+        let scale = axis == .horizontal ? 1 : Self.faceScales[depth]
 
         shape
             .fill(themeManager.appTheme.carouselCardSurface)
@@ -114,7 +128,7 @@ struct StackedWorkCover: View {
             .overlay { shape.strokeBorder(themeManager.appTheme.carouselCardBorder(hue: hue), lineWidth: 0.75) }
             .frame(width: cardSize.width * scale, height: cardSize.height * scale)
             .offset(
-                x: axis == .horizontal ? -offset * trailingSign : 0,
+                x: axis == .horizontal ? offset * trailingSign : 0,
                 y: axis == .vertical ? offset : 0
             )
             .shadow(
