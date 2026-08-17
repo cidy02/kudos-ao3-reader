@@ -139,34 +139,39 @@ private struct UnblurredHomeResumeHero: View {
                 .font(.caption)
             }
 
-            // Same metadata every carousel card shows, just laid out like
-            // WorkDetailHeroCard's own stat row — a wrapping FlowLayout of
-            // WorkStatLabels, not CoverCardStatsRow's one-stat-per-line column.
-            // The hero is this page's own "detail card" moment, so it should
-            // read like one, not like a bigger carousel tile.
+            // Same four-chip Rating/Pairings/Warnings/Completion row the
+            // search-result cards show (WorkListStatsRow's top row), so the
+            // hero reads as one identity-facts family with the rest of the
+            // app instead of a compressed 4-stat line of its own.
+            WorkTopStatsRow(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.workCategories,
+                warnings: work.workWarnings,
+                completion: work.completionStatus
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+            // Language/words/chapters below the identity chips — the hero's
+            // own shorter second row, not WorkListStatsRow's full one (which
+            // always includes comments/kudos/bookmarks/hits too).
             FlowLayout(spacing: 10, rowSpacing: 6) {
-                let ratingName = WorkStat.ratingName(work.rating)
-                if let ratingName {
+                if !work.language.isEmpty {
                     WorkStatLabel(
-                        text: ratingName,
-                        symbol: "checkmark.shield",
-                        accessibilityLabel: work.rating.isEmpty ? ratingName : work.rating
+                        text: work.language,
+                        symbol: "globe",
+                        accessibilityLabel: "Language: \(work.language)"
                     )
                 }
-                if !work.chapters.isEmpty {
-                    WorkStatLabel(text: work.chapters, symbol: "book", accessibilityLabel: "Chapters \(work.chapters)")
-                }
-                WorkStatLabel(
-                    text: work.completionStatus.text,
-                    symbol: work.completionStatus.symbol,
-                    iconColor: work.completionStatus.color
-                )
                 if work.wordCount > 0 {
                     WorkStatLabel(
                         text: work.wordCount.formatted(),
                         symbol: "textformat.size",
                         accessibilityLabel: "\(work.wordCount.formatted()) words"
                     )
+                }
+                if !work.chapters.isEmpty {
+                    WorkStatLabel(text: work.chapters, symbol: "book", accessibilityLabel: "Chapters \(work.chapters)")
                 }
             }
             .font(.caption)

@@ -33,7 +33,10 @@ struct WorkDetailHeroCard: View {
     let identities: [AO3AuthorIdentity]
     let fandoms: [String]
     let rating: String
-    let status: String?
+    let categories: [String]
+    let warnings: [String]
+    let completion: WorkCompletionStatus
+    let language: String
     let chapters: String
     let words: Int?
     /// Progress bar shown only when set — a work with no local reading state
@@ -106,18 +109,21 @@ struct WorkDetailHeroCard: View {
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
             }
 
+            // Same four-chip Rating/Pairings/Warnings/Completion row the
+            // search-result cards show (WorkListStatsRow's top row) — see
+            // HomeResumeHero.swift for the matching Home hero treatment.
+            WorkTopStatsRow(
+                rating: rating.isEmpty ? nil : rating,
+                categories: categories,
+                warnings: warnings,
+                completion: completion
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
             FlowLayout(spacing: 10, rowSpacing: 6) {
-                if !rating.isEmpty {
-                    WorkStatLabel(text: rating, symbol: "checkmark.shield")
-                }
-                if !chapters.isEmpty {
-                    WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
-                }
-                if let status {
-                    WorkStatLabel(
-                        text: status,
-                        symbol: status == "Complete" ? "checkmark.seal" : "circle.dashed"
-                    )
+                if !language.isEmpty {
+                    WorkStatLabel(text: language, symbol: "globe", accessibilityLabel: "Language: \(language)")
                 }
                 if let words {
                     WorkStatLabel(
@@ -125,6 +131,9 @@ struct WorkDetailHeroCard: View {
                         symbol: "textformat.size",
                         accessibilityLabel: "\(words.formatted()) words"
                     )
+                }
+                if !chapters.isEmpty {
+                    WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
                 }
             }
             .font(.caption)
