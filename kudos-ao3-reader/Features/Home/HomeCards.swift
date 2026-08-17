@@ -96,7 +96,8 @@ struct WorkCoverCard: View {
             rating: work.rating.isEmpty ? nil : work.rating,
             categories: work.workCategories,
             warnings: work.workWarnings,
-            completion: work.completionStatus
+            completion: work.completionStatus,
+            stacked: true
         )
         .font(.caption2)
         .foregroundStyle(.tertiary)
@@ -203,7 +204,8 @@ struct AO3WorkCoverCard: View {
             rating: work.rating.isEmpty ? nil : work.rating,
             categories: work.categories,
             warnings: work.warnings,
-            completion: WorkCompletionStatus(isComplete: work.isComplete)
+            completion: WorkCompletionStatus(isComplete: work.isComplete),
+            stacked: true
         )
         .font(.caption2)
         .foregroundStyle(.tertiary)
