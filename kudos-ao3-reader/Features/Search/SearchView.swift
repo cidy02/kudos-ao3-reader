@@ -743,7 +743,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     private func deleteSavedSearches(at offsets: IndexSet) {
         for index in offsets {
-            context.delete(savedSearches[index])
+            let search = savedSearches[index]
+            SyncTombstones.recordDeletion(of: search, in: context)
+            context.delete(search)
         }
         try? context.save()
     }
