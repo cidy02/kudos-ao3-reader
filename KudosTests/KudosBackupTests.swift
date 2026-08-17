@@ -2028,8 +2028,10 @@ struct KudosBackupTests {
         let searchID = UUID()
         let bookmark = Bookmark(title: "Deleted link", urlString: "https://archiveofourown.org/works/9")
         bookmark.id = bookmarkID
+        bookmark.dateAdded = Date(timeIntervalSince1970: 100)
         let search = SavedSearch(name: "Deleted search", filters: AO3SearchFilters())
         search.id = searchID
+        search.dateAdded = Date(timeIntervalSince1970: 100)
         let stale = try KudosBackupService.makeContents(
             works: [],
             bookmarks: [bookmark],
@@ -2081,8 +2083,10 @@ struct KudosBackupTests {
         let searchID = UUID()
         let bookmark = Bookmark(title: "Peer deleted", urlString: "https://archiveofourown.org/works/8")
         bookmark.id = bookmarkID
+        bookmark.dateAdded = Date(timeIntervalSince1970: 100)
         let search = SavedSearch(name: "Peer deleted search", filters: AO3SearchFilters())
         search.id = searchID
+        search.dateAdded = Date(timeIntervalSince1970: 100)
         let bookmarkTomb = SyncTombstone(
             recordID: bookmarkID,
             recordType: .bookmark,
