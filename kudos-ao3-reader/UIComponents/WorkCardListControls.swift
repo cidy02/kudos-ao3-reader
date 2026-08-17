@@ -28,6 +28,12 @@ struct FilterButton: View {
                 : "line.3.horizontal.decrease.circle")
         }
         .labelStyle(.iconOnly)
+        // Explicit nil (not simply omitted): calling .tint even with nil opts
+        // this button out of the system's automatic Liquid Glass grouping
+        // with adjacent toolbar buttons, so it renders as its own distinct
+        // pill instead of merging into one shared pill with its neighbors —
+        // see ToolbarIconButton's identical comment for this exact mechanism.
+        .tint(nil)
         .help(filterHelp)
         .contextMenu {
             if filtersActive, let onClearFilters {
@@ -50,8 +56,15 @@ struct WorkListMoreMenu<Content: View>: View {
         Menu {
             content()
         } label: {
-            Label("More", systemImage: "ellipsis.circle")
+            // Plain dots, not "ellipsis.circle" — the glass button already
+            // draws its own circular background, so the circled symbol
+            // doubled it up. Matches Apple Books' "..." more button.
+            Label("More", systemImage: "ellipsis")
         }
+        // Explicit nil: isolates this into its own glass pill instead of
+        // merging with adjacent untinted toolbar buttons — see FilterButton's
+        // identical comment for this mechanism.
+        .tint(nil)
     }
 }
 
