@@ -331,11 +331,17 @@ struct ReadingQueueBrowserView: View {
     /// reader sheet's own values exactly, not an approximation of them — a
     /// content-fitted `.height(...)` detent (two earlier attempts here) reads
     /// as "cropped to its contents" and can't be dragged past that height even
-    /// with `.large` alongside it; `[.medium, .large]` always can. Likewise no
-    /// `.presentationBackground` override: the reader sheet never sets one, so
-    /// it keeps the system's actual default Liquid Glass translucency — an
-    /// explicit `.regularMaterial` (an earlier attempt here) rendered more
-    /// opaque than that true default, not more transparent.
+    /// with `.large` alongside it; `[.medium, .large]` always can.
+    ///
+    /// `.presentationBackground(.ultraThinMaterial)`: leaving this unset (an
+    /// earlier attempt — reasoning the reader sheet never sets one either, so
+    /// the "true default" should already be translucent) still read as
+    /// opaque, and `.regularMaterial` (the attempt before that) more so —
+    /// this app's own Dark/OLED backdrop behind this sheet is near-black,
+    /// where even a real blur has little luminance to show through, so the
+    /// least-opaque material available is what actually reads as glass here,
+    /// not what happens to be the reader sheet's own (untested-in-isolation)
+    /// default.
     private var switcherList: some View {
         NavigationStack {
             List {
@@ -362,6 +368,7 @@ struct ReadingQueueBrowserView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
+        .presentationBackground(.ultraThinMaterial)
     }
 
     private func queueRow(_ queue: ReadingQueue) -> some View {
