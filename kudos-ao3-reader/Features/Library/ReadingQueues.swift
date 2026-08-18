@@ -209,11 +209,12 @@ struct ReadingQueueCard: View {
         .clipShape(shape)
     }
 
-    /// One grid cell: `work`'s title/author, left-aligned like every other
-    /// card in the app, over its own title-hued tint — plus its rating/
-    /// category/warnings/completion as a compact icon-only 2×2 (AO3's own
-    /// tag-grid idea, reimagined for this app's chip colors/symbols), centered
-    /// beneath them. An empty placeholder when the queue has fewer than 4 works.
+    /// One grid cell, left-aligned like every other card in the app, over its
+    /// own title-hued tint: `work`'s title at top, its rating/category/
+    /// warnings/completion as a compact icon-only 2×2 (AO3's own tag-grid
+    /// idea, reimagined for this app's chip colors/symbols) centered in the
+    /// middle, then author and fandom at the bottom. An empty placeholder
+    /// when the queue has fewer than 4 works.
     @ViewBuilder
     private func gridCell(_ work: SavedWork?) -> some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -225,16 +226,22 @@ struct ReadingQueueCard: View {
                         .font(.system(size: 9, weight: .semibold))
                         .lineLimit(2)
                         .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    miniStatusGrid(for: work)
+                        .frame(maxWidth: .infinity)
+                    Spacer(minLength: 0)
                     if !work.author.isEmpty {
                         Text(work.author)
                             .font(.system(size: 8))
                             .lineLimit(1)
                             .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 0)
-                    miniStatusGrid(for: work)
-                        .frame(maxWidth: .infinity)
-                    Spacer(minLength: 0)
+                    if let fandom = work.workFandoms.first, !fandom.isEmpty {
+                        Text(fandom)
+                            .font(.system(size: 7))
+                            .lineLimit(1)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
                 .padding(6)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
