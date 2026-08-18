@@ -209,29 +209,35 @@ struct ReadingQueueCard: View {
         .clipShape(shape)
     }
 
-    /// One grid cell: `work`'s title over its own title-hued tint, with its
-    /// rating/category/warnings/completion as a compact icon-only 2×2 (AO3's
-    /// own tag-grid idea, reimagined for this app's chip colors/symbols) in
-    /// place of the author line — or an empty placeholder when the queue has
-    /// fewer than 4 works.
+    /// One grid cell: `work`'s title/author, left-aligned like every other
+    /// card in the app, over its own title-hued tint — plus its rating/
+    /// category/warnings/completion as a compact icon-only 2×2 (AO3's own
+    /// tag-grid idea, reimagined for this app's chip colors/symbols), centered
+    /// beneath them. An empty placeholder when the queue has fewer than 4 works.
     @ViewBuilder
     private func gridCell(_ work: SavedWork?) -> some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         Group {
             if let work {
                 let hue = CoverArt.hue(for: work.title)
-                VStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(work.title)
                         .font(.system(size: 9, weight: .semibold))
                         .lineLimit(2)
-                        .multilineTextAlignment(.center)
                         .foregroundStyle(.primary)
+                    if !work.author.isEmpty {
+                        Text(work.author)
+                            .font(.system(size: 8))
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer(minLength: 0)
                     miniStatusGrid(for: work)
+                        .frame(maxWidth: .infinity)
                     Spacer(minLength: 0)
                 }
                 .padding(6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(themeManager.appTheme.carouselCardTint(hue: hue))
             } else {
                 Color.clear
