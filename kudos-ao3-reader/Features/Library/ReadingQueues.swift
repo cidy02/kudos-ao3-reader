@@ -209,35 +209,77 @@ struct ReadingQueueCard: View {
         .clipShape(shape)
     }
 
-    /// One grid cell: `work`'s title/author over its own title-hued tint, or an
-    /// empty placeholder when the queue has fewer than 4 works.
+    /// One grid cell: `work`'s title over its own title-hued tint, with its
+    /// rating/category/warnings/completion as a compact icon-only 2×2 (AO3's
+    /// own tag-grid idea, reimagined for this app's chip colors/symbols) in
+    /// place of the author line — or an empty placeholder when the queue has
+    /// fewer than 4 works.
     @ViewBuilder
     private func gridCell(_ work: SavedWork?) -> some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         Group {
             if let work {
                 let hue = CoverArt.hue(for: work.title)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(spacing: 4) {
                     Text(work.title)
                         .font(.system(size: 9, weight: .semibold))
                         .lineLimit(2)
+                        .multilineTextAlignment(.center)
                         .foregroundStyle(.primary)
                     Spacer(minLength: 0)
-                    if !work.author.isEmpty {
-                        Text(work.author)
-                            .font(.system(size: 8))
-                            .lineLimit(1)
-                            .foregroundStyle(.secondary)
-                    }
+                    miniStatusGrid(for: work)
+                    Spacer(minLength: 0)
                 }
                 .padding(6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(themeManager.appTheme.carouselCardTint(hue: hue))
             } else {
                 Color.clear
             }
         }
         .clipShape(shape)
+    }
+
+    /// `work`'s rating/category/warnings/completion — same per-facet symbol and
+    /// color `WorkTopStatsRow` already resolves everywhere else in the app
+    /// (AO3's real category-collapsing rules included) — as 4 icon-only tiles,
+    /// no text. Decorative: the cell's own title above is the real accessible
+    /// content here, same as `StackedWorkCover`'s hidden decorative stack.
+    private func miniStatusGrid(for work: SavedWork) -> some View {
+        let items = WorkTopStatsRow(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.workCategories,
+            warnings: work.workWarnings,
+            completion: work.completionStatus
+        ).topItems
+        return VStack(spacing: 2) {
+            HStack(spacing: 2) {
+                miniStatusTile(!items.isEmpty ? items[0] : nil)
+                miniStatusTile(items.count > 1 ? items[1] : nil)
+            }
+            HStack(spacing: 2) {
+                miniStatusTile(items.count > 2 ? items[2] : nil)
+                miniStatusTile(items.count > 3 ? items[3] : nil)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func miniStatusTile(_ item: WorkTopStatsRow.Item?) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        if let item {
+            shape
+                .fill((item.iconColor ?? .gray).opacity(0.3))
+                .overlay {
+                    Image(systemName: item.symbol)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(item.iconColor ?? .gray)
+                }
+                .frame(width: 14, height: 14)
+        } else {
+            Color.clear.frame(width: 14, height: 14)
+        }
     }
 }
 
