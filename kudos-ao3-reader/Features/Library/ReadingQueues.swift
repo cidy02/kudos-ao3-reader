@@ -4,6 +4,8 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+// swiftlint:disable file_length
+
 /// Navigation route for Reading Queues beyond the Library carousel.
 /// - `initialQueueID == nil` — the full grid of queue stack cards ("See all" chevron).
 /// - non-nil — the Safari-style browser pre-selected on that queue (carousel tile
@@ -193,20 +195,41 @@ struct ReadingQueueCard: View {
             .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
     }
 
-    /// One skeleton cell — title/author placeholder lines, matching `gridCell`'s
-    /// real layout so an empty queue previews the same shape it'll fill into.
+    /// One skeleton cell, matching `gridCell`'s current layout so an empty
+    /// queue previews the same shape it'll fill into: title placeholder,
+    /// a 2×2 of blocks the same size as `miniStatusTile`'s real tiles, then
+    /// author/fandom placeholder lines.
     private func skeletonCell() -> some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: 2) {
             SkeletonTextLine(height: 7, width: 40)
-            SkeletonTextLine(height: 6, width: 28)
+            Spacer(minLength: 0)
+            skeletonStatusGrid
+                .frame(maxWidth: .infinity)
             Spacer(minLength: 0)
             SkeletonTextLine(height: 6, width: 32)
+            SkeletonTextLine(height: 5, width: 28)
         }
         .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.primary.opacity(0.05))
         .clipShape(shape)
+    }
+
+    /// Placeholder for `miniStatusGrid` — same 14×14/3pt-radius/2pt-gap
+    /// geometry as `miniStatusTile`, just `SkeletonBlock` instead of a real
+    /// hued icon tile.
+    private var skeletonStatusGrid: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 2) {
+                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
+                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
+            }
+            HStack(spacing: 2) {
+                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
+                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
+            }
+        }
     }
 
     /// One grid cell, left-aligned like every other card in the app, over its
