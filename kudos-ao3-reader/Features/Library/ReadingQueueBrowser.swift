@@ -323,35 +323,32 @@ struct ReadingQueueBrowserView: View {
     /// Bookmarks/Highlights sheet (`ReaderContentsSheet.chapterList`) — the
     /// reference this is matching — is a flat `.listStyle(.plain)` list with
     /// default hairline separators, not floating rounded cards.
-    /// `.appThemedRows()`/`.appThemedScroll()` stay, since unlike `.cardRow()`
-    /// they're a no-op outside Sepia and only exist to keep this row's colors
-    /// consistent with the app's Sepia theme, not to add card chrome.
     ///
-    /// `.presentationDetents`/`.presentationContentInteraction` copy the
-    /// reader sheet's own values exactly, not an approximation of them — a
-    /// content-fitted `.height(...)` detent (two earlier attempts here) reads
-    /// as "cropped to its contents" and can't be dragged past that height even
-    /// with `.large` alongside it; `[.medium, .large]` always can.
-    ///
-    /// `.presentationBackground(.ultraThinMaterial)`: leaving this unset (an
-    /// earlier attempt — reasoning the reader sheet never sets one either, so
-    /// the "true default" should already be translucent) still read as
-    /// opaque, and `.regularMaterial` (the attempt before that) more so —
-    /// this app's own Dark/OLED backdrop behind this sheet is near-black,
-    /// where even a real blur has little luminance to show through, so the
-    /// least-opaque material available is what actually reads as glass here,
-    /// not what happens to be the reader sheet's own (untested-in-isolation)
-    /// default.
+    /// No `.appThemedRows()`/`.appThemedScroll()`, and no
+    /// `.presentationBackground` override — three straight attempts at the
+    /// latter (unset, `.regularMaterial`, `.ultraThinMaterial`) all looked
+    /// equally opaque on device, which was the tell: the material was never
+    /// the actual variable. `ReaderTheme.appBaseBackground`/
+    /// `appElevatedBackground` (`Features/Reader/ReaderStyle.swift`) are `nil`
+    /// **only** for `.light` — for Sepia/Dark/OLED they're real opaque
+    /// colors, so `.appThemedScroll()`/`.appThemedRows()` were painting a
+    /// solid `.background()`/`.listRowBackground()` over the whole list on
+    /// this device's Dark/OLED theme, sitting on top of and completely
+    /// masking whatever `.presentationBackground` material the sheet
+    /// declared — confirmed root cause (root-caused via Gemini after three
+    /// failed material-only attempts by hand). The reader sheet never
+    /// applies these modifiers either, so dropping them here — Sepia
+    /// included — matches the reference exactly rather than approximating
+    /// it, and lets the system's own default sheet translucency show through
+    /// unobstructed, the same as `readerSheet`.
     private var switcherList: some View {
         NavigationStack {
             List {
                 ForEach(orderedQueues) { queue in
                     queueRow(queue)
                 }
-                .appThemedRows()
             }
             .listStyle(.plain)
-            .appThemedScroll()
             .navigationTitle("Reading Queues")
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -368,7 +365,6 @@ struct ReadingQueueBrowserView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
-        .presentationBackground(.ultraThinMaterial)
     }
 
     private func queueRow(_ queue: ReadingQueue) -> some View {
