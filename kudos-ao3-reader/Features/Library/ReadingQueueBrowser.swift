@@ -315,21 +315,27 @@ struct ReadingQueueBrowserView: View {
     // MARK: - Switcher list
 
     /// Same shape as this file's own `newQueueSheet` and CommentsView's chapter
-    /// picker (`chapterPickerDetents`): a real `NavigationStack` + title, a
-    /// content-fitted `.presentationDetents`, and `.presentationDragIndicator`
-    /// all applied to the sheet's own content — not a bare `List` handed to
+    /// picker: a real `NavigationStack` + title, not a bare `List` handed to
     /// `.popover(...).presentationCompactAdaptation(.sheet)`, which is what
     /// clipped the sheet's top chrome in two earlier attempts here.
     ///
     /// Plain rows, not `.cardRow()`/`.cardList()`: the reader's own Contents/
     /// Bookmarks/Highlights sheet (`ReaderContentsSheet.chapterList`) — the
     /// reference this is matching — is a flat `.listStyle(.plain)` list with
-    /// default hairline separators, not floating rounded cards. Rounded cards
-    /// read as a completely different surface next to that reference, which is
-    /// what "doesn't look anything like the reader contents page" was about;
+    /// default hairline separators, not floating rounded cards.
     /// `.appThemedRows()`/`.appThemedScroll()` stay, since unlike `.cardRow()`
     /// they're a no-op outside Sepia and only exist to keep this row's colors
     /// consistent with the app's Sepia theme, not to add card chrome.
+    ///
+    /// `.presentationDetents`/`.presentationContentInteraction` copy the
+    /// reader sheet's own values exactly, not an approximation of them — a
+    /// content-fitted `.height(...)` detent (two earlier attempts here) reads
+    /// as "cropped to its contents" and can't be dragged past that height even
+    /// with `.large` alongside it; `[.medium, .large]` always can. Likewise no
+    /// `.presentationBackground` override: the reader sheet never sets one, so
+    /// it keeps the system's actual default Liquid Glass translucency — an
+    /// explicit `.regularMaterial` (an earlier attempt here) rendered more
+    /// opaque than that true default, not more transparent.
     private var switcherList: some View {
         NavigationStack {
             List {
@@ -353,33 +359,9 @@ struct ReadingQueueBrowserView: View {
                 }
             }
         }
-        .presentationDetents(switcherDetents)
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        // Liquid Glass, matching the reader's Contents sheet: that sheet never
-        // overrides its presentation background, so it keeps the system's
-        // translucent glass sheet material — visible there because a reader
-        // page (white/sepia/etc.) shows blurred behind it. This app's own
-        // backdrop is dark enough in Dark/OLED that the same default glass
-        // read as flat black, so it's requested explicitly here instead of
-        // left to the (in this context, indistinguishable) system default.
-        .presentationBackground(.regularMaterial)
-    }
-
-    /// Title bar + rows, no footer — same reasoning as CommentsView's
-    /// chapterPickerDetents ("Title + rows + footer note"), minus the base
-    /// height a footer would add, since this list doesn't have one.
-    ///
-    /// Unlike chapterPickerDetents, always pairs the fitted height with
-    /// `.large` rather than using it alone: a fixed single detent has no
-    /// larger stop to drag to at all, which read as the sheet being stuck
-    /// too short. The fitted height is still the default/initial detent —
-    /// this only adds the option to expand, not a taller starting point.
-    private var switcherDetents: Set<PresentationDetent> {
-        if orderedQueues.count <= 6 {
-            let rowCount = CGFloat(orderedQueues.count)
-            return [.height(90 + rowCount * 52), .large]
-        }
-        return [.medium, .large]
+        .presentationContentInteraction(.scrolls)
     }
 
     private func queueRow(_ queue: ReadingQueue) -> some View {
