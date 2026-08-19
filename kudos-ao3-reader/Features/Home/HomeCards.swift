@@ -92,15 +92,13 @@ struct WorkCoverCard: View {
     }
 
     private var cardStats: some View {
-        WorkTopStatsRow(
+        WorkStatusIconGrid(
             rating: work.rating.isEmpty ? nil : work.rating,
             categories: work.workCategories,
             warnings: work.workWarnings,
             completion: work.completionStatus,
-            stacked: true
+            announcesToVoiceOver: true
         )
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
     }
 
     private var progressValue: Double? {
@@ -200,15 +198,13 @@ struct AO3WorkCoverCard: View {
     }
 
     private var cardStats: some View {
-        WorkTopStatsRow(
+        WorkStatusIconGrid(
             rating: work.rating.isEmpty ? nil : work.rating,
             categories: work.categories,
             warnings: work.warnings,
             completion: WorkCompletionStatus(isComplete: work.isComplete),
-            stacked: true
+            announcesToVoiceOver: true
         )
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
     }
 }
 
