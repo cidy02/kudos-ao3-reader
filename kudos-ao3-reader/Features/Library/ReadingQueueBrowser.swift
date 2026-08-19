@@ -59,9 +59,19 @@ struct ReadingQueueBrowserView: View {
         }
     }
 
+    /// Falls through to `initialQueueID` before `orderedQueues.first`: `selectedQueueID`
+    /// itself isn't written until `resolveInitialSelection()` runs on `.onAppear`, which
+    /// is after the first body evaluation. Without this fallback, a push straight into a
+    /// specific queue (e.g. tapping a queue card on Home) rendered "Saved for Later" (or
+    /// whatever sorts first) for the view's first frame, then swapped to the real target
+    /// a beat later — a full ContentUnavailableView/grid + title structural change lands
+    /// mid-push-transition, competing with the tab bar's own hide animation for the main
+    /// thread. That's what was surfacing as the tab bar lingering after the switcher pill
+    /// had already settled, independent of how the switcher pill itself is positioned.
     private var selectedQueue: ReadingQueue? {
-        guard let selectedQueueID else { return orderedQueues.first }
-        return orderedQueues.first { $0.id == selectedQueueID } ?? orderedQueues.first
+        let targetID = selectedQueueID ?? initialQueueID
+        guard let targetID else { return orderedQueues.first }
+        return orderedQueues.first { $0.id == targetID } ?? orderedQueues.first
     }
 
     private var works: [SavedWork] {
