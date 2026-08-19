@@ -65,13 +65,15 @@ struct MediaBrowserView: View {
     }
 
     #if os(iOS)
-    /// Two independent columns, not a `LazyVGrid` — card height varies with
-    /// content (1-2 line title, 0-3 lines of "recently read" chips), and
-    /// `LazyVGrid` sizes every *row* to its tallest cell, so a short card next to
-    /// a tall one either wastes space or (padded to a shared height) still isn't
-    /// truly self-sizing. Splitting into two columns lets each one pack its own
-    /// cards back-to-back by their real height — masonry, like Google Keep —
-    /// with no fixed/minimum height needed at all.
+    /// A custom `Layout` (`MasonryLayout`, in this file), not two hand-split
+    /// columns — two rounds of "guess which column is shorter" both broke on
+    /// real content: index alternation stacked several tall cards in one
+    /// column, and a follow-up content-based height *estimate* still guessed
+    /// wrong for at least one card, leaving the columns visibly uneven again.
+    /// `Layout` asks each subview for its real `sizeThatFits` during actual
+    /// layout — no estimation, no double-render measurement hack — and places
+    /// it into whichever column is shortest *so far*, which is the correct
+    /// algorithm this was always trying to approximate.
     private var categoryGrid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
@@ -79,9 +81,30 @@ struct MediaBrowserView: View {
                     .font(.headline)
                     .padding(.horizontal, CardListMetrics.sideMargin)
 
-                HStack(alignment: .top, spacing: CardListMetrics.interCardSpacing) {
-                    categoryColumn(leftColumnCategories)
-                    categoryColumn(rightColumnCategories)
+                MasonryLayout(columns: 2, spacing: CardListMetrics.interCardSpacing) {
+                    ForEach(categories) { category in
+                        NavigationLink(value: category) {
+                            categoryCard(category)
+                                .padding(CardListMetrics.innerHorizontal)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                                        .fill(themeManager.appTheme.cardSurface)
+                                        .overlay(
+                                            RoundedRectangle(
+                                                cornerRadius: CardListMetrics.cornerRadius, style: .continuous
+                                            )
+                                            .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
+                                        )
+                                        .shadow(color: themeManager.appTheme.cardShadow.color,
+                                                radius: themeManager.appTheme.cardShadow.radius,
+                                                x: 0, y: themeManager.appTheme.cardShadow.y)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .onAppear { visibleCategoryIDs.insert(category.id) }
+                        .onDisappear { visibleCategoryIDs.remove(category.id) }
+                    }
                 }
                 .padding(.horizontal, CardListMetrics.sideMargin)
 
@@ -99,79 +122,6 @@ struct MediaBrowserView: View {
             await AO3Client.shared.invalidateCachedResponses()
             await refresh()
         }
-    }
-
-    /// Greedy shortest-column assignment by *estimated* height, not alternating
-    /// by index — index alternation assumes every card is roughly the same
-    /// height, but this card's height varies a lot: a category with several
-    /// "recently read" chips runs noticeably taller than one with none, and
-    /// alternation can easily stack all the tall ones in one column, leaving the
-    /// other visibly shorter with empty space at the bottom (exactly what
-    /// happened with Movies/Other Media/TV Shows landing together on the left).
-    /// SwiftUI doesn't report a view's real height before layout, so this is a
-    /// content-based estimate, not a measurement — good enough to keep both
-    /// columns close without a measure-then-place rendering pass.
-    private var columnAssignment: (left: [AO3MediaCategory], right: [AO3MediaCategory]) {
-        var left: [AO3MediaCategory] = []
-        var right: [AO3MediaCategory] = []
-        var leftHeight: CGFloat = 0
-        var rightHeight: CGFloat = 0
-        for category in categories {
-            let height = estimatedCardHeight(category)
-            if leftHeight <= rightHeight {
-                left.append(category)
-                leftHeight += height
-            } else {
-                right.append(category)
-                rightHeight += height
-            }
-        }
-        return (left, right)
-    }
-
-    /// Icon/name row + stats line + card padding is roughly constant across
-    /// every card; the "Recently read" block (present only once stats have
-    /// loaded, 0-3 chips) is what actually varies, so that's the only part
-    /// estimated per chip rather than measured.
-    private func estimatedCardHeight(_ category: AO3MediaCategory) -> CGFloat {
-        let base: CGFloat = 90
-        guard let recent = statsByCategory[category.id]?.recentFandoms, !recent.isEmpty else { return base }
-        return base + 20 + CGFloat(recent.count) * 30
-    }
-
-    private var leftColumnCategories: [AO3MediaCategory] { columnAssignment.left }
-    private var rightColumnCategories: [AO3MediaCategory] { columnAssignment.right }
-
-    /// One masonry column: each card sized to its own content, stacked directly
-    /// on the next with no shared row height. Draws its own card background (the
-    /// same recipe `.cardRow()` uses on a `List` row — `theme.appTheme.cardSurface`/
-    /// `cardBorder`/`cardShadow` — since a `List` row's own chrome doesn't apply
-    /// outside a `List`).
-    private func categoryColumn(_ items: [AO3MediaCategory]) -> some View {
-        VStack(spacing: CardListMetrics.interCardSpacing) {
-            ForEach(items) { category in
-                NavigationLink(value: category) {
-                    categoryCard(category)
-                        .padding(CardListMetrics.innerHorizontal)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .background(
-                            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                                .fill(themeManager.appTheme.cardSurface)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                                        .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
-                                )
-                                .shadow(color: themeManager.appTheme.cardShadow.color,
-                                        radius: themeManager.appTheme.cardShadow.radius,
-                                        x: 0, y: themeManager.appTheme.cardShadow.y)
-                        )
-                }
-                .buttonStyle(.plain)
-                .onAppear { visibleCategoryIDs.insert(category.id) }
-                .onDisappear { visibleCategoryIDs.remove(category.id) }
-            }
-        }
-        .frame(maxWidth: .infinity)
     }
     #else
     private var categoryListMac: some View {
@@ -242,15 +192,18 @@ struct MediaBrowserView: View {
     private func categoryCard(_ category: AO3MediaCategory) -> some View {
         let stats = statsByCategory[category.id]
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: category.symbol)
-                    .font(.headline) // icon stays emphasized
-                    .foregroundStyle(.tint)
-                    .frame(width: 24)
-                Text(category.name)
-                    .font(.headline.weight(.regular)) // regular weight (was bold)
-                    .foregroundStyle(.primary)
-            }
+            Text(category.name)
+                .font(.headline.weight(.regular)) // regular weight (was bold)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Room for the icon overlay below so the title never renders
+                // under it, and .fixedSize/.lineLimit(nil) so a long name always
+                // wraps onto more lines instead of truncating — one card
+                // ("Anime & Manga") was truncating to "Anime & Ma…" while every
+                // sibling card with an equally long name wrapped fine.
+                .padding(.trailing, 28)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
 
             statsLine(stats)
 
@@ -265,6 +218,13 @@ struct MediaBrowserView: View {
         }
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Icon decoupled from the title row, into the card's own top-right
+        // corner — a badge rather than a leading glyph.
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: category.symbol)
+                .font(.headline)
+                .foregroundStyle(.tint)
+        }
     }
 
     private func statsLine(_ stats: CategoryStats?) -> some View {
@@ -509,3 +469,76 @@ private extension SavedWork {
         isFinished || hasStartedReading
     }
 }
+
+#if os(iOS)
+/// Masonry: N equal-width columns, each subview placed into whichever column is
+/// shortest *so far* — using each subview's own real `sizeThatFits`, not a guess.
+/// Two earlier attempts at this same layout (index alternation, then a
+/// content-based height estimate) both produced visibly uneven columns on real
+/// data; `Layout` gets the actual size during layout itself, so there's nothing
+/// left to estimate.
+private struct MasonryLayout: Layout {
+    var columns: Int = 2
+    var spacing: CGFloat = 12
+
+    /// Guards against a `columns <= 0` caller: unguarded, `columnWidth` divides
+    /// by zero (silently producing `.infinity`, not a crash) but the
+    /// `count: columns` array allocations below it would crash outright.
+    private var safeColumns: Int { max(1, columns) }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        // `?? .replacingUnspecifiedDimensions()`, not a bare `.zero` fallback:
+        // a nil proposal.width (e.g. a parent asking for this layout's ideal
+        // size rather than fitting it to a known width) would otherwise
+        // collapse the whole layout to zero size instead of reporting one.
+        let width = proposal.width ?? proposal.replacingUnspecifiedDimensions().width
+        let columnWidth = columnWidth(for: width)
+        let columnHeights = placedColumnHeights(columnWidth: columnWidth, subviews: subviews)
+        // Each column's running height carries one trailing `spacing` past its
+        // last item (added unconditionally every iteration, including the
+        // last), which isn't real content — trimmed here so the reported
+        // height matches what's actually drawn, not one gap taller.
+        let contentHeight = (columnHeights.max() ?? 0) - spacing
+        return CGSize(width: width, height: max(0, contentHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        guard !subviews.isEmpty else { return }
+        let columnWidth = columnWidth(for: bounds.width)
+        var columnHeights = Array(repeating: CGFloat(0), count: safeColumns)
+        for subview in subviews {
+            let height = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height
+            let column = shortestColumn(columnHeights)
+            let origin = CGPoint(
+                x: bounds.minX + CGFloat(column) * (columnWidth + spacing),
+                y: bounds.minY + columnHeights[column]
+            )
+            subview.place(at: origin, proposal: ProposedViewSize(width: columnWidth, height: height))
+            columnHeights[column] += height + spacing
+        }
+    }
+
+    private func columnWidth(for totalWidth: CGFloat) -> CGFloat {
+        max(0, (totalWidth - spacing * CGFloat(safeColumns - 1)) / CGFloat(safeColumns))
+    }
+
+    private func shortestColumn(_ heights: [CGFloat]) -> Int {
+        heights.indices.min { heights[$0] < heights[$1] } ?? 0
+    }
+
+    /// Dry-runs the same placement loop `placeSubviews` uses, just to total each
+    /// column's final height for `sizeThatFits` — kept as a separate pass (not
+    /// shared state) since `sizeThatFits` and `placeSubviews` aren't guaranteed
+    /// to run back-to-back for the same proposal.
+    private func placedColumnHeights(columnWidth: CGFloat, subviews: Subviews) -> [CGFloat] {
+        var columnHeights = Array(repeating: CGFloat(0), count: safeColumns)
+        for subview in subviews {
+            let height = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height
+            let column = shortestColumn(columnHeights)
+            columnHeights[column] += height + spacing
+        }
+        return columnHeights
+    }
+}
+#endif
