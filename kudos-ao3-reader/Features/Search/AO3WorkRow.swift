@@ -179,7 +179,13 @@ struct AO3WorkRow: View {
             // other's alignment.
             if !work.dateUpdated.isEmpty || isExpandable {
                 HStack {
-                    WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
+                    // A chip (TagChip), not the plain WorkUpdatedDateBadge every
+                    // other row uses — search results are the one place this date
+                    // sits alone in its own row rather than beside other stat text,
+                    // so it reads better with a bit of its own visual weight.
+                    if !work.dateUpdated.isEmpty {
+                        TagChip(text: WorkStat.displayDate(work.dateUpdated), symbol: "calendar.badge.clock")
+                    }
                     Spacer(minLength: 0)
                     if isExpandable {
                         expandButton
