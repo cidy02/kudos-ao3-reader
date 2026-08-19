@@ -23,17 +23,18 @@ struct FilterButton: View {
 
     var body: some View {
         Button { showingFilters = true } label: {
-            // "line.3.horizontal.decrease.circle"/".circle.fill" — the actual SF
-            // Symbols Mail.app uses for this same on/off filter state (confirmed
-            // via NSImage(systemSymbolName:); an earlier version of this comment
-            // claimed no filled variant existed, which was wrong — that search was
-            // against the circle-less base glyph, not this one). The circle is
-            // part of the glyph itself, not a hand-drawn background, so `.tint()`
-            // alone renders the whole badge correctly through the toolbar's
-            // Liquid Glass pipeline — no custom background/buttonStyle needed.
+            // "line.3.horizontal.decrease" (off) / ".circle.fill" (on) — the
+            // actual SF Symbol pair Mail.app uses for this same filter state (all
+            // three of the bare/circle/circle.fill variants resolve fine via
+            // NSImage(systemSymbolName:); an earlier version of this comment
+            // wrongly claimed none did). The circle only appears once a filter is
+            // active, as part of the *badge* glyph itself, not a hand-drawn
+            // background — so plain `.tint()` renders it correctly through the
+            // toolbar's Liquid Glass pipeline with no custom background/
+            // buttonStyle needed.
             Label("Filter", systemImage: filtersActive
                 ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle")
+                : "line.3.horizontal.decrease")
         }
         .tint(filtersActive ? Color.accentColor : Color.primary)
         .labelStyle(.iconOnly)
