@@ -35,9 +35,16 @@ struct TagChip: View {
         }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .foregroundStyle(tinted ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            // `Color.primary`/a concrete gray, not the bare `.primary`/`.quaternary`
+            // hierarchical styles: those are defined *relative to the current
+            // foreground*, and every one of these chips sits inside a `Button` —
+            // which sets that ambient foreground to the app's accent tint. The
+            // chip inherited that tint through the hierarchy even though nothing
+            // here asked for it, which is what actually painted every "neutral"
+            // chip red — a concrete `Color` doesn't participate in that lookup.
+            .foregroundStyle(tinted ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
             .background(
-                tinted ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary),
+                tinted ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.quaternarySystemFill)),
                 in: Capsule()
             )
     }
