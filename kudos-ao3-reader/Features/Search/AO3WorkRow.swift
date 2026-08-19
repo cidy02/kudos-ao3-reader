@@ -52,22 +52,12 @@ struct AO3WorkRow: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Title + author share a tight block so the hierarchy reads as one unit.
-            // AO3's own quadrant tag grid leads the row now, in this app's chip
+            // AO3's own quadrant tag grid trails the row, in this app's chip
             // colors/symbols (WorkStatusIconGrid) — a glanceable rating/category/
-            // warnings/completion read before the title, the same information
-            // WorkListStatsRow's text chips repeat lower on the card. The expand
-            // control moved to the card's bottom-right, below the stats row.
+            // warnings/completion alongside the title, the same information
+            // WorkListStatsRow's text chips repeat lower on the card. The updated
+            // date moved down to bottom-left, beside the expand control.
             HStack(alignment: .top, spacing: 8) {
-                WorkStatusIconGrid(
-                    rating: work.rating.isEmpty ? nil : work.rating,
-                    categories: work.categories,
-                    warnings: work.warnings,
-                    completion: WorkCompletionStatus(isComplete: work.isComplete),
-                    isExpanded: expanded,
-                    // 1.5x the default (18) — this card has more room to spend
-                    // on it than the Reading Queue mini-cards do.
-                    tileSize: 27
-                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(work.title)
                         .font(.headline)
@@ -81,7 +71,16 @@ struct AO3WorkRow: View {
                     )
                 }
                 Spacer(minLength: 0)
-                WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
+                WorkStatusIconGrid(
+                    rating: work.rating.isEmpty ? nil : work.rating,
+                    categories: work.categories,
+                    warnings: work.warnings,
+                    completion: WorkCompletionStatus(isComplete: work.isComplete),
+                    isExpanded: expanded,
+                    // 1.5x the default (18) — this card has more room to spend
+                    // on it than the Reading Queue mini-cards do.
+                    tileSize: 27
+                )
                 if isSelecting {
                     WorkSelectionBubble(isSelected: isSelected)
                 }
@@ -170,18 +169,21 @@ struct AO3WorkRow: View {
                 hits: work.hits,
                 // AO3WorkSummary (the Search-result blurb model) only carries a single
                 // "revised_at" date, unlike SavedWork which tracks both — see WorkRow.
-                // It shows in the card's top-right corner, not here.
+                // It shows in the card's bottom-left corner, not here.
                 isExpanded: expanded
             )
 
-            // Bottom-right, below the stats row it controls — omitted entirely
-            // (not just hidden) when there's nothing to expand: unlike its old
-            // leading spot, nothing else on this row depends on its slot being
-            // reserved for alignment.
-            if isExpandable {
+            // Date bottom-left, expand control bottom-right — omitted
+            // entirely (not just hidden) when there's nothing to show:
+            // unlike an always-reserved slot, neither depends on the
+            // other's alignment.
+            if !work.dateUpdated.isEmpty || isExpandable {
                 HStack {
+                    WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
                     Spacer(minLength: 0)
-                    expandButton
+                    if isExpandable {
+                        expandButton
+                    }
                 }
             }
         }
