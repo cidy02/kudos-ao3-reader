@@ -15,29 +15,24 @@ struct WorkCoverCard: View {
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
-                // Rating/category/warnings/completion moved up here from their
-                // own row below (`cardStats`, now gone) — the icon grid says
-                // the same four facts in a quarter of the vertical space, so
-                // it sits beside the title instead of costing its own line.
-                HStack(alignment: .top, spacing: 8) {
-                    Text(work.title)
-                        .font(.subheadline.weight(.semibold))
-                        // Two lines, then "…". A third line costs real card height
-                        // for a fraction of a title, and long fandom titles are
-                        // common enough that they decided the card's size more often
-                        // than the metadata below them did.
-                        .lineLimit(2)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    cardStats
-                }
-                // Three groups on this card — what it is, who wrote it, what it
-                // measures — and the uniform 7pt rhythm ran them together. The extra
-                // space sits on the *title* rather than on the author row so the gap
-                // survives a work with no author. Absorbed by the trailing
-                // `Spacer(minLength:)`, so the card stays at its height floor
-                // and carousel cards stay uniform.
-                .padding(.bottom, 3)
+                Text(work.title)
+                    .font(.subheadline.weight(.semibold))
+                    // Two lines, then "…". A third line costs real card height
+                    // for a fraction of a title, and long fandom titles are
+                    // common enough that they decided the card's size more often
+                    // than the metadata below them did.
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                cardStats
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                // Pushes author/fandom/progress into their own group at the card's
+                // bottom edge, right above the progress bar, so the header (title +
+                // rating/category/warnings/completion icons) and the footer stay
+                // visually separate regardless of how much either side has.
+                Spacer(minLength: 4)
 
                 if !work.author.isEmpty {
                     CardMetaLabel(text: work.author, symbol: "person", accessibilityLabel: "Author: \(work.author)")
@@ -58,8 +53,6 @@ struct WorkCoverCard: View {
                     WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
                         .font(.caption2)
                 }
-
-                Spacer(minLength: 4)
 
                 if let progressValue {
                     progressGroup(progressValue)
@@ -141,16 +134,17 @@ struct AO3WorkCoverCard: View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
                 // Matches the local card — see `WorkCoverCard`.
-                HStack(alignment: .top, spacing: 8) {
-                    Text(work.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(2)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    cardStats
-                }
+                Text(work.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                cardStats
+                    .frame(maxWidth: .infinity, alignment: .center)
+
                 // Matches the local card's grouping — see `WorkCoverCard`.
-                .padding(.bottom, 3)
+                Spacer(minLength: 4)
 
                 if let author = work.authors.first, !author.isEmpty {
                     CardMetaLabel(text: author, symbol: "person", accessibilityLabel: "Author: \(author)")
@@ -164,8 +158,6 @@ struct AO3WorkCoverCard: View {
                     )
                     .font(.caption2)
                 }
-
-                Spacer(minLength: 4)
 
                 if !work.dateUpdated.isEmpty {
                     WorkStateBadge(text: work.dateUpdated, symbol: "calendar")
