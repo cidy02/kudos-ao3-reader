@@ -33,14 +33,6 @@ struct BrowseView: View {
                     WorkDetailView(remote: work)
                 }
                 .ao3AuthorNavigation(path: $path, tab: .browse)
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        // Root-hosted sheet (ContentView) — stays on Browse when Done.
-                        Button { router.openWebsite() } label: {
-                            Label("Open AO3 Website", systemImage: "safari")
-                        }
-                    }
-                }
                 // A tapped AO3 tag link (e.g. in a work's preface) → native tag works.
                 .onChange(of: router.pendingTagWorks, initial: true) { _, request in
                     if let request {
