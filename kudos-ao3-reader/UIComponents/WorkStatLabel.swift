@@ -380,7 +380,7 @@ struct WorkStatusIconGrid: View {
             Image(systemName: "shield")
                 .font(.system(size: shieldSize))
                 .foregroundStyle(item.iconColor ?? .gray)
-            // No manual offset: an earlier version pushed this up by
+            // No vertical offset: an earlier version pushed this up by
             // -tileSize/36 on the theory that the shield's taper shifts its
             // visual centroid above geometric center, but rasterizing both
             // layers with ImageRenderer and measuring their actual ink
@@ -388,13 +388,23 @@ struct WorkStatusIconGrid: View {
             // opposite — the unfilled shield's ink is already dead-centered
             // in its layout frame (SF Symbols bake balanced bounding-box
             // padding into asymmetric shapes like this one), and so is every
-            // rating letter (G/T/M/E/?), to within a quarter point of
-            // sub-pixel rendering noise that changes sign between sizes
-            // rather than tracking the taper. The old offset had no basis in
-            // the render and was pushing the letter visibly high.
+            // rating letter (G/T/M/E/?) vertically, to within a quarter point
+            // of sub-pixel rendering noise that changes sign between sizes
+            // rather than tracking the taper.
+            //
+            // The same measurement did find a real *horizontal* bias, though:
+            // every letter's ink sits left of the shield's (dead-centered)
+            // ink by ~0.3pt, consistently in the same direction at both
+            // 18pt and 27pt tiles — small enough to read as noise on its
+            // own, but visible once the eye has the shield's edges as a
+            // reference (reported: "more space to the right than the
+            // left"). Unlike the vertical bias this one didn't scale with
+            // tileSize between the two sizes tested, so it's a small fixed
+            // point offset rather than a proportional one.
             Text(letter)
                 .font(.system(size: letterSize, weight: .bold, design: .rounded))
                 .foregroundStyle(item.iconColor ?? .gray)
+                .offset(x: 0.3)
         }
     }
 
