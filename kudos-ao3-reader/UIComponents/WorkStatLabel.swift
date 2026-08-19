@@ -421,8 +421,10 @@ struct WorkStatusIconGrid: View {
             Image(systemName: "person.3.fill")
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(item.iconColor ?? .gray)
+        case "Other":
+            categoryText("⚧", item) // U+26A7 MALE WITH STROKE AND MALE AND FEMALE SIGN
         default:
-            // "Other" and "N/A" — nothing more specific to symbolize.
+            // "N/A" — nothing to symbolize.
             Image(systemName: item.symbol)
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(item.iconColor ?? .gray)
