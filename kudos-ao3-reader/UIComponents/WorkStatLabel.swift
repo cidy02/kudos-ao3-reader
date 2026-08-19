@@ -322,10 +322,11 @@ struct WorkStatusIconGrid: View {
     /// icons around them at the same point size — Apple Symbols draws them
     /// with more internal padding than SF Symbols' own icon metrics.
     private var pairingSymbolSize: CGFloat { tileSize * 12 / 18 }
-    /// Multi tile geometry — fixed vector coordinates, not a font glyph, so
-    /// this is a plain design ratio rather than anything measured. Two
+    /// Multi tile geometry — a vector ring+stem motif, not a font glyph, so
+    /// these are plain design ratios rather than anything measured. Two
     /// quadrants across exactly fill the tile.
     private var multiQuadrantSize: CGFloat { tileSize / 2 }
+    private var multiRingDiameter: CGFloat { tileSize / 3 }
     /// Matched to the rating shield's own outline thickness — measured by
     /// rendering `Image(systemName: "shield")` at `shieldSize` and finding
     /// the ink width of its side stroke: ~5.1-5.2% of tileSize at both 18pt
@@ -488,93 +489,147 @@ struct WorkStatusIconGrid: View {
     }
 
     /// Multi has no single relationship to symbolize — AO3's own icon here is
-    /// a small multi-color grid. This draws an equivalent as fixed vector
-    /// geometry (no font involved): four rings, one per relationship type —
-    /// General (green, matching `categoryColor("Gen")`), F/M (purple), F/F
-    /// (red), M/M (blue) — joined into a closed loop by four short stems,
-    /// each sitting on the tile edge between two adjacent rings and reaching
-    /// exactly to both of their edges. Every coordinate below is a fixed
-    /// fraction of tileSize, worked out once by hand (not measured, and not
-    /// solved by rotating a shape at runtime) — ring centers at (tileSize/2
-    /// ± tileSize/4, tileSize/2 ± tileSize/4), ring radius tileSize/6, each
-    /// stem centered on the edge it shares with the ring it connects to,
-    /// tileSize/6 long. Positions use `.position(_:)`, whose coordinate
-    /// space has (0, 0) at the tile's top-left corner — not `.offset(_:)`,
-    /// which is relative to wherever layout already placed the view, and
-    /// silently did nothing useful for a raw center-relative `Path`'s own
-    /// internal point coordinates (an earlier version of this drew stems
-    /// that way and every stem rendered as a disconnected sliver nowhere
-    /// near its ring). Each quadrant is tinted at the same `.opacity(0.3)`
-    /// every other tile's background uses, with its ring/stem in the same
-    /// color at full strength on top, matching the colored-line-on-tinted-
-    /// background look the other three category tiles already use.
+    /// a small multi-color grid. This builds an equivalent from four
+    /// `RingMotif`/`StemMotif` ring+stem pairs (a vector stand-in for
+    /// NEUTER, U+26B2 — no font involved), each rotated 90° further than the
+    /// last and positioned so its stem tip touches the next glyph's ring
+    /// edge, forming a closed loop. Each quadrant is tinted per relationship
+    /// type rather than one shared color: General (green, matching
+    /// `categoryColor("Gen")`), F/M (purple), F/F (red), M/M (blue) — each
+    /// square tinted at the same `.opacity(0.3)` every other tile's
+    /// background uses, with its motif in the same color at full strength on
+    /// top, matching the colored-line-on-tinted-background look the other
+    /// three category tiles already use.
+    ///
+    /// Quadrant centers sit at (±quadrantSize/2, ±quadrantSize/2), and since
+    /// quadrantSize is exactly tileSize/2, two quadrants across always fill
+    /// the tile exactly — no per-size measurement or post-hoc scaling needed
+    /// the way the font-glyph version this replaced required.
     private var multiIcon: some View {
-        let half = tileSize / 4
-        let ringRadius = tileSize / 6
-        let stemLength = tileSize / 6
-        let mid = tileSize / 2
-        let rings: [(center: CGPoint, color: Color)] = [
-            (CGPoint(x: mid - half, y: mid - half), .green), // top-left — Gen
-            (CGPoint(x: mid + half, y: mid - half), .purple), // top-right — F/M
-            (CGPoint(x: mid - half, y: mid + half), .red), // bottom-left — F/F
-            (CGPoint(x: mid + half, y: mid + half), .blue), // bottom-right — M/M
-        ]
-        // Each stem sits on the edge it shares with the next ring in the
-        // loop (top, right, bottom, left) rather than pointing out from its
-        // own ring, so no rotation is needed to place it correctly.
-        let stems: [MultiStem] = [
-            MultiStem(center: CGPoint(x: mid, y: mid - half), horizontal: true, color: .green),
-            MultiStem(center: CGPoint(x: mid + half, y: mid), horizontal: false, color: .purple),
-            MultiStem(center: CGPoint(x: mid - half, y: mid), horizontal: false, color: .red),
-            MultiStem(center: CGPoint(x: mid, y: mid + half), horizontal: true, color: .blue),
+        let half = multiQuadrantSize / 2
+        // The ring's own center, in its unrotated local frame (a
+        // multiRingDiameter × multiQuadrantSize box with the ring at the top
+        // and the stem running down to the bottom edge), relative to that
+        // frame's center.
+        let localRingOffset = CGPoint(x: 0, y: multiRingDiameter / 2 - half)
+        let quadrants: [MultiQuadrant] = [
+            MultiQuadrant(rotation: -90, squareCenter: CGPoint(x: -half, y: -half), color: .green), // top-left — Gen
+            MultiQuadrant(rotation: 0, squareCenter: CGPoint(x: half, y: -half), color: .purple), // top-right — F/M
+            MultiQuadrant(rotation: 180, squareCenter: CGPoint(x: -half, y: half), color: .red), // bottom-left — F/F
+            MultiQuadrant(rotation: 90, squareCenter: CGPoint(x: half, y: half), color: .blue), // bottom-right — M/M
         ]
         return ZStack {
-            ForEach(rings.indices, id: \.self) { i in
+            ForEach(quadrants.indices, id: \.self) { i in
+                let quadrant = quadrants[i]
                 // Only the corner facing away from the tile's center is
                 // rounded — the other three meet a neighbor or the shared
                 // center point and stay sharp, so the four quadrants read as
                 // one shape from outside.
-                let center = rings[i].center
+                let center = quadrant.squareCenter
                 UnevenRoundedRectangle(
-                    topLeadingRadius: center.x < mid && center.y < mid ? cornerRadius : 0,
-                    bottomLeadingRadius: center.x < mid && center.y > mid ? cornerRadius : 0,
-                    bottomTrailingRadius: center.x > mid && center.y > mid ? cornerRadius : 0,
-                    topTrailingRadius: center.x > mid && center.y < mid ? cornerRadius : 0,
+                    topLeadingRadius: center.x < 0 && center.y < 0 ? cornerRadius : 0,
+                    bottomLeadingRadius: center.x < 0 && center.y > 0 ? cornerRadius : 0,
+                    bottomTrailingRadius: center.x > 0 && center.y > 0 ? cornerRadius : 0,
+                    topTrailingRadius: center.x > 0 && center.y < 0 ? cornerRadius : 0,
                     style: .continuous
                 )
-                .fill(rings[i].color.opacity(0.3))
+                .fill(quadrant.color.opacity(0.3))
                 .frame(width: multiQuadrantSize, height: multiQuadrantSize)
-                .position(center)
+                .offset(x: center.x, y: center.y)
             }
-            // All 4 stems first, then all 4 rings on top — so a ring is
-            // never covered by the stem reaching into it, regardless of
-            // which pair of rings a given stem connects.
-            ForEach(stems.indices, id: \.self) { i in
-                let stem = stems[i]
-                Rectangle()
-                    .fill(stem.color)
-                    .frame(
-                        width: stem.horizontal ? stemLength : multiLineWidth,
-                        height: stem.horizontal ? multiLineWidth : stemLength
-                    )
-                    .position(stem.center)
+            // Every stem is drawn before every ring — not per-quadrant, all
+            // 4 stems then all 4 rings — so every ring sits on top of any
+            // stem it touches, regardless of which quadrant pair that is.
+            // The loop's own direction means quadrant N's stem always
+            // touches quadrant N+1's ring, so no single per-quadrant z-order
+            // could satisfy all 4 junctions at once (it's circular: TL's
+            // ring must be both above BL's stem and below its own stem's
+            // target) — splitting ring and stem into their own passes
+            // sidesteps that instead of solving it.
+            ForEach(quadrants.indices, id: \.self) { i in
+                let quadrant = quadrants[i]
+                motifShape(quadrant, localRingOffset: localRingOffset) {
+                    // Butt cap, not round: a round cap extends the stem's
+                    // stroke past its own start point by half the line
+                    // width, bulging it into the ring it's meant to just
+                    // touch (reported: "the stems overlap the circles").
+                    StemMotif().stroke(quadrant.color, style: StrokeStyle(lineWidth: multiLineWidth, lineCap: .butt))
+                }
             }
-            ForEach(rings.indices, id: \.self) { i in
-                Circle()
-                    .stroke(rings[i].color, lineWidth: multiLineWidth)
-                    .frame(width: ringRadius * 2, height: ringRadius * 2)
-                    .position(rings[i].center)
+            ForEach(quadrants.indices, id: \.self) { i in
+                let quadrant = quadrants[i]
+                motifShape(quadrant, localRingOffset: localRingOffset) {
+                    RingMotif().stroke(quadrant.color, lineWidth: multiLineWidth)
+                }
             }
         }
         .frame(width: tileSize, height: tileSize)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
+
+    /// Positions one quadrant's ring or stem piece identically — same frame,
+    /// rotation, and offset a combined ring+stem motif would use — so the
+    /// two independently-z-ordered passes above land exactly where a single
+    /// motif would have.
+    @ViewBuilder
+    private func motifShape(
+        _ quadrant: MultiQuadrant, localRingOffset: CGPoint, @ViewBuilder content: () -> some View
+    ) -> some View {
+        let rotatedRing = rotate(localRingOffset, degrees: quadrant.rotation)
+        let motifOffset = CGSize(
+            width: quadrant.squareCenter.x - rotatedRing.x,
+            height: quadrant.squareCenter.y - rotatedRing.y
+        )
+        content()
+            .frame(width: multiRingDiameter, height: multiQuadrantSize)
+            .rotationEffect(.degrees(quadrant.rotation))
+            .offset(motifOffset)
+    }
+
+    private func rotate(_ point: CGPoint, degrees: Double) -> CGPoint {
+        let radians = degrees * .pi / 180
+        return CGPoint(
+            x: point.x * cos(radians) - point.y * sin(radians),
+            y: point.x * sin(radians) + point.y * cos(radians)
+        )
+    }
 }
 
-private struct MultiStem {
-    let center: CGPoint
-    let horizontal: Bool
+private struct MultiQuadrant {
+    let rotation: Double
+    let squareCenter: CGPoint
     let color: Color
+}
+
+/// A relationship-category ring+stem motif, drawn as plain vector geometry
+/// (no font involved) so it scales losslessly at any tile size — split into
+/// two shapes (rather than one combined path) so `multiIcon` can draw every
+/// quadrant's stem before every quadrant's ring, keeping each ring on top of
+/// any stem it touches. Both fill whatever rect they're given, sized and
+/// positioned as one unit: a ring whose diameter equals the rect's width,
+/// sitting at the top, and a stem running from the ring's bottom edge to the
+/// rect's bottom edge. `WorkStatusIconGrid.multiIcon` rotates and positions
+/// four of these pairs (one per relationship-category color) so each one's
+/// stem tip touches the next one's ring, forming a closed loop.
+private struct RingMotif: Shape {
+    func path(in rect: CGRect) -> Path {
+        let diameter = rect.width
+        let radius = diameter / 2
+        let ringCenter = CGPoint(x: rect.midX, y: rect.minY + radius)
+        return Path(ellipseIn: CGRect(
+            x: ringCenter.x - radius, y: ringCenter.y - radius, width: diameter, height: diameter
+        ))
+    }
+}
+
+private struct StemMotif: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let ringBottom = rect.minY + rect.width
+        path.move(to: CGPoint(x: rect.midX, y: ringBottom))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        return path
+    }
 }
 
 /// The rating/word-count/chapters/kudos stat row on a detailed list row. Shared
