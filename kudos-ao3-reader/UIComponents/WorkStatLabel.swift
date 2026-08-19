@@ -486,8 +486,10 @@ struct WorkStatusIconGrid: View {
     /// glyph's circle edge, forming a closed loop. Each quadrant is tinted
     /// per relationship type rather than one shared color: General (green,
     /// matching `categoryColor("Gen")`), Straight/F-M (purple), Lesbian/F-F
-    /// (red), Gay/M-M (blue) — with the glyphs themselves left white so they
-    /// read against any of the four.
+    /// (red), Gay/M-M (blue) — each square tinted at the same `.opacity(0.3)`
+    /// every other tile's background uses, with its glyph in the same color
+    /// at full strength on top, matching the colored-line-on-tinted-
+    /// background look the other three category tiles already use.
     private var multiIcon: some View {
         let geometry = MultiGlyphGeometry.measured(tileSize: tileSize)
         let placements = MultiGlyphGeometry.placements(geometry)
@@ -515,7 +517,7 @@ struct WorkStatusIconGrid: View {
                     topTrailingRadius: center.x > 0 && center.y < 0 ? preScaleCornerRadius : 0,
                     style: .continuous
                 )
-                .fill(placement.color)
+                .fill(placement.color.opacity(0.3))
                 .frame(width: squareSize, height: squareSize)
                 .offset(x: center.x, y: center.y)
             }
@@ -526,7 +528,7 @@ struct WorkStatusIconGrid: View {
                 // rather than whatever the fallback cascade picks.
                 Text("⚲")
                     .font(.custom("AppleSymbols", size: multiGlyphFontSize))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(placement.color)
                     .rotationEffect(.degrees(placement.rotation))
                     .offset(placement.glyphOffset)
             }
