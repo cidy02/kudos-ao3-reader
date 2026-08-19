@@ -179,49 +179,25 @@ struct ReadingQueueBrowserView: View {
 
     private var compactLayout: some View {
         pageContent
-            // A spacer, not switcherBar itself, on safeAreaInset: safeAreaInset
-            // content is re-laid-out every frame the ambient safe area changes,
-            // and during the push transition that ambient value IS the tab bar's
-            // own hide animation. Chaining switcherBar's real position to that
-            // per-frame recompute was observed (via a captured screen recording,
-            // frame-extracted since this is a live-device-only animation) making
-            // the system tab bar visibly hang on screen for several frames after
-            // the rest of the page had already settled. Only the scroll-content
-            // clearance still depends on the animating safe area here; the
-            // visible bar itself is placed by the static overlay below instead,
-            // which reads the view's fixed frame edge, not the live safe area.
-            .safeAreaInset(edge: .bottom) {
-                if !isSelecting && !isReordering {
-                    Color.clear.frame(height: switcherBarHeight)
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if !isSelecting && !isReordering {
-                    switcherBar
-                }
-            }
             #if os(iOS)
             .toolbar(.hidden, for: .tabBar)
             #endif
     }
 
-    /// Matches switcherBar's own rendered height (44pt buttons + 8pt bottom
-    /// padding) — kept as an explicit constant since the overlay placing the
-    /// real bar no longer reports its size back into layout the way
-    /// safeAreaInset used to, so scroll-content clearance is hand-matched here.
-    private var switcherBarHeight: CGFloat { 52 }
-
-    private var switcherBar: some View {
-        HStack(spacing: 10) {
+    /// The switcher used to be a hand-drawn floating overlay, positioned by the app
+    /// itself with no relationship to the system's own tab-bar-hide animation — two
+    /// timing-based fix attempts (see git history) couldn't make that combination
+    /// reliably seamless, because the two animations were never actually coordinated,
+    /// just separately timed to *look* right. Library's Select-mode bottom bar
+    /// (`ToolbarItemGroup(placement: .bottomBar)` in `LibraryView.manageToolbar`)
+    /// never has this problem, because it's real toolbar content: the system treats
+    /// the tab-bar-hide and the bottom-bar-show as one coordinated transition, not
+    /// two independent views racing each other. This does the same thing here.
+    private var switcherBarContent: some View {
+        Group {
             Button { showingSwitcher = true } label: {
                 Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(themeManager.effectiveTint)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("All Queues")
             // A direct .sheet, not .popover + .presentationCompactAdaptation(.sheet):
             // this bar only ever renders in compactLayout (iPhone) — regularLayout
@@ -236,6 +212,8 @@ struct ReadingQueueBrowserView: View {
                 switcherList
             }
 
+            Spacer()
+
             Button { showingSwitcher = true } label: {
                 HStack(spacing: 6) {
                     queueGlyph(selectedQueue)
@@ -246,32 +224,23 @@ struct ReadingQueueBrowserView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .frame(height: 44)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .contentShape(.capsule)
             .accessibilityLabel("Switch Reading Queue")
             .accessibilityValue(selectedQueue?.displayName ?? "No queue selected")
+
+            Spacer()
 
             Button {
                 newQueueName = ""
                 showingNewQueue = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(themeManager.effectiveTint)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("New Queue")
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
     }
 
     private var newQueueSheet: some View {
@@ -673,6 +642,17 @@ struct ReadingQueueBrowserView: View {
                 }
             }
         }
+
+        // Not nested in the branches above: the switcher must stay reachable even
+        // from an empty queue (it's how you get to a *different* queue). regularLayout
+        // (iPad/Mac) never renders this — it has its own sidebar list instead.
+        #if os(iOS)
+        if horizontalSizeClass != .regular, !isSelecting, !isReordering {
+            ToolbarItemGroup(placement: .bottomBar) {
+                switcherBarContent
+            }
+        }
+        #endif
     }
 
     // MARK: - Actions
