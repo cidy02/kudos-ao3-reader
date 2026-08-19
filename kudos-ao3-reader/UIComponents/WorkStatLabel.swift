@@ -318,6 +318,10 @@ struct WorkStatusIconGrid: View {
     private var iconSize: CGFloat { tileSize * 10 / 18 }
     private var shieldSize: CGFloat { tileSize * 12 / 18 }
     private var letterSize: CGFloat { tileSize * 6 / 18 }
+    /// The Unicode pairing glyphs (⚢/⚣/⚤/♅) read smaller than the SF Symbol
+    /// icons around them at the same point size — Apple Symbols draws them
+    /// with more internal padding than SF Symbols' own icon metrics.
+    private var pairingSymbolSize: CGFloat { tileSize * 12 / 18 }
 
     var body: some View {
         let items = items
@@ -444,8 +448,13 @@ struct WorkStatusIconGrid: View {
     }
 
     private func categoryText(_ symbol: String, _ item: WorkTopStatsRow.Item) -> some View {
+        // `.system` hands these glyphs to the font-fallback cascade, which
+        // doesn't always land on Apple Symbols even when it has the glyph —
+        // confirmed via CoreText that ♅ resolves to Menlo instead, despite
+        // Apple Symbols containing it. Naming the font directly skips the
+        // cascade and guarantees the glyph AO3's own icon set intends.
         Text(symbol)
-            .font(.system(size: iconSize, weight: .bold))
+            .font(.custom("AppleSymbols", size: pairingSymbolSize))
             .foregroundStyle(item.iconColor ?? .gray)
     }
 }
@@ -770,7 +779,7 @@ enum WorkStat {
         case "Gen": .green
         case "M/M": .blue
         case "Multi": .purple
-        case "Other": .gray
+        case "Other": .black
         default: nil
         }
     }
