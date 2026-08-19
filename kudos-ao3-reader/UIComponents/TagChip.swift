@@ -19,11 +19,12 @@ struct TagChip: View {
             if let symbol {
                 Image(systemName: symbol)
                     .font(.caption2.weight(.bold))
-                    // Untinted when the chip is: a filled capsule already carries
-                    // the accent, and a tinted glyph on it would vanish.
-                    .foregroundStyle(tinted ? AnyShapeStyle(.white) : AnyShapeStyle(.tint))
-                    // The glyph is decorative — the category is announced by the
-                    // caller's accessibility label, not by SF Symbol name.
+                    // No color of its own for now — inherits the chip's own
+                    // foreground (below) instead of the app's accent tint, so
+                    // an untinted chip doesn't read as accent-colored before
+                    // per-category tag colors exist. Revisit once those land.
+                    // The glyph is decorative — the category is announced by
+                    // the caller's accessibility label, not by SF Symbol name.
                     .accessibilityHidden(true)
             }
             Text(text)
