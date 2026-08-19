@@ -406,7 +406,7 @@ struct LibrarySectionListView: View {
     }
 
     private func refreshSection() async {
-        _ = await WorkMetadataRefresh.refresh(visibleItems, in: context)
+        _ = await WorkMetadataRefresh.refresh(visibleItems, in: context, auth: auth)
         if kind == .savedForLater { await loadMarkedForLater() }
     }
 }

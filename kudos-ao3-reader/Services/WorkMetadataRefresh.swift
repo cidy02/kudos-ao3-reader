@@ -33,7 +33,7 @@ enum WorkMetadataRefresh {
         }
     }
 
-    static func refresh(_ works: [SavedWork], in context: ModelContext) async -> Summary {
+    static func refresh(_ works: [SavedWork], in context: ModelContext, auth: AO3AuthService) async -> Summary {
         var seen = Set<UUID>()
         var summary = Summary()
         for work in works where seen.insert(work.id).inserted {
@@ -47,7 +47,7 @@ enum WorkMetadataRefresh {
                 break
             }
             do {
-                try await refresh(work, in: context)
+                try await refresh(work, in: context, auth: auth)
                 summary.refreshed += 1
             } catch RefreshError.missingAO3ID {
                 summary.skipped += 1
@@ -68,13 +68,13 @@ enum WorkMetadataRefresh {
         return summary
     }
 
-    static func refresh(_ work: SavedWork, in context: ModelContext) async throws {
+    static func refresh(_ work: SavedWork, in context: ModelContext, auth: AO3AuthService) async throws {
         guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
             throw RefreshError.missingAO3ID
         }
 
         let metadata = try await AO3RequestCoordinator.shared.withSlot {
-            try await AO3Client.shared.workMetadata(workID: id)
+            try await AO3Client.shared.workMetadata(workID: id, request: authenticatedRequest(workID: id, auth: auth))
         }
 
         // Safety rule: all network/parse failures throw before this point. From here
@@ -86,10 +86,25 @@ enum WorkMetadataRefresh {
 
     /// The full parsed work-page metadata, for callers (Work Details refresh)
     /// that need fields `AO3WorkSummary` doesn't carry, like the published date.
-    static func remoteMetadata(workID: Int) async throws -> AO3WorkMetadata {
+    static func remoteMetadata(workID: Int, auth: AO3AuthService) async throws -> AO3WorkMetadata {
         try await AO3RequestCoordinator.shared.withSlot {
-            try await AO3Client.shared.workMetadata(workID: workID)
+            try await AO3Client.shared.workMetadata(
+                workID: workID, request: authenticatedRequest(workID: workID, auth: auth)
+            )
         }
+    }
+
+    /// A restricted AO3 work (visible only to registered users) 404s/login-walls an
+    /// anonymous fetch — `parseWorkMetadata` then finds no title/tags/words/chapters
+    /// at all and throws `.parse`, which reads as "AO3 changed its page format"
+    /// rather than the real "you're not logged in" cause. Signed in, refresh should
+    /// see exactly what the user sees browsing the work themselves. `nil` (not a
+    /// thrown error) when signed out or the request can't be built — every existing
+    /// caller already handles `workMetadata`'s anonymous-fetch fallback correctly,
+    /// and a public work refreshes the same either way.
+    private static func authenticatedRequest(workID: Int, auth: AO3AuthService) -> URLRequest? {
+        guard let url = URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true") else { return nil }
+        return try? auth.authenticatedRequest(for: url)
     }
 
     static func message(for error: Error) -> String {

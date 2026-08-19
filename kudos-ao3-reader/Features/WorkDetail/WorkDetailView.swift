@@ -612,9 +612,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         resolveExistingIfNeeded()
         do {
             if let work = localWork {
-                try await WorkMetadataRefresh.refresh(work, in: context)
+                try await WorkMetadataRefresh.refresh(work, in: context, auth: auth)
             } else if let summary = remote {
-                let metadata = try await WorkMetadataRefresh.remoteMetadata(workID: summary.id)
+                let metadata = try await WorkMetadataRefresh.remoteMetadata(workID: summary.id, auth: auth)
                 refreshedRemote = metadata.summaryValue
                 refreshedPublished = metadata.datePublished
             } else {

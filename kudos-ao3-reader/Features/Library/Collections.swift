@@ -123,6 +123,7 @@ struct CollectionDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AO3AuthService.self) private var auth
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingRename = false
@@ -196,7 +197,7 @@ struct CollectionDetailView: View {
                 }
                 .cardList()
                 .refreshable {
-                    let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
+                    let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context, auth: auth) }
                     refreshTask = task
                     await task.value
                 }

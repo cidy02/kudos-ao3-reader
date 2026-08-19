@@ -727,12 +727,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private func refreshLibraryDashboard() async {
-        _ = await WorkMetadataRefresh.refresh(visibleDashboardWorks, in: context)
+        _ = await WorkMetadataRefresh.refresh(visibleDashboardWorks, in: context, auth: auth)
         await loadMarkedForLater()
     }
 
     private func refreshSelectableWorks() async {
-        _ = await WorkMetadataRefresh.refresh(selectableWorks, in: context)
+        _ = await WorkMetadataRefresh.refresh(selectableWorks, in: context, auth: auth)
     }
 
     private var visibleDashboardWorks: [SavedWork] {
