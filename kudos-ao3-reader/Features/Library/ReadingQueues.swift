@@ -4,8 +4,6 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-// swiftlint:disable file_length
-
 /// Navigation route for Reading Queues beyond the Library carousel.
 /// - `initialQueueID == nil` — the full grid of queue stack cards ("See all" chevron).
 /// - non-nil — the Safari-style browser pre-selected on that queue (carousel tile
@@ -250,8 +248,13 @@ struct ReadingQueueCard: View {
                         .lineLimit(2)
                         .foregroundStyle(.primary)
                     Spacer(minLength: 0)
-                    miniStatusGrid(for: work)
-                        .frame(maxWidth: .infinity)
+                    WorkStatusIconGrid(
+                        rating: work.rating.isEmpty ? nil : work.rating,
+                        categories: work.workCategories,
+                        warnings: work.workWarnings,
+                        completion: work.completionStatus
+                    )
+                    .frame(maxWidth: .infinity)
                     Spacer(minLength: 0)
                     if !work.author.isEmpty {
                         Text(work.author)
@@ -276,75 +279,6 @@ struct ReadingQueueCard: View {
         .clipShape(shape)
     }
 
-    /// `work`'s rating/category/warnings/completion — same per-facet symbol and
-    /// color `WorkTopStatsRow` already resolves everywhere else in the app
-    /// (AO3's real category-collapsing rules included) — as 4 icon-only tiles,
-    /// no text. Decorative: the cell's own title above is the real accessible
-    /// content here, same as `StackedWorkCover`'s hidden decorative stack.
-    private func miniStatusGrid(for work: SavedWork) -> some View {
-        let items = WorkTopStatsRow(
-            rating: work.rating.isEmpty ? nil : work.rating,
-            categories: work.workCategories,
-            warnings: work.workWarnings,
-            completion: work.completionStatus
-        ).topItems
-        return VStack(spacing: 3) {
-            HStack(spacing: 3) {
-                miniStatusTile(!items.isEmpty ? items[0] : nil)
-                miniStatusTile(items.count > 1 ? items[1] : nil)
-            }
-            HStack(spacing: 3) {
-                miniStatusTile(items.count > 2 ? items[2] : nil)
-                miniStatusTile(items.count > 3 ? items[3] : nil)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    @ViewBuilder
-    private func miniStatusTile(_ item: WorkTopStatsRow.Item?) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-        if let item {
-            shape
-                .fill((item.iconColor ?? .gray).opacity(0.3))
-                .overlay {
-                    // Rating (AO3's own quadrant reads a letter, not a checkmark):
-                    // no `{letter}.shield` SF Symbol exists — confirmed against
-                    // the live catalog, unlike `{letter}.circle`/`.square`, which
-                    // do — so the letter is composited by hand over a filled
-                    // shield instead of a single systemName.
-                    if item.symbol == "checkmark.shield" {
-                        ratingShield(item)
-                    } else {
-                        Image(systemName: item.symbol)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(item.iconColor ?? .gray)
-                    }
-                }
-                .frame(width: 18, height: 18)
-        } else {
-            Color.clear.frame(width: 18, height: 18)
-        }
-    }
-
-    private func ratingShield(_ item: WorkTopStatsRow.Item) -> some View {
-        // "NR" (WorkStat.ratingLetter's own text for Not Rated) is two
-        // characters — cramped at this size, and "?" already reads as
-        // "unrated/unknown" without needing to fit two glyphs.
-        let letter = item.text == "NR" ? "?" : item.text
-        return ZStack {
-            // Matches the other 3 tiles' own 10pt icon size.
-            Image(systemName: "shield.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(item.iconColor ?? .gray)
-            Text(letter)
-                .font(.system(size: 6, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                // Shields taper at the bottom point, so their centroid sits
-                // above true geometric center — an un-offset letter reads low.
-                .offset(y: -0.5)
-        }
-    }
 }
 
 struct NewReadingQueueCard: View {
