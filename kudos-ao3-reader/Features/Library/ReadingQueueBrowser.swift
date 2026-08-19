@@ -169,23 +169,37 @@ struct ReadingQueueBrowserView: View {
 
     private var compactLayout: some View {
         pageContent
+            // A spacer, not switcherBar itself, on safeAreaInset: safeAreaInset
+            // content is re-laid-out every frame the ambient safe area changes,
+            // and during the push transition that ambient value IS the tab bar's
+            // own hide animation. Chaining switcherBar's real position to that
+            // per-frame recompute was observed (via a captured screen recording,
+            // frame-extracted since this is a live-device-only animation) making
+            // the system tab bar visibly hang on screen for several frames after
+            // the rest of the page had already settled. Only the scroll-content
+            // clearance still depends on the animating safe area here; the
+            // visible bar itself is placed by the static overlay below instead,
+            // which reads the view's fixed frame edge, not the live safe area.
             .safeAreaInset(edge: .bottom) {
+                if !isSelecting && !isReordering {
+                    Color.clear.frame(height: switcherBarHeight)
+                }
+            }
+            .overlay(alignment: .bottom) {
                 if !isSelecting && !isReordering {
                     switcherBar
                 }
             }
             #if os(iOS)
-            // Co-located with the safeAreaInset above (not on the shared `body`,
-            // which also serves `regularLayout`) rather than a separate modifier
-            // applied afterward: with the tab-bar-hide and the bottom-inset that
-            // depends on it in the same modifier chain, SwiftUI settles both in
-            // one layout pass. Split across two chains, the inset was observed
-            // resolving against the safe area *before* the tab bar's own hide
-            // animation caught up — reported as the system tab bar briefly
-            // visible beneath this screen's own bottom chrome.
             .toolbar(.hidden, for: .tabBar)
             #endif
     }
+
+    /// Matches switcherBar's own rendered height (44pt buttons + 8pt bottom
+    /// padding) — kept as an explicit constant since the overlay placing the
+    /// real bar no longer reports its size back into layout the way
+    /// safeAreaInset used to, so scroll-content clearance is hand-matched here.
+    private var switcherBarHeight: CGFloat { 52 }
 
     private var switcherBar: some View {
         HStack(spacing: 10) {
