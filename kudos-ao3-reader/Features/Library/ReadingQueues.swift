@@ -308,13 +308,36 @@ struct ReadingQueueCard: View {
             shape
                 .fill((item.iconColor ?? .gray).opacity(0.3))
                 .overlay {
-                    Image(systemName: item.symbol)
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(item.iconColor ?? .gray)
+                    // Rating (AO3's own quadrant reads a letter, not a checkmark):
+                    // no `{letter}.shield` SF Symbol exists — confirmed against
+                    // the live catalog, unlike `{letter}.circle`/`.square`, which
+                    // do — so the letter is composited by hand over a filled
+                    // shield instead of a single systemName.
+                    if item.symbol == "checkmark.shield" {
+                        ratingShield(item)
+                    } else {
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(item.iconColor ?? .gray)
+                    }
                 }
                 .frame(width: 14, height: 14)
         } else {
             Color.clear.frame(width: 14, height: 14)
+        }
+    }
+
+    private func ratingShield(_ item: WorkTopStatsRow.Item) -> some View {
+        ZStack {
+            Image(systemName: "shield.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(item.iconColor ?? .gray)
+            Text(item.text)
+                .font(.system(size: 6, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                // Shields taper at the bottom point, so their centroid sits
+                // above true geometric center — an un-offset letter reads low.
+                .offset(y: -0.5)
         }
     }
 }
