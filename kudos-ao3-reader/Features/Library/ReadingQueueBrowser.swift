@@ -15,6 +15,7 @@ struct ReadingQueueBrowserView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AO3AuthService.self) private var auth
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var allQueues: [ReadingQueue]
     @Query(sort: \Tag.name) private var allTags: [Tag]
@@ -428,7 +429,7 @@ struct ReadingQueueBrowserView: View {
                 }
             }
             .refreshable {
-                let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context) }
+                let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context, auth: auth) }
                 refreshTask = task
                 await task.value
             }

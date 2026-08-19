@@ -10,6 +10,7 @@ struct HomeSectionListView: View {
     @Environment(\.modelContext) private var context
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AO3AuthService.self) private var auth
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
@@ -96,7 +97,7 @@ struct HomeSectionListView: View {
                     }
                 }
                 .refreshable {
-                    let task = Task { _ = await WorkMetadataRefresh.refresh(visibleItems, in: context) }
+                    let task = Task { _ = await WorkMetadataRefresh.refresh(visibleItems, in: context, auth: auth) }
                     refreshTask = task
                     await task.value
                 }

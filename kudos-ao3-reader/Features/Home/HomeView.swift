@@ -552,7 +552,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     }
 
     private func refreshHome() async {
-        _ = await WorkMetadataRefresh.refresh(visibleHomeWorks, in: context)
+        _ = await WorkMetadataRefresh.refresh(visibleHomeWorks, in: context, auth: auth)
         await loadSubscriptions()
     }
 
