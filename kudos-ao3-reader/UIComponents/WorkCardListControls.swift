@@ -35,6 +35,11 @@ struct FilterButton: View {
             Label("Filter", systemImage: "line.3.horizontal.decrease")
         }
         .symbolVariant(filtersActive ? .fill : .none)
+        // Unstyled toolbar buttons pick up the app's accent color (red) from the
+        // ambient tint — fine for something you tap to act, wrong for a state
+        // indicator that should read as "on" only when it actually is (Messages'
+        // own filter/mute icons follow the same neutral-unless-active pattern).
+        .foregroundStyle(filtersActive ? Color.accentColor : Color.primary)
         .labelStyle(.iconOnly)
         .help(filterHelp)
         .contextMenu {

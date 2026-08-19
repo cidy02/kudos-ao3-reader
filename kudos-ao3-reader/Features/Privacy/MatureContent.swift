@@ -330,5 +330,7 @@ struct MatureRevealToggle: View {
             Label(gate.revealAll ? "Hide mature" : "Show mature",
                   systemImage: gate.revealAll ? "eye.slash" : "eye")
         }
+        // Matches FilterButton: neutral unless actively toggled on.
+        .foregroundStyle(gate.revealAll ? Color.accentColor : Color.primary)
     }
 }
