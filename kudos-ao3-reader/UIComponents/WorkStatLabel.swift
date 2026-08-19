@@ -322,6 +322,8 @@ struct WorkStatusIconGrid: View {
     /// icons around them at the same point size — Apple Symbols draws them
     /// with more internal padding than SF Symbols' own icon metrics.
     private var pairingSymbolSize: CGFloat { tileSize * 12 / 18 }
+    /// Font size for the four "⚲" glyphs that make up the Multi tile.
+    private var multiGlyphFontSize: CGFloat { tileSize / 3 }
 
     var body: some View {
         let items = items
@@ -438,21 +440,7 @@ struct WorkStatusIconGrid: View {
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(item.iconColor ?? .gray)
         case "Multi":
-            // More than a pair, not a specific one — two overlapping hearts
-            // read as "more than one relationship" without needing AO3's own
-            // multi-color grid or a third figure at this size. The back heart
-            // is dimmed (same opacity convention `tile(_:)` uses for its own
-            // background tint) so the overlap reads as two shapes, not one.
-            ZStack {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: iconSize, weight: .bold))
-                    .foregroundStyle((item.iconColor ?? .gray).opacity(0.6))
-                    .offset(x: -iconSize * 0.22)
-                Image(systemName: "heart.fill")
-                    .font(.system(size: iconSize, weight: .bold))
-                    .foregroundStyle(item.iconColor ?? .gray)
-                    .offset(x: iconSize * 0.22)
-            }
+            multiIcon
         case "Other":
             // AO3's own icon here is the Uranus astrological symbol on a black
             // background — the design team's pick for relationships that don't
@@ -484,6 +472,131 @@ struct WorkStatusIconGrid: View {
             .font(.custom("AppleSymbols", size: pairingSymbolSize))
             .foregroundStyle(item.iconColor ?? .gray)
             .offset(y: pairingSymbolSize * verticalOffset)
+    }
+
+    /// Multi has no single relationship to symbolize — AO3's own icon here is
+    /// a small multi-color grid. This builds an equivalent from four "⚲"
+    /// glyphs (NEUTER, U+26B2 — a circle with one stem), each rotated 90°
+    /// further than the last and positioned so its stem tip touches the next
+    /// glyph's circle edge, forming a closed loop. Each quadrant is tinted
+    /// per relationship type rather than one shared color: General (green,
+    /// matching `categoryColor("Gen")`), Straight/F-M (purple), Lesbian/F-F
+    /// (red), Gay/M-M (blue) — with the glyphs themselves left white so they
+    /// read against any of the four.
+    private var multiIcon: some View {
+        let geometry = MultiGlyphGeometry.measured(tileSize: tileSize)
+        let placements = MultiGlyphGeometry.placements(geometry)
+        let squareSize = geometry.halfSpacing * 2
+        let squareCornerRadius = squareSize * 4 / 18
+        return ZStack {
+            ForEach(placements.indices, id: \.self) { i in
+                let placement = placements[i]
+                // Only the corner facing away from the mosaic's center is
+                // rounded — the other three meet a neighbor or the shared
+                // center point and stay sharp, so the four quadrants read as
+                // one shape from outside.
+                let center = placement.squareCenter
+                UnevenRoundedRectangle(
+                    topLeadingRadius: center.x < 0 && center.y < 0 ? squareCornerRadius : 0,
+                    bottomLeadingRadius: center.x < 0 && center.y > 0 ? squareCornerRadius : 0,
+                    bottomTrailingRadius: center.x > 0 && center.y > 0 ? squareCornerRadius : 0,
+                    topTrailingRadius: center.x > 0 && center.y < 0 ? squareCornerRadius : 0,
+                    style: .continuous
+                )
+                .fill(placement.color)
+                .frame(width: squareSize, height: squareSize)
+                .offset(x: center.x, y: center.y)
+            }
+            ForEach(placements.indices, id: \.self) { i in
+                let placement = placements[i]
+                // Named directly (not `.system`) for the same reason as the
+                // pairing glyphs: guarantees Apple Symbols' glyph shape
+                // rather than whatever the fallback cascade picks.
+                Text("⚲")
+                    .font(.custom("AppleSymbols", size: multiGlyphFontSize))
+                    .foregroundStyle(Color.white)
+                    .rotationEffect(.degrees(placement.rotation))
+                    .offset(placement.glyphOffset)
+            }
+        }
+    }
+}
+
+/// Geometry for `WorkStatusIconGrid`'s Multi tile: where "⚲"'s circle sits
+/// relative to its own rotation pivot (Text's layout center), its radius, and
+/// its stem's length — measured once per font size by rasterizing the glyph
+/// with `ImageRenderer` and row-profiling its ink to separate the circle
+/// (the smoothly-tapering round part) from the stem (the constant-width
+/// tail), rather than assumed from the font's advertised metrics.
+private struct MultiGlyphGeometry {
+    let circleOffset: CGPoint
+    let radius: CGFloat
+    let stemLength: CGFloat
+    /// Distance from the mosaic's center to each circle's center. Placing
+    /// circle centers at (±halfSpacing, ±halfSpacing) makes adjacent
+    /// glyphs' center-to-center distance exactly stemLength + radius — the
+    /// spacing at which a stem tip lands exactly on the neighbor's circle
+    /// edge, given each stem points in a pure cardinal direction (measured:
+    /// its own horizontal drift is under 0.03pt, negligible).
+    var halfSpacing: CGFloat { (stemLength + radius) / 2 }
+
+    /// Measured directly at the two sizes this grid is actually used at
+    /// (18pt default tileSize → 6pt glyphs, 27pt search-card tileSize → 9pt
+    /// glyphs) — not extrapolated from one, since small glyph metrics don't
+    /// scale linearly with size (confirmed earlier while centering the
+    /// rating shield's letter, where a real offset stayed ~constant in
+    /// points rather than scaling with tileSize). Any other tileSize falls
+    /// back to the 18pt measurement.
+    static func measured(tileSize: CGFloat) -> MultiGlyphGeometry {
+        tileSize >= 22
+            ? MultiGlyphGeometry(circleOffset: CGPoint(x: -0.094, y: -0.906), radius: 2.094, stemLength: 4.344)
+            : MultiGlyphGeometry(circleOffset: CGPoint(x: -0.063, y: -0.969), radius: 1.422, stemLength: 2.906)
+    }
+
+    struct Placement {
+        let rotation: Double
+        let glyphOffset: CGSize
+        let squareCenter: CGPoint
+        let color: Color
+    }
+
+    private struct Slot {
+        let rotation: Double
+        let squareCenter: CGPoint
+        let color: Color
+    }
+
+    /// Solves each glyph's placement offset so its circle lands exactly on
+    /// its assigned grid slot: rotation pivots around the glyph's own layout
+    /// center, so a glyph's circle ends up at `Rotate(θ)·circleOffset`
+    /// before any additional offset — the offset needed is simply the
+    /// desired slot position minus that.
+    static func placements(_ geometry: MultiGlyphGeometry) -> [Placement] {
+        let s2 = geometry.halfSpacing
+        let slots: [Slot] = [
+            Slot(rotation: -90, squareCenter: CGPoint(x: -s2, y: -s2), color: .green), // top-left — General
+            Slot(rotation: 0, squareCenter: CGPoint(x: s2, y: -s2), color: .purple), // top-right — Straight
+            Slot(rotation: 180, squareCenter: CGPoint(x: -s2, y: s2), color: .red), // bottom-left — Lesbian
+            Slot(rotation: 90, squareCenter: CGPoint(x: s2, y: s2), color: .blue), // bottom-right — Gay
+        ]
+        return slots.map { slot in
+            let rotatedCircle = rotate(geometry.circleOffset, degrees: slot.rotation)
+            let glyphOffset = CGSize(
+                width: slot.squareCenter.x - rotatedCircle.x,
+                height: slot.squareCenter.y - rotatedCircle.y
+            )
+            return Placement(
+                rotation: slot.rotation, glyphOffset: glyphOffset, squareCenter: slot.squareCenter, color: slot.color
+            )
+        }
+    }
+
+    private static func rotate(_ point: CGPoint, degrees: Double) -> CGPoint {
+        let radians = degrees * .pi / 180
+        return CGPoint(
+            x: point.x * cos(radians) - point.y * sin(radians),
+            y: point.x * sin(radians) + point.y * cos(radians)
+        )
     }
 }
 
