@@ -345,7 +345,12 @@ struct WorkStatusIconGrid: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         if let item {
             shape
-                .fill((item.iconColor ?? .gray).opacity(0.3))
+                // Multi's own icon IS a full multicolor quadrant — a tint
+                // behind it would just be a fifth, redundant color peeking
+                // around its edges.
+                .fill(
+                    item.text == "Multi" ? AnyShapeStyle(.clear) : AnyShapeStyle((item.iconColor ?? .gray).opacity(0.3))
+                )
                 .overlay {
                     // Rating (AO3's own quadrant reads a letter, not a checkmark):
                     // no `{letter}.shield` SF Symbol exists — confirmed against
@@ -487,7 +492,14 @@ struct WorkStatusIconGrid: View {
         let geometry = MultiGlyphGeometry.measured(tileSize: tileSize)
         let placements = MultiGlyphGeometry.placements(geometry)
         let squareSize = geometry.halfSpacing * 2
-        let squareCornerRadius = squareSize * 4 / 18
+        // The touching-stem geometry is measured at each glyph's own natural
+        // size, which doesn't happen to fill the tile — scaling the whole
+        // composite up (not re-measuring at a bigger font) preserves the
+        // touching relationship exactly, since a uniform scale can't change
+        // proportions. Corner radius is scaled down first so it lands back
+        // on the tile's own `cornerRadius` once the transform is applied.
+        let scaleFactor = (tileSize / 2) / squareSize
+        let preScaleCornerRadius = cornerRadius / scaleFactor
         return ZStack {
             ForEach(placements.indices, id: \.self) { i in
                 let placement = placements[i]
@@ -497,10 +509,10 @@ struct WorkStatusIconGrid: View {
                 // one shape from outside.
                 let center = placement.squareCenter
                 UnevenRoundedRectangle(
-                    topLeadingRadius: center.x < 0 && center.y < 0 ? squareCornerRadius : 0,
-                    bottomLeadingRadius: center.x < 0 && center.y > 0 ? squareCornerRadius : 0,
-                    bottomTrailingRadius: center.x > 0 && center.y > 0 ? squareCornerRadius : 0,
-                    topTrailingRadius: center.x > 0 && center.y < 0 ? squareCornerRadius : 0,
+                    topLeadingRadius: center.x < 0 && center.y < 0 ? preScaleCornerRadius : 0,
+                    bottomLeadingRadius: center.x < 0 && center.y > 0 ? preScaleCornerRadius : 0,
+                    bottomTrailingRadius: center.x > 0 && center.y > 0 ? preScaleCornerRadius : 0,
+                    topTrailingRadius: center.x > 0 && center.y < 0 ? preScaleCornerRadius : 0,
                     style: .continuous
                 )
                 .fill(placement.color)
@@ -519,6 +531,9 @@ struct WorkStatusIconGrid: View {
                     .offset(placement.glyphOffset)
             }
         }
+        .scaleEffect(scaleFactor)
+        .frame(width: tileSize, height: tileSize)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
