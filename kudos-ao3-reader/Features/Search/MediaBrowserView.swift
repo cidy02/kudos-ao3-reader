@@ -12,6 +12,9 @@ import SwiftUI
 struct MediaBrowserView: View {
     var onSelectFandom: (String) -> Void
 
+    #if os(iOS)
+    @Environment(ThemeManager.self) private var themeManager
+    #endif
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var library: [SavedWork]
 
     @State private var categories: [AO3MediaCategory] = []
@@ -54,31 +57,92 @@ struct MediaBrowserView: View {
     }
 
     private var categoryList: some View {
+        #if os(iOS)
+        categoryGrid
+        #else
+        categoryListMac
+        #endif
+    }
+
+    #if os(iOS)
+    /// Two-column grid of category cards. Each cell draws its own card background
+    /// directly (the same recipe `.cardRow()` uses on a `List` row —
+    /// `theme.appTheme.cardSurface`/`cardBorder`/`cardShadow` — since a `List`
+    /// row's own chrome doesn't apply to a free-floating `LazyVGrid` cell).
+    private var categoryGrid: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
+                Text("Browse by fandom")
+                    .font(.headline)
+                    .padding(.horizontal, CardListMetrics.sideMargin)
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
+                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
+                    ],
+                    spacing: CardListMetrics.interCardSpacing
+                ) {
+                    ForEach(categories) { category in
+                        NavigationLink(value: category) {
+                            categoryCard(category)
+                                .padding(CardListMetrics.innerHorizontal)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                                        .fill(themeManager.appTheme.cardSurface)
+                                        .overlay(
+                                            RoundedRectangle(
+                                                cornerRadius: CardListMetrics.cornerRadius, style: .continuous
+                                            )
+                                            .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
+                                        )
+                                        .shadow(color: themeManager.appTheme.cardShadow.color,
+                                                radius: themeManager.appTheme.cardShadow.radius,
+                                                x: 0, y: themeManager.appTheme.cardShadow.y)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .onAppear { visibleCategoryIDs.insert(category.id) }
+                        .onDisappear { visibleCategoryIDs.remove(category.id) }
+                    }
+                }
+                .padding(.horizontal, CardListMetrics.sideMargin)
+
+                instructions
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CardListMetrics.sideMargin)
+            }
+            .padding(.vertical, CardListMetrics.interCardSpacing)
+        }
+        // `/media` is `max-age=600, public`, so without the invalidation the
+        // gesture re-renders the same bytes for ten minutes.
+        .refreshable {
+            await AO3Client.shared.invalidateCachedResponses()
+            await refresh()
+        }
+    }
+    #else
+    private var categoryListMac: some View {
         List {
             Section {
                 ForEach(categories) { category in
-                    Group {
-                        #if os(iOS)
-                        NavigationLink(value: category) {
-                            categoryCard(category)
-                        }
-                        #else
-                        DisclosureGroup(isExpanded: expansionBinding(for: category.id)) {
-                            ForEach(category.fandoms) { fandom in
-                                Button {
-                                    onSelectFandom(fandom.name)
-                                } label: {
-                                    Text(fandom.name)
-                                        .foregroundStyle(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
+                    DisclosureGroup(isExpanded: expansionBinding(for: category.id)) {
+                        ForEach(category.fandoms) { fandom in
+                            Button {
+                                onSelectFandom(fandom.name)
+                            } label: {
+                                Text(fandom.name)
+                                    .foregroundStyle(.primary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                             }
-                        } label: {
-                            categoryCard(category)
+                            .buttonStyle(.plain)
                         }
-                        #endif
+                    } label: {
+                        categoryCard(category)
                     }
                     .onAppear { visibleCategoryIDs.insert(category.id) }
                     .onDisappear { visibleCategoryIDs.remove(category.id) }
@@ -107,6 +171,7 @@ struct MediaBrowserView: View {
             await refresh()
         }
     }
+    #endif
 
     /// Instructional caption shown under the category list.
     private var instructions: Text {
