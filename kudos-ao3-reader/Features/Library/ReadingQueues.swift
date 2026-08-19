@@ -333,11 +333,13 @@ struct ReadingQueueCard: View {
         // "unrated/unknown" without needing to fit two glyphs.
         let letter = item.text == "NR" ? "?" : item.text
         return ZStack {
+            // Matches the other 3 tiles' own 8pt icon size — was 13pt, visibly
+            // heavier than its neighbors in the same grid.
             Image(systemName: "shield.fill")
-                .font(.system(size: 13))
+                .font(.system(size: 9))
                 .foregroundStyle(item.iconColor ?? .gray)
             Text(letter)
-                .font(.system(size: 6, weight: .bold, design: .rounded))
+                .font(.system(size: 5, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 // Shields taper at the bottom point, so their centroid sits
                 // above true geometric center — an un-offset letter reads low.
