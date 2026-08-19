@@ -63,7 +63,10 @@ struct AO3WorkRow: View {
                     categories: work.categories,
                     warnings: work.warnings,
                     completion: WorkCompletionStatus(isComplete: work.isComplete),
-                    isExpanded: expanded
+                    isExpanded: expanded,
+                    // 1.5x the default (18) — this card has more room to spend
+                    // on it than the Reading Queue mini-cards do.
+                    tileSize: 27
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(work.title)
