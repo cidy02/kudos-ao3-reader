@@ -20,7 +20,6 @@ struct WorkCoverCard: View {
                 // the same four facts in a quarter of the vertical space, so
                 // it sits beside the title instead of costing its own line.
                 HStack(alignment: .top, spacing: 8) {
-                    cardStats
                     Text(work.title)
                         .font(.subheadline.weight(.semibold))
                         // Two lines, then "…". A third line costs real card height
@@ -30,6 +29,7 @@ struct WorkCoverCard: View {
                         .lineLimit(2)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    cardStats
                 }
                 // Three groups on this card — what it is, who wrote it, what it
                 // measures — and the uniform 7pt rhythm ran them together. The extra
@@ -142,12 +142,12 @@ struct AO3WorkCoverCard: View {
             VStack(alignment: .leading, spacing: 7) {
                 // Matches the local card — see `WorkCoverCard`.
                 HStack(alignment: .top, spacing: 8) {
-                    cardStats
                     Text(work.title)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(2)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    cardStats
                 }
                 // Matches the local card's grouping — see `WorkCoverCard`.
                 .padding(.bottom, 3)
