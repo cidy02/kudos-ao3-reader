@@ -1,23 +1,6 @@
 import SwiftData
 import SwiftUI
 
-/// A short centred hairline between a card's attribution (author, fandom) and its
-/// counted stats.
-///
-/// Spacing alone had to carry that split before, and at the card's 7pt rhythm the two
-/// groups still read as one list. Inset well short of the card's width and drawn in
-/// `.quaternary` so it reads as a breath rather than a rule — the same treatment the
-/// progress track uses, so it inherits the theme instead of hard-coding a grey.
-struct CardMetaSeparator: View {
-    var body: some View {
-        Capsule()
-            .fill(.quaternary)
-            .frame(width: 48, height: 1)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityHidden(true)
-    }
-}
-
 /// Standard carousel card: a compact AO3 work summary surface with the title, author,
 /// status, metadata, and reading progress all inside the tappable card.
 struct WorkCoverCard: View {
@@ -32,22 +15,28 @@ struct WorkCoverCard: View {
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
-                Text(work.title)
-                    .font(.subheadline.weight(.semibold))
-                    // Two lines, then "…". A third line costs real card height
-                    // for a fraction of a title, and long fandom titles are
-                    // common enough that they decided the card's size more often
-                    // than the metadata below them did.
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Rating/category/warnings/completion moved up here from their
+                // own row below (`cardStats`, now gone) — the icon grid says
+                // the same four facts in a quarter of the vertical space, so
+                // it sits beside the title instead of costing its own line.
+                HStack(alignment: .top, spacing: 8) {
+                    Text(work.title)
+                        .font(.subheadline.weight(.semibold))
+                        // Two lines, then "…". A third line costs real card height
+                        // for a fraction of a title, and long fandom titles are
+                        // common enough that they decided the card's size more often
+                        // than the metadata below them did.
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    cardStats
+                }
                 // Three groups on this card — what it is, who wrote it, what it
                 // measures — and the uniform 7pt rhythm ran them together. The extra
                 // space sits on the *title* rather than on the author row so the gap
-                // survives a work with no author, and on `cardStats` so the counted
-                // stats read as their own block below the attribution. Both are
-                // absorbed by the trailing `Spacer(minLength:)`, so the card stays at
-                // its height floor and carousel cards stay uniform.
+                // survives a work with no author. Absorbed by the trailing
+                // `Spacer(minLength:)`, so the card stays at its height floor
+                // and carousel cards stay uniform.
                 .padding(.bottom, 3)
 
                 if !work.author.isEmpty {
@@ -59,12 +48,6 @@ struct WorkCoverCard: View {
                     CardMetaLabel(text: fandom, symbol: "books.vertical", accessibilityLabel: "Fandom: \(fandom)")
                         .font(.caption2)
                 }
-
-                if !work.author.isEmpty || !(work.workFandoms.first ?? "").isEmpty {
-                    CardMetaSeparator()
-                }
-
-                cardStats
 
                 // Only preservation stays on the card. It is the one status the app
                 // exists to surface — "this is the last copy of a deleted work" — and
@@ -157,12 +140,15 @@ struct AO3WorkCoverCard: View {
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
-                Text(work.title)
-                    .font(.subheadline.weight(.semibold))
-                    // Matches the local card — see `WorkCoverCard`.
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Matches the local card — see `WorkCoverCard`.
+                HStack(alignment: .top, spacing: 8) {
+                    Text(work.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    cardStats
+                }
                 // Matches the local card's grouping — see `WorkCoverCard`.
                 .padding(.bottom, 3)
 
@@ -178,12 +164,6 @@ struct AO3WorkCoverCard: View {
                     )
                     .font(.caption2)
                 }
-
-                if work.authors.first?.isEmpty == false || work.fandoms.first?.isEmpty == false {
-                    CardMetaSeparator()
-                }
-
-                cardStats
 
                 Spacer(minLength: 4)
 
