@@ -183,6 +183,16 @@ struct MediaBrowserView: View {
 
     // MARK: - Card
 
+    /// A non-breaking space before "&", so a wrapped title always breaks *after*
+    /// the ampersand ("Category &" stays on the first line, the next word moves
+    /// down) instead of sometimes breaking before it. Plain wrapping picked
+    /// whichever space ran out of width first — "Anime & Manga" wrapped as
+    /// "Anime" / "& Manga" while every other card ("Books &" / "Literature")
+    /// wrapped the other way; this makes all of them consistent.
+    private func wrapSafeName(_ name: String) -> String {
+        name.replacingOccurrences(of: " &", with: "\u{00A0}&")
+    }
+
     /// The enriched category card: an emphasized icon + regular-weight name, a stats
     /// line, and (when present) recently-read chips. Reads precomputed
     /// stats (`statsByCategory`) instead of computing them inline — the derivation
@@ -192,7 +202,7 @@ struct MediaBrowserView: View {
     private func categoryCard(_ category: AO3MediaCategory) -> some View {
         let stats = statsByCategory[category.id]
         return VStack(alignment: .leading, spacing: 8) {
-            Text(category.name)
+            Text(wrapSafeName(category.name))
                 .font(.headline.weight(.regular)) // regular weight (was bold)
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -1424,7 +1424,7 @@ nonisolated struct AO3MediaCategory: Identifiable, Hashable, Sendable {
         switch name {
         case "Anime & Manga": "sparkles"
         case "Books & Literature": "books.vertical"
-        case "Cartoons & Comics & Graphic Novels": "books.vertical.fill"
+        case "Cartoons & Comics & Graphic Novels": "book.closed"
         case "Celebrities & Real People": "person.2"
         case "Movies": "film"
         case "Music & Bands": "music.note"
