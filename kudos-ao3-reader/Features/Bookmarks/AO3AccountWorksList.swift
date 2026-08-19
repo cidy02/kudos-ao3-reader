@@ -177,27 +177,30 @@ struct AO3AccountWorksList: View {
                 // reserves an (empty-looking) toolbar slot, most commonly hit here
                 // while signed out (no local matches to reveal, no filter/menu cluster
                 // since nothing's loaded yet).
-                if (hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true }))
-                    || (auth.isLoggedIn && phase == .loaded && !works.isEmpty) {
+                let hasMature = hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true })
+                let hasWorks = auth.isLoggedIn && phase == .loaded && !works.isEmpty
+                if hasMature || hasWorks {
                     // Matches the pattern already established in LibraryView.swift's
-                    // dashboard toolbar.
+                    // dashboard toolbar. WorkListMoreMenu's own gate widened to
+                    // `hasWorks || hasMature` — Privacy now lives inside it, so it
+                    // needs a home even with nothing loaded yet.
                     ActionToolbar(items: [
-                        (hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true }))
-                            ? AnyView(MatureRevealToggle())
-                            : nil,
-                        (auth.isLoggedIn && phase == .loaded && !works.isEmpty)
+                        hasWorks
                             ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                     showingFilters: $showingFilters,
                                                     onClearFilters: { filters = AO3SearchFilters() }))
                             : nil,
-                        (auth.isLoggedIn && phase == .loaded && !works.isEmpty)
-                            ? AnyView(WorkListMoreMenu {
+                        AnyView(WorkListMoreMenu {
+                            if hasMature {
+                                MatureRevealToggle()
+                            }
+                            if hasWorks {
                                 DisplayModeMenuPicker(mode: $displayMode)
                                 if displayMode == .detailed {
                                     ExpandAllMenuItem(expandAll: $expandAll)
                                 }
-                            })
-                            : nil
+                            }
+                        })
                     ].compactMap { $0 })
                 }
             }

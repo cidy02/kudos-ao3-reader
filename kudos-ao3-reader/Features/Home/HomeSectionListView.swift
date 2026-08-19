@@ -135,38 +135,44 @@ struct HomeSectionListView: View {
                         WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                     }
                     #endif
-                } else if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) || !items.isEmpty {
+                } else {
+                    let hasMature = PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature)
                     // Gated as a whole, not just its inner pieces — an empty HStack
                     // still reserves an (empty-looking) toolbar slot when the section
                     // has no works and no mature works to reveal.
                     //
                     // Matches the pattern already established in LibraryView.swift's
-                    // dashboard toolbar.
-                    ActionToolbar(items: [
-                        PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature)
-                            ? AnyView(MatureRevealToggle())
-                            : nil,
-                        !items.isEmpty
-                            ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
-                                                    showingFilters: $showingFilters,
-                                                    filterHelp: "Filter the works in this section",
-                                                    onClearFilters: { filters = LibraryFilters() }))
-                            : nil,
-                        !items.isEmpty
-                            ? AnyView(WorkListMoreMenu {
-                                Button {
-                                    isSelecting = true
-                                } label: {
-                                    Label("Select", systemImage: "checklist")
+                    // dashboard toolbar. WorkListMoreMenu's own gate widened to
+                    // `!items.isEmpty || hasMature` (was `!items.isEmpty` alone) —
+                    // Privacy now lives inside it, so it needs a home even when the
+                    // section itself is empty but has mature works to reveal.
+                    if !items.isEmpty || hasMature {
+                        ActionToolbar(items: [
+                            !items.isEmpty
+                                ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                        showingFilters: $showingFilters,
+                                                        filterHelp: "Filter the works in this section",
+                                                        onClearFilters: { filters = LibraryFilters() }))
+                                : nil,
+                            AnyView(WorkListMoreMenu {
+                                if hasMature {
+                                    MatureRevealToggle()
                                 }
-                                DisplayModeMenuPicker(mode: $displayMode)
-                                // Compact cards don't expand/collapse — only detailed rows do.
-                                if displayMode == .detailed {
-                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                if !items.isEmpty {
+                                    Button {
+                                        isSelecting = true
+                                    } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    // Compact cards don't expand/collapse — only detailed rows do.
+                                    if displayMode == .detailed {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
                                 }
                             })
-                            : nil
-                    ].compactMap { $0 })
+                        ].compactMap { $0 })
+                    }
                 }
             }
         #if os(iOS)

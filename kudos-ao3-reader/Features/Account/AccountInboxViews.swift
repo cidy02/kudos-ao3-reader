@@ -65,13 +65,20 @@ struct AccountToolbarContent: ToolbarContent {
                 }
             #endif
         } else {
+            // WorkListMoreMenu's own gate widened to `showsWorkListControls ||
+            // showsMatureRevealControl` — Privacy now lives inside it, so it needs
+            // a home even when the work-list controls themselves aren't showing.
             ActionToolbar(items: [
-                showsMatureRevealControl ? AnyView(MatureRevealToggle()) : nil,
-                showsWorkListControls
+                (showsWorkListControls || showsMatureRevealControl)
                     ? AnyView(WorkListMoreMenu {
-                        DisplayModeMenuPicker(mode: $displayMode)
-                        if displayMode == .detailed {
-                            ExpandAllMenuItem(expandAll: $expandAll)
+                        if showsMatureRevealControl {
+                            MatureRevealToggle()
+                        }
+                        if showsWorkListControls {
+                            DisplayModeMenuPicker(mode: $displayMode)
+                            if displayMode == .detailed {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                            }
                         }
                     })
                     : nil,
