@@ -353,7 +353,7 @@ struct CardMetaLabel: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Image(systemName: symbol)
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
             Text(text)
                 .foregroundStyle(.secondary)
         }
