@@ -305,6 +305,12 @@ struct WorkStatusIconGrid: View {
     /// Each tile's edge length; gap/corner-radius/glyph sizes all scale with it
     /// so the grid stays proportional at any size a caller asks for.
     var tileSize: CGFloat = 18
+    /// True when this grid is a card's *only* summary of rating/category/
+    /// warnings/completion, with no separate always-visible text row to
+    /// carry the accessible version — announces the same facts as one
+    /// VoiceOver stop instead of staying fully hidden. Default false matches
+    /// every existing caller, which keeps its own accessible text elsewhere.
+    var announcesToVoiceOver: Bool = false
 
     private var items: [WorkTopStatsRow.Item] {
         WorkTopStatsRow(
@@ -343,7 +349,7 @@ struct WorkStatusIconGrid: View {
 
     var body: some View {
         let items = items
-        VStack(spacing: gap) {
+        let grid = VStack(spacing: gap) {
             HStack(spacing: gap) {
                 tile(!items.isEmpty ? items[0] : nil)
                 tile(items.count > 1 ? items[1] : nil)
@@ -353,7 +359,11 @@ struct WorkStatusIconGrid: View {
                 tile(items.count > 3 ? items[3] : nil)
             }
         }
-        .accessibilityHidden(true)
+        if announcesToVoiceOver {
+            grid.combinedAccessibilityRow(items.map(\.accessibilityLabel).joined(separator: ", "))
+        } else {
+            grid.accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder
