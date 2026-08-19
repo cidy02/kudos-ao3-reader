@@ -137,11 +137,6 @@ struct ReadingQueueBrowserView: View {
                 #endif
             }
             .toolbar { manageToolbar }
-            #if os(iOS)
-            // Always hide the app tab bar: this screen owns bottom chrome (switcher
-            // and/or select bulk bar). Select mode also needs the bottomBar free.
-            .toolbar(.hidden, for: .tabBar)
-            #endif
             .alert("Rename Queue", isPresented: $showingRename) {
                 TextField("Name", text: $renameText)
                 Button("Save") {
@@ -179,6 +174,17 @@ struct ReadingQueueBrowserView: View {
                     switcherBar
                 }
             }
+            #if os(iOS)
+            // Co-located with the safeAreaInset above (not on the shared `body`,
+            // which also serves `regularLayout`) rather than a separate modifier
+            // applied afterward: with the tab-bar-hide and the bottom-inset that
+            // depends on it in the same modifier chain, SwiftUI settles both in
+            // one layout pass. Split across two chains, the inset was observed
+            // resolving against the safe area *before* the tab bar's own hide
+            // animation caught up — reported as the system tab bar briefly
+            // visible beneath this screen's own bottom chrome.
+            .toolbar(.hidden, for: .tabBar)
+            #endif
     }
 
     private var switcherBar: some View {
@@ -311,6 +317,12 @@ struct ReadingQueueBrowserView: View {
                 pageContent
             }
         }
+        #if os(iOS)
+        // This screen always owns the bottom chrome (switcher and/or select
+        // bulk bar in compactLayout; regularLayout has no phone-style tab bar
+        // to begin with, but stays consistent with compactLayout regardless).
+        .toolbar(.hidden, for: .tabBar)
+        #endif
     }
 
     // MARK: - Switcher list
