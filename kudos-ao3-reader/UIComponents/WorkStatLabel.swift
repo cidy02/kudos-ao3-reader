@@ -415,12 +415,21 @@ struct WorkStatusIconGrid: View {
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(item.iconColor ?? .gray)
         case "Multi":
-            // More than a pair, not a specific one — AO3's own icon here is a
-            // small multi-color grid; a third figure reads the same idea
-            // without needing a color mix at this size.
-            Image(systemName: "person.3.fill")
-                .font(.system(size: iconSize, weight: .bold))
-                .foregroundStyle(item.iconColor ?? .gray)
+            // More than a pair, not a specific one — two overlapping hearts
+            // read as "more than one relationship" without needing AO3's own
+            // multi-color grid or a third figure at this size. The back heart
+            // is dimmed (same opacity convention `tile(_:)` uses for its own
+            // background tint) so the overlap reads as two shapes, not one.
+            ZStack {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: iconSize, weight: .bold))
+                    .foregroundStyle((item.iconColor ?? .gray).opacity(0.6))
+                    .offset(x: -iconSize * 0.22)
+                Image(systemName: "heart.fill")
+                    .font(.system(size: iconSize, weight: .bold))
+                    .foregroundStyle(item.iconColor ?? .gray)
+                    .offset(x: iconSize * 0.22)
+            }
         case "Other":
             // AO3's own icon here is the Uranus astrological symbol on a black
             // background — the design team's pick for relationships that don't
