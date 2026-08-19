@@ -380,12 +380,21 @@ struct WorkStatusIconGrid: View {
             Image(systemName: "shield")
                 .font(.system(size: shieldSize))
                 .foregroundStyle(item.iconColor ?? .gray)
+            // No manual offset: an earlier version pushed this up by
+            // -tileSize/36 on the theory that the shield's taper shifts its
+            // visual centroid above geometric center, but rasterizing both
+            // layers with ImageRenderer and measuring their actual ink
+            // bounding boxes (at 8x supersampling, two tile sizes) found the
+            // opposite — the unfilled shield's ink is already dead-centered
+            // in its layout frame (SF Symbols bake balanced bounding-box
+            // padding into asymmetric shapes like this one), and so is every
+            // rating letter (G/T/M/E/?), to within a quarter point of
+            // sub-pixel rendering noise that changes sign between sizes
+            // rather than tracking the taper. The old offset had no basis in
+            // the render and was pushing the letter visibly high.
             Text(letter)
                 .font(.system(size: letterSize, weight: .bold, design: .rounded))
                 .foregroundStyle(item.iconColor ?? .gray)
-                // Shields taper at the bottom point, so their centroid sits
-                // above true geometric center — an un-offset letter reads low.
-                .offset(y: -tileSize / 36)
         }
     }
 
