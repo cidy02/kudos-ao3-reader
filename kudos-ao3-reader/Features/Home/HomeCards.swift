@@ -25,13 +25,16 @@ struct WorkCoverCard: View {
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                // A flexible spacer on both sides of the grid, not just below it —
+                // matches the Reading Queue mini-cards (ReadingQueues.gridCell),
+                // which center their icon grid between the title above and
+                // author/fandom below with even space on each side, rather than
+                // leaving it glued to the title.
+                Spacer(minLength: 4)
+
                 cardStats
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                // Pushes author/fandom/progress into their own group at the card's
-                // bottom edge, right above the progress bar, so the header (title +
-                // rating/category/warnings/completion icons) and the footer stay
-                // visually separate regardless of how much either side has.
                 Spacer(minLength: 4)
 
                 if !work.author.isEmpty {
@@ -143,10 +146,12 @@ struct AO3WorkCoverCard: View {
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                // Matches the local card's grouping — see `WorkCoverCard`.
+                Spacer(minLength: 4)
+
                 cardStats
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                // Matches the local card's grouping — see `WorkCoverCard`.
                 Spacer(minLength: 4)
 
                 if let author = work.authors.first, !author.isEmpty {
