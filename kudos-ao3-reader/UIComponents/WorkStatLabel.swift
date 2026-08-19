@@ -422,7 +422,10 @@ struct WorkStatusIconGrid: View {
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(item.iconColor ?? .gray)
         case "Other":
-            categoryText("⚧", item) // U+26A7 MALE WITH STROKE AND MALE AND FEMALE SIGN
+            // AO3's own icon here is the Uranus astrological symbol on a black
+            // background — the design team's pick for relationships that don't
+            // fit the other categories. See archiveofourown.org/help/symbols_key.
+            categoryText("♅", item) // U+2645 URANUS
         default:
             // "N/A" — nothing to symbolize.
             Image(systemName: item.symbol)
