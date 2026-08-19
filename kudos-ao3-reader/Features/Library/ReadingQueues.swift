@@ -328,11 +328,15 @@ struct ReadingQueueCard: View {
     }
 
     private func ratingShield(_ item: WorkTopStatsRow.Item) -> some View {
-        ZStack {
+        // "NR" (WorkStat.ratingLetter's own text for Not Rated) is two
+        // characters — cramped at this size, and "?" already reads as
+        // "unrated/unknown" without needing to fit two glyphs.
+        let letter = item.text == "NR" ? "?" : item.text
+        return ZStack {
             Image(systemName: "shield.fill")
                 .font(.system(size: 13))
                 .foregroundStyle(item.iconColor ?? .gray)
-            Text(item.text)
+            Text(letter)
                 .font(.system(size: 6, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 // Shields taper at the bottom point, so their centroid sits
