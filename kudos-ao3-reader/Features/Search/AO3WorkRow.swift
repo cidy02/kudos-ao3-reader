@@ -52,18 +52,19 @@ struct AO3WorkRow: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Title + author share a tight block so the hierarchy reads as one unit.
-            // The expand control leads the row, which leaves the trailing corner to
-            // the updated-date badge alone — the two were crowding each other, and
-            // the date is the longer of the pair.
+            // AO3's own quadrant tag grid leads the row now, in this app's chip
+            // colors/symbols (WorkStatusIconGrid) — a glanceable rating/category/
+            // warnings/completion read before the title, the same information
+            // WorkListStatsRow's text chips repeat lower on the card. The expand
+            // control moved to the card's bottom-right, below the stats row.
             HStack(alignment: .top, spacing: 8) {
-                // Always occupies its slot, hidden when there's nothing to expand:
-                // otherwise titles would start at two different x positions down a
-                // list of results, which reads as broken alignment rather than as
-                // an absent control.
-                expandButton
-                    .opacity(isExpandable ? 1 : 0)
-                    .accessibilityHidden(!isExpandable)
-                    .allowsHitTesting(isExpandable)
+                WorkStatusIconGrid(
+                    rating: work.rating.isEmpty ? nil : work.rating,
+                    categories: work.categories,
+                    warnings: work.warnings,
+                    completion: WorkCompletionStatus(isComplete: work.isComplete),
+                    isExpanded: expanded
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(work.title)
                         .font(.headline)
@@ -169,15 +170,26 @@ struct AO3WorkRow: View {
                 // It shows in the card's top-right corner, not here.
                 isExpanded: expanded
             )
+
+            // Bottom-right, below the stats row it controls — omitted entirely
+            // (not just hidden) when there's nothing to expand: unlike its old
+            // leading spot, nothing else on this row depends on its slot being
+            // reserved for alignment.
+            if isExpandable {
+                HStack {
+                    Spacer(minLength: 0)
+                    expandButton
+                }
+            }
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Leading expand/collapse control. A bordered circular button (not plain
-    /// text) so it reads as a tappable affordance; borderless interaction would
-    /// blend into the title. Captures its own tap so it never triggers the row's
-    /// navigation link.
+    /// Expand/collapse control, bottom-right of the card. A bordered circular
+    /// button (not plain text) so it reads as a tappable affordance; borderless
+    /// interaction would blend into the background. Captures its own tap so it
+    /// never triggers the row's navigation link.
     private var expandButton: some View {
         Button {
             // No `withAnimation`: these rows live in a `List`, and animating a

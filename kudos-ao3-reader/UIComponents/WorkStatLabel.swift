@@ -286,6 +286,99 @@ struct WorkTopStatsRow: View {
     }
 }
 
+/// Rating/category/warnings/completion as a compact icon-only 2×2 grid — AO3's
+/// own quadrant "tag grid" idea (Symbols Key: rating upper-left, category
+/// upper-right, warnings lower-right, completion lower-left — this follows the
+/// same reading order), reimagined in this app's own chip colors and symbols
+/// rather than AO3's flat colored-square-with-white-glyph badges.
+///
+/// Purely decorative — `topItems`' `WorkTopStatsRow.Item.accessibilityLabel`
+/// never reaches VoiceOver here (`.accessibilityHidden`), so callers must keep
+/// a real accessible summary of the same facts elsewhere (`WorkTopStatsRow`'s
+/// own text chips, or the card's title/stats row).
+struct WorkStatusIconGrid: View {
+    var rating: String?
+    var categories: [String] = []
+    var warnings: [String] = []
+    var completion: WorkCompletionStatus = .unknown
+    var isExpanded: Bool = false
+    /// Each tile's edge length; gap/corner-radius/glyph sizes all scale with it
+    /// so the grid stays proportional at any size a caller asks for.
+    var tileSize: CGFloat = 18
+
+    private var items: [WorkTopStatsRow.Item] {
+        WorkTopStatsRow(
+            rating: rating, categories: categories, warnings: warnings,
+            completion: completion, isExpanded: isExpanded
+        ).topItems
+    }
+
+    private var gap: CGFloat { tileSize * 3 / 18 }
+    private var cornerRadius: CGFloat { tileSize * 4 / 18 }
+    private var iconSize: CGFloat { tileSize * 10 / 18 }
+    private var shieldSize: CGFloat { tileSize * 12 / 18 }
+    private var letterSize: CGFloat { tileSize * 6 / 18 }
+
+    var body: some View {
+        let items = items
+        VStack(spacing: gap) {
+            HStack(spacing: gap) {
+                tile(!items.isEmpty ? items[0] : nil)
+                tile(items.count > 1 ? items[1] : nil)
+            }
+            HStack(spacing: gap) {
+                tile(items.count > 2 ? items[2] : nil)
+                tile(items.count > 3 ? items[3] : nil)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func tile(_ item: WorkTopStatsRow.Item?) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if let item {
+            shape
+                .fill((item.iconColor ?? .gray).opacity(0.3))
+                .overlay {
+                    // Rating (AO3's own quadrant reads a letter, not a checkmark):
+                    // no `{letter}.shield` SF Symbol exists — confirmed against
+                    // the live catalog, unlike `{letter}.circle`/`.square`, which
+                    // do — so the letter is composited by hand over a filled
+                    // shield instead of a single systemName.
+                    if item.symbol == "checkmark.shield" {
+                        ratingShield(item)
+                    } else {
+                        Image(systemName: item.symbol)
+                            .font(.system(size: iconSize, weight: .bold))
+                            .foregroundStyle(item.iconColor ?? .gray)
+                    }
+                }
+                .frame(width: tileSize, height: tileSize)
+        } else {
+            Color.clear.frame(width: tileSize, height: tileSize)
+        }
+    }
+
+    private func ratingShield(_ item: WorkTopStatsRow.Item) -> some View {
+        // "NR" (WorkStat.ratingLetter's own text for Not Rated) is two
+        // characters — cramped at this size, and "?" already reads as
+        // "unrated/unknown" without needing to fit two glyphs.
+        let letter = item.text == "NR" ? "?" : item.text
+        return ZStack {
+            Image(systemName: "shield.fill")
+                .font(.system(size: shieldSize))
+                .foregroundStyle(item.iconColor ?? .gray)
+            Text(letter)
+                .font(.system(size: letterSize, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                // Shields taper at the bottom point, so their centroid sits
+                // above true geometric center — an un-offset letter reads low.
+                .offset(y: -tileSize / 36)
+        }
+    }
+}
+
 /// The rating/word-count/chapters/kudos stat row on a detailed list row. Shared
 /// by `WorkRow` (local `SavedWork`) and `AO3WorkRow` (remote `AO3WorkSummary`)
 /// — each derives these already-formatted, already-nil-checked values from its
