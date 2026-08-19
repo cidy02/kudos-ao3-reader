@@ -65,10 +65,13 @@ struct MediaBrowserView: View {
     }
 
     #if os(iOS)
-    /// Two-column grid of category cards. Each cell draws its own card background
-    /// directly (the same recipe `.cardRow()` uses on a `List` row —
-    /// `theme.appTheme.cardSurface`/`cardBorder`/`cardShadow` — since a `List`
-    /// row's own chrome doesn't apply to a free-floating `LazyVGrid` cell).
+    /// Two independent columns, not a `LazyVGrid` — card height varies with
+    /// content (1-2 line title, 0-3 lines of "recently read" chips), and
+    /// `LazyVGrid` sizes every *row* to its tallest cell, so a short card next to
+    /// a tall one either wastes space or (padded to a shared height) still isn't
+    /// truly self-sizing. Splitting into two columns lets each one pack its own
+    /// cards back-to-back by their real height — masonry, like Google Keep —
+    /// with no fixed/minimum height needed at all.
     private var categoryGrid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
@@ -76,44 +79,9 @@ struct MediaBrowserView: View {
                     .font(.headline)
                     .padding(.horizontal, CardListMetrics.sideMargin)
 
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
-                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
-                    ],
-                    spacing: CardListMetrics.interCardSpacing
-                ) {
-                    ForEach(categories) { category in
-                        NavigationLink(value: category) {
-                            categoryCard(category)
-                                .padding(CardListMetrics.innerHorizontal)
-                                // A shared minHeight, top-aligned: LazyVGrid sizes each
-                                // row to its tallest cell, and this card's own height
-                                // varies with content (1-2 line title, and 0-3 lines of
-                                // "recently read" chips) — without a floor, the *gap*
-                                // between rows visibly changed depending on which
-                                // categories landed next to each other. minHeight isn't
-                                // a hard cap (a rare very-tall card can still exceed it),
-                                // but it makes the common case consistent.
-                                .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
-                                .background(
-                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                                        .fill(themeManager.appTheme.cardSurface)
-                                        .overlay(
-                                            RoundedRectangle(
-                                                cornerRadius: CardListMetrics.cornerRadius, style: .continuous
-                                            )
-                                            .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
-                                        )
-                                        .shadow(color: themeManager.appTheme.cardShadow.color,
-                                                radius: themeManager.appTheme.cardShadow.radius,
-                                                x: 0, y: themeManager.appTheme.cardShadow.y)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .onAppear { visibleCategoryIDs.insert(category.id) }
-                        .onDisappear { visibleCategoryIDs.remove(category.id) }
-                    }
+                HStack(alignment: .top, spacing: CardListMetrics.interCardSpacing) {
+                    categoryColumn(leftColumnCategories)
+                    categoryColumn(rightColumnCategories)
                 }
                 .padding(.horizontal, CardListMetrics.sideMargin)
 
@@ -131,6 +99,52 @@ struct MediaBrowserView: View {
             await AO3Client.shared.invalidateCachedResponses()
             await refresh()
         }
+    }
+
+    /// Alternating by index, not balanced by actual rendered height — SwiftUI
+    /// doesn't know a card's height before laying it out, so true height-aware
+    /// balancing needs a measure-then-place pass this doesn't do. Alternating
+    /// keeps both columns close enough in item *count* to look even in practice
+    /// for a page-sized category list; only pathological cases (one card far
+    /// taller than every other) would visibly unbalance it.
+    private var leftColumnCategories: [AO3MediaCategory] {
+        categories.enumerated().filter { $0.offset.isMultiple(of: 2) }.map(\.element)
+    }
+
+    private var rightColumnCategories: [AO3MediaCategory] {
+        categories.enumerated().filter { !$0.offset.isMultiple(of: 2) }.map(\.element)
+    }
+
+    /// One masonry column: each card sized to its own content, stacked directly
+    /// on the next with no shared row height. Draws its own card background (the
+    /// same recipe `.cardRow()` uses on a `List` row — `theme.appTheme.cardSurface`/
+    /// `cardBorder`/`cardShadow` — since a `List` row's own chrome doesn't apply
+    /// outside a `List`).
+    private func categoryColumn(_ items: [AO3MediaCategory]) -> some View {
+        VStack(spacing: CardListMetrics.interCardSpacing) {
+            ForEach(items) { category in
+                NavigationLink(value: category) {
+                    categoryCard(category)
+                        .padding(CardListMetrics.innerHorizontal)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .background(
+                            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                                .fill(themeManager.appTheme.cardSurface)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                                        .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
+                                )
+                                .shadow(color: themeManager.appTheme.cardShadow.color,
+                                        radius: themeManager.appTheme.cardShadow.radius,
+                                        x: 0, y: themeManager.appTheme.cardShadow.y)
+                        )
+                }
+                .buttonStyle(.plain)
+                .onAppear { visibleCategoryIDs.insert(category.id) }
+                .onDisappear { visibleCategoryIDs.remove(category.id) }
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
     #else
     private var categoryListMac: some View {
