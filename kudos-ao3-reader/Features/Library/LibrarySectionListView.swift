@@ -140,25 +140,28 @@ struct LibrarySectionListView: View {
                         WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                     }
                     #endif
-                } else if PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature) || hasAnyContent {
+                } else {
+                    let hasMature = PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature)
                     // Gated as a whole, not just its inner pieces — an empty HStack
                     // still reserves an (empty-looking) toolbar slot when the section
                     // has no works and no mature works to reveal.
                     //
                     // Matches the pattern already established in LibraryView.swift's
-                    // dashboard toolbar.
-                    ActionToolbar(items: [
-                        PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature)
-                            ? AnyView(MatureRevealToggle())
-                            : nil,
-                        hasAnyContent
-                            ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
-                                                    showingFilters: $showingFilters,
-                                                    filterHelp: "Filter the works in this section",
-                                                    onClearFilters: { filters = LibraryFilters() }))
-                            : nil,
-                        hasAnyContent
-                            ? AnyView(WorkListMoreMenu {
+                    // dashboard toolbar. WorkListMoreMenu's own gate widened to
+                    // `hasAnyContent || hasMature` — Privacy now lives inside it, so
+                    // it needs a home even when the section has no other content.
+                    if hasAnyContent || hasMature {
+                        ActionToolbar(items: [
+                            hasAnyContent
+                                ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
+                                                        showingFilters: $showingFilters,
+                                                        filterHelp: "Filter the works in this section",
+                                                        onClearFilters: { filters = LibraryFilters() }))
+                                : nil,
+                            AnyView(WorkListMoreMenu {
+                                if hasMature {
+                                    MatureRevealToggle()
+                                }
                                 if !items.isEmpty {
                                     Button {
                                         isSelecting = true
@@ -172,8 +175,8 @@ struct LibrarySectionListView: View {
                                     ExpandAllMenuItem(expandAll: $expandAll)
                                 }
                             })
-                            : nil
-                    ].compactMap { $0 })
+                        ].compactMap { $0 })
+                    }
                 }
             }
         #if os(iOS)

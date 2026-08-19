@@ -222,25 +222,32 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
                         }
                         #endif
-                    } else if PrivacyGate.hasVisibleMatureWorks(in: allLocalSectionWorks, hideMature: hideMature)
-                        || !allLocalSectionWorks.isEmpty {
+                    } else {
+                        let hasMature = PrivacyGate.hasVisibleMatureWorks(
+                            in: allLocalSectionWorks, hideMature: hideMature
+                        )
                         // Gated as a whole, not just its inner pieces — an empty HStack
                         // still reserves an (empty-looking) toolbar slot, which is
                         // exactly what showed a blank button when the Library was empty.
-                        ActionToolbar(items: [
-                            PrivacyGate.hasVisibleMatureWorks(in: allLocalSectionWorks, hideMature: hideMature)
-                                ? AnyView(MatureRevealToggle())
-                                : nil,
-                            !allLocalSectionWorks.isEmpty
-                                ? AnyView(WorkListMoreMenu {
-                                    Button {
-                                        enterSelectMode()
-                                    } label: {
-                                        Label("Select", systemImage: "checklist")
+                        // WorkListMoreMenu's own gate widened to
+                        // `!allLocalSectionWorks.isEmpty || hasMature` — Privacy now
+                        // lives inside it, so it needs a home even with no local works.
+                        if !allLocalSectionWorks.isEmpty || hasMature {
+                            ActionToolbar(items: [
+                                AnyView(WorkListMoreMenu {
+                                    if hasMature {
+                                        MatureRevealToggle()
+                                    }
+                                    if !allLocalSectionWorks.isEmpty {
+                                        Button {
+                                            enterSelectMode()
+                                        } label: {
+                                            Label("Select", systemImage: "checklist")
+                                        }
                                     }
                                 })
-                                : nil
-                        ].compactMap { $0 })
+                            ].compactMap { $0 })
+                        }
                     }
                 }
                 // Sheet for the dashboard carousel's New Queue card — same reliability

@@ -549,16 +549,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             let showsMature = PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature)
             let showsStatistics = !statisticsWorks.isEmpty
             let showsSelect = !works.isEmpty
-            let showsMoreMenu = showsStatistics || showsSelect
+            let showsMoreMenu = showsStatistics || showsSelect || showsMature
             // Gated as a whole, not just its inner pieces — an empty HStack (or a
             // WorkListMoreMenu with no items) still reserves an (empty-looking)
             // toolbar slot, which is exactly what showed a blank "..." button when
             // the Library was empty.
-            if showsMature || !works.isEmpty || showsMoreMenu {
-                // Filter sits directly visible, right after Privacy — everything
-                // else (Reading Insights, Select) lives behind the "..." menu.
+            if !works.isEmpty || showsMoreMenu {
+                // Filter is the only control that stays directly visible —
+                // Privacy now lives behind "..." too (with Reading Insights, Select).
                 ActionToolbar(items: [
-                    showsMature ? AnyView(MatureRevealToggle()) : nil,
                     !works.isEmpty
                         ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                 showingFilters: router.isShowing(.libraryFilters),
@@ -566,6 +565,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         : nil,
                     showsMoreMenu
                         ? AnyView(WorkListMoreMenu {
+                            if showsMature {
+                                MatureRevealToggle()
+                            }
                             if showsStatistics {
                                 NavigationLink {
                                     ReadingStatisticsView(works: statisticsWorks)
