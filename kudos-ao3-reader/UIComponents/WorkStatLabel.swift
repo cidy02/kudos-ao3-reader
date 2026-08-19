@@ -322,6 +322,13 @@ struct WorkStatusIconGrid: View {
     /// icons around them at the same point size — Apple Symbols draws them
     /// with more internal padding than SF Symbols' own icon metrics.
     private var pairingSymbolSize: CGFloat { tileSize * 12 / 18 }
+    /// Gen's sun glyph (☉) specifically reads much smaller than the other
+    /// icons at `pairingSymbolSize` — Apple Symbols draws it with far more
+    /// internal padding than the doubled-gender glyphs get. Measured its
+    /// rendered ink against the warning tile's own exclamationmark-circle
+    /// ink at both tile sizes: a font size equal to `tileSize` itself (not
+    /// `pairingSymbolSize`) lands within a couple percent of matching it.
+    private var genSymbolSize: CGFloat { tileSize }
     /// Multi tile geometry — a vector ring+stem motif, not a font glyph, so
     /// these are plain design ratios rather than anything measured. Two
     /// quadrants across exactly fill the tile.
@@ -443,23 +450,26 @@ struct WorkStatusIconGrid: View {
     private func categoryGlyph(_ item: WorkTopStatsRow.Item) -> some View {
         switch item.text {
         case "F/F":
-            categoryText("⚢", verticalOffset: 0.193, item) // U+26A2 DOUBLED FEMALE SIGN
+            categoryText("⚢", size: pairingSymbolSize, verticalOffset: 0.193, item) // U+26A2 DOUBLED FEMALE SIGN
         case "M/M":
-            categoryText("⚣", verticalOffset: 0.249, item) // U+26A3 DOUBLED MALE SIGN
+            categoryText("⚣", size: pairingSymbolSize, verticalOffset: 0.249, item) // U+26A3 DOUBLED MALE SIGN
         case "F/M":
-            categoryText("⚤", verticalOffset: 0.102, item) // U+26A4 INTERLOCKED FEMALE AND MALE SIGN
+            categoryText("⚤", size: pairingSymbolSize, verticalOffset: 0.102, item) // U+26A4 INTERLOCKED F+M SIGN
         case "Gen":
             // AO3's own icon here is the Sun astronomical symbol on a green
             // background — no pairing to symbolize since Gen means no
             // romantic/sexual focus. See archiveofourown.org/help/symbols_key.
-            categoryText("☉", verticalOffset: 0.120, item) // U+2609 SUN
+            // Sized to genSymbolSize, not pairingSymbolSize: measured against
+            // the warning tile's own ink, this glyph reads much smaller than
+            // the other pairing glyphs at the same font size.
+            categoryText("☉", size: genSymbolSize, verticalOffset: 0.120, item) // U+2609 SUN
         case "Multi":
             multiIcon
         case "Other":
             // AO3's own icon here is the Uranus astrological symbol on a black
             // background — the design team's pick for relationships that don't
             // fit the other categories. See archiveofourown.org/help/symbols_key.
-            categoryText("♅", verticalOffset: 0.129, item) // U+2645 URANUS
+            categoryText("♅", size: pairingSymbolSize, verticalOffset: 0.129, item) // U+2645 URANUS
         default:
             // "N/A" — nothing to symbolize.
             Image(systemName: item.symbol)
@@ -468,24 +478,27 @@ struct WorkStatusIconGrid: View {
         }
     }
 
-    /// - Parameter verticalOffset: fraction of `pairingSymbolSize` to shift
-    ///   down by. Apple Symbols' line-box metrics (ascent/descent) don't match
-    ///   these glyphs' own ink bounds — every one of them sits above the
-    ///   center of the box `Text` centers by default, so an un-offset glyph
-    ///   reads high, and by an amount that varies per glyph (measured via
+    /// - Parameter size: font size to render `symbol` at — `pairingSymbolSize`
+    ///   for every glyph except Gen's sun, which needs its own larger size.
+    /// - Parameter verticalOffset: fraction of `size` to shift down by. Apple
+    ///   Symbols' line-box metrics (ascent/descent) don't match these
+    ///   glyphs' own ink bounds — every one of them sits above the center of
+    ///   the box `Text` centers by default, so an un-offset glyph reads
+    ///   high, and by an amount that varies per glyph (measured via
     ///   CTFontGetBoundingRectsForGlyphs against CTFontGetAscent/GetDescent:
-    ///   ⚢ 19.3%, ⚣ 24.9%, ⚤ 10.2%, ♅ 12.9% of point size) rather than one
-    ///   constant that would only look right for one of them.
-    private func categoryText(_ symbol: String, verticalOffset: CGFloat, _ item: WorkTopStatsRow.Item) -> some View {
+    ///   ⚢ 19.3%, ⚣ 24.9%, ⚤ 10.2%, ☉ 12.0%, ♅ 12.9% of point size) rather
+    ///   than one constant that would only look right for one of them.
+    private func categoryText(_ symbol: String, size: CGFloat, verticalOffset: CGFloat, _ item: WorkTopStatsRow.Item)
+        -> some View {
         // `.system` hands these glyphs to the font-fallback cascade, which
         // doesn't always land on Apple Symbols even when it has the glyph —
         // confirmed via CoreText that ♅ resolves to Menlo instead, despite
         // Apple Symbols containing it. Naming the font directly skips the
         // cascade and guarantees the glyph AO3's own icon set intends.
         Text(symbol)
-            .font(.custom("AppleSymbols", size: pairingSymbolSize))
+            .font(.custom("AppleSymbols", size: size))
             .foregroundStyle(item.iconColor ?? .gray)
-            .offset(y: pairingSymbolSize * verticalOffset)
+            .offset(y: size * verticalOffset)
     }
 
     /// Multi has no single relationship to symbolize — AO3's own icon here is
