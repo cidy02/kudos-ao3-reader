@@ -54,7 +54,7 @@ extension WorkDetailView {
                             // Tap a tag → search AO3 for works carrying it. Full
                             // canonical text wraps (no truncation).
                             Button { router.searchAO3(group.field, tag) } label: {
-                                TagChip(text: tag, multiline: true)
+                                TagChip(text: tag, multiline: true, symbol: group.field.symbol)
                             }
                             .buttonStyle(.plain)
                             .minimumHitTarget(28)

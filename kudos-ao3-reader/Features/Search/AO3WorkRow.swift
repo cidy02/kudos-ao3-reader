@@ -241,7 +241,7 @@ struct AO3WorkRow: View {
                     .foregroundStyle(.tertiary)
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(tags, id: \.self) { tag in
-                        Button { router.searchAO3(field, tag) } label: { TagChip(text: tag) }
+                        Button { router.searchAO3(field, tag) } label: { TagChip(text: tag, symbol: field.symbol) }
                             .buttonStyle(.borderless)
                             .minimumHitTarget(28)
                     }
