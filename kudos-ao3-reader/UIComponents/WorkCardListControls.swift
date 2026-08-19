@@ -23,36 +23,19 @@ struct FilterButton: View {
 
     var body: some View {
         Button { showingFilters = true } label: {
-            // "line.3.horizontal.decrease" — the funnel-shaped filter glyph
-            // without a circle around it (there is no plain "funnel" SF
-            // Symbol; confirmed via NSImage(systemSymbolName:), the literal
-            // name silently fails to resolve and Label/Button falls back to
-            // showing the text title instead of a broken icon, which is
-            // exactly the bug this replaces). No dedicated ".fill" asset for
-            // this glyph either, so the active state comes from
-            // .symbolVariant instead of a second name.
-            //
-            // Custom icon view (not a plain `Label("Filter", systemImage:)`)
-            // because the active state needs a real solid badge — Messages'
-            // own filter chip: neutral outline glyph normally, a filled
-            // accent-colored circle with a white glyph once a filter is on.
-            // Neither `.tint()` nor `.foregroundStyle()` alone produces that;
-            // both only recolor the glyph, not draw a background behind it.
-            Label {
-                Text("Filter")
-            } icon: {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .symbolVariant(filtersActive ? .fill : .none)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(filtersActive ? Color.white : Color.primary)
-                    .frame(width: 28, height: 28)
-                    .background {
-                        if filtersActive {
-                            Circle().fill(Color.accentColor)
-                        }
-                    }
-            }
+            // "line.3.horizontal.decrease.circle"/".circle.fill" — the actual SF
+            // Symbols Mail.app uses for this same on/off filter state (confirmed
+            // via NSImage(systemSymbolName:); an earlier version of this comment
+            // claimed no filled variant existed, which was wrong — that search was
+            // against the circle-less base glyph, not this one). The circle is
+            // part of the glyph itself, not a hand-drawn background, so `.tint()`
+            // alone renders the whole badge correctly through the toolbar's
+            // Liquid Glass pipeline — no custom background/buttonStyle needed.
+            Label("Filter", systemImage: filtersActive
+                ? "line.3.horizontal.decrease.circle.fill"
+                : "line.3.horizontal.decrease.circle")
         }
+        .tint(filtersActive ? Color.accentColor : Color.primary)
         .labelStyle(.iconOnly)
         .help(filterHelp)
         .contextMenu {

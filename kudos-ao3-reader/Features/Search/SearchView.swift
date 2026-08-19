@@ -644,6 +644,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     private func runSearch() {
         guard filters.isSearchable else { return }
+        // Close the filters panel — the other AO3FilterPanel call sites
+        // (NativeBrowseView's applyFilters, AO3AccountWorksList) already dismiss
+        // on apply; this was the one left open after running the search.
+        router.panel = .none
         phase = .loading
         results = []
         currentPage = 1
