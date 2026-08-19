@@ -322,8 +322,12 @@ struct WorkStatusIconGrid: View {
     /// icons around them at the same point size — Apple Symbols draws them
     /// with more internal padding than SF Symbols' own icon metrics.
     private var pairingSymbolSize: CGFloat { tileSize * 12 / 18 }
-    /// Font size for the four "⚲" glyphs that make up the Multi tile.
-    private var multiGlyphFontSize: CGFloat { tileSize / 3 }
+    /// Multi tile geometry — a vector ring+stem motif (`NeuterMotif`), not a
+    /// font glyph, so these are plain design ratios rather than anything
+    /// measured. Two quadrants across exactly fill the tile.
+    private var multiQuadrantSize: CGFloat { tileSize / 2 }
+    private var multiRingDiameter: CGFloat { tileSize / 3 }
+    private var multiLineWidth: CGFloat { max(tileSize / 14, 1) }
 
     var body: some View {
         let items = items
@@ -480,151 +484,106 @@ struct WorkStatusIconGrid: View {
     }
 
     /// Multi has no single relationship to symbolize — AO3's own icon here is
-    /// a small multi-color grid. This builds an equivalent from four "⚲"
-    /// glyphs (NEUTER, U+26B2 — a circle with one stem), each rotated 90°
-    /// further than the last and positioned so its stem tip touches the next
-    /// glyph's circle edge, forming a closed loop. Each quadrant is tinted
-    /// per relationship type rather than one shared color: General (green,
-    /// matching `categoryColor("Gen")`), Straight/F-M (purple), Lesbian/F-F
-    /// (red), Gay/M-M (blue) — each square tinted at the same `.opacity(0.3)`
-    /// every other tile's background uses, with its glyph in the same color
-    /// at full strength on top, matching the colored-line-on-tinted-
-    /// background look the other three category tiles already use.
+    /// a small multi-color grid. This builds an equivalent from four
+    /// `NeuterMotif` ring+stem shapes (a vector stand-in for NEUTER, U+26B2 —
+    /// no font involved), each rotated 90° further than the last and
+    /// positioned so its stem tip touches the next glyph's ring edge,
+    /// forming a closed loop. Each quadrant is tinted per relationship type
+    /// rather than one shared color: General (green, matching
+    /// `categoryColor("Gen")`), F/M (purple), F/F (red), M/M (blue) — each
+    /// square tinted at the same `.opacity(0.3)` every other tile's
+    /// background uses, with its motif in the same color at full strength on
+    /// top, matching the colored-line-on-tinted-background look the other
+    /// three category tiles already use.
+    ///
+    /// Quadrant centers sit at (±quadrantSize/2, ±quadrantSize/2), and since
+    /// quadrantSize is exactly tileSize/2, two quadrants across always fill
+    /// the tile exactly — no per-size measurement or post-hoc scaling needed
+    /// the way the font-glyph version this replaced required.
     private var multiIcon: some View {
-        let geometry = MultiGlyphGeometry.measured(tileSize: tileSize)
-        let placements = MultiGlyphGeometry.placements(geometry)
-        let squareSize = geometry.halfSpacing * 2
-        // The touching-stem geometry is measured at each glyph's own natural
-        // size, which doesn't happen to fill the tile — scaling the whole
-        // composite up (not re-measuring at a bigger font) preserves the
-        // touching relationship exactly, since a uniform scale can't change
-        // proportions. Corner radius is scaled down first so it lands back
-        // on the tile's own `cornerRadius` once the transform is applied.
-        let scaleFactor = (tileSize / 2) / squareSize
-        let preScaleCornerRadius = cornerRadius / scaleFactor
+        let half = multiQuadrantSize / 2
+        // The ring's own center, in its unrotated local frame (a
+        // multiRingDiameter × multiQuadrantSize box with the ring at the top
+        // and the stem running down to the bottom edge), relative to that
+        // frame's center.
+        let localRingOffset = CGPoint(x: 0, y: multiRingDiameter / 2 - half)
+        let quadrants: [MultiQuadrant] = [
+            MultiQuadrant(rotation: -90, squareCenter: CGPoint(x: -half, y: -half), color: .green), // top-left — Gen
+            MultiQuadrant(rotation: 0, squareCenter: CGPoint(x: half, y: -half), color: .purple), // top-right — F/M
+            MultiQuadrant(rotation: 180, squareCenter: CGPoint(x: -half, y: half), color: .red), // bottom-left — F/F
+            MultiQuadrant(rotation: 90, squareCenter: CGPoint(x: half, y: half), color: .blue), // bottom-right — M/M
+        ]
         return ZStack {
-            ForEach(placements.indices, id: \.self) { i in
-                let placement = placements[i]
-                // Only the corner facing away from the mosaic's center is
+            ForEach(quadrants.indices, id: \.self) { i in
+                let quadrant = quadrants[i]
+                // Only the corner facing away from the tile's center is
                 // rounded — the other three meet a neighbor or the shared
                 // center point and stay sharp, so the four quadrants read as
                 // one shape from outside.
-                let center = placement.squareCenter
+                let center = quadrant.squareCenter
                 UnevenRoundedRectangle(
-                    topLeadingRadius: center.x < 0 && center.y < 0 ? preScaleCornerRadius : 0,
-                    bottomLeadingRadius: center.x < 0 && center.y > 0 ? preScaleCornerRadius : 0,
-                    bottomTrailingRadius: center.x > 0 && center.y > 0 ? preScaleCornerRadius : 0,
-                    topTrailingRadius: center.x > 0 && center.y < 0 ? preScaleCornerRadius : 0,
+                    topLeadingRadius: center.x < 0 && center.y < 0 ? cornerRadius : 0,
+                    bottomLeadingRadius: center.x < 0 && center.y > 0 ? cornerRadius : 0,
+                    bottomTrailingRadius: center.x > 0 && center.y > 0 ? cornerRadius : 0,
+                    topTrailingRadius: center.x > 0 && center.y < 0 ? cornerRadius : 0,
                     style: .continuous
                 )
-                .fill(placement.color.opacity(0.3))
-                .frame(width: squareSize, height: squareSize)
+                .fill(quadrant.color.opacity(0.3))
+                .frame(width: multiQuadrantSize, height: multiQuadrantSize)
                 .offset(x: center.x, y: center.y)
             }
-            ForEach(placements.indices, id: \.self) { i in
-                let placement = placements[i]
-                // Named directly (not `.system`) for the same reason as the
-                // pairing glyphs: guarantees Apple Symbols' glyph shape
-                // rather than whatever the fallback cascade picks.
-                Text("⚲")
-                    .font(.custom("AppleSymbols", size: multiGlyphFontSize))
-                    .foregroundStyle(placement.color)
-                    .rotationEffect(.degrees(placement.rotation))
-                    .offset(placement.glyphOffset)
+            ForEach(quadrants.indices, id: \.self) { i in
+                let quadrant = quadrants[i]
+                let rotatedRing = rotate(localRingOffset, degrees: quadrant.rotation)
+                let motifOffset = CGSize(
+                    width: quadrant.squareCenter.x - rotatedRing.x,
+                    height: quadrant.squareCenter.y - rotatedRing.y
+                )
+                NeuterMotif()
+                    .stroke(quadrant.color, style: StrokeStyle(lineWidth: multiLineWidth, lineCap: .round))
+                    .frame(width: multiRingDiameter, height: multiQuadrantSize)
+                    .rotationEffect(.degrees(quadrant.rotation))
+                    .offset(motifOffset)
             }
         }
-        .scaleEffect(scaleFactor)
         .frame(width: tileSize, height: tileSize)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
-}
 
-/// Geometry for `WorkStatusIconGrid`'s Multi tile: where "⚲"'s circle sits
-/// relative to its own rotation pivot (Text's layout center), its radius, and
-/// its stem's length — measured once per font size by rasterizing the glyph
-/// with `ImageRenderer` and row-profiling its ink to separate the circle
-/// (the smoothly-tapering round part) from the stem (the constant-width
-/// tail), rather than assumed from the font's advertised metrics.
-private struct MultiGlyphGeometry {
-    let circleOffset: CGPoint
-    let radius: CGFloat
-    let stemLength: CGFloat
-    /// Distance from the mosaic's center to each circle's center. Placing
-    /// circle centers at (±halfSpacing, ±halfSpacing) makes adjacent
-    /// glyphs' center-to-center distance exactly stemLength + radius — the
-    /// spacing at which a stem tip lands exactly on the neighbor's circle
-    /// edge, given each stem points in a pure cardinal direction (measured:
-    /// its own horizontal drift is under 0.03pt, negligible).
-    var halfSpacing: CGFloat { (stemLength + radius) / 2 }
-
-    /// Measured directly at the two sizes this grid is actually used at
-    /// (18pt default tileSize → 6pt glyphs, 27pt search-card tileSize → 9pt
-    /// glyphs) — not extrapolated from one, since small glyph metrics don't
-    /// scale linearly with size (confirmed earlier while centering the
-    /// rating shield's letter, where a real offset stayed ~constant in
-    /// points rather than scaling with tileSize). Any other tileSize falls
-    /// back to the 18pt measurement.
-    ///
-    /// `circleOffset` MUST be measured against `.custom("AppleSymbols",
-    /// size:)` specifically, not `.system(size:)` — even though `.system`
-    /// happens to render the same glyph shape (via its own fallback to
-    /// Apple Symbols), Text centers by the *requested* font's line-box
-    /// metrics, not the fallback's. An earlier measurement done against
-    /// `.system` put the circle's center off by roughly 1.5pt at both
-    /// sizes — small enough to look like touching still worked (stem
-    /// lengths and radii, which come purely from the glyph's own ink and
-    /// don't depend on which font was requested, were unaffected), but
-    /// large enough that each circle visibly sat off-center in its square.
-    static func measured(tileSize: CGFloat) -> MultiGlyphGeometry {
-        tileSize >= 22
-            ? MultiGlyphGeometry(circleOffset: CGPoint(x: -0.094, y: -2.406), radius: 2.094, stemLength: 4.344)
-            : MultiGlyphGeometry(circleOffset: CGPoint(x: -0.063, y: -1.969), radius: 1.422, stemLength: 2.906)
-    }
-
-    struct Placement {
-        let rotation: Double
-        let glyphOffset: CGSize
-        let squareCenter: CGPoint
-        let color: Color
-    }
-
-    private struct Slot {
-        let rotation: Double
-        let squareCenter: CGPoint
-        let color: Color
-    }
-
-    /// Solves each glyph's placement offset so its circle lands exactly on
-    /// its assigned grid slot: rotation pivots around the glyph's own layout
-    /// center, so a glyph's circle ends up at `Rotate(θ)·circleOffset`
-    /// before any additional offset — the offset needed is simply the
-    /// desired slot position minus that.
-    static func placements(_ geometry: MultiGlyphGeometry) -> [Placement] {
-        let s2 = geometry.halfSpacing
-        let slots: [Slot] = [
-            Slot(rotation: -90, squareCenter: CGPoint(x: -s2, y: -s2), color: .green), // top-left — General
-            Slot(rotation: 0, squareCenter: CGPoint(x: s2, y: -s2), color: .purple), // top-right — Straight
-            Slot(rotation: 180, squareCenter: CGPoint(x: -s2, y: s2), color: .red), // bottom-left — Lesbian
-            Slot(rotation: 90, squareCenter: CGPoint(x: s2, y: s2), color: .blue), // bottom-right — Gay
-        ]
-        return slots.map { slot in
-            let rotatedCircle = rotate(geometry.circleOffset, degrees: slot.rotation)
-            let glyphOffset = CGSize(
-                width: slot.squareCenter.x - rotatedCircle.x,
-                height: slot.squareCenter.y - rotatedCircle.y
-            )
-            return Placement(
-                rotation: slot.rotation, glyphOffset: glyphOffset, squareCenter: slot.squareCenter, color: slot.color
-            )
-        }
-    }
-
-    private static func rotate(_ point: CGPoint, degrees: Double) -> CGPoint {
+    private func rotate(_ point: CGPoint, degrees: Double) -> CGPoint {
         let radians = degrees * .pi / 180
         return CGPoint(
             x: point.x * cos(radians) - point.y * sin(radians),
             y: point.x * sin(radians) + point.y * cos(radians)
         )
+    }
+}
+
+private struct MultiQuadrant {
+    let rotation: Double
+    let squareCenter: CGPoint
+    let color: Color
+}
+
+/// A relationship-category ring+stem motif, drawn as plain vector geometry
+/// (no font involved) so it scales losslessly at any tile size. Fills
+/// whatever rect it's given: a ring whose diameter equals the rect's width,
+/// sitting at the top, with a stem running from the ring's bottom edge to
+/// the rect's bottom edge. `WorkStatusIconGrid.multiIcon` rotates and
+/// positions four of these (one per relationship-category color) so each
+/// one's stem tip touches the next one's ring, forming a closed loop.
+private struct NeuterMotif: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let diameter = rect.width
+        let radius = diameter / 2
+        let ringCenter = CGPoint(x: rect.midX, y: rect.minY + radius)
+        path.addEllipse(in: CGRect(
+            x: ringCenter.x - radius, y: ringCenter.y - radius, width: diameter, height: diameter
+        ))
+        path.move(to: CGPoint(x: rect.midX, y: ringCenter.y + radius))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        return path
     }
 }
 
