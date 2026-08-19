@@ -366,12 +366,17 @@ struct WorkStatusIconGrid: View {
         // "unrated/unknown" without needing to fit two glyphs.
         let letter = item.text == "NR" ? "?" : item.text
         return ZStack {
-            Image(systemName: "shield.fill")
+            // Unfilled outline, not `.shield.fill` — a solid block was the odd
+            // one out next to the other 3 tiles' own colored-line-on-tinted-
+            // background treatment. The letter now sits on that same tint
+            // rather than a solid fill, so it's colored to match instead of
+            // needing white for contrast.
+            Image(systemName: "shield")
                 .font(.system(size: shieldSize))
                 .foregroundStyle(item.iconColor ?? .gray)
             Text(letter)
                 .font(.system(size: letterSize, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(item.iconColor ?? .gray)
                 // Shields taper at the bottom point, so their centroid sits
                 // above true geometric center — an un-offset letter reads low.
                 .offset(y: -tileSize / 36)
