@@ -435,10 +435,10 @@ struct WorkStatusIconGrid: View {
         case "F/M":
             categoryText("⚤", verticalOffset: 0.102, item) // U+26A4 INTERLOCKED FEMALE AND MALE SIGN
         case "Gen":
-            // No pairing to symbolize — Gen means no romantic/sexual focus.
-            Image(systemName: "person.fill")
-                .font(.system(size: iconSize, weight: .bold))
-                .foregroundStyle(item.iconColor ?? .gray)
+            // AO3's own icon here is the Sun astronomical symbol on a green
+            // background — no pairing to symbolize since Gen means no
+            // romantic/sexual focus. See archiveofourown.org/help/symbols_key.
+            categoryText("☉", verticalOffset: 0.120, item) // U+2609 SUN
         case "Multi":
             multiIcon
         case "Other":
