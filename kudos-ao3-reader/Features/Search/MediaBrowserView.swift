@@ -101,19 +101,46 @@ struct MediaBrowserView: View {
         }
     }
 
-    /// Alternating by index, not balanced by actual rendered height — SwiftUI
-    /// doesn't know a card's height before laying it out, so true height-aware
-    /// balancing needs a measure-then-place pass this doesn't do. Alternating
-    /// keeps both columns close enough in item *count* to look even in practice
-    /// for a page-sized category list; only pathological cases (one card far
-    /// taller than every other) would visibly unbalance it.
-    private var leftColumnCategories: [AO3MediaCategory] {
-        categories.enumerated().filter { $0.offset.isMultiple(of: 2) }.map(\.element)
+    /// Greedy shortest-column assignment by *estimated* height, not alternating
+    /// by index — index alternation assumes every card is roughly the same
+    /// height, but this card's height varies a lot: a category with several
+    /// "recently read" chips runs noticeably taller than one with none, and
+    /// alternation can easily stack all the tall ones in one column, leaving the
+    /// other visibly shorter with empty space at the bottom (exactly what
+    /// happened with Movies/Other Media/TV Shows landing together on the left).
+    /// SwiftUI doesn't report a view's real height before layout, so this is a
+    /// content-based estimate, not a measurement — good enough to keep both
+    /// columns close without a measure-then-place rendering pass.
+    private var columnAssignment: (left: [AO3MediaCategory], right: [AO3MediaCategory]) {
+        var left: [AO3MediaCategory] = []
+        var right: [AO3MediaCategory] = []
+        var leftHeight: CGFloat = 0
+        var rightHeight: CGFloat = 0
+        for category in categories {
+            let height = estimatedCardHeight(category)
+            if leftHeight <= rightHeight {
+                left.append(category)
+                leftHeight += height
+            } else {
+                right.append(category)
+                rightHeight += height
+            }
+        }
+        return (left, right)
     }
 
-    private var rightColumnCategories: [AO3MediaCategory] {
-        categories.enumerated().filter { !$0.offset.isMultiple(of: 2) }.map(\.element)
+    /// Icon/name row + stats line + card padding is roughly constant across
+    /// every card; the "Recently read" block (present only once stats have
+    /// loaded, 0-3 chips) is what actually varies, so that's the only part
+    /// estimated per chip rather than measured.
+    private func estimatedCardHeight(_ category: AO3MediaCategory) -> CGFloat {
+        let base: CGFloat = 90
+        guard let recent = statsByCategory[category.id]?.recentFandoms, !recent.isEmpty else { return base }
+        return base + 20 + CGFloat(recent.count) * 30
     }
+
+    private var leftColumnCategories: [AO3MediaCategory] { columnAssignment.left }
+    private var rightColumnCategories: [AO3MediaCategory] { columnAssignment.right }
 
     /// One masonry column: each card sized to its own content, stacked directly
     /// on the next with no shared row height. Draws its own card background (the
