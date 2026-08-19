@@ -348,6 +348,8 @@ struct WorkStatusIconGrid: View {
                     // shield instead of a single systemName.
                     if item.symbol == "checkmark.shield" {
                         ratingShield(item)
+                    } else if item.symbol == "person.2.fill" {
+                        categoryGlyph(item)
                     } else {
                         Image(systemName: item.symbol)
                             .font(.system(size: iconSize, weight: .bold))
@@ -381,6 +383,54 @@ struct WorkStatusIconGrid: View {
                 // above true geometric center — an un-offset letter reads low.
                 .offset(y: -tileSize / 36)
         }
+    }
+
+    /// Category (AO3's own quadrant pairs a gender symbol per orientation, not
+    /// one generic icon for all of them): no SF Symbol ships literal ♀/♂ glyphs
+    /// — Apple dropped gender-specific symbols from the catalog — so these are
+    /// composited from the actual Unicode characters, overlapping like a Venn
+    /// diagram rather than sitting side by side. `item.text` is AO3's own raw
+    /// category string ("F/F"/"M/M"/"F/M"/"Gen"/"Multi"/"Other"/"N/A"), already
+    /// resolved by `WorkTopStatsRow.topItems` — reused here rather than
+    /// re-deriving the category from anywhere else.
+    @ViewBuilder
+    private func categoryGlyph(_ item: WorkTopStatsRow.Item) -> some View {
+        switch item.text {
+        case "F/F":
+            genderOverlap("♀", "♀", item)
+        case "M/M":
+            genderOverlap("♂", "♂", item)
+        case "F/M":
+            genderOverlap("♂", "♀", item)
+        case "Gen":
+            // No pairing to symbolize — Gen means no romantic/sexual focus.
+            Image(systemName: "person.fill")
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundStyle(item.iconColor ?? .gray)
+        case "Multi":
+            // More than a pair, not a specific one — AO3's own icon here is a
+            // small multi-color grid; a third figure reads the same idea
+            // without needing a color mix at this size.
+            Image(systemName: "person.3.fill")
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundStyle(item.iconColor ?? .gray)
+        default:
+            // "Other" and "N/A" — nothing more specific to symbolize.
+            Image(systemName: item.symbol)
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundStyle(item.iconColor ?? .gray)
+        }
+    }
+
+    private func genderOverlap(_ leading: String, _ trailing: String, _ item: WorkTopStatsRow.Item) -> some View {
+        ZStack {
+            Text(leading)
+                .offset(x: -iconSize * 0.22)
+            Text(trailing)
+                .offset(x: iconSize * 0.22)
+        }
+        .font(.system(size: iconSize, weight: .bold))
+        .foregroundStyle(item.iconColor ?? .gray)
     }
 }
 
