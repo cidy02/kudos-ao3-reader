@@ -562,10 +562,21 @@ private struct MultiGlyphGeometry {
     /// rating shield's letter, where a real offset stayed ~constant in
     /// points rather than scaling with tileSize). Any other tileSize falls
     /// back to the 18pt measurement.
+    ///
+    /// `circleOffset` MUST be measured against `.custom("AppleSymbols",
+    /// size:)` specifically, not `.system(size:)` — even though `.system`
+    /// happens to render the same glyph shape (via its own fallback to
+    /// Apple Symbols), Text centers by the *requested* font's line-box
+    /// metrics, not the fallback's. An earlier measurement done against
+    /// `.system` put the circle's center off by roughly 1.5pt at both
+    /// sizes — small enough to look like touching still worked (stem
+    /// lengths and radii, which come purely from the glyph's own ink and
+    /// don't depend on which font was requested, were unaffected), but
+    /// large enough that each circle visibly sat off-center in its square.
     static func measured(tileSize: CGFloat) -> MultiGlyphGeometry {
         tileSize >= 22
-            ? MultiGlyphGeometry(circleOffset: CGPoint(x: -0.094, y: -0.906), radius: 2.094, stemLength: 4.344)
-            : MultiGlyphGeometry(circleOffset: CGPoint(x: -0.063, y: -0.969), radius: 1.422, stemLength: 2.906)
+            ? MultiGlyphGeometry(circleOffset: CGPoint(x: -0.094, y: -2.406), radius: 2.094, stemLength: 4.344)
+            : MultiGlyphGeometry(circleOffset: CGPoint(x: -0.063, y: -1.969), radius: 1.422, stemLength: 2.906)
     }
 
     struct Placement {
