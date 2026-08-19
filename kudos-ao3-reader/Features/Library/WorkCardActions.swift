@@ -427,6 +427,10 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     Label("Delete", systemImage: "trash")
                 }
             }
+            // Neutral, not the ambient accent (red) — matches WorkListMoreMenu.
+            // Destructive items (Delete above) keep their system red regardless,
+            // since `role: .destructive` overrides ambient tint.
+            .tint(Color.primary)
             .sheet(isPresented: $showingAddToQueue) {
                 AddToQueueView(work: work)
             }
@@ -665,6 +669,9 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     Label("Work Details", systemImage: "info.circle")
                 }
             }
+            // Neutral, not the ambient accent (red) — matches WorkListMoreMenu /
+            // LocalWorkContextMenuModifier. Delete keeps its system red regardless.
+            .tint(Color.primary)
             .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
             .sheet(item: $queueWork) { AddToQueueView(work: $0) }
             .sheet(item: $collectionWork) { AddToCollectionView(work: $0) }
