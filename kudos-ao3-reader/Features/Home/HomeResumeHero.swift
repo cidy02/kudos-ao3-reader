@@ -109,22 +109,38 @@ private struct UnblurredHomeResumeHero: View {
             : nil
 
         return VStack(alignment: .leading, spacing: 12) {
-            Text(work.title)
-                .font(.title3.weight(.bold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Tag grid sits beside the title, top-right — matches the compact
+            // work cards (WorkCoverCard) rather than a separate stats row
+            // below, which would otherwise repeat the same four facts twice.
+            HStack(alignment: .top, spacing: 8) {
+                Text(work.title)
+                    .font(.title3.weight(.bold))
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                WorkStatusIconGrid(
+                    rating: work.rating.isEmpty ? nil : work.rating,
+                    categories: work.workCategories,
+                    warnings: work.workWarnings,
+                    completion: work.completionStatus,
+                    tileSize: 27,
+                    announcesToVoiceOver: true
+                )
+            }
 
             // Author/fandom share the stat row's own component (not
             // CardMetaLabel) so their text and icons read at exactly the same
-            // size as the rating/chapters/completion/word-count row below —
-            // one metadata family, not two different scales.
+            // size as the language/words/chapters row below — one metadata
+            // family, not two different scales. No iconColor override: the
+            // default (WorkStatLabel's own .secondary) is correct here — this
+            // isn't a state indicator, forcing the app's accent tint just
+            // made the icon read as active/red for no reason.
             if !work.author.isEmpty {
                 WorkStatLabel(
                     text: work.author,
                     symbol: "person",
-                    accessibilityLabel: "Author: \(work.author)",
-                    iconColor: themeManager.effectiveTint
+                    accessibilityLabel: "Author: \(work.author)"
                 )
                 .font(.caption)
             }
@@ -133,24 +149,10 @@ private struct UnblurredHomeResumeHero: View {
                 WorkStatLabel(
                     text: fandom,
                     symbol: "books.vertical",
-                    accessibilityLabel: "Fandom: \(fandom)",
-                    iconColor: themeManager.effectiveTint
+                    accessibilityLabel: "Fandom: \(fandom)"
                 )
                 .font(.caption)
             }
-
-            // Same four-chip Rating/Pairings/Warnings/Completion row the
-            // search-result cards show (WorkListStatsRow's top row), so the
-            // hero reads as one identity-facts family with the rest of the
-            // app instead of a compressed 4-stat line of its own.
-            WorkTopStatsRow(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.workCategories,
-                warnings: work.workWarnings,
-                completion: work.completionStatus
-            )
-            .font(.caption2)
-            .foregroundStyle(.secondary)
 
             // Language/words/chapters below the identity chips — the hero's
             // own shorter second row, not WorkListStatsRow's full one (which

@@ -58,12 +58,27 @@ struct WorkDetailHeroCard: View {
         // card inside another card's chrome would double up the background.
         let hue = CoverArt.hue(for: title)
         return VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.title3.weight(.bold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
+            // Tag grid sits beside the title, top-right — matches the compact
+            // work cards (WorkCoverCard) and HomeResumeHero rather than a
+            // separate stats row below, which would otherwise repeat the same
+            // four facts twice.
+            HStack(alignment: .top, spacing: 8) {
+                Text(title)
+                    .font(.title3.weight(.bold))
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+
+                WorkStatusIconGrid(
+                    rating: rating.isEmpty ? nil : rating,
+                    categories: categories,
+                    warnings: warnings,
+                    completion: completion,
+                    tileSize: 27,
+                    announcesToVoiceOver: true
+                )
+            }
 
             // `.caption`-sized, matching the "Continue Reading" hero's
             // author/fandom (WorkStatLabel) so the metadata reads as one
@@ -84,6 +99,10 @@ struct WorkDetailHeroCard: View {
                 // the Label's own font — two different glyph sizes on two
                 // different baselines, which is exactly the column alignment
                 // the comment above was trying to guarantee.
+                //
+                // Icon is .secondary, matching the Fandoms label right below —
+                // not themeManager.effectiveTint (the app's red accent), which
+                // made this read as an active/state icon for no reason.
                 Label {
                     AO3AuthorBylineView(
                         names: authors,
@@ -93,7 +112,7 @@ struct WorkDetailHeroCard: View {
                     )
                 } icon: {
                     Image(systemName: "person")
-                        .foregroundStyle(themeManager.effectiveTint)
+                        .foregroundStyle(.secondary)
                 }
                 .font(.caption)
             }
@@ -108,18 +127,6 @@ struct WorkDetailHeroCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
             }
-
-            // Same four-chip Rating/Pairings/Warnings/Completion row the
-            // search-result cards show (WorkListStatsRow's top row) — see
-            // HomeResumeHero.swift for the matching Home hero treatment.
-            WorkTopStatsRow(
-                rating: rating.isEmpty ? nil : rating,
-                categories: categories,
-                warnings: warnings,
-                completion: completion
-            )
-            .font(.caption2)
-            .foregroundStyle(.secondary)
 
             FlowLayout(spacing: 10, rowSpacing: 6) {
                 if !language.isEmpty {
