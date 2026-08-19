@@ -46,18 +46,14 @@ struct WorkDetailHeroCard: View {
     var lastSpineIndex: Int = 0
 
     var body: some View {
-        // Byte-for-byte the same card as HomeResumeHero.swift's
-        // UnblurredHomeResumeHero — same background/border/shadow, same
-        // VStack spacing and padding, same title/stat-row treatment — per
-        // the owner's explicit "copy it exactly" request. This supersedes
-        // the file header comment above (work-content cards keeping the
-        // Library's `.cardRow()` geometry): that was a *prior* design
-        // decision, not a hard constraint, and the owner asked for this one
-        // specifically. `.cardRow()` was removed from this card's call site
-        // in WorkDetailView.swift for the same reason — a self-contained
+        // Same VStack spacing/padding and title/stat-row treatment as
+        // HomeResumeHero.swift's UnblurredHomeResumeHero, but its own plain
+        // background (see the .background block below) rather than that card's
+        // per-work hue tint — this hero is the only card on the page, so there's
+        // no sibling to distinguish it from. `.cardRow()` was removed from this
+        // card's call site in WorkDetailView.swift regardless — a self-contained
         // card inside another card's chrome would double up the background.
-        let hue = CoverArt.hue(for: title)
-        return VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             // Tag grid sits beside the title, top-right — matches the compact
             // work cards (WorkCoverCard) and HomeResumeHero rather than a
             // separate stats row below, which would otherwise repeat the same
@@ -103,12 +99,18 @@ struct WorkDetailHeroCard: View {
                 // Icon is .secondary, matching the Fandoms label right below —
                 // not themeManager.effectiveTint (the app's red accent), which
                 // made this read as an active/state icon for no reason.
+                //
+                // expandsHitTarget: false — its default (true) gives each name
+                // its own top-aligned 28pt hit box, which visibly desyncs this
+                // icon from the byline's vertical center once that box is
+                // taller than the .caption text itself.
                 Label {
                     AO3AuthorBylineView(
                         names: authors,
                         identities: identities,
                         includesBy: false,
-                        font: .caption
+                        font: .caption,
+                        expandsHitTarget: false
                     )
                 } icon: {
                     Image(systemName: "person")
@@ -179,21 +181,22 @@ struct WorkDetailHeroCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        // Plain theme card surface, not HomeResumeHero's per-work hue tint: this
+        // hero is the only card on the page, so there's no sibling to visually
+        // distinguish it from, and coloring it made the page read like a carousel
+        // item rather than the page's own content. Matches the "standard
+        // .cardRow() geometry" this file's header comment already calls for.
         .background(
-            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                .fill(themeManager.appTheme.carouselCardSurface)
+            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                .fill(themeManager.appTheme.cardSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                        .fill(themeManager.appTheme.carouselCardTint(hue: hue))
+                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                        .strokeBorder(themeManager.appTheme.carouselCardBorder(hue: hue), lineWidth: 0.5)
-                )
-                .shadow(color: themeManager.appTheme.carouselCardShadow.color,
-                        radius: themeManager.appTheme.carouselCardShadow.radius,
+                .shadow(color: themeManager.appTheme.cardShadow.color,
+                        radius: themeManager.appTheme.cardShadow.radius,
                         x: 0,
-                        y: themeManager.appTheme.carouselCardShadow.y)
+                        y: themeManager.appTheme.cardShadow.y)
         )
     }
 }

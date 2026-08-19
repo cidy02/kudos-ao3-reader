@@ -87,7 +87,15 @@ struct MediaBrowserView: View {
                         NavigationLink(value: category) {
                             categoryCard(category)
                                 .padding(CardListMetrics.innerHorizontal)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                // A shared minHeight, top-aligned: LazyVGrid sizes each
+                                // row to its tallest cell, and this card's own height
+                                // varies with content (1-2 line title, and 0-3 lines of
+                                // "recently read" chips) — without a floor, the *gap*
+                                // between rows visibly changed depending on which
+                                // categories landed next to each other. minHeight isn't
+                                // a hard cap (a rare very-tall card can still exceed it),
+                                // but it makes the common case consistent.
+                                .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
                                 .background(
                                     RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
                                         .fill(themeManager.appTheme.cardSurface)

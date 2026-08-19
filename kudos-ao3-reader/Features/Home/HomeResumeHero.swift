@@ -62,6 +62,9 @@ struct HomeResumeHero: View {
                 onToggleSelection?()
             } label: {
                 UnblurredHomeResumeHero(work: work)
+                    // Nested author byline would otherwise fight this Button for the
+                    // same tap in selection mode — disabled here the same way the
+                    // blurred branch above already disables it.
                     .environment(\.ao3AuthorNavigationEnabled, false)
                     .overlay(alignment: .topTrailing) {
                         WorkSelectionBubble(isSelected: isSelected)
@@ -79,11 +82,19 @@ struct HomeResumeHero: View {
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .localWorkContextMenu(work: work, onSelect: onSelect)
         } else {
-            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                UnblurredHomeResumeHero(work: work)
-            }
-            .buttonStyle(.plain)
-            .localWorkContextMenu(work: work, onSelect: onSelect)
+            // .cardNavigation, not a NavigationLink wrapping the visible hero as its
+            // label: the hero's author name is its own tappable byline now (see
+            // UnblurredHomeResumeHero), and a Button/NavigationLink nested inside
+            // another NavigationLink's label doesn't reliably get its own
+            // independent tap. cardNavigation instead puts an invisible background
+            // NavigationLink behind the content — the same technique AO3WorkRow and
+            // WorkRow already use for exactly this reason — so a tap on the byline
+            // opens the author (and briefly suppresses the background link via
+            // AppRouter.cardNavigationSuppressed) while a tap anywhere else on the
+            // card still opens the reader.
+            UnblurredHomeResumeHero(work: work)
+                .cardNavigation(to: LocalWorkDestination.reader(work), accessibilityLabel: work.title)
+                .localWorkContextMenu(work: work, onSelect: onSelect)
         }
     }
 }
@@ -92,6 +103,14 @@ private struct UnblurredHomeResumeHero: View {
     let work: SavedWork
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
+
+    /// Individual author names for the byline — matches WorkDetailView's
+    /// `displayAuthorList` derivation for the same work.
+    private var authorNames: [String] {
+        work.verifiedAuthorIdentities.isEmpty
+            ? (work.author.isEmpty ? [] : [work.author])
+            : work.verifiedAuthorIdentities.map(\.displayName)
+    }
 
     var body: some View {
         let hue = CoverArt.hue(for: work.title)
@@ -129,19 +148,26 @@ private struct UnblurredHomeResumeHero: View {
                 )
             }
 
-            // Author/fandom share the stat row's own component (not
-            // CardMetaLabel) so their text and icons read at exactly the same
-            // size as the language/words/chapters row below — one metadata
-            // family, not two different scales. No iconColor override: the
-            // default (WorkStatLabel's own .secondary) is correct here — this
-            // isn't a state indicator, forcing the app's accent tint just
-            // made the icon read as active/red for no reason.
+            // Real Label + AO3AuthorBylineView (matching WorkDetailHeroCard, not
+            // WorkStatLabel) so the author name is tappable, same as everywhere
+            // else authors show up in the app. expandsHitTarget: false — its
+            // default (true) gives each name its own top-aligned 28pt hit box,
+            // which reads fine beside plain inline text but visibly desyncs this
+            // icon from the byline's vertical center once the box is taller than
+            // the .caption text itself (see WorkDetailHeroCard's matching fix).
             if !work.author.isEmpty {
-                WorkStatLabel(
-                    text: work.author,
-                    symbol: "person",
-                    accessibilityLabel: "Author: \(work.author)"
-                )
+                Label {
+                    AO3AuthorBylineView(
+                        names: authorNames,
+                        identities: work.verifiedAuthorIdentities,
+                        includesBy: false,
+                        font: .caption,
+                        expandsHitTarget: false
+                    )
+                } icon: {
+                    Image(systemName: "person")
+                        .foregroundStyle(.secondary)
+                }
                 .font(.caption)
             }
 
