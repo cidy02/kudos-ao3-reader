@@ -73,6 +73,9 @@ struct WorkCoverCard: View {
             categories: work.workCategories,
             warnings: work.workWarnings,
             completion: work.completionStatus,
+            // Matches AO3WorkRow's search-results tileSize — this card has more
+            // room to spend on it than the Reading Queue mini-cards do.
+            tileSize: 27,
             announcesToVoiceOver: true
         )
     }
@@ -175,6 +178,7 @@ struct AO3WorkCoverCard: View {
             categories: work.categories,
             warnings: work.warnings,
             completion: WorkCompletionStatus(isComplete: work.isComplete),
+            tileSize: 27,
             announcesToVoiceOver: true
         )
     }
