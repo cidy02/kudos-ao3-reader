@@ -386,22 +386,29 @@ struct WorkStatusIconGrid: View {
     }
 
     /// Category (AO3's own quadrant pairs a gender symbol per orientation, not
-    /// one generic icon for all of them): no SF Symbol ships literal ♀/♂ glyphs
-    /// — Apple dropped gender-specific symbols from the catalog — so these are
-    /// composited from the actual Unicode characters, overlapping like a Venn
-    /// diagram rather than sitting side by side. `item.text` is AO3's own raw
-    /// category string ("F/F"/"M/M"/"F/M"/"Gen"/"Multi"/"Other"/"N/A"), already
-    /// resolved by `WorkTopStatsRow.topItems` — reused here rather than
-    /// re-deriving the category from anywhere else.
+    /// one generic icon for all of them): no SF Symbol ships literal gender
+    /// glyphs — Apple dropped them from the catalog — and the raw ♀/♂
+    /// characters aren't in SF Pro either (confirmed: they resolve to
+    /// `CJKSymbolsFallbackSC`, not SF, regardless of what font is requested —
+    /// fallback happens per-glyph for characters the requested font doesn't
+    /// contain). Unicode's Miscellaneous Symbols block already has real,
+    /// single, purpose-drawn glyphs for the *combined* signs though — used
+    /// here instead of manually overlapping two separate characters. Same
+    /// fallback situation (`AppleSymbols`, not SF — accepted as-is: a clean,
+    /// purpose-built system font, not a mismatched decorative one), but a
+    /// properly kerned glyph instead of a hand-offset approximation of one.
+    /// `item.text` is AO3's own raw category string ("F/F"/"M/M"/"F/M"/"Gen"/
+    /// "Multi"/"Other"/"N/A"), already resolved by `WorkTopStatsRow.topItems`
+    /// — reused here rather than re-deriving the category from anywhere else.
     @ViewBuilder
     private func categoryGlyph(_ item: WorkTopStatsRow.Item) -> some View {
         switch item.text {
         case "F/F":
-            genderOverlap("♀", "♀", item)
+            categoryText("⚢", item) // U+26A2 DOUBLED FEMALE SIGN
         case "M/M":
-            genderOverlap("♂", "♂", item)
+            categoryText("⚣", item) // U+26A3 DOUBLED MALE SIGN
         case "F/M":
-            genderOverlap("♂", "♀", item)
+            categoryText("⚤", item) // U+26A4 INTERLOCKED FEMALE AND MALE SIGN
         case "Gen":
             // No pairing to symbolize — Gen means no romantic/sexual focus.
             Image(systemName: "person.fill")
@@ -422,15 +429,10 @@ struct WorkStatusIconGrid: View {
         }
     }
 
-    private func genderOverlap(_ leading: String, _ trailing: String, _ item: WorkTopStatsRow.Item) -> some View {
-        ZStack {
-            Text(leading)
-                .offset(x: -iconSize * 0.22)
-            Text(trailing)
-                .offset(x: iconSize * 0.22)
-        }
-        .font(.system(size: iconSize, weight: .bold))
-        .foregroundStyle(item.iconColor ?? .gray)
+    private func categoryText(_ symbol: String, _ item: WorkTopStatsRow.Item) -> some View {
+        Text(symbol)
+            .font(.system(size: iconSize, weight: .bold))
+            .foregroundStyle(item.iconColor ?? .gray)
     }
 }
 
