@@ -473,35 +473,10 @@ struct WorkStatusIconGrid: View {
         // confirmed via CoreText that ♅ resolves to Menlo instead, despite
         // Apple Symbols containing it. Naming the font directly skips the
         // cascade and guarantees the glyph AO3's own icon set intends.
-        boldSymbol(symbol, size: pairingSymbolSize, color: item.iconColor ?? .gray)
+        Text(symbol)
+            .font(.custom("AppleSymbols", size: pairingSymbolSize))
+            .foregroundStyle(item.iconColor ?? .gray)
             .offset(y: pairingSymbolSize * verticalOffset)
-    }
-
-    /// Apple Symbols glyphs don't respond to `.bold()`/`.fontWeight()` —
-    /// confirmed by rendering both against plain text and finding them
-    /// pixel-identical — because the font has no bold variant and doesn't
-    /// support CoreText's synthetic-bold path. Layers the same glyph 4 more
-    /// times with a tiny cardinal offset instead, which does visibly thicken
-    /// the strokes, so these read closer to the weight of the bold SF
-    /// Symbols filling the rest of this grid instead of noticeably thinner.
-    /// 3.5% of the glyph's own size per offset, tuned by rendering ⚢ at
-    /// every size this grid actually uses (6/9/12/18pt): enough to visibly
-    /// bold without closing up the rings at the smallest size.
-    private func boldSymbol(_ symbol: String, size: CGFloat, color: Color) -> some View {
-        let strokeThickening = size * 0.035
-        let offsets = [
-            CGSize(width: -strokeThickening, height: 0), CGSize(width: strokeThickening, height: 0),
-            CGSize(width: 0, height: -strokeThickening), CGSize(width: 0, height: strokeThickening),
-        ]
-        return ZStack {
-            ForEach(offsets.indices, id: \.self) { i in
-                Text(symbol)
-                    .font(.custom("AppleSymbols", size: size))
-                    .offset(offsets[i])
-            }
-            Text(symbol).font(.custom("AppleSymbols", size: size))
-        }
-        .foregroundStyle(color)
     }
 
     /// Multi has no single relationship to symbolize — AO3's own icon here is
@@ -548,13 +523,12 @@ struct WorkStatusIconGrid: View {
             }
             ForEach(placements.indices, id: \.self) { i in
                 let placement = placements[i]
-                // boldSymbol (not a plain Text): same reason as the pairing
-                // glyphs — Apple Symbols has no bold variant, so this layers
-                // the glyph instead of relying on a no-op `.bold()`. The
-                // layering is symmetric around the glyph's own center, so it
-                // doesn't shift the circle/stem geometry `measured(tileSize:)`
-                // was solved against.
-                boldSymbol("⚲", size: multiGlyphFontSize, color: placement.color)
+                // Named directly (not `.system`) for the same reason as the
+                // pairing glyphs: guarantees Apple Symbols' glyph shape
+                // rather than whatever the fallback cascade picks.
+                Text("⚲")
+                    .font(.custom("AppleSymbols", size: multiGlyphFontSize))
+                    .foregroundStyle(placement.color)
                     .rotationEffect(.degrees(placement.rotation))
                     .offset(placement.glyphOffset)
             }
