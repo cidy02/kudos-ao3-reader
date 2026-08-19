@@ -288,12 +288,12 @@ struct ReadingQueueCard: View {
             warnings: work.workWarnings,
             completion: work.completionStatus
         ).topItems
-        return VStack(spacing: 2) {
-            HStack(spacing: 2) {
+        return VStack(spacing: 3) {
+            HStack(spacing: 3) {
                 miniStatusTile(!items.isEmpty ? items[0] : nil)
                 miniStatusTile(items.count > 1 ? items[1] : nil)
             }
-            HStack(spacing: 2) {
+            HStack(spacing: 3) {
                 miniStatusTile(items.count > 2 ? items[2] : nil)
                 miniStatusTile(items.count > 3 ? items[3] : nil)
             }
@@ -303,7 +303,7 @@ struct ReadingQueueCard: View {
 
     @ViewBuilder
     private func miniStatusTile(_ item: WorkTopStatsRow.Item?) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
         if let item {
             shape
                 .fill((item.iconColor ?? .gray).opacity(0.3))
@@ -317,13 +317,13 @@ struct ReadingQueueCard: View {
                         ratingShield(item)
                     } else {
                         Image(systemName: item.symbol)
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(item.iconColor ?? .gray)
                     }
                 }
-                .frame(width: 14, height: 14)
+                .frame(width: 18, height: 18)
         } else {
-            Color.clear.frame(width: 14, height: 14)
+            Color.clear.frame(width: 18, height: 18)
         }
     }
 
@@ -333,13 +333,12 @@ struct ReadingQueueCard: View {
         // "unrated/unknown" without needing to fit two glyphs.
         let letter = item.text == "NR" ? "?" : item.text
         return ZStack {
-            // Matches the other 3 tiles' own 8pt icon size — was 13pt, visibly
-            // heavier than its neighbors in the same grid.
+            // Matches the other 3 tiles' own 10pt icon size.
             Image(systemName: "shield.fill")
-                .font(.system(size: 9))
+                .font(.system(size: 12))
                 .foregroundStyle(item.iconColor ?? .gray)
             Text(letter)
-                .font(.system(size: 5, weight: .bold, design: .rounded))
+                .font(.system(size: 6, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 // Shields taper at the bottom point, so their centroid sits
                 // above true geometric center — an un-offset letter reads low.
