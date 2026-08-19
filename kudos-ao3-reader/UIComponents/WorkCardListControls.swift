@@ -38,6 +38,10 @@ struct FilterButton: View {
         }
         .tint(filtersActive ? Color.accentColor : Color.primary)
         .labelStyle(.iconOnly)
+        // The default toolbar glyph size left the filled circle visibly smaller
+        // than the button's own touch-target circle around it — Messages' filled
+        // filter badge fills that outer circle almost completely.
+        .imageScale(.large)
         .help(filterHelp)
         .contextMenu {
             if filtersActive, let onClearFilters {
