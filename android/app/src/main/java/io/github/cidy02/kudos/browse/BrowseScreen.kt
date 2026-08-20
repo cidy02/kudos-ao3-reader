@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Description
@@ -167,9 +169,13 @@ fun BrowseScreen(
                             }
                         }
                     )
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    LazyVerticalStaggeredGrid(
+                        columns = StaggeredGridCells.Fixed(2),
+                        verticalItemSpacing = 10.dp,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
                     ) {
                         items(current.categories, key = { it.name }) { category ->
                             // Stats scan the full library once per category — never do that
@@ -252,52 +258,44 @@ private fun CategoryCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
         modifier = Modifier
-            .fillMaxWidth()
             .semantics {
                 contentDescription = "${category.name}. Open fandoms."
             }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.medium)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = CategoryStatsCalculator.iconFor(category.name),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
-                )
                 Text(
-                    text = category.name,
+                    text = category.name.replace(" &", "\u00A0&"),
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.padding(end = 28.dp)
                 )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            CategoryStatsLine(stats = stats)
-
-            if (stats.recentFandoms.isNotEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                RecentlyReadChips(
-                    fandoms = stats.recentFandoms,
-                    onOpenFandom = onOpenFandom
-                )
+                CategoryStatsLine(stats = stats)
+
+                if (stats.recentFandoms.isNotEmpty()) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    RecentlyReadChips(
+                        fandoms = stats.recentFandoms,
+                        onOpenFandom = onOpenFandom
+                    )
+                }
             }
+            Icon(
+                imageVector = CategoryStatsCalculator.iconFor(category.name),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(14.dp)
+                    .size(22.dp)
+            )
         }
     }
 }
@@ -378,7 +376,9 @@ private fun RecentlyReadChips(
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.clickable { onOpenFandom(fandom) }
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clickable { onOpenFandom(fandom) }
                 ) {
                     Text(
                         text = fandom,

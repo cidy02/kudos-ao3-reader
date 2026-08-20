@@ -35,7 +35,7 @@ data class CategoryStats(
 )
 
 object CategoryStatsCalculator {
-    private const val RecentLimit = 3
+    private const val RecentLimit = 5
 
     fun stats(
         category: AO3MediaCategory,
