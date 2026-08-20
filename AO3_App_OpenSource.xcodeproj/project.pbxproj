@@ -13,6 +13,7 @@
 		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000320000000 /* ReadiumStreamer */; };
 		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000330000000 /* ReadiumNavigator */; };
 		000000000000000410000000 /* MuPDF.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000400000000 /* MuPDF.xcframework */; };
+		000000000000000720000000 /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000710000000 /* sherpa-onnx */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +52,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				000000000000000620000000 /* SWCompression in Frameworks */,
+				000000000000000720000000 /* sherpa-onnx in Frameworks */,
 				000000000000000220000000 /* SwiftSoup in Frameworks */,
 				000000000000000311000000 /* ReadiumShared in Frameworks */,
 				000000000000000321000000 /* ReadiumStreamer in Frameworks */,
@@ -107,6 +109,7 @@
 			name = AO3_App_OpenSource;
 			packageProductDependencies = (
 				000000000000000610000000 /* SWCompression */,
+				000000000000000710000000 /* sherpa-onnx */,
 				000000000000000210000000 /* SwiftSoup */,
 				000000000000000310000000 /* ReadiumShared */,
 				000000000000000320000000 /* ReadiumStreamer */,
@@ -167,6 +170,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				000000000000000600000000 /* XCRemoteSwiftPackageReference "SWCompression" */,
+				000000000000000700000000 /* XCRemoteSwiftPackageReference "sherpa-onnx" */,
 				000000000000000200000000 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				000000000000000300000000 /* XCRemoteSwiftPackageReference "swift-toolkit" */,
 			);
@@ -770,6 +774,14 @@
 				minimumVersion = 3.9.0;
 			};
 		};
+		000000000000000700000000 /* XCRemoteSwiftPackageReference "sherpa-onnx" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/k2-fsa/sherpa-onnx.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.13.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -797,6 +809,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000300000000 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
 			productName = ReadiumNavigator;
+		};
+		000000000000000710000000 /* sherpa-onnx */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000700000000 /* XCRemoteSwiftPackageReference "sherpa-onnx" */;
+			productName = "sherpa-onnx";
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
