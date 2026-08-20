@@ -7,7 +7,6 @@ import SwiftUI
 struct ReaderChromeTopBar: View {
     let title: String
     let author: String
-    let tint: Color
     /// Hidden while the fan menu is open: the menu replaces its own button and so
     /// expands into this row, which would otherwise truncate the title to a word
     /// or two behind the first menu pill. The close button stays put.
@@ -21,15 +20,17 @@ struct ReaderChromeTopBar: View {
             Button(action: onClose) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(tint)
+                    // Neutral, not the theme tint — Close has no active state to
+                    // signal, same reasoning as the fan menu's own controls.
+                    .foregroundStyle(Color.primary)
                     .frame(width: 44, height: 44)
                     // A thin chevron is a very small hit target on its own; the
                     // content shape restores the full 44pt circle a .plain button
                     // would otherwise not accept taps across.
                     .contentShape(Circle())
             }
-            // .plain so the accent tint above is this view's own explicit choice
-            // rather than whatever the ambient button style would impose.
+            // .plain so the color above is this view's own explicit choice rather
+            // than whatever the ambient button style would impose.
             .buttonStyle(.plain)
             .glassEffect(.regular, in: Circle())
             .accessibilityLabel("Close reader")

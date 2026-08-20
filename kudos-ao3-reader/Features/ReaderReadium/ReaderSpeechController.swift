@@ -585,11 +585,14 @@ struct ReaderSpeechMiniPlayer: View {
                     stopButton
                 }
 
+                // Transport (skip/play-pause) is neutral, not the theme tint — no
+                // active state of its own to signal. Stop and the waveform below
+                // keep tint: both are deliberately left alone.
                 HStack(spacing: 4) {
                     HoldableTransportButton(
                         systemImage: "backward.fill",
                         font: .body,
-                        tint: tint,
+                        tint: Color.primary,
                         hitSize: Self.hitSize,
                         accessibilityLabel: "Previous chapter",
                         accessibilityHint: "Double-tap and hold to seek backward",
@@ -603,7 +606,7 @@ struct ReaderSpeechMiniPlayer: View {
                         Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill")
                             .font(.title3)
                             .contentTransition(.symbolEffect(.replace))
-                            .foregroundStyle(tint)
+                            .foregroundStyle(Color.primary)
                             .frame(width: Self.hitSize, height: Self.hitSize)
                             .contentShape(Rectangle())
                     }
@@ -613,7 +616,7 @@ struct ReaderSpeechMiniPlayer: View {
                     HoldableTransportButton(
                         systemImage: "forward.fill",
                         font: .body,
-                        tint: tint,
+                        tint: Color.primary,
                         hitSize: Self.hitSize,
                         accessibilityLabel: "Next chapter",
                         accessibilityHint: "Double-tap and hold to seek forward",
