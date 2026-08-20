@@ -104,6 +104,7 @@ import io.github.cidy02.kudos.ui.components.StatusBadge
 import io.github.cidy02.kudos.ui.components.WorkStatIcons
 import io.github.cidy02.kudos.ui.components.WorkStatItem
 import io.github.cidy02.kudos.ui.components.WorkStatLabel
+import io.github.cidy02.kudos.ui.components.WorkStatusIconGrid
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
 import java.time.Instant
 import java.time.ZoneId
@@ -1542,12 +1543,24 @@ private fun WorkDetailHeaderCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = state.title,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = state.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 60.dp)
+                )
+                WorkStatusIconGrid(
+                    rating = state.rating,
+                    categories = state.categories,
+                    warnings = state.warnings,
+                    isComplete = state.completionLabel == "Complete" || state.local?.isComplete == true,
+                    tileSize = 27.dp,
+                    announcesToVoiceOver = true,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
             AuthorLine(
                 authorNames = state.tappableAuthorNames,
                 displayAuthor = state.author,
@@ -1574,31 +1587,11 @@ private fun WorkDetailHeaderCard(
                 }
             }
             val compactStats = buildList {
-                if (state.rating.isNotBlank()) {
-                    add(
-                        WorkStatItem(
-                            text = state.rating,
-                            icon = WorkStatIcons.rating
-                        )
-                    )
-                }
                 if (state.chapters.isNotBlank()) {
                     add(
                         WorkStatItem(
                             text = state.chapters,
                             icon = WorkStatIcons.chapters
-                        )
-                    )
-                }
-                if (state.completionLabel.isNotBlank()) {
-                    add(
-                        WorkStatItem(
-                            text = state.completionLabel,
-                            icon = if (state.completionLabel == "Complete") {
-                                WorkStatIcons.complete
-                            } else {
-                                WorkStatIcons.inProgress
-                            }
                         )
                     )
                 }
