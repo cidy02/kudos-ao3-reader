@@ -386,6 +386,7 @@ class WorkRepository(
                     workRelationships = if (meta.relationships.isNotEmpty()) meta.relationships else work.workRelationships,
                     workCharacters = if (meta.characters.isNotEmpty()) meta.characters else work.workCharacters,
                     workFreeforms = if (meta.freeforms.isNotEmpty()) meta.freeforms else work.workFreeforms,
+                    hasGivenKudos = work.hasGivenKudos || meta.kudosGivenByCurrentUser,
                     lastUpdateCheck = clock()
                 )
                 upsert(updated)

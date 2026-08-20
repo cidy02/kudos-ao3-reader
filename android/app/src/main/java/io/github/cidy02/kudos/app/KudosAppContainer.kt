@@ -177,11 +177,11 @@ class KudosAppContainer(context: Context) {
     }
 
     val metadataRepository: AO3WorkMetadataRepository by lazy {
-        AO3WorkMetadataRepository(ao3Client)
+        AO3WorkMetadataRepository(ao3Client, authRepository = authRepository)
     }
 
     val tagsRepository: io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository by lazy {
-        io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository(ao3Client)
+        io.github.cidy02.kudos.network.ao3.work.WorkTagsRepository(ao3Client, authRepository = authRepository)
     }
 
     val epubDownloader: AO3EpubDownloader by lazy {
