@@ -717,6 +717,18 @@ final class AO3AuthService {
         return request
     }
 
+    /// A placeholder-URL convenience for callers (search/listing fetches) that
+    /// build their real request URL later and only need this for the cookies —
+    /// same pattern `WorkMetadataRefresh.authenticatedRequest` established, just
+    /// generalized instead of copied at each new call site. `nil`, not a thrown
+    /// error, when signed out or the request can't be built: every caller already
+    /// falls back to its own existing anonymous-fetch path when this is nil, so a
+    /// signed-out user's search/browse keeps working exactly as before.
+    func authenticatedRequest() -> URLRequest? {
+        guard let url = URL(string: "https://archiveofourown.org") else { return nil }
+        return try? authenticatedRequest(for: url)
+    }
+
     /// A comment form's CSRF token and pseud belong to the session that fetched
     /// them. Re-check immediately before its POST so an account switch during
     /// the form GET aborts instead of borrowing the replacement session's cookie.

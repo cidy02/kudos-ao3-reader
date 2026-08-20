@@ -49,6 +49,7 @@ struct BrowseView: View {
 struct FandomWorksView: View {
     let fandom: String
 
+    @Environment(AO3AuthService.self) private var auth
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
@@ -218,7 +219,7 @@ struct FandomWorksView: View {
             // <fandom>" heading, so the results card shows AO3's figures rather
             // than ones derived here.
             let result = try await AO3Client.shared.fandomWorksPage(
-                fandom: fandom, filters: filters, page: page
+                fandom: fandom, filters: filters, page: page, request: auth.authenticatedRequest()
             )
             results = result.works
             currentPage = result.currentPage
@@ -298,6 +299,7 @@ struct FandomWorksView: View {
 struct TagWorksView: View {
     let request: AO3TagWorksRequest
 
+    @Environment(AO3AuthService.self) private var auth
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
@@ -498,7 +500,7 @@ struct TagWorksView: View {
         phase = .loading
         do {
             let result = try await AO3Client.shared.worksPage(
-                at: request.url, filters: filters, page: page
+                at: request.url, filters: filters, page: page, request: auth.authenticatedRequest()
             )
             results = result.works
             currentPage = result.currentPage

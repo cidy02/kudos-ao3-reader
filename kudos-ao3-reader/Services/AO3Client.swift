@@ -359,24 +359,47 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     ]
 
     /// Runs a works search for the given filters. `page` is 1-based.
-    func search(filters: AO3SearchFilters, page: Int = 1) async throws -> AO3SearchPage {
+    ///
+    /// `request`, when supplied, is an authenticated request from
+    /// `AO3AuthService.authenticatedRequest(for:)` (its `.url` is overwritten with
+    /// the real search URL below — same pattern as `workMetadata`). AO3 excludes
+    /// restricted works ("only registered users") from search/browse results
+    /// entirely for anonymous requests, not just from the work's own page —
+    /// confirmed empirically (64 sampled work IDs across several unauthenticated
+    /// `/works/search` queries, zero restricted). Signed in, results should match
+    /// what the user sees browsing AO3 themselves.
+    func search(filters: AO3SearchFilters, page: Int = 1, request: URLRequest? = nil) async throws -> AO3SearchPage {
         guard let url = Self.searchURL(filters: filters, page: page) else {
             throw AO3Error.network("Bad search URL.")
         }
-        let html = try await getHTML(url)
+        let html: String
+        if var request {
+            request.url = url
+            html = try await authenticatedPageHTML(for: request)
+        } else {
+            html = try await getHTML(url)
+        }
         return try Self.parseSearchPage(html, page: page)
     }
 
     /// One page of a fandom's works, from AO3's own tag listing — Browse's
     /// endpoint. Takes the same filters as `search`; see `fandomWorksURL` for why
-    /// Browse asks the tag page rather than `/works/search`.
+    /// Browse asks the tag page rather than `/works/search`. `request` — see
+    /// `search`'s own doc comment for why this matters here too.
     func fandomWorksPage(
-        fandom: String, filters: AO3SearchFilters, page: Int = 1
+        fandom: String, filters: AO3SearchFilters, page: Int = 1, request: URLRequest? = nil
     ) async throws -> AO3SearchPage {
         guard let url = Self.fandomWorksURL(fandom: fandom, filters: filters, page: page) else {
             throw AO3Error.network("Bad fandom URL.")
         }
-        return try Self.parseSearchPage(try await getHTML(url), page: page)
+        let html: String
+        if var request {
+            request.url = url
+            html = try await authenticatedPageHTML(for: request)
+        } else {
+            html = try await getHTML(url)
+        }
+        return try Self.parseSearchPage(html, page: page)
     }
 
     /// The `/works/search` URL for a filter set. Pure and static so every
@@ -962,8 +985,22 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// does — all 23 measured live and identical on both, see
     /// `docs/reports/filter-parity-2026-08-07.md` — so a tag listing can be a real
     /// search rather than a page to sift through by hand.
-    func worksPage(at url: URL, filters: AO3SearchFilters, page: Int) async throws -> AO3SearchPage {
-        return try await Self.parseSearchPage(getHTML(Self.filteredWorksURL(url, filters: filters, page: page)), page: page)
+    /// `request` — see `search`'s own doc comment for why this matters: AO3
+    /// excludes restricted works from anonymous listing results, tag pages
+    /// included, so this is the path `TagWorksView` (Browse's tag search) needs
+    /// authenticated too.
+    func worksPage(
+        at url: URL, filters: AO3SearchFilters, page: Int, request: URLRequest? = nil
+    ) async throws -> AO3SearchPage {
+        let resolved = Self.filteredWorksURL(url, filters: filters, page: page)
+        let html: String
+        if var request {
+            request.url = resolved
+            html = try await authenticatedPageHTML(for: request)
+        } else {
+            html = try await getHTML(resolved)
+        }
+        return try Self.parseSearchPage(html, page: page)
     }
 
     /// The URL for the call above, split out so the merge is testable without a
