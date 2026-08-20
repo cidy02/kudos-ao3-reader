@@ -263,7 +263,10 @@ struct ReaderFanMenu: View {
                     ForEach(0 ..< 3, id: \.self) { _ in Circle().frame(width: 2.6, height: 2.6) }
                 }
             }
-            .foregroundStyle(accentColor)
+            // Neutral, not the theme tint — this button has no active state
+            // (open/closed is a transient interaction, not a persisted toggle);
+            // matches the rest of the fan menu's own controls.
+            .foregroundStyle(Color.primary)
             .frame(width: 44, height: 44)
             // The glyph is thin bars and small dots; without an explicit content
             // shape a .plain button only accepts taps that land on the strokes,

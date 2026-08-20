@@ -962,7 +962,7 @@ struct ReadiumReaderView: View {
     private var topBarLayer: some View {
         ReaderChromeTopBar(
             title: work.title, author: work.author,
-            tint: themeManager.effectiveTint, titleHidden: fanMenuOpen,
+            titleHidden: fanMenuOpen,
             onClose: dismissReader,
             onOpenDetails: { showingWorkDetail = true }
         )
