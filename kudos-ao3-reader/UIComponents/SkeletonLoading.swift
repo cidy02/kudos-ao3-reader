@@ -18,10 +18,19 @@ struct SkeletonBlock: View {
     var cornerRadius: CGFloat = 6
 
     var body: some View {
+        // `.frame(width:)` for a fixed size, not `.frame(maxWidth:)` — a max is
+        // only an upper bound, and a bare RoundedRectangle has no intrinsic size
+        // of its own to fall back to, so a caller-specified width was silently
+        // ignored by any layout that queries this view's *ideal* size rather
+        // than just handing it the full proposed width (FlowLayout does this
+        // when wrapping) — the block collapsed toward zero instead of actually
+        // rendering at the width asked for. Confirmed on device: recently-read
+        // chip placeholders (inside a FlowLayout) rendered as thin slivers
+        // instead of the pill widths they were given.
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(.quaternary)
-            .frame(height: height)
-            .frame(maxWidth: width ?? .infinity, alignment: .leading)
+            .frame(width: width, height: height, alignment: .leading)
+            .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
     }
 }
 
@@ -471,7 +480,12 @@ struct AO3WorkRowSkeletonList: View {
 
 /// A card list of category-card skeletons — the Browse root first load.
 struct CategoryCardSkeletonList: View {
-    var count: Int = 8
+    // AO3's media-category taxonomy is a fixed, known set of exactly 11
+    // (AO3MediaCategory.symbol's switch enumerates all of them) — matching that
+    // exactly means the skeleton naturally covers the same page extent the
+    // real grid will, rather than running noticeably shorter and leaving a gap
+    // of empty space before the real content settles in.
+    var count: Int = 11
 
     /// Cycles through a fixed pattern of chip counts (none, a few, a lot) so
     /// neighboring placeholders land at different heights — matching the real
