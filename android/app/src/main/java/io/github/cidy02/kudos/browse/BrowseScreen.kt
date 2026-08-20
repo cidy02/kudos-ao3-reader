@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,7 +52,7 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.SkeletonBlock
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlinx.coroutines.Dispatchers
@@ -140,7 +141,11 @@ fun BrowseScreen(
         )
 
         when (val current = state) {
-            BrowseCategoriesState.Loading -> LoadingStateCard("Loading AO3 media categories")
+            BrowseCategoriesState.Loading -> CategoryCardSkeletonList(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
             is BrowseCategoriesState.Error -> BrowseErrorBlock(
                 message = current.message,
                 onRetry = ::load,
@@ -397,4 +402,83 @@ private sealed interface BrowseCategoriesState {
     data object Loading : BrowseCategoriesState
     data class Loaded(val categories: List<AO3MediaCategory>) : BrowseCategoriesState
     data class Error(val message: String) : BrowseCategoriesState
+}
+
+@Composable
+private fun CategoryCardSkeleton(chipCount: Int) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.clearAndSetSemantics { }
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.medium)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(end = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    SkeletonBlock(height = 19.dp)
+                    SkeletonBlock(width = 120.dp, height = 19.dp)
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    SkeletonBlock(width = 80.dp, height = 16.dp)
+                    SkeletonBlock(width = 100.dp, height = 16.dp)
+                }
+
+                if (chipCount > 0) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SkeletonBlock(width = 72.dp, height = 14.dp)
+                        
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            for (i in 0 until chipCount) {
+                                val w = if (i % 2 == 0) 116.dp else 82.dp
+                                SkeletonBlock(width = w, height = 28.dp, cornerRadius = 8.dp)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(14.dp)
+                    .size(22.dp)
+            ) {
+                SkeletonBlock(width = 22.dp, height = 22.dp, cornerRadius = 4.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryCardSkeletonList(modifier: Modifier = Modifier) {
+    val counts = listOf(0, 2, 1, 0, 3, 2, 0, 1, 2, 0, 3)
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Fixed(2),
+        verticalItemSpacing = 10.dp,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+    ) {
+        items(counts.size) { index ->
+            CategoryCardSkeleton(chipCount = counts[index])
+        }
+    }
 }

@@ -46,9 +46,9 @@ import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
+import io.github.cidy02.kudos.ui.components.WorkCoverCardSkeleton
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
@@ -143,10 +143,23 @@ fun HomeScreen(
 
         if (state.loading) {
             item {
-                LoadingStateCard(
-                    message = "Loading your reading dashboard",
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    KudosSectionHeader(
+                        title = "Continue Reading",
+                        subtitle = "Loading…",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.height(WorkCoverCardMetrics.height)
+                    ) {
+                        items(4) {
+                            WorkCoverCardSkeleton()
+                        }
+                    }
+                }
             }
             return@LazyColumn
         }
@@ -439,10 +452,16 @@ private fun SubscriptionsShelf(
         if (!isCollapsed) {
             when {
                 showSkeleton -> {
-                    LoadingStateCard(
-                        message = "Loading subscriptions",
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.height(WorkCoverCardMetrics.height)
+                    ) {
+                        items(4) {
+                            WorkCoverCardSkeleton()
+                        }
+                    }
                 }
                 works.isEmpty() -> {
                     EmptyStateCard(

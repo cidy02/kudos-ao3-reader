@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -389,4 +390,86 @@ object WorkCoverCardMetrics {
     val footerHeight = 36.dp
     /** Cap stats rows so denser works don't overflow the fixed card. */
     const val maxStats = 4
+}
+
+@Composable
+fun WorkCoverCardSkeleton(
+    modifier: Modifier = Modifier
+) {
+    ElevatedCard(
+        modifier = modifier
+            .width(WorkCoverCardMetrics.width)
+            .height(WorkCoverCardMetrics.height)
+            .clearAndSetSemantics { },
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(WorkCoverCardMetrics.contentPadding),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    SkeletonBlock(height = 18.dp)
+                    SkeletonBlock(width = 96.dp, height = 18.dp)
+                }
+                SkeletonBlock(width = 40.dp, height = 40.dp, cornerRadius = 20.dp)
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SkeletonBlock(width = 14.dp, height = 14.dp, cornerRadius = 7.dp)
+                SkeletonBlock(width = 80.dp, height = 14.dp)
+            }
+            
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SkeletonBlock(width = 14.dp, height = 14.dp, cornerRadius = 2.dp)
+                SkeletonBlock(width = 110.dp, height = 14.dp)
+            }
+
+            CardMetaSeparator()
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SkeletonBlock(width = 14.dp, height = 14.dp, cornerRadius = 2.dp)
+                    SkeletonBlock(width = 90.dp, height = 14.dp)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SkeletonBlock(width = 14.dp, height = 14.dp, cornerRadius = 2.dp)
+                    SkeletonBlock(width = 60.dp, height = 14.dp)
+                }
+            }
+
+            Spacer(Modifier.weight(1f, fill = true))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(WorkCoverCardMetrics.footerHeight),
+                contentAlignment = Alignment.BottomStart
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SkeletonBlock(height = 4.dp, cornerRadius = 2.dp)
+                    SkeletonBlock(width = 48.dp, height = 12.dp)
+                }
+            }
+        }
+    }
 }
