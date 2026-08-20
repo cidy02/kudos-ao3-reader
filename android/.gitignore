@@ -8,3 +8,8 @@ keystore.properties
 
 # Kotlin Gradle plugin 2.x scratch dir (session files, build reports).
 .kotlin/
+
+# Vendored sherpa-onnx AAR (~47 MB) — not on Maven Central, fetched locally by
+# Scripts/fetch-sherpa-onnx.sh from the project's GitHub releases rather than
+# committed (same reasoning as MuPDF's build artifacts on the iOS side).
+app/libs/*.aar
