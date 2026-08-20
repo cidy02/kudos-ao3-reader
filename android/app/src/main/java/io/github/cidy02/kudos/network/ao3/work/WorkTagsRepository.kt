@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.network.ao3.work
 
+import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
@@ -14,7 +15,8 @@ import kotlinx.coroutines.withContext
  */
 class WorkTagsRepository(
     private val client: AO3Client = OkHttpAO3Client(),
-    private val parser: AO3WorkMetadataParser = AO3WorkMetadataParser()
+    private val parser: AO3WorkMetadataParser = AO3WorkMetadataParser(),
+    private val authRepository: AO3AuthRepository? = null
 ) {
     /**
      * Re-fetches a work's front page to get the latest tags and availability.
@@ -22,13 +24,14 @@ class WorkTagsRepository(
      */
     suspend fun refreshTags(workId: Long): AO3Result<AO3WorkMetadata> {
         val url = WorkTags.ao3WorkUrl(workId)
+        val username = authRepository?.username()
         return when (val result = client.get(url)) {
             is AO3Result.Failure -> result
             is AO3Result.Success -> {
                 if (result.value.statusCode == 404) {
                     AO3Result.Failure(AO3Error.NotFound)
                 } else {
-                    runParse { parser.parse(result.value.body) }
+                    runParse { parser.parse(result.value.body, username) }
                 }
             }
         }

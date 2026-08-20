@@ -95,4 +95,15 @@ class ReaderRepository(
      */
     suspend fun markEpubMissing(workId: String): SavedWork? =
         workRepository.setHasEpub(workId, false)
+
+    /**
+     * Persists that kudos were successfully given on this work, so the icon
+     * shows filled after a relaunch (Work Detail's kudos button does the
+     * same upsert; the reader's own kudos button needs it too).
+     */
+    suspend fun markKudosGiven(workId: String): SavedWork? {
+        val work = workRepository.getWork(workId) ?: return null
+        if (work.hasGivenKudos) return work
+        return workRepository.upsert(work.copy(hasGivenKudos = true, lastModifiedAt = clock()))
+    }
 }
