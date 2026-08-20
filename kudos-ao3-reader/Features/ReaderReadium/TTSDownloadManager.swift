@@ -16,6 +16,10 @@ public final class TTSDownloadManager: NSObject {
 
     public private(set) var status: Status = .idle
     private var downloadTask: URLSessionDownloadTask?
+    // @Observable rewrites stored properties into tracked computed accessors,
+    // which lazy can't participate in — @ObservationIgnored opts this one out
+    // (it's implementation detail, not observed UI state, so that's correct).
+    @ObservationIgnored
     private lazy var urlSession: URLSession = {
         let config = URLSessionConfiguration.background(withIdentifier: "tts_model_download")
         return URLSession(configuration: config, delegate: self, delegateQueue: nil)
@@ -118,10 +122,8 @@ extension TTSDownloadManager: URLSessionDownloadDelegate {
             let entries = try TarContainer.open(container: decompressedData)
             
             for entry in entries {
-                guard let info = entry.info.name else { continue }
-                
                 // Remove the top-level folder prefix (kokoro-int8-en-v0_19/) from paths
-                var relativePath = info
+                var relativePath = entry.info.name
                 let prefix = "kokoro-int8-en-v0_19/"
                 if relativePath.hasPrefix(prefix) {
                     relativePath = String(relativePath.dropFirst(prefix.count))

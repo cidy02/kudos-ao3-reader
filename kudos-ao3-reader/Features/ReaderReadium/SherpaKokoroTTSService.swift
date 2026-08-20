@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import ReadiumNavigator
 import ReadiumShared
 
 #if canImport(sherpa_onnx)
@@ -76,7 +77,7 @@ public final class SherpaKokoroTTSService: TTSService {
             // For Kokoro, voices are determined by ID. We can populate some common voices or read from config if sherpa exposes it.
             // (Assuming generic IDs for now)
             availableVoices = [
-                TTSVoice(identifier: "0", language: Language(code: "en"), name: "Kokoro Default Voice", gender: .unspecified, quality: .enhanced)
+                TTSVoice(identifier: "0", language: Language(code: "en"), name: "Kokoro Default Voice", gender: .unspecified, quality: .higher)
             ]
         }
         #endif
