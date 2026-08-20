@@ -29,6 +29,21 @@ handoff channel between sessions and between agents.
 ## 🅿️ Backlog (prioritized)
 
 ### P1 — remaining
+- **T-187 · Offline neural TTS (sherpa-onnx + Kokoro-82M)** 🅿️ *idea, not started.*
+  Replace the reader's current system-TTS voice (iOS: `AVSpeechSynthesizer` via
+  `AVTTSEngine`, see `ReaderSpeechController.swift`; Android: none yet) with a
+  fully offline, on-device neural TTS pipeline — Kokoro-82M (Apache-2.0) served
+  through `sherpa-onnx`, ~300–350MB model assets downloaded on demand (not
+  bundled in the app binary/store package) and cached locally. Full
+  ready-to-paste implementation spec (architecture notes, exact model asset
+  names, cross-platform `TTSService` protocol/interface contract, iOS
+  `AVAudioEngine` + Android `AudioTrack` streaming playback design, chunking
+  strategy, error/interruption handling) saved at
+  `docs/prompts/kudos-tts-implementation-prompt.md` (gitignored, local-only —
+  ask the human if absent). iOS first per the spec's own ordering, Android
+  after. Large scope (new engine, new download/asset-management flow, new
+  audio pipeline on both platforms) — likely its own multi-session effort,
+  not a drop-in swap.
 - **T-07 · Lazy / on-demand chapter extraction** 🅿️ *deferred.* Legacy/macOS reader
   only (the iOS Readium reader is already lazy); correctness-risky (WKWebView must
   resolve each chapter's CSS/image/font resources). Low ROI — do only if large-work
