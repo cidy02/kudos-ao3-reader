@@ -353,7 +353,8 @@ class DownloadQueueTest {
             workRepository = repository,
             metadataRepository = metadataRepository,
             downloader = AO3EpubDownloader(client),
-            fileStore = fileStore
+            fileStore = fileStore,
+            cacheDir = Files.createTempDirectory("kudos-dlqueue-cache-tests").toFile()
         )
         return DownloadQueue(
             workImporter = importer,
