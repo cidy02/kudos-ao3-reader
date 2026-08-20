@@ -204,7 +204,8 @@ class KudosAppContainer(context: Context) {
             workRepository = workRepository,
             metadataRepository = metadataRepository,
             downloader = epubDownloader,
-            fileStore = workFileStore
+            fileStore = workFileStore,
+            cacheDir = appContext.cacheDir
         )
     }
 

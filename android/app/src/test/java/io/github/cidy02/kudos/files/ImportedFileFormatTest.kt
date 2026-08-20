@@ -1,11 +1,15 @@
 package io.github.cidy02.kudos.files
 
+import io.github.cidy02.kudos.works.converters.KudosMuPDF
 import io.github.cidy02.kudos.works.converters.PDFWorkConverter
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -56,23 +60,33 @@ class ImportedFileFormatTest {
         assertEquals(ImportedFileFormat.HTML, ImportedFileFormat.sniff(bytes, "chapter.txt"))
     }
 
+    private fun converter() = PDFWorkConverter(Files.createTempDirectory("kudos-pdf-tests").toFile())
+
     @Test
-    fun `compressed pdf refuses to convert rather than emitting binary noise`() {
-        // The defect this guards: /FlateDecode streams made the old regex emit
-        // decompressed binary as <p> paragraphs, so users got mojibake works.
-        // A FlateDecode header plus bytes that would previously have been
-        // scraped out from between parentheses and emitted as <p> paragraphs.
-        val header = "%PDF-1.4\n<< /Filter /FlateDecode /Length 42 >>\nstream\n"
-        val compressed = header.toByteArray(Charsets.ISO_8859_1) +
-            byteArrayOf(0x00, 0x01, 0x28, 0xC3.toByte(), 0xAB.toByte(), 0x29, 0x0A) +
-            "endstream".toByteArray(Charsets.ISO_8859_1)
-        assertNull(PDFWorkConverter().convert("Story", compressed))
+    fun `without the native MuPDF library only uncompressed pdf text converts`() {
+        // KudosMuPDF.isAvailable is always false here: this is a plain JVM unit
+        // test, and libkudosmupdf.so is an Android .so the JVM can't load. That's
+        // exactly the "checkout hasn't run build-mupdf.sh" case: PDFWorkConverter
+        // reads literals from an uncompressed stream and refuses anything
+        // compressed rather than guessing.
+        assertFalse(
+            "expected native MuPDF to be unavailable in a JVM unit test",
+            KudosMuPDF.isAvailable
+        )
+        val plain = "%PDF-1.4\nBT (Hello there, reader.) Tj ET".toByteArray(Charsets.ISO_8859_1)
+        assertNotNull(converter().convert("Story", plain))
+        val compressed = "%PDF-1.4\n<< /Filter /FlateDecode >> stream (x\u009cË) endstream"
+            .toByteArray(Charsets.ISO_8859_1)
+        assertNull(converter().convert("Story", compressed))
     }
 
     @Test
-    fun `uncompressed pdf text still converts`() {
+    fun `uncompressed pdf text still converts when the native library is present`() {
+        // Only meaningful on a device/emulator with the real .so — see
+        // android/Scripts/build-mupdf.sh. Skips (not fails) under a plain JVM run.
+        assumeTrue(KudosMuPDF.isAvailable)
         val simple = "%PDF-1.4\nBT (Hello there, reader.) Tj ET".toByteArray(Charsets.ISO_8859_1)
-        val epub = PDFWorkConverter().convert("Story", simple)
+        val epub = converter().convert("Story", simple)
         assertNotNull("plain literal text should still be extractable", epub)
         assertEquals(ImportedFileFormat.EPUB, ImportedFileFormat.sniff(epub!!, "Story.epub"))
     }

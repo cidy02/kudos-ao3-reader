@@ -1,33 +1,51 @@
 package io.github.cidy02.kudos.works.converters
 
+import java.io.File
+
 /**
- * Best-effort PDF → EPUB text extraction.
+ * PDF → EPUB.
  *
- * Kudos ships no PDF library, so this only reads text from *uncompressed* PDF
- * text objects — literals inside `( … )` in the content stream. Most real PDFs
- * compress their streams (`/FlateDecode`), where those parentheses match
- * compressed binary rather than words.
+ * **Preferred path: MuPDF structured text.** MuPDF returns ordered blocks with
+ * reliable bounding boxes, which is the data a converter actually needs. The
+ * platform text APIs on both platforms are *text* APIs, not *layout* ones —
+ * iOS's docs/PDF_ENGINE_MUPDF.md records five defects that came out of
+ * reconstructing paragraphs from PDFKit, the worst being prose silently
+ * relocated into the wrong paragraph, which is the worst failure mode a
+ * preservation app can have.
  *
- * That is why [convert] returns `null` instead of an EPUB it can't stand behind:
- * the previous version emitted that binary as paragraphs, so importing an
- * ordinary PDF produced a library entry full of mojibake instead of a clear
- * "can't read this" message. Measured on a real PDF, 10 of 18 emitted
- * "paragraphs" were raw binary and none were document text.
+ * **Fallback: uncompressed text only, else refuse honestly.** When
+ * `libkudosmupdf.so` isn't in the APK (`jniLibs/` is not committed — the library
+ * is AGPL-3.0 and built locally), only literals inside `( … )` in an
+ * *uncompressed* content stream are read, and [convert] returns `null` rather
+ * than an EPUB it can't stand behind. An earlier version regexed compressed
+ * bytes too; measured on a real PDF, 10 of 18 "paragraphs" were raw binary and
+ * none were document text.
  *
- * When extraction does yield readable paragraphs, [AuthorNoteDetector] marks
- * author's notes the same way as plain-text import (iOS PDF path uses the same
- * detector via `HTMLWorkSanitizer.paragraphs`).
- *
- * ponytail: literal-only extraction. Swap in PdfBox-Android (plus ML Kit OCR for
- * scanned pages) if PDF import becomes a feature worth its dependency weight.
+ * Either way, [AuthorNoteDetector] marks author's notes the same way as
+ * plain-text import (iOS's PDF path uses the same detector via
+ * `HTMLWorkSanitizer.paragraphs`).
  */
-class PDFWorkConverter {
+class PDFWorkConverter(private val cacheDir: File? = null) {
 
     fun convert(title: String, bytes: ByteArray): ByteArray? {
-        val paragraphs = extractParagraphs(bytes) ?: return null
+        val paragraphs = muPdfParagraphs(bytes) ?: extractParagraphs(bytes) ?: return null
         if (paragraphs.isEmpty()) return null
         val body = paragraphsWithAuthorNotes(paragraphs)
         return if (body.isBlank()) null else EpubBuilder.buildEpub(title, body)
+    }
+
+    /** MuPDF's paragraphs in reading order, or null when MuPDF can't read the file. */
+    private fun muPdfParagraphs(bytes: ByteArray): List<String>? {
+        if (!KudosMuPDF.isAvailable) return null
+        val temp = writeTemp(bytes) ?: return null
+        return try {
+            KudosMuPDF.paragraphsPerPage(temp.absolutePath)
+                ?.flatten()
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+        } finally {
+            temp.delete()
+        }
     }
 
     /**
@@ -57,6 +75,37 @@ class PDFWorkConverter {
             }
             .filter { it.isNotBlank() && it.isMostlyReadable() && !it.isPdfDateStamp() }
             .toList()
+    }
+
+    /**
+     * The document's text as *lines*, for the calibre/FanFicFare label block.
+     *
+     * Deliberately not paragraphs: assembling a block joins its lines, which
+     * merges `Label: value` rows into one blob and makes the parser read
+     * `Storylink:` as part of `Story:`'s value.
+     */
+    fun metadataLines(bytes: ByteArray): List<String> {
+        if (!KudosMuPDF.isAvailable) return emptyList()
+        val temp = writeTemp(bytes) ?: return emptyList()
+        return try {
+            KudosMuPDF.linesPerPage(temp.absolutePath)?.firstOrNull().orEmpty()
+        } finally {
+            temp.delete()
+        }
+    }
+
+    /**
+     * MuPDF opens a path, not a buffer, so the bytes land in the cache dir
+     * briefly. Explicit directory, not the bare 2-arg overload: Android doesn't
+     * reliably populate `java.io.tmpdir`, so that version can throw — every
+     * other temp-file write in this codebase (`WorkFileStore`, `FontFileStore`,
+     * `FandomCatalogCache`) passes its directory explicitly for the same reason.
+     */
+    private fun writeTemp(bytes: ByteArray): File? {
+        val dir = cacheDir ?: return null
+        return runCatching {
+            File.createTempFile("kudos-import-", ".pdf", dir).apply { writeBytes(bytes) }
+        }.getOrNull()
     }
 
     /** Rejects binary that happened to sit between parentheses. */

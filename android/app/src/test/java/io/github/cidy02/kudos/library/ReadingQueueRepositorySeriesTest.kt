@@ -52,7 +52,8 @@ class ReadingQueueRepositorySeriesTest {
             workRepo,
             AO3WorkMetadataRepository(fakeClient),
             AO3EpubDownloader(fakeClient),
-            fileStore
+            fileStore,
+            context.cacheDir
         )
     }
 
