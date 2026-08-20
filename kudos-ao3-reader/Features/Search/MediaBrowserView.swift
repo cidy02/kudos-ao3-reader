@@ -87,6 +87,14 @@ struct MediaBrowserView: View {
                             categoryCard(category)
                                 .padding(CardListMetrics.innerHorizontal)
                                 .frame(maxWidth: .infinity, alignment: .topLeading)
+                                // Defensive: clips content to the card's own bounds
+                                // before the background/shadow below, so an
+                                // oversized child can't spill into the neighboring
+                                // masonry column. Matches CategoryCardSkeleton's own
+                                // fix for the same failure mode (SkeletonLoading.swift).
+                                .clipShape(
+                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                                )
                                 .background(
                                     RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
                                         .fill(themeManager.appTheme.cardSurface)
