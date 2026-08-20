@@ -32,6 +32,7 @@ final class ReaderSpeechController {
         case stopped
         case playing
         case paused
+        case modelNotDownloaded
     }
 
     private(set) var status: Status = .unavailable
@@ -52,18 +53,17 @@ final class ReaderSpeechController {
     /// Now Playing / Lock Screen next-track — chapter skip (same as mini player).
     var onSkipNext: (() -> Void)?
 
-    private var synthesizer: PublicationSpeechSynthesizer?
+    private var publication: Publication?
+    private var ttsService: TTSService?
+    private let downloadManager = TTSDownloadManager()
+    private var stoppedManually = false
+    
     /// After a re-anchor while paused, pause again once the first utterance starts.
     private var pendingPauseAfterReanchor = false
     /// Instantaneous target (0…1); `speechEnergy` lerps toward this at ~60 fps.
     private var speechEnergyTarget: Double = 0
     /// Runs the attack/release smoother while energy is live or speaking.
     private var speechEnergySmoothTask: Task<Void, Never>?
-    private var delegateProxy: DelegateProxy?
-    private var engineBridge: EngineBridge?
-    /// Identity of the publication the live synthesizer was built for. Used so
-    /// a re-entrant `.ready` for the same open does not tear down playback.
-    private var preparedPublicationID: ObjectIdentifier?
 
     /// Work metadata for the system Now Playing card (title + author byline).
     private var nowPlayingTitle: String = ""
@@ -83,7 +83,7 @@ final class ReaderSpeechController {
 
     /// Voices the settings UI can offer (already filtered for long-form reading).
     var availableVoices: [TTSVoice] {
-        synthesizer?.availableVoices ?? ReaderSpeechPreferences.catalogVoices()
+        ttsService?.availableVoices ?? []
     }
 
     /// Builds the synthesizer for a publication. Returns quietly when the
@@ -108,15 +108,13 @@ final class ReaderSpeechController {
         nowPlayingArtist = author.isEmpty ? nil : author
         totalPositionCount = max(0, totalPositions)
 
-        guard let publication,
-              PublicationSpeechSynthesizer.canSpeak(publication: publication)
-        else {
+        guard let publication, publication.content() != nil else {
             tearDown()
             return
         }
 
         let id = ObjectIdentifier(publication)
-        if preparedPublicationID == id, synthesizer != nil {
+        if self.publication.map({ ObjectIdentifier($0) }) == id, ttsService != nil {
             // Same open — keep the engine and any in-flight playback; still
             // refresh metadata in case the view re-bound.
             return
@@ -127,74 +125,144 @@ final class ReaderSpeechController {
         nowPlayingTitle = title
         nowPlayingArtist = author.isEmpty ? nil : author
         totalPositionCount = max(0, totalPositions)
+        self.publication = publication
 
-        let bridge = EngineBridge()
-        let proxy = DelegateProxy()
-        proxy.owner = self
-
-        let voices = ReaderSpeechPreferences.catalogVoices()
-        let language = publication.metadata.language
-        let voiceID = ReaderSpeechPreferences.resolvedVoiceIdentifier(
-            language: language,
-            voices: voices
-        )
-
-        guard let synthesizer = PublicationSpeechSynthesizer(
-            publication: publication,
-            config: .init(
-                defaultLanguage: language,
-                voiceIdentifier: voiceID
-            ),
-            // Readium owns category/mode/activation; leave defaults.
-            engineFactory: { bridge.makeEngine() },
-            delegate: proxy
-        ) else { return }
-
-        self.engineBridge = bridge
-        self.delegateProxy = proxy
-        self.synthesizer = synthesizer
-        preparedPublicationID = id
-        status = .stopped
+        let service = SherpaKokoroTTSService(modelDirectory: downloadManager.modelDirectory)
+        
+        service.onStatusChange = { [weak self] newStatus in
+            guard let self else { return }
+            switch newStatus {
+            case .unavailable:
+                self.status = .unavailable
+            case .stopped:
+                self.status = .stopped
+                self.clearSpeechEnergy()
+                self.clearNowPlaying()
+                if !self.stoppedManually {
+                    // ponytail: Auto chapter continuation.
+                    // SherpaKokoroTTSService finishes a chapter and stops on its own.
+                    // This ceiling is chapter-boundary granularity instead of Readium's
+                    // old per-sentence locator tracking. Future batches could add
+                    // finer-grained locators if TTSService grows a per-chunk-locator API.
+                    self.onSkipNext?()
+                }
+            case .playing:
+                self.status = .playing
+                self.publishNowPlaying(playing: true)
+            case .paused:
+                self.status = .paused
+                self.clearSpeechEnergy()
+                self.publishNowPlaying(playing: false)
+            }
+        }
+        
+        service.onSpokenTextChange = { [weak self] text in
+            guard let self else { return }
+            self.spokenText = ReaderSpeechPreferences.cleanUtteranceText(text)
+            if self.pendingPauseAfterReanchor && !text.isEmpty {
+                self.pendingPauseAfterReanchor = false
+                self.status = .playing
+                self.ttsService?.pause()
+            }
+        }
+        
+        service.onSpeechEnergyPulse = { [weak self] energy, seed in
+            // Reusing pulseSpeechEnergy target logic.
+            // pulseSpeechEnergy takes a string highlight to compute target, but we already have energy.
+            // I'll directly update the target and start smoothing.
+            guard let self else { return }
+            self.speechEnergyTarget = energy
+            self.speechEnergySeed = seed
+            self.startSpeechEnergySmoothingIfNeeded()
+        }
+        
+        service.onAdvance = { [weak self] locator in
+            self?.resumeLocator = locator
+            self?.onAdvance?(locator)
+        }
+        
+        self.ttsService = service
+        self.status = .stopped
     }
 
     /// Pushes the latest UserDefaults preferences into the live synthesizer.
     /// Rate/pitch apply on the next utterance via the engine bridge; voice
     /// changes take effect on the next utterance through `config`.
     func applyPreferences() {
-        guard let synthesizer else { return }
-        let language = synthesizer.config.defaultLanguage
+        guard let ttsService else { return }
+        let language = publication?.metadata.language ?? Language(code: .bcp47(Locale.current.identifier))
         let voiceID = ReaderSpeechPreferences.resolvedVoiceIdentifier(
             language: language,
-            voices: synthesizer.availableVoices
+            voices: ttsService.availableVoices
         )
-        synthesizer.config.voiceIdentifier = voiceID
+        ttsService.setVoice(id: voiceID ?? "")
+        ttsService.setRate(Float(ReaderSpeechPreferences.rateMultiplier))
+        ttsService.setPitch(Float(ReaderSpeechPreferences.pitchMultiplier))
     }
 
     /// Starts at `locator` (normally the reader's current position) or resumes
     /// where it left off.
+    private func startSpeech(from locator: Locator?) {
+        guard let publication else { return }
+        let startLoc = locator ?? resumeLocator
+        applyPreferences()
+        
+        Task {
+            do {
+                guard let content = publication.content(from: startLoc) else { return }
+                let allElements = await content.elements()
+                
+                guard let firstElement = allElements.first else { return }
+                let targetHref = startLoc?.href ?? firstElement.locator.href
+                
+                var chapterElements: [ContentElement] = []
+                for el in allElements {
+                    if el.locator.href == targetHref {
+                        chapterElements.append(el)
+                    } else {
+                        break
+                    }
+                }
+                
+                let text = chapterElements.compactMap { ($0 as? TextualContentElement)?.text }.filter { !$0.isEmpty }.joined(separator: "\n")
+                if text.isEmpty { return }
+                
+                installRemoteCommandsIfNeeded()
+                stoppedManually = false
+                try await ttsService?.speak(text: text, startLocator: startLoc ?? firstElement.locator)
+            } catch {
+                // Ignore error
+            }
+        }
+    }
+
     func toggle(from locator: Locator?) {
-        guard let synthesizer else { return }
+        guard ttsService != nil else { return }
         applyPreferences()
         switch status {
         case .unavailable:
             return
         case .playing:
-            synthesizer.pause()
+            pause()
         case .paused:
-            synthesizer.resume()
-        case .stopped:
+            ttsService?.resume()
+        case .stopped, .modelNotDownloaded:
+            if !downloadManager.isModelDownloaded() {
+                status = .modelNotDownloaded
+                return
+            }
             if let locator {
                 resumeLocator = locator
             }
-            installRemoteCommandsIfNeeded()
-            synthesizer.start(from: locator ?? resumeLocator)
+            startSpeech(from: locator ?? resumeLocator)
         }
     }
 
     func stop() {
         pendingPauseAfterReanchor = false
-        synthesizer?.stop()
-        status = synthesizer == nil ? .unavailable : .stopped
+        stoppedManually = true
+        ttsService?.stop()
+        status = ttsService == nil ? .unavailable : .stopped
         spokenText = ""
         clearSpeechEnergy()
         clearNowPlaying()
@@ -209,7 +277,8 @@ final class ReaderSpeechController {
     /// Pause without ending the session (hold-to-seek while scrubbing).
     func pause() {
         pendingPauseAfterReanchor = false
-        synthesizer?.pause()
+        stoppedManually = true
+        ttsService?.pause()
         clearSpeechEnergy()
     }
 
@@ -218,15 +287,24 @@ final class ReaderSpeechController {
     ///   was active, start then immediately pause so Play resumes from the new spot.
     func reanchor(to locator: Locator?, resumePlaying: Bool) {
         resumeLocator = locator
-        guard let synthesizer, status != .unavailable else { return }
+        guard ttsService != nil, status != .unavailable else { return }
+        
         applyPreferences()
-        installRemoteCommandsIfNeeded()
+        
         if resumePlaying {
+            if !downloadManager.isModelDownloaded() {
+                status = .modelNotDownloaded
+                return
+            }
             pendingPauseAfterReanchor = false
-            synthesizer.start(from: locator)
+            startSpeech(from: locator)
         } else if isSessionActive {
+            if !downloadManager.isModelDownloaded() {
+                status = .modelNotDownloaded
+                return
+            }
             pendingPauseAfterReanchor = true
-            synthesizer.start(from: locator)
+            startSpeech(from: locator)
         }
     }
 
@@ -241,69 +319,16 @@ final class ReaderSpeechController {
     /// Island transport does not keep targeting a dead session.
     func tearDown() {
         pendingPauseAfterReanchor = false
+        stoppedManually = true
         onAdvance = nil
         onSkipPrevious = nil
         onSkipNext = nil
-        synthesizer?.stop()
-        synthesizer = nil
-        delegateProxy = nil
-        engineBridge = nil
-        preparedPublicationID = nil
-        resumeLocator = nil
-        totalPositionCount = 0
-        status = .unavailable
-        spokenText = ""
-        clearSpeechEnergy()
+        ttsService?.stop()
+        ttsService = nil
+        publication = nil
         clearNowPlaying()
         removeRemoteCommands()
-    }
-
-    fileprivate func apply(state: PublicationSpeechSynthesizer.State) {
-        switch state {
-        case .stopped:
-            status = .stopped
-            spokenText = ""
-            clearSpeechEnergy()
-            clearNowPlaying()
-        case let .paused(utterance):
-            status = .paused
-            spokenText = ReaderSpeechPreferences.cleanUtteranceText(utterance.text)
-            resumeLocator = utterance.locator
-            clearSpeechEnergy()
-            publishNowPlaying(playing: false)
-        case let .playing(utterance, range):
-            spokenText = ReaderSpeechPreferences.cleanUtteranceText(utterance.text)
-            resumeLocator = utterance.locator
-            if pendingPauseAfterReanchor {
-                pendingPauseAfterReanchor = false
-                status = .playing
-                synthesizer?.pause()
-                return
-            }
-            status = .playing
-            // Only pulse on real willSpeakRange updates — not the initial
-            // `.playing(utterance, range: nil)` seed (that jumped bars before audio).
-            if let range, let fragment = range.text.highlight {
-                pulseSpeechEnergy(spokenFragment: fragment)
-            }
-            onAdvance?(utterance.locator)
-            publishNowPlaying(playing: true)
-        }
-    }
-
-    /// Raise the energy *target* from a currently spoken fragment. A background
-    /// loop smooths `speechEnergy` toward the target (fast attack / slower release)
-    /// and eases the target back to 0 between range callbacks.
-    private func pulseSpeechEnergy(spokenFragment: String) {
-        let trimmed = spokenFragment.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              trimmed.unicodeScalars.contains(where: { CharacterSet.letters.contains($0)
-                  || CharacterSet.decimalDigits.contains($0) })
-        else { return }
-
-        speechEnergyTarget = Double.random(in: 0.88 ... 1.0)
-        speechEnergySeed = Double(trimmed.unicodeScalars.reduce(0) { ($0 &+ UInt32($1.value)) } % 997) / 997.0
-        startSpeechEnergySmoothingIfNeeded()
+        status = .unavailable
     }
 
     private func startSpeechEnergySmoothingIfNeeded() {
@@ -466,7 +491,7 @@ final class ReaderSpeechController {
     }
 
     private func handleRemotePlay() -> MPRemoteCommandHandlerStatus {
-        guard let synthesizer else { return .commandFailed }
+        guard ttsService != nil else { return .commandFailed }
         applyPreferences()
         switch status {
         case .unavailable:
@@ -474,22 +499,27 @@ final class ReaderSpeechController {
         case .playing:
             return .success
         case .paused:
-            synthesizer.resume()
+            ttsService?.resume()
             return .success
-        case .stopped:
-            installRemoteCommandsIfNeeded()
-            synthesizer.start(from: resumeLocator)
+        case .stopped, .modelNotDownloaded:
+            if !downloadManager.isModelDownloaded() {
+                status = .modelNotDownloaded
+                return .commandFailed
+            }
+            startSpeech(from: resumeLocator)
             return .success
         }
     }
 
     private func handleRemotePause() -> MPRemoteCommandHandlerStatus {
-        guard synthesizer != nil else { return .commandFailed }
+        guard ttsService != nil else { return .commandFailed }
         switch status {
-        case .playing:
-            synthesizer?.pause()
+        case .unavailable, .stopped, .modelNotDownloaded:
+            return .noActionableNowPlayingItem
+        case .paused:
             return .success
-        case .paused, .stopped, .unavailable:
+        case .playing:
+            pause()
             return .success
         }
     }
@@ -502,46 +532,6 @@ final class ReaderSpeechController {
     /// initializer is internal. We still normalize whitespace for the mini
     /// player's caption in `apply(state:)`. Sentence pauses + rate/pitch are
     /// applied on each `AVSpeechUtterance` via the delegate.
-    private final class EngineBridge: AVTTSEngineDelegate {
-        private var engine: AVTTSEngine?
-
-        func makeEngine() -> TTSEngine {
-            if let engine { return engine }
-            let av = AVTTSEngine(delegate: self)
-            engine = av
-            return av
-        }
-
-        func avTTSEngine(_ engine: AVTTSEngine, didCreateUtterance utterance: AVSpeechUtterance) {
-            utterance.rate = ReaderSpeechPreferences.avSpeechRate
-            utterance.pitchMultiplier = ReaderSpeechPreferences.avPitch
-            // A short post-sentence pause makes chapter prose less machine-gun.
-            utterance.postUtteranceDelay = ReaderSpeechPreferences.sentencePause
-        }
-    }
-
-    /// Readium's delegate is a class-bound protocol, so the `@Observable`
-    /// controller can't conform directly without becoming an `NSObject`
-    /// subclass; this thin proxy keeps that detail out of the model.
-    private final class DelegateProxy: PublicationSpeechSynthesizerDelegate {
-        weak var owner: ReaderSpeechController?
-
-        func publicationSpeechSynthesizer(
-            _: PublicationSpeechSynthesizer,
-            stateDidChange state: PublicationSpeechSynthesizer.State
-        ) {
-            Task { @MainActor [weak owner] in owner?.apply(state: state) }
-        }
-
-        func publicationSpeechSynthesizer(
-            _: PublicationSpeechSynthesizer,
-            utterance _: PublicationSpeechSynthesizer.Utterance,
-            didFailWithError _: PublicationSpeechSynthesizer.Error
-        ) {
-            // A single utterance failing (an unsupported language, say) should
-            // not tear playback down; the synthesizer moves to the next one.
-        }
-    }
 }
 
 /// The read-aloud transport strip. When chrome is up it sits *inside*
