@@ -223,17 +223,20 @@ struct CategoryCardSkeleton: View {
             // real chips — a plain HStack would overflow the card's width past
             // 2-3 placeholders instead of wrapping), only when chipCount > 0.
             // Chip height 28 to match TagChip's own real padded size (.caption
-            // text + 5pt vertical padding on each side). Fandom names are
-            // usually long enough to truncate rather than fit, so a real chip
-            // commonly spans most of the card's own width by itself — sized
-            // these to match rather than the narrow, clearly-too-small pills a
-            // first pass used.
+            // text + 5pt vertical padding on each side). A real chip's fandom
+            // name is truncated (TagChip's own .lineLimit(1)) to whatever fits,
+            // never wider than the card — 150pt didn't respect that ceiling: on
+            // the narrowest supported device a 2-column masonry card's own
+            // content width is ~133pt, so that chip was wider than its own
+            // card and (SkeletonBlock now sizing to an exact width rather than
+            // silently collapsing) visibly spilled into the next column.
+            // 116/82 stay safely under that on every supported width.
             if chipCount > 0 {
                 SkeletonBlock(height: 11, width: 92, cornerRadius: 3)
                     .padding(.top, 2)
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(0 ..< chipCount, id: \.self) { index in
-                        SkeletonBlock(height: 28, width: index.isMultiple(of: 2) ? 150 : 108, cornerRadius: 14)
+                        SkeletonBlock(height: 28, width: index.isMultiple(of: 2) ? 116 : 82, cornerRadius: 14)
                     }
                 }
             }
@@ -244,6 +247,14 @@ struct CategoryCardSkeleton: View {
         }
         .padding(CardListMetrics.innerHorizontal)
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        // Clips the *content* to the card's own bounds before the background/
+        // shadow below is added, so an oversized child (a chip wider than the
+        // card, say) is cut off at this card's edge instead of visibly
+        // spilling into the neighboring masonry column — confirmed on device.
+        // Applied before .background, not after, so the shadow (drawn as part
+        // of that background layer) keeps its own soft edge instead of also
+        // getting clipped.
+        .clipShape(RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous))
         // Same card chrome as the real grid cell (theme.appTheme.cardSurface/
         // cardBorder/cardShadow) — this renders inside a plain masonry column,
         // not a List row, so it needs its own background the way .cardRow()
