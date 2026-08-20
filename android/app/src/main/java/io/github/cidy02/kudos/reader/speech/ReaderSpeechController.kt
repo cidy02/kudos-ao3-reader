@@ -6,20 +6,27 @@ import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
-import android.speech.tts.Voice
+import androidx.lifecycle.asFlow
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
-import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 enum class SpeechStatus {
     UNAVAILABLE,
     STOPPED,
     PLAYING,
-    PAUSED
+    PAUSED,
+    MODEL_NOT_DOWNLOADED
 }
 
 /**
@@ -27,27 +34,29 @@ enum class SpeechStatus {
  * transport. Port of Apple `ReaderSpeechController` + `MPRemoteCommandCenter`.
  */
 class ReaderSpeechController(
-    context: Context,
+    private val context: Context,
     private val onUtteranceStart: ((String) -> Unit)? = null
-) : TextToSpeech.OnInitListener {
-
+) {
     private val appContext = context.applicationContext
-    private var tts: TextToSpeech? = TextToSpeech(appContext, this)
-    private var isInitialized = false
+    private val tts = KokoroTTSController(appContext)
+    
+    private val scope = CoroutineScope(Dispatchers.Main + Job())
 
     private val _status = MutableStateFlow(SpeechStatus.STOPPED)
     val status: StateFlow<SpeechStatus> = _status.asStateFlow()
 
-    private val _spokenText = MutableStateFlow("")
-    val spokenText: StateFlow<String> = _spokenText.asStateFlow()
+    val spokenText: StateFlow<String> = tts.spokenText
 
-    private val _availableVoices = MutableStateFlow<List<Voice>>(emptyList())
-    val availableVoices: StateFlow<List<Voice>> = _availableVoices.asStateFlow()
+    val availableVoices: StateFlow<List<TTSVoice>> = tts.availableVoices
+
+    private val _downloadProgress = MutableStateFlow<Float?>(null)
+    val downloadProgress: StateFlow<Float?> = _downloadProgress.asStateFlow()
 
     private var currentQueue: List<String> = emptyList()
     private var currentIndex = 0
     private var currentPreferences = ReaderPreferences()
     private var workTitle: String = "Kudos"
+    private var currentSpeakJob: Job? = null
 
     private val mediaSession: MediaSession = MediaSession(appContext, "kudos.reader.tts").apply {
         setCallback(object : MediaSession.Callback() {
@@ -74,45 +83,62 @@ class ReaderSpeechController(
         isActive = true
     }
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            isInitialized = true
-            tts?.language = Locale.getDefault()
-            _availableVoices.value = tts?.voices?.toList().orEmpty()
-            applyVoicePreference()
-            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {
-                    _status.value = SpeechStatus.PLAYING
-                    publishPlaybackState(PlaybackState.STATE_PLAYING)
-                    onUtteranceStart?.invoke(utteranceId.orEmpty())
+    init {
+        scope.launch {
+            tts.status.collect { ttsStatus ->
+                // Map the inner TTS service status to the controller's status, except when we override it
+                if (ttsStatus == SpeechStatus.UNAVAILABLE && !TTSDownloadWorker.isModelDownloaded(appContext)) {
+                    _status.value = SpeechStatus.MODEL_NOT_DOWNLOADED
+                } else if (_status.value != SpeechStatus.MODEL_NOT_DOWNLOADED) {
+                    _status.value = ttsStatus
+                    if (ttsStatus == SpeechStatus.STOPPED && currentIndex < currentQueue.size) {
+                        // The chunk finished playing. We should speak the next one.
+                        // Actually, tts.speak() is suspending and blocks until done, so we handle sequencing in speakCurrent().
+                    }
                 }
-
-                override fun onDone(utteranceId: String?) {
-                    speakNext()
-                }
-
-                @Deprecated("Deprecated in Java")
-                override fun onError(utteranceId: String?) {
-                    speakNext()
-                }
-            })
-        } else {
-            _status.value = SpeechStatus.UNAVAILABLE
+            }
         }
+        
+        scope.launch {
+            WorkManager.getInstance(appContext)
+                .getWorkInfosForUniqueWorkFlow("TTSDownloadWorker")
+                .collectLatest { infos ->
+                    val info = infos.firstOrNull()
+                    if (info != null && info.state == WorkInfo.State.RUNNING) {
+                        val p = info.progress.getFloat(TTSDownloadWorker.KEY_PROGRESS, -1f)
+                        _downloadProgress.value = if (p >= 0f) p else null
+                    } else if (info != null && info.state.isFinished) {
+                        _downloadProgress.value = null
+                        if (TTSDownloadWorker.isModelDownloaded(appContext)) {
+                            _status.value = SpeechStatus.STOPPED
+                        }
+                    }
+                }
+        }
+
+        if (!TTSDownloadWorker.isModelDownloaded(appContext)) {
+            _status.value = SpeechStatus.MODEL_NOT_DOWNLOADED
+        }
+    }
+
+    fun enqueueDownload() {
+        TTSDownloadWorker.enqueue(appContext)
+        _status.value = SpeechStatus.MODEL_NOT_DOWNLOADED
     }
 
     fun configure(preferences: ReaderPreferences, title: String = workTitle) {
         currentPreferences = preferences
         workTitle = title.ifBlank { "Kudos" }
-        if (!isInitialized) return
-        tts?.setSpeechRate(preferences.speechRate)
-        tts?.setPitch(preferences.speechPitch)
+        tts.setRate(preferences.speechRate)
+        tts.setPitch(preferences.speechPitch)
         applyVoicePreference()
         updateMetadata()
     }
 
     fun startReading(paragraphs: List<String>) {
-        if (!isInitialized || paragraphs.isEmpty()) return
+        if (paragraphs.isEmpty()) return
+        if (_status.value == SpeechStatus.MODEL_NOT_DOWNLOADED) return
+        
         currentQueue = paragraphs
         currentIndex = 0
         updateMetadata()
@@ -138,62 +164,69 @@ class ReaderSpeechController(
     }
 
     private fun applyVoicePreference() {
-        val id = currentPreferences.speechVoiceIdentifier ?: return
-        val voice = tts?.voices?.firstOrNull { it.name == id } ?: return
-        tts?.voice = voice
+        val id = currentPreferences.speechVoiceIdentifier
+        if (id != null) {
+            tts.setVoice(id)
+        }
     }
 
     private fun speakCurrent() {
         if (currentIndex >= currentQueue.size) {
             _status.value = SpeechStatus.STOPPED
-            _spokenText.value = ""
             publishPlaybackState(PlaybackState.STATE_STOPPED)
             return
         }
-        val text = currentQueue[currentIndex]
-        _spokenText.value = text
-        tts?.setSpeechRate(currentPreferences.speechRate)
-        tts?.setPitch(currentPreferences.speechPitch)
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utt_$currentIndex")
-        publishPlaybackState(PlaybackState.STATE_PLAYING)
-    }
-
-    private fun speakNext() {
-        currentIndex++
-        if (currentIndex < currentQueue.size) {
-            speakCurrent()
-        } else {
-            _status.value = SpeechStatus.STOPPED
-            _spokenText.value = ""
-            publishPlaybackState(PlaybackState.STATE_STOPPED)
+        
+        currentSpeakJob?.cancel()
+        currentSpeakJob = scope.launch(Dispatchers.Default) {
+            val text = currentQueue[currentIndex]
+            tts.setRate(currentPreferences.speechRate)
+            tts.setPitch(currentPreferences.speechPitch)
+            onUtteranceStart?.invoke("utt_$currentIndex")
+            publishPlaybackState(PlaybackState.STATE_PLAYING)
+            
+            tts.speak(text)
+            
+            launch(Dispatchers.Main) {
+                currentIndex++
+                if (currentIndex < currentQueue.size) {
+                    speakCurrent()
+                } else {
+                    _status.value = SpeechStatus.STOPPED
+                    publishPlaybackState(PlaybackState.STATE_STOPPED)
+                }
+            }
         }
     }
 
     fun pause() {
         if (_status.value == SpeechStatus.PLAYING) {
-            tts?.stop()
+            tts.pause()
             _status.value = SpeechStatus.PAUSED
             publishPlaybackState(PlaybackState.STATE_PAUSED)
         }
     }
 
     fun resume() {
-        if (_status.value == SpeechStatus.PAUSED && currentIndex < currentQueue.size) {
-            speakCurrent()
+        if (_status.value == SpeechStatus.PAUSED) {
+            tts.resume()
+            _status.value = SpeechStatus.PLAYING
+            publishPlaybackState(PlaybackState.STATE_PLAYING)
         }
     }
 
     fun stop() {
-        tts?.stop()
+        currentSpeakJob?.cancel()
+        currentSpeakJob = null
+        tts.stop()
         _status.value = SpeechStatus.STOPPED
-        _spokenText.value = ""
         publishPlaybackState(PlaybackState.STATE_STOPPED)
     }
 
     fun shutdown() {
-        tts?.stop()
-        tts?.shutdown()
-        tts = null
+        currentSpeakJob?.cancel()
+        scope.cancel()
+        tts.stop()
         mediaSession.isActive = false
         mediaSession.release()
     }

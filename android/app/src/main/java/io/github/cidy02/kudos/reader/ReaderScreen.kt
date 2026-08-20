@@ -472,8 +472,10 @@ private fun ReaderReading(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                 ) {
+                    val downloadProgress by speechController.downloadProgress.collectAsState()
                     ReaderTtsControls(
                         status = speechStatus,
+                        downloadProgress = downloadProgress,
                         onPlay = {
                             if (speechStatus == SpeechStatus.PAUSED) {
                                 speechController.resume()
@@ -503,7 +505,8 @@ private fun ReaderReading(
                             showTtsControls = false
                         },
                         onSkipNext = { speechController.skipForward() },
-                        onSkipPrevious = { speechController.skipBackward() }
+                        onSkipPrevious = { speechController.skipBackward() },
+                        onDownloadStart = { speechController.enqueueDownload() }
                     )
                 }
 
@@ -660,12 +663,14 @@ private fun ReaderReading(
 
             if (showDisplaySheet) {
                 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                val availableVoices by speechController.availableVoices.collectAsState()
                 ModalBottomSheet(
                     onDismissRequest = { showDisplaySheet = false },
                     sheetState = sheetState
                 ) {
                     ReaderDisplaySheet(
                         preferences = state.preferences,
+                        availableVoices = availableVoices,
                         onFontSizeChange = viewModel::setFontSizePercent,
                         onThemeChange = viewModel::setColorTheme,
                         onScrollModeChange = viewModel::setScrollMode,
@@ -675,6 +680,7 @@ private fun ReaderReading(
                         onWordSpacingChange = viewModel::setWordSpacing,
                         onSpeechRateChange = viewModel::setSpeechRate,
                         onSpeechPitchChange = viewModel::setSpeechPitch,
+                        onSpeechVoiceChange = viewModel::setSpeechVoiceIdentifier,
                         onFontFamilyChange = viewModel::setFontFamily
                     )
                 }
@@ -1061,6 +1067,7 @@ private fun AnnotationList(
 @Composable
 private fun ReaderDisplaySheet(
     preferences: ReaderPreferences,
+    availableVoices: List<io.github.cidy02.kudos.reader.speech.TTSVoice> = emptyList(),
     onFontSizeChange: (Int) -> Unit,
     onThemeChange: (ReaderColorTheme) -> Unit,
     onScrollModeChange: (Boolean) -> Unit = {},
@@ -1070,6 +1077,7 @@ private fun ReaderDisplaySheet(
     onWordSpacingChange: (Double) -> Unit = {},
     onSpeechRateChange: (Float) -> Unit = {},
     onSpeechPitchChange: (Float) -> Unit = {},
+    onSpeechVoiceChange: (String?) -> Unit = {},
     onFontFamilyChange: (String?) -> Unit = {}
 ) {
     Column(
@@ -1166,6 +1174,22 @@ private fun ReaderDisplaySheet(
         )
 
         Text(text = "Read aloud", style = MaterialTheme.typography.titleMedium)
+        if (availableVoices.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                availableVoices.forEach { voice ->
+                    FilterChip(
+                        selected = preferences.speechVoiceIdentifier == voice.id,
+                        onClick = { onSpeechVoiceChange(voice.id) },
+                        label = { Text(voice.name) }
+                    )
+                }
+            }
+        }
         Text(
             text = "Speed · ${"%.1f".format(preferences.speechRate)}×",
             style = MaterialTheme.typography.titleSmall
@@ -1355,42 +1379,74 @@ private fun openExternal(context: Context, url: String) {
 @Composable
 private fun ReaderTtsControls(
     status: SpeechStatus,
+    downloadProgress: Float?,
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onStop: () -> Unit,
     onSkipNext: () -> Unit = {},
-    onSkipPrevious: () -> Unit = {}
+    onSkipPrevious: () -> Unit = {},
+    onDownloadStart: () -> Unit = {}
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         tonalElevation = 3.dp,
         shadowElevation = 2.dp
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onSkipPrevious) {
-                Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous paragraph")
-            }
-            if (status == SpeechStatus.PLAYING) {
-                IconButton(onClick = onPause) {
-                    Icon(Icons.Filled.Pause, contentDescription = "Pause TTS")
+        if (status == SpeechStatus.MODEL_NOT_DOWNLOADED) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "High-quality voice model needed (~45MB)",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (downloadProgress != null) {
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { downloadProgress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("${(downloadProgress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Button(onClick = onDownloadStart) {
+                        Text("Download Model")
+                    }
                 }
-            } else {
-                IconButton(onClick = onPlay) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "Play TTS")
+                TextButton(onClick = onStop) {
+                    Text("Close")
                 }
             }
-            IconButton(onClick = onStop) {
-                Icon(Icons.Filled.Stop, contentDescription = "Stop TTS")
-            }
-            IconButton(onClick = onSkipNext) {
-                Icon(Icons.Filled.SkipNext, contentDescription = "Next paragraph")
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onSkipPrevious) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous paragraph")
+                }
+                if (status == SpeechStatus.PLAYING) {
+                    IconButton(onClick = onPause) {
+                        Icon(Icons.Filled.Pause, contentDescription = "Pause TTS")
+                    }
+                } else {
+                    IconButton(onClick = onPlay) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "Play TTS")
+                    }
+                }
+                IconButton(onClick = onStop) {
+                    Icon(Icons.Filled.Stop, contentDescription = "Stop TTS")
+                }
+                IconButton(onClick = onSkipNext) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Next paragraph")
+                }
             }
         }
     }

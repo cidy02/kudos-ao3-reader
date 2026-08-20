@@ -130,6 +130,7 @@ dependencies {
     implementation(libs.readium.shared)
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
+    implementation(files("libs/sherpa-onnx-1.13.6.aar"))
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     ksp(libs.androidx.room.compiler)
