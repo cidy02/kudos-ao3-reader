@@ -106,15 +106,16 @@ struct ReaderFanMenu: View {
                         pill.action()
                     } label: {
                         HStack(spacing: 12) {
-                            // Text stays primary; only icons take the theme tint.
+                            // Neutral, not the theme tint — these are plain navigation
+                            // rows (Contents, Find, Themes…) with no active/inactive
+                            // state to signal, so tinting them made every row read as
+                            // already "on."
                             Text(pill.title)
                                 .font(.system(size: 15.5))
                                 .foregroundStyle(pill.isEnabled ? .primary : .secondary)
                             Spacer(minLength: 8)
                             Image(systemName: pill.systemImage)
-                                .foregroundStyle(
-                                    pill.isEnabled ? accentColor : accentColor.opacity(0.4)
-                                )
+                                .foregroundStyle(pill.isEnabled ? Color.primary : Color.secondary)
                         }
                         .padding(.horizontal, 18)
                         .frame(width: pillWidth, height: Self.roundActionHeight)
@@ -142,7 +143,8 @@ struct ReaderFanMenu: View {
                         ShareLink(item: shareURL) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 17))
-                                .foregroundStyle(accentColor)
+                                // Neutral — Share has no active state either.
+                                .foregroundStyle(Color.primary)
                                 .frame(width: Self.roundActionWidth, height: Self.roundActionHeight)
                                 .contentShape(.capsule)
                         }
@@ -163,15 +165,16 @@ struct ReaderFanMenu: View {
         .accessibilityAction(.escape) { close() }
     }
 
-    /// One round action: glass + theme glyph by default; when `isEmphasized`, a
-    /// solid theme fill with a light glyph so locked/unlocked (etc.) is obvious.
+    /// One round action: neutral glass glyph by default; when `isEmphasized`, a
+    /// solid theme fill with a light glyph so an active state (locked, speaking,
+    /// bookmarked…) is obvious. Neutral, not the theme tint, the rest of the
+    /// time — an always-tinted glyph read as already "on" regardless of state.
+    /// `.replace` is the Control Center-style morph for lock/heart/bookmark swaps.
     @ViewBuilder
     private func roundActionButton(_ action: ReaderFanRoundAction) -> some View {
-        // Glyph: contrasting on a filled capsule; theme tint (or dimmed) otherwise.
-        // `.replace` is the Control Center-style morph for lock/heart/bookmark swaps.
         let glyphColor: Color = {
             if action.isEmphasized { return Color.white }
-            return action.isEnabled ? action.tint : action.tint.opacity(0.45)
+            return action.isEnabled ? Color.primary : Color.primary.opacity(0.45)
         }()
 
         Button(action: action.action) {
