@@ -41,7 +41,6 @@ struct ReaderSpeechSettingsSection: View {
             } label: {
                 LabeledContent("Voice", value: selectedVoiceLabel)
             }
-            .disabled(!downloadManager.isModelDownloaded())
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -77,7 +76,7 @@ struct ReaderSpeechSettingsSection: View {
         } header: {
             Text("Read Aloud")
         } footer: {
-            Text("Automatic uses the bundled Kokoro voice pack for high-quality offline speech. The voice pack is a one-time ~200MB download.")
+            Text("Read Aloud uses the system voice immediately. Download the optional Kokoro voice pack for higher-quality offline speech (~200MB, one-time).")
         }
         .onAppear(perform: updateVoices)
         .onChange(of: downloadManager.status) { _, _ in updateVoices() }
@@ -133,7 +132,8 @@ struct ReaderSpeechSettingsSection: View {
             }
             voices = kokoroService?.availableVoices ?? []
         } else {
-            voices = []
+            kokoroService = nil
+            voices = ReaderSpeechPreferences.catalogVoices()
         }
     }
 

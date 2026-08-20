@@ -350,10 +350,6 @@ struct ReadiumReaderView: View {
                 // Lock Screen / Island previous-next track = chapter skip (mini player).
                 speech.onSkipPrevious = { handleSpeechSkipBack() }
                 speech.onSkipNext = { handleSpeechSkipForward() }
-                speech.onNeedsModelDownload = {
-                    fanMenuOpen = false
-                    router.panel = .readerDisplay
-                }
             }
             // Voice changes from the Display sheet apply on the next utterance.
             .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
@@ -462,9 +458,6 @@ struct ReadiumReaderView: View {
     /// same full stop as the mini player (not pause).
     ///
     /// Must key off `isSessionActive` (playing/paused), not `status != .stopped`.
-    /// After the Kokoro migration, `.modelNotDownloaded` is a real idle state —
-    /// the raw comparison treated a missing voice pack as "already on" and
-    /// called `stop()` instead of `toggle()`, so the button appeared dead.
     private func toggleReadingAloud() {
         if speech.isSessionActive {
             stopReadingAloud()
