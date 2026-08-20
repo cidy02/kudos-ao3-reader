@@ -16,6 +16,8 @@ enum ReaderSpeechPreferences {
     static let voiceIDKey = "readerSpeechVoiceID"
     static let rateKey = "readerSpeechRate"
     static let pitchKey = "readerSpeechPitch"
+    static let kokoroModelPackKey = "readerSpeechKokoroModelPack"
+    static let kokoroExecutionProviderKey = "readerSpeechKokoroExecutionProvider"
 
     /// Multiplier on `AVSpeechUtteranceDefaultSpeechRate`. 1.0 = system default.
     static let rateRange: ClosedRange<Double> = 0.5 ... 1.5
@@ -38,6 +40,27 @@ enum ReaderSpeechPreferences {
     static var engineIdentifier: String {
         get { UserDefaults.standard.string(forKey: engineKey) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: engineKey) }
+    }
+
+    static var kokoroModelPack: KokoroModelPack {
+        get { KokoroModelPack.resolving(UserDefaults.standard.string(forKey: kokoroModelPackKey)) }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: kokoroModelPackKey) }
+    }
+
+    static var kokoroExecutionProvider: KokoroExecutionProvider {
+        get {
+            KokoroExecutionProvider.resolving(
+                UserDefaults.standard.string(forKey: kokoroExecutionProviderKey)
+            )
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: kokoroExecutionProviderKey) }
+    }
+
+    static var kokoroRuntimeConfiguration: KokoroRuntimeConfiguration {
+        KokoroRuntimeConfiguration(
+            modelPack: kokoroModelPack,
+            executionProvider: kokoroExecutionProvider
+        )
     }
 
     static var rateMultiplier: Double {

@@ -54,6 +54,8 @@ public final class SherpaKokoroTTSService: TTSService {
 
     private var tts: SherpaOnnxOfflineTtsWrapper?
     private let modelDirectory: URL
+    private let modelPack: KokoroModelPack
+    private let executionProvider: KokoroExecutionProvider
     private static let synthesisQueue = DispatchQueue(
         label: "com.cidy02.Kudos.tts.synthesis",
         qos: .userInitiated
@@ -90,8 +92,24 @@ public final class SherpaKokoroTTSService: TTSService {
         }
     }()
 
-    public init(modelDirectory: URL) {
+    /// Preserves the ordinary Int8/CPU construction path for callers which
+    /// do not need the Settings-driven benchmark configuration.
+    public convenience init(modelDirectory: URL) {
+        self.init(
+            modelDirectory: modelDirectory,
+            modelPack: .int8V019,
+            executionProvider: .cpu
+        )
+    }
+
+    init(
+        modelDirectory: URL,
+        modelPack: KokoroModelPack,
+        executionProvider: KokoroExecutionProvider
+    ) {
         self.modelDirectory = modelDirectory
+        self.modelPack = modelPack
+        self.executionProvider = executionProvider
         attachPlayerNodeIfNeeded()
     }
 
@@ -292,7 +310,7 @@ public final class SherpaKokoroTTSService: TTSService {
     private func loadEngineIfNeeded() -> Bool {
         if let tts, tts.tts != nil { return true }
 
-        let modelPath = modelDirectory.appendingPathComponent("model.int8.onnx").path
+        let modelPath = modelDirectory.appendingPathComponent(modelPack.modelFileName).path
         let voicesPath = modelDirectory.appendingPathComponent("voices.bin").path
         let tokensPath = modelDirectory.appendingPathComponent("tokens.txt").path
         let dataDir = modelDirectory.appendingPathComponent("espeak-ng-data").path
@@ -305,6 +323,55 @@ public final class SherpaKokoroTTSService: TTSService {
             return false
         }
 
+        var usedProvider = executionProvider
+        var wrapper = makeTTSWrapper(
+            modelPath: modelPath,
+            voicesPath: voicesPath,
+            tokensPath: tokensPath,
+            dataDir: dataDir,
+            provider: usedProvider
+        )
+        if wrapper.tts == nil, executionProvider == .coreML {
+            Log.tts.error("Kokoro Core ML provider failed to load; retrying CPU")
+            usedProvider = .cpu
+            wrapper = makeTTSWrapper(
+                modelPath: modelPath,
+                voicesPath: voicesPath,
+                tokensPath: tokensPath,
+                dataDir: dataDir,
+                provider: usedProvider
+            )
+        }
+        guard wrapper.tts != nil else {
+            Log.tts.error("SherpaOnnxCreateOfflineTts returned nil")
+            return false
+        }
+
+        tts = wrapper
+        let loadMessage: String
+        if usedProvider == executionProvider {
+            loadMessage = "Kokoro loaded \(modelPack.rawValue); "
+                + "provider-request=\(executionProvider.rawValue)"
+        } else {
+            loadMessage = "Kokoro loaded \(modelPack.rawValue); "
+                + "provider-request=\(executionProvider.rawValue); "
+                + "provider-retry=\(usedProvider.rawValue)"
+        }
+        Log.tts.info("\(loadMessage, privacy: .public)")
+        let count = Int(wrapper.numSpeakers)
+        if count > 0 {
+            availableVoices = Self.voices(count: count)
+        }
+        return true
+    }
+
+    private func makeTTSWrapper(
+        modelPath: String,
+        voicesPath: String,
+        tokensPath: String,
+        dataDir: String,
+        provider: KokoroExecutionProvider
+    ) -> SherpaOnnxOfflineTtsWrapper {
         let kokoro = sherpaOnnxOfflineTtsKokoroModelConfig(
             model: modelPath,
             voices: voicesPath,
@@ -316,25 +383,14 @@ public final class SherpaKokoroTTSService: TTSService {
             kokoro: kokoro,
             numThreads: 2,
             debug: 0,
-            provider: "cpu"
+            provider: provider.sherpaIdentifier
         )
         var ttsConfig = sherpaOnnxOfflineTtsConfig(
             model: modelConfig,
             // `sentenceChunks` supplies one natural sentence per generation.
             maxNumSentences: 1
         )
-        let wrapper = SherpaOnnxOfflineTtsWrapper(config: &ttsConfig)
-        guard wrapper.tts != nil else {
-            Log.tts.error("SherpaOnnxCreateOfflineTts returned nil")
-            return false
-        }
-
-        tts = wrapper
-        let count = Int(wrapper.numSpeakers)
-        if count > 0 {
-            availableVoices = Self.voices(count: count)
-        }
-        return true
+        return SherpaOnnxOfflineTtsWrapper(config: &ttsConfig)
     }
 
     private static func voices(count: Int) -> [TTSVoice] {
