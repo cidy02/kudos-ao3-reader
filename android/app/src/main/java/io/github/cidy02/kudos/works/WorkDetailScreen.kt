@@ -1131,12 +1131,14 @@ fun WorkDetailScreen(
             }
         },
         onAddToQueue = {
-            ensureLocalThen { work ->
+            // Open the picker immediately — never wait on AO3 metadata/EPUB work.
+            // Selecting a queue still runs ensureLocalThen(queueOnly = true) + preserve.
+            // listQueues() is a local Room read, not network, so this resolves
+            // near-instantly — the launch is only to satisfy suspend, not to defer work.
+            scope.launch {
                 availableQueues = readingQueueRepository.listQueues()
                     .filter { it.kindRaw != ReadingQueueKind.SAVED_FOR_LATER }
                 queuePickerOpen = true
-                // Keep work in state after ensureLocal.
-                refreshLocal(work.id, state.remote)
             }
         },
         onAddToCollection = { collectionDialogOpen = true },

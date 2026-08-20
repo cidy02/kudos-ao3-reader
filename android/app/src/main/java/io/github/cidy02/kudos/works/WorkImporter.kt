@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import java.io.File
 import java.time.Instant
 import java.util.Locale
 
@@ -25,8 +26,11 @@ class WorkImporter(
     private val metadataRepository: AO3WorkMetadataRepository,
     private val downloader: AO3EpubDownloader,
     private val fileStore: WorkFileStore,
+    private val cacheDir: File,
     private val merger: WorkMetadataMerger = WorkMetadataMerger()
 ) {
+    private val pdfConverter get() = io.github.cidy02.kudos.works.converters.PDFWorkConverter(cacheDir)
+
     /**
      * [markSaved] defaults true for the ordinary explicit-save/download callers.
      * Queue-add (see `WorkDetailScreen.ensureLocalThen`) passes `markSaved = false,
@@ -147,7 +151,7 @@ class WorkImporter(
         val finalBytes = when (format) {
             ImportedFileFormat.EPUB -> bytes
             ImportedFileFormat.PDF ->
-                io.github.cidy02.kudos.works.converters.PDFWorkConverter().convert(title, bytes)
+                pdfConverter.convert(title, bytes)
             ImportedFileFormat.HTML ->
                 io.github.cidy02.kudos.works.converters.HTMLWorkConverter().convert(title, bytes)
             ImportedFileFormat.TEXT ->
@@ -169,11 +173,16 @@ class WorkImporter(
         // calibre / FanFicFare exports carry a label block; recovering it means a
         // converted work keeps its real title, tags and — most usefully — the
         // source URL, instead of being stranded with no origin.
-        val exported = TextDecoding.decode(bytes)
-            ?.lineSequence()
-            ?.take(40)
-            ?.toList()
-            ?.let(CalibreMetadata::parse)
+        //
+        // A PDF's label block has to come from MuPDF's *line* granularity: the
+        // bytes are binary, and assembled paragraphs merge `Label: value` rows
+        // into one blob.
+        val exportedLines = if (format == ImportedFileFormat.PDF) {
+            pdfConverter.metadataLines(bytes)
+        } else {
+            TextDecoding.decode(bytes)?.lineSequence()?.take(40)?.toList().orEmpty()
+        }
+        val exported = exportedLines.takeIf { it.isNotEmpty() }?.let(CalibreMetadata::parse)
 
         val work = SavedWork(
             title = exported?.title?.takeIf { it.isNotBlank() } ?: title,
@@ -229,7 +238,7 @@ class WorkImporter(
         val format = ImportedFileFormat.sniff(bytes, "original.$extension")
         val rebuilt = when (format) {
             ImportedFileFormat.PDF ->
-                io.github.cidy02.kudos.works.converters.PDFWorkConverter().convert(work.title, bytes)
+                pdfConverter.convert(work.title, bytes)
             ImportedFileFormat.HTML ->
                 io.github.cidy02.kudos.works.converters.HTMLWorkConverter().convert(work.title, bytes)
             ImportedFileFormat.TEXT ->

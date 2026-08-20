@@ -5,3 +5,9 @@ local.properties
 keystore.properties
 *.keystore
 *.jks
+
+# MuPDF is AGPL-3.0 and built locally by Scripts/build-mupdf.sh — the built
+# library and its source checkout are not committed (same rule as iOS's
+# xcframework). Run that script, or attach the .so to a release.
+build-mupdf/
+app/src/main/jniLibs/

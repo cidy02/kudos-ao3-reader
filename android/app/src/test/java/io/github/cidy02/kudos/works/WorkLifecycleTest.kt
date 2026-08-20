@@ -845,6 +845,7 @@ class WorkImporterLifecycleTest {
             metadataRepository = metadataRepository,
             downloader = AO3EpubDownloader(client),
             fileStore = fileStore,
+            cacheDir = Files.createTempDirectory("kudos-import-cache-tests").toFile(),
             merger = WorkMetadataMerger(uuidFactory = { workUuid })
         )
     }

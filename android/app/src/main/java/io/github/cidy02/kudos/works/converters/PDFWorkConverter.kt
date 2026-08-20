@@ -1,63 +1,68 @@
 package io.github.cidy02.kudos.works.converters
 
+import java.io.File
+
 /**
- * Best-effort PDF → EPUB text extraction.
+ * PDF → EPUB.
  *
- * Kudos ships no PDF library, so this only reads text from *uncompressed* PDF
- * text objects — literals inside `( … )` in the content stream. Most real PDFs
- * compress their streams (`/FlateDecode`), where those parentheses match
- * compressed binary rather than words.
+ * **Preferred path: MuPDF structured text.** MuPDF returns ordered blocks with
+ * reliable bounding boxes, which is the data a converter actually needs. The
+ * platform text APIs on both platforms are *text* APIs, not *layout* ones —
+ * iOS's docs/PDF_ENGINE_MUPDF.md records five defects that came out of
+ * reconstructing paragraphs from PDFKit, the worst being prose silently
+ * relocated into the wrong paragraph, which is the worst failure mode a
+ * preservation app can have.
  *
- * That is why [convert] returns `null` instead of an EPUB it can't stand behind:
- * the previous version emitted that binary as paragraphs, so importing an
- * ordinary PDF produced a library entry full of mojibake instead of a clear
- * "can't read this" message. Measured on a real PDF, 10 of 18 emitted
- * "paragraphs" were raw binary and none were document text.
- *
- * ponytail: literal-only extraction. Swap in PdfBox-Android (plus ML Kit OCR for
- * scanned pages) if PDF import becomes a feature worth its dependency weight.
+ * **Fallback: refuse honestly.** When `libkudosmupdf.so` isn't in the APK
+ * (`jniLibs/` is not committed — the library is AGPL-3.0 and built locally),
+ * [convert] returns null rather than an EPUB it can't stand behind. An earlier
+ * version regexed `( … )` over raw bytes and emitted decompressed binary as
+ * paragraphs; measured on a real PDF, 10 of 18 "paragraphs" were noise and none
+ * were document text.
  */
-class PDFWorkConverter {
+class PDFWorkConverter(private val cacheDir: File) {
 
     fun convert(title: String, bytes: ByteArray): ByteArray? {
-        val rawData = String(bytes, Charsets.ISO_8859_1)
+        val temp = writeTemp(bytes) ?: return null
+        try {
+            val pages = KudosMuPDF.paragraphsPerPage(temp.absolutePath) ?: return null
+            val paragraphs = pages.flatten().map { it.trim() }.filter { it.isNotEmpty() }
+            if (paragraphs.isEmpty()) return null
 
-        // Compressed content streams need an inflater + object parser to read.
-        // Bail before the regex turns compressed bytes into "paragraphs".
-        if (rawData.contains("/FlateDecode") ||
-            rawData.contains("/LZWDecode") ||
-            rawData.contains("/DCTDecode") ||
-            rawData.contains("/Encrypt")
-        ) {
-            return null
+            val body = paragraphs.joinToString("\n") { "<p>${escape(it)}</p>" }
+            return EpubBuilder.buildEpub(title, body)
+        } finally {
+            temp.delete()
         }
-
-        val paragraphs = Regex("""\((.*?)\)""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(rawData)
-            .map { match ->
-                match.groupValues[1]
-                    .replace("\\(", "(")
-                    .replace("\\)", ")")
-                    .replace("\\\\", "\\")
-            }
-            .filter { it.isNotBlank() && it.isMostlyReadable() && !it.isPdfDateStamp() }
-            .toList()
-
-        if (paragraphs.isEmpty()) return null
-
-        val body = paragraphs.joinToString("\n") { paragraph ->
-            "<p>${paragraph.replace("&", "&amp;").replace("<", "&lt;")}</p>"
-        }
-        return EpubBuilder.buildEpub(title, body)
     }
 
-    /** Rejects binary that happened to sit between parentheses. */
-    private fun String.isMostlyReadable(): Boolean {
-        val readable = count { it.isLetterOrDigit() || it.isWhitespace() || it in ".,;:!?'\"-()[]{}" }
-        return readable.toDouble() / length >= 0.9
+    /**
+     * The document's text as *lines*, for the calibre/FanFicFare label block.
+     *
+     * Deliberately not paragraphs: assembling a block joins its lines, which
+     * merges `Label: value` rows into one blob and makes the parser read
+     * `Storylink:` as part of `Story:`'s value.
+     */
+    fun metadataLines(bytes: ByteArray): List<String> {
+        val temp = writeTemp(bytes) ?: return emptyList()
+        return try {
+            KudosMuPDF.linesPerPage(temp.absolutePath)?.firstOrNull().orEmpty()
+        } finally {
+            temp.delete()
+        }
     }
 
-    /** `D:20181013142839-08'00'` is PDF metadata, not prose. */
-    private fun String.isPdfDateStamp(): Boolean = startsWith("D:") && length > 6 &&
-        this[2].isDigit() && this[3].isDigit() && this[4].isDigit() && this[5].isDigit()
+    /**
+     * MuPDF opens a path, not a buffer, so the bytes land in the cache dir
+     * briefly. Explicit directory, not the bare 2-arg overload: Android doesn't
+     * reliably populate `java.io.tmpdir`, so that version can throw — every
+     * other temp-file write in this codebase (`WorkFileStore`, `FontFileStore`,
+     * `FandomCatalogCache`) passes its directory explicitly for the same reason.
+     */
+    private fun writeTemp(bytes: ByteArray): File? = runCatching {
+        File.createTempFile("kudos-import-", ".pdf", cacheDir).apply { writeBytes(bytes) }
+    }.getOrNull()
+
+    private fun escape(value: String): String =
+        value.replace("&", "&amp;").replace("<", "&lt;")
 }
