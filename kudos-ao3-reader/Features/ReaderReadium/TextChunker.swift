@@ -1,11 +1,30 @@
 import Foundation
+import NaturalLanguage
 
-/// Pure, unit-testable function for splitting long text into TTS-friendly chunks.
+/// Pure, unit-testable function for splitting text into TTS-friendly chunks.
 public enum TextChunker {
 
-    /// Splits long text at natural boundaries (sentence-ending punctuation, paragraph breaks, dialogue markers)
-    /// into chunks of roughly 150-250 characters.
+    /// Splits long text at natural boundaries into chunks of at most `maxLength`.
+    /// Short paragraphs stay intact for engines that can manage their own
+    /// sentence prosody.
     public static func chunk(text: String, maxLength: Int = 250) -> [String] {
+        makeChunks(text: text, maxLength: maxLength, separateSentences: false)
+    }
+
+    /// Gives an engine one complete sentence at a time, unless one sentence is
+    /// itself too long. This preserves commas and terminal punctuation while
+    /// keeping models configured for one sentence from truncating after a
+    /// sentence boundary.
+    public static func sentenceChunks(text: String, maxLength: Int = 250) -> [String] {
+        makeChunks(text: text, maxLength: maxLength, separateSentences: true)
+    }
+
+    private static func makeChunks(
+        text: String,
+        maxLength: Int,
+        separateSentences: Bool
+    ) -> [String] {
+        let maximumLength = max(1, maxLength)
         var chunks: [String] = []
 
         let paragraphs = text.components(separatedBy: .newlines)
@@ -14,37 +33,54 @@ public enum TextChunker {
             let paragraphText = paragraph.trimmingCharacters(in: .whitespaces)
             guard !paragraphText.isEmpty else { continue }
 
-            if paragraphText.count <= maxLength {
+            if !separateSentences, paragraphText.count <= maximumLength {
                 chunks.append(paragraphText)
-            } else {
-                let sentences = splitIntoSentences(paragraphText, maxLength: maxLength)
-                var currentChunk = ""
+                continue
+            }
 
-                for sentence in sentences {
-                    if currentChunk.isEmpty {
-                        currentChunk = sentence
-                    } else if currentChunk.count + sentence.count + 1 <= maxLength {
-                        currentChunk += " " + sentence
-                    } else {
-                        chunks.append(currentChunk)
-                        currentChunk = sentence
-                    }
-                }
-                if !currentChunk.isEmpty {
-                    chunks.append(currentChunk)
-                }
+            let sentences = splitIntoSentences(paragraphText, maxLength: maximumLength)
+            guard !sentences.isEmpty else { continue }
+
+            if separateSentences {
+                chunks.append(contentsOf: sentences)
+            } else {
+                appendPacked(sentences, to: &chunks, maxLength: maximumLength)
             }
         }
 
         return chunks
     }
 
+    private static func appendPacked(
+        _ sentences: [String],
+        to chunks: inout [String],
+        maxLength: Int
+    ) {
+        var currentChunk = ""
+
+        for sentence in sentences {
+            if currentChunk.isEmpty {
+                currentChunk = sentence
+            } else if currentChunk.count + sentence.count + 1 <= maxLength {
+                currentChunk += " " + sentence
+            } else {
+                chunks.append(currentChunk)
+                currentChunk = sentence
+            }
+        }
+        if !currentChunk.isEmpty {
+            chunks.append(currentChunk)
+        }
+    }
+
     private static func splitIntoSentences(_ text: String, maxLength: Int) -> [String] {
         var sentences: [String] = []
-        let range = text.startIndex ..< text.endIndex
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
 
-        text.enumerateSubstrings(in: range, options: .bySentences) { substring, _, _, _ in
-            guard let sentence = substring?.trimmingCharacters(in: .whitespaces), !sentence.isEmpty else { return }
+        tokenizer.enumerateTokens(in: text.startIndex ..< text.endIndex) { range, _ in
+            let sentence = String(text[range]).trimmingCharacters(in: .whitespaces)
+            guard !sentence.isEmpty else { return true }
 
             if sentence.count <= maxLength {
                 sentences.append(sentence)
@@ -52,13 +88,14 @@ public enum TextChunker {
                 // Harder split for very long sentences
                 sentences.append(contentsOf: splitByClauses(sentence, maxLength: maxLength))
             }
+            return true
         }
         return sentences
     }
 
     private static func splitByClauses(_ text: String, maxLength: Int) -> [String] {
         // Simple greedy split on common pause markers
-        let delimiters: Set<Character> = [";", ":", "—", ",", "”", "\""]
+        let delimiters: Set<Character> = [";", ":", "—", ","]
         var pieces: [String] = []
         var currentPiece = ""
 
@@ -68,9 +105,9 @@ public enum TextChunker {
             currentPiece.append(char)
 
             if delimiters.contains(char) {
-                // Check if the current piece is long enough to be worth splitting
-                // or if it's a quote, which is a good natural boundary
-                if currentPiece.count >= (maxLength / 2) || char == "”" || char == "\"" {
+                // Avoid splitting a short sentence merely because it contains a
+                // comma; only use a pause marker once it makes a useful chunk.
+                if currentPiece.count >= (maxLength / 2) {
                     pieces.append(currentPiece.trimmingCharacters(in: .whitespaces))
                     currentPiece = ""
                 }
@@ -93,7 +130,7 @@ public enum TextChunker {
     }
 
     private static func splitByWords(_ text: String, maxLength: Int) -> [String] {
-        let words = text.split(separator: " ").map { String($0) }
+        let words = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
         var pieces: [String] = []
         var currentPiece = ""
 
