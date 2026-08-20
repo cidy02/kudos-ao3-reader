@@ -45,6 +45,8 @@ public final class SherpaKokoroTTSService: TTSService {
     private let playerNode = AVAudioPlayerNode()
     private var playerAttached = false
     private var playbackFormat: AVAudioFormat?
+    private var hasScheduledPlayback = false
+    private var playbackStartedAt: Date?
     private var pauseWaiters: [CheckedContinuation<Void, Never>] = []
     private var speechEnergyTask: Task<Void, Never>?
     private var speechEnergyEnvelopes: [SpeechEnergyEnvelope] = []
@@ -56,6 +58,7 @@ public final class SherpaKokoroTTSService: TTSService {
         label: "com.cidy02.Kudos.tts.synthesis",
         qos: .userInitiated
     )
+    private static let requiredFollowingAudioSeconds = 1.5
 
     private var currentSpeed: Float = 1.0
     private var currentVoiceId: Int = 0
@@ -134,69 +137,115 @@ public final class SherpaKokoroTTSService: TTSService {
                 speed: speed,
                 sampleRate: sampleRate
             )
-            guard var current = await Self.generateNextAudibleChunk(
-                request: synthesis,
-                chunks: chunks,
-                startingAt: 0
-            ) else {
+            var primed: [GeneratedTextChunk] = []
+            var nextStartIndex = 0
+            var sourceExhausted = false
+
+            // Keep enough generated PCM *after* the currently playing buffer
+            // to cover a slow following inference. This is deliberately a
+            // bounded in-memory audio cache: normally 1.5 seconds of following
+            // audio, not an unbounded chapter cache. A sentence can overshoot
+            // the target because sentence boundaries remain intact.
+            while !Task.isCancelled,
+                  KokoroPlaybackAnalysis.needsMoreQueuedAudio(
+                    queuedAudioSeconds: primed.map {
+                        Double($0.generated.samples.count) / sampleRate
+                    },
+                    requiredFollowingAudioSeconds: Self.requiredFollowingAudioSeconds
+                  ) {
+                await self.waitWhilePaused()
+                guard !Task.isCancelled, self.status != .stopped else { return }
+
+                guard let next = await Self.generateNextAudibleChunk(
+                    request: synthesis,
+                    chunks: chunks,
+                    startingAt: nextStartIndex
+                ) else {
+                    sourceExhausted = true
+                    break
+                }
+                primed.append(next)
+                nextStartIndex = next.index + 1
+            }
+
+            guard !primed.isEmpty else {
                 self.finishNaturally()
                 return
             }
 
-            guard var currentPlayback = self.enqueue(
-                unit: current.unit,
-                samples: current.generated.samples,
-                energyEnvelope: current.generated.energyEnvelope,
-                seed: Double.random(in: 0...1)
-            ) else {
-                self.finishNaturally()
-                return
+            // Nothing is scheduled until the whole initial lead is ready. That
+            // keeps pause/resume from starting a lone first sentence mid-prime.
+            await self.waitWhilePaused()
+            guard !Task.isCancelled, self.status == .playing else { return }
+
+            var queued: [(chunk: GeneratedTextChunk, playback: ScheduledPlayback)] = []
+            for chunk in primed {
+                guard let playback = self.enqueue(
+                    unit: chunk.unit,
+                    samples: chunk.generated.samples,
+                    energyEnvelope: chunk.generated.energyEnvelope,
+                    seed: Double.random(in: 0...1),
+                    startsPlayback: false
+                ) else {
+                    self.finishNaturally()
+                    return
+                }
+                queued.append((chunk, playback))
             }
+            self.startPlayerIfNeeded()
+            let followingAudioSeconds = queued.dropFirst()
+                .map { $0.playback.audioSeconds }
+                .reduce(0, +)
+            let primingMessage = (
+                "Kokoro playback primed with \(queued.count) PCM buffers; "
+                    + "followingAudio=\(followingAudioSeconds)s"
+            )
+            Log.tts.debug("\(primingMessage, privacy: .public)")
 
             while !Task.isCancelled {
                 await self.waitWhilePaused()
                 guard !Task.isCancelled, self.status != .stopped else { return }
 
-                // `scheduleBuffer(_:completionHandler:)` reports data consumed, not
-                // audible completion. Generate and queue one following chunk while
-                // this one remains scheduled, then use data-consumed only to bound
-                // the lookahead to one buffer.
-                let nextStartIndex = current.index + 1
-                async let prefetched = Self.generateNextAudibleChunk(
-                    request: synthesis,
-                    chunks: chunks,
-                    startingAt: nextStartIndex
-                )
+                if !sourceExhausted,
+                   KokoroPlaybackAnalysis.needsMoreQueuedAudio(
+                    queuedAudioSeconds: queued.map { $0.playback.audioSeconds },
+                    requiredFollowingAudioSeconds: Self.requiredFollowingAudioSeconds
+                   ) {
+                    guard let next = await Self.generateNextAudibleChunk(
+                        request: synthesis,
+                        chunks: chunks,
+                        startingAt: nextStartIndex
+                    ) else {
+                        sourceExhausted = true
+                        continue
+                    }
+                    nextStartIndex = next.index + 1
 
-                let next = await prefetched
+                    await self.waitWhilePaused()
+                    guard !Task.isCancelled, self.status == .playing else { return }
+                    guard let playback = self.enqueue(
+                        unit: next.unit,
+                        samples: next.generated.samples,
+                        energyEnvelope: next.generated.energyEnvelope,
+                        seed: Double.random(in: 0...1)
+                    ) else {
+                        Log.tts.error("Kokoro could not enqueue a generated audio buffer")
+                        await self.waitForPlaybackDrain()
+                        break
+                    }
+                    queued.append((next, playback))
+                    continue
+                }
+
+                guard !queued.isEmpty else { break }
+                let oldest = queued.removeFirst()
+                await self.waitUntilConsumed(oldest.playback)
                 guard !Task.isCancelled, self.status != .stopped else { return }
-                guard let next else {
-                    await self.waitUntilConsumed(currentPlayback)
-                    guard !Task.isCancelled, self.status != .stopped else { return }
+
+                if sourceExhausted, queued.isEmpty {
                     await self.waitForPlaybackDrain()
                     break
                 }
-
-                await self.waitWhilePaused()
-                guard !Task.isCancelled, self.status == .playing else { return }
-                guard let nextPlayback = self.enqueue(
-                    unit: next.unit,
-                    samples: next.generated.samples,
-                    energyEnvelope: next.generated.energyEnvelope,
-                    seed: Double.random(in: 0...1)
-                ) else {
-                    Log.tts.error("Kokoro could not enqueue a generated audio buffer")
-                    await self.waitUntilConsumed(currentPlayback)
-                    guard !Task.isCancelled, self.status != .stopped else { return }
-                    await self.waitForPlaybackDrain()
-                    break
-                }
-
-                await self.waitUntilConsumed(currentPlayback)
-                guard !Task.isCancelled, self.status != .stopped else { return }
-
-                current = next
-                currentPlayback = nextPlayback
             }
 
             self.finishNaturally()
@@ -214,8 +263,8 @@ public final class SherpaKokoroTTSService: TTSService {
         if !engine.isRunning {
             try? engine.start()
         }
-        playerNode.play()
         status = .playing
+        startPlayerIfNeeded()
         resumePauseWaiters()
     }
 
@@ -376,7 +425,8 @@ public final class SherpaKokoroTTSService: TTSService {
         unit: TTSSpeechUnit,
         samples: [Float],
         energyEnvelope: [Double],
-        seed: Double
+        seed: Double,
+        startsPlayback: Bool = true
     ) -> ScheduledPlayback? {
         guard status == .playing, !Task.isCancelled else { return nil }
         guard let format = playbackFormat,
@@ -405,10 +455,11 @@ public final class SherpaKokoroTTSService: TTSService {
             streamContinuation.yield()
             streamContinuation.finish()
         }
-        if !playerNode.isPlaying, status == .playing {
-            playerNode.play()
-        }
+        hasScheduledPlayback = true
         enqueueSpeechEnergy(energyEnvelope, seed: seed, unit: unit)
+        if startsPlayback {
+            startPlayerIfNeeded()
+        }
         return ScheduledPlayback(
             consumption: consumption,
             scheduledAt: scheduledAt,
@@ -416,13 +467,22 @@ public final class SherpaKokoroTTSService: TTSService {
         )
     }
 
+    private func startPlayerIfNeeded() {
+        guard hasScheduledPlayback, !playerNode.isPlaying, status == .playing else { return }
+        if playbackStartedAt == nil {
+            playbackStartedAt = Date()
+        }
+        playerNode.play()
+        startSpeechEnergyPulsesIfNeeded()
+    }
+
     private func waitUntilConsumed(_ playback: ScheduledPlayback) async {
         var iterator = playback.consumption.makeAsyncIterator()
         _ = await iterator.next()
-        let diagnosticMessage = (
-            "Kokoro buffer consumed after \(Date().timeIntervalSince(playback.scheduledAt))s; "
-                + "audio=\(playback.audioSeconds)s"
-        )
+        let playerElapsed = playbackStartedAt.map { Date().timeIntervalSince($0) }
+        let diagnosticMessage = "Kokoro buffer data-consumed; "
+            + "queuedFor=\(Date().timeIntervalSince(playback.scheduledAt))s, "
+            + "sincePlayerStart=\(playerElapsed ?? -1)s, audio=\(playback.audioSeconds)s"
         Log.tts.debug("\(diagnosticMessage, privacy: .public)")
     }
 
@@ -467,6 +527,8 @@ public final class SherpaKokoroTTSService: TTSService {
         activeTask = nil
         stopSpeechEnergyPulses()
         playerNode.stop()
+        hasScheduledPlayback = false
+        playbackStartedAt = nil
         if engine.isRunning {
             engine.stop()
         }
@@ -484,6 +546,8 @@ public final class SherpaKokoroTTSService: TTSService {
         activeTask = nil
         stopSpeechEnergyPulses()
         playerNode.stop()
+        hasScheduledPlayback = false
+        playbackStartedAt = nil
         if engine.isRunning {
             engine.stop()
         }
@@ -513,7 +577,11 @@ private extension SherpaKokoroTTSService {
             speechEnergyEnvelopes.append(nextEnvelope)
         }
 
-        guard speechEnergyTask == nil else { return }
+        startSpeechEnergyPulsesIfNeeded()
+    }
+
+    private func startSpeechEnergyPulsesIfNeeded() {
+        guard speechEnergyTask == nil, playerNode.isPlaying else { return }
         let reportedOutputLatency = engine.outputNode.presentationLatency
         let outputLatency = reportedOutputLatency.isFinite
             ? max(0, reportedOutputLatency)
