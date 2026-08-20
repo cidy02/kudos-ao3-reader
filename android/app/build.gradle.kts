@@ -118,6 +118,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.jsoup)
     implementation(libs.okhttp)
+    implementation(libs.commons.compress)
     implementation(libs.tink.android)
     // QR **generation only** for the keysync pairing sheet (Android shows its
     // pubkey; iOS scans — see PairingKeyCodec doc comment). zxing:core is the
