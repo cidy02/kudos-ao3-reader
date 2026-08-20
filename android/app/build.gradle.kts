@@ -24,8 +24,8 @@ android {
         applicationId = "io.github.cidy02.kudos"
         minSdk = 26
         targetSdk = 37
-        versionCode = 8
-        versionName = "0.2.0"
+        versionCode = 10
+        versionName = "0.2.2"
     }
 
     signingConfigs {
