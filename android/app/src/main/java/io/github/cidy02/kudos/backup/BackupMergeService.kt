@@ -198,7 +198,8 @@ object BackupMergeService {
                 comments = archived.comments ?: existing.comments,
                 hits = archived.hits ?: existing.hits,
                 knownChapterCount = archived.knownChapterCount ?: existing.knownChapterCount,
-                lastUpdateCheck = restored.lastUpdateCheck ?: existing.lastUpdateCheck
+                lastUpdateCheck = restored.lastUpdateCheck ?: existing.lastUpdateCheck,
+                hasGivenKudos = existing.hasGivenKudos || restored.hasGivenKudos
             )
         } else {
             // Keep local flags/metadata; still absorb non-destructive fills.
@@ -225,7 +226,8 @@ object BackupMergeService {
                 workFreeforms = mergeStringLists(existing.workFreeforms, restored.workFreeforms),
                 workTagsFetched = existing.workTagsFetched || restored.workTagsFetched,
                 lastModifiedAt = maxInstant(existing.lastModifiedAt, incomingModifiedAt)
-                    ?: existing.effectiveLastModifiedAt
+                    ?: existing.effectiveLastModifiedAt,
+                hasGivenKudos = existing.hasGivenKudos || restored.hasGivenKudos
             )
         }
 

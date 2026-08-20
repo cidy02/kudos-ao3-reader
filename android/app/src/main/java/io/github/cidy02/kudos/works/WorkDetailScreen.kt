@@ -1116,7 +1116,39 @@ fun WorkDetailScreen(
                 }
             }
         },
-        onKudos = { runAo3Write { writeRepository.giveKudos(it) } },
+        onKudos = {
+            val ao3Id = state.ao3WorkId
+            if (ao3Id == null) {
+                // Should be unreachable due to UI disabling the button, but just in case
+                return@WorkDetailContent
+            }
+            runWorkAction {
+                val result = writeRepository.giveKudos(ao3Id)
+                handleWriteResult(result)
+                if (result is AO3Result.Success) {
+                    val local = state.local
+                    if (local != null) {
+                        val updated = workRepository.upsert(
+                            local.copy(hasGivenKudos = true, lastModifiedAt = Instant.now())
+                        )
+                        refreshLocal(updated.id, state.remote)
+                    } else {
+                        val remote = state.remote
+                        if (remote != null) {
+                            when (val importResult = workImporter.saveMetadataOnly(remote, markSaved = false)) {
+                                is WorkImportResult.Success -> {
+                                    val updated = workRepository.upsert(
+                                        importResult.work.copy(hasGivenKudos = true, lastModifiedAt = Instant.now())
+                                    )
+                                    refreshLocal(updated.id, state.remote)
+                                }
+                                is WorkImportResult.Failure -> {}
+                            }
+                        }
+                    }
+                }
+            }
+        },
         onSubscribe = { runAo3Write { writeRepository.toggleSubscribe(it) } },
         onMarkForLater = { runAo3Write { writeRepository.markForLater(it) } },
         onAddToSavedForLater = {
@@ -1593,7 +1625,20 @@ private fun WorkDetailHeaderCard(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 TextButton(onClick = onKudos, enabled = state.ao3WorkId != null) {
-                    Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                    val hasGiven = state.local?.hasGivenKudos == true
+                    // In Android Material icons, Star is often used for favorite, but the original code had:
+                    // Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                    // Wait, maybe the icon should be different if given vs not given. The original was ALWAYS Icons.Filled.Star.
+                    // Wait, the spec says "so the kudos heart shows filled after a relaunch instead of resetting to unfilled". So there is a filled/unfilled state.
+                    // Actually, let's use Icons.Filled.Star and Icons.Outlined.StarBorder, or if it used a heart? 
+                    // Let's use Icons.Filled.Favorite and Icons.Outlined.FavoriteBorder if it's a heart. But original used Star.
+                    // Wait! The iOS code says "kudos heart shows filled".
+                    // But in Android `WorkDetailScreen.kt` line 1597 it was `Icons.Filled.Star` for Kudos.
+                    // Oh, wait, `Icons.Filled.Star` was for Kudos? Let me check what the original line was.
+                    // Line 1627: Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                    // Let's just use Star for now if they mapped kudos to Star on Android, or maybe Favorite.
+                    val icon = if (hasGiven) Icons.Filled.Star else Icons.Outlined.StarBorder
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.padding(end = 4.dp))
                     Text("Kudos")
                 }

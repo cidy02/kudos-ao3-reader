@@ -74,6 +74,7 @@ class WorkMetadataMerger(
             workTags = WorkTags.flattenedWorkTags(fandoms, relationships, characters, freeforms),
             workTagsFetched = if (canonical != null && !canonical.isEmpty) true else base.workTagsFetched,
             isFavorite = base.isFavorite,
+            hasGivenKudos = base.hasGivenKudos || (canonical?.kudosGivenByCurrentUser == true),
             isFinished = base.isFinished,
             lastSpineIndex = base.lastSpineIndex,
             lastScrollFraction = base.lastScrollFraction,

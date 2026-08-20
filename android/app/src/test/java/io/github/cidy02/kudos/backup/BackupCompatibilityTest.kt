@@ -125,6 +125,44 @@ class BackupRoundTripBasicTest {
     }
 }
 
+class BackupHasGivenKudosMergeTest {
+    @Test
+    fun mergeAppliesOrLogicForHasGivenKudos() {
+        val olderIncomingWinsButFalse = sampleSavedWork().copy(
+            hasGivenKudos = true,
+            lastModifiedAt = Instant.parse("2026-07-01T00:00:00Z")
+        )
+        val incomingOld = sampleBackupWork().copy(
+            hasGivenKudos = false,
+            lastModifiedAt = "2026-08-01T00:00:00Z"
+        )
+
+        val resultWhenIncomingWins = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(olderIncomingWinsButFalse)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(incomingOld)))
+        )
+
+        val merged1 = resultWhenIncomingWins.snapshot.works.single { it.id == WORK_ID }
+        assertTrue("hasGivenKudos should remain true even if incoming wins and is false", merged1.hasGivenKudos)
+        
+        val newerIncomingWinsAndTrue = sampleSavedWork().copy(
+            hasGivenKudos = false,
+            lastModifiedAt = Instant.parse("2026-08-01T00:00:00Z")
+        )
+        val incomingTrue = sampleBackupWork().copy(
+            hasGivenKudos = true,
+            lastModifiedAt = "2026-07-01T00:00:00Z"
+        )
+        
+        val resultWhenLocalWins = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(works = listOf(newerIncomingWinsAndTrue)),
+            backup = samplePackage(manifest = sampleManifest(works = listOf(incomingTrue)))
+        )
+        val merged2 = resultWhenLocalWins.snapshot.works.single { it.id == WORK_ID }
+        assertTrue("hasGivenKudos should become true even if local wins and incoming is true", merged2.hasGivenKudos)
+    }
+}
+
 class BackupMergeDoesNotDeleteExistingWorkTest {
     @Test
     fun mergeKeepsWorksAbsentFromBackup() {

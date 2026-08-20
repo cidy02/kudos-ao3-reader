@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.data.local.entity
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 import java.time.Instant
 
 @Entity(
@@ -20,8 +21,9 @@ data class WorkEntity(
     val summary: String,
     val sourceUrl: String,
     val dateAdded: Instant,
-    val isFavorite: Boolean,
-    val isSaved: Boolean,
+    val isFavorite: Boolean = false,
+    @ColumnInfo(name = "hasGivenKudos", defaultValue = "0") val hasGivenKudos: Boolean = false,
+    val isSaved: Boolean = false,
     val isFinished: Boolean,
     val hasEpub: Boolean,
     val isComplete: Boolean,

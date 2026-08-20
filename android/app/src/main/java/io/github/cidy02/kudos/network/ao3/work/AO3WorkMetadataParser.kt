@@ -9,7 +9,7 @@ sealed class AO3WorkMetadataParseException(message: String) : Exception(message)
 }
 
 class AO3WorkMetadataParser {
-    fun parse(html: String): AO3WorkMetadata {
+    fun parse(html: String, currentUsername: String? = null): AO3WorkMetadata {
         if (AO3OverloadDetector.isOverloadPage(html)) {
             throw AO3WorkMetadataParseException.Overloaded()
         }
@@ -28,7 +28,10 @@ class AO3WorkMetadataParser {
             chapters = stat(document, "chapters"),
             kudos = statInt(document, "kudos"),
             comments = statInt(document, "comments"),
-            hits = statInt(document, "hits")
+            hits = statInt(document, "hits"),
+            kudosGivenByCurrentUser = currentUsername?.let { username ->
+                document.selectFirst("#kudos a[href=\"/users/$username\"]") != null
+            } ?: false
         )
     }
 

@@ -40,7 +40,8 @@ class WorkMetadataRefresh(
                     // A successful fetch proves the work is back on AO3.
                     ao3Unavailable = false,
                     lastAvailabilityCheck = Instant.now(),
-                    lastModifiedAt = Instant.now()
+                    lastModifiedAt = Instant.now(),
+                    hasGivenKudos = work.hasGivenKudos || md.kudosGivenByCurrentUser
                 ))
             }
             is AO3Result.Failure -> work

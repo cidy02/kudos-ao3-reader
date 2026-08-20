@@ -73,6 +73,37 @@ class WorkMetadataMergerTest {
         assertEquals(9, merged.kudos)
     }
 
+    @Test
+    fun appliesOpportunisticKudosSignalWithoutClobberingTrueToFalse() {
+        val existingWithKudos = SavedWork(
+            id = workUuid,
+            title = "Title",
+            author = "Author",
+            summary = "Summary",
+            sourceUrl = "https://archiveofourown.org/works/123",
+            dateAdded = Instant.now(),
+            hasGivenKudos = true
+        )
+        val metadataWithoutKudos = AO3WorkMetadata(kudosGivenByCurrentUser = false)
+        val merged1 = WorkMetadataMerger().merge(
+            summary = null,
+            canonical = metadataWithoutKudos,
+            existing = existingWithKudos,
+            markSaved = false
+        )
+        assertTrue("Monotonic signal must not be cleared", merged1.hasGivenKudos)
+
+        val existingWithoutKudos = existingWithKudos.copy(hasGivenKudos = false)
+        val metadataWithKudos = AO3WorkMetadata(kudosGivenByCurrentUser = true)
+        val merged2 = WorkMetadataMerger().merge(
+            summary = null,
+            canonical = metadataWithKudos,
+            existing = existingWithoutKudos,
+            markSaved = false
+        )
+        assertTrue("Signal must be applied when detected", merged2.hasGivenKudos)
+    }
+
     // The three cases below pin the revival behaviour added to fix a real bug found in
     // review: importing or saving a work that matches a soft-deleted (Recently Deleted)
     // row updated its fields but left `isDeleted` untouched — the download reported

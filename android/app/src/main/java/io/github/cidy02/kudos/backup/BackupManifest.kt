@@ -42,6 +42,7 @@ data class BackupWork(
     @SerialName("sourceURL") val sourceURL: String = "",
     val dateAdded: String = "",
     val isFavorite: Boolean = false,
+    val hasGivenKudos: Boolean = false,
     val isSaved: Boolean = false,
     val isFinished: Boolean = false,
     @SerialName("hasEPUB") val hasEPUB: Boolean = false,

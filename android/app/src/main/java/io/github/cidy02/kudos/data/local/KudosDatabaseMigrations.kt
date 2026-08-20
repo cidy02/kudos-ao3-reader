@@ -201,4 +201,10 @@ object KudosDatabaseMigrations {
             db.execSQL("ALTER TABLE works ADD COLUMN lastTagRefreshAttemptAt INTEGER")
         }
     }
+
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN hasGivenKudos INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 }
