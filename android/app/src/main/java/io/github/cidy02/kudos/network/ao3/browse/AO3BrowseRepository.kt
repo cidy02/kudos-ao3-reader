@@ -10,6 +10,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
+import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,7 +27,8 @@ import kotlinx.coroutines.withContext
 class AO3BrowseRepository(
     private val client: AO3Client = OkHttpAO3Client(),
     private val parser: AO3BrowseParser = AO3BrowseParser(),
-    private val searchRepository: AO3SearchRepository = AO3SearchRepository(client),
+    private val authenticatedClient: AO3AuthenticatedClient? = null,
+    private val searchRepository: AO3SearchRepository = AO3SearchRepository(client, authenticatedClient),
     private val cache: FandomCatalogCache? = null,
     private val clock: AO3Clock = SystemAO3Clock
 ) {
