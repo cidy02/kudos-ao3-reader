@@ -68,22 +68,58 @@ extension View {
 /// summary lines, and a stats row.
 struct AO3WorkRowSkeleton: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SkeletonTextLine(height: 16, width: 230) // title
-            SkeletonTextLine(height: 13, width: 130) // author
-            SkeletonTextLine(height: 12, width: 190) // fandom
-            VStack(alignment: .leading, spacing: 5) {
-                SkeletonTextLine(height: 12)
-                SkeletonTextLine(height: 12)
-                SkeletonTextLine(height: 12, width: 210)
+        // Matches AO3WorkRow.card's current layout (Features/Search/AO3WorkRow.swift):
+        // title+author leading beside the trailing WorkStatusIconGrid, fandom row,
+        // summary, stats row, then a date chip + expand control at the bottom.
+        // Previously matched an older row shape (author/fandom stacked with no tag
+        // grid at all, a plain 3-stat row) from before that card's own redesign.
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    SkeletonTextLine(height: 17, width: 200) // title
+                    SkeletonTextLine(height: 17, width: 140) // title, line 2 (often wraps)
+                    SkeletonTextLine(height: 14, width: 110) // author
+                        .padding(.top, 2)
+                }
+                Spacer(minLength: 0)
+                // 2x2 tag grid (WorkStatusIconGrid, tileSize 27) — same math as
+                // WorkCoverCardSkeleton's own grid (see that struct's comment).
+                Grid(horizontalSpacing: 4.5, verticalSpacing: 4.5) {
+                    GridRow {
+                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                    }
+                    GridRow {
+                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                    }
+                }
             }
-            .padding(.top, 1)
-            HStack(spacing: 16) {
+
+            SkeletonTextLine(height: 12, width: 190) // fandom row
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 5) { // summary
+                SkeletonTextLine(height: 13)
+                SkeletonTextLine(height: 13)
+                SkeletonTextLine(height: 13, width: 210)
+            }
+            .padding(.top, 2)
+
+            HStack(spacing: 16) { // WorkListStatsRow
                 SkeletonBlock(height: 11, width: 46)
                 SkeletonBlock(height: 11, width: 58)
                 SkeletonBlock(height: 11, width: 40)
+                SkeletonBlock(height: 11, width: 52)
             }
-            .padding(.top, 2)
+            .padding(.top, 4)
+
+            HStack { // date TagChip (bottom-left) + expand control (bottom-right)
+                SkeletonBlock(height: 24, width: 96, cornerRadius: 12)
+                Spacer(minLength: 0)
+                SkeletonBlock(height: 24, width: 24, cornerRadius: 12)
+            }
+            .padding(.top, 4)
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
