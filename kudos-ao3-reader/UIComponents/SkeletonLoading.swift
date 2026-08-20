@@ -123,19 +123,45 @@ struct WorkCoverCardSkeleton: View {
 
 /// Wireframe matching the Browse category card (icon + name, stats line).
 struct CategoryCardSkeleton: View {
+    @Environment(ThemeManager.self) private var themeManager
+
     var body: some View {
+        // Icon overlay applied to the inner content *before* the outer padding/
+        // background below — same ordering as MediaBrowserView.categoryCard,
+        // so the icon ends up inset from the card's edge by exactly the one
+        // outer padding, not that padding plus a second one of its own.
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                SkeletonBlock(height: 24, width: 24, cornerRadius: 6)
-                SkeletonTextLine(height: 16, width: 170)
-            }
+            // Title alone, icon decoupled into a top-trailing overlay — matches
+            // categoryCard's own layout (the icon moved out of this row into a
+            // corner badge).
+            SkeletonTextLine(height: 16, width: 130)
+                .padding(.trailing, 28)
             HStack(spacing: 16) {
                 SkeletonBlock(height: 11, width: 90)
                 SkeletonBlock(height: 11, width: 72)
             }
         }
-        .padding(.vertical, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .overlay(alignment: .topTrailing) {
+            SkeletonBlock(height: 22, width: 22, cornerRadius: 6)
+        }
+        .padding(CardListMetrics.innerHorizontal)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // Same card chrome as the real grid cell (theme.appTheme.cardSurface/
+        // cardBorder/cardShadow) — this renders inside a plain masonry column,
+        // not a List row, so it needs its own background the way .cardRow()
+        // used to supply for free.
+        .background(
+            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                .fill(themeManager.appTheme.cardSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
+                )
+                .shadow(color: themeManager.appTheme.cardShadow.color,
+                        radius: themeManager.appTheme.cardShadow.radius,
+                        x: 0, y: themeManager.appTheme.cardShadow.y)
+        )
         .skeletonShimmer()
     }
 }
@@ -360,6 +386,34 @@ struct CategoryCardSkeletonList: View {
     var count: Int = 8
 
     var body: some View {
+        #if os(iOS)
+        // Matches MediaBrowserView.categoryGrid's own structure (ScrollView +
+        // header + 2-column grid, not a List) — every card skeleton is the same
+        // height, so a plain LazyVGrid balances the two columns evenly with no
+        // need for that view's real MasonryLayout, which only earns its keep
+        // once card heights actually vary (the "recently read" chips, absent
+        // here).
+        ScrollView {
+            VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
+                Text("Browse by fandom")
+                    .font(.headline)
+                    .padding(.horizontal, CardListMetrics.sideMargin)
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
+                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
+                    ],
+                    spacing: CardListMetrics.interCardSpacing
+                ) {
+                    ForEach(0 ..< count, id: \.self) { _ in CategoryCardSkeleton() }
+                }
+                .padding(.horizontal, CardListMetrics.sideMargin)
+            }
+            .padding(.vertical, CardListMetrics.interCardSpacing)
+        }
+        #else
+        // macOS keeps categoryListMac's single-column List/DisclosureGroup shape.
         List {
             Section {
                 ForEach(0 ..< count, id: \.self) { _ in CategoryCardSkeleton() }
@@ -369,6 +423,7 @@ struct CategoryCardSkeletonList: View {
             }
         }
         .cardList()
+        #endif
     }
 }
 
