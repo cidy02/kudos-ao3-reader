@@ -38,6 +38,7 @@ public final class SherpaKokoroTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onAdvance: ((Locator) -> Void)?
+    public var onSpokenRange: ((Locator) -> Void)?
 
     private var activeTask: Task<Void, Never>?
     private let engine = AVAudioEngine()
@@ -91,13 +92,13 @@ public final class SherpaKokoroTTSService: TTSService {
         attachPlayerNodeIfNeeded()
     }
 
-    public func speak(text: String, startLocator: Locator?) async throws {
+    public func speak(units: [TTSSpeechUnit]) async throws {
         resetPlayback(notifyStopped: false)
 
         // The sherpa Kokoro frontend is configured for one sentence. Supplying
         // complete sentence units preserves punctuation/prosody and avoids
         // handing it a short paragraph that can end mid-thought.
-        let chunks = TextChunker.sentenceChunks(text: text)
+        let chunks = TTSSpeechUnit.sentenceChunks(from: units)
         guard !chunks.isEmpty else { return }
 
         guard loadEngineIfNeeded(), let tts else {
@@ -142,8 +143,8 @@ public final class SherpaKokoroTTSService: TTSService {
                 return
             }
 
-            self.publishCurrentText(current.text, startLocator: startLocator)
             guard var currentPlayback = self.enqueue(
+                unit: current.unit,
                 samples: current.generated.samples,
                 energyEnvelope: current.generated.energyEnvelope,
                 seed: Double.random(in: 0...1)
@@ -179,6 +180,7 @@ public final class SherpaKokoroTTSService: TTSService {
                 await self.waitWhilePaused()
                 guard !Task.isCancelled, self.status == .playing else { return }
                 guard let nextPlayback = self.enqueue(
+                    unit: next.unit,
                     samples: next.generated.samples,
                     energyEnvelope: next.generated.energyEnvelope,
                     seed: Double.random(in: 0...1)
@@ -195,7 +197,6 @@ public final class SherpaKokoroTTSService: TTSService {
 
                 current = next
                 currentPlayback = nextPlayback
-                self.publishCurrentText(current.text, startLocator: startLocator)
             }
 
             self.finishNaturally()
@@ -323,67 +324,6 @@ public final class SherpaKokoroTTSService: TTSService {
         engine.connect(playerNode, to: engine.mainMixerNode, format: format)
     }
 
-    private func publishCurrentText(_ text: String, startLocator: Locator?) {
-        spokenText = text
-        if let startLocator {
-            onAdvance?(startLocator)
-        }
-    }
-
-    private func enqueueSpeechEnergy(_ envelope: [Double], seed: Double) {
-        guard !envelope.isEmpty else { return }
-
-        let nextEnvelope = SpeechEnergyEnvelope(levels: envelope, seed: seed)
-        if let waiter = speechEnergyWaiter {
-            speechEnergyWaiter = nil
-            waiter.resume(returning: nextEnvelope)
-        } else {
-            speechEnergyEnvelopes.append(nextEnvelope)
-        }
-
-        guard speechEnergyTask == nil else { return }
-        let reportedOutputLatency = engine.outputNode.presentationLatency
-        let outputLatency = reportedOutputLatency.isFinite
-            ? max(0, reportedOutputLatency)
-            : 0
-        speechEnergyTask = Task { @MainActor [weak self] in
-            if outputLatency > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(outputLatency * 1_000_000_000))
-            }
-            while let self, !Task.isCancelled {
-                guard let envelope = await self.nextSpeechEnergyEnvelope() else { return }
-                self.speechEnergySeed = envelope.seed
-
-                for energy in envelope.levels {
-                    guard !Task.isCancelled else { return }
-                    await self.waitWhilePaused()
-                    guard !Task.isCancelled, self.status == .playing else { return }
-
-                    self.speechEnergy = energy
-                    self.onSpeechEnergyPulse?(energy, envelope.seed)
-                    try? await Task.sleep(nanoseconds: 33_333_333)
-                }
-            }
-        }
-    }
-
-    private func nextSpeechEnergyEnvelope() async -> SpeechEnergyEnvelope? {
-        if !speechEnergyEnvelopes.isEmpty {
-            return speechEnergyEnvelopes.removeFirst()
-        }
-
-        return await withCheckedContinuation { speechEnergyWaiter = $0 }
-    }
-
-    private func stopSpeechEnergyPulses() {
-        speechEnergyTask?.cancel()
-        speechEnergyTask = nil
-        speechEnergyEnvelopes = []
-        let waiter = speechEnergyWaiter
-        speechEnergyWaiter = nil
-        waiter?.resume(returning: nil)
-    }
-
     private func activateAudioSession() throws {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
@@ -413,13 +353,14 @@ public final class SherpaKokoroTTSService: TTSService {
 
     private struct GeneratedTextChunk: Sendable {
         let index: Int
-        let text: String
+        let unit: TTSSpeechUnit
         let generated: GeneratedChunk
     }
 
     private struct SpeechEnergyEnvelope: Sendable {
         let levels: [Double]
         let seed: Double
+        let unit: TTSSpeechUnit
     }
 
     private struct ScheduledPlayback {
@@ -432,6 +373,7 @@ public final class SherpaKokoroTTSService: TTSService {
     /// event is intentionally used only to bound lookahead, never as audible
     /// playback completion.
     private func enqueue(
+        unit: TTSSpeechUnit,
         samples: [Float],
         energyEnvelope: [Double],
         seed: Double
@@ -466,7 +408,7 @@ public final class SherpaKokoroTTSService: TTSService {
         if !playerNode.isPlaying, status == .playing {
             playerNode.play()
         }
-        enqueueSpeechEnergy(energyEnvelope, seed: seed)
+        enqueueSpeechEnergy(energyEnvelope, seed: seed, unit: unit)
         return ScheduledPlayback(
             consumption: consumption,
             scheduledAt: scheduledAt,
@@ -556,6 +498,72 @@ public final class SherpaKokoroTTSService: TTSService {
 
 private extension SherpaKokoroTTSService {
 
+    private func enqueueSpeechEnergy(
+        _ envelope: [Double],
+        seed: Double,
+        unit: TTSSpeechUnit
+    ) {
+        guard !envelope.isEmpty else { return }
+
+        let nextEnvelope = SpeechEnergyEnvelope(levels: envelope, seed: seed, unit: unit)
+        if let waiter = speechEnergyWaiter {
+            speechEnergyWaiter = nil
+            waiter.resume(returning: nextEnvelope)
+        } else {
+            speechEnergyEnvelopes.append(nextEnvelope)
+        }
+
+        guard speechEnergyTask == nil else { return }
+        let reportedOutputLatency = engine.outputNode.presentationLatency
+        let outputLatency = reportedOutputLatency.isFinite
+            ? max(0, reportedOutputLatency)
+            : 0
+        speechEnergyTask = Task { @MainActor [weak self] in
+            if outputLatency > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(outputLatency * 1_000_000_000))
+            }
+            while let self, !Task.isCancelled {
+                guard let envelope = await self.nextSpeechEnergyEnvelope() else { return }
+                await self.waitWhilePaused()
+                guard !Task.isCancelled, self.status == .playing else { return }
+
+                self.spokenText = envelope.unit.text
+                if let locator = envelope.unit.locator {
+                    self.onAdvance?(locator)
+                    self.onSpokenRange?(locator)
+                }
+                self.speechEnergySeed = envelope.seed
+
+                for energy in envelope.levels {
+                    guard !Task.isCancelled else { return }
+                    await self.waitWhilePaused()
+                    guard !Task.isCancelled, self.status == .playing else { return }
+
+                    self.speechEnergy = energy
+                    self.onSpeechEnergyPulse?(energy, envelope.seed)
+                    try? await Task.sleep(nanoseconds: 33_333_333)
+                }
+            }
+        }
+    }
+
+    private func nextSpeechEnergyEnvelope() async -> SpeechEnergyEnvelope? {
+        if !speechEnergyEnvelopes.isEmpty {
+            return speechEnergyEnvelopes.removeFirst()
+        }
+
+        return await withCheckedContinuation { speechEnergyWaiter = $0 }
+    }
+
+    private func stopSpeechEnergyPulses() {
+        speechEnergyTask?.cancel()
+        speechEnergyTask = nil
+        speechEnergyEnvelopes = []
+        let waiter = speechEnergyWaiter
+        speechEnergyWaiter = nil
+        waiter?.resume(returning: nil)
+    }
+
     private static func generateChunk(
         request: SynthesisRequest,
         text: String
@@ -610,18 +618,18 @@ private extension SherpaKokoroTTSService {
 
     private static func generateNextAudibleChunk(
         request: SynthesisRequest,
-        chunks: [String],
+        chunks: [TTSSpeechUnit],
         startingAt: Int
     ) async -> GeneratedTextChunk? {
         guard !Task.isCancelled, startingAt < chunks.count else { return nil }
 
         for index in startingAt..<chunks.count {
             guard !Task.isCancelled else { return nil }
-            let text = chunks[index]
-            let generated = await generateChunk(request: request, text: text)
+            let unit = chunks[index]
+            let generated = await generateChunk(request: request, text: unit.text)
             guard !Task.isCancelled else { return nil }
             if !generated.samples.isEmpty {
-                return GeneratedTextChunk(index: index, text: text, generated: generated)
+                return GeneratedTextChunk(index: index, unit: unit, generated: generated)
             }
         }
         return nil

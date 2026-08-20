@@ -347,6 +347,8 @@ struct ReadiumReaderView: View {
                     guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
                     book.go(to: locator)
                 }
+                speech.onSpokenRange = { locator in book.applySpeechDecoration(at: locator) }
+                speech.onSessionEnded = { book.applySpeechDecoration(at: nil) }
                 // Lock Screen / Island previous-next track = chapter skip (mini player).
                 speech.onSkipPrevious = { handleSpeechSkipBack() }
                 speech.onSkipNext = { handleSpeechSkipForward() }
