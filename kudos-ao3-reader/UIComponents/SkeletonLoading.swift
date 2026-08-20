@@ -94,21 +94,31 @@ struct AO3WorkRowSkeleton: View {
 /// Wireframe matching the carousel cover cards (`WorkCoverCard` / `AO3WorkCoverCard`).
 struct WorkCoverCardSkeleton: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SkeletonTextLine(height: 15, width: 132) // title
+        VStack(alignment: .leading, spacing: 7) {
+            // Title, then the 2x2 tag grid (WorkStatusIconGrid) centered between
+            // it and author/fandom with a flexible spacer on each side, then
+            // author/fandom, then the progress bar — matches WorkCoverCard's
+            // current layout (HomeCards.swift). This skeleton previously matched
+            // an older card shape (author/fandom directly under the title, two
+            // small tag-chip pills below that) from before that card was
+            // redesigned; the mismatch was reported directly against a real
+            // screenshot.
+            SkeletonTextLine(height: 15, width: 132)
+            SkeletonTextLine(height: 15, width: 84)
+
+            Spacer(minLength: 4)
+            // WorkStatusIconGrid at tileSize 27 renders as a ~59pt square
+            // (2 tiles + the gap between them) — see WorkStatLabel.swift's
+            // WorkStatusIconGrid for the tileSize -> gap/tile math.
+            SkeletonBlock(height: 59, width: 59, cornerRadius: 12)
+                .frame(maxWidth: .infinity, alignment: .center)
+            Spacer(minLength: 4)
+
             SkeletonTextLine(height: 12, width: 92) // author
             SkeletonTextLine(height: 10, width: 118) // fandom
-            HStack(spacing: 8) {
-                SkeletonBlock(height: 10, width: 32, cornerRadius: 4)
-                SkeletonBlock(height: 10, width: 44, cornerRadius: 4)
-            }
-            HStack(spacing: 6) {
-                SkeletonBlock(height: 18, width: 58, cornerRadius: 9)
-                SkeletonBlock(height: 18, width: 62, cornerRadius: 9)
-            }
-            Spacer(minLength: 4)
-            SkeletonTextLine(height: 10, width: 112)
-            SkeletonBlock(height: 5, width: 140, cornerRadius: 3)
+
+            SkeletonTextLine(height: 10, width: 60) // "Reading"/date label
+            SkeletonBlock(height: 5, width: 140, cornerRadius: 3) // progress bar
         }
         .padding(12)
         .frame(width: CarouselCardMetrics.width,
