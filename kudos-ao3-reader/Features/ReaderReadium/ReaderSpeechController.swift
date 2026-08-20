@@ -46,6 +46,11 @@ final class ReaderSpeechController {
     /// Called with each utterance's locator so the reader can page along with
     /// the voice.
     var onAdvance: ((Locator) -> Void)?
+    /// Called with the exact audible word/phrase locator when an engine can
+    /// provide one, or its current sentence locator otherwise.
+    var onSpokenRange: ((Locator) -> Void)?
+    /// Called when the active service has no current audible source range.
+    var onSessionEnded: (() -> Void)?
     /// Now Playing / Lock Screen previous-track — chapter skip (same as mini player).
     var onSkipPrevious: (() -> Void)?
     /// Now Playing / Lock Screen next-track — chapter skip (same as mini player).
@@ -186,6 +191,7 @@ final class ReaderSpeechController {
             existing.onSpokenTextChange = nil
             existing.onSpeechEnergyPulse = nil
             existing.onAdvance = nil
+            existing.onSpokenRange = nil
             existing.stop()
         }
 
@@ -194,6 +200,7 @@ final class ReaderSpeechController {
             switch newStatus {
             case .unavailable:
                 self.status = .unavailable
+                self.onSessionEnded?()
             case .stopped:
                 // Only auto-advance when a playing chapter actually finished.
                 // `speak()` used to call `stop()` on the way in, which fired this
@@ -203,6 +210,7 @@ final class ReaderSpeechController {
                 self.status = .stopped
                 self.clearSpeechEnergy()
                 self.clearNowPlaying()
+                self.onSessionEnded?()
                 if shouldContinue {
                     self.pendingAutoContinue = true
                     self.onSkipNext?()
@@ -240,6 +248,10 @@ final class ReaderSpeechController {
             self?.onAdvance?(locator)
         }
 
+        service.onSpokenRange = { [weak self] locator in
+            self?.onSpokenRange?(locator)
+        }
+
         ttsService = service
         ttsServiceKind = kind
     }
@@ -266,8 +278,7 @@ final class ReaderSpeechController {
                 // do not also filter by `startLoc.href`, which can disagree on
                 // URL form and yield an empty chapter.
                 var chapterHref: AnyURL?
-                var texts: [String] = []
-                var firstLocator: Locator?
+                var units: [TTSSpeechUnit] = []
                 for await element in content.sequence() {
                     if Task.isCancelled { return }
                     if chapterHref == nil {
@@ -275,16 +286,20 @@ final class ReaderSpeechController {
                     } else if element.locator.href != chapterHref {
                         break
                     }
-                    if firstLocator == nil {
-                        firstLocator = element.locator
-                    }
-                    if let text = (element as? TextualContentElement)?.text, !text.isEmpty {
-                        texts.append(text)
-                    }
+                    guard let textElement = element as? TextualContentElement else { continue }
+
+                    // Use Readium's normalized text for synthesis. The locator
+                    // quote preserves raw XHTML whitespace, which must stay out
+                    // of the sentence chunker or pretty-printed markup can
+                    // create a false paragraph boundary mid-sentence.
+                    guard let text = textElement.text,
+                          !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else { continue }
+
+                    units.append(TTSSpeechUnit(text: text, locator: textElement.locator))
                 }
 
-                let text = texts.joined(separator: "\n")
-                guard !text.isEmpty else {
+                guard !units.isEmpty else {
                     Log.tts.error("No extractable text in the current chapter")
                     return
                 }
@@ -295,10 +310,7 @@ final class ReaderSpeechController {
                 // while we were walking the spine is used for this tap.
                 ensureEngineForPlayback()
                 applyPreferences()
-                try await ttsService?.speak(
-                    text: text,
-                    startLocator: startLoc ?? firstLocator
-                )
+                try await ttsService?.speak(units: units)
             } catch {
                 Log.tts.error("speak() failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -383,7 +395,10 @@ final class ReaderSpeechController {
         stoppedManually = true
         startTask?.cancel()
         startTask = nil
+        onSessionEnded?()
         onAdvance = nil
+        onSpokenRange = nil
+        onSessionEnded = nil
         onSkipPrevious = nil
         onSkipNext = nil
         ttsService?.stop()

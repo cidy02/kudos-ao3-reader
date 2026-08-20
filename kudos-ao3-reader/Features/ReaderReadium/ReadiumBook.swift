@@ -96,6 +96,24 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
     }
 
+    /// Draws one transient sentence-range decoration for read-aloud. It lives
+    /// in its own group so speech state can never replace persisted annotations.
+    func applySpeechDecoration(at locator: Locator?) {
+        let decorations = locator.map { locator in
+            [
+                Decoration(
+                    id: "tts-current",
+                    locator: locator,
+                    style: .highlight(
+                        tint: UIColor.systemYellow.withAlphaComponent(0.55),
+                        isActive: true
+                    )
+                )
+            ]
+        } ?? []
+        navigator?.apply(decorations: decorations, in: Self.speechDecorationGroup)
+    }
+
     /// Registers a tap handler for highlight decorations. Call once per open
     /// book; Readium appends callbacks, so we gate on `highlightTapsInstalled`.
     /// `onActivate` receives the decoration id (the annotation's UUID string).
@@ -108,6 +126,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     static let highlightDecorationGroup = "kudos-highlights"
+    static let speechDecorationGroup = "kudos-tts"
     /// Ensures `observeHighlightTaps` only registers once per navigator lifetime.
     private var highlightTapsInstalled = false
     /// Readium's static position list grouped by reading-order item (chapter).

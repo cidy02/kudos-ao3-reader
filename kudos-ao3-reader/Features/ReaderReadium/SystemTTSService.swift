@@ -18,8 +18,8 @@ import ReadiumShared
 ///   the old `PublicationSpeechSynthesizer`)
 /// - interruption pause/resume
 ///
-/// Chapter text arrives through `TTSService.speak(text:startLocator:)` (the
-/// controller now extracts the spine resource). Utterances are spoken
+/// Chapter text arrives through locator-bearing `TTSService` speech units.
+/// Utterances are spoken
 /// sequentially so a new `speak` is never submitted before `didFinish` of the
 /// previous one (the iOS 15 `AVTTSEngine` deadlock this codebase already
 /// worked around).
@@ -45,6 +45,7 @@ public final class SystemTTSService: TTSService {
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
     public var onAdvance: ((Locator) -> Void)?
+    public var onSpokenRange: ((Locator) -> Void)?
 
     private let synthesizer = AVSpeechSynthesizer()
     private let delegateProxy = DelegateProxy()
@@ -52,10 +53,11 @@ public final class SystemTTSService: TTSService {
     private var interruptionObserver: NSObjectProtocol?
     private var utteranceWaiter: CheckedContinuation<Void, Never>?
     private var pauseWaiters: [CheckedContinuation<Void, Never>] = []
+    private var activeUtteranceID: ObjectIdentifier?
+    private var activeUtteranceUnit: TTSSpeechUnit?
 
-    private var chunks: [String] = []
+    private var chunks: [TTSSpeechUnit] = []
     private var currentIndex: Int = 0
-    private var startLocator: Locator?
     private var currentVoiceId: String = ""
     private var wasPlayingBeforeInterruption = false
 
@@ -71,20 +73,24 @@ public final class SystemTTSService: TTSService {
         }
     }
 
-    public func speak(text: String, startLocator: Locator?) async throws {
+    public func speak(units: [TTSSpeechUnit]) async throws {
         resetPlayback(notifyStopped: false)
 
-        let prepared = TextChunker.chunk(text: text)
-            .map { ReaderSpeechPreferences.cleanUtteranceText($0) }
+        let prepared = TTSSpeechUnit.packedChunks(from: units)
+            .map { unit in
+                TTSSpeechUnit(
+                    text: ReaderSpeechPreferences.cleanUtteranceText(unit.text),
+                    locator: unit.locator
+                )
+            }
             .filter { chunk in
-                chunk.unicodeScalars.contains { CharacterSet.letters.contains($0)
+                chunk.text.unicodeScalars.contains { CharacterSet.letters.contains($0)
                     || CharacterSet.decimalDigits.contains($0) }
             }
         guard !prepared.isEmpty else { return }
 
         chunks = prepared
         currentIndex = 0
-        self.startLocator = startLocator
 
         try activateAudioSession()
         status = .playing
@@ -149,13 +155,13 @@ public final class SystemTTSService: TTSService {
             guard !Task.isCancelled, status != .stopped else { return }
 
             currentIndex = index
-            let text = chunks[index]
-            spokenText = text
-            if let startLocator {
-                onAdvance?(startLocator)
+            let chunk = chunks[index]
+            spokenText = chunk.text
+            if let locator = chunk.locator {
+                onAdvance?(locator)
             }
 
-            await speakUtterance(text)
+            await speakUtterance(chunk)
         }
 
         finishNaturally()
@@ -163,10 +169,12 @@ public final class SystemTTSService: TTSService {
 
     /// One utterance at a time: wait for `didFinish`/`didCancel` before the
     /// next `synthesizer.speak`, matching `AVTTSEngine`'s iOS 15 state machine.
-    private func speakUtterance(_ text: String) async {
+    private func speakUtterance(_ chunk: TTSSpeechUnit) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             utteranceWaiter = continuation
-            let utterance = AVSpeechUtterance(string: text)
+            let utterance = AVSpeechUtterance(string: chunk.text)
+            activeUtteranceID = ObjectIdentifier(utterance)
+            activeUtteranceUnit = chunk
             // Pre-Kokoro EngineBridge (ReaderSpeechController at 863d33c2^).
             utterance.rate = ReaderSpeechPreferences.avSpeechRate
             utterance.pitchMultiplier = ReaderSpeechPreferences.avPitch
@@ -191,10 +199,30 @@ public final class SystemTTSService: TTSService {
         onSpeechEnergyPulse?(speechEnergy, speechEnergySeed)
     }
 
-    fileprivate func handleUtteranceEnded() {
+    fileprivate func handleUtteranceEnded(utteranceID: ObjectIdentifier? = nil) {
+        if let utteranceID, utteranceID != activeUtteranceID {
+            return
+        }
+        activeUtteranceID = nil
+        activeUtteranceUnit = nil
         let waiter = utteranceWaiter
         utteranceWaiter = nil
         waiter?.resume()
+    }
+
+    fileprivate func handleSpokenRange(
+        _ range: Range<String.Index>,
+        utteranceID: ObjectIdentifier,
+        utteranceText: String
+    ) {
+        guard activeUtteranceID == utteranceID,
+              let unit = activeUtteranceUnit
+        else { return }
+
+        pulseSpeechEnergy(spokenFragment: String(utteranceText[range]))
+        if let locator = unit.locator(forSpokenRange: range, in: utteranceText) {
+            onSpokenRange?(locator)
+        }
     }
 
     private func waitWhilePaused() async {
@@ -219,6 +247,8 @@ public final class SystemTTSService: TTSService {
         currentIndex = 0
         spokenText = ""
         speechEnergy = 0
+        activeUtteranceID = nil
+        activeUtteranceUnit = nil
         wasPlayingBeforeInterruption = false
         if notifyStopped, status != .unavailable {
             status = .stopped
@@ -295,8 +325,9 @@ public final class SystemTTSService: TTSService {
             _ synthesizer: AVSpeechSynthesizer,
             didFinish utterance: AVSpeechUtterance
         ) {
+            let utteranceID = ObjectIdentifier(utterance)
             Task { @MainActor [weak owner] in
-                owner?.handleUtteranceEnded()
+                owner?.handleUtteranceEnded(utteranceID: utteranceID)
             }
         }
 
@@ -304,8 +335,9 @@ public final class SystemTTSService: TTSService {
             _ synthesizer: AVSpeechSynthesizer,
             didCancel utterance: AVSpeechUtterance
         ) {
+            let utteranceID = ObjectIdentifier(utterance)
             Task { @MainActor [weak owner] in
-                owner?.handleUtteranceEnded()
+                owner?.handleUtteranceEnded(utteranceID: utteranceID)
             }
         }
 
@@ -316,9 +348,13 @@ public final class SystemTTSService: TTSService {
         ) {
             let text = utterance.speechString
             guard let range = Range(characterRange, in: text) else { return }
-            let fragment = String(text[range])
+            let utteranceID = ObjectIdentifier(utterance)
             Task { @MainActor [weak owner] in
-                owner?.pulseSpeechEnergy(spokenFragment: fragment)
+                owner?.handleSpokenRange(
+                    range,
+                    utteranceID: utteranceID,
+                    utteranceText: text
+                )
             }
         }
     }
