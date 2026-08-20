@@ -124,6 +124,12 @@ struct WorkCoverCardSkeleton: View {
 /// Wireframe matching the Browse category card (icon + name, stats line).
 struct CategoryCardSkeleton: View {
     @Environment(ThemeManager.self) private var themeManager
+    /// How many "Recently read" chip placeholders to show below the stats line —
+    /// 0 matches a category with none loaded/found; a real card can show up to
+    /// `MediaBrowserView.recentFandomsLimit` (5). Varying this per card is what
+    /// gives the skeleton grid the same uneven-height masonry shape the real
+    /// grid will settle into, rather than every placeholder being identical.
+    var chipCount: Int = 0
 
     var body: some View {
         // Icon overlay applied to the inner content *before* the outer padding/
@@ -139,6 +145,20 @@ struct CategoryCardSkeleton: View {
             HStack(spacing: 16) {
                 SkeletonBlock(height: 11, width: 90)
                 SkeletonBlock(height: 11, width: 72)
+            }
+
+            // Matches categoryCard's own recentlyRead block: a label line plus a
+            // wrapping row of chip-shaped placeholders (FlowLayout, same as the
+            // real chips — a plain HStack would overflow the card's width past
+            // 2-3 placeholders instead of wrapping), only when chipCount > 0.
+            if chipCount > 0 {
+                SkeletonBlock(height: 10, width: 84, cornerRadius: 3)
+                    .padding(.top, 2)
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(0 ..< chipCount, id: \.self) { index in
+                        SkeletonBlock(height: 22, width: index.isMultiple(of: 2) ? 92 : 68, cornerRadius: 11)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -385,28 +405,29 @@ struct AO3WorkRowSkeletonList: View {
 struct CategoryCardSkeletonList: View {
     var count: Int = 8
 
+    /// Cycles through a fixed pattern of chip counts (none, a few, a lot) so
+    /// neighboring placeholders land at different heights — matching the real
+    /// grid's masonry shape (some categories have several "recently read"
+    /// chips, some have none) instead of a uniform block grid that doesn't
+    /// preview what's about to load.
+    private static let chipCountPattern = [0, 3, 0, 2, 5, 0, 1, 0]
+
     var body: some View {
         #if os(iOS)
         // Matches MediaBrowserView.categoryGrid's own structure (ScrollView +
-        // header + 2-column grid, not a List) — every card skeleton is the same
-        // height, so a plain LazyVGrid balances the two columns evenly with no
-        // need for that view's real MasonryLayout, which only earns its keep
-        // once card heights actually vary (the "recently read" chips, absent
-        // here).
+        // header + the real MasonryLayout, not a List or a uniform LazyVGrid) —
+        // varying chipCount below means these placeholders are different
+        // heights, same as the real cards will be.
         ScrollView {
             VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
                 Text("Browse by fandom")
                     .font(.headline)
                     .padding(.horizontal, CardListMetrics.sideMargin)
 
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
-                        GridItem(.flexible(), spacing: CardListMetrics.interCardSpacing),
-                    ],
-                    spacing: CardListMetrics.interCardSpacing
-                ) {
-                    ForEach(0 ..< count, id: \.self) { _ in CategoryCardSkeleton() }
+                MasonryLayout(columns: 2, spacing: CardListMetrics.interCardSpacing) {
+                    ForEach(0 ..< count, id: \.self) { index in
+                        CategoryCardSkeleton(chipCount: Self.chipCountPattern[index % Self.chipCountPattern.count])
+                    }
                 }
                 .padding(.horizontal, CardListMetrics.sideMargin)
             }
