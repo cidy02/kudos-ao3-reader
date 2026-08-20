@@ -12,6 +12,7 @@ import ReadiumShared
 /// Personal Voice is intentionally excluded — fanfic read in the listener's own
 /// voice is a product choice we don't offer.
 enum ReaderSpeechPreferences {
+    static let engineKey = "readerSpeechEngine"
     static let voiceIDKey = "readerSpeechVoiceID"
     static let rateKey = "readerSpeechRate"
     static let pitchKey = "readerSpeechPitch"
@@ -30,6 +31,13 @@ enum ReaderSpeechPreferences {
     static var voiceIdentifier: String {
         get { UserDefaults.standard.string(forKey: voiceIDKey) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: voiceIDKey) }
+    }
+
+    /// Empty means Automatic. Unknown values intentionally also resolve as
+    /// Automatic, keeping a future removed engine from blocking read-aloud.
+    static var engineIdentifier: String {
+        get { UserDefaults.standard.string(forKey: engineKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: engineKey) }
     }
 
     static var rateMultiplier: Double {

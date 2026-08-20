@@ -2,16 +2,41 @@ import Foundation
 import ReadiumNavigator
 import ReadiumShared
 
-/// Which `TTSService` implementation `ReaderSpeechController` should bind.
-/// Kokoro only after `TTSDownloadManager.isModelDownloaded()`; otherwise Apple
-/// `AVSpeechSynthesizer` via `SystemTTSService`. Re-evaluated each time speech
-/// starts so a mid-session download takes effect on the next Read Aloud tap.
-enum ReaderTTSEngineKind: Equatable {
+/// Which concrete `TTSService` implementation `ReaderSpeechController` should
+/// bind. Persisted manual choices use `rawValue`; an empty or unknown value
+/// means Automatic. Re-evaluate on every new playback so a finished download
+/// becomes available without relaunching the reader.
+enum ReaderTTSEngineKind: String, CaseIterable {
     case system
     case kokoro
 
+    var displayName: String {
+        switch self {
+        case .system: "Apple"
+        case .kokoro: "Kokoro Offline"
+        }
+    }
+
     static func preferred(modelDownloaded: Bool) -> ReaderTTSEngineKind {
         modelDownloaded ? .kokoro : .system
+    }
+
+    /// Resolves a persisted manual choice to a safe engine. A requested Kokoro
+    /// pack is never treated as available until its files are actually present.
+    static func effective(
+        requestedRawValue: String,
+        modelDownloaded: Bool
+    ) -> ReaderTTSEngineKind {
+        guard let requested = ReaderTTSEngineKind(rawValue: requestedRawValue) else {
+            return preferred(modelDownloaded: modelDownloaded)
+        }
+
+        switch requested {
+        case .system:
+            return .system
+        case .kokoro:
+            return modelDownloaded ? .kokoro : .system
+        }
     }
 }
 

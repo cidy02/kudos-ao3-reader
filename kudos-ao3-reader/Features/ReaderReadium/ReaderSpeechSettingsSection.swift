@@ -8,6 +8,7 @@ import UIKit
 /// and Settings). Preferences persist via `@AppStorage` / UserDefaults and are
 /// picked up by `ReaderSpeechController` on the next utterance.
 struct ReaderSpeechSettingsSection: View {
+    @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
     @AppStorage(ReaderSpeechPreferences.rateKey)
     private var rate = ReaderSpeechPreferences.defaultRate
@@ -34,8 +35,24 @@ struct ReaderSpeechSettingsSection: View {
 
     var body: some View {
         downloadSection
-        
+
         Section {
+            Picker("Engine", selection: $engineID) {
+                Text("Automatic").tag("")
+                ForEach(ReaderTTSEngineKind.allCases, id: \.rawValue) { engine in
+                    Text(engine.displayName).tag(engine.rawValue)
+                }
+            }
+
+            if isKokoroAwaitingVoicePack {
+                Label(
+                    "Kokoro requires the Voice Pack. Apple is used until it finishes.",
+                    systemImage: "info.circle"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
             NavigationLink {
                 voicePicker
             } label: {
@@ -69,6 +86,7 @@ struct ReaderSpeechSettingsSection: View {
             }
 
             Button("Reset Read Aloud") {
+                engineID = ""
                 voiceID = ""
                 rate = ReaderSpeechPreferences.defaultRate
                 pitch = ReaderSpeechPreferences.defaultPitch
@@ -76,10 +94,17 @@ struct ReaderSpeechSettingsSection: View {
         } header: {
             Text("Read Aloud")
         } footer: {
-            Text("Read Aloud uses the system voice immediately. Download the optional Kokoro voice pack for higher-quality offline speech (~200MB, one-time).")
+            Text(
+                "Automatic uses Apple immediately, then Kokoro after its optional offline "
+                    + "Voice Pack is downloaded (~200MB, one-time)."
+            )
         }
-        .onAppear(perform: updateVoices)
+        .onAppear {
+            normalizeEngineID()
+            updateVoices()
+        }
         .onChange(of: downloadManager.status) { _, _ in updateVoices() }
+        .onChange(of: engineID) { _, _ in updateVoices() }
     }
 
     @ViewBuilder
@@ -124,17 +149,37 @@ struct ReaderSpeechSettingsSection: View {
             Text("Voice Pack")
         }
     }
-    
+
     private func updateVoices() {
-        if downloadManager.isModelDownloaded() {
+        switch effectiveEngineKind {
+        case .kokoro:
             if kokoroService == nil {
                 kokoroService = SherpaKokoroTTSService(modelDirectory: downloadManager.modelDirectory)
             }
             voices = kokoroService?.availableVoices ?? []
-        } else {
+        case .system:
             kokoroService = nil
             voices = ReaderSpeechPreferences.catalogVoices()
         }
+    }
+
+    private func normalizeEngineID() {
+        guard !engineID.isEmpty,
+              ReaderTTSEngineKind(rawValue: engineID) == nil
+        else { return }
+        engineID = ""
+    }
+
+    private var effectiveEngineKind: ReaderTTSEngineKind {
+        ReaderTTSEngineKind.effective(
+            requestedRawValue: engineID,
+            modelDownloaded: downloadManager.isModelDownloaded()
+        )
+    }
+
+    private var isKokoroAwaitingVoicePack: Bool {
+        engineID == ReaderTTSEngineKind.kokoro.rawValue
+            && !downloadManager.isModelDownloaded()
     }
 
     private var voicePicker: some View {
@@ -199,7 +244,6 @@ struct ReaderSpeechSettingsSection: View {
         let lang = voice.language.code.bcp47
         return "\(quality) · \(lang)"
     }
-
 
     private var rateLabel: String {
         if abs(rate - 1.0) < 0.001 { return "Default" }
