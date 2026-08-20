@@ -15,6 +15,8 @@ struct ReaderSpeechSettingsSection: View {
     private var pitch = ReaderSpeechPreferences.defaultPitch
 
     @State private var voices: [TTSVoice] = []
+    @State private var downloadManager = TTSDownloadManager()
+    @State private var kokoroService: SherpaKokoroTTSService?
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -31,18 +33,15 @@ struct ReaderSpeechSettingsSection: View {
     }
 
     var body: some View {
+        downloadSection
+        
         Section {
             NavigationLink {
                 voicePicker
             } label: {
                 LabeledContent("Voice", value: selectedVoiceLabel)
             }
-
-            Button {
-                SystemSpokenContentSettings.open()
-            } label: {
-                Label("Open Settings for More Voices…", systemImage: "arrow.up.forward.app")
-            }
+            .disabled(!downloadManager.isModelDownloaded())
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -78,16 +77,64 @@ struct ReaderSpeechSettingsSection: View {
         } header: {
             Text("Read Aloud")
         } footer: {
-            Text(
-                "Automatic picks the highest-quality voice for the book’s language. "
-                    + "Open Settings jumps to this app’s own Settings page — iOS doesn’t let "
-                    + "apps deep-link any further than that. From there, go to Settings → "
-                    + "Accessibility → Read & Speak → Voices → (Language) → Voice to download "
-                    + "Enhanced or Premium voices. After installing one, return here and choose "
-                    + "it — or leave Automatic. Personal Voice is not used."
-            )
+            Text("Automatic uses the bundled Kokoro voice pack for high-quality offline speech. The voice pack is a one-time ~200MB download.")
         }
-        .onAppear { voices = ReaderSpeechPreferences.catalogVoices() }
+        .onAppear(perform: updateVoices)
+        .onChange(of: downloadManager.status) { _, _ in updateVoices() }
+    }
+
+    @ViewBuilder
+    private var downloadSection: some View {
+        Section {
+            switch downloadManager.status {
+            case .idle:
+                Button("Download Voice Pack") {
+                    Task { try? await downloadManager.downloadModel() }
+                }
+            case .downloading(let progress):
+                VStack(alignment: .leading, spacing: 4) {
+                    ProgressView(value: progress)
+                    Text("Downloading... \(Int(progress * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            case .extracting:
+                HStack {
+                    ProgressView()
+                        .padding(.trailing, 8)
+                    Text("Extracting...")
+                }
+            case .completed:
+                HStack {
+                    Text("Voice Pack Downloaded")
+                    Spacer()
+                    Image(systemName: "checkmark")
+                        .foregroundColor(.green)
+                }
+            case .failed(let error):
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Download failed: \(error)")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    Button("Retry Download") {
+                        Task { try? await downloadManager.downloadModel() }
+                    }
+                }
+            }
+        } header: {
+            Text("Voice Pack")
+        }
+    }
+    
+    private func updateVoices() {
+        if downloadManager.isModelDownloaded() {
+            if kokoroService == nil {
+                kokoroService = SherpaKokoroTTSService(modelDirectory: downloadManager.modelDirectory)
+            }
+            voices = kokoroService?.availableVoices ?? []
+        } else {
+            voices = []
+        }
     }
 
     private var voicePicker: some View {
@@ -110,28 +157,11 @@ struct ReaderSpeechSettingsSection: View {
                 }
             } header: {
                 Text("Installed Voices")
-            } footer: {
-                if !hasEnhancedOrBetter {
-                    Text(
-                        "Only compact voices are installed. Use Open Settings for More Voices, "
-                            + "then Accessibility → Read & Speak → Voices → (Language) to add "
-                            + "higher-quality voices, then return here."
-                    )
-                }
-            }
-
-            Section {
-                Button {
-                    SystemSpokenContentSettings.open()
-                } label: {
-                    Label("Download Enhanced & Premium Voices…", systemImage: "arrow.up.forward.app")
-                }
             }
         }
         .navigationTitle("Voice")
         .navigationBarTitleDisplayMode(.inline)
-        // Returning from Settings: refresh so newly installed voices appear.
-        .onAppear { voices = ReaderSpeechPreferences.catalogVoices() }
+        .onAppear(perform: updateVoices)
     }
     private func voiceRow(id: String, title: String, subtitle: String) -> some View {
         Button {
@@ -170,14 +200,6 @@ struct ReaderSpeechSettingsSection: View {
         return "\(quality) · \(lang)"
     }
 
-    private var hasEnhancedOrBetter: Bool {
-        voices.contains { voice in
-            switch voice.quality {
-            case .high, .higher: true
-            default: false
-            }
-        }
-    }
 
     private var rateLabel: String {
         if abs(rate - 1.0) < 0.001 { return "Default" }
@@ -190,31 +212,4 @@ struct ReaderSpeechSettingsSection: View {
     }
 }
 
-/// Opens Settings so the reader can find Read & Speak (formerly "Spoken
-/// Content") and download Enhanced / Premium voices.
-///
-/// **Tried and confirmed wrong on-device (iOS 26.5):** the undocumented
-/// `App-prefs:root=ACCESSIBILITY&path=SPEECH` / `prefs:` deep links do not
-/// error out — `UIApplication.open(_:)` reports `success == true` — but they
-/// land on Settings' **Apps** section, not Accessibility. A "successful" deep
-/// link to the wrong screen is worse than no deep link at all: the user has
-/// no signal anything went sideways. Do not resurrect them without re-testing
-/// on a real device; a scheme that silently mis-routes is not a working
-/// fallback candidate.
-///
-/// The only navigation a third-party app is actually allowed to make into
-/// Settings is `UIApplication.openSettingsURLString`, which opens *this app's
-/// own* Settings page — not Accessibility, not Read & Speak. That's still
-/// useful: it puts the user inside Settings.app one back-tap from its root,
-/// instead of making them find and open Settings themselves. The honest
-/// manual path from there — **Settings → Accessibility → Read & Speak →
-/// Voices → (Language) → Voice** — lives in `ReaderSpeechSettingsSection`'s
-/// footer text, not in this deep link, because this deep link cannot reach it.
-@MainActor
-enum SystemSpokenContentSettings {
-    static func open() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
-    }
-}
 #endif
