@@ -424,7 +424,8 @@ private fun ReaderReading(
                                     navigatorController.clearSelection()
                                 }
                             }
-                        }
+                        },
+                        isTtsActive = showTtsControls || speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
                     )
                 }
 
@@ -733,7 +734,8 @@ private fun ReaderTopBar(
     onGiveKudos: () -> Unit,
     onBookmarkPosition: () -> Unit = {},
     onHighlightSelection: () -> Unit = {},
-    onNoteSelection: () -> Unit = {}
+    onNoteSelection: () -> Unit = {},
+    isTtsActive: Boolean = false
 ) {
     val context = LocalContext.current
     var showOverflow by remember { mutableStateOf(false) }
@@ -761,7 +763,11 @@ private fun ReaderTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Column(
                 modifier = Modifier
@@ -785,20 +791,40 @@ private fun ReaderTopBar(
                 }
             }
             IconButton(onClick = onOpenSearch) {
-                Icon(Icons.Filled.Search, contentDescription = "Find in work")
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = "Find in work",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             IconButton(onClick = onOpenToc) {
-                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Contents")
+                Icon(
+                    Icons.AutoMirrored.Filled.List,
+                    contentDescription = "Contents",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             IconButton(onClick = onOpenDisplay) {
-                Icon(Icons.Filled.TextFields, contentDescription = "Display")
+                Icon(
+                    Icons.Filled.TextFields,
+                    contentDescription = "Display",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             IconButton(onClick = onToggleTts) {
-                Icon(Icons.Filled.VolumeUp, contentDescription = "Text to Speech")
+                Icon(
+                    Icons.Filled.VolumeUp,
+                    contentDescription = "Text to Speech",
+                    tint = if (isTtsActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Box {
                 IconButton(onClick = { showOverflow = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "More actions",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 androidx.compose.material3.DropdownMenu(
                     expanded = showOverflow,
@@ -1375,22 +1401,42 @@ private fun ReaderTtsControls(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onSkipPrevious) {
-                Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous paragraph")
+                Icon(
+                    Icons.Filled.SkipPrevious,
+                    contentDescription = "Previous paragraph",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             if (status == SpeechStatus.PLAYING) {
                 IconButton(onClick = onPause) {
-                    Icon(Icons.Filled.Pause, contentDescription = "Pause TTS")
+                    Icon(
+                        Icons.Filled.Pause,
+                        contentDescription = "Pause TTS",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             } else {
                 IconButton(onClick = onPlay) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "Play TTS")
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = "Play TTS",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             IconButton(onClick = onStop) {
-                Icon(Icons.Filled.Stop, contentDescription = "Stop TTS")
+                Icon(
+                    Icons.Filled.Stop,
+                    contentDescription = "Stop TTS",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
             IconButton(onClick = onSkipNext) {
-                Icon(Icons.Filled.SkipNext, contentDescription = "Next paragraph")
+                Icon(
+                    Icons.Filled.SkipNext,
+                    contentDescription = "Next paragraph",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
