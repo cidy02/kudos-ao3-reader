@@ -107,11 +107,23 @@ struct WorkCoverCardSkeleton: View {
             SkeletonTextLine(height: 15, width: 84)
 
             Spacer(minLength: 4)
-            // WorkStatusIconGrid at tileSize 27 renders as a ~59pt square
-            // (2 tiles + the gap between them) — see WorkStatLabel.swift's
-            // WorkStatusIconGrid for the tileSize -> gap/tile math.
-            SkeletonBlock(height: 59, width: 59, cornerRadius: 12)
-                .frame(maxWidth: .infinity, alignment: .center)
+            // Four separate tiles in a 2x2 arrangement, not one solid square —
+            // WorkStatusIconGrid renders as four individually-colored quadrants
+            // (rating/category/warnings/completion), and a single block read as
+            // a plain icon rather than previewing that grid shape. Sizes match
+            // WorkStatusIconGrid's own tileSize 27 -> gap/cornerRadius math (see
+            // WorkStatLabel.swift): gap = 27*3/18 = 4.5, cornerRadius = 27*4/18 = 6.
+            Grid(horizontalSpacing: 4.5, verticalSpacing: 4.5) {
+                GridRow {
+                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                }
+                GridRow {
+                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
             Spacer(minLength: 4)
 
             SkeletonTextLine(height: 12, width: 92) // author
