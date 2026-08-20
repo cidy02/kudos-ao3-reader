@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.works.converters
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -27,11 +29,15 @@ import java.io.File
  */
 class PDFWorkConverter(private val cacheDir: File? = null) {
 
-    fun convert(title: String, bytes: ByteArray): ByteArray? {
-        val paragraphs = muPdfParagraphs(bytes) ?: extractParagraphs(bytes) ?: return null
-        if (paragraphs.isEmpty()) return null
+    // MuPDF's structured-text walk is blocking native work — real PDFs run to
+    // the hundreds of pages, and every caller reaches this through a suspend
+    // function, so dispatching here once covers all of them rather than
+    // relying on each call site to remember Dispatchers.IO itself.
+    suspend fun convert(title: String, bytes: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
+        val paragraphs = muPdfParagraphs(bytes) ?: extractParagraphs(bytes)
+        if (paragraphs.isNullOrEmpty()) return@withContext null
         val body = paragraphsWithAuthorNotes(paragraphs)
-        return if (body.isBlank()) null else EpubBuilder.buildEpub(title, body)
+        if (body.isBlank()) null else EpubBuilder.buildEpub(title, body)
     }
 
     /** MuPDF's paragraphs in reading order, or null when MuPDF can't read the file. */
@@ -84,10 +90,10 @@ class PDFWorkConverter(private val cacheDir: File? = null) {
      * merges `Label: value` rows into one blob and makes the parser read
      * `Storylink:` as part of `Story:`'s value.
      */
-    fun metadataLines(bytes: ByteArray): List<String> {
-        if (!KudosMuPDF.isAvailable) return emptyList()
-        val temp = writeTemp(bytes) ?: return emptyList()
-        return try {
+    suspend fun metadataLines(bytes: ByteArray): List<String> = withContext(Dispatchers.IO) {
+        if (!KudosMuPDF.isAvailable) return@withContext emptyList()
+        val temp = writeTemp(bytes) ?: return@withContext emptyList()
+        try {
             KudosMuPDF.linesPerPage(temp.absolutePath)?.firstOrNull().orEmpty()
         } finally {
             temp.delete()
@@ -104,7 +110,14 @@ class PDFWorkConverter(private val cacheDir: File? = null) {
     private fun writeTemp(bytes: ByteArray): File? {
         val dir = cacheDir ?: return null
         return runCatching {
-            File.createTempFile("kudos-import-", ".pdf", dir).apply { writeBytes(bytes) }
+            val file = File.createTempFile("kudos-import-", ".pdf", dir)
+            try {
+                file.writeBytes(bytes)
+                file
+            } catch (e: Exception) {
+                file.delete()
+                throw e
+            }
         }.getOrNull()
     }
 

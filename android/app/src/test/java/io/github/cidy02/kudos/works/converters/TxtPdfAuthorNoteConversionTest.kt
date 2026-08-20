@@ -105,7 +105,7 @@ class TxtPdfAuthorNoteConversionTest {
     }
 
     @Test
-    fun pdfConvertUsesDetectorOnExtractedLiterals() {
+    fun pdfConvertUsesDetectorOnExtractedLiterals() = kotlinx.coroutines.test.runTest {
         // Minimal uncompressed PDF-ish payload: a text object with two literals.
         val pdf = """
             %PDF-1.1
