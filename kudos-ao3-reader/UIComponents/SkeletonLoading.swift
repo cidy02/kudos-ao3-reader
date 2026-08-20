@@ -136,34 +136,44 @@ struct CategoryCardSkeleton: View {
         // background below — same ordering as MediaBrowserView.categoryCard,
         // so the icon ends up inset from the card's edge by exactly the one
         // outer padding, not that padding plus a second one of its own.
-        VStack(alignment: .leading, spacing: 8) {
-            // Title alone, icon decoupled into a top-trailing overlay — matches
-            // categoryCard's own layout (the icon moved out of this row into a
-            // corner badge).
-            SkeletonTextLine(height: 16, width: 130)
-                .padding(.trailing, 28)
+        VStack(alignment: .leading, spacing: 10) {
+            // Two lines, not one: category.name is almost always long enough to
+            // wrap onto 2 lines at .headline weight (every card in the actual
+            // screenshot did) — a single 16pt line under-represented the title's
+            // real height by roughly a full line.
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonTextLine(height: 19, width: 160)
+                SkeletonTextLine(height: 19, width: 96)
+            }
+            .padding(.trailing, 32)
             HStack(spacing: 16) {
-                SkeletonBlock(height: 11, width: 90)
-                SkeletonBlock(height: 11, width: 72)
+                SkeletonBlock(height: 13, width: 96)
+                SkeletonBlock(height: 13, width: 78)
             }
 
             // Matches categoryCard's own recentlyRead block: a label line plus a
             // wrapping row of chip-shaped placeholders (FlowLayout, same as the
             // real chips — a plain HStack would overflow the card's width past
             // 2-3 placeholders instead of wrapping), only when chipCount > 0.
+            // Chip height 28 to match TagChip's own real padded size (.caption
+            // text + 5pt vertical padding on each side). Fandom names are
+            // usually long enough to truncate rather than fit, so a real chip
+            // commonly spans most of the card's own width by itself — sized
+            // these to match rather than the narrow, clearly-too-small pills a
+            // first pass used.
             if chipCount > 0 {
-                SkeletonBlock(height: 10, width: 84, cornerRadius: 3)
+                SkeletonBlock(height: 11, width: 92, cornerRadius: 3)
                     .padding(.top, 2)
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(0 ..< chipCount, id: \.self) { index in
-                        SkeletonBlock(height: 22, width: index.isMultiple(of: 2) ? 92 : 68, cornerRadius: 11)
+                        SkeletonBlock(height: 28, width: index.isMultiple(of: 2) ? 150 : 108, cornerRadius: 14)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .overlay(alignment: .topTrailing) {
-            SkeletonBlock(height: 22, width: 22, cornerRadius: 6)
+            SkeletonBlock(height: 26, width: 26, cornerRadius: 7)
         }
         .padding(CardListMetrics.innerHorizontal)
         .frame(maxWidth: .infinity, alignment: .topLeading)
