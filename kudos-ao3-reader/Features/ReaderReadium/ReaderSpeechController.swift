@@ -53,6 +53,7 @@ final class ReaderSpeechController {
 
     private var publication: Publication?
     private var ttsService: TTSService?
+    private var ttsServiceKind: ReaderTTSEngineKind?
     private let downloadManager = TTSDownloadManager()
     private var stoppedManually = false
     
@@ -130,7 +131,7 @@ final class ReaderSpeechController {
         totalPositionCount = max(0, totalPositions)
         self.publication = publication
 
-        installTTSService(makeTTSService(for: preferredEngineKind()))
+        installTTSService(for: preferredEngineKind())
         self.status = .stopped
     }
 
@@ -149,18 +150,13 @@ final class ReaderSpeechController {
         ttsService.setPitch(Float(ReaderSpeechPreferences.pitchMultiplier))
     }
 
-    /// Kokoro if the voice pack is on disk, otherwise the system voice.
-    /// Re-checked at every playback start (not on pause/resume).
+    /// Applies the manual request when present; otherwise automatically uses
+    /// Kokoro once its pack is on disk. Re-checked at every new playback.
     private func preferredEngineKind() -> ReaderTTSEngineKind {
-        ReaderTTSEngineKind.preferred(modelDownloaded: downloadManager.isModelDownloaded())
-    }
-
-    private func currentEngineKind() -> ReaderTTSEngineKind? {
-        switch ttsService {
-        case is SherpaKokoroTTSService: return .kokoro
-        case is SystemTTSService: return .system
-        default: return nil
-        }
+        ReaderTTSEngineKind.effective(
+            requestedRawValue: ReaderSpeechPreferences.engineIdentifier,
+            modelDownloaded: downloadManager.isModelDownloaded()
+        )
     }
 
     private func makeTTSService(for kind: ReaderTTSEngineKind) -> TTSService {
@@ -172,15 +168,19 @@ final class ReaderSpeechController {
         }
     }
 
+    private func installTTSService(for kind: ReaderTTSEngineKind) {
+        installTTSService(makeTTSService(for: kind), kind: kind)
+    }
+
     /// Swap the bound engine if the download state changed since last start.
     /// Unbinds callbacks before `stop()` so a swap cannot auto-skip a chapter.
     private func ensureEngineForPlayback() {
         let kind = preferredEngineKind()
-        guard currentEngineKind() != kind else { return }
-        installTTSService(makeTTSService(for: kind))
+        guard ttsServiceKind != kind else { return }
+        installTTSService(for: kind)
     }
 
-    private func installTTSService(_ service: TTSService) {
+    private func installTTSService(_ service: TTSService, kind: ReaderTTSEngineKind) {
         if let existing = ttsService {
             existing.onStatusChange = nil
             existing.onSpokenTextChange = nil
@@ -241,6 +241,7 @@ final class ReaderSpeechController {
         }
 
         ttsService = service
+        ttsServiceKind = kind
     }
 
     /// Starts at `locator` (normally the reader's current position) or resumes
@@ -387,6 +388,7 @@ final class ReaderSpeechController {
         onSkipNext = nil
         ttsService?.stop()
         ttsService = nil
+        ttsServiceKind = nil
         publication = nil
         clearNowPlaying()
         removeRemoteCommands()
