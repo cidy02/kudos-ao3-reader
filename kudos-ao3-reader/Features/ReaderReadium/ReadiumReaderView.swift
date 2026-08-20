@@ -162,10 +162,12 @@ struct ReadiumReaderView: View {
     @State private var speechSeekHolding = false
     /// 0…1 thumb position when the chapter slider scrub began — origin `|` tick.
     @State private var sliderScrubOrigin: Double?
-    /// Session-only "kudos left" flag — there's no persisted per-work kudos state
-    /// (AO3 doesn't expose one to check), so this reflects only this reading
-    /// session's own successful tap, same honesty rule as `AO3WorkActionsModel`.
-    @State private var kudosGiven = false
+    // `kudosGiven` used to be session-only @State (AO3 doesn't expose a "did I
+    // already leave kudos" check, so there was nothing to initialize it from on
+    // appear) — the heart reset to unfilled on every relaunch even after a real,
+    // successful kudos. Reads work.hasGivenKudos directly instead: not claiming
+    // knowledge AO3 doesn't give the app, just remembering this app's own past
+    // successful action, which is honest and exactly what was asked for.
     @State private var kudosWorking = false
     @State private var kudosBanner: String?
 
@@ -1201,11 +1203,11 @@ struct ReadiumReaderView: View {
         if let ao3WorkID {
             actions.append(ReaderFanRoundAction(
                 id: "kudos",
-                systemImage: kudosGiven ? "heart.fill" : "heart",
+                systemImage: work.hasGivenKudos ? "heart.fill" : "heart",
                 tint: tint,
-                accessibilityLabel: kudosGiven ? "Kudos given" : "Give kudos",
-                isEnabled: !kudosWorking && !kudosGiven,
-                isEmphasized: kudosGiven
+                accessibilityLabel: work.hasGivenKudos ? "Kudos given" : "Give kudos",
+                isEnabled: !kudosWorking && !work.hasGivenKudos,
+                isEmphasized: work.hasGivenKudos
             ) {
                 giveKudos(workID: ao3WorkID)
             })
@@ -1744,12 +1746,15 @@ extension ReadiumReaderView {
     }
 
     private func giveKudos(workID: Int) {
-        guard !kudosWorking, !kudosGiven else { return }
+        guard !kudosWorking, !work.hasGivenKudos else { return }
         kudosWorking = true
         Task {
             do {
                 kudosBanner = try await auth.giveKudos(workID: workID)
-                kudosGiven = true
+                // Reached on both "Kudos left." and the benign "already left kudos
+                // here" outcome — either way it's confirmed given, so persist it.
+                work.hasGivenKudos = true
+                try? modelContext.save()
             } catch {
                 kudosBanner = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }

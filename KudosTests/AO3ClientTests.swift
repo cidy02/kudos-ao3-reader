@@ -395,6 +395,35 @@ struct AO3ClientTests {
         #expect(metadata.isComplete == false)
     }
 
+    /// kudosGivenByCurrentUser: exact href match against the #kudos block, only when
+    /// a username is actually passed in — never a plain text search (a username
+    /// could legally be a substring of another, or of unrelated page text).
+    @Test func detectsKudosGivenByCurrentUserFromExactHrefMatch() throws {
+        let html = """
+        <html><body>
+        <h2 class="title heading">A Test Work</h2>
+        <dl class="stats"><dd class="chapters">1/1</dd></dl>
+        <div id="kudos">
+          <p class="kudos">
+            <a href="/users/alice">alice</a>, <a href="/users/bobsmith">bobsmith</a>
+            <a id="kudos_more_link" href="/works/1/kudos">3 more users</a>
+          </p>
+        </div>
+        </body></html>
+        """
+        let hit = try AO3Client.parseWorkMetadata(from: html, workID: 1, currentUsername: "alice")
+        #expect(hit.kudosGivenByCurrentUser == true)
+
+        // "bob" is a real substring of "bobsmith" but not its own href — must not match.
+        let miss = try AO3Client.parseWorkMetadata(from: html, workID: 1, currentUsername: "bob")
+        #expect(miss.kudosGivenByCurrentUser == false)
+
+        // No username passed — every other existing caller's behavior — always false,
+        // never treated as a signal either way.
+        let noUsername = try AO3Client.parseWorkMetadata(from: html, workID: 1)
+        #expect(noUsername.kudosGivenByCurrentUser == false)
+    }
+
     // MARK: Fandom index (/media/<name>/fandoms) — linear-scan parser
 
     /// Two letter-group `<ol>`s mirroring AO3's fandom index markup: entities in
