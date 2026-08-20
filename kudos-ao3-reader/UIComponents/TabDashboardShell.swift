@@ -55,11 +55,17 @@ struct TabDashboardShell: View {
         }
     }
 
+    /// Real fandom filter chips ("Supergirl (TV 2015)", "Naruto (Anime & Manga)")
+    /// run well past 88pt — a uniform narrow pill undersold the row. "All" stays
+    /// short and first (it's a real, fixed label, not a fandom name), the rest
+    /// vary to preview a fandom-name-length row rather than four identical pills.
+    private static let filterChipWidths: [CGFloat] = [56, 148, 172, 120]
+
     private var filterChipRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(0 ..< 4, id: \.self) { _ in
-                    SkeletonBlock(height: 28, width: 88, cornerRadius: 14)
+                ForEach(Self.filterChipWidths.indices, id: \.self) { index in
+                    SkeletonBlock(height: 28, width: Self.filterChipWidths[index], cornerRadius: 14)
                 }
             }
             .padding(.horizontal, 16)
