@@ -490,7 +490,11 @@ private extension SavedWork {
 /// content-based height estimate) both produced visibly uneven columns on real
 /// data; `Layout` gets the actual size during layout itself, so there's nothing
 /// left to estimate.
-private struct MasonryLayout: Layout {
+///
+/// Internal, not private: `CategoryCardSkeletonList` (SkeletonLoading.swift)
+/// reuses this to show its own placeholder cards in variable heights, matching
+/// the shape of what's about to load instead of a uniform grid.
+struct MasonryLayout: Layout {
     var columns: Int = 2
     var spacing: CGFloat = 12
 
