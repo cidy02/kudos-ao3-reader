@@ -94,7 +94,10 @@ public final class SherpaKokoroTTSService: TTSService {
     public func speak(text: String, startLocator: Locator?) async throws {
         resetPlayback(notifyStopped: false)
 
-        let chunks = TextChunker.chunk(text: text)
+        // The sherpa Kokoro frontend is configured for one sentence. Supplying
+        // complete sentence units preserves punctuation/prosody and avoids
+        // handing it a short paragraph that can end mid-thought.
+        let chunks = TextChunker.sentenceChunks(text: text)
         guard !chunks.isEmpty else { return }
 
         guard loadEngineIfNeeded(), let tts else {
@@ -267,6 +270,7 @@ public final class SherpaKokoroTTSService: TTSService {
         )
         var ttsConfig = sherpaOnnxOfflineTtsConfig(
             model: modelConfig,
+            // `sentenceChunks` supplies one natural sentence per generation.
             maxNumSentences: 1
         )
         let wrapper = SherpaOnnxOfflineTtsWrapper(config: &ttsConfig)

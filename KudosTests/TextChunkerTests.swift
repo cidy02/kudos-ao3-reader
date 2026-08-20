@@ -32,6 +32,44 @@ final class TextChunkerTests: XCTestCase {
         XCTAssertEqual(chunks[0], sentence1)
         XCTAssertEqual(chunks[1], sentence2)
     }
+
+    func testSentenceChunksSplitShortParagraphIntoCompleteSentences() {
+        let text = "First sentence. Second sentence? Third sentence!"
+
+        let chunks = TextChunker.sentenceChunks(text: text)
+
+        XCTAssertEqual(chunks, ["First sentence.", "Second sentence?", "Third sentence!"])
+    }
+
+    func testSentenceChunksPreserveCommasInsideOrdinarySentence() {
+        let text = "Rain fell, softly. Then it stopped."
+
+        let chunks = TextChunker.sentenceChunks(text: text)
+
+        XCTAssertEqual(chunks, ["Rain fell, softly.", "Then it stopped."])
+    }
+
+    func testSentenceChunksKeepHonorificWithTheSentence() {
+        let text = "Dr. Smith went home. Mr. Darcy stayed."
+
+        let chunks = TextChunker.sentenceChunks(text: text)
+
+        XCTAssertEqual(chunks, ["Dr. Smith went home.", "Mr. Darcy stayed."])
+    }
+
+    func testSentenceChunksKeepAbbreviationsWithTheSentence() {
+        let text = "Try e.g. apples and pears. Then decide."
+
+        let chunks = TextChunker.sentenceChunks(text: text)
+
+        XCTAssertEqual(chunks, ["Try e.g. apples and pears.", "Then decide."])
+    }
+
+    func testDefaultChunkerKeepsShortMultiSentenceParagraphTogether() {
+        let text = "First sentence. Second sentence."
+
+        XCTAssertEqual(TextChunker.chunk(text: text), [text])
+    }
     
     func testVeryLongSentenceSplitsAtComma() {
         let clause1 = String(repeating: "A", count: 150)
@@ -42,6 +80,16 @@ final class TextChunkerTests: XCTestCase {
         XCTAssertEqual(chunks.count, 2)
         XCTAssertEqual(chunks[0], clause1 + ",")
         XCTAssertEqual(chunks[1], clause2 + ".")
+    }
+
+    func testSentenceChunksSplitOnlyAnOversizedSentenceAtComma() {
+        let clause1 = String(repeating: "A", count: 150)
+        let clause2 = String(repeating: "B", count: 150)
+        let text = clause1 + ", " + clause2 + "."
+
+        let chunks = TextChunker.sentenceChunks(text: text, maxLength: 250)
+
+        XCTAssertEqual(chunks, [clause1 + ",", clause2 + "."])
     }
     
     func testExtremelyLongSentenceWithoutPunctuationSplitsByWords() {
