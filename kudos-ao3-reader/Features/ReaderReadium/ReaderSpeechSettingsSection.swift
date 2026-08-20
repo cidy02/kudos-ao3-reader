@@ -14,10 +14,15 @@ struct ReaderSpeechSettingsSection: View {
     private var rate = ReaderSpeechPreferences.defaultRate
     @AppStorage(ReaderSpeechPreferences.pitchKey)
     private var pitch = ReaderSpeechPreferences.defaultPitch
+    @AppStorage(ReaderSpeechPreferences.kokoroModelPackKey)
+    private var kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
+    @AppStorage(ReaderSpeechPreferences.kokoroExecutionProviderKey)
+    private var kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
 
     @State private var voices: [TTSVoice] = []
     @State private var downloadManager = TTSDownloadManager()
     @State private var kokoroService: SherpaKokoroTTSService?
+    @State private var cachedKokoroRuntimeConfiguration: KokoroRuntimeConfiguration?
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -42,6 +47,38 @@ struct ReaderSpeechSettingsSection: View {
                 ForEach(ReaderTTSEngineKind.allCases, id: \.rawValue) { engine in
                     Text(engine.displayName).tag(engine.rawValue)
                 }
+            }
+
+            Picker("Kokoro model", selection: $kokoroModelPackID) {
+                ForEach(KokoroModelPack.allCases, id: \.rawValue) { pack in
+                    Text(pack.displayName).tag(pack.rawValue)
+                }
+            }
+
+            Picker("Kokoro compute", selection: $kokoroExecutionProviderID) {
+                ForEach(KokoroExecutionProvider.allCases, id: \.rawValue) { provider in
+                    Text(provider.displayName).tag(provider.rawValue)
+                }
+            }
+
+            if selectedKokoroExecutionProvider == .coreML {
+                Label(
+                    "Core ML is requested experimentally; it does not guarantee Neural Engine use.",
+                    systemImage: "info.circle"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            if selectedKokoroModelPack.requiresDeveloperInstallation &&
+                !isSelectedKokoroModelPackDownloaded {
+                Label(
+                    "FP32 is a developer-installed test pack. Kudos uses the available Int8 pack "
+                        + "or Apple until it is verified; no compatible FP16 pack is available.",
+                    systemImage: "wrench.and.screwdriver"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
 
             if isKokoroAwaitingVoicePack {
@@ -90,75 +127,164 @@ struct ReaderSpeechSettingsSection: View {
                 voiceID = ""
                 rate = ReaderSpeechPreferences.defaultRate
                 pitch = ReaderSpeechPreferences.defaultPitch
+                kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
+                kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
             }
         } header: {
             Text("Read Aloud")
         } footer: {
             Text(
                 "Automatic uses Apple immediately, then Kokoro after its optional offline "
-                    + "Voice Pack is downloaded (~200MB, one-time)."
+                    + "Int8 Voice Pack is downloaded. FP32 is an on-device benchmark pack."
             )
         }
         .onAppear {
             normalizeEngineID()
+            normalizeKokoroConfiguration()
+            downloadManager.refreshStatus(for: selectedKokoroModelPack)
             updateVoices()
         }
-        .onChange(of: downloadManager.status) { _, _ in updateVoices() }
+        .onChange(of: downloadManager.status) { _, _ in
+            if downloadManager.statusPack != selectedKokoroModelPack {
+                downloadManager.refreshStatus(for: selectedKokoroModelPack)
+            }
+            updateVoices()
+        }
         .onChange(of: engineID) { _, _ in updateVoices() }
+        .onChange(of: kokoroModelPackID) { _, _ in
+            normalizeKokoroConfiguration()
+            downloadManager.refreshStatus(for: selectedKokoroModelPack)
+            updateVoices()
+        }
+        .onChange(of: kokoroExecutionProviderID) { _, _ in
+            normalizeKokoroConfiguration()
+            updateVoices()
+        }
     }
 
     @ViewBuilder
     private var downloadSection: some View {
         Section {
-            switch downloadManager.status {
-            case .idle:
-                Button("Download Voice Pack") {
-                    Task { try? await downloadManager.downloadModel() }
+            if selectedKokoroModelPack.requiresDeveloperInstallation {
+                switch downloadManager.status {
+                case .verifying where downloadManager.statusPack == selectedKokoroModelPack:
+                    HStack {
+                        ProgressView()
+                            .padding(.trailing, 8)
+                        Text("Verifying FP32 Test Pack...")
+                    }
+                case .completed where isSelectedKokoroModelPackDownloaded:
+                    HStack {
+                        Text("FP32 Test Pack Verified")
+                        Spacer()
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.green)
+                    }
+                case .failed(let error) where downloadManager.statusPack == selectedKokoroModelPack:
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("FP32 verification failed: \(error)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                        Button("Verify Side-Loaded FP32 Pack") {
+                            Task {
+                                await downloadManager.verifyDeveloperInstalledModelPack(
+                                    selectedKokoroModelPack
+                                )
+                            }
+                        }
+                    }
+                default:
+                    Label(
+                        "FP32 must be side-loaded then verified; the app will not unpack its 320 MB archive in memory.",
+                        systemImage: "externaldrive"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    Button("Verify Side-Loaded FP32 Pack") {
+                        Task {
+                            await downloadManager.verifyDeveloperInstalledModelPack(
+                                selectedKokoroModelPack
+                            )
+                        }
+                    }
                 }
-            case .downloading(let progress):
-                VStack(alignment: .leading, spacing: 4) {
-                    ProgressView(value: progress)
-                    Text("Downloading... \(Int(progress * 100))%")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            case .extracting:
-                HStack {
-                    ProgressView()
-                        .padding(.trailing, 8)
-                    Text("Extracting...")
-                }
-            case .completed:
-                HStack {
-                    Text("Voice Pack Downloaded")
-                    Spacer()
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.green)
-                }
-            case .failed(let error):
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Download failed: \(error)")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                    Button("Retry Download") {
-                        Task { try? await downloadManager.downloadModel() }
+            } else {
+                switch downloadManager.status {
+                case .downloading(let progress):
+                    VStack(alignment: .leading, spacing: 4) {
+                        ProgressView(value: progress)
+                        Text("Downloading... \(Int(progress * 100))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                case .extracting:
+                    HStack {
+                        ProgressView()
+                            .padding(.trailing, 8)
+                        Text("Extracting...")
+                    }
+                case .verifying:
+                    HStack {
+                        ProgressView()
+                            .padding(.trailing, 8)
+                        Text("Verifying side-loaded pack...")
+                    }
+                case .completed where isSelectedKokoroModelPackDownloaded:
+                    HStack {
+                        Text("Voice Pack Downloaded")
+                        Spacer()
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.green)
+                    }
+                case .idle, .completed:
+                    Button("Download Voice Pack") {
+                        Task {
+                            try? await downloadManager.downloadModel(for: selectedKokoroModelPack)
+                        }
+                    }
+                case .failed(let error) where downloadManager.statusPack == selectedKokoroModelPack:
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Download failed: \(error)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                        Button("Retry Download") {
+                            Task {
+                                try? await downloadManager.downloadModel(for: selectedKokoroModelPack)
+                            }
+                        }
+                    }
+                case .failed:
+                    Button("Download Voice Pack") {
+                        Task {
+                            try? await downloadManager.downloadModel(for: selectedKokoroModelPack)
+                        }
                     }
                 }
             }
         } header: {
-            Text("Voice Pack")
+            Text("Kokoro Pack")
         }
     }
 
     private func updateVoices() {
         switch effectiveEngineKind {
         case .kokoro:
-            if kokoroService == nil {
-                kokoroService = SherpaKokoroTTSService(modelDirectory: downloadManager.modelDirectory)
+            guard let runtimeConfiguration = effectiveKokoroRuntimeConfiguration else {
+                voices = []
+                return
+            }
+            if cachedKokoroRuntimeConfiguration != runtimeConfiguration {
+                kokoroService = SherpaKokoroTTSService(
+                    modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
+                    modelPack: runtimeConfiguration.modelPack,
+                    executionProvider: runtimeConfiguration.executionProvider
+                )
+                cachedKokoroRuntimeConfiguration = runtimeConfiguration
             }
             voices = kokoroService?.availableVoices ?? []
         case .system:
             kokoroService = nil
+            cachedKokoroRuntimeConfiguration = nil
             voices = ReaderSpeechPreferences.catalogVoices()
         }
     }
@@ -170,16 +296,51 @@ struct ReaderSpeechSettingsSection: View {
         engineID = ""
     }
 
+    private func normalizeKokoroConfiguration() {
+        let modelPack = KokoroModelPack.resolving(kokoroModelPackID)
+        if kokoroModelPackID != modelPack.rawValue {
+            kokoroModelPackID = modelPack.rawValue
+        }
+        let provider = KokoroExecutionProvider.resolving(kokoroExecutionProviderID)
+        if kokoroExecutionProviderID != provider.rawValue {
+            kokoroExecutionProviderID = provider.rawValue
+        }
+    }
+
     private var effectiveEngineKind: ReaderTTSEngineKind {
         ReaderTTSEngineKind.effective(
             requestedRawValue: engineID,
-            modelDownloaded: downloadManager.isModelDownloaded()
+            modelDownloaded: effectiveKokoroRuntimeConfiguration != nil
         )
     }
 
     private var isKokoroAwaitingVoicePack: Bool {
         engineID == ReaderTTSEngineKind.kokoro.rawValue
-            && !downloadManager.isModelDownloaded()
+            && effectiveKokoroRuntimeConfiguration == nil
+    }
+
+    private var selectedKokoroModelPack: KokoroModelPack {
+        KokoroModelPack.resolving(kokoroModelPackID)
+    }
+
+    private var selectedKokoroExecutionProvider: KokoroExecutionProvider {
+        KokoroExecutionProvider.resolving(kokoroExecutionProviderID)
+    }
+
+    private var isSelectedKokoroModelPackDownloaded: Bool {
+        downloadManager.isModelDownloaded(for: selectedKokoroModelPack)
+    }
+
+    private var effectiveKokoroRuntimeConfiguration: KokoroRuntimeConfiguration? {
+        KokoroRuntimeConfiguration.resolved(
+            requested: KokoroRuntimeConfiguration(
+                modelPack: selectedKokoroModelPack,
+                executionProvider: selectedKokoroExecutionProvider
+            ),
+            isModelDownloaded: { pack in
+                downloadManager.isModelDownloaded(for: pack)
+            }
+        )
     }
 
     private var voicePicker: some View {

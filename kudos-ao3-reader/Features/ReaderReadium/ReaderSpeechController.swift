@@ -59,6 +59,7 @@ final class ReaderSpeechController {
     private var publication: Publication?
     private var ttsService: TTSService?
     private var ttsServiceKind: ReaderTTSEngineKind?
+    private var ttsServiceRuntimeConfiguration: KokoroRuntimeConfiguration?
     private let downloadManager = TTSDownloadManager()
     private var stoppedManually = false
     
@@ -160,32 +161,78 @@ final class ReaderSpeechController {
     private func preferredEngineKind() -> ReaderTTSEngineKind {
         ReaderTTSEngineKind.effective(
             requestedRawValue: ReaderSpeechPreferences.engineIdentifier,
-            modelDownloaded: downloadManager.isModelDownloaded()
+            modelDownloaded: resolvedKokoroRuntimeConfiguration() != nil
         )
     }
 
-    private func makeTTSService(for kind: ReaderTTSEngineKind) -> TTSService {
+    /// Falls back to the installed Int8 pack when a requested FP32 benchmark
+    /// pack has not been developer-installed yet. The user's FP32 preference
+    /// remains intact, so it becomes active automatically once present.
+    private func resolvedKokoroRuntimeConfiguration() -> KokoroRuntimeConfiguration? {
+        KokoroRuntimeConfiguration.resolved(
+            requested: ReaderSpeechPreferences.kokoroRuntimeConfiguration,
+            isModelDownloaded: { [downloadManager] pack in
+                downloadManager.isModelDownloaded(for: pack)
+            }
+        )
+    }
+
+    private func makeTTSService(
+        for kind: ReaderTTSEngineKind,
+        runtimeConfiguration: KokoroRuntimeConfiguration?
+    ) -> TTSService {
         switch kind {
         case .kokoro:
-            return SherpaKokoroTTSService(modelDirectory: downloadManager.modelDirectory)
+            guard let runtimeConfiguration else {
+                return SystemTTSService()
+            }
+            return SherpaKokoroTTSService(
+                modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
+                modelPack: runtimeConfiguration.modelPack,
+                executionProvider: runtimeConfiguration.executionProvider
+            )
         case .system:
             return SystemTTSService()
         }
     }
 
     private func installTTSService(for kind: ReaderTTSEngineKind) {
-        installTTSService(makeTTSService(for: kind), kind: kind)
+        let runtimeConfiguration = kind == .kokoro
+            ? resolvedKokoroRuntimeConfiguration()
+            : nil
+        let effectiveKind: ReaderTTSEngineKind = kind == .kokoro && runtimeConfiguration == nil
+            ? .system
+            : kind
+        installTTSService(
+            makeTTSService(for: effectiveKind, runtimeConfiguration: runtimeConfiguration),
+            kind: effectiveKind,
+            runtimeConfiguration: runtimeConfiguration
+        )
     }
 
     /// Swap the bound engine if the download state changed since last start.
     /// Unbinds callbacks before `stop()` so a swap cannot auto-skip a chapter.
     private func ensureEngineForPlayback() {
         let kind = preferredEngineKind()
-        guard ttsServiceKind != kind else { return }
+        let runtimeConfiguration = kind == .kokoro
+            ? resolvedKokoroRuntimeConfiguration()
+            : nil
+        guard KokoroRuntimeConfiguration.needsEngineReplacement(
+            currentKind: ttsServiceKind,
+            currentConfiguration: ttsServiceRuntimeConfiguration,
+            requestedKind: kind,
+            requestedConfiguration: runtimeConfiguration
+        ) else {
+            return
+        }
         installTTSService(for: kind)
     }
 
-    private func installTTSService(_ service: TTSService, kind: ReaderTTSEngineKind) {
+    private func installTTSService(
+        _ service: TTSService,
+        kind: ReaderTTSEngineKind,
+        runtimeConfiguration: KokoroRuntimeConfiguration?
+    ) {
         if let existing = ttsService {
             existing.onStatusChange = nil
             existing.onSpokenTextChange = nil
@@ -254,6 +301,7 @@ final class ReaderSpeechController {
 
         ttsService = service
         ttsServiceKind = kind
+        ttsServiceRuntimeConfiguration = runtimeConfiguration
     }
 
     /// Starts at `locator` (normally the reader's current position) or resumes
@@ -404,6 +452,7 @@ final class ReaderSpeechController {
         ttsService?.stop()
         ttsService = nil
         ttsServiceKind = nil
+        ttsServiceRuntimeConfiguration = nil
         publication = nil
         clearNowPlaying()
         removeRemoteCommands()
