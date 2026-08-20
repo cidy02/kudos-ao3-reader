@@ -168,7 +168,7 @@ class KudosAppContainer(context: Context) {
     }
 
     val searchRepository: AO3SearchRepository by lazy {
-        AO3SearchRepository(ao3Client)
+        AO3SearchRepository(ao3Client, authenticatedClient)
     }
 
     val workRepository: WorkRepository by lazy {
@@ -244,7 +244,7 @@ class KudosAppContainer(context: Context) {
     }
 
     val browseRepository: AO3BrowseRepository by lazy {
-        AO3BrowseRepository(client = ao3Client, cache = fandomCatalogCache)
+        AO3BrowseRepository(client = ao3Client, authenticatedClient = authenticatedClient, cache = fandomCatalogCache)
     }
 
     val backupRepository: BackupRepository by lazy {

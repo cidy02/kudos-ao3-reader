@@ -324,6 +324,7 @@ fun AppNavHost(
             } else {
                 TagWorksScreen(
                     tagName = tagName,
+                    repository = container.searchRepository,
                     workRepository = container.workRepository,
                     workImporter = container.workImporter,
                     readingQueueRepository = container.readingQueueRepository,
@@ -490,6 +491,7 @@ fun AppNavHost(
         }
         sharedComposable(Routes.Search) {
             SearchScreen(
+                repository = container.searchRepository,
                 onOpenWork = { work ->
                     navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                 },
