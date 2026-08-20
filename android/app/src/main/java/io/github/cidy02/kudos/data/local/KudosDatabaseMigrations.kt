@@ -233,4 +233,15 @@ object KudosDatabaseMigrations {
             )
         }
     }
+
+    /**
+     * v9 → v10: `hasGivenKudos` on works (from `android/ios-parity-port-2`, where
+     * it was numbered 7 → 8; renumbered after the base's 7 → 8 and 8 → 9 in the
+     * T-245 reconciliation, since released 0.2.1 and 0.2.2 are both schema 7).
+     */
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN hasGivenKudos INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 }

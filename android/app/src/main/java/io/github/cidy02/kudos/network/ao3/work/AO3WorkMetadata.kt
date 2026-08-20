@@ -13,7 +13,8 @@ data class AO3WorkMetadata(
     val chapters: String = "",
     val kudos: Int? = null,
     val comments: Int? = null,
-    val hits: Int? = null
+    val hits: Int? = null,
+    val kudosGivenByCurrentUser: Boolean = false
 ) {
     val flattenedTags: List<String>
         get() = (fandoms + relationships + characters + freeforms).dedupeFirstSeen()
