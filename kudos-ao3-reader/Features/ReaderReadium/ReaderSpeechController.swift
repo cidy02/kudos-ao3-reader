@@ -1,23 +1,20 @@
 #if os(iOS)
 import AVFoundation
 import MediaPlayer
+import OSLog
 import ReadiumNavigator
 import ReadiumShared
 import SwiftUI
 import UIKit
 
-/// Read-aloud for the reader, on top of Readium's own
-/// `PublicationSpeechSynthesizer`.
+/// Read-aloud for the reader, driven by `SherpaKokoroTTSService` (offline
+/// Kokoro via sherpa-onnx). The controller is the seam the fan-menu waveform
+/// and mini player call; it extracts the current chapter's text from Readium's
+/// `Publication.content(from:)` and hands it to the engine.
 ///
-/// Readium's synthesizer walks the publication and yields utterances with
-/// `Locator`s (so the page can follow the voice). The engine underneath is
-/// Apple's `AVSpeechSynthesizer` via `AVTTSEngine`, configured with the user's
-/// voice / rate / pitch preferences from `ReaderSpeechPreferences`.
-///
-/// **Audio session:** owned by Readium (`PublicationSpeechSynthesizer`'s
-/// `AudioSession` with `.spokenAudio` / long-form). This controller must not
-/// activate or deactivate `AVAudioSession` on its own — dual ownership races
-/// stop/start and unducking.
+/// **Audio session:** owned by `SherpaKokoroTTSService` (`.playback` /
+/// `.spokenAudio` / long-form). Readium's `PublicationSpeechSynthesizer` is no
+/// longer in this path, so the engine must activate the session itself.
 ///
 /// **Now Playing / Dynamic Island:** while a session is playing or paused, we
 /// publish system Now Playing info + remote commands so Lock Screen / Control
@@ -52,6 +49,9 @@ final class ReaderSpeechController {
     var onSkipPrevious: (() -> Void)?
     /// Now Playing / Lock Screen next-track — chapter skip (same as mini player).
     var onSkipNext: (() -> Void)?
+    /// Read Aloud tapped while the Kokoro voice pack is missing — host should
+    /// surface the download UI (the reader Display sheet) instead of no-op.
+    var onNeedsModelDownload: (() -> Void)?
 
     private var publication: Publication?
     private var ttsService: TTSService?
@@ -60,6 +60,11 @@ final class ReaderSpeechController {
     
     /// After a re-anchor while paused, pause again once the first utterance starts.
     private var pendingPauseAfterReanchor = false
+    /// Chapter finished speaking — next `reanchor` should resume even though
+    /// status has already flipped to `.stopped`.
+    private var pendingAutoContinue = false
+    /// In-flight chapter extract + `speak` so a second tap can cancel it.
+    private var startTask: Task<Void, Never>?
     /// Instantaneous target (0…1); `speechEnergy` lerps toward this at ~60 fps.
     private var speechEnergyTarget: Double = 0
     /// Runs the attack/release smoother while energy is live or speaking.
@@ -135,16 +140,18 @@ final class ReaderSpeechController {
             case .unavailable:
                 self.status = .unavailable
             case .stopped:
+                // Only auto-advance when a playing chapter actually finished.
+                // `speak()` used to call `stop()` on the way in, which fired this
+                // path with `stoppedManually == false` and skipped a chapter on
+                // every Read Aloud tap.
+                let shouldContinue = self.status == .playing && !self.stoppedManually
                 self.status = .stopped
                 self.clearSpeechEnergy()
                 self.clearNowPlaying()
-                if !self.stoppedManually {
-                    // ponytail: Auto chapter continuation.
-                    // SherpaKokoroTTSService finishes a chapter and stops on its own.
-                    // This ceiling is chapter-boundary granularity instead of Readium's
-                    // old per-sentence locator tracking. Future batches could add
-                    // finer-grained locators if TTSService grows a per-chunk-locator API.
+                if shouldContinue {
+                    self.pendingAutoContinue = true
                     self.onSkipNext?()
+                    self.pendingAutoContinue = false
                 }
             case .playing:
                 self.status = .playing
@@ -182,7 +189,7 @@ final class ReaderSpeechController {
         }
         
         self.ttsService = service
-        self.status = .stopped
+        self.status = downloadManager.isModelDownloaded() ? .stopped : .modelNotDownloaded
     }
 
     /// Pushes the latest UserDefaults preferences into the live synthesizer.
@@ -201,37 +208,57 @@ final class ReaderSpeechController {
     }
 
     /// Starts at `locator` (normally the reader's current position) or resumes
-    /// where it left off.
+    /// where it left off. Walks only the current spine resource — not the rest
+    /// of the publication — so a long work does not stall the first tap.
     private func startSpeech(from locator: Locator?) {
         guard let publication else { return }
         let startLoc = locator ?? resumeLocator
         applyPreferences()
-        
-        Task {
+
+        startTask?.cancel()
+        startTask = Task {
             do {
-                guard let content = publication.content(from: startLoc) else { return }
-                let allElements = await content.elements()
-                
-                guard let firstElement = allElements.first else { return }
-                let targetHref = startLoc?.href ?? firstElement.locator.href
-                
-                var chapterElements: [ContentElement] = []
-                for el in allElements {
-                    if el.locator.href == targetHref {
-                        chapterElements.append(el)
-                    } else {
+                guard let content = publication.content(from: startLoc) else {
+                    Log.tts.error("Publication has no ContentService — cannot extract read-aloud text")
+                    return
+                }
+
+                // `content(from:)` already starts at `startLoc`. Take the first
+                // spine resource's remaining text and stop at the next href —
+                // do not also filter by `startLoc.href`, which can disagree on
+                // URL form and yield an empty chapter.
+                var chapterHref: AnyURL?
+                var texts: [String] = []
+                var firstLocator: Locator?
+                for await element in content.sequence() {
+                    if Task.isCancelled { return }
+                    if chapterHref == nil {
+                        chapterHref = element.locator.href
+                    } else if element.locator.href != chapterHref {
                         break
                     }
+                    if firstLocator == nil {
+                        firstLocator = element.locator
+                    }
+                    if let text = (element as? TextualContentElement)?.text, !text.isEmpty {
+                        texts.append(text)
+                    }
                 }
-                
-                let text = chapterElements.compactMap { ($0 as? TextualContentElement)?.text }.filter { !$0.isEmpty }.joined(separator: "\n")
-                if text.isEmpty { return }
-                
+
+                let text = texts.joined(separator: "\n")
+                guard !text.isEmpty else {
+                    Log.tts.error("No extractable text in the current chapter")
+                    return
+                }
+
                 installRemoteCommandsIfNeeded()
                 stoppedManually = false
-                try await ttsService?.speak(text: text, startLocator: startLoc ?? firstElement.locator)
+                try await ttsService?.speak(
+                    text: text,
+                    startLocator: startLoc ?? firstLocator
+                )
             } catch {
-                // Ignore error
+                Log.tts.error("speak() failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -249,6 +276,7 @@ final class ReaderSpeechController {
         case .stopped, .modelNotDownloaded:
             if !downloadManager.isModelDownloaded() {
                 status = .modelNotDownloaded
+                onNeedsModelDownload?()
                 return
             }
             if let locator {
@@ -260,7 +288,10 @@ final class ReaderSpeechController {
 
     func stop() {
         pendingPauseAfterReanchor = false
+        pendingAutoContinue = false
         stoppedManually = true
+        startTask?.cancel()
+        startTask = nil
         ttsService?.stop()
         status = ttsService == nil ? .unavailable : .stopped
         spokenText = ""
@@ -277,7 +308,6 @@ final class ReaderSpeechController {
     /// Pause without ending the session (hold-to-seek while scrubbing).
     func pause() {
         pendingPauseAfterReanchor = false
-        stoppedManually = true
         ttsService?.pause()
         clearSpeechEnergy()
     }
@@ -290,10 +320,12 @@ final class ReaderSpeechController {
         guard ttsService != nil, status != .unavailable else { return }
         
         applyPreferences()
-        
-        if resumePlaying {
+
+        let shouldPlay = resumePlaying || pendingAutoContinue
+        if shouldPlay {
             if !downloadManager.isModelDownloaded() {
                 status = .modelNotDownloaded
+                onNeedsModelDownload?()
                 return
             }
             pendingPauseAfterReanchor = false
@@ -301,6 +333,7 @@ final class ReaderSpeechController {
         } else if isSessionActive {
             if !downloadManager.isModelDownloaded() {
                 status = .modelNotDownloaded
+                onNeedsModelDownload?()
                 return
             }
             pendingPauseAfterReanchor = true
@@ -319,10 +352,14 @@ final class ReaderSpeechController {
     /// Island transport does not keep targeting a dead session.
     func tearDown() {
         pendingPauseAfterReanchor = false
+        pendingAutoContinue = false
         stoppedManually = true
+        startTask?.cancel()
+        startTask = nil
         onAdvance = nil
         onSkipPrevious = nil
         onSkipNext = nil
+        onNeedsModelDownload = nil
         ttsService?.stop()
         ttsService = nil
         publication = nil
@@ -504,6 +541,7 @@ final class ReaderSpeechController {
         case .stopped, .modelNotDownloaded:
             if !downloadManager.isModelDownloaded() {
                 status = .modelNotDownloaded
+                onNeedsModelDownload?()
                 return .commandFailed
             }
             startSpeech(from: resumeLocator)
@@ -524,14 +562,6 @@ final class ReaderSpeechController {
         }
     }
 
-    /// Owns the `AVTTSEngine` + rate/pitch delegate. Readium's synthesizer
-    /// constructs the engine lazily through `engineFactory`; we keep one bridge
-    /// so preference changes always hit the same live engine.
-    ///
-    /// Note: utterance *text* cleanup can't run here — Readium's `TTSUtterance`
-    /// initializer is internal. We still normalize whitespace for the mini
-    /// player's caption in `apply(state:)`. Sentence pauses + rate/pitch are
-    /// applied on each `AVSpeechUtterance` via the delegate.
 }
 
 /// The read-aloud transport strip. When chrome is up it sits *inside*
