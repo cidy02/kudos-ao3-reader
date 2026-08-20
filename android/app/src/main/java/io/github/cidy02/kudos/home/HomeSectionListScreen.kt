@@ -6,14 +6,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import io.github.cidy02.kudos.ui.components.FilterToolbarButton
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -154,17 +153,13 @@ fun HomeSectionListScreen(
                                     Icon(Icons.Outlined.Checklist, "Select")
                                 }
                             }
-                            IconButton(onClick = { showFilters = true }) {
-                                BadgedBox(
-                                    badge = {
-                                        if (filters.hasActiveFilters) {
-                                            androidx.compose.material3.Badge { Text("!") }
-                                        }
-                                    }
-                                ) {
-                                    Icon(Icons.Outlined.FilterList, contentDescription = "Filter this section")
-                                }
-                            }
+                            FilterToolbarButton(
+                                filtersActive = filters.hasActiveFilters,
+                                showBadge = filters.hasActiveFilters,
+                                onClick = { showFilters = true },
+                                onClearFilters = { filters = LibraryFilterState() },
+                                contentDescription = "Filter this section"
+                            )
                             IconButton(onClick = { expandAll = !expandAll }) {
                                 Icon(
                                     imageVector = if (expandAll) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,

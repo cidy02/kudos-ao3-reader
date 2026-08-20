@@ -22,6 +22,8 @@ import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.MoreVert
@@ -352,13 +354,23 @@ private fun InboxFilterMenu(
     onSelect: (String, String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // AO3's form always has a selected value per field (often the first "all"
+    // option). Treat a filter as active only when it differs from that baseline.
+    val filtersActive = fields.any { field ->
+        val current = selectedValues[field.name] ?: field.selectedValue
+        val baseline = field.options.firstOrNull()?.value
+        current != null && current != baseline
+    }
     Box {
         OutlinedButton(
             onClick = { expanded = true },
-            enabled = enabled
+            enabled = enabled,
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = if (filtersActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         ) {
             Icon(
-                Icons.Outlined.FilterList,
+                imageVector = if (filtersActive) Icons.Filled.FilterList else Icons.Outlined.FilterList,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )

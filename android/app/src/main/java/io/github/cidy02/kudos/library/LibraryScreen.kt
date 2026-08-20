@@ -33,8 +33,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -62,6 +60,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import io.github.cidy02.kudos.ui.components.MatureRevealToolbarButton
+import io.github.cidy02.kudos.ui.components.NeutralToolbarIconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -913,43 +913,25 @@ private fun LibraryToolbarPill(
                     modifier = Modifier.padding(horizontal = 2.dp)
                 ) {
                     if (state.showPrivacyToggle) {
-                        IconButton(onClick = onTogglePrivacy) {
-                            Icon(
-                                // Reflects the session-only reveal-all state, not the
-                                // persisted "Hide mature content" setting — tapping this
-                                // never touches that setting. See LibraryUiState.revealAllActive.
-                                imageVector = if (state.revealAllActive) {
-                                    Icons.Filled.Visibility
-                                } else {
-                                    Icons.Filled.VisibilityOff
-                                },
-                                contentDescription = if (state.revealAllActive) {
-                                    "Hide mature works"
-                                } else {
-                                    "Show mature works"
-                                },
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        MatureRevealToolbarButton(
+                            revealAll = state.revealAllActive,
+                            onClick = onTogglePrivacy
+                        )
                     }
                     if (state.hasSavedWorks) {
-                        IconButton(onClick = onEnterSelection) {
-                            Icon(
-                                imageVector = Icons.Outlined.Checklist,
-                                contentDescription = "Select",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        NeutralToolbarIconButton(
+                            icon = Icons.Outlined.Checklist,
+                            contentDescription = "Select",
+                            onClick = onEnterSelection
+                        )
                         var overflowOpen by remember { mutableStateOf(false) }
                         var selectionMoreOpen by remember { mutableStateOf(false) }
                         Box {
-                            IconButton(onClick = { overflowOpen = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = "More",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                            NeutralToolbarIconButton(
+                                icon = Icons.Filled.MoreVert,
+                                contentDescription = "More",
+                                onClick = { overflowOpen = true }
+                            )
                             DropdownMenu(
                                 expanded = overflowOpen,
                                 onDismissRequest = { overflowOpen = false }
@@ -1362,7 +1344,7 @@ private fun ContextMenuItem(
                 tint = if (destructive) {
                     MaterialTheme.colorScheme.error
                 } else {
-                    MaterialTheme.colorScheme.primary
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 }
             )
         },

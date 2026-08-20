@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.UnfoldLess
@@ -39,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -441,7 +443,17 @@ private fun SearchControlsRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        OutlinedButton(onClick = onOpenFilters) {
+        val filtersActive = activeChipCount > 0
+        OutlinedButton(
+            onClick = onOpenFilters,
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = if (filtersActive) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        ) {
             BadgedBox(
                 badge = {
                     if (activeChipCount > 0) {
@@ -454,7 +466,11 @@ private fun SearchControlsRow(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.FilterList,
+                        imageVector = if (filtersActive) {
+                            Icons.Filled.FilterList
+                        } else {
+                            Icons.Outlined.FilterList
+                        },
                         contentDescription = null
                     )
                     Text("Filters")

@@ -12,16 +12,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.Checklist
-import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import io.github.cidy02.kudos.ui.components.FilterToolbarButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -118,19 +117,12 @@ fun TagWorksScreen(
             subtitle = "AO3 works for this tag.",
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showFilterSheet = true }) {
-                        BadgedBox(
-                            badge = {
-                                if (activeChips.isNotEmpty()) {
-                                    androidx.compose.material3.Badge {
-                                        Text(activeChips.size.toString())
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Outlined.FilterList, contentDescription = "Filters")
-                        }
-                    }
+                    FilterToolbarButton(
+                        filtersActive = activeChips.isNotEmpty(),
+                        badgeCount = activeChips.size,
+                        onClick = { showFilterSheet = true },
+                        onClearFilters = { filters = AO3SearchFilters() }
+                    )
                     if (workImporter != null) {
                         IconButton(onClick = { if (selection.isSelecting) selection.exit() else selection.enter() }) {
                             Icon(

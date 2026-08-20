@@ -11,8 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Checklist
@@ -22,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import io.github.cidy02.kudos.ui.components.MatureRevealToolbarButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -316,12 +315,10 @@ private fun HomeHeader(
                     }
                 }
                 if (state.hiddenByPrivacyCount > 0) {
-                    IconButton(onClick = onToggleRevealAll) {
-                        Icon(
-                            imageVector = if (revealAll) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (revealAll) "Hide mature content" else "Reveal all mature content"
-                        )
-                    }
+                    MatureRevealToolbarButton(
+                        revealAll = revealAll,
+                        onClick = onToggleRevealAll
+                    )
                 }
             }
         },

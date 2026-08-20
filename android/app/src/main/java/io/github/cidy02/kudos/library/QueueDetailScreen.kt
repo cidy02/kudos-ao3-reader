@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import io.github.cidy02.kudos.ui.components.NeutralToolbarIconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -252,9 +253,11 @@ fun QueueDetailScreen(
                             }
                         }
                         Box {
-                            IconButton(onClick = { overflowExpanded = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Queue actions")
-                            }
+                            NeutralToolbarIconButton(
+                                icon = Icons.Default.MoreVert,
+                                contentDescription = "Queue actions",
+                                onClick = { overflowExpanded = true }
+                            )
                             DropdownMenu(
                                 expanded = overflowExpanded,
                                 onDismissRequest = { overflowExpanded = false }
