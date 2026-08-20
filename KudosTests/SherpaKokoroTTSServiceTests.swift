@@ -46,5 +46,23 @@ struct SherpaKokoroTTSServiceTests {
         #expect(envelope.count == 2)
         #expect(envelope.allSatisfy { $0 > 0 })
     }
+
+    @Test func playbackPrebufferProtectsTheFollowingAudio() {
+        #expect(KokoroPlaybackAnalysis.needsMoreQueuedAudio(
+            queuedAudioSeconds: [2]
+        ))
+        #expect(!KokoroPlaybackAnalysis.needsMoreQueuedAudio(
+            queuedAudioSeconds: [0.1, 2]
+        ))
+        #expect(KokoroPlaybackAnalysis.needsMoreQueuedAudio(
+            queuedAudioSeconds: [2, 0.1]
+        ))
+        #expect(KokoroPlaybackAnalysis.needsMoreQueuedAudio(
+            queuedAudioSeconds: [0.1, 0.1, 0.1, 0.1]
+        ))
+        #expect(!KokoroPlaybackAnalysis.needsMoreQueuedAudio(
+            queuedAudioSeconds: [0.1, 0.8, 0.8]
+        ))
+    }
 }
 #endif

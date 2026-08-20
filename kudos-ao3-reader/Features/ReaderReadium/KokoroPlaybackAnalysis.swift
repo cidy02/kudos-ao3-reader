@@ -22,6 +22,20 @@ nonisolated final class KokoroSynthesisCancellation: @unchecked Sendable {
 /// Pure sample analysis used for Kokoro timing diagnostics and the reader waveform.
 enum KokoroPlaybackAnalysis {
 
+    /// Returns whether playback needs another generated PCM buffer before it
+    /// waits for the current buffer to be consumed. The buffer after the one
+    /// currently playing is what protects the next synthesis deadline.
+    static func needsMoreQueuedAudio(
+        queuedAudioSeconds: [Double],
+        requiredFollowingAudioSeconds: Double = 1.5
+    ) -> Bool {
+        guard queuedAudioSeconds.count < 2 else {
+            let followingAudioSeconds = queuedAudioSeconds.dropFirst().reduce(0, +)
+            return followingAudioSeconds < requiredFollowingAudioSeconds
+        }
+        return true
+    }
+
     struct SampleDiagnostics: Sendable {
         let minimum: Float
         let maximum: Float
