@@ -198,7 +198,10 @@ class ReaderViewModel(
         val writes = writeRepository ?: return
         viewModelScope.launch {
             when (val result = writes.giveKudos(ao3Id)) {
-                is AO3Result.Success -> _writeMessage.value = result.value.message
+                is AO3Result.Success -> {
+                    _writeMessage.value = result.value.message
+                    repository.markKudosGiven(workId)
+                }
                 is AO3Result.Failure -> _writeMessage.value = when (val err = result.error) {
                     is io.github.cidy02.kudos.network.ao3.AO3Error.Network -> err.message
                     is io.github.cidy02.kudos.network.ao3.AO3Error.Validation -> err.message
