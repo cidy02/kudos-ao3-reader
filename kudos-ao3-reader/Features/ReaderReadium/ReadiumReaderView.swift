@@ -1194,8 +1194,9 @@ struct ReadiumReaderView: View {
     /// land (TASKS.md) rather than faked.
     private var fanRoundActions: [ReaderFanRoundAction] {
         var actions: [ReaderFanRoundAction] = []
-        // Icons always use the reader theme tint; active/inactive is outline vs
-        // filled SF Symbol (kudos heart, bookmark), not grey vs tint.
+        // Icons are neutral unless isEmphasized — active/inactive is the theme
+        // capsule fill (isEmphasized), matching rotation lock and read-aloud, not
+        // an always-tinted glyph with only the outline-vs-filled symbol changing.
         let tint = themeManager.effectiveTint
         if let ao3WorkID {
             actions.append(ReaderFanRoundAction(
@@ -1203,7 +1204,8 @@ struct ReadiumReaderView: View {
                 systemImage: kudosGiven ? "heart.fill" : "heart",
                 tint: tint,
                 accessibilityLabel: kudosGiven ? "Kudos given" : "Give kudos",
-                isEnabled: !kudosWorking && !kudosGiven
+                isEnabled: !kudosWorking && !kudosGiven,
+                isEmphasized: kudosGiven
             ) {
                 giveKudos(workID: ao3WorkID)
             })
@@ -1278,7 +1280,8 @@ struct ReadiumReaderView: View {
             tint: tint,
             accessibilityLabel: isBookmarked ? "Remove bookmark" : "Add bookmark",
             // Needs a locator to anchor to; disabled until the navigator reports one.
-            isEnabled: currentReadingPosition != nil
+            isEnabled: currentReadingPosition != nil,
+            isEmphasized: isBookmarked
         ) {
             playReaderToggleHaptic()
             toggleBookmarkAtCurrentPosition()
