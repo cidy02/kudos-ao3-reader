@@ -7,14 +7,16 @@ import ReadiumShared
 import SwiftUI
 import UIKit
 
-/// Read-aloud for the reader, driven by `SherpaKokoroTTSService` (offline
-/// Kokoro via sherpa-onnx). The controller is the seam the fan-menu waveform
+/// Read-aloud for the reader. The controller is the seam the fan-menu waveform
 /// and mini player call; it extracts the current chapter's text from Readium's
-/// `Publication.content(from:)` and hands it to the engine.
+/// `Publication.content(from:)` and hands it to a `TTSService`.
 ///
-/// **Audio session:** owned by `SherpaKokoroTTSService` (`.playback` /
-/// `.spokenAudio` / long-form). Readium's `PublicationSpeechSynthesizer` is no
-/// longer in this path, so the engine must activate the session itself.
+/// **Engine:** `SystemTTSService` (Apple `AVSpeechSynthesizer` via Readium
+/// `AVTTSEngine`) until the Kokoro pack is on disk, then
+/// `SherpaKokoroTTSService`. Selection is re-checked each time speech starts.
+///
+/// **Audio session:** owned by the active `TTSService` (`.playback` /
+/// `.spokenAudio` / long-form).
 ///
 /// **Now Playing / Dynamic Island:** while a session is playing or paused, we
 /// publish system Now Playing info + remote commands so Lock Screen / Control
@@ -29,7 +31,6 @@ final class ReaderSpeechController {
         case stopped
         case playing
         case paused
-        case modelNotDownloaded
     }
 
     private(set) var status: Status = .unavailable
@@ -49,9 +50,6 @@ final class ReaderSpeechController {
     var onSkipPrevious: (() -> Void)?
     /// Now Playing / Lock Screen next-track — chapter skip (same as mini player).
     var onSkipNext: (() -> Void)?
-    /// Read Aloud tapped while the Kokoro voice pack is missing — host should
-    /// surface the download UI (the reader Display sheet) instead of no-op.
-    var onNeedsModelDownload: (() -> Void)?
 
     private var publication: Publication?
     private var ttsService: TTSService?
@@ -88,7 +86,7 @@ final class ReaderSpeechController {
 
     /// Voices the settings UI can offer (already filtered for long-form reading).
     var availableVoices: [TTSVoice] {
-        ttsService?.availableVoices ?? []
+        ttsService?.availableVoices ?? ReaderSpeechPreferences.catalogVoices()
     }
 
     /// Builds the synthesizer for a publication. Returns quietly when the
@@ -132,8 +130,65 @@ final class ReaderSpeechController {
         totalPositionCount = max(0, totalPositions)
         self.publication = publication
 
-        let service = SherpaKokoroTTSService(modelDirectory: downloadManager.modelDirectory)
-        
+        installTTSService(makeTTSService(for: preferredEngineKind()))
+        self.status = .stopped
+    }
+
+    /// Pushes the latest UserDefaults preferences into the live synthesizer.
+    /// Rate/pitch apply on the next utterance via the engine bridge; voice
+    /// changes take effect on the next utterance through `config`.
+    func applyPreferences() {
+        guard let ttsService else { return }
+        let language = publication?.metadata.language ?? Language(code: .bcp47(Locale.current.identifier))
+        let voiceID = ReaderSpeechPreferences.resolvedVoiceIdentifier(
+            language: language,
+            voices: ttsService.availableVoices
+        )
+        ttsService.setVoice(id: voiceID ?? "")
+        ttsService.setRate(Float(ReaderSpeechPreferences.rateMultiplier))
+        ttsService.setPitch(Float(ReaderSpeechPreferences.pitchMultiplier))
+    }
+
+    /// Kokoro if the voice pack is on disk, otherwise the system voice.
+    /// Re-checked at every playback start (not on pause/resume).
+    private func preferredEngineKind() -> ReaderTTSEngineKind {
+        ReaderTTSEngineKind.preferred(modelDownloaded: downloadManager.isModelDownloaded())
+    }
+
+    private func currentEngineKind() -> ReaderTTSEngineKind? {
+        switch ttsService {
+        case is SherpaKokoroTTSService: return .kokoro
+        case is SystemTTSService: return .system
+        default: return nil
+        }
+    }
+
+    private func makeTTSService(for kind: ReaderTTSEngineKind) -> TTSService {
+        switch kind {
+        case .kokoro:
+            return SherpaKokoroTTSService(modelDirectory: downloadManager.modelDirectory)
+        case .system:
+            return SystemTTSService()
+        }
+    }
+
+    /// Swap the bound engine if the download state changed since last start.
+    /// Unbinds callbacks before `stop()` so a swap cannot auto-skip a chapter.
+    private func ensureEngineForPlayback() {
+        let kind = preferredEngineKind()
+        guard currentEngineKind() != kind else { return }
+        installTTSService(makeTTSService(for: kind))
+    }
+
+    private func installTTSService(_ service: TTSService) {
+        if let existing = ttsService {
+            existing.onStatusChange = nil
+            existing.onSpokenTextChange = nil
+            existing.onSpeechEnergyPulse = nil
+            existing.onAdvance = nil
+            existing.stop()
+        }
+
         service.onStatusChange = { [weak self] newStatus in
             guard let self else { return }
             switch newStatus {
@@ -162,7 +217,7 @@ final class ReaderSpeechController {
                 self.publishNowPlaying(playing: false)
             }
         }
-        
+
         service.onSpokenTextChange = { [weak self] text in
             guard let self else { return }
             self.spokenText = ReaderSpeechPreferences.cleanUtteranceText(text)
@@ -172,39 +227,20 @@ final class ReaderSpeechController {
                 self.ttsService?.pause()
             }
         }
-        
+
         service.onSpeechEnergyPulse = { [weak self] energy, seed in
-            // Reusing pulseSpeechEnergy target logic.
-            // pulseSpeechEnergy takes a string highlight to compute target, but we already have energy.
-            // I'll directly update the target and start smoothing.
             guard let self else { return }
             self.speechEnergyTarget = energy
             self.speechEnergySeed = seed
             self.startSpeechEnergySmoothingIfNeeded()
         }
-        
+
         service.onAdvance = { [weak self] locator in
             self?.resumeLocator = locator
             self?.onAdvance?(locator)
         }
-        
-        self.ttsService = service
-        self.status = downloadManager.isModelDownloaded() ? .stopped : .modelNotDownloaded
-    }
 
-    /// Pushes the latest UserDefaults preferences into the live synthesizer.
-    /// Rate/pitch apply on the next utterance via the engine bridge; voice
-    /// changes take effect on the next utterance through `config`.
-    func applyPreferences() {
-        guard let ttsService else { return }
-        let language = publication?.metadata.language ?? Language(code: .bcp47(Locale.current.identifier))
-        let voiceID = ReaderSpeechPreferences.resolvedVoiceIdentifier(
-            language: language,
-            voices: ttsService.availableVoices
-        )
-        ttsService.setVoice(id: voiceID ?? "")
-        ttsService.setRate(Float(ReaderSpeechPreferences.rateMultiplier))
-        ttsService.setPitch(Float(ReaderSpeechPreferences.pitchMultiplier))
+        ttsService = service
     }
 
     /// Starts at `locator` (normally the reader's current position) or resumes
@@ -213,6 +249,7 @@ final class ReaderSpeechController {
     private func startSpeech(from locator: Locator?) {
         guard let publication else { return }
         let startLoc = locator ?? resumeLocator
+        ensureEngineForPlayback()
         applyPreferences()
 
         startTask?.cancel()
@@ -253,6 +290,10 @@ final class ReaderSpeechController {
 
                 installRemoteCommandsIfNeeded()
                 stoppedManually = false
+                // Re-check after chapter extract so a download that finished
+                // while we were walking the spine is used for this tap.
+                ensureEngineForPlayback()
+                applyPreferences()
                 try await ttsService?.speak(
                     text: text,
                     startLocator: startLoc ?? firstLocator
@@ -273,12 +314,7 @@ final class ReaderSpeechController {
             pause()
         case .paused:
             ttsService?.resume()
-        case .stopped, .modelNotDownloaded:
-            if !downloadManager.isModelDownloaded() {
-                status = .modelNotDownloaded
-                onNeedsModelDownload?()
-                return
-            }
+        case .stopped:
             if let locator {
                 resumeLocator = locator
             }
@@ -323,19 +359,9 @@ final class ReaderSpeechController {
 
         let shouldPlay = resumePlaying || pendingAutoContinue
         if shouldPlay {
-            if !downloadManager.isModelDownloaded() {
-                status = .modelNotDownloaded
-                onNeedsModelDownload?()
-                return
-            }
             pendingPauseAfterReanchor = false
             startSpeech(from: locator)
         } else if isSessionActive {
-            if !downloadManager.isModelDownloaded() {
-                status = .modelNotDownloaded
-                onNeedsModelDownload?()
-                return
-            }
             pendingPauseAfterReanchor = true
             startSpeech(from: locator)
         }
@@ -359,7 +385,6 @@ final class ReaderSpeechController {
         onAdvance = nil
         onSkipPrevious = nil
         onSkipNext = nil
-        onNeedsModelDownload = nil
         ttsService?.stop()
         ttsService = nil
         publication = nil
@@ -538,12 +563,7 @@ final class ReaderSpeechController {
         case .paused:
             ttsService?.resume()
             return .success
-        case .stopped, .modelNotDownloaded:
-            if !downloadManager.isModelDownloaded() {
-                status = .modelNotDownloaded
-                onNeedsModelDownload?()
-                return .commandFailed
-            }
+        case .stopped:
             startSpeech(from: resumeLocator)
             return .success
         }
@@ -552,7 +572,7 @@ final class ReaderSpeechController {
     private func handleRemotePause() -> MPRemoteCommandHandlerStatus {
         guard ttsService != nil else { return .commandFailed }
         switch status {
-        case .unavailable, .stopped, .modelNotDownloaded:
+        case .unavailable, .stopped:
             return .noActionableNowPlayingItem
         case .paused:
             return .success

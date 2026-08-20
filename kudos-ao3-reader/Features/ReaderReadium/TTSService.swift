@@ -2,6 +2,19 @@ import Foundation
 import ReadiumNavigator
 import ReadiumShared
 
+/// Which `TTSService` implementation `ReaderSpeechController` should bind.
+/// Kokoro only after `TTSDownloadManager.isModelDownloaded()`; otherwise Apple
+/// `AVSpeechSynthesizer` via `SystemTTSService`. Re-evaluated each time speech
+/// starts so a mid-session download takes effect on the next Read Aloud tap.
+enum ReaderTTSEngineKind: Equatable {
+    case system
+    case kokoro
+
+    static func preferred(modelDownloaded: Bool) -> ReaderTTSEngineKind {
+        modelDownloaded ? .kokoro : .system
+    }
+}
+
 public enum TTSServiceStatus: Equatable {
     case unavailable
     case stopped
