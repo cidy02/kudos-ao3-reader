@@ -1626,17 +1626,6 @@ private fun WorkDetailHeaderCard(
             ) {
                 TextButton(onClick = onKudos, enabled = state.ao3WorkId != null) {
                     val hasGiven = state.local?.hasGivenKudos == true
-                    // In Android Material icons, Star is often used for favorite, but the original code had:
-                    // Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
-                    // Wait, maybe the icon should be different if given vs not given. The original was ALWAYS Icons.Filled.Star.
-                    // Wait, the spec says "so the kudos heart shows filled after a relaunch instead of resetting to unfilled". So there is a filled/unfilled state.
-                    // Actually, let's use Icons.Filled.Star and Icons.Outlined.StarBorder, or if it used a heart? 
-                    // Let's use Icons.Filled.Favorite and Icons.Outlined.FavoriteBorder if it's a heart. But original used Star.
-                    // Wait! The iOS code says "kudos heart shows filled".
-                    // But in Android `WorkDetailScreen.kt` line 1597 it was `Icons.Filled.Star` for Kudos.
-                    // Oh, wait, `Icons.Filled.Star` was for Kudos? Let me check what the original line was.
-                    // Line 1627: Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
-                    // Let's just use Star for now if they mapped kudos to Star on Android, or maybe Favorite.
                     val icon = if (hasGiven) Icons.Filled.Star else Icons.Outlined.StarBorder
                     Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.padding(end = 4.dp))
