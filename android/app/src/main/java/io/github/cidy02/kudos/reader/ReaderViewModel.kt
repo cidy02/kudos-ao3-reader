@@ -305,6 +305,10 @@ class ReaderViewModel(
         updatePreferences { it.copy(speechRate = clamped) }
     }
 
+    fun setSpeechVoiceIdentifier(id: String?) {
+        updatePreferences { it.copy(speechVoiceIdentifier = id) }
+    }
+
     fun setSpeechPitch(pitch: Float) {
         val clamped = pitch.coerceIn(0.5f, 2.0f)
         updatePreferences { it.copy(speechPitch = clamped) }
