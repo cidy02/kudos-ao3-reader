@@ -370,6 +370,9 @@ struct MediaBrowserView: View {
         statsByCategory = computed
     }
 
+    /// How many "recently read" fandom chips a category card shows at most.
+    private static let recentFandomsLimit = 5
+
     /// Pure, off-actor derivation: builds each category's lowercased name set ONCE
     /// (the expensive part for big categories) and scans the library against it.
     private nonisolated static func computeStats(
@@ -398,7 +401,7 @@ struct MediaBrowserView: View {
                         recent.append(work.fandomsDisplay[index])
                     }
                 }
-                if recent.count >= 3 { break }
+                if recent.count >= recentFandomsLimit { break }
             }
 
             result[input.id] = CategoryStats(
@@ -407,7 +410,7 @@ struct MediaBrowserView: View {
                     ? input.fandoms.reduce(0) { $0 + ($1.workCount ?? 0) }
                     : nil,
                 savedCount: savedCount,
-                recentFandoms: Array(recent.prefix(3))
+                recentFandoms: Array(recent.prefix(recentFandomsLimit))
             )
         }
         return result
