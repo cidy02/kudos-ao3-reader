@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.works.converters
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -22,15 +24,19 @@ import java.io.File
  */
 class PDFWorkConverter(private val cacheDir: File) {
 
-    fun convert(title: String, bytes: ByteArray): ByteArray? {
-        val temp = writeTemp(bytes) ?: return null
+    // MuPDF's structured-text walk is blocking native work — real PDFs run to
+    // the hundreds of pages, and every caller reaches this through a suspend
+    // function, so dispatching here once covers all of them rather than
+    // relying on each call site to remember Dispatchers.IO itself.
+    suspend fun convert(title: String, bytes: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
+        val temp = writeTemp(bytes) ?: return@withContext null
         try {
-            val pages = KudosMuPDF.paragraphsPerPage(temp.absolutePath) ?: return null
+            val pages = KudosMuPDF.paragraphsPerPage(temp.absolutePath) ?: return@withContext null
             val paragraphs = pages.flatten().map { it.trim() }.filter { it.isNotEmpty() }
-            if (paragraphs.isEmpty()) return null
+            if (paragraphs.isEmpty()) return@withContext null
 
             val body = paragraphs.joinToString("\n") { "<p>${escape(it)}</p>" }
-            return EpubBuilder.buildEpub(title, body)
+            EpubBuilder.buildEpub(title, body)
         } finally {
             temp.delete()
         }
@@ -43,9 +49,9 @@ class PDFWorkConverter(private val cacheDir: File) {
      * merges `Label: value` rows into one blob and makes the parser read
      * `Storylink:` as part of `Story:`'s value.
      */
-    fun metadataLines(bytes: ByteArray): List<String> {
-        val temp = writeTemp(bytes) ?: return emptyList()
-        return try {
+    suspend fun metadataLines(bytes: ByteArray): List<String> = withContext(Dispatchers.IO) {
+        val temp = writeTemp(bytes) ?: return@withContext emptyList()
+        try {
             KudosMuPDF.linesPerPage(temp.absolutePath)?.firstOrNull().orEmpty()
         } finally {
             temp.delete()
@@ -60,7 +66,14 @@ class PDFWorkConverter(private val cacheDir: File) {
      * `FandomCatalogCache`) passes its directory explicitly for the same reason.
      */
     private fun writeTemp(bytes: ByteArray): File? = runCatching {
-        File.createTempFile("kudos-import-", ".pdf", cacheDir).apply { writeBytes(bytes) }
+        val file = File.createTempFile("kudos-import-", ".pdf", cacheDir)
+        try {
+            file.writeBytes(bytes)
+            file
+        } catch (e: Exception) {
+            file.delete()
+            throw e
+        }
     }.getOrNull()
 
     private fun escape(value: String): String =

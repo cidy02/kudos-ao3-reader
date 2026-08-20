@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.files
 
 import io.github.cidy02.kudos.works.converters.KudosMuPDF
 import io.github.cidy02.kudos.works.converters.PDFWorkConverter
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -63,7 +64,7 @@ class ImportedFileFormatTest {
     private fun converter() = PDFWorkConverter(Files.createTempDirectory("kudos-pdf-tests").toFile())
 
     @Test
-    fun `pdf conversion refuses honestly when the native MuPDF library isn't loaded`() {
+    fun `pdf conversion refuses honestly when the native MuPDF library isn't loaded`() = runTest {
         // KudosMuPDF.isAvailable is always false here: this is a plain JVM unit
         // test, and libkudosmupdf.so is an Android .so the JVM can't load. That's
         // exactly the "checkout hasn't run build-mupdf.sh" case PDFWorkConverter
@@ -79,7 +80,7 @@ class ImportedFileFormatTest {
     }
 
     @Test
-    fun `uncompressed pdf text still converts when the native library is present`() {
+    fun `uncompressed pdf text still converts when the native library is present`() = runTest {
         // Only meaningful on a device/emulator with the real .so — see
         // android/Scripts/build-mupdf.sh. Skips (not fails) under a plain JVM run.
         assumeTrue(KudosMuPDF.isAvailable)

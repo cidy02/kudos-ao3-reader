@@ -37,12 +37,21 @@ TOOLCHAIN="$NDK_DIR/toolchains/llvm/prebuilt/darwin-x86_64"
 
 mkdir -p "$OUT"
 
+# Pinned, not `master`: two checkouts of the same Kudos commit must link the
+# same MuPDF (reproducibility, and so a MuPDF-side regression/CVE doesn't
+# silently change under us). This is the commit build-mupdf.sh was last
+# actually built and tested against.
+MUPDF_COMMIT="9ef7ec2a6e469471f5f74a9af3896c3340c25b9c"
+
 if [ ! -d "$SRC" ]; then
-  echo "== cloning MuPDF (shallow, with submodules) =="
+  echo "== cloning MuPDF @ $MUPDF_COMMIT (shallow, with submodules) =="
   # Shallow for the main repo, but NOT --shallow-submodules: MuPDF's submodules
   # have submodules of their own (freetype -> subprojects/dlg), and a shallow
   # fetch there fails with "shallow file has changed since we read it".
-  git clone --depth 1 https://github.com/ArtifexSoftware/mupdf.git "$SRC"
+  git init -q "$SRC"
+  git -C "$SRC" remote add origin https://github.com/ArtifexSoftware/mupdf.git
+  git -C "$SRC" fetch --depth 1 origin "$MUPDF_COMMIT"
+  git -C "$SRC" checkout -q FETCH_HEAD
   git -C "$SRC" submodule update --init --recursive
 fi
 
@@ -91,7 +100,7 @@ make -C "$SRC" -j"$(sysctl -n hw.ncpu)" libs \
   CXX="$TOOLCHAIN/bin/${TRIPLE}${API}-clang++" \
   AR="$TOOLCHAIN/bin/llvm-ar" \
   RANLIB="$TOOLCHAIN/bin/llvm-ranlib" \
-  >"$OUT/mupdf-$ABI.log" 2>&1
+  >"$OUT/mupdf-$ABI.log" 2>&1 || { echo "== MuPDF build failed, tail of $OUT/mupdf-$ABI.log: ==" >&2; tail -n 80 "$OUT/mupdf-$ABI.log" >&2; exit 1; }
 
 echo "   $(du -h "$SRC/build/android-$ABI/libmupdf.a" | cut -f1) libmupdf.a"
 

@@ -20,23 +20,48 @@ typedef enum {
     KudosGranularityLine = 1
 } KudosGranularity;
 
-/** Appends one structured-text line's characters (UTF-32 runes) as UTF-8. */
-static void kudos_append_line(fz_stext_line *line, fz_buffer *buffer, fz_context *ctx) {
-    char scratch[8];
-    for (fz_stext_char *ch = line->first_char; ch != NULL; ch = ch->next) {
-        int written = fz_runetochar(scratch, ch->c);
-        fz_append_data(ctx, buffer, scratch, (size_t) written);
+/**
+ * Appends one Unicode codepoint to `buffer` as native-order UTF-16 code
+ * unit(s) — one for a BMP codepoint, a surrogate pair above it. JNI's
+ * `NewString` takes `jchar*`/UTF-16, not UTF-8; feeding it raw UTF-8 via
+ * `NewStringUTF` (JNI's *Modified* UTF-8, which forbids 4-byte sequences)
+ * aborts the process under CheckJNI on any character outside the BMP —
+ * emoji, some CJK extension characters, anything an AO3 author's note can
+ * contain. A lone surrogate value from `fz_runetochar`'s rune isn't a valid
+ * standalone codepoint, so it's substituted with U+FFFD rather than passed
+ * through and corrupting the UTF-16 stream.
+ */
+static void kudos_append_utf16(fz_context *ctx, fz_buffer *buffer, int rune) {
+    if (rune < 0 || (rune >= 0xD800 && rune <= 0xDFFF)) {
+        rune = 0xFFFD;
+    }
+    if (rune <= 0xFFFF) {
+        jchar unit = (jchar) rune;
+        fz_append_data(ctx, buffer, &unit, sizeof(unit));
+    } else {
+        int v = rune - 0x10000;
+        jchar hi = (jchar) (0xD800 + (v >> 10));
+        jchar lo = (jchar) (0xDC00 + (v & 0x3FF));
+        fz_append_data(ctx, buffer, &hi, sizeof(hi));
+        fz_append_data(ctx, buffer, &lo, sizeof(lo));
     }
 }
 
+/** Appends one structured-text line's characters as UTF-16 code units. */
+static void kudos_append_line(fz_stext_line *line, fz_buffer *buffer, fz_context *ctx) {
+    for (fz_stext_char *ch = line->first_char; ch != NULL; ch = ch->next) {
+        kudos_append_utf16(ctx, buffer, ch->c);
+    }
+}
+
+/** `buffer` holds native-order UTF-16 code units (see kudos_append_utf16). */
 static jstring kudos_buffer_to_jstring(JNIEnv *env, fz_context *ctx, fz_buffer *buffer) {
     unsigned char *data = NULL;
     size_t length = fz_buffer_storage(ctx, buffer, &data);
     if (length == 0 || data == NULL) return NULL;
-    // NUL-terminate for NewStringUTF, which takes a C string.
-    fz_terminate_buffer(ctx, buffer);
-    fz_buffer_storage(ctx, buffer, &data);
-    return (*env)->NewStringUTF(env, (const char *) data);
+    jsize unitCount = (jsize) (length / sizeof(jchar));
+    if (unitCount == 0) return NULL;
+    return (*env)->NewString(env, (const jchar *) data, unitCount);
 }
 
 /**
@@ -58,24 +83,48 @@ static jobjectArray kudos_extract(JNIEnv *env, jstring jpath, KudosGranularity g
     jclass stringClass = (*env)->FindClass(env, "java/lang/String");
     jobjectArray pages = NULL;
     fz_document *doc = NULL;
+    // A page rarely has more blocks than this; the cap also bounds the
+    // per-page local-JNI-ref frame requested below against a hostile PDF.
+    const int maxEntries = 4096;
+    // Bounds allocation against a hostile /Count; no real work has anywhere
+    // near this many pages.
+    const int maxPages = 20000;
+
+    fz_var(doc);
+    fz_var(pages);
 
     // Every MuPDF call that can longjmp is inside fz_try. Without this a
     // malformed PDF — which is most of what this feature exists for — takes the
-    // whole process down instead of failing one import.
+    // whole process down instead of failing one import. Locals assigned inside
+    // fz_try and read in fz_always/fz_catch (or after a catch) must be fz_var'd:
+    // fz_try is setjmp/longjmp, and an un-fz_var'd local can roll back to its
+    // pre-try value across the jump under optimization.
     fz_try(ctx) {
         fz_register_document_handlers(ctx);
         doc = fz_open_document(ctx, path);
         int pageCount = fz_count_pages(ctx, doc);
+        if (pageCount < 0) pageCount = 0;
+        if (pageCount > maxPages) pageCount = maxPages;
         pages = (*env)->NewObjectArray(env, pageCount, stringArrayClass, NULL);
+        if (pages == NULL) fz_throw(ctx, FZ_ERROR_GENERIC, "NewObjectArray(pages) failed");
 
         for (int index = 0; index < pageCount; index++) {
             fz_stext_options options = { 0 };
             fz_stext_page *stext = NULL;
-            // Bounded: a page rarely has more blocks than this, and the cap keeps
-            // a hostile document from making us allocate without limit.
-            const int maxEntries = 4096;
             jstring entries[4096];
             int count = 0;
+
+            fz_var(stext);
+            fz_var(count);
+
+            // Local refs for every entry on the page live only inside this
+            // frame — freeing them all at PopLocalFrame, rather than one by
+            // one, is what keeps a dense page (many short lines) under ART's
+            // local-reference-table limit (JNI guarantees only 16 by default;
+            // ART's is larger but still far short of maxEntries).
+            if ((*env)->PushLocalFrame(env, maxEntries + 32) < 0) {
+                continue; // OOM reserving frame capacity — skip this page.
+            }
 
             // Per-page fz_try: one unreadable page yields an empty page rather
             // than abandoning the document, which matters for a 170-page work
@@ -102,7 +151,7 @@ static jobjectArray kudos_extract(JNIEnv *env, jstring jpath, KudosGranularity g
                         int first = 1;
                         for (fz_stext_line *line = block->u.t.first_line;
                              line != NULL; line = line->next) {
-                            if (!first) fz_append_byte(ctx, buf, ' ');
+                            if (!first) kudos_append_utf16(ctx, buf, ' ');
                             first = 0;
                             kudos_append_line(line, buf, ctx);
                         }
@@ -120,12 +169,19 @@ static jobjectArray kudos_extract(JNIEnv *env, jstring jpath, KudosGranularity g
             }
 
             jobjectArray pageArray = (*env)->NewObjectArray(env, count, stringClass, NULL);
-            for (int i = 0; i < count; i++) {
-                (*env)->SetObjectArrayElement(env, pageArray, i, entries[i]);
-                (*env)->DeleteLocalRef(env, entries[i]);
+            if (pageArray != NULL) {
+                for (int i = 0; i < count; i++) {
+                    (*env)->SetObjectArrayElement(env, pageArray, i, entries[i]);
+                }
             }
-            (*env)->SetObjectArrayElement(env, pages, index, pageArray);
-            (*env)->DeleteLocalRef(env, pageArray);
+            // Pops every local ref created since PushLocalFrame (ctx, stext,
+            // all `entries`) and re-homes pageArray as a single local ref in
+            // the caller's (outer try's) frame.
+            pageArray = (*env)->PopLocalFrame(env, pageArray);
+            if (pageArray != NULL) {
+                (*env)->SetObjectArrayElement(env, pages, index, pageArray);
+                (*env)->DeleteLocalRef(env, pageArray);
+            }
         }
     }
     fz_always(ctx) {

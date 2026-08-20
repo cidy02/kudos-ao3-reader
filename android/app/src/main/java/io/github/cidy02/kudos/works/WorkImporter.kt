@@ -323,7 +323,8 @@ class WorkImporter(
         /** Format-specific guidance instead of one generic rejection string. */
         internal fun unsupportedMessage(format: ImportedFileFormat): String = when (format) {
             ImportedFileFormat.PDF ->
-                "This PDF's text can't be extracted — it's scanned or compressed. " +
+                "This PDF's text couldn't be extracted — it may be a scanned " +
+                    "(image-only) PDF with no real text layer. " +
                     "Try exporting it as EPUB, HTML, or plain text first."
             ImportedFileFormat.ZIP ->
                 "Couldn't find anything readable in that archive. It needs an EPUB, " +
