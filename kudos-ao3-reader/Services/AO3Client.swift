@@ -1110,7 +1110,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// any thrown error as a non-destructive refresh failure; only this successful,
     /// fully parsed value should be merged into local `SavedWork` records.
     func workMetadata(
-        workID: Int, request: URLRequest? = nil
+        workID: Int, request: URLRequest? = nil, currentUsername: String? = nil
     ) async throws -> AO3WorkMetadata {
         guard let url = URL(string: "\(base)/works/\(workID)?view_adult=true") else {
             throw AO3Error.network("Bad work URL.")
@@ -1122,7 +1122,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         } else {
             html = try await getHTML(url)
         }
-        return try Self.parseWorkMetadata(from: html, workID: workID)
+        return try Self.parseWorkMetadata(from: html, workID: workID, currentUsername: currentUsername)
     }
 
     /// Parses a work page's canonical tag groups + stats from its HTML. Split out
@@ -1137,7 +1137,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// returns a value type, leaving merge/safety decisions to the refresh service.
     static func parseWorkMetadata( // swiftlint:disable:this function_body_length
         from html: String,
-        workID: Int = 0
+        workID: Int = 0,
+        // Only ever used to check for a positive match (see
+        // AO3WorkMetadata.kudosGivenByCurrentUser's own doc comment for why absence
+        // isn't reliable) — nil for every caller that isn't opting into that check.
+        currentUsername: String? = nil
     ) throws -> AO3WorkMetadata {
         let doc = try SwiftSoup.parse(html)
 
@@ -1284,7 +1288,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             isComplete: completionStatus(chapters: chapters, statusLabel: statusDTLabel()),
             seriesTitle: seriesTitle.isEmpty ? nil : seriesTitle,
             seriesURL: rawSeriesURL.flatMap(absoluteAO3URL),
-            seriesPosition: firstNumber(in: seriesPositionText)
+            seriesPosition: firstNumber(in: seriesPositionText),
+            kudosGivenByCurrentUser: currentUsername.map { username in
+                // Exact href match, not a text/name search — a username can legally be
+                // a substring of another (or of unrelated page text), while the href
+                // path is an unambiguous, exact identifier AO3 itself uses as the link.
+                (try? doc.select("#kudos a[href=\"/users/\(username)\"]").first()) != nil
+            } ?? false
         )
 
         guard !metadata.title.isEmpty

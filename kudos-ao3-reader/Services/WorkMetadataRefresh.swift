@@ -74,7 +74,9 @@ enum WorkMetadataRefresh {
         }
 
         let metadata = try await AO3RequestCoordinator.shared.withSlot {
-            try await AO3Client.shared.workMetadata(workID: id, request: authenticatedRequest(workID: id, auth: auth))
+            try await AO3Client.shared.workMetadata(
+                workID: id, request: authenticatedRequest(workID: id, auth: auth), currentUsername: auth.username
+            )
         }
 
         // Safety rule: all network/parse failures throw before this point. From here
@@ -151,6 +153,12 @@ enum WorkMetadataRefresh {
         if let words = metadata.words { work.wordCount = words }
         if !metadata.chapters.isEmpty { work.chapters = metadata.chapters }
         if let kudos = metadata.kudos { work.kudos = kudos }
+        // OR, never assigned outright: metadata.kudosGivenByCurrentUser is a
+        // positive-only signal (see its own doc comment) — a miss doesn't mean
+        // kudos wasn't given, AO3 truncates this list on popular works, so this
+        // can only ever confirm a kudos-given the app didn't already know about,
+        // never clear one it already recorded from the user's own in-app tap.
+        if metadata.kudosGivenByCurrentUser { work.hasGivenKudos = true }
         if let comments = metadata.comments { work.comments = comments }
         if let bookmarks = metadata.bookmarks { work.bookmarks = bookmarks }
         if let hits = metadata.hits { work.hits = hits }

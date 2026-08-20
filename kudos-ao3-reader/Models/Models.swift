@@ -166,6 +166,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// Whether the user has marked this work as a favorite.
     var isFavorite: Bool = false
 
+    /// Whether the user has successfully left kudos on this work through the app,
+    /// via their signed-in AO3 account (the only way kudos-giving works here —
+    /// there's no guest/anonymous kudos path). Persisted so the kudos heart shows
+    /// filled after a relaunch instead of resetting to unfilled every session.
+    var hasGivenKudos: Bool = false
+
     /// Whether the user marked this work as Downloaded — keep its EPUB permanently
     /// (never auto-freed). Distinct from Saved for Later (reading queue) and AO3 bookmarks.
     var isSaved: Bool = false

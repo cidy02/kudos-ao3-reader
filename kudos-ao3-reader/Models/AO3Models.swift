@@ -1289,6 +1289,16 @@ nonisolated struct AO3WorkMetadata {
     var seriesTitle: String?
     var seriesURL: String?
     var seriesPosition: Int?
+    /// Whether the signed-in user's own username appears in this page's kudos-givers
+    /// list. Only meaningful when the page was fetched authenticated with a username
+    /// to check against (see `parseWorkMetadata`'s `currentUsername` parameter) —
+    /// false otherwise, which reads the same as "not found" either way. One-directional
+    /// signal: a hit is fully reliable (your name can't appear unless you gave kudos),
+    /// but a miss is NOT reliable evidence you didn't — AO3 truncates this list to a
+    /// server-rendered prefix behind a "N more users" link on popular works, so kudos
+    /// given on a popular work can be true and still not show up here. Callers must
+    /// only ever use this to *set* a stored kudos-given flag, never to clear one.
+    var kudosGivenByCurrentUser: Bool = false
 
     var authorText: String {
         authors.isEmpty ? "Anonymous" : authors.joined(separator: ", ")

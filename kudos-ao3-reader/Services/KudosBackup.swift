@@ -652,6 +652,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let permanentDeletionScheduledAt: Date?
     let assetIdentifier: String?
     let isFavorite: Bool
+    let hasGivenKudos: Bool
     let isSaved: Bool
     let isFinished: Bool
     let hasEPUB: Bool
@@ -708,6 +709,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         permanentDeletionScheduledAt = work.permanentDeletionScheduledAt
         assetIdentifier = work.effectiveAssetIdentifier
         isFavorite = work.isFavorite
+        hasGivenKudos = work.hasGivenKudos
         isSaved = work.isSaved
         isFinished = work.isFinished
         hasEPUB = work.hasEPUB
@@ -768,6 +770,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case permanentDeletionScheduledAt
         case assetIdentifier
         case isFavorite
+        case hasGivenKudos
         case isSaved
         case isFinished
         case hasEPUB
@@ -828,6 +831,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         )
         assetIdentifier = try container.decodeIfPresent(String.self, forKey: .assetIdentifier)
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        hasGivenKudos = try container.decodeIfPresent(Bool.self, forKey: .hasGivenKudos) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isFinished = try container.decodeIfPresent(Bool.self, forKey: .isFinished) ?? false
         hasEPUB = try container.decodeIfPresent(Bool.self, forKey: .hasEPUB) ?? false
@@ -3010,6 +3014,11 @@ enum KudosBackupService {
         work.seriesURL = mergedText(current: work.seriesURL, incoming: archived.seriesURL, incomingWins: incomingWins)
 
         work.isFavorite = incomingWins ? archived.isFavorite : work.isFavorite
+        // OR, not incomingWins-gated like the toggleable flags around it: kudos-given
+        // is monotonic (AO3 has no way to un-give kudos), so once any device recorded
+        // a successful give, a merge must never flip it back to false just because
+        // that device's own sync record happens to be older than another device's.
+        work.hasGivenKudos = work.hasGivenKudos || archived.hasGivenKudos
         work.isSaved = incomingWins ? archived.isSaved : work.isSaved
         work.isFinished = incomingWins ? archived.isFinished : work.isFinished
         work.isComplete = incomingWins ? archived.isComplete : work.isComplete
