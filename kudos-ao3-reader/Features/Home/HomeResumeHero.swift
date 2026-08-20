@@ -128,25 +128,31 @@ private struct UnblurredHomeResumeHero: View {
             : nil
 
         return VStack(alignment: .leading, spacing: 12) {
-            // Tag grid sits beside the title, top-right — matches the compact
-            // work cards (WorkCoverCard) rather than a separate stats row
-            // below, which would otherwise repeat the same four facts twice.
-            HStack(alignment: .top, spacing: 8) {
-                Text(work.title)
-                    .font(.title3.weight(.bold))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                WorkStatusIconGrid(
-                    rating: work.rating.isEmpty ? nil : work.rating,
-                    categories: work.workCategories,
-                    warnings: work.workWarnings,
-                    completion: work.completionStatus,
-                    tileSize: 27,
-                    announcesToVoiceOver: true
-                )
-            }
+            // Tag grid decoupled into a top-trailing overlay on the title, not
+            // an HStack sibling of it — an HStack top-aligns both, and since
+            // the 2x2 grid (tileSize 27, ~60pt tall) is much taller than a
+            // single line of title text, the VStack's spacing to the *next*
+            // row (author) measured from the grid's bottom, not the shorter
+            // title's — a large dead gap that had nothing to do with the
+            // 12pt spacing value itself. An overlay lets the title's own
+            // height drive the VStack's rhythm while the grid just floats in
+            // the corner.
+            Text(work.title)
+                .font(.title3.weight(.bold))
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 60)
+                .overlay(alignment: .topTrailing) {
+                    WorkStatusIconGrid(
+                        rating: work.rating.isEmpty ? nil : work.rating,
+                        categories: work.workCategories,
+                        warnings: work.workWarnings,
+                        completion: work.completionStatus,
+                        tileSize: 27,
+                        announcesToVoiceOver: true
+                    )
+                }
 
             // Real Label + AO3AuthorBylineView (matching WorkDetailHeroCard, not
             // WorkStatLabel) so the author name is tappable, same as everywhere

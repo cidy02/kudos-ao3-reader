@@ -54,27 +54,32 @@ struct WorkDetailHeroCard: View {
         // card's call site in WorkDetailView.swift regardless — a self-contained
         // card inside another card's chrome would double up the background.
         VStack(alignment: .leading, spacing: 12) {
-            // Tag grid sits beside the title, top-right — matches the compact
-            // work cards (WorkCoverCard) and HomeResumeHero rather than a
-            // separate stats row below, which would otherwise repeat the same
-            // four facts twice.
-            HStack(alignment: .top, spacing: 8) {
-                Text(title)
-                    .font(.title3.weight(.bold))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityAddTraits(.isHeader)
-
-                WorkStatusIconGrid(
-                    rating: rating.isEmpty ? nil : rating,
-                    categories: categories,
-                    warnings: warnings,
-                    completion: completion,
-                    tileSize: 27,
-                    announcesToVoiceOver: true
-                )
-            }
+            // Tag grid decoupled into a top-trailing overlay on the title, not
+            // an HStack sibling of it — an HStack top-aligns both, and since
+            // the 2x2 grid (tileSize 27, ~60pt tall) is much taller than a
+            // single line of title text, the VStack's spacing to the *next*
+            // row (author) measured from the grid's bottom, not the shorter
+            // title's — a large dead gap that had nothing to do with the
+            // 12pt spacing value itself. An overlay lets the title's own
+            // height drive the VStack's rhythm while the grid just floats in
+            // the corner. Matches HomeResumeHero's identical fix.
+            Text(title)
+                .font(.title3.weight(.bold))
+                .lineLimit(2)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.trailing, 60)
+                .overlay(alignment: .topTrailing) {
+                    WorkStatusIconGrid(
+                        rating: rating.isEmpty ? nil : rating,
+                        categories: categories,
+                        warnings: warnings,
+                        completion: completion,
+                        tileSize: 27,
+                        announcesToVoiceOver: true
+                    )
+                }
 
             // `.caption`-sized, matching the "Continue Reading" hero's
             // author/fandom (WorkStatLabel) so the metadata reads as one
