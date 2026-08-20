@@ -234,17 +234,52 @@ class KudosDatabaseMigrationTest {
     }
 
     @Test
-    fun roomOpensFreshDatabaseAtVersion9WithMigrationRegistered() {
+    fun migrate9To10_addsHasGivenKudosDefaultingToFalse() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name("kudos-migration-9-10")
+                .callback(object : SupportSQLiteOpenHelper.Callback(9) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL("CREATE TABLE IF NOT EXISTS `works` (`id` TEXT NOT NULL, PRIMARY KEY(`id`))")
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+        try {
+            db.execSQL("INSERT INTO works (id) VALUES ('work-pre')")
+            assertFalse(columnNames(db, "works").contains("hasGivenKudos"))
+
+            KudosDatabaseMigrations.MIGRATION_9_10.migrate(db)
+            db.version = 10
+
+            db.query("SELECT hasGivenKudos FROM works WHERE id = ?", arrayOf("work-pre")).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+            assertEquals(10, db.version)
+        } finally {
+            db.close()
+            helper.close()
+        }
+    }
+
+    @Test
+    fun roomOpensFreshDatabaseAtVersion10WithMigrationRegistered() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries()
             .addMigrations(
                 KudosDatabaseMigrations.MIGRATION_7_8,
-                KudosDatabaseMigrations.MIGRATION_8_9
+                KudosDatabaseMigrations.MIGRATION_8_9,
+                KudosDatabaseMigrations.MIGRATION_9_10
             )
             .build()
         try {
-            assertEquals(9, db.openHelper.readableDatabase.version)
+            assertEquals(10, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }

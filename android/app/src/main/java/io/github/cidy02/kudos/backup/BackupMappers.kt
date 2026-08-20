@@ -97,6 +97,7 @@ fun SavedWork.toBackupWork(
         sourceURL = sourceUrl,
         dateAdded = BackupValidator.formatInstant(dateAdded),
         isFavorite = isFavorite,
+        hasGivenKudos = hasGivenKudos,
         isSaved = isSaved,
         isQueuedForLater = isQueuedForLater,
         isFinished = isFinished,
@@ -165,6 +166,7 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
             ?: sourceURL,
         dateAdded = added,
         isFavorite = isFavorite,
+        hasGivenKudos = hasGivenKudos,
         // Honour the archive's flag exactly, as iOS does (`KudosBackup.swift`
         // `work.isSaved = incomingWins ? archived.isSaved : work.isSaved`).
         // Forcing saved whenever an EPUB was present destroyed the queue-only

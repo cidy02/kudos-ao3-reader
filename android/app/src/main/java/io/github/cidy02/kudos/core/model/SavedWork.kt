@@ -11,6 +11,7 @@ data class SavedWork(
     val sourceUrl: String = "",
     val dateAdded: Instant = Instant.now(),
     val isFavorite: Boolean = false,
+    val hasGivenKudos: Boolean = false,
     val isSaved: Boolean = false,
     /**
      * Added to a reading queue without being explicitly saved (iOS
