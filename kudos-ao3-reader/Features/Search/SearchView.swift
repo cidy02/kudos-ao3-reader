@@ -8,6 +8,7 @@ import SwiftUI
 struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
+    @Environment(AO3AuthService.self) private var auth
 
     // Local-first search sources (Global Search, Phase 2): matched on-device, live.
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
@@ -779,7 +780,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         loadTask?.cancel()
         loadTask = Task {
             do {
-                let result = try await AO3Client.shared.search(filters: current, page: page)
+                let result = try await AO3Client.shared.search(
+                    filters: current, page: page, request: auth.authenticatedRequest()
+                )
                 // Backed out to Browse (or a newer search started) while this was in
                 // flight — drop the result so it can't yank the user back to results.
                 // Cancellation is cooperative, so this token check still matters as a
