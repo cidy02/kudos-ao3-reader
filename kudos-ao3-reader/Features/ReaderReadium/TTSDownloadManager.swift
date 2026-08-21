@@ -278,13 +278,14 @@ public final class TTSDownloadManager: NSObject {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    private nonisolated static func runtimeContentFiles(
+    nonisolated static func runtimeContentFiles(
         modelFileName: String,
         in modelDirectory: URL
     ) throws -> [(relativePath: String, url: URL)] {
         let fileManager = FileManager.default
         let rootFileNames = [modelFileName, "voices.bin", "tokens.txt"]
         var files: [(relativePath: String, url: URL)] = []
+        var eSpeakFiles: [(relativePath: String, url: URL)] = []
 
         for fileName in rootFileNames {
             let url = modelDirectory.appendingPathComponent(fileName)
@@ -320,13 +321,16 @@ public final class TTSDownloadManager: NSObject {
             let relativePath = "espeak-ng-data/" + String(
                 url.path.dropFirst(eSpeakDirectory.path.count + 1)
             )
-            files.append((relativePath, url))
+            eSpeakFiles.append((relativePath, url))
         }
 
-        guard files.count > rootFileNames.count else {
+        guard !eSpeakFiles.isEmpty else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        return files.sorted { $0.relativePath < $1.relativePath }
+        // Keep the three root files in the documented pack order. The eSpeak
+        // subtree itself is sorted so its filesystem enumeration cannot alter
+        // the runtime fingerprint.
+        return files + eSpeakFiles.sorted { $0.relativePath < $1.relativePath }
     }
 }
 

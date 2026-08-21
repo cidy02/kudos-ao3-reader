@@ -79,6 +79,32 @@ struct KokoroModelConfigurationTests {
         )
     }
 
+    @Test func runtimeFingerprintKeepsOfficialRootFileOrder() throws {
+        let fileManager = FileManager.default
+        let temporaryRoot = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fileManager.removeItem(at: temporaryRoot) }
+        let eSpeakDirectory = temporaryRoot.appendingPathComponent("espeak-ng-data")
+
+        try fileManager.createDirectory(at: eSpeakDirectory, withIntermediateDirectories: true)
+        for fileName in ["model.onnx", "voices.bin", "tokens.txt"] {
+            try Data(fileName.utf8).write(to: temporaryRoot.appendingPathComponent(fileName))
+        }
+        try Data("z".utf8).write(to: eSpeakDirectory.appendingPathComponent("z"))
+        try Data("a".utf8).write(to: eSpeakDirectory.appendingPathComponent("a"))
+
+        let paths = try TTSDownloadManager.runtimeContentFiles(
+            modelFileName: "model.onnx",
+            in: temporaryRoot
+        ).map(\.relativePath)
+        #expect(paths == [
+            "model.onnx",
+            "voices.bin",
+            "tokens.txt",
+            "espeak-ng-data/a",
+            "espeak-ng-data/z"
+        ])
+    }
+
     @MainActor
     @Test func unverifiedFP32FilesNeverBecomeReady() async throws {
         let fileManager = FileManager.default
