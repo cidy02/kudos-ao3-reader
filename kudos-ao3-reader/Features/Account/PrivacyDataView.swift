@@ -29,8 +29,23 @@ struct PrivacyDataView: View {
                         .font(.subheadline)
                 } footer: {
                     Text("Everything Kudos stores — your library, reading progress, tags, "
-                        + "collections, and AO3 session — stays on this device. Nothing is sent "
-                        + "anywhere except AO3 itself, to load the works you ask for.")
+                        + "collections, and AO3 session — stays on this device. Kudos sends data "
+                        + "only to services you explicitly use, such as AO3 to load a work or an "
+                        + "optional Voice Pack host after you confirm its download.")
+                }
+
+                Section {
+                    Label("Optional Voice Pack downloads stay separate from your reading data.",
+                          systemImage: "waveform")
+                        .font(.subheadline)
+                } header: {
+                    Text("Read Aloud Downloads")
+                } footer: {
+                    Text("Kudos never sends book text, generated audio, AO3 credentials, saved "
+                        + "works, reading history, analytics, or an account identifier to a Voice "
+                        + "Pack host. The host or its CDN can receive your IP address and standard "
+                        + "connection metadata. Kokoro shows this before a Voice Pack downloads; "
+                        + "installed voice files remain on this device.")
                 }
 
                 Section {

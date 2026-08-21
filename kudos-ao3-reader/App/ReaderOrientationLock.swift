@@ -86,5 +86,21 @@ final class KudosAppDelegate: NSObject, UIApplicationDelegate {
     ) -> UIInterfaceOrientationMask {
         MainActor.assumeIsolated { ReaderOrientationLock.shared.mask }
     }
+
+    func application(
+        _: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard identifier == TTSDownloadManager.backgroundSessionIdentifier else {
+            completionHandler()
+            return
+        }
+        Task { @MainActor in
+            TTSDownloadManager.shared.handleBackgroundURLSessionEvents(
+                completionHandler: completionHandler
+            )
+        }
+    }
 }
 #endif

@@ -60,7 +60,7 @@ final class ReaderSpeechController {
     private var ttsService: TTSService?
     private var ttsServiceKind: ReaderTTSEngineKind?
     private var ttsServiceRuntimeConfiguration: KokoroRuntimeConfiguration?
-    private let downloadManager = TTSDownloadManager()
+    private let downloadManager = TTSDownloadManager.shared
     private var stoppedManually = false
     
     /// After a re-anchor while paused, pause again once the first utterance starts.
