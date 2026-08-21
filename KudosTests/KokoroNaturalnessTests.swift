@@ -1,0 +1,271 @@
+#if os(iOS)
+import Foundation
+import ReadiumShared
+import XCTest
+@testable import Kudos
+
+/// Synthetic AO3-like prose covering the hard cases in the long-form Kokoro
+/// naturalness work: dialogue, contractions, scene breaks, headings, and
+/// leftover short utterances. Not copyrighted source text.
+enum KokoroNaturalnessCorpus {
+    static let curlyContraction = "She wasn’t ready."
+    static let asciiContraction = "Don't do that."
+    static let curlyQuoted = "“Don’t do that.”"
+    static let oneWordDialogue = "\"No.\""
+    static let interrupted = "\"Wait—what?\""
+    static let ellipsis = "\"I... don't know.\""
+    static let honorifics = "Dr. Smith walked away. Mr. Potter looked up."
+    static let decimal = "It was 3.14 exactly."
+    static let initials = "The U.S.A. replied."
+    static let splitDialogue = "\"What?\" she asked. \"Why?\""
+    static let rapidExchange = """
+    "Where are you going?"
+    "Home."
+    "You can't."
+    "I can."
+    """
+    static let interruptedPair = """
+    "I told you—"
+    "No. You didn't."
+    """
+    static let names = "Sephiroth met Kakashi near Pallet Town."
+    static let shout = "RUN. HARRY! NOW."
+    static let sceneAndChapter = """
+    Chapter 12
+    Rain stitched the windows.
+    * * *
+    He opened the letter.
+    """
+    static let longNarration = String(
+        repeating: "The corridor stretched on, lined with portraits that whispered as she passed. ",
+        count: 8
+    ) + "She kept walking."
+    static let shortNarration = "Night had fallen."
+    static let mixedChapter: [TTSSpeechUnit] = [
+        unit("Chapter 3", selector: "html > body > h2"),
+        unit("She wasn’t sure.", selector: "html > body > p:nth-child(2)"),
+        unit("\"No.\"", selector: "html > body > p:nth-child(3)"),
+        unit("He stepped backward.", selector: "html > body > p:nth-child(4)"),
+        unit("\"You're lying.\"", selector: "html > body > p:nth-child(5)"),
+        unit("* * *", selector: "html > body > p:nth-child(6)"),
+        unit("Dawn came anyway.", selector: "html > body > p:nth-child(7)")
+    ]
+
+    static func unit(_ text: String, selector: String? = nil) -> TTSSpeechUnit {
+        var locations = Locator.Locations()
+        if let selector {
+            locations.cssSelector = selector
+        }
+        return TTSSpeechUnit(
+            text: text,
+            locator: Locator(
+                href: URL(string: "https://example.invalid/chapter.xhtml")!,
+                mediaType: .xhtml,
+                locations: locations,
+                text: .init(highlight: text)
+            )
+        )
+    }
+}
+
+@MainActor
+final class KokoroNaturalnessTests: XCTestCase {
+    func testCurlyApostropheKeepsNegation() {
+        let words = KokoroSpeechNormalizer.words(in: KokoroNaturalnessCorpus.curlyContraction)
+        XCTAssertEqual(words, ["She", "wasn't", "ready"])
+        XCTAssertFalse(words.contains("was"))
+        XCTAssertFalse(words.contains("nt"))
+        XCTAssertTrue(KokoroSpeechNormalizer.normalize("wasn’t").contains("wasn't"))
+    }
+
+    func testQuotedCurlyContractionIsPreserved() {
+        let words = KokoroSpeechNormalizer.words(in: KokoroNaturalnessCorpus.curlyQuoted)
+        XCTAssertTrue(words.contains { $0.replacingOccurrences(of: "'", with: "").lowercased() == "dont" })
+        XCTAssertFalse(words.contains("Don"))
+        XCTAssertFalse(words.contains("t"))
+    }
+
+    func testEllipsisAndEmDashSurvive() {
+        XCTAssertTrue(KokoroSpeechNormalizer.normalize("Wait--what?").contains("—"))
+        XCTAssertTrue(KokoroSpeechNormalizer.normalize("I... don't know.").contains("…"))
+        XCTAssertTrue(KokoroSpeechNormalizer.normalize(KokoroNaturalnessCorpus.interrupted).contains("—"))
+    }
+
+    func testLineBreakFragmentsStillJoin() {
+        let utterances = KokoroUtterancePacker.pack(units: [
+            KokoroNaturalnessCorpus.unit("She began to", selector: "html > body > p"),
+            KokoroNaturalnessCorpus.unit("read the letter.", selector: "html > body > p")
+        ])
+        let spoken = KokoroUtterancePacker.reconstructedText(from: utterances)
+        XCTAssertEqual(spoken, "She began to read the letter.")
+        XCTAssertFalse(utterances.contains { $0.text == "read" })
+    }
+
+    func testHonorificsAndInitialsStayWithTheSentence() {
+        let utterances = KokoroUtterancePacker.pack(units: [
+            KokoroNaturalnessCorpus.unit(KokoroNaturalnessCorpus.honorifics)
+        ])
+        let spoken = KokoroUtterancePacker.reconstructedText(from: utterances)
+        XCTAssertTrue(spoken.contains("Dr. Smith"))
+        XCTAssertTrue(spoken.contains("Mr. Potter"))
+        XCTAssertFalse(spoken.contains("Dr "))
+    }
+
+    func testShortDialogueMergesInsideAParagraph() {
+        let utterances = KokoroUtterancePacker.pack(units: [
+            KokoroNaturalnessCorpus.unit("\"No.\" He stepped backward. \"You're lying.\"")
+        ])
+        XCTAssertEqual(utterances.count, 1)
+        XCTAssertTrue(utterances[0].text.contains("No."))
+        XCTAssertTrue(utterances[0].text.contains("You're lying."))
+    }
+
+    func testSceneBreakIsNotSpokenAndWidensPause() {
+        let utterances = KokoroUtterancePacker.pack(units: KokoroNaturalnessCorpus.mixedChapter)
+        let spoken = KokoroUtterancePacker.reconstructedText(from: utterances)
+        XCTAssertFalse(spoken.contains("*"))
+        XCTAssertTrue(spoken.contains("She wasn't sure.") || spoken.contains("She wasn't sure.".replacingOccurrences(of: "'", with: "'")))
+        XCTAssertTrue(spoken.contains("Dawn came anyway."))
+        XCTAssertTrue(utterances.contains { $0.pauseAfter == .scene || $0.pauseAfter == .chapter })
+        XCTAssertEqual(utterances.first?.pauseAfter, .chapter)
+    }
+
+    func testHeadingIsItsOwnUtterance() {
+        let utterances = KokoroUtterancePacker.pack(units: KokoroNaturalnessCorpus.mixedChapter)
+        XCTAssertEqual(utterances.first?.text, "Chapter 3")
+    }
+
+    func testPackedChunksStayInsideEmergencyPhonemeCap() {
+        let estimator = KokoroPhonemeEstimator()
+        let units = [KokoroNaturalnessCorpus.unit(KokoroNaturalnessCorpus.longNarration)]
+        let utterances = KokoroUtterancePacker.pack(units: units, estimator: estimator)
+        XCTAssertFalse(utterances.isEmpty)
+        for utterance in utterances {
+            XCTAssertLessThanOrEqual(
+                estimator.estimatePhonemeLength(utterance.text),
+                KokoroPhonemeBudget.modelLimit
+            )
+            XCTAssertLessThanOrEqual(
+                estimator.estimatePhonemeLength(utterance.text),
+                KokoroPhonemeBudget.modelLimit
+            )
+        }
+    }
+
+    func testLongCompleteSentenceIsNotCutToHitTheGroupingTarget() {
+        let sentence = """
+        When she finally reached the end of the corridor, the portraits had \
+        gone silent, the candles had burned down to nubs, and the only sound \
+        left was her own breath against the cold stone, which felt less like \
+        victory than like the moment before a door opens.
+        """
+        let estimator = KokoroPhonemeEstimator()
+        let estimate = estimator.estimatePhonemeLength(sentence)
+        XCTAssertGreaterThan(estimate, KokoroPhonemeBudget.preferredTarget)
+        XCTAssertLessThan(estimate, KokoroPhonemeBudget.modelLimit)
+
+        let utterances = KokoroUtterancePacker.pack(
+            units: [KokoroNaturalnessCorpus.unit(sentence)],
+            estimator: estimator
+        )
+        XCTAssertEqual(utterances.count, 1)
+        XCTAssertEqual(utterances[0].text, KokoroSpeechNormalizer.normalize(sentence))
+        XCTAssertFalse(utterances[0].text.hasSuffix("corridor,"))
+    }
+
+    func testPackingGroupsWholeSentencesWithoutSplittingThem() {
+        let first = "The corridor stretched on, lined with portraits that whispered as she passed."
+        let second = "She kept walking toward the stair."
+        let utterances = KokoroUtterancePacker.pack(units: [
+            KokoroNaturalnessCorpus.unit("\(first) \(second)")
+        ])
+        XCTAssertEqual(utterances.count, 1)
+        XCTAssertTrue(utterances[0].text.contains(first))
+        XCTAssertTrue(utterances[0].text.contains(second))
+        XCTAssertEqual(
+            KokoroUtterancePacker.completeSentences(in: utterances[0].text).count,
+            2
+        )
+    }
+
+    func testLongParagraphDoesNotLeaveATinyTail() {
+        let estimator = KokoroPhonemeEstimator()
+        let sentences = (0 ..< 12).map { "This is a measured sentence number \($0) about walking down a hall." }
+        let units = [KokoroNaturalnessCorpus.unit(sentences.joined(separator: " "))]
+        let utterances = KokoroUtterancePacker.pack(units: units, estimator: estimator)
+        XCTAssertGreaterThan(utterances.count, 1)
+        let estimates = utterances.map { estimator.estimatePhonemeLength($0.text) }
+        if let last = estimates.last, estimates.count >= 2 {
+            XCTAssertGreaterThan(last, KokoroPhonemeBudget.shortFragment)
+        }
+    }
+
+    func testReconstructedTextKeepsAuthorWordsInOrder() {
+        let units: [TTSSpeechUnit] = [
+            KokoroNaturalnessCorpus.unit("Don't do that."),
+            KokoroNaturalnessCorpus.unit("\"No.\""),
+            KokoroNaturalnessCorpus.unit("Wait—what?"),
+            KokoroNaturalnessCorpus.unit("I... don't know."),
+            KokoroNaturalnessCorpus.unit("Dr. Smith walked away."),
+            KokoroNaturalnessCorpus.unit("It was 3.14 exactly.")
+        ]
+        let spoken = KokoroUtterancePacker.reconstructedText(
+            from: KokoroUtterancePacker.pack(units: units)
+        )
+        XCTAssertTrue(spoken.contains("Don't"))
+        XCTAssertTrue(spoken.contains("No."))
+        XCTAssertTrue(spoken.contains("Wait"))
+        XCTAssertTrue(spoken.contains("don't know"))
+        XCTAssertTrue(spoken.contains("Dr. Smith"))
+        XCTAssertTrue(spoken.contains("3.14"))
+    }
+
+    func testPauseAssemblerTrimsEdgeSilenceAndInsertsBoundary() {
+        var samples = Array(repeating: Float(0), count: 2400)
+        for i in 600 ..< 1800 {
+            samples[i] = 0.2 * sin(Float(i) / 10)
+        }
+        let assembled = KokoroPauseAssembler.assemble(
+            samples: samples,
+            sampleRate: 24_000,
+            pauseAfter: .paragraph
+        )
+        let pauseSamples = Int((KokoroBoundary.paragraph.pauseSeconds * 24_000).rounded())
+        XCTAssertGreaterThan(assembled.count, pauseSamples)
+        XCTAssertLessThan(assembled.count, samples.count + pauseSamples)
+        XCTAssertEqual(assembled.suffix(pauseSamples).allSatisfy { $0 == 0 }, true)
+    }
+
+    func testPronunciationLayersWorkWins() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kokoro-pronunciations-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var file = KokoroPronunciationStore.empty
+        file.global = ["Kakashi": "global"]
+        file.fandoms = ["Naruto": ["Kakashi": "fandom"]]
+        file.works = ["work-1": ["Kakashi": "work"]]
+        let store = KokoroPronunciationStore(url: url)
+        try store.save(file)
+        XCTAssertEqual(store.lexicon()["Kakashi"], "global")
+        XCTAssertEqual(store.lexicon(fandom: "Naruto")["Kakashi"], "fandom")
+        XCTAssertEqual(store.lexicon(fandom: "Naruto", workID: "work-1")["Kakashi"], "work")
+    }
+
+    func testPhonemeCacheInvalidatesOnRevision() {
+        let cache = KokoroSpeechSessionCache(capacity: 8)
+        cache.store(phonemes: "həlˈO", for: "hello", revision: "1")
+        XCTAssertEqual(cache.phonemeString(for: "hello", revision: "1"), "həlˈO")
+        XCTAssertNil(cache.phonemeString(for: "hello", revision: "2"))
+    }
+
+    func testSentenceBaselineProducesMoreUtterancesThanSemanticPacking() {
+        let units = [KokoroNaturalnessCorpus.unit(
+            "\"No.\" He stepped backward. \"You're lying.\" Rain stitched the windows. She kept walking."
+        )]
+        let sentences = TTSSpeechUnit.sentenceChunks(from: units)
+        let packed = KokoroUtterancePacker.pack(units: units)
+        XCTAssertGreaterThan(sentences.count, packed.count)
+        XCTAssertGreaterThanOrEqual(packed.count, 1)
+    }
+}
+#endif

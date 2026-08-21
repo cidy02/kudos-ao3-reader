@@ -14,15 +14,10 @@ struct ReaderSpeechSettingsSection: View {
     private var rate = ReaderSpeechPreferences.defaultRate
     @AppStorage(ReaderSpeechPreferences.pitchKey)
     private var pitch = ReaderSpeechPreferences.defaultPitch
-    @AppStorage(ReaderSpeechPreferences.kokoroModelPackKey)
-    private var kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
-    @AppStorage(ReaderSpeechPreferences.kokoroExecutionProviderKey)
-    private var kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
 
     @State private var voices: [TTSVoice] = []
-    @State private var downloadManager = TTSDownloadManager.shared
-    @State private var kokoroService: SherpaKokoroTTSService?
-    @State private var cachedKokoroRuntimeConfiguration: KokoroRuntimeConfiguration?
+    @State private var kokoroInstaller = CoreMLKokoroPackInstaller.shared
+    @State private var kokoroService: TTSService?
     @State private var isShowingKokoroDownloadConfirmation = false
 
     private var sortedVoices: [TTSVoice] {
@@ -50,42 +45,9 @@ struct ReaderSpeechSettingsSection: View {
                 }
             }
 
-            Picker("Kokoro model", selection: $kokoroModelPackID) {
-                ForEach(KokoroModelPack.allCases, id: \.rawValue) { pack in
-                    Text(pack.displayName).tag(pack.rawValue)
-                }
-            }
-
-            Picker("Kokoro compute", selection: $kokoroExecutionProviderID) {
-                ForEach(KokoroExecutionProvider.allCases, id: \.rawValue) { provider in
-                    Text(provider.displayName).tag(provider.rawValue)
-                }
-            }
-
-            if selectedKokoroExecutionProvider == .coreML {
-                Label(
-                    "Core ML is requested experimentally; it does not guarantee Neural Engine use.",
-                    systemImage: "info.circle"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            if selectedKokoroModelPack.requiresInt8SupportFiles &&
-                !isSelectedKokoroModelPackDownloaded {
-                Label(
-                    "FP32 downloads only the official model.onnx from Hugging Face "
-                        + "and reuses the Int8 Voice Pack voices, tokens, and eSpeak data. "
-                        + "Kudos uses Int8 or Apple until that finishes.",
-                    systemImage: "externaldrive"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
             if isKokoroAwaitingVoicePack {
                 Label(
-                    "Kokoro requires the Voice Pack. Apple is used until it finishes.",
+                    "Kokoro Neural Engine pack is not ready. Apple is used until it is.",
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
@@ -129,188 +91,113 @@ struct ReaderSpeechSettingsSection: View {
                 voiceID = ""
                 rate = ReaderSpeechPreferences.defaultRate
                 pitch = ReaderSpeechPreferences.defaultPitch
-                kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
-                kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
             }
         } header: {
             Text("Read Aloud")
         } footer: {
             Text(
-                "Automatic uses Apple immediately, then Kokoro after its optional offline "
-                    + "Int8 Voice Pack is downloaded. Full precision (FP32) is an explicit "
-                    + "Hugging Face download of csukuangfj/kokoro-en-v0_19 model.onnx; "
-                    + "Kudos does not send reading data, library data, or telemetry."
+                "Automatic uses Apple immediately, then Kokoro on the Neural Engine "
+                    + "after the optional Core ML pack is installed. Kudos does not send "
+                    + "reading data, library data, or telemetry."
             )
         }
         .onAppear {
             normalizeEngineID()
-            normalizeKokoroConfiguration()
-            downloadManager.refreshStatus(for: selectedKokoroModelPack)
             updateVoices()
         }
-        .onChange(of: downloadManager.status) { _, _ in
-            if downloadManager.statusPack != selectedKokoroModelPack {
-                downloadManager.refreshStatus(for: selectedKokoroModelPack)
-            }
-            updateVoices()
-        }
+        .onChange(of: kokoroInstaller.status) { _, _ in updateVoices() }
         .onChange(of: engineID) { _, _ in updateVoices() }
-        .onChange(of: kokoroModelPackID) { _, _ in
-            normalizeKokoroConfiguration()
-            downloadManager.refreshStatus(for: selectedKokoroModelPack)
-            updateVoices()
-        }
-        .onChange(of: kokoroExecutionProviderID) { _, _ in
-            normalizeKokoroConfiguration()
-            updateVoices()
-        }
     }
 
     @ViewBuilder
     private var downloadSection: some View {
         Section {
-            if selectedKokoroModelPack.requiresInt8SupportFiles,
-               !downloadManager.isModelDownloaded(for: .int8V019),
-               !isBusyWithSelectedPack {
-                Label(
-                    "Download the Int8 Voice Pack first. FP32 reuses its voices, "
-                        + "tokens, and eSpeak data and never unpacks the 320 MB tar.",
-                    systemImage: "info.circle"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
             packStatusViews
         } header: {
-            Text("Kokoro Pack")
+            Text("Kokoro Neural Engine")
         } footer: {
-            Text(downloadDisclosure)
+            Text(
+                "Kokoro runs as staged Core ML graphs on the Apple Neural Engine "
+                    + "(FluidAudio), not Sherpa/ONNX. The pack is dense FP16 "
+                    + "(no 8-bit palettes; Noise and Tail stay FP32). The first "
+                    + "install downloads the zip from this project's GitHub Releases. "
+                    + "Kudos sends no book text, audio, or library data; GitHub "
+                    + "can receive your IP address and ordinary connection metadata."
+            )
         }
         .confirmationDialog(
-            "Download \(selectedKokoroModelPack.displayName) Voice Pack?",
+            "Download Kokoro for the Neural Engine?",
             isPresented: $isShowingKokoroDownloadConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Download \(selectedPackSizeLabel)") {
-                startSelectedPackDownload()
+            Button("Download") {
+                kokoroInstaller.install()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "Kudos will request this public Voice Pack from \(selectedPackHostName). No "
-                    + "reading or library data is sent, but the host/CDN can receive your IP "
-                    + "address and standard "
-                    + "connection metadata."
+                "Kudos will download the Core ML Kokoro zip from GitHub Releases "
+                    + "(cidy02/kudos-ao3-reader). No reading or library data is sent, "
+                    + "but GitHub can receive your IP address and standard connection "
+                    + "metadata."
             )
         }
     }
 
     @ViewBuilder
     private var packStatusViews: some View {
-        switch downloadManager.status {
-        case .downloading(let progress) where isBusyWithSelectedPack:
+        switch kokoroInstaller.status {
+        case .downloading(let progress):
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: progress)
-                Text(selectedKokoroModelPack.requiresInt8SupportFiles
-                     ? "Downloading official FP32 model from Hugging Face… \(Int(progress * 100))%"
-                     : "Downloading... \(Int(progress * 100))%")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Button("Cancel", role: .cancel) {
-                    downloadManager.cancel()
+                HStack {
+                    Text("Downloading… \(Int(progress * 100))%")
+                        .font(.caption)
+                    Spacer()
+                    Button("Cancel", role: .cancel) {
+                        kokoroInstaller.cancel()
+                    }
                 }
             }
-        case .extracting where isBusyWithSelectedPack:
-            busyRow("Extracting...")
-        case .installing where isBusyWithSelectedPack:
-            busyRow("Installing official FP32 model…")
-        case .verifying where isBusyWithSelectedPack:
-            busyRow(
-                selectedKokoroModelPack.requiresInt8SupportFiles
-                    ? "Verifying official FP32 runtime…"
-                    : "Verifying side-loaded pack..."
-            )
-        case .cancelling where isBusyWithSelectedPack:
+        case .installing:
             HStack {
                 ProgressView()
                     .padding(.trailing, 8)
-                Text("Cancelling…")
+                Text("Installing Core ML Kokoro…")
                 Spacer()
             }
-        case .completed where isSelectedKokoroModelPackDownloaded:
+        case .completed:
             HStack {
-                Text(selectedKokoroModelPack.requiresInt8SupportFiles
-                     ? "FP32 Pack Installed"
-                     : "Voice Pack Downloaded")
+                Text("Neural Engine pack ready")
                 Spacer()
                 Image(systemName: "checkmark")
                     .foregroundColor(.green)
             }
-        case .failed(let error) where downloadManager.statusPack == selectedKokoroModelPack:
+        case .failed(let error):
             VStack(alignment: .leading, spacing: 8) {
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.red)
-                downloadOrRetryButton(title: "Retry Download")
+                Button("Retry Download") {
+                    isShowingKokoroDownloadConfirmation = true
+                }
             }
-        case .idle, .completed, .failed, .downloading, .extracting, .installing, .verifying,
-             .cancelling:
-            downloadOrRetryButton(
-                title: selectedKokoroModelPack.requiresInt8SupportFiles
-                    ? "Download Official FP32 Model"
-                    : "Download Voice Pack"
-            )
-        }
-    }
-
-    private func busyRow(_ title: String) -> some View {
-        HStack {
-            ProgressView()
-                .padding(.trailing, 8)
-            Text(title)
-            Spacer()
-            Button("Cancel", role: .cancel) {
-                downloadManager.cancel()
+        case .idle:
+            Button("Download Kokoro (Neural Engine)") {
+                isShowingKokoroDownloadConfirmation = true
             }
-        }
-    }
-
-    private func downloadOrRetryButton(title: String) -> some View {
-        Button(title) {
-            isShowingKokoroDownloadConfirmation = true
-        }
-        .disabled(
-            selectedKokoroModelPack.requiresInt8SupportFiles
-                && !downloadManager.isModelDownloaded(for: .int8V019)
-        )
-    }
-
-    private func startSelectedPackDownload() {
-        let pack = selectedKokoroModelPack
-        Task {
-            try? await downloadManager.downloadModel(for: pack)
         }
     }
 
     private func updateVoices() {
         switch effectiveEngineKind {
         case .kokoro:
-            guard let runtimeConfiguration = effectiveKokoroRuntimeConfiguration else {
-                voices = []
-                return
-            }
-            if cachedKokoroRuntimeConfiguration != runtimeConfiguration {
-                kokoroService = SherpaKokoroTTSService(
-                    modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
-                    modelPack: runtimeConfiguration.modelPack,
-                    executionProvider: runtimeConfiguration.executionProvider
-                )
-                cachedKokoroRuntimeConfiguration = runtimeConfiguration
+            if kokoroService == nil {
+                kokoroService = CoreMLKokoroTTSService()
             }
             voices = kokoroService?.availableVoices ?? []
         case .system:
             kokoroService = nil
-            cachedKokoroRuntimeConfiguration = nil
             voices = ReaderSpeechPreferences.catalogVoices()
         }
     }
@@ -322,82 +209,16 @@ struct ReaderSpeechSettingsSection: View {
         engineID = ""
     }
 
-    private func normalizeKokoroConfiguration() {
-        let modelPack = KokoroModelPack.resolving(kokoroModelPackID)
-        if kokoroModelPackID != modelPack.rawValue {
-            kokoroModelPackID = modelPack.rawValue
-        }
-        let provider = KokoroExecutionProvider.resolving(kokoroExecutionProviderID)
-        if kokoroExecutionProviderID != provider.rawValue {
-            kokoroExecutionProviderID = provider.rawValue
-        }
-    }
-
     private var effectiveEngineKind: ReaderTTSEngineKind {
         ReaderTTSEngineKind.effective(
             requestedRawValue: engineID,
-            modelDownloaded: effectiveKokoroRuntimeConfiguration != nil
+            modelDownloaded: KokoroAneAvailability.isUsableForPlayback
         )
     }
 
     private var isKokoroAwaitingVoicePack: Bool {
         engineID == ReaderTTSEngineKind.kokoro.rawValue
-            && effectiveKokoroRuntimeConfiguration == nil
-    }
-
-    private var selectedKokoroModelPack: KokoroModelPack {
-        KokoroModelPack.resolving(kokoroModelPackID)
-    }
-
-    private var selectedKokoroExecutionProvider: KokoroExecutionProvider {
-        KokoroExecutionProvider.resolving(kokoroExecutionProviderID)
-    }
-
-    private var isSelectedKokoroModelPackDownloaded: Bool {
-        downloadManager.isModelDownloaded(for: selectedKokoroModelPack)
-    }
-
-    private var isBusyWithSelectedPack: Bool {
-        downloadManager.statusPack == selectedKokoroModelPack
-    }
-
-    private var selectedPackSizeLabel: String {
-        switch selectedKokoroModelPack {
-        case .int8V019:
-            return "103 MB"
-        case .fp32V019:
-            let megabytes = KokoroModelPack.fp32V019.expectedModelByteCount / 1_000_000
-            return "\(megabytes) MB"
-        }
-    }
-
-    private var selectedPackHostName: String {
-        selectedKokoroModelPack.requiresInt8SupportFiles ? "Hugging Face" : "GitHub"
-    }
-
-    private var downloadDisclosure: String {
-        let prefix: String
-        if selectedKokoroModelPack.requiresInt8SupportFiles {
-            prefix = "FP32 downloads the \(selectedPackSizeLabel) public model from Hugging Face "
-                + "at a pinned revision. Allow up to 900 MB free during install."
-        } else {
-            prefix = "The Int8 Voice Pack downloads its public archive from GitHub."
-        }
-        return prefix + " Kudos sends no book text, audio, AO3 credentials, library, reading "
-            + "history, analytics, or account identifier. The host or its CDN can receive your "
-            + "IP address and standard connection/request metadata under its privacy policy."
-    }
-
-    private var effectiveKokoroRuntimeConfiguration: KokoroRuntimeConfiguration? {
-        KokoroRuntimeConfiguration.resolved(
-            requested: KokoroRuntimeConfiguration(
-                modelPack: selectedKokoroModelPack,
-                executionProvider: selectedKokoroExecutionProvider
-            ),
-            isModelDownloaded: { pack in
-                downloadManager.isModelDownloaded(for: pack)
-            }
-        )
+            && !KokoroAneAvailability.isPackInstalled
     }
 
     private var voicePicker: some View {

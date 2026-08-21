@@ -46,13 +46,15 @@ reaches a terminal state.
 
 ## Core ML
 
-The current compute picker requests ONNX Runtime's experimental Core ML
-execution provider for Sherpa. It is not a native Core ML Kokoro pipeline and
-does not guarantee Neural Engine use: unsupported graph segments can run on
-CPU/GPU. A native route needs a separately pinned Core ML model bundle, a
-`NativeCoreMLKokoroTTSService`, offline provisioning, per-device compute-plan
-validation, and physical-device stress testing. It must not be represented as
-available until those assets and tests land.
+Playback no longer uses Sherpa or ONNX Runtime's experimental Core ML EP.
+iOS Read Aloud uses FluidAudio `KokoroAneManager` (`CoreMLKokoroTTSService`)
+with default per-stage compute units so Albert / PostAlbert / Alignment /
+Vocoder stay on the Neural Engine. The FP32 ONNX installer in this document
+is historical: it is not wired for playback.
+
+FluidAudio still documents a BNNS `EXC_BAD_ACCESS` on iOS 26.4–26.6 (no
+confirmed iOS 26.x fix; iOS 27 is the first unflagged iOS line). Kudos does
+not hide Kokoro behind that check. See `docs/TTS_KOKORO_ARCHITECTURE.md`.
 
 ## Why FP16 is not listed
 
@@ -69,12 +71,10 @@ validation before it can be offered.
   uses the legacy BZip2/TAR extraction path and materializes that smaller
   archive in memory. A one-tap, memory-safe first install needs a separately
   pinned support-file distribution.
-- Native Core ML / ANE: FluidAudio and similar Core ML Kokoro conversions are
-  a different graph (typically hexgrad Kokoro-82M stages), auto-download from
-  Hugging Face by default, and cannot consume the official Sherpa v0.19
-  `model.onnx` + Int8 support layout. Their ANE paths are multi-stage and do
-  not prove whole-model Neural Engine placement. No native Core ML backend is
-  wired in this build.
+- Native Core ML / ANE: FluidAudio KokoroAne is now the iOS playback backend
+  (`CoreMLKokoroTTSService`). It cannot consume the Sherpa v0.19 `model.onnx`
+  + Int8 support layout. Four stages run on the Neural Engine by default; Noise
+  and Tail stay on GPU.
 - Licensing remains a release review item: Kokoro and Sherpa are Apache-2.0;
   the packaged eSpeak NG data needs its GPL-3.0-or-later attribution and source
   offer handled in the app's third-party notices before a public release.

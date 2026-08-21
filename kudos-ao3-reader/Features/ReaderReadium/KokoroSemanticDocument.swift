@@ -1,0 +1,184 @@
+import Foundation
+import ReadiumShared
+
+/// Pause that should follow an utterance, chosen from EPUB structure rather
+/// than whatever silence Kokoro emitted at the clip edge.
+nonisolated public enum KokoroBoundary: Int, Sendable, Comparable {
+    case none = 0
+    case continuation = 1
+    case paragraph = 2
+    case scene = 3
+    case chapter = 4
+
+    public static func < (lhs: KokoroBoundary, rhs: KokoroBoundary) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    public var pauseSeconds: Double {
+        switch self {
+        case .none: 0
+        case .continuation: 0.14
+        case .paragraph: 0.32
+        case .scene: 0.85
+        case .chapter: 1.25
+        }
+    }
+}
+
+nonisolated struct KokoroSemanticBlock: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case heading
+        case paragraph
+        case dialogue
+        case blockquote
+        case sceneBreak
+    }
+
+    var kind: Kind
+    var text: String
+    var locator: Locator?
+    var selector: String?
+}
+
+nonisolated enum KokoroSemanticDocument {
+    static func blocks(from units: [TTSSpeechUnit]) -> [KokoroSemanticBlock] {
+        var open: KokoroSemanticBlock?
+        var result: [KokoroSemanticBlock] = []
+
+        func flush() {
+            guard var block = open else { return }
+            block.text = KokoroSpeechNormalizer.normalize(block.text)
+            if !block.text.isEmpty || block.kind == .sceneBreak {
+                result.append(block)
+            }
+            open = nil
+        }
+
+        for unit in units {
+            let raw = unit.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { continue }
+            let selector = unit.locator?.locations.cssSelector
+            let kind = classify(text: raw, selector: selector)
+
+            if kind == .sceneBreak {
+                flush()
+                result.append(KokoroSemanticBlock(
+                    kind: .sceneBreak,
+                    text: "",
+                    locator: unit.locator,
+                    selector: selector
+                ))
+                continue
+            }
+
+            if let current = open, canJoin(current, kind: kind, selector: selector) {
+                open?.text = join(current.text, raw)
+                continue
+            }
+
+            flush()
+            open = KokoroSemanticBlock(
+                kind: kind,
+                text: raw,
+                locator: unit.locator,
+                selector: selector
+            )
+        }
+        flush()
+        return result
+    }
+
+    private static func classify(text: String, selector: String?) -> KokoroSemanticBlock.Kind {
+        if looksLikeSceneBreak(text: text, selector: selector) { return .sceneBreak }
+        if looksLikeHeading(text: text, selector: selector) { return .heading }
+        if let selector, selector.range(
+            of: #"(^|[\s>+~])blockquote(\b|[:.\[])"#,
+            options: .regularExpression
+        ) != nil {
+            return .blockquote
+        }
+        let normalized = KokoroSpeechNormalizer.normalize(text)
+        if normalized.first == "\"" { return .dialogue }
+        return .paragraph
+    }
+
+    private static func looksLikeHeading(text: String, selector: String?) -> Bool {
+        if let selector, selector.range(
+            of: #"(^|[\s>+~])h[1-6](\b|[:.\[])"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+        let trimmed = KokoroSpeechNormalizer.normalize(text)
+        guard trimmed.count <= 80 else { return false }
+        return trimmed.range(
+            of: #"^(Chapter|Epilogue|Prologue|Preface|Afterword|Interlude|Part)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func looksLikeSceneBreak(text: String, selector: String?) -> Bool {
+        if let selector, selector.range(
+            of: #"(^|[\s>+~])hr(\b|[:.\[])"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+        let compact = text.filter { !$0.isWhitespace }
+        guard (3...12).contains(compact.count) else { return false }
+        return compact.allSatisfy { "*•·●◦▪-–—_=~#".contains($0) }
+    }
+
+    private static func canJoin(
+        _ open: KokoroSemanticBlock,
+        kind: KokoroSemanticBlock.Kind,
+        selector: String?
+    ) -> Bool {
+        if open.kind == .heading || open.kind == .sceneBreak { return false }
+        if kind == .heading || kind == .sceneBreak { return false }
+        if let left = open.selector, let right = selector, left == right {
+            return true
+        }
+        if endsUtterance(open.text) { return false }
+        return isBody(open.kind) && isBody(kind)
+    }
+
+    private static func isBody(_ kind: KokoroSemanticBlock.Kind) -> Bool {
+        switch kind {
+        case .paragraph, .dialogue, .blockquote: true
+        case .heading, .sceneBreak: false
+        }
+    }
+
+    private static func endsUtterance(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last else { return false }
+        if ")]}\"".contains(last) {
+            let inner = trimmed.dropLast().trimmingCharacters(in: .whitespaces)
+            return inner.last.map { ".!?…".contains($0) } ?? false
+        }
+        return ".!?…".contains(last)
+    }
+
+    private static func join(_ left: String, _ right: String) -> String {
+        let piece = right.trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = left.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return piece }
+        if needsSpace(before: piece, in: text) {
+            text.append(" ")
+        }
+        text.append(piece)
+        return text
+    }
+
+    private static func needsSpace(before piece: String, in text: String) -> Bool {
+        guard let last = text.last, let first = piece.first else { return false }
+        if last.isWhitespace || first.isWhitespace { return false }
+        switch first {
+        case ".", ",", ";", ":", "!", "?", "…", ")", "]", "}":
+            return false
+        default:
+            return true
+        }
+    }
+}
