@@ -20,9 +20,10 @@ struct ReaderSpeechSettingsSection: View {
     private var kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
 
     @State private var voices: [TTSVoice] = []
-    @State private var downloadManager = TTSDownloadManager()
+    @State private var downloadManager = TTSDownloadManager.shared
     @State private var kokoroService: SherpaKokoroTTSService?
     @State private var cachedKokoroRuntimeConfiguration: KokoroRuntimeConfiguration?
+    @State private var isShowingKokoroDownloadConfirmation = false
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -70,12 +71,13 @@ struct ReaderSpeechSettingsSection: View {
                 .foregroundStyle(.secondary)
             }
 
-            if selectedKokoroModelPack.requiresDeveloperInstallation &&
+            if selectedKokoroModelPack.requiresInt8SupportFiles &&
                 !isSelectedKokoroModelPackDownloaded {
                 Label(
-                    "FP32 is a developer-installed test pack. Kudos uses the available Int8 pack "
-                        + "or Apple until it is verified; no compatible FP16 pack is available.",
-                    systemImage: "wrench.and.screwdriver"
+                    "FP32 downloads only the official model.onnx from Hugging Face "
+                        + "and reuses the Int8 Voice Pack voices, tokens, and eSpeak data. "
+                        + "Kudos uses Int8 or Apple until that finishes.",
+                    systemImage: "externaldrive"
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -135,7 +137,9 @@ struct ReaderSpeechSettingsSection: View {
         } footer: {
             Text(
                 "Automatic uses Apple immediately, then Kokoro after its optional offline "
-                    + "Int8 Voice Pack is downloaded. FP32 is an on-device benchmark pack."
+                    + "Int8 Voice Pack is downloaded. Full precision (FP32) is an explicit "
+                    + "Hugging Face download of csukuangfj/kokoro-en-v0_19 model.onnx; "
+                    + "Kudos does not send reading data, library data, or telemetry."
             )
         }
         .onAppear {
@@ -165,104 +169,126 @@ struct ReaderSpeechSettingsSection: View {
     @ViewBuilder
     private var downloadSection: some View {
         Section {
-            if selectedKokoroModelPack.requiresDeveloperInstallation {
-                switch downloadManager.status {
-                case .verifying where downloadManager.statusPack == selectedKokoroModelPack:
-                    HStack {
-                        ProgressView()
-                            .padding(.trailing, 8)
-                        Text("Verifying FP32 Test Pack...")
-                    }
-                case .completed where isSelectedKokoroModelPackDownloaded:
-                    HStack {
-                        Text("FP32 Test Pack Verified")
-                        Spacer()
-                        Image(systemName: "checkmark")
-                            .foregroundColor(.green)
-                    }
-                case .failed(let error) where downloadManager.statusPack == selectedKokoroModelPack:
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("FP32 verification failed: \(error)")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                        Button("Verify Side-Loaded FP32 Pack") {
-                            Task {
-                                await downloadManager.verifyDeveloperInstalledModelPack(
-                                    selectedKokoroModelPack
-                                )
-                            }
-                        }
-                    }
-                default:
-                    Label(
-                        "FP32 must be side-loaded then verified; the app will not unpack its 320 MB archive in memory.",
-                        systemImage: "externaldrive"
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    Button("Verify Side-Loaded FP32 Pack") {
-                        Task {
-                            await downloadManager.verifyDeveloperInstalledModelPack(
-                                selectedKokoroModelPack
-                            )
-                        }
-                    }
-                }
-            } else {
-                switch downloadManager.status {
-                case .downloading(let progress):
-                    VStack(alignment: .leading, spacing: 4) {
-                        ProgressView(value: progress)
-                        Text("Downloading... \(Int(progress * 100))%")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                case .extracting:
-                    HStack {
-                        ProgressView()
-                            .padding(.trailing, 8)
-                        Text("Extracting...")
-                    }
-                case .verifying:
-                    HStack {
-                        ProgressView()
-                            .padding(.trailing, 8)
-                        Text("Verifying side-loaded pack...")
-                    }
-                case .completed where isSelectedKokoroModelPackDownloaded:
-                    HStack {
-                        Text("Voice Pack Downloaded")
-                        Spacer()
-                        Image(systemName: "checkmark")
-                            .foregroundColor(.green)
-                    }
-                case .idle, .completed:
-                    Button("Download Voice Pack") {
-                        Task {
-                            try? await downloadManager.downloadModel(for: selectedKokoroModelPack)
-                        }
-                    }
-                case .failed(let error) where downloadManager.statusPack == selectedKokoroModelPack:
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Download failed: \(error)")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                        Button("Retry Download") {
-                            Task {
-                                try? await downloadManager.downloadModel(for: selectedKokoroModelPack)
-                            }
-                        }
-                    }
-                case .failed:
-                    Button("Download Voice Pack") {
-                        Task {
-                            try? await downloadManager.downloadModel(for: selectedKokoroModelPack)
-                        }
-                    }
-                }
+            if selectedKokoroModelPack.requiresInt8SupportFiles,
+               !downloadManager.isModelDownloaded(for: .int8V019),
+               !isBusyWithSelectedPack {
+                Label(
+                    "Download the Int8 Voice Pack first. FP32 reuses its voices, "
+                        + "tokens, and eSpeak data and never unpacks the 320 MB tar.",
+                    systemImage: "info.circle"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
+            packStatusViews
         } header: {
             Text("Kokoro Pack")
+        } footer: {
+            Text(downloadDisclosure)
+        }
+        .confirmationDialog(
+            "Download \(selectedKokoroModelPack.displayName) Voice Pack?",
+            isPresented: $isShowingKokoroDownloadConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Download \(selectedPackSizeLabel)") {
+                startSelectedPackDownload()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Kudos will request this public Voice Pack from \(selectedPackHostName). No "
+                    + "reading or library data is sent, but the host/CDN can receive your IP "
+                    + "address and standard "
+                    + "connection metadata."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var packStatusViews: some View {
+        switch downloadManager.status {
+        case .downloading(let progress) where isBusyWithSelectedPack:
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView(value: progress)
+                Text(selectedKokoroModelPack.requiresInt8SupportFiles
+                     ? "Downloading official FP32 model from Hugging Face… \(Int(progress * 100))%"
+                     : "Downloading... \(Int(progress * 100))%")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Button("Cancel", role: .cancel) {
+                    downloadManager.cancel()
+                }
+            }
+        case .extracting where isBusyWithSelectedPack:
+            busyRow("Extracting...")
+        case .installing where isBusyWithSelectedPack:
+            busyRow("Installing official FP32 model…")
+        case .verifying where isBusyWithSelectedPack:
+            busyRow(
+                selectedKokoroModelPack.requiresInt8SupportFiles
+                    ? "Verifying official FP32 runtime…"
+                    : "Verifying side-loaded pack..."
+            )
+        case .cancelling where isBusyWithSelectedPack:
+            HStack {
+                ProgressView()
+                    .padding(.trailing, 8)
+                Text("Cancelling…")
+                Spacer()
+            }
+        case .completed where isSelectedKokoroModelPackDownloaded:
+            HStack {
+                Text(selectedKokoroModelPack.requiresInt8SupportFiles
+                     ? "FP32 Pack Installed"
+                     : "Voice Pack Downloaded")
+                Spacer()
+                Image(systemName: "checkmark")
+                    .foregroundColor(.green)
+            }
+        case .failed(let error) where downloadManager.statusPack == selectedKokoroModelPack:
+            VStack(alignment: .leading, spacing: 8) {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                downloadOrRetryButton(title: "Retry Download")
+            }
+        case .idle, .completed, .failed, .downloading, .extracting, .installing, .verifying,
+             .cancelling:
+            downloadOrRetryButton(
+                title: selectedKokoroModelPack.requiresInt8SupportFiles
+                    ? "Download Official FP32 Model"
+                    : "Download Voice Pack"
+            )
+        }
+    }
+
+    private func busyRow(_ title: String) -> some View {
+        HStack {
+            ProgressView()
+                .padding(.trailing, 8)
+            Text(title)
+            Spacer()
+            Button("Cancel", role: .cancel) {
+                downloadManager.cancel()
+            }
+        }
+    }
+
+    private func downloadOrRetryButton(title: String) -> some View {
+        Button(title) {
+            isShowingKokoroDownloadConfirmation = true
+        }
+        .disabled(
+            selectedKokoroModelPack.requiresInt8SupportFiles
+                && !downloadManager.isModelDownloaded(for: .int8V019)
+        )
+    }
+
+    private func startSelectedPackDownload() {
+        let pack = selectedKokoroModelPack
+        Task {
+            try? await downloadManager.downloadModel(for: pack)
         }
     }
 
@@ -329,6 +355,37 @@ struct ReaderSpeechSettingsSection: View {
 
     private var isSelectedKokoroModelPackDownloaded: Bool {
         downloadManager.isModelDownloaded(for: selectedKokoroModelPack)
+    }
+
+    private var isBusyWithSelectedPack: Bool {
+        downloadManager.statusPack == selectedKokoroModelPack
+    }
+
+    private var selectedPackSizeLabel: String {
+        switch selectedKokoroModelPack {
+        case .int8V019:
+            return "103 MB"
+        case .fp32V019:
+            let megabytes = KokoroModelPack.fp32V019.expectedModelByteCount / 1_000_000
+            return "\(megabytes) MB"
+        }
+    }
+
+    private var selectedPackHostName: String {
+        selectedKokoroModelPack.requiresInt8SupportFiles ? "Hugging Face" : "GitHub"
+    }
+
+    private var downloadDisclosure: String {
+        let prefix: String
+        if selectedKokoroModelPack.requiresInt8SupportFiles {
+            prefix = "FP32 downloads the \(selectedPackSizeLabel) public model from Hugging Face "
+                + "at a pinned revision. Allow up to 900 MB free during install."
+        } else {
+            prefix = "The Int8 Voice Pack downloads its public archive from GitHub."
+        }
+        return prefix + " Kudos sends no book text, audio, AO3 credentials, library, reading "
+            + "history, analytics, or account identifier. The host or its CDN can receive your "
+            + "IP address and standard connection/request metadata under its privacy policy."
     }
 
     private var effectiveKokoroRuntimeConfiguration: KokoroRuntimeConfiguration? {
