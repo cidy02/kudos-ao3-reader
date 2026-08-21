@@ -95,6 +95,70 @@ final class TTSSpeechUnitTests: XCTestCase {
         XCTAssertEqual(chunks[0].locator, locator)
     }
 
+    func testLineBreakFragmentsJoinIntoOneSentence() {
+        let chunks = TTSSpeechUnit.sentenceChunks(
+            from: [
+                TTSSpeechUnit(text: "She began to", locator: makeLocator(highlight: "She began to")),
+                TTSSpeechUnit(text: "read the letter."),
+            ]
+        )
+
+        XCTAssertEqual(chunks.map(\.text), ["She began to read the letter."])
+        XCTAssertFalse(chunks.contains(where: { $0.text == "read" }))
+    }
+
+    func testIsolatedHomographIsNotItsOwnUtterance() {
+        let chunks = TTSSpeechUnit.sentenceChunks(
+            from: [
+                TTSSpeechUnit(text: "I will"),
+                TTSSpeechUnit(text: "read"),
+                TTSSpeechUnit(text: "it now."),
+            ]
+        )
+
+        XCTAssertEqual(chunks.map(\.text), ["I will read it now."])
+    }
+
+    func testCompleteSentencesStaySeparateAfterJoin() {
+        let chunks = TTSSpeechUnit.sentenceChunks(
+            from: [
+                TTSSpeechUnit(text: "He opened the door."),
+                TTSSpeechUnit(text: "Night had fallen."),
+            ]
+        )
+
+        XCTAssertEqual(chunks.map(\.text), [
+            "He opened the door.",
+            "Night had fallen."
+        ])
+    }
+
+    func testTrailingFragmentJoinsTheFollowingLine() {
+        let chunks = TTSSpeechUnit.sentenceChunks(
+            from: [
+                TTSSpeechUnit(text: "He stopped."),
+                TTSSpeechUnit(text: "Then he"),
+                TTSSpeechUnit(text: "continued walking."),
+            ]
+        )
+
+        XCTAssertEqual(chunks.map(\.text), [
+            "He stopped.",
+            "Then he continued walking."
+        ])
+    }
+
+    func testAttachingPunctuationDoesNotInsertASpace() {
+        let chunks = TTSSpeechUnit.sentenceChunks(
+            from: [
+                TTSSpeechUnit(text: "She said hello"),
+                TTSSpeechUnit(text: "."),
+            ]
+        )
+
+        XCTAssertEqual(chunks.map(\.text), ["She said hello."])
+    }
+
     private func makeLocator(highlight: String) -> Locator {
         Locator(
             href: URL(string: "https://example.invalid/chapter.xhtml")!,

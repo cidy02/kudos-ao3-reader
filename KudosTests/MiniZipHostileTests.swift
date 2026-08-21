@@ -289,4 +289,73 @@ struct MiniZipHostileTests {
             ])
         }
     }
+
+    // MARK: - 11. Nested Core ML packages and directory entries
+
+    /// The Kokoro Neural Engine zip stores `.mlmodelc` bundles (and ZIP
+    /// directory markers with a trailing slash). Extraction must not treat
+    /// those as path traversal, including when the destination is reached
+    /// through a symlink the way iOS tmp (`/var` → `/private/var`) is.
+    @Test func nestedMlmodelcZipExtractsThroughASymlinkRoot() throws {
+        let archive = try MiniZip.archiveData([
+            (name: "kokoro-82m-coreml/ANE/KokoroVocoder.mlmodelc/weights/weight.bin", data: Data("weights".utf8)),
+            (name: "kokoro-82m-coreml/ANE/KokoroVocoder.mlmodelc/coremldata.bin", data: Data("coreml".utf8)),
+            (name: "kokoro-82m-coreml/ANE/vocab.json", data: Data("{}".utf8))
+        ])
+        // Directory-only entries are stored as a trailing-slash name with
+        // empty payload. Rebuild with an extra directory marker.
+        let withDirs = buildArchive([
+            RawEntry(name: "kokoro-82m-coreml/", payload: Data()),
+            RawEntry(name: "kokoro-82m-coreml/ANE/", payload: Data()),
+            RawEntry(
+                name: "kokoro-82m-coreml/ANE/KokoroVocoder.mlmodelc/weights/weight.bin",
+                payload: Data("weights".utf8)
+            ),
+            RawEntry(name: "kokoro-82m-coreml/ANE/vocab.json", payload: Data("{}".utf8)),
+            RawEntry(name: "__MACOSX/._vocab.json", payload: Data("junk".utf8)),
+            RawEntry(name: "kokoro-82m-coreml/ANE/._af_heart.bin", payload: Data("fork".utf8))
+        ])
+
+        let cachesRoot = freshTempDir()
+        defer { try? FileManager.default.removeItem(at: cachesRoot) }
+        let real = cachesRoot.appendingPathComponent("real", isDirectory: true)
+        let link = cachesRoot.appendingPathComponent("link", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+
+        let zip = try MiniZip(data: withDirs, limits: .kokoroAne)
+        let dest = link.appendingPathComponent("unpacked", isDirectory: true)
+        try zip.unzip(to: dest)
+
+        #expect(FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent(
+                "kokoro-82m-coreml/ANE/KokoroVocoder.mlmodelc/weights/weight.bin"
+            ).path
+        ))
+        #expect(try Data(contentsOf: dest.appendingPathComponent(
+            "kokoro-82m-coreml/ANE/vocab.json"
+        )) == Data("{}".utf8))
+        #expect(!FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent("__MACOSX/._vocab.json").path
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: dest.appendingPathComponent("kokoro-82m-coreml/ANE/._af_heart.bin").path
+        ))
+
+        let roundTrip = try MiniZip(data: archive, limits: .kokoroAne)
+        let dest2 = link.appendingPathComponent("roundtrip", isDirectory: true)
+        try roundTrip.unzip(to: dest2)
+        #expect(try Data(contentsOf: dest2.appendingPathComponent(
+            "kokoro-82m-coreml/ANE/KokoroVocoder.mlmodelc/coremldata.bin"
+        )) == Data("coreml".utf8))
+    }
+
+    @Test func trailingSlashDirectoryNamedDotDotIsRejected() {
+        let archive = buildArchive([
+            RawEntry(name: "../", payload: Data())
+        ])
+        #expect(throws: MiniZipError.pathTraversal) {
+            _ = try MiniZip(data: archive)
+        }
+    }
 }

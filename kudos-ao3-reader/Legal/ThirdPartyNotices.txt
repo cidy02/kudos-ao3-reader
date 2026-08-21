@@ -462,6 +462,79 @@ fails the build if any pinned package identity has no entry here.
 
 ------------------------------------------------------------------------------
 
+10. FluidAudio
+   Package identity: fluidaudio
+   https://github.com/FluidInference/FluidAudio
+   License: Apache License 2.0
+
+   Copyright Fluid Inference contributors.
+   Licensed under the Apache License, Version 2.0. The full Apache 2.0 text
+   is reproduced under DifferenceKit in this file.
+
+   Kokoro-82M Core ML stages are derived from laishere/kokoro-coreml and
+   hexgrad/Kokoro-82M (Apache-2.0). After user consent the app downloads
+   compiled graphs. Kudos mirrors the English ANE + G2P files on GitHub
+   Releases (cidy02/kudos-ao3-reader, tag kokoro-ane-coreml-fp16-1).
+   FluidAudio also vendors NemoTextProcessing (Apache-2.0 binary target).
+
+------------------------------------------------------------------------------
+
+11. SWCompression
+   Package identity: swcompression
+   https://github.com/tsolomko/SWCompression
+   Pinned revision: 03a68e67991815a267e28174a0a01fbe0cff937b (version 4.9.1)
+   License: MIT
+
+   Copyright (c) Timofey Solomko
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+------------------------------------------------------------------------------
+
+12. BitByteData (transitive, SWCompression)
+   Package identity: bitbytedata
+   https://github.com/tsolomko/BitByteData
+   Pinned revision: e1a5443be67daf0833cbb5f4fa3a06a265ca3105 (version 2.1.0)
+   License: MIT
+
+   Copyright (c) Timofey Solomko
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+------------------------------------------------------------------------------
+
 MuPDF (vendored binary, not a Swift package)
 
    https://mupdf.com — https://github.com/ArtifexSoftware/mupdf

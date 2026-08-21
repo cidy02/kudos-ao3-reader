@@ -23,6 +23,6 @@ nonisolated enum Log {
     static let library = Logger(subsystem: subsystem, category: "library")
     /// Mature-content privacy decisions (reveals, biometric gating).
     static let privacy = Logger(subsystem: subsystem, category: "privacy")
-    /// Reader TTS (system `AVSpeechSynthesizer` + Kokoro/sherpa-onnx), download, and transport.
+    /// Reader TTS (system `AVSpeechSynthesizer` + FluidAudio Kokoro ANE), download, and transport.
     static let tts = Logger(subsystem: subsystem, category: "tts")
 }

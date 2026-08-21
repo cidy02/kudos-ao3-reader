@@ -13,7 +13,7 @@ enum ReaderTTSEngineKind: String, CaseIterable {
     var displayName: String {
         switch self {
         case .system: "Apple"
-        case .kokoro: "Kokoro Offline"
+        case .kokoro: "Kokoro (Neural Engine)"
         }
     }
 
@@ -67,57 +67,179 @@ public struct TTSSpeechUnit: Hashable, Sendable {
         from units: [TTSSpeechUnit],
         maxLength: Int = 250
     ) -> [TTSSpeechUnit] {
-        chunks(from: units, maxLength: maxLength, using: TextChunker.chunk)
+        packAdjacent(
+            splitIntoContextualSentences(from: units, maxLength: maxLength),
+            maxLength: maxLength
+        )
     }
 
-    /// Gives the Kokoro engine complete sentence units and carries their
-    /// individual source locations into the playback callbacks.
+    /// Gives Kokoro complete sentences, including those Readium split across
+    /// `<br>` / adjacent block elements. G2P is per-word; an isolated fragment
+    /// like "read" is pronounced as a citation form instead of the verb in
+    /// "began to read the letter".
     @MainActor
     public static func sentenceChunks(
         from units: [TTSSpeechUnit],
         maxLength: Int = 250
     ) -> [TTSSpeechUnit] {
-        chunks(from: units, maxLength: maxLength, using: TextChunker.sentenceChunks)
+        splitIntoContextualSentences(from: units, maxLength: maxLength)
+    }
+
+    /// Semantic + phoneme-aware utterances for Neural Engine Kokoro. Apple
+    /// TTS still uses `packedChunks`; this path is Kokoro-only.
+    @MainActor
+    public static func kokoroUtterances(from units: [TTSSpeechUnit]) -> [KokoroUtterance] {
+        KokoroUtterancePacker.pack(units: units)
     }
 
     @MainActor
-    private static func chunks(
+    private static func splitIntoContextualSentences(
         from units: [TTSSpeechUnit],
-        maxLength: Int,
-        using chunker: (String, Int) -> [String]
+        maxLength: Int
     ) -> [TTSSpeechUnit] {
-        units.flatMap { unit in
-            let chunkTexts = chunker(unit.text, maxLength)
-            guard let locator = unit.locator,
-                  let source = locator.text.highlight,
-                  !source.isEmpty
-            else {
-                return chunkTexts.map { TTSSpeechUnit(text: $0, locator: unit.locator) }
-            }
+        let joined = concatenateForSentenceContext(units)
+        guard !joined.text.isEmpty else { return [] }
 
-            var searchStart = source.startIndex
-            var hasExactRange = true
-            return chunkTexts.map { text in
-                guard hasExactRange,
-                      let range = whitespaceInsensitiveRange(
-                          matchingWhitespaceIn: text,
-                          source: source,
-                          startingAt: searchStart
-                      )
-                else {
-                    hasExactRange = false
-                    // TextualContentElement.text can differ slightly from
-                    // locator text after EPUB whitespace normalization. Keep
-                    // the element locator instead of inventing a bad range.
-                    return TTSSpeechUnit(text: text, locator: locator)
-                }
+        let sentences = TextChunker.sentenceChunks(text: joined.text, maxLength: maxLength)
+        var searchStart = joined.text.startIndex
+        var highlightSearchStart: [Int: String.Index] = [:]
+        return sentences.map { sentence in
+            let range = whitespaceInsensitiveRange(
+                matchingWhitespaceIn: sentence,
+                source: joined.text,
+                startingAt: searchStart
+            ) ?? joined.text.range(of: sentence, range: searchStart ..< joined.text.endIndex)
+            if let range {
                 searchStart = range.upperBound
                 return TTSSpeechUnit(
-                    text: text,
-                    locator: locator.copy(text: { $0 = $0[range] })
+                    text: sentence,
+                    locator: locator(
+                        covering: range,
+                        in: joined,
+                        highlightSearchStart: &highlightSearchStart
+                    )
                 )
             }
+            // Fall back to the span we are *currently* inside, not
+            // `spans.first` — that sent the reader's highlight back to the top
+            // of the chapter whenever a sentence failed to match.
+            return TTSSpeechUnit(
+                text: sentence,
+                locator: span(containing: searchStart, in: joined)?.locator
+            )
         }
+    }
+
+    /// The span owning `index`, for the no-match fallback. Spans are built in
+    /// document order, so the last one starting at or before `index` contains it.
+    private static func span(
+        containing index: String.Index,
+        in joined: JoinedSpeechText
+    ) -> (range: Range<String.Index>, locator: Locator?)? {
+        joined.spans.last { $0.range.lowerBound <= index } ?? joined.spans.first
+    }
+
+    @MainActor
+    private static func packAdjacent(
+        _ sentences: [TTSSpeechUnit],
+        maxLength: Int
+    ) -> [TTSSpeechUnit] {
+        let maximumLength = max(1, maxLength)
+        var packed: [TTSSpeechUnit] = []
+        var currentText = ""
+        var currentLocator: Locator?
+
+        for sentence in sentences {
+            if currentText.isEmpty {
+                currentText = sentence.text
+                currentLocator = sentence.locator
+            } else if currentText.count + 1 + sentence.text.count <= maximumLength {
+                currentText += " " + sentence.text
+            } else {
+                packed.append(TTSSpeechUnit(text: currentText, locator: currentLocator))
+                currentText = sentence.text
+                currentLocator = sentence.locator
+            }
+        }
+        if !currentText.isEmpty {
+            packed.append(TTSSpeechUnit(text: currentText, locator: currentLocator))
+        }
+        return packed
+    }
+
+    private struct JoinedSpeechText {
+        let text: String
+        let spans: [(range: Range<String.Index>, locator: Locator?)]
+    }
+
+    /// Space-joins Readium content elements so a sentence broken by `<br>`
+    /// (or a split inline run) is one G2P input. No extra space before
+    /// attaching punctuation.
+    private static func concatenateForSentenceContext(_ units: [TTSSpeechUnit]) -> JoinedSpeechText {
+        var text = ""
+        var spans: [(range: Range<String.Index>, locator: Locator?)] = []
+
+        for unit in units {
+            let piece = unit.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !piece.isEmpty else { continue }
+
+            if !text.isEmpty, needsJoinSpace(before: piece, in: text) {
+                text.append(" ")
+            }
+            let start = text.endIndex
+            text.append(piece)
+            spans.append((start ..< text.endIndex, unit.locator))
+        }
+        return JoinedSpeechText(text: text, spans: spans)
+    }
+
+    private static func needsJoinSpace(before piece: String, in text: String) -> Bool {
+        guard let last = text.last, let first = piece.first else { return false }
+        if last.isWhitespace || first.isWhitespace { return false }
+        switch first {
+        case ".", ",", ";", ":", "!", "?", "…", ")", "]", "}":
+            return false
+        default:
+            return true
+        }
+    }
+
+    @MainActor
+    private static func locator(
+        covering range: Range<String.Index>,
+        in joined: JoinedSpeechText,
+        highlightSearchStart: inout [Int: String.Index]
+    ) -> Locator? {
+        guard let spanIndex = joined.spans.firstIndex(where: { $0.range.overlaps(range) }) else {
+            return nil
+        }
+        // Spans are in document order, so everything overlapping `range` is
+        // contiguous from `spanIndex`. A full `filter` rescanned every span in
+        // the chapter for every sentence in it.
+        let overlapCount = joined.spans[spanIndex...]
+            .prefix { $0.range.overlaps(range) }
+            .count
+        let first = joined.spans[spanIndex]
+        guard overlapCount == 1, let locator = first.locator else {
+            return first.locator?.copy(text: {
+                $0 = Locator.Text(highlight: String(joined.text[range]))
+            })
+        }
+
+        guard let source = locator.text.highlight, !source.isEmpty else {
+            return locator
+        }
+        let spoken = String(joined.text[range])
+        let start = highlightSearchStart[spanIndex] ?? source.startIndex
+        if let sliced = whitespaceInsensitiveRange(
+            matchingWhitespaceIn: spoken,
+            source: source,
+            startingAt: start
+        ) {
+            highlightSearchStart[spanIndex] = sliced.upperBound
+            return locator.copy(text: { $0 = $0[sliced] })
+        }
+        return locator
     }
 
     /// Resolves an AVSpeechSynthesizer word/phrase range back into this unit's

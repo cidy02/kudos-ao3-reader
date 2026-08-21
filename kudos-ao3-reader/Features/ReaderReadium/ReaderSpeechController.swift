@@ -11,9 +11,12 @@ import UIKit
 /// and mini player call; it extracts the current chapter's text from Readium's
 /// `Publication.content(from:)` and hands it to a `TTSService`.
 ///
-/// **Engine:** `SystemTTSService` (Apple `AVSpeechSynthesizer` via Readium
-/// `AVTTSEngine`) until the Kokoro pack is on disk, then
-/// `SherpaKokoroTTSService`. Selection is re-checked each time speech starts.
+/// **Engine ladder:** `CoreMLKokoroTTSService` (FluidAudio staged graphs on
+/// the Neural Engine) → `SherpaKokoroTTSService` (sherpa-onnx) →
+/// `SystemTTSService` (Apple `AVSpeechSynthesizer`). Core ML is used whenever
+/// its pack is installed and `KokoroAneHealth` has not recorded repeated
+/// synthesis crashes on this device; Sherpa covers the device where it has.
+/// Selection is re-checked each time speech starts.
 ///
 /// **Audio session:** owned by the active `TTSService` (`.playback` /
 /// `.spokenAudio` / long-form).
@@ -161,8 +164,14 @@ final class ReaderSpeechController {
     private func preferredEngineKind() -> ReaderTTSEngineKind {
         ReaderTTSEngineKind.effective(
             requestedRawValue: ReaderSpeechPreferences.engineIdentifier,
-            modelDownloaded: resolvedKokoroRuntimeConfiguration() != nil
+            modelDownloaded: coreMLKokoroIsUsable || resolvedKokoroRuntimeConfiguration() != nil
         )
+    }
+
+    /// The Core ML pack is installed *and* synthesis has not repeatedly died
+    /// on this device. See `KokoroAneHealth`.
+    private var coreMLKokoroIsUsable: Bool {
+        KokoroAneAvailability.isUsableForPlayback && !KokoroAneHealth.hasAbandonedCoreML
     }
 
     /// Falls back to the installed Int8 pack when a requested FP32 benchmark
@@ -177,15 +186,23 @@ final class ReaderSpeechController {
         )
     }
 
+    /// Kokoro degrades **Core ML → Sherpa/ONNX → Apple**, never Core ML →
+    /// Apple. The libBNNS fault the Core ML path can hit (FluidAudio #817) is
+    /// a SIGSEGV, so Sherpa is the only thing standing between a repeatedly
+    /// crashing device and losing neural TTS altogether.
     private func makeTTSService(
         for kind: ReaderTTSEngineKind,
         runtimeConfiguration: KokoroRuntimeConfiguration?
     ) -> TTSService {
         switch kind {
         case .kokoro:
+            if coreMLKokoroIsUsable {
+                return CoreMLKokoroTTSService()
+            }
             guard let runtimeConfiguration else {
                 return SystemTTSService()
             }
+            Log.tts.info("Kokoro falling back to Sherpa/ONNX (Core ML unavailable)")
             return SherpaKokoroTTSService(
                 modelDirectory: downloadManager.modelDirectory(for: runtimeConfiguration.modelPack),
                 modelPack: runtimeConfiguration.modelPack,
@@ -197,10 +214,11 @@ final class ReaderSpeechController {
     }
 
     private func installTTSService(for kind: ReaderTTSEngineKind) {
-        let runtimeConfiguration = kind == .kokoro
+        let runtimeConfiguration = kind == .kokoro && !coreMLKokoroIsUsable
             ? resolvedKokoroRuntimeConfiguration()
             : nil
-        let effectiveKind: ReaderTTSEngineKind = kind == .kokoro && runtimeConfiguration == nil
+        let hasAnyKokoro = coreMLKokoroIsUsable || runtimeConfiguration != nil
+        let effectiveKind: ReaderTTSEngineKind = kind == .kokoro && !hasAnyKokoro
             ? .system
             : kind
         installTTSService(
@@ -214,7 +232,7 @@ final class ReaderSpeechController {
     /// Unbinds callbacks before `stop()` so a swap cannot auto-skip a chapter.
     private func ensureEngineForPlayback() {
         let kind = preferredEngineKind()
-        let runtimeConfiguration = kind == .kokoro
+        let runtimeConfiguration = kind == .kokoro && !coreMLKokoroIsUsable
             ? resolvedKokoroRuntimeConfiguration()
             : nil
         guard KokoroRuntimeConfiguration.needsEngineReplacement(

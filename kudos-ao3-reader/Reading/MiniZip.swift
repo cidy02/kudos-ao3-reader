@@ -80,6 +80,15 @@ nonisolated struct MiniZip {
         /// caps bound what a hostile archive can make the reader allocate
         /// (per entry, and per restore in total) while comfortably covering
         /// any real library.
+        /// Dense FP16 Kokoro ANE zip: vocoder `weight.bin` is ~98 MB, total
+        /// uncompressed payload ~180 MB. Headroom covers a future denser pack.
+        static let kokoroAne = Limits(
+            maxEntryCount: 10_000,
+            maxSingleEntryUncompressedSize: 400_000_000,
+            maxTotalUncompressedSize: 2_000_000_000,
+            maxCompressionRatio: 1100
+        )
+
         static let backup = Limits(
             maxEntryCount: 250_000,
             maxSingleEntryUncompressedSize: 1_000_000_000,
@@ -161,11 +170,11 @@ nonisolated struct MiniZip {
             // hostile entry name fails the archive before any preflight caller
             // (`EPUBDocument.inspectPackage`, used by the backup-restore EPUB
             // validator) can treat the archive as safe just because it never
-            // happened to read that specific entry by name.
+            // happened to read that specific entry by name. Directory entries
+            // (`foo/`) are checked after stripping the trailing slash so a
+            // `../` directory cannot skip the traversal rules.
             guard seenNames.insert(name).inserted else { throw MiniZipError.malformedArchive }
-            if !name.hasSuffix("/") {
-                _ = try MiniZip.validatedRelativePath(name)
-            }
+            _ = try MiniZip.validatedRelativePath(name)
             parsed.append(ZipEntry(
                 name: name,
                 method: method,
@@ -215,12 +224,20 @@ nonisolated struct MiniZip {
         )
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: staging) }
-        let stagingRoot = staging.standardizedFileURL.path
+        // Resolve once after the directory exists so iOS `/var` vs `/private/var`
+        // (and any other symlink tmp root) cannot make a nested dest look like
+        // it escaped the staging prefix. Destinations are built from this
+        // canonical root, not mixed with the unresolved URL.
+        let stagingRootURL = URL(fileURLWithPath: staging.path, isDirectory: true)
+            .resolvingSymlinksInPath()
+        let stagingRoot = stagingRootURL.path
 
         for entry in entries where !entry.name.hasSuffix("/") {
+            if MiniZip.isZipJunk(entry.name) { continue }
             let relativePath = try MiniZip.validatedRelativePath(entry.name)
-            let dest = staging.appendingPathComponent(relativePath).standardizedFileURL
-            guard dest.path == stagingRoot || dest.path.hasPrefix(stagingRoot + "/") else {
+            let dest = MiniZip.destinationURL(relativePath: relativePath, under: stagingRootURL)
+            let destPath = dest.resolvingSymlinksInPath().path
+            guard destPath == stagingRoot || destPath.hasPrefix(stagingRoot + "/") else {
                 throw MiniZipError.pathTraversal
             }
             let bytes = try extract(entry)
@@ -450,8 +467,10 @@ nonisolated struct MiniZip {
 
     /// Normalizes an archive entry name into a safe path relative to the
     /// extraction root, rejecting absolute paths, `..` traversal, backslash
-    /// traversal, and drive/scheme-like prefixes (`C:\`, `file://`). The
-    /// standardized-path containment check in `unzip` is a second, independent
+    /// traversal, and drive/scheme-like prefixes (`C:\`, `file://`). A single
+    /// trailing slash (ZIP directory marker) is stripped before the empty-
+    /// component check so legitimate `foo/` entries are not treated as
+    /// traversal. The containment check in `unzip` is a second, independent
     /// line of defense on top of this.
     private static func validatedRelativePath(_ rawName: String) throws -> String {
         guard !rawName.isEmpty, !rawName.contains("\\"), !rawName.contains("\0") else {
@@ -461,12 +480,38 @@ nonisolated struct MiniZip {
            rawName.distance(from: rawName.startIndex, to: colon) <= 2 {
             throw MiniZipError.pathTraversal
         }
-        let components = rawName.split(separator: "/", omittingEmptySubsequences: false)
+        var name = rawName
+        while name.hasSuffix("/") {
+            name.removeLast()
+        }
+        guard !name.isEmpty else { throw MiniZipError.pathTraversal }
+        let components = name.split(separator: "/", omittingEmptySubsequences: false)
         guard let first = components.first, !first.isEmpty else { throw MiniZipError.pathTraversal }
         guard !components.contains(where: { $0 == ".." || $0.isEmpty }) else {
             throw MiniZipError.pathTraversal
         }
-        return rawName
+        return name
+    }
+
+    /// AppleDouble / macOS resource-fork entries are not path traversal, but
+    /// they are not payload. Skipping them keeps Core ML `.mlmodelc` trees
+    /// loadable after a `ditto` or Finder zip.
+    private static func isZipJunk(_ name: String) -> Bool {
+        let parts = name.split(separator: "/", omittingEmptySubsequences: true)
+        return parts.contains { $0 == "__MACOSX" || $0.hasPrefix("._") }
+    }
+
+    /// Builds `root/a/b/c` by appending one component at a time. Passing a
+    /// slash-containing string to `appendingPathComponent` is undefined on
+    /// some iOS URL implementations and is what made the Kokoro Neural Engine
+    /// zip fail with `pathTraversal` on device.
+    private static func destinationURL(relativePath: String, under root: URL) -> URL {
+        let parts = relativePath.split(separator: "/", omittingEmptySubsequences: true)
+        var dest = root
+        for (index, part) in parts.enumerated() {
+            dest = dest.appendingPathComponent(String(part), isDirectory: index + 1 < parts.count)
+        }
+        return dest
     }
 }
 

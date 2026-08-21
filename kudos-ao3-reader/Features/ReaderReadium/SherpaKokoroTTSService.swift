@@ -1,3 +1,4 @@
+#if os(iOS)
 import AVFoundation
 import Foundation
 import OSLog
@@ -9,6 +10,10 @@ import ReadiumShared
 #elseif canImport(sherpa_onnx)
 import sherpa_onnx
 #else
+// Deliberately loud. This engine is the ONLY fallback for the Core ML path:
+// the libBNNS fault it covers (FluidAudio #817) is a SIGSEGV, so nothing can
+// catch it at runtime. Silently compiling this file away leaves Kokoro users
+// dropping straight to Apple TTS.
 #error("sherpa-onnx Swift module is not linked (expected import SherpaOnnx)")
 #endif
 
@@ -759,3 +764,4 @@ private extension SherpaKokoroTTSService {
         return nil
     }
 }
+#endif
