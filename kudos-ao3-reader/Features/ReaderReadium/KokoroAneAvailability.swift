@@ -17,6 +17,26 @@ nonisolated enum KokoroAneAvailability: Sendable {
         modelsDirectory.appendingPathComponent(readyMarkerFileName)
     }
 
+    /// Where the unpacked pack's `<voice>.bin` style vectors live.
+    ///
+    /// Mirrors `FluidAudio.TtsCacheDirectory.ensure()` — Application Support
+    /// (deliberately *not* Caches, which the system can reclaim under disk
+    /// pressure) plus the `Models/kokoro-82m-coreml/ANE` layout that
+    /// `CoreMLKokoroPackInstaller` writes. Duplicated rather than called
+    /// because that type lives behind `canImport(FluidAudio)`;
+    /// `KokoroVoiceCatalogTests` pins the two together.
+    static var packVoicesDirectory: URL {
+        let support = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!
+        return support
+            .appendingPathComponent("fluidaudio", isDirectory: true)
+            .appendingPathComponent("Models", isDirectory: true)
+            .appendingPathComponent("kokoro-82m-coreml", isDirectory: true)
+            .appendingPathComponent("ANE", isDirectory: true)
+    }
+
     static var isPackInstalled: Bool {
         guard let marker = try? String(contentsOf: readyMarkerURL, encoding: .utf8) else {
             return false

@@ -71,9 +71,10 @@ final class CoreMLKokoroPackInstaller {
         try await seedCacheFromGitHub()
         status = .installing
         let units = KokoroAnePlayback.computeUnits
-        Log.tts.info(
-            "Kokoro compute units: \(KokoroAnePlayback.prefersGpuOverBnns() ? "cpuAndGpu (avoid iOS 26 BNNS)" : "default ANE", privacy: .public)"
-        )
+        let routing = KokoroAneHealth.currentTier == .neuralEngine
+            ? "default (ANE per stage)"
+            : "cpuOnly (crash recorded)"
+        Log.tts.info("Kokoro compute units: \(routing, privacy: .public)")
         let created = KokoroAneManager(
             directory: try TtsCacheDirectory.ensure().appendingPathComponent("Models"),
             computeUnits: units

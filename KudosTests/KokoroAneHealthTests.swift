@@ -10,8 +10,10 @@ struct KokoroAneHealthTests {
         #expect(KokoroAneHealth.tier(forStrikes: 0) == .neuralEngine)
     }
 
-    @Test func oneCrashRoutesAroundBnnsButKeepsCoreML() {
-        #expect(KokoroAneHealth.tier(forStrikes: 1) == .coreMLAvoidingBnns)
+    /// One crash drops the ANE but keeps Core ML. The demotion is `cpuOnly`,
+    /// not `cpuAndGpu`: Metal is the *other* known-bad path on iOS 27 (#843).
+    @Test func oneCrashDropsToCpuOnlyButKeepsCoreML() {
+        #expect(KokoroAneHealth.tier(forStrikes: 1) == .coreMLCpuOnly)
     }
 
     @Test func repeatedCrashesHandOffToSherpa() {
@@ -101,6 +103,65 @@ struct KokoroPronunciationRevisionTests {
         try store.save(file)
 
         #expect(store.resolved().revision == store.resolved().revision)
+    }
+}
+
+@Suite("Kokoro voice catalog")
+struct KokoroVoiceCatalogTests {
+    @Test func parsesLocaleAndGenderFromTheIdentifier() throws {
+        let bella = try #require(KokoroVoiceCatalog.voice(forIdentifier: "af_bella"))
+        #expect(bella.name == "Bella")
+        #expect(bella.gender == .female)
+        #expect(bella.language.code.bcp47 == "en-US")
+
+        let george = try #require(KokoroVoiceCatalog.voice(forIdentifier: "bm_george"))
+        #expect(george.name == "George")
+        #expect(george.gender == .male)
+        #expect(george.language.code.bcp47 == "en-GB")
+    }
+
+    /// Non-English locales need a G2P frontend the English variant lacks, so
+    /// they must not appear even if their `.bin` is present.
+    @Test func rejectsLocalesTheEnglishFrontendCannotSpeak() {
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "jf_alpha") == nil)
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "zm_yunxi") == nil)
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "ef_dora") == nil)
+    }
+
+    @Test func rejectsMalformedIdentifiers() {
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "") == nil)
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "af") == nil)
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "af_") == nil)
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "axx_bella") == nil)
+        #expect(KokoroVoiceCatalog.voice(forIdentifier: "ax_bella") == nil)
+    }
+
+    @Test func readsVoicesFromTheInstalledPackDirectory() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kokoro-voices-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        for name in ["af_heart.bin", "bm_george.bin", "vocab.json", "zm_yunxi.bin"] {
+            try Data().write(to: dir.appendingPathComponent(name))
+        }
+        let voices = KokoroVoiceCatalog.installedVoices(in: dir)
+        #expect(voices.map(\.identifier) == ["af_heart", "bm_george"])
+        #expect(KokoroVoiceCatalog.defaultIdentifier(among: voices) == "af_heart")
+    }
+
+    @Test func emptyPackDirectoryYieldsNoVoices() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kokoro-absent-\(UUID().uuidString)", isDirectory: true)
+        #expect(KokoroVoiceCatalog.installedVoices(in: missing).isEmpty)
+    }
+
+    /// `packVoicesDirectory` duplicates FluidAudio's `TtsCacheDirectory`
+    /// layout; if upstream moves, this is what catches it.
+    @Test func packDirectoryMatchesFluidAudioLayout() {
+        let path = KokoroAneAvailability.packVoicesDirectory.path
+        #expect(path.hasSuffix("/fluidaudio/Models/kokoro-82m-coreml/ANE"))
+        #expect(path.contains("Application Support"))
     }
 }
 #endif

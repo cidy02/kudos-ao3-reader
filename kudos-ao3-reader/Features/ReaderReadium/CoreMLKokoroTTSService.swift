@@ -27,7 +27,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     public private(set) var speechEnergy: Double = 0
     public private(set) var speechEnergySeed: Double = 0
 
-    public var availableVoices: [TTSVoice] = CoreMLKokoroTTSService.catalogVoices
+    public var availableVoices: [TTSVoice] = KokoroVoiceCatalog.installedVoices()
 
     public var onStatusChange: ((TTSServiceStatus) -> Void)?
     public var onSpokenTextChange: ((String) -> Void)?
@@ -45,22 +45,11 @@ public final class CoreMLKokoroTTSService: TTSService {
     private var playbackFormat: AVAudioFormat?
     private var pauseWaiters: [CheckedContinuation<Void, Never>] = []
     private var currentSpeed: Float = 1.0
-    private var currentVoice: String = "af_heart"
+    private var currentVoice: String = KokoroVoiceCatalog.defaultIdentifier(
+        among: KokoroVoiceCatalog.installedVoices()
+    )
     private let phonemeCache = KokoroSpeechSessionCache()
     private let pronunciations = KokoroPronunciationStore()
-
-    private static let catalogVoices: [TTSVoice] = {
-        let language = Language(code: .bcp47("en"))
-        return [
-            TTSVoice(
-                identifier: "af_heart",
-                language: language,
-                name: "Heart",
-                gender: .female,
-                quality: .higher
-            )
-        ]
-    }()
 
     public init() {
         attachPlayerNodeIfNeeded()
