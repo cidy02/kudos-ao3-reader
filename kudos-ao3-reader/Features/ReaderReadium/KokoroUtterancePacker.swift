@@ -219,17 +219,41 @@ nonisolated enum KokoroUtterancePacker {
         }
         if !current.isEmpty { groups.append(current) }
 
+        // A block's *last* group is whatever the loop above could not fit
+        // anywhere, so it is systematically the runt: measured across 12
+        // formatting-diverse works, block tails are 2–3× more likely to fall
+        // below `preferredMin` than mid-block pieces, in every single work.
+        //
+        // Fragmentation is the cost, not the length itself — a genuinely short
+        // block *should* be a short utterance (a line of dialogue, a text
+        // message), and Kokoro handles those well. What hurts is a long
+        // paragraph shedding a stub, because every extra utterance is another
+        // independent synthesis with its own prosody reset.
         if groups.count >= 2,
            let last = groups.last,
-           estimator.estimatePhonemeLength(last.joined(separator: " ")) < KokoroPhonemeBudget.preferredMin,
-           groups[groups.count - 2].count >= 2
+           estimator.estimatePhonemeLength(last.joined(separator: " ")) < KokoroPhonemeBudget.preferredMin
         {
-            var previous = groups[groups.count - 2]
-            let stolen = previous.removeLast()
-            groups[groups.count - 2] = previous
-            groups[groups.count - 1] = [stolen] + last
-            if groups[groups.count - 2].isEmpty {
-                groups.remove(at: groups.count - 2)
+            let previous = groups[groups.count - 2]
+            let combined = previous + last
+            if estimator.estimatePhonemeLength(combined.joined(separator: " "))
+                <= KokoroPhonemeBudget.softUpper
+            {
+                // Absorb the stub outright: one utterance instead of two, and
+                // unlike stealing it cannot leave a new runt behind. Bounded by
+                // `softUpper` rather than `preferredMax` because merging two
+                // already-grouped pieces is worth a little slack.
+                groups.removeLast()
+                groups[groups.count - 1] = combined
+            } else if previous.count >= 2 {
+                // Too big to merge — rebalance instead, moving one sentence
+                // across so neither side is starved.
+                var trimmed = previous
+                let stolen = trimmed.removeLast()
+                groups[groups.count - 2] = trimmed
+                groups[groups.count - 1] = [stolen] + last
+                if groups[groups.count - 2].isEmpty {
+                    groups.remove(at: groups.count - 2)
+                }
             }
         }
 

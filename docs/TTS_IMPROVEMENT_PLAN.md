@@ -220,9 +220,23 @@ everything below is provisional without it.
       Fix in our layer: down-case an all-caps token before G2P unless it is a
       known initialism. Costs nothing expressively; Kokoro ignores
       capitalization for emphasis entirely `[prior-art]`.
-      `[measured]` Run 1 saw only 22 distinct tokens and ~54 uses, which
-      under-sold it: Run 2 found **336 distinct across 7 works, 222 in the
-      Harry Potter work alone**. Real, and style-dependent in magnitude.
+      `[measured]` Run 1 saw 22 distinct tokens; Runs 2–3 found **336 then
+      1,308 distinct** (Hetalia 637, chat fic 570). But **the magnitude that
+      matters is still unmeasured, and this item is blocked on it.**
+      The rule only fires on tokens that *miss* the Misaki lexicon. Splitting
+      the corpus by whether a token's lower-case form appears elsewhere in the
+      same work gives 8,065 "shouted" against 1,872 "initialism-ish" — but that
+      over-counts enormously, because the shouted set is dominated by `THE`,
+      `YOU`, `TO`, `NOT`, `WHAT`, which all resolve at lexicon tier 5 and never
+      reach the rule. The genuinely affected set is shouted **proper nouns**
+      (`NEWT`, `ROY`, `GIZA`, `SANAZ`, `NARA`, `NANI` in the corpus) — small,
+      but they are character names, and they recur.
+      **Do not blunt-force down-case.** 1,872 initialism-ish uses include real
+      acronyms where letter-spelling is *correct*, 262 of them in the Halo work
+      alone. The discriminator needed is "is this in the Misaki lexicon", which
+      is precisely what the phonemizer already knows and our layer does not —
+      so the clean fix is to ask it, which needs the model pack installed.
+      Blocked on a device/pack run, not on design.
 
 - [ ] **AO3 boilerplate is read aloud.** `[proposal]` "Chapter Text" headers,
       author's notes, endnotes, tag dumps, bare URLs. A URL spelled out
@@ -236,7 +250,35 @@ phoneme count, so **utterance length selects the voice's prosodic character**.
 Upstream Kokoro's design (`ref_s = voicepack[len(ps)-1]`), not a quirk. It is
 why this phase is about quality and not tidiness.
 
-- [ ] **28% of utterances fall below the packer's own minimum.** `[measured]`
+- [x] **Orphaned block tails — partially fixed 2026-08-22.** `[measured]`
+      `[code]` Measuring tails (`pauseAfter != .continuation`) against
+      mid-block pieces showed the real shape: **block tails are 2–3× more
+      likely to be short than mid-block pieces, in every one of 12 works**
+      (prose 30–37% vs 11–18%; texting 83% vs 25%). A block's last group is
+      whatever the loop could not place, so it is systematically the runt.
+      `packWholeSentences` now absorbs a sub-`preferredMin` tail into the
+      previous group when the pair fits `softUpper`, instead of only
+      *stealing* one sentence back — stealing needed the previous group to
+      hold ≥2 sentences and could leave a fresh runt behind.
+      Measured before/after on identical input: **66,915 → 65,303 utterances**
+      (−1,612 independent synthesis units), tails 44.5% → 42.2% short, median
+      148 → 153. **Trade-off:** above `preferredMax` rose 9.2% → 11.8%, bounded
+      by `softUpper` (250) and far under the 400 split threshold.
+      **Deliberately not fixed further:** the dominant remaining case is a
+      block that yields a *single* short group, where there is nothing
+      in-block to merge with. Per the texting / chat / social-media data those
+      blocks are genuinely short — a text message, a line of dialogue — and
+      Kokoro handles short utterances well. Merging across blocks would buy
+      length at the cost of the paragraph pause, which is a real prosodic
+      boundary. The residue is correct content, not a defect.
+
+      *Note on the original framing:* this was first written up as "28% voiced
+      with style rows the prose never implied". That was wrong — the style row
+      for a short utterance *is* the right row for its length; that is the
+      design. The cost is **fragmentation**: every extra utterance is another
+      independent synthesis with its own prosody reset (see Phase 5).
+
+- [ ] **~~28% of utterances fall below the packer's own minimum.~~** superseded `[measured]`
       `[code]` Structural, not stylistic. `packBlock` runs **per block** and
       `packWholeSentences` can only group sentences *within* one block, so
       every paragraph's remainder is emitted alone however short it is;

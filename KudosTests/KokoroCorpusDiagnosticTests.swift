@@ -34,6 +34,13 @@ struct KokoroCorpusDiagnosticTests {
         var capsCandidates: Set<String> = []
         var straightQuotes = 0
         var curlyQuotes = 0
+        /// Utterances that end a block (`pauseAfter != .continuation`) versus
+        /// those mid-block. A block tail is the piece `packWholeSentences`
+        /// could not group with anything, so if tails skew short the problem
+        /// is orphaning — not short utterances as such, which are correct for
+        /// genuinely short blocks.
+        var tailSizes: [Int] = []
+        var midSizes: [Int] = []
     }
 
     @Test func reportPackingDistribution() throws {
@@ -58,12 +65,16 @@ struct KokoroCorpusDiagnosticTests {
             all.straightQuotes += report.straightQuotes
             all.curlyQuotes += report.curlyQuotes
             all.capsCandidates.formUnion(report.capsCandidates)
+            all.tailSizes += report.tailSizes
+            all.midSizes += report.midSizes
             for (k, v) in report.pauses { all.pauses[k, default: 0] += v }
         }
         // Per-work `sizes` arrive sorted; concatenating them leaves the
         // aggregate only piecewise-sorted, which made its percentiles nonsense
         // (p25 above the median). Sort once here.
         all.sizes.sort()
+        all.tailSizes.sort()
+        all.midSizes.sort()
         if files.count > 1 { out += Self.render(all) }
         // Test stdout goes to the simulator console, not xcodebuild's — write
         // the report next to the corpus so it is actually readable.
@@ -96,7 +107,17 @@ struct KokoroCorpusDiagnosticTests {
         let estimator = KokoroPhonemeEstimator()
         report.utterances = utterances.count
         report.sizes = utterances.map { estimator.estimatePhonemeLength($0.text) }.sorted()
-        for utterance in utterances { report.pauses[utterance.pauseAfter, default: 0] += 1 }
+        for utterance in utterances {
+            report.pauses[utterance.pauseAfter, default: 0] += 1
+            let n = estimator.estimatePhonemeLength(utterance.text)
+            if utterance.pauseAfter == .continuation {
+                report.midSizes.append(n)
+            } else {
+                report.tailSizes.append(n)
+            }
+        }
+        report.tailSizes.sort()
+        report.midSizes.sort()
         return report
     }
 
@@ -124,7 +145,18 @@ struct KokoroCorpusDiagnosticTests {
         pauses               : cont=\(r.pauses[.continuation] ?? 0) para=\(r.pauses[.paragraph] ?? 0) scene=\(r.pauses[.scene] ?? 0) chapter=\(r.pauses[.chapter] ?? 0) none=\(r.pauses[.none] ?? 0)
         quotes               : straight=\(r.straightQuotes) curly=\(r.curlyQuotes)
         all-caps 2-5 tokens  : \(r.capsCandidates.count) distinct
+        block tails          : n=\(r.tailSizes.count) med=\(med(r.tailSizes)) short=\(shortShare(r.tailSizes))
+        mid-block            : n=\(r.midSizes.count) med=\(med(r.midSizes)) short=\(shortShare(r.midSizes))
         """
+    }
+
+    private static func med(_ xs: [Int]) -> Int {
+        xs.isEmpty ? 0 : xs[xs.count / 2]
+    }
+
+    private static func shortShare(_ xs: [Int]) -> String {
+        let n = xs.filter { $0 < KokoroPhonemeBudget.preferredMin }.count
+        return String(format: "%.1f%%", 100 * Double(n) / Double(max(xs.count, 1)))
     }
 }
 #endif
