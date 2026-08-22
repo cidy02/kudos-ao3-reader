@@ -49,6 +49,19 @@ the effect is audible.
       toggle (becomes open/close tracking, which is more correct anyway).
       Verify by ear before/after on a dialogue exchange.
 
+- [ ] **Shouted words get spelled out letter-by-letter.** After a lexicon
+      miss, `EnglishInitialisms.isCandidate` spells any strict-ASCII all-caps
+      token of **2–5 characters** as letter names (`FBI` → `ˈɛf bˈi ˈI`). That
+      is right for initialisms and wrong for fanfic: `NOOO` becomes
+      "N-O-O-O", and a shouted character name `DRACO!` becomes "D-R-A-C-O".
+      Words whose lower-case form *is* in the lexicon (`STOP`, `WHAT`) are
+      safe — only misses reach the rule, which is exactly where names and
+      stretched interjections live.
+      Fix in our layer: down-case an all-caps token before G2P unless it is a
+      known initialism. Costs nothing expressively — Kokoro **ignores
+      capitalization for emphasis entirely** (see Prior art), so there is no
+      loudness being preserved by leaving it upper-case.
+
 - [ ] **AO3 boilerplate is read aloud.** "Chapter Text" headers, author's
       pre/post notes, endnotes, tag dumps, and bare URLs all get spoken. A URL
       spelled out letter-by-letter mid-chapter is the worst of these. Cheap to
@@ -82,6 +95,12 @@ mispronounced name is permanent.
       offer them as a review list. Turns an invisible failure into a fixable
       one, and costs almost nothing given the fallback path is already a
       distinct branch in `KokoroAneEnglishPhonemizer`.
+
+- [ ] **Adopt the established inline override syntax.** Kokoro-FastAPI and
+      MisakiSwift both use a markdown-shaped form —
+      `[Worcester](/wˈʊstər/)`. Reusing it rather than inventing one means
+      power users can paste overrides they already have, and it gives the
+      respelling UI an obvious serialized form.
 
 - [ ] **Cast pre-flight.** On opening a work, run the character/relationship
       tags through `manager.phonemes(for:)`, detect which missed the Misaki
@@ -117,6 +136,22 @@ not a quirk.
       session, so the synthesis call gets it free. Deletes the estimator
       entirely.
 
+- [ ] **Split before the rushing zone, not at the model cap.** Kokoro is
+      reported to *rush* on utterances beyond ~400 tokens, and Kokoro-FastAPI
+      sets `ABSOLUTE_MAX_TOKENS = 450` despite the same 510 model limit. Our
+      `KokoroPhonemeBudget.modelLimit = 510` doubles as the split trigger, so
+      a long sentence can legitimately synthesize at ~500 tokens and rush.
+      Separate the two constants: keep 510 as the hard `vocab.encode` cap,
+      add a ~400 split threshold.
+
+- [ ] **Revisit the packing band (A/B).** Ours is min 110 / target 175 / max
+      220. Kokoro-FastAPI ships min **175** / max **250** — their *minimum* is
+      our *target*. Worth hearing both.
+      Note this pulls against the dialogue item below: their band is tuned for
+      continuous narration, whereas a standalone line of dialogue should stay
+      short on purpose. Likely answer is a narration band and a dialogue
+      exception, not one global band.
+
 - [ ] **Do not merge across dialogue boundaries.** The packer merges whole
       sentences up to 220 IPA chars, so a standalone `"Don't."` gets glued into
       surrounding narration and voiced with a long-form style row instead of
@@ -136,6 +171,18 @@ not a quirk.
       seeded from the character tags already in hand — and keep the narrator
       distinct. Largest piece of work on this list; also the difference between
       "a screen reader" and "an audiobook".
+
+- [ ] **Voice blending — unlimited voices from the 28 we ship.** A voice pack
+      is a `[510, 256]` fp32 tensor (`KokoroAneVoicePack.storage`), so mixing
+      two voices is a weighted combination of those vectors — Kokoro-FastAPI
+      exposes exactly this as `af_bella(2)+af_heart(1)`, normalized to 100%.
+      Use **SLERP, not a naive average**: averaging two vectors that point in
+      different directions shrinks the result's magnitude and audibly flattens
+      the voice.
+      This makes the multi-voice item above far more valuable — a large cast
+      stops requiring a larger pack, and blends give related-but-distinct
+      voices (useful for siblings, or for keeping a narrator adjacent to a POV
+      character). Cheap to implement; verify by ear.
 
 - [ ] **Emphasis from EPUB markup.** `<em>`/`<i>`/`<strong>`/`<b>` is authorial
       stress, and in fic italics also mark internal thought. `KokoroSemanticBlock`
@@ -174,6 +221,61 @@ not a quirk.
       a fixed test paragraph.
 
 ---
+
+## Prior art — what other Kokoro apps do
+
+License check done because this project is **AGPL-3.0**; Apache-2.0, MIT, BSD
+and ISC are all one-way compatible *into* AGPL-3.0.
+
+| Project | License | Usable? | Worth taking |
+|---|---|---|---|
+| [hexgrad/kokoro](https://github.com/hexgrad/kokoro) | Apache-2.0 | ✅ | Reference pipeline — the authority on what the model expects |
+| [remsky/Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | Apache-2.0 | ✅ | Token band (175/250/450), voice blending, inline IPA syntax |
+| [thewh1teagle/kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) | MIT | ✅ | Packaging; combined all-voices binary |
+| [nazdridoy/kokoro-tts](https://github.com/nazdridoy/kokoro-tts) | MIT | ✅ | Closest use case — an EPUB reader with blending |
+| [mlalma/MisakiSwift](https://github.com/mlalma/MisakiSwift) | Apache-2.0 | ✅ | Inline override syntax (G2P itself is redundant — FluidAudio ships one) |
+| [lucasjinreal/Kokoros](https://github.com/lucasjinreal/Kokoros) | **none** | ❌ | No license file = all rights reserved. Do not read or adapt. |
+| nikkoxgonzales/streaming-tts | **none** | ❌ | Same. |
+
+**Settled by consensus across sources — do not spend time on these:**
+
+- **Kokoro ignores capitalization, emoji, emotion markers (`[excited]`), and
+  SSML tags** entirely, or misreads them. There is no markup path to emphasis;
+  the levers are punctuation, the phoneme string itself, and the style vector.
+- Stacking `!!!` does not increase energy over a single `!`.
+- Chunking is *the* quality lever for long-form. Split on sentence and
+  paragraph boundaries, never on character counts.
+
+**Punctuation is the prosody API** (already mostly handled by preserving the
+vocab's punctuation tokens, but worth knowing when tuning pause lengths — these
+are the model's *own* pauses, which our structural pauses stack on top of):
+
+| Mark | Effect |
+|---|---|
+| `.` | Full stop, intonation resets completely |
+| `,` | Brief breath, sentence flow maintained |
+| `…` | Trailing pause **0.5–1 s**, falling intonation |
+| `;` | Between comma and period |
+| `:` | Pause with anticipation |
+| `?` | Rising intonation on yes/no questions |
+| `!` | Higher energy (one is enough) |
+
+- [ ] **Check for stacked pauses.** `…` already yields a 0.5–1 s pause from the
+      model, and `KokoroPauseAssembler` then appends a structural pause on top.
+      An ellipsis at a paragraph end may be getting ~1.3 s. Audible check once
+      Phase 0 exists.
+
+- [ ] **Default speed 0.9, not 1.0.** Audiobook narration is widely recommended
+      at 0.9 (1.05 for ads). We default to 1.0. One-line change to
+      `ReaderSpeechPreferences.defaultRate`, but it changes everyone's
+      experience — A/B first.
+
+- [ ] **Normalization escape hatch.** Kokoro-FastAPI exposes
+      `normalization_options: {normalize: false}` because text normalization
+      "can incorrectly remove or change some phrases". We stack two normalizers
+      (`KokoroSpeechNormalizer` then NeMo `EnglishTextNormalizer`) with no way
+      to inspect or disable either. At minimum a debug toggle, so a
+      mispronunciation can be traced to the right stage.
 
 ## Known defects and housekeeping
 
