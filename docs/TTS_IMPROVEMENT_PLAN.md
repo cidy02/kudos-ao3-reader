@@ -133,6 +133,47 @@ Scene breaks fired **409** times (283 / 68 / 33 / 25 across four works), so
 `looksLikeSceneBreak` is exercised and working — Run 1's `scene=0` was
 genuinely an absent feature, not a broken detector.
 
+### Run 3 — 2026-08-22 · 12 works, formatting-diverse
+
+Sorting by kudos finds well-liked work, which is reliably *cleanly typeset*
+work — it selects against exactly the formatting a reader app must survive. So
+Run 3 samples two ways: by fandom for specific conventions (quirk typing,
+transcript framing, broadcast script, multilingual dialogue, footnotes,
+military acronyms, unusual typography), and by AO3's **own convention tags**
+sorted by date rather than kudos — `Not Beta Read` (the archive's marker for
+unedited prose), `Chat Fic`, `Epistolary`, `Social Media`, `Texting`.
+
+| target | blocks → utt | med | max | < 110 | > 400 | straight | curly | caps |
+|---|---|---|---|---|---|---|---|---|
+| goodomens-footnotes | 9,454 → 11,440 | 147 | **510** | 26.6% | 30 | 834 | 12,676 | 213 |
+| halo-acronyms | 2,299 → **11,351** | 175 | 509 | 16.0% | **234** | 4,014 | 2,423 | 164 |
+| hetalia-multilingual | 6,194 → 6,372 | 153 | **510** | 25.7% | 121 | 299 | 573 | **637** |
+| homestuck-quirk | 3,516 → 6,523 | 146 | 493 | 26.4% | 3 | 3,980 | **0** | 86 |
+| magnus-transcript | 3,958 → 4,771 | 156 | 493 | 22.6% | 4 | 269 | 6,364 | 19 |
+| messy-chat-fic | 16,266 → 3,479 | 97 | **510** | **55.6%** | 121 | **0** | 2,232 | 570 |
+| messy-epistolary | 4,130 → 4,734 | 103 | 503 | **53.0%** | 18 | 752 | **0** | 68 |
+| messy-not-beta-read | 1,858 → 3,331 | 154 | 507 | 23.6% | 1 | 3,568 | 767 | 194 |
+| messy-social-media | 6,241 → 2,542 | 103 | 498 | **52.7%** | 5 | 8 | 4,016 | 211 |
+| messy-texting | 2,874 → 2,759 | **42** | 492 | **78.4%** | 4 | 1,374 | **0** | 5 |
+| nightvale-broadcast | 2,324 → 4,342 | 161 | 508 | 21.1% | 15 | 2,343 | 2,232 | 30 |
+| undertale-typography | 3,488 → 4,739 | 154 | 471 | 21.6% | 2 | 433 | 5,783 | 30 |
+| **ALL** | **62,602 → 66,383** | 148 | **510** | **30.1%** | **558** | 17,874 | 37,066 | **1,308** |
+
+Every headline number gets worse on formatting-diverse input:
+
+- **Short utterances 17.7–29.8% → up to 78.4%.** Non-prose layouts (texting,
+  chat, epistolary, social media) are *majority* runts. The packer's band is
+  not merely missed there, it is meaningless.
+- **Rushing zone 63 → 558.** `halo-acronyms` alone contributes 234, and four
+  works touch **510 — the exact cap where `vocab.encode` throws.** Splitting at
+  the model limit rather than below it is now clearly wrong.
+- **All-caps 336 → 1,308 distinct.** Hetalia 637, chat fic 570.
+- **`halo-acronyms` expands 2,299 blocks into 11,351 utterances — 4.9×.**
+  The most extreme splitting seen; worth understanding before tuning the band.
+- **Quote convention is bimodal, not a spectrum.** Three works have *zero*
+  curly quotes; two have *zero* straight. Any fix must handle both, and must
+  not assume a work is internally consistent.
+
 ---
 
 ## 4. Findings and checklist

@@ -24,10 +24,9 @@ import Testing
 ///     TEST_RUNNER_KOKORO_HARVEST_DIR=/path/to/epubs xcodebuild test \
 ///       -only-testing:KudosTests/KokoroCorpusHarvestTests
 ///
-/// Optionally override the fandom list with `TEST_RUNNER_KOKORO_FANDOMS`
-/// (comma-separated). Downloaded works are third-party fiction: they stay
-/// local, are never committed, and are used only to measure what the packer
-/// does to real prose.
+/// Targets are declared in `targets` below. Downloaded works are third-party
+/// fiction: they stay local, are never committed, and only aggregate
+/// statistics about them are ever recorded.
 @Suite("Kokoro corpus harvest", .serialized)
 struct KokoroCorpusHarvestTests {
     private static var destination: String {
@@ -35,30 +34,60 @@ struct KokoroCorpusHarvestTests {
         return env["TEST_RUNNER_KOKORO_HARVEST_DIR"] ?? env["KOKORO_HARVEST_DIR"] ?? ""
     }
 
-    /// Deliberately spread across categories and prose conventions — anime and
-    /// manga (romaji, honorifics), Western TV, book fandom, and military SF
-    /// (acronyms, which are the one place letter-spelling is *correct*).
-    private static var fandoms: [String] {
-        let env = ProcessInfo.processInfo.environment
-        if let raw = env["TEST_RUNNER_KOKORO_FANDOMS"] ?? env["KOKORO_FANDOMS"],
-           !raw.isEmpty
-        {
-            return raw.split(separator: ",").map {
-                $0.trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return [
-            "Naruto",
-            "Bleach",
-            "Supergirl (TV 2015)",
-            "Supernatural",
-            "Harry Potter - J. K. Rowling",
-            "Criminal Minds (US TV)",
-            "Halo (Video Games)",
+    /// One corpus target. `fandom` and/or `additionalTags` narrow it; `sort`
+    /// decides *which* work comes back, and that choice is load-bearing.
+    struct Target: Sendable {
+        var label: String
+        var fandom: String = ""
+        var additionalTags: String = ""
+        var sort: AO3SearchFilters.Sort = .kudos
+        var wordsFrom: String = "150000"
+    }
+
+    /// Two deliberately different sampling strategies.
+    ///
+    /// **By kudos** finds well-liked work — which is also, reliably, *cleanly
+    /// typeset* work. Sorting by kudos selects against exactly the formatting
+    /// problems a reader app has to survive, so it can never be the whole
+    /// corpus.
+    ///
+    /// **By AO3's own convention tags** finds the rest: `Not Beta Read` is the
+    /// archive's marker for unedited prose (typos, inconsistent punctuation),
+    /// and `Chat Fic` / `Epistolary` / `Social Media` are non-prose layouts
+    /// full of timestamps, speaker labels, and fragments. These are sorted by
+    /// date rather than kudos on purpose — the goal is *typical*, not *best*.
+    ///
+    /// Fandom picks target specific conventions: quirk typing (Homestuck),
+    /// transcript framing (Magnus Archives), broadcast script (Night Vale),
+    /// multilingual dialogue (Hetalia), footnotes (Good Omens), and military
+    /// acronyms (Halo) — the one place letter-spelling is *correct* and must
+    /// keep working after the `NOOO` fix.
+    private static var targets: [Target] {
+        [
+            // Formatting conventions
+            .init(label: "homestuck-quirk", fandom: "Homestuck", wordsFrom: "80000"),
+            .init(label: "magnus-transcript", fandom: "The Magnus Archives (Podcast)", wordsFrom: "80000"),
+            .init(label: "nightvale-broadcast", fandom: "Welcome to Night Vale", wordsFrom: "40000"),
+            .init(label: "hetalia-multilingual", fandom: "Hetalia (Anime & Manga)", wordsFrom: "80000"),
+            .init(label: "goodomens-footnotes", fandom: "Good Omens (TV)", wordsFrom: "150000"),
+            .init(label: "halo-acronyms", fandom: "Halo (Video Games) & Related Fandoms", wordsFrom: "80000"),
+            .init(label: "undertale-typography", fandom: "Undertale (Video Game)", wordsFrom: "80000"),
+
+            // Messy by construction — note the sort is NOT kudos
+            .init(label: "messy-not-beta-read", additionalTags: "Not Beta Read",
+                  sort: .dateUpdated, wordsFrom: "40000"),
+            .init(label: "messy-chat-fic", additionalTags: "Chat Fic",
+                  sort: .dateUpdated, wordsFrom: "30000"),
+            .init(label: "messy-epistolary", additionalTags: "Epistolary",
+                  sort: .dateUpdated, wordsFrom: "30000"),
+            .init(label: "messy-social-media", additionalTags: "Social Media",
+                  sort: .dateUpdated, wordsFrom: "30000"),
+            .init(label: "messy-texting", additionalTags: "Texting",
+                  sort: .dateUpdated, wordsFrom: "20000"),
         ]
     }
 
-    @Test func harvestOneLongWellLikedWorkPerFandom() async throws {
+    @Test func harvestCorpusAcrossFormattingConventions() async throws {
         let dir = Self.destination
         try #require(!dir.isEmpty, "set TEST_RUNNER_KOKORO_HARVEST_DIR to run this")
         try FileManager.default.createDirectory(
@@ -68,21 +97,20 @@ struct KokoroCorpusHarvestTests {
         let client = AO3Client.shared
         var log: [String] = []
 
-        for fandom in Self.fandoms {
+        for target in Self.targets {
             var filters = AO3SearchFilters()
-            filters.fandom = fandom
-            filters.sort = .kudos
+            filters.fandom = target.fandom
+            filters.additionalTags = target.additionalTags
+            filters.sort = target.sort
             filters.sortDirection = .descending
             filters.completion = .complete
             filters.language = .init(id: "en")
-            // Long enough to exercise chapter-scale packing, not so long that a
-            // single work dominates the corpus.
-            filters.wordsFrom = "150000"
+            filters.wordsFrom = target.wordsFrom
 
             do {
                 let page = try await client.search(filters: filters, page: 1)
                 guard let work = page.works.first else {
-                    log.append("\(fandom): no results")
+                    log.append("\(target.label): no results")
                     continue
                 }
                 let epub = try await client.downloadEPUB(workID: work.id)
@@ -93,15 +121,15 @@ struct KokoroCorpusHarvestTests {
                     .lowercased()
                     .prefix(48)
                 let dest = URL(fileURLWithPath: dir)
-                    .appendingPathComponent("\(slug)-\(work.id).epub")
+                    .appendingPathComponent("\(target.label)--\(slug)-\(work.id).epub")
                 try? FileManager.default.removeItem(at: dest)
                 try FileManager.default.moveItem(at: epub, to: dest)
                 let attrs = try? FileManager.default.attributesOfItem(atPath: dest.path)
                 let size = (attrs?[.size] as? Int) ?? 0
-                log.append("\(fandom): \(work.id) \"\(work.title)\" -> \(dest.lastPathComponent) (\(size) bytes)")
+                log.append("\(target.label): \(work.id) \"\(work.title)\" -> \(dest.lastPathComponent) (\(size) bytes)")
             } catch {
                 // One fandom failing must not lose the others already fetched.
-                log.append("\(fandom): FAILED \(error)")
+                log.append("\(target.label): FAILED \(error)")
             }
         }
 
