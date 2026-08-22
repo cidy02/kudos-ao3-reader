@@ -11,8 +11,21 @@ nonisolated enum KokoroPhonemeBudget: Sendable {
     static let preferredMin = 110
     static let preferredMax = 220
     static let softUpper = 250
-    /// Hard model cap from `KokoroAneConstants.maxPhonemeLength`. This is the
-    /// only size that may split a complete sentence.
+
+    /// Where a complete sentence may be split. Deliberately **below**
+    /// `modelLimit`: Kokoro rushes past roughly 400 phonemes, and
+    /// Kokoro-FastAPI likewise stops at 450 against the same 510 cap. Using
+    /// the hard cap as the split trigger meant a long sentence could
+    /// legitimately synthesize at ~500 and be delivered rushed.
+    ///
+    /// Corpus run 3 measured **558 utterances above 400** across 12
+    /// formatting-diverse works, with four of them touching exactly 510.
+    static let splitThreshold = 400
+
+    /// Hard model cap from `KokoroAneConstants.maxPhonemeLength`. Above this
+    /// `KokoroAneVocab.encode` *throws*, which would end Read Aloud for the
+    /// whole chapter — so this is a correctness boundary, not a quality one.
+    /// Split at `splitThreshold` instead.
     static let modelLimit = 510
 
     /// Merge fragments shorter than this into a neighbor in the same block.

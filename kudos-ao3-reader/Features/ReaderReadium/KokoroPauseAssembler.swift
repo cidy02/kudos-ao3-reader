@@ -8,14 +8,21 @@ nonisolated enum KokoroPauseAssembler: Sendable {
     static let rmsThreshold: Float = 0.006
     static let sampleRate = 24_000.0
 
+    /// - Parameter speed: the rate the clip was synthesized at. Silence has to
+    ///   scale with it: the synthesizer compresses the *speech* at 1.5× but a
+    ///   fixed-second pause stays put, so gaps ran ~50% long at high speed and
+    ///   short at low. Pauses are a fraction of the surrounding speech, not an
+    ///   absolute duration.
     static func assemble(
         samples: [Float],
         sampleRate: Double,
-        pauseAfter: KokoroBoundary
+        pauseAfter: KokoroBoundary,
+        speed: Float = 1.0
     ) -> [Float] {
         let trimmed = trimEdgeSilence(samples: samples, sampleRate: sampleRate)
         let speech = trimmed.isEmpty ? samples : trimmed
-        let pauseCount = Int((pauseAfter.pauseSeconds * sampleRate).rounded())
+        let scale = Double(max(0.1, speed))
+        let pauseCount = Int((pauseAfter.pauseSeconds / scale * sampleRate).rounded())
         guard pauseCount > 0 else { return speech }
         var output = speech
         output.append(contentsOf: repeatElement(Float(0), count: pauseCount))
