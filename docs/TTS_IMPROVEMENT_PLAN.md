@@ -12,9 +12,10 @@ Packing rationale: [`TTS_KOKORO_NATURALNESS.md`](TTS_KOKORO_NATURALNESS.md)
 
 Three findings are load-bearing, and only one of them was predicted:
 
-1. **The packer emits 27.9% of utterances below its own minimum**, and
-   *increases* unit count by 69%. It is net-splitting, not packing. Structural,
-   and reproduces on any normally-paragraphed work. (§4, Phase 2)
+1. **The packer emits ~24% of utterances below its own minimum** — every work
+   measured, range 17.7–29.8% over 7 fandoms, and it *increases* unit count
+   (64,355 blocks → 84,116 utterances). It is net-splitting, not packing.
+   Structural, not stylistic. (§4, Phase 2)
 2. **The voice pack's style vector is indexed by phoneme count**, so utterance
    length selects the voice's prosodic character. That turns (1) from an
    efficiency issue into a quality one, and makes chunking decisions audible
@@ -110,6 +111,28 @@ Frozen (2013), 2020, 433k words / 11,960 blocks / 103 chapters.
 contains no markers. `epub-to-corpus.py` now emits `***` for `<hr>` so a work
 that uses them will exercise `looksLikeSceneBreak`.
 
+### Run 2 — 2026-08-22 · 7 works, 7 fandoms
+
+Harvested with `KokoroCorpusHarvestTests`, which drives the app's own
+`AO3Client` (§2.1). Top complete English work over 150k words by kudos, per
+fandom: Harry Potter, Bleach, Supernatural, Frozen, Naruto, Supergirl,
+Criminal Minds. 64,355 blocks total.
+
+| Work (fandom) | blocks → utt. | med | max | < 110 | > 400 | straight q | curly q | caps |
+|---|---|---|---|---|---|---|---|---|
+| Harry Potter | 22,841 → 23,778 | 152 | **510** | 24.1% | 35 | 608 | 39,711 | **222** |
+| Bleach | 3,974 → 7,028 | 164 | 462 | 17.7% | 7 | 2 | 8,748 | 25 |
+| Supernatural | 9,182 → 9,261 | 145 | 382 | 29.8% | 0 | 8 | 14,298 | 26 |
+| Frozen | 11,960 → 20,230 | 143 | 407 | 27.9% | 1 | 14,273 | 719 | 22 |
+| Naruto | 3,296 → 6,962 | 155 | 470 | 18.0% | 1 | 2,615 | **0** | 23 |
+| Supergirl | 7,470 → 9,211 | 155 | 439 | 20.5% | 9 | 29 | 11,580 | 51 |
+| Criminal Minds | 5,632 → 7,646 | 152 | 496 | 25.8% | 10 | 56 | 11,188 | 31 |
+| **ALL** | **64,355 → 84,116** | **151** | **510** | **24.3%** | **63** | **17,591** | **86,244** | **336** |
+
+Scene breaks fired **409** times (283 / 68 / 33 / 25 across four works), so
+`looksLikeSceneBreak` is exercised and working — Run 1's `scene=0` was
+genuinely an absent feature, not a broken detector.
+
 ---
 
 ## 4. Findings and checklist
@@ -132,6 +155,20 @@ everything below is provisional without it.
       the silence does not, so gaps run ~50% long; at 0.75× they run short.
       Fix: thread `speed` through, divide `pauseSeconds` by it.
 
+- [ ] **Curly quotes are collapsed, losing open/close.** `[code]` `[measured]`
+      Kokoro's vocab holds `“` (U+201C), `”` (U+201D) **and** `"` as three
+      distinct tokens — opening and closing cue different intonation, which is
+      the most common prosodic signal in dialogue. `KokoroSpeechNormalizer`
+      maps all of them to `"`, discarding it.
+      **Corpus says this matters: curly outnumbers straight 86,244 to 17,591**
+      across 7 works, and 5 of 7 are overwhelmingly curly. Two works (Frozen,
+      Naruto) are straight-dominant, one with *zero* curly quotes — so the fix
+      has to handle both directions: **preserve curly where present, and
+      promote straight to curly open/close by position where it is not.**
+      Dependents: `KokoroSemanticDocument.classify`'s `normalized.first == "\""`
+      dialogue test, and `KokoroUtterancePacker.splitKeepingDelimiter`'s
+      `inQuote` toggle (becomes open/close tracking, which is more correct).
+
 - [ ] **Shouted words are spelled out letter by letter.** `[code]` After a
       lexicon miss, `EnglishInitialisms.isCandidate` spells any strict-ASCII
       all-caps token of **2–5 characters** as letter names (`FBI` →
@@ -142,7 +179,9 @@ everything below is provisional without it.
       Fix in our layer: down-case an all-caps token before G2P unless it is a
       known initialism. Costs nothing expressively; Kokoro ignores
       capitalization for emphasis entirely `[prior-art]`.
-      *~54 uses in the measured work* `[measured]` *— see §5.*
+      `[measured]` Run 1 saw only 22 distinct tokens and ~54 uses, which
+      under-sold it: Run 2 found **336 distinct across 7 works, 222 in the
+      Harry Potter work alone**. Real, and style-dependent in magnitude.
 
 - [ ] **AO3 boilerplate is read aloud.** `[proposal]` "Chapter Text" headers,
       author's notes, endnotes, tag dumps, bare URLs. A URL spelled out
@@ -174,8 +213,9 @@ why this phase is about quality and not tidiness.
       `KokoroPhonemeBudget.modelLimit = 510` doubles as the split trigger, so a
       long sentence can synthesize at ~500 and rush. Separate the constants:
       keep 510 as the hard `vocab.encode` cap, add a ~400 split threshold.
-      *Measured max was 407, one utterance* `[measured]` *— rare here, but a
-      single rushed sentence is audible.*
+      `[measured]` **63 utterances above 400 across 7 works, and the Harry
+      Potter work hits exactly 510** — the model cap — so this is not
+      hypothetical. Rare per work, but a single rushed sentence is audible.
 
 - [ ] **Replace the estimator with real phoneme counts.** `[code]`
       `KokoroPhonemeEstimator` guesses IPA length as graphemes × 1.15, but the
@@ -284,19 +324,36 @@ Recorded so they are not mistaken for resolved. This author writes with
 straight quotes, almost no ALL-CAPS and almost no non-English, so these got
 **no signal — not a negative result**.
 
-| Item | Measured | Why still open |
-|---|---|---|
-| Curly-quote open/close | straight 14,273 · curly 719 | **Inverts the fix.** With straight quotes dominant, the opportunity is *promoting* them to curly open/close by position — Kokoro's vocab holds `“`, `”` and `"` as three distinct tokens `[code]` — giving the distinction on all 14k rather than preserving 719. Other authors do post curly. |
-| All-caps spelling | 22 distinct, ~54 uses; most lowercase to lexicon hits and never reach the rule | Fandoms with quirk typing or heavy caps emphasis would hit it hard |
-| Stretched vowels | 9 total | Style-dependent. `AAAAAAH` (7 chars) exceeds the 2–5 window and goes to BART anyway |
-| Non-English | `é` ×14 | Anime/manga fandoms carry romaji and honorifics throughout |
-| URLs | 3 | Epistolary and social-media formats are full of them |
-| Numbers | 142, mostly small integers | Estimator under-count needs date/time-heavy prose to show |
-| `<hr>` scene breaks | 0 | This work is chapter-per-scene. Detector untested |
+### Resolved by Run 2
+
+| Item | Run 1 (1 work) | Run 2 (7 works) | Outcome |
+|---|---|---|---|
+| Curly-quote open/close | straight 14,273 · curly 719 | **curly 86,244 · straight 17,591** | **Run 1 was the outlier.** 5 of 7 works are overwhelmingly curly; one has *zero* curly. The fix must handle both directions — see Phase 1 |
+| All-caps spelling | 22 distinct | **336 distinct**, 222 in one work | Real; Run 1 under-sold it by 10× |
+| `<hr>` scene breaks | 0 — untested | **409 fired** across 4 works | Detector works |
+| Rushing zone > 400 | 1 utterance | **63**, one work hits exactly 510 | Real, not hypothetical |
+
+### Still unexercised
+
+| Item | Why still open |
+|---|---|
+| Stretched vowels | Style-dependent; `AAAAAAH` (7 chars) exceeds the 2–5 window and reaches BART anyway |
+| Non-English | Even the Naruto and Bleach works are English-prose; romaji-heavy works exist but were not sampled |
+| URLs | Epistolary and social-media formats are full of them; none sampled |
+| Numbers | Estimator under-count needs date/time-heavy prose |
+| Quirk typing | Homestuck-style typing quirks would stress the caps and punctuation paths hardest |
 
 **Next corpus additions should deliberately target these**: a quirk-typed work,
-an anime/manga fandom with romaji, a texting or epistolary format, and anything
-using `<hr>` scene breaks.
+a romaji-heavy fic, and a texting or epistolary format. Halo returned no
+results for the current filter — the canonical tag name needs checking.
+
+### The methodological lesson
+
+The curly-quote item was **predicted correctly, then wrongly reversed off a
+single work, then restored by seven**. One work characterises its author, and
+that cuts both ways: it can no more disprove a finding than prove one. Treat
+any single-work result as a hypothesis, and note that `[measured]` is only as
+strong as the corpus behind it — always cite the run.
 
 ---
 
