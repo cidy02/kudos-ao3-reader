@@ -1,367 +1,381 @@
-# TTS Improvement Plan — flow, inflection, pronunciation
+# Read Aloud quality — findings report and work checklist
 
-Working checklist for Read Aloud quality after T-208. Ordered so each phase
-unblocks the next; within a phase, order is by payoff over effort.
+Status: **investigation complete, no items implemented.** Follows T-208
+(Core ML Kokoro on iOS 27+, Sherpa/ONNX on iOS 26). Tracked as T-209.
 
-Architecture context: [`TTS_KOKORO_ARCHITECTURE.md`](TTS_KOKORO_ARCHITECTURE.md).
-Naturalness/packing rationale: [`TTS_KOKORO_NATURALNESS.md`](TTS_KOKORO_NATURALNESS.md).
-
-**Everything here is judged by ear.** Phase 0 exists because right now there is
-no way to compare two settings without rebuilding and listening to a whole
-chapter — which means the ordering below is reasoned from Kokoro's design, not
-measured, and may need revising once anyone actually listens.
+Architecture: [`TTS_KOKORO_ARCHITECTURE.md`](TTS_KOKORO_ARCHITECTURE.md) ·
+Packing rationale: [`TTS_KOKORO_NATURALNESS.md`](TTS_KOKORO_NATURALNESS.md)
 
 ---
 
-## Phase 0 — make quality judgeable
+## 1. Summary
 
-Nothing else on this list can be evaluated honestly until this exists.
+Three findings are load-bearing, and only one of them was predicted:
 
-- [ ] **Audition harness.** A settings screen that speaks a fixed sample
-      paragraph on demand, with the current voice / speed / pause settings, and
-      ideally A/B against the previous setting. Cheapest item here and it gates
-      every other one. Include a dialogue-heavy sample and a
-      numbers/names-heavy sample, not just clean prose.
+1. **The packer emits 27.9% of utterances below its own minimum**, and
+   *increases* unit count by 69%. It is net-splitting, not packing. Structural,
+   and reproduces on any normally-paragraphed work. (§4, Phase 2)
+2. **The voice pack's style vector is indexed by phoneme count**, so utterance
+   length selects the voice's prosodic character. That turns (1) from an
+   efficiency issue into a quality one, and makes chunking decisions audible
+   rather than merely tidy. (§4, Phase 2)
+3. **Pauses ignore the speed setting** — a plain defect that anyone who moves
+   the speed slider is already hearing. (§4, Phase 1)
 
----
+Everything else is smaller, style-dependent, or a proposal.
 
-## Phase 1 — near-free defects
-
-Small, self-contained, each affects every sentence. Do with Phase 0 in place so
-the effect is audible.
-
-- [ ] **Pauses ignore speed.** `KokoroPauseAssembler.assemble` inserts
-      `pauseSeconds × sampleRate` samples with no `speed` parameter, while
-      `speed` *is* passed to the synthesizer. At 1.5× the speech compresses and
-      the silence does not, so gaps run ~50% long; at 0.75× they run short.
-      Straight defect — anyone who touches the speed slider hears it.
-      Fix: thread `speed` in, divide `pauseSeconds` by it.
-
-- [ ] **Curly quotes are collapsed, losing open/close.** Kokoro's `vocab.json`
-      carries `“` (U+201C), `”` (U+201D) **and** `"` as three distinct tokens —
-      opening and closing quotes cue different intonation.
-      `KokoroSpeechNormalizer` maps all of them to `"`, so the model cannot tell
-      a line opening from a line closing. In fanfic that is the most common
-      prosodic cue in the text.
-      Fix: map `“`→`“`, `”`→`”`. Two dependents need updating —
-      `KokoroSemanticDocument.classify`'s `normalized.first == "\""` dialogue
-      test, and `KokoroUtterancePacker.splitKeepingDelimiter`'s `inQuote`
-      toggle (becomes open/close tracking, which is more correct anyway).
-      Verify by ear before/after on a dialogue exchange.
-
-- [ ] **Shouted words get spelled out letter-by-letter.** After a lexicon
-      miss, `EnglishInitialisms.isCandidate` spells any strict-ASCII all-caps
-      token of **2–5 characters** as letter names (`FBI` → `ˈɛf bˈi ˈI`). That
-      is right for initialisms and wrong for fanfic: `NOOO` becomes
-      "N-O-O-O", and a shouted character name `DRACO!` becomes "D-R-A-C-O".
-      Words whose lower-case form *is* in the lexicon (`STOP`, `WHAT`) are
-      safe — only misses reach the rule, which is exactly where names and
-      stretched interjections live.
-      Fix in our layer: down-case an all-caps token before G2P unless it is a
-      known initialism. Costs nothing expressively — Kokoro **ignores
-      capitalization for emphasis entirely** (see Prior art), so there is no
-      loudness being preserved by leaving it upper-case.
-
-- [ ] **AO3 boilerplate is read aloud.** "Chapter Text" headers, author's
-      pre/post notes, endnotes, tag dumps, and bare URLs all get spoken. A URL
-      spelled out letter-by-letter mid-chapter is the worst of these. Cheap to
-      filter, disproportionately noticeable.
+**The biggest gap is not a defect at all:** there is no way to hear two
+settings side by side. Every item here is judged by ear and the only current
+method is rebuild-and-listen to a whole chapter. That is why Phase 0 exists and
+why the ordering below is provisional.
 
 ---
 
-## Phase 2 — pronunciation
+## 2. How these findings were established
 
-Fanfic's hardest speech problem, and the one place this app has an advantage no
-general-purpose TTS can have: **AO3 tags every work with its characters,
-relationships, and fandoms** (`AO3Models.swift` — `characters: [String]`,
-`relationships: [String]`, `fandoms: [String]`). That is a curated list of
-exactly the proper nouns BART G2P will butcher, available *before* playback
-starts.
+Each item is tagged with the strength of its evidence. **Do not promote an item
+across tiers without doing the work that tier requires.**
 
-`KokoroPronunciationStore` already persists global / fandom / work layers and
-is already wired as tier 1 of the phonemizer's resolution order — it beats the
-Misaki lexicon and the BART fallback. **It has no UI at all**, so today a
-mispronounced name is permanent.
+| Tag | Means | Established by |
+|---|---|---|
+| `[code]` | Read in the source; behaviour is certain | Reading Kudos and FluidAudio source directly |
+| `[measured]` | Observed running real code over real input | `KokoroCorpusDiagnosticTests` over a real work |
+| `[prior-art]` | Multiple external sources agree | Licence-checked survey of other Kokoro apps (§6) |
+| `[proposal]` | Design idea, not validated | Reasoning from the above; **may be wrong** |
 
-- [ ] **Pronunciation-fix UI.** Long-press a word while reading →
-      "Fix pronunciation". The reader already has text selection.
+Nothing here has been validated by listening. No audio has been produced from
+either engine on this branch.
 
-- [ ] **Respelling input, not IPA.** Nobody types `hɜːrˈmaɪəni`. Accept
-      `her-MY-oh-nee` and convert using the lexicon already on disk —
-      phonemize each chunk, concatenate, take stress from the capitalised
-      syllable. Without this the store is unusable by real users.
+### 2.1 Corpus method
 
-- [ ] **"Words I guessed at."** Log BART fallbacks locally during a chapter and
-      offer them as a review list. Turns an invisible failure into a fixable
-      one, and costs almost nothing given the fallback path is already a
-      distinct branch in `KokoroAneEnglishPhonemizer`.
+`Scripts/epub-to-corpus.py` converts an EPUB to a `tag<TAB>text` TSV in spine
+order. `KokoroCorpusDiagnosticTests` runs the **real** `KokoroUtterancePacker`
+over a directory of those and writes `REPORT.txt`. Diagnostic only — skipped
+unless `TEST_RUNNER_KOKORO_CORPUS_DIR` is set, so it costs nothing normally.
 
-- [ ] **Adopt the established inline override syntax.** Kokoro-FastAPI and
-      MisakiSwift both use a markdown-shaped form —
-      `[Worcester](/wˈʊstər/)`. Reusing it rather than inventing one means
-      power users can paste overrides they already have, and it gives the
-      respelling UI an obvious serialized form.
+```
+Scripts/epub-to-corpus.py ~/Downloads/Work.epub corpus/
+TEST_RUNNER_KOKORO_CORPUS_DIR=$PWD/corpus xcodebuild test \
+  -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
+  -destination 'id=<sim-udid>' \
+  -only-testing:KudosTests/KokoroCorpusDiagnosticTests
+```
 
-- [ ] **Cast pre-flight.** On opening a work, run the character/relationship
-      tags through `manager.phonemes(for:)`, detect which missed the Misaki
-      lexicon and fell through to BART, and prompt once: "Before we start, how
-      do you say *Aziraphale*?" One prompt per work fixes words that would
-      otherwise be mangled hundreds of times.
+Corpora are third-party fiction and stay local. Only the script is tracked.
 
-- [ ] **Fandom seed dictionaries.** The `fandoms` layer exists and is unused.
-      Once one person fixes *Hermione* it should be right for every Potter fic
-      they open. Ship a seed set for the largest fandoms so most users never
-      see a prompt.
+### 2.2 Limits of the current evidence — read before citing any number
 
----
-
-## Phase 3 — packing and style-row correctness
-
-These two compose: exact phoneme counts are what make dialogue-boundary
-splitting land on the right style rows.
-
-Background: `KokoroAneVoicePack.slice(for:)` computes
-`row = min(max(phonemeCount - 1, 0), 509)` — **the style vector is indexed by
-phoneme count**, so utterance length literally selects the voice's prosodic
-character. This is upstream Kokoro's design (`ref_s = voicepack[len(ps)-1]`),
-not a quirk.
-
-- [ ] **Replace the estimator with real phoneme counts.**
-      `KokoroPhonemeEstimator` guesses IPA length as graphemes × 1.15, but the
-      NeMo normalizer expands numbers before G2P ("2024" → 4 graphemes → ~20
-      IPA characters), so a date-heavy paragraph can estimate ~200 and actually
-      exceed the 510 cap. `prepareClip`'s runtime re-check catches it and
-      splits, so it is correct but wasteful — G2P re-runs on the halves. Pack
-      against `manager.phonemes(for:)` instead; it is already cached per
-      session, so the synthesis call gets it free. Deletes the estimator
-      entirely.
-
-- [ ] **Split before the rushing zone, not at the model cap.** Kokoro is
-      reported to *rush* on utterances beyond ~400 tokens, and Kokoro-FastAPI
-      sets `ABSOLUTE_MAX_TOKENS = 450` despite the same 510 model limit. Our
-      `KokoroPhonemeBudget.modelLimit = 510` doubles as the split trigger, so
-      a long sentence can legitimately synthesize at ~500 tokens and rush.
-      Separate the two constants: keep 510 as the hard `vocab.encode` cap,
-      add a ~400 split threshold.
-
-- [ ] **Revisit the packing band (A/B).** Ours is min 110 / target 175 / max
-      220. Kokoro-FastAPI ships min **175** / max **250** — their *minimum* is
-      our *target*. Worth hearing both.
-      Note this pulls against the dialogue item below: their band is tuned for
-      continuous narration, whereas a standalone line of dialogue should stay
-      short on purpose. Likely answer is a narration band and a dialogue
-      exception, not one global band.
-
-- [ ] **Do not merge across dialogue boundaries.** The packer merges whole
-      sentences up to 220 IPA chars, so a standalone `"Don't."` gets glued into
-      surrounding narration and voiced with a long-form style row instead of
-      its own short-utterance row — losing both the delivery and the beat
-      around it. `KokoroSemanticDocument` already classifies `.dialogue`, and
-      **that classification is currently dead** — the only place it or
-      `.blockquote` is consulted is `isBody()`, which treats them exactly like
-      `.paragraph`.
+- **One work, one author, one fandom.** Prose style varies enormously and each
+  style exercises a different part of the pipeline. A measurement showing some
+  feature "isn't a problem" is a statement about the works measured so far and
+  **never** a verdict on the item. §5 lists what this work left untested.
+- **The harness has no CSS selector.** The TSV carries a tag but
+  `TTSSpeechUnit.locator` is `nil`, so `KokoroSemanticDocument.classify` fell
+  back to its text-only heading regex, which matched **74 of 104** headings.
+  The real app receives `locator.locations.cssSelector` from Readium and
+  detects `h2` directly. **Pause counts in §3 are therefore harness-specific.**
+  The size distribution is unaffected.
+- **No phoneme ground truth.** Sizes are `KokoroPhonemeEstimator` estimates,
+  not real IPA counts, because running G2P needs the model pack. The estimator
+  under-counts expanded numbers (Phase 2), so real counts will differ, most
+  likely upward.
+- **Prior art is documentation, not measurement.** The token bands and
+  punctuation effects in §6 are what other projects publish. They have not been
+  reproduced here.
 
 ---
 
-## Phase 4 — expressiveness
+## 3. Corpus measurements
 
-- [ ] **Multi-voice dialogue.** The biggest single upgrade available, and going
-      from 1 voice to 28 is what unlocked it. Fic is overwhelmingly dialogue.
-      Parse attribution (`"…," said Draco`), assign a voice per character —
-      seeded from the character tags already in hand — and keep the narrator
-      distinct. Largest piece of work on this list; also the difference between
-      "a screen reader" and "an audiobook".
+### Run 1 — 2026-08-22 · 1 work
 
-- [ ] **Voice blending — unlimited voices from the 28 we ship.** A voice pack
-      is a `[510, 256]` fp32 tensor (`KokoroAneVoicePack.storage`), so mixing
-      two voices is a weighted combination of those vectors — Kokoro-FastAPI
-      exposes exactly this as `af_bella(2)+af_heart(1)`, normalized to 100%.
-      Use **SLERP, not a naive average**: averaging two vectors that point in
-      different directions shrinks the result's magnitude and audibly flattens
-      the voice.
-      This makes the multi-voice item above far more valuable — a large cast
-      stops requiring a larger pack, and blends give related-but-distinct
-      voices (useful for siblings, or for keeping a narrator adjacent to a POV
-      character). Cheap to implement; verify by ear.
+Frozen (2013), 2020, 433k words / 11,960 blocks / 103 chapters.
 
-- [ ] **Emphasis from EPUB markup.** `<em>`/`<i>`/`<strong>`/`<b>` is authorial
-      stress, and in fic italics also mark internal thought. `KokoroSemanticBlock`
-      already carries `selector`, but it is only ever tested for `h1-6`,
-      `blockquote`, and `hr` — the inline emphasis signal is discarded. Map to
-      IPA stress marks or a distinct delivery.
-
-- [ ] **Fanfic's own conventions.** ALL-CAPS shouting, `*asterisk emphasis*`,
-      stretched vowels (`noooooo` → lengthened IPA `ː`), interrobangs, trailing
-      `…`. These currently reach BART as OOV garbage.
-
----
-
-## Phase 5 — hard or experimental
-
-- [ ] **Cross-chunk prosody context.** Every chunk is synthesized with no
-      knowledge of the chunk before it, so prosody resets at every boundary —
-      this is the "reading a list of sentences" quality that separates chunked
-      TTS from continuous, and it is the real ceiling on flow. No amount of
-      pause tuning reaches it. Standard fix: carry a few words of context into
-      each chunk and trim the overlap from the rendered audio. Costs synthesis
-      time and is fiddly.
-
-- [ ] **Non-English passages.** Fic drops in Japanese, French, Spanish
-      constantly and English G2P mangles it. The pack now ships English voices
-      only and the English variant has no other G2P frontend. At minimum
-      detect and handle gracefully rather than sounding out romaji; the Kokoro
-      model itself does support other locales if a frontend is added.
-
-- [ ] **Intonation arrows — A/B only, do not ship blind.** The vocab also
-      carries `→ ↓ ↗ ↘` (level, downstep, rising, falling pitch markers) and we
-      emit none of them. Tempting to inject `↗` on questions and `↘` on
-      sentence-final falls. **The tokens are verified to exist; the model's
-      response to them in arbitrary positions is not.** Feeding a model tokens
-      outside its training distribution usually degrades. Requires Phase 0 and
-      a fixed test paragraph.
-
----
-
-## Corpus measurements
-
-`Scripts/epub-to-corpus.py` + `KokoroCorpusDiagnosticTests` run the **real
-packer** over real works and report what it does to them. Diagnostic only —
-skipped unless `TEST_RUNNER_KOKORO_CORPUS_DIR` is set.
-
-**One work characterises its own author and nothing else.** Prose style varies
-enormously between fandoms and writers, and each style stresses a different
-part of the pipeline. A measurement showing some feature "isn't a problem" is
-only a statement about the works measured so far, never a verdict on the item.
-Add works from different fandoms and authors as they come.
-
-### Measured 2026-08-22 — 1 work
-
-| | |
+| Metric | Value |
 |---|---|
-| Corpus | 1 work, Frozen, 2020, 433k words / 11,960 blocks / 103 chapters |
 | blocks → utterances | 11,960 → **20,230** |
 | est. IPA length | min 4 · p25 103 · med 143 · p75 179 · p95 215 · max 407 |
 | below `preferredMin` 110 | **5,648 (27.9%)** |
 | above `preferredMax` 220 | 505 (2.5%) |
-| above 400 (rushing) | 1 |
-| above 510 (throws) | 0 |
-| pauses | cont 9,171 · para 10,911 · scene **0** · chapter 148 |
+| above 400 (rushing zone) | 1 |
+| above 510 (would throw) | 0 |
+| pauses † | cont 9,171 · para 10,911 · scene **0** · chapter 148 |
+| quotes | straight 14,273 · curly 719 |
+| all-caps 2–5 tokens | 22 distinct, ~54 uses |
+| blocks opening with a quote | 3,319 (27.7%) |
 
-**Caveat on this run:** the corpus TSV carries no CSS selector, so
-`KokoroSemanticDocument.classify` fell back to its text-only heading regex,
-which matched 74 of 104 headings. The real app gets `locator.locations.cssSelector`
-from Readium and detects `h2` directly, so the pause counts above are
-harness-specific. The size distribution is not affected.
+† harness-specific, see §2.2.
 
-- [ ] **The packer emits 28% of utterances below its own minimum.** Not
-      style-dependent — structural. `packBlock` runs **per block**, and
+`scene=0` says nothing about the detector — this work is chapter-per-scene and
+contains no markers. `epub-to-corpus.py` now emits `***` for `<hr>` so a work
+that uses them will exercise `looksLikeSceneBreak`.
+
+---
+
+## 4. Findings and checklist
+
+### Phase 0 — make quality judgeable
+
+Nothing below can be evaluated honestly until this exists, and the ordering of
+everything below is provisional without it.
+
+- [ ] **Audition harness.** `[proposal]` Speak a fixed sample on demand under
+      current settings, ideally A/B against the previous setting. Include a
+      dialogue-heavy and a numbers/names-heavy sample, not just clean prose.
+      Cheapest item here; gates every other one.
+
+### Phase 1 — defects
+
+- [ ] **Pauses ignore speed.** `[code]` `KokoroPauseAssembler.assemble` inserts
+      `pauseSeconds × sampleRate` samples and takes no `speed` parameter, while
+      `speed` *is* passed to the synthesizer. At 1.5× the speech compresses and
+      the silence does not, so gaps run ~50% long; at 0.75× they run short.
+      Fix: thread `speed` through, divide `pauseSeconds` by it.
+
+- [ ] **Shouted words are spelled out letter by letter.** `[code]` After a
+      lexicon miss, `EnglishInitialisms.isCandidate` spells any strict-ASCII
+      all-caps token of **2–5 characters** as letter names (`FBI` →
+      `ˈɛf bˈi ˈI`). Right for initialisms, wrong for fiction: `NOOO` becomes
+      "N-O-O-O", a shouted `DRACO!` becomes "D-R-A-C-O". Only *misses* reach
+      the rule — `STOP`/`WHAT` resolve normally — which is exactly where names
+      and interjections live.
+      Fix in our layer: down-case an all-caps token before G2P unless it is a
+      known initialism. Costs nothing expressively; Kokoro ignores
+      capitalization for emphasis entirely `[prior-art]`.
+      *~54 uses in the measured work* `[measured]` *— see §5.*
+
+- [ ] **AO3 boilerplate is read aloud.** `[proposal]` "Chapter Text" headers,
+      author's notes, endnotes, tag dumps, bare URLs. A URL spelled out
+      mid-chapter is the worst of them. Cheap, disproportionately noticeable.
+
+### Phase 2 — packing and style-row correctness
+
+**Background** `[code]`: `KokoroAneVoicePack.slice(for:)` computes
+`row = min(max(phonemeCount - 1, 0), 509)` — the style vector is indexed by
+phoneme count, so **utterance length selects the voice's prosodic character**.
+Upstream Kokoro's design (`ref_s = voicepack[len(ps)-1]`), not a quirk. It is
+why this phase is about quality and not tidiness.
+
+- [ ] **28% of utterances fall below the packer's own minimum.** `[measured]`
+      `[code]` Structural, not stylistic. `packBlock` runs **per block** and
       `packWholeSentences` can only group sentences *within* one block, so
-      every paragraph's remainder is emitted alone however short it is.
-      `mergeShort` only rescues fragments under `shortFragment` (40). With one
-      block per paragraph, that is ~12,000 chances to emit a runt.
-      This is also why the "packer" **increases** unit count by 69% — it is
-      net-splitting, not packing.
-      Given the style vector is indexed by phoneme count, 28% of the work is
-      being voiced with short-utterance style rows the author never implied.
-      Fix: allow merging across adjacent same-kind blocks up to
-      `preferredMax`, or enforce a floor by pulling the next block's opening
-      sentence forward. Interacts with the dialogue item — a short line of
-      *dialogue* should stay short deliberately; a short line of narration
-      should not.
+      every paragraph's remainder is emitted alone however short it is;
+      `mergeShort` only rescues fragments under `shortFragment` (40). One block
+      per paragraph means ~12,000 chances to emit a runt. It is also why unit
+      count *rises* 69% — the packer is net-splitting.
+      Fix: merge across adjacent same-kind blocks up to `preferredMax`, or pull
+      the next block's opening sentence forward to meet a floor.
+      Interacts with the dialogue item below — a short line of *dialogue*
+      should stay short deliberately; a short line of narration should not.
 
-- [ ] **`<hr>` scene breaks are unexercised.** The measured work uses
-      chapter-per-scene and contains no `***`-style markers, so `scene=0` says
-      nothing about the detector. `epub-to-corpus.py` now emits `***` for
-      `<hr>` so a work that uses them will exercise
-      `KokoroSemanticDocument.looksLikeSceneBreak`. Needs a work that has them.
+- [ ] **Split before the rushing zone, not at the model cap.** `[prior-art]`
+      Kokoro is reported to rush beyond ~400 tokens, and Kokoro-FastAPI sets
+      `ABSOLUTE_MAX_TOKENS = 450` against the same 510 model limit. Our
+      `KokoroPhonemeBudget.modelLimit = 510` doubles as the split trigger, so a
+      long sentence can synthesize at ~500 and rush. Separate the constants:
+      keep 510 as the hard `vocab.encode` cap, add a ~400 split threshold.
+      *Measured max was 407, one utterance* `[measured]` *— rare here, but a
+      single rushed sentence is audible.*
 
-### Predictions this work did not exercise
+- [ ] **Replace the estimator with real phoneme counts.** `[code]`
+      `KokoroPhonemeEstimator` guesses IPA length as graphemes × 1.15, but the
+      NeMo normalizer expands numbers before G2P ("2024" → 4 graphemes → ~20
+      IPA), so a date-heavy paragraph can estimate ~200 and exceed the cap.
+      `prepareClip`'s runtime re-check catches it and splits, so it is correct
+      but wasteful — G2P re-runs on the halves. Pack against
+      `manager.phonemes(for:)`, already cached per session. Deletes the
+      estimator, and makes every number in §3 exact.
+
+- [ ] **Do not merge across dialogue boundaries.** `[code]` `[proposal]`
+      A standalone `"Don't."` glued into surrounding narration is voiced with a
+      long-form style row instead of its own. `KokoroSemanticDocument` already
+      classifies `.dialogue` and **that classification is dead** — the only
+      place it or `.blockquote` is consulted is `isBody()`, which treats them
+      exactly like `.paragraph`. hexgrad specifically improved Kokoro's short
+      utterances `[prior-art]`, so short lines are a strength to use.
+
+- [ ] **Revisit the packing band (A/B).** `[prior-art]` Ours is min 110 /
+      target 175 / max 220; Kokoro-FastAPI ships min **175** / max **250** —
+      their minimum is our target. Their band is tuned for continuous
+      narration, so the answer is probably a narration band plus a dialogue
+      exception, not one global band.
+
+### Phase 3 — pronunciation
+
+Fanfic's hardest speech problem, and the one place this app has an advantage no
+general-purpose engine can have: **AO3 tags every work with its characters,
+relationships and fandoms** (`AO3Models.swift`). That is a curated list of
+exactly the proper nouns BART G2P will mispronounce, available *before*
+playback starts.
+
+`KokoroPronunciationStore` already persists global / fandom / work layers and
+is already tier 1 of the phonemizer's resolution order — it beats the Misaki
+lexicon and the BART fallback `[code]`. **It has no UI at all**, so today a
+mispronounced name is permanent.
+
+- [ ] **Pronunciation-fix UI.** `[proposal]` Long-press a word while reading →
+      "Fix pronunciation". The reader already has selection.
+- [ ] **Respelling input, not IPA.** `[proposal]` Nobody types `hɜːrˈmaɪəni`.
+      Accept `her-MY-oh-nee`, convert with the lexicon already on disk, take
+      stress from the capitalised syllable. Without this the store is unusable.
+- [ ] **"Words I guessed at."** `[proposal]` Log BART fallbacks locally and
+      offer them as a review list. The fallback is already a distinct branch in
+      `KokoroAneEnglishPhonemizer`, so this is nearly free.
+- [ ] **Adopt the established inline syntax.** `[prior-art]` Kokoro-FastAPI and
+      MisakiSwift both use `[Worcester](/wˈʊstər/)`. Reuse rather than invent —
+      it gives the respelling UI a serialized form and lets power users paste
+      overrides they already have.
+- [ ] **Cast pre-flight.** `[proposal]` On opening a work, phonemize the
+      character/relationship tags, detect which fell through to BART, prompt
+      once. One prompt fixes words that would otherwise be mangled hundreds of
+      times.
+- [ ] **Fandom seed dictionaries.** `[proposal]` The `fandoms` layer exists and
+      is unused. Fixing *Hermione* once should hold for every Potter fic.
+
+### Phase 4 — expressiveness
+
+- [ ] **Voice blending.** `[prior-art]` A voice pack is a `[510, 256]` fp32
+      tensor, so mixing two voices is a weighted combination —
+      Kokoro-FastAPI exposes it as `af_bella(2)+af_heart(1)`. Use **SLERP, not
+      a naive average**: averaging vectors pointing different directions
+      shrinks magnitude and audibly flattens the voice. Turns 28 voices into an
+      unbounded set and makes the next item far cheaper.
+
+- [ ] **Multi-voice dialogue.** `[proposal]` The biggest single upgrade
+      available, unlocked by going from 1 voice to 28. **27.7% of blocks in the
+      measured work open with a quote** `[measured]`. Parse attribution, assign
+      per character from the tags already in hand, keep the narrator distinct.
+      Largest item on this list.
+
+- [ ] **Emphasis from EPUB markup.** `[code]` `<em>`/`<i>`/`<strong>` is
+      authorial stress, and in fic italics also mark internal thought.
+      `KokoroSemanticBlock` carries `selector` but only ever tests it for
+      `h1-6`, `blockquote`, `hr` — the inline signal is discarded.
+
+- [ ] **Fanfic's own conventions.** `[proposal]` ALL-CAPS, `*asterisks*`,
+      stretched vowels (`noooooo` → lengthened `ː`), interrobangs, trailing `…`.
+
+### Phase 5 — hard or experimental
+
+- [ ] **Cross-chunk prosody context.** `[proposal]` Every chunk is synthesized
+      with no knowledge of the one before it, so prosody resets at every
+      boundary. This is the "reading a list of sentences" quality that
+      separates chunked TTS from continuous, and it is the real ceiling on
+      flow — no amount of pause tuning reaches it. Standard fix: carry a few
+      words of context into each chunk and trim the overlap from the audio.
+      Costs synthesis time and is fiddly.
+
+- [ ] **Non-English passages.** `[proposal]` English G2P mangles them. The pack
+      ships English voices only and the English variant has no other frontend.
+      At minimum detect and handle gracefully.
+
+- [ ] **Intonation arrows — A/B only, do not ship blind.** `[code]`
+      `[proposal]` The vocab carries `→ ↓ ↗ ↘` (level, downstep, rising,
+      falling) and we emit none. **The tokens are verified to exist; the
+      model's response to them in arbitrary positions is not.** Feeding a model
+      tokens outside its training distribution usually degrades. Needs Phase 0
+      and a fixed test paragraph.
+
+---
+
+## 5. Predictions the measured work did not exercise
 
 Recorded so they are not mistaken for resolved. This author writes with
-straight quotes, almost no ALL-CAPS, and almost no non-English — so the
-corresponding items got no signal, not a negative result:
+straight quotes, almost no ALL-CAPS and almost no non-English, so these got
+**no signal — not a negative result**.
 
-| Item | This work | Still open because |
+| Item | Measured | Why still open |
 |---|---|---|
-| Curly-quote open/close | straight 14,273 · curly 719 | **Inverts the fix**: the opportunity is *promoting* straight quotes to curly open/close by position, giving Kokoro the distinction on all 14k rather than preserving 719. Other authors do post curly. |
-| All-caps letter-spelling | 22 distinct, ~54 uses; most lowercase to lexicon hits so never reach the rule | Fandoms with quirk typing or heavy caps emphasis would hit it hard |
-| Stretched vowels | 9 total | Style-dependent; `AAAAAAH` (7 chars) exceeds the 2–5 window and goes to BART anyway |
-| Non-English | `é` ×14 only | Anime/manga fandoms carry romaji and honorifics throughout |
-| URLs | 3 | Epistolary and social-media-format works are full of them |
+| Curly-quote open/close | straight 14,273 · curly 719 | **Inverts the fix.** With straight quotes dominant, the opportunity is *promoting* them to curly open/close by position — Kokoro's vocab holds `“`, `”` and `"` as three distinct tokens `[code]` — giving the distinction on all 14k rather than preserving 719. Other authors do post curly. |
+| All-caps spelling | 22 distinct, ~54 uses; most lowercase to lexicon hits and never reach the rule | Fandoms with quirk typing or heavy caps emphasis would hit it hard |
+| Stretched vowels | 9 total | Style-dependent. `AAAAAAH` (7 chars) exceeds the 2–5 window and goes to BART anyway |
+| Non-English | `é` ×14 | Anime/manga fandoms carry romaji and honorifics throughout |
+| URLs | 3 | Epistolary and social-media formats are full of them |
 | Numbers | 142, mostly small integers | Estimator under-count needs date/time-heavy prose to show |
+| `<hr>` scene breaks | 0 | This work is chapter-per-scene. Detector untested |
 
-## Prior art — what other Kokoro apps do
+**Next corpus additions should deliberately target these**: a quirk-typed work,
+an anime/manga fandom with romaji, a texting or epistolary format, and anything
+using `<hr>` scene breaks.
 
-License check done because this project is **AGPL-3.0**; Apache-2.0, MIT, BSD
-and ISC are all one-way compatible *into* AGPL-3.0.
+---
 
-| Project | License | Usable? | Worth taking |
+## 6. Prior art
+
+Licence-checked because this project is **AGPL-3.0**; Apache-2.0, MIT, BSD and
+ISC are all one-way compatible *into* AGPL-3.0.
+
+| Project | Licence | Usable | Worth taking |
 |---|---|---|---|
 | [hexgrad/kokoro](https://github.com/hexgrad/kokoro) | Apache-2.0 | ✅ | Reference pipeline — the authority on what the model expects |
-| [remsky/Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | Apache-2.0 | ✅ | Token band (175/250/450), voice blending, inline IPA syntax |
+| [remsky/Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | Apache-2.0 | ✅ | Token band 175/250/450, voice blending, inline IPA syntax |
 | [thewh1teagle/kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) | MIT | ✅ | Packaging; combined all-voices binary |
 | [nazdridoy/kokoro-tts](https://github.com/nazdridoy/kokoro-tts) | MIT | ✅ | Closest use case — an EPUB reader with blending |
-| [mlalma/MisakiSwift](https://github.com/mlalma/MisakiSwift) | Apache-2.0 | ✅ | Inline override syntax (G2P itself is redundant — FluidAudio ships one) |
-| [lucasjinreal/Kokoros](https://github.com/lucasjinreal/Kokoros) | **none** | ❌ | No license file = all rights reserved. Do not read or adapt. |
-| nikkoxgonzales/streaming-tts | **none** | ❌ | Same. |
+| [mlalma/MisakiSwift](https://github.com/mlalma/MisakiSwift) | Apache-2.0 | ✅ | Inline override syntax. G2P itself is redundant — FluidAudio ships one |
+| [lucasjinreal/Kokoros](https://github.com/lucasjinreal/Kokoros) | **none** | ❌ | No licence file = all rights reserved. Do not read or adapt |
+| nikkoxgonzales/streaming-tts | **none** | ❌ | Same |
 
-**Settled by consensus across sources — do not spend time on these:**
+### Settled — do not re-investigate
 
-- **Kokoro ignores capitalization, emoji, emotion markers (`[excited]`), and
-  SSML tags** entirely, or misreads them. There is no markup path to emphasis;
-  the levers are punctuation, the phoneme string itself, and the style vector.
+- Kokoro **ignores** capitalization, emoji, emotion markers (`[excited]`) and
+  SSML tags entirely, or misreads them. There is no markup path to emphasis;
+  the levers are punctuation, the phoneme string, and the style vector.
 - Stacking `!!!` does not increase energy over a single `!`.
-- Chunking is *the* quality lever for long-form. Split on sentence and
-  paragraph boundaries, never on character counts.
+- Chunking on sentence and paragraph boundaries — never character counts — is
+  *the* quality lever for long-form.
 
-**Punctuation is the prosody API** (already mostly handled by preserving the
-vocab's punctuation tokens, but worth knowing when tuning pause lengths — these
-are the model's *own* pauses, which our structural pauses stack on top of):
+### Punctuation is the prosody API
+
+These are the model's **own** pauses, which our structural pauses stack on top
+of. Relevant when tuning pause lengths.
 
 | Mark | Effect |
 |---|---|
 | `.` | Full stop, intonation resets completely |
-| `,` | Brief breath, sentence flow maintained |
+| `,` | Brief breath, flow maintained |
 | `…` | Trailing pause **0.5–1 s**, falling intonation |
 | `;` | Between comma and period |
 | `:` | Pause with anticipation |
 | `?` | Rising intonation on yes/no questions |
 | `!` | Higher energy (one is enough) |
 
-- [ ] **Check for stacked pauses.** `…` already yields a 0.5–1 s pause from the
-      model, and `KokoroPauseAssembler` then appends a structural pause on top.
-      An ellipsis at a paragraph end may be getting ~1.3 s. Audible check once
-      Phase 0 exists.
-
-- [ ] **Default speed 0.9, not 1.0.** Audiobook narration is widely recommended
-      at 0.9 (1.05 for ads). We default to 1.0. One-line change to
+- [ ] **Check for stacked pauses.** `[prior-art]` `…` already yields 0.5–1 s
+      from the model and `KokoroPauseAssembler` then appends a structural pause
+      on top — an ellipsis at a paragraph end may be getting ~1.3 s.
+- [ ] **Default speed 0.9, not 1.0.** `[prior-art]` Audiobook narration is
+      widely recommended at 0.9 (1.05 for ads). One line in
       `ReaderSpeechPreferences.defaultRate`, but it changes everyone's
       experience — A/B first.
-
-- [ ] **Normalization escape hatch.** Kokoro-FastAPI exposes
-      `normalization_options: {normalize: false}` because text normalization
-      "can incorrectly remove or change some phrases". We stack two normalizers
-      (`KokoroSpeechNormalizer` then NeMo `EnglishTextNormalizer`) with no way
-      to inspect or disable either. At minimum a debug toggle, so a
+- [ ] **Normalization escape hatch.** `[prior-art]` Kokoro-FastAPI exposes
+      `normalization_options: {normalize: false}` because normalization "can
+      incorrectly remove or change some phrases". We stack two normalizers
+      (`KokoroSpeechNormalizer`, then NeMo `EnglishTextNormalizer`) with no way
+      to inspect or disable either. A debug toggle at minimum, so a
       mispronunciation can be traced to the right stage.
 
-## Known defects and housekeeping
+---
 
-- [ ] **Speed changes need a restart.** `CoreMLKokoroTTSService.speak` captures
-      `currentSpeed` into a local at start, so moving the slider mid-playback
-      does nothing until the next utterance batch.
+## 7. Housekeeping and known defects
+
+- [ ] **Speed changes need a restart.** `[code]` `CoreMLKokoroTTSService.speak`
+      captures `currentSpeed` into a local at start, so the slider does nothing
+      until the next utterance batch.
 - [ ] **Republish the pack with 28 voices.**
       `Scripts/pack-kokoro-ane-github-release.sh` → `gh release create` → bump
       `tag` and `expectedSHA256` in `KokoroGitHubPack`. The published release is
       still the 1-voice build.
-- [ ] **Device-test both engines.** Nothing on this branch has produced audible
-      audio. Core ML path needs an iOS 27 device; Sherpa path needs iOS 26.
-- [ ] **Pre-existing suite failures, unrelated to TTS** — worth their own task.
-      9 tests fail identically on commit `2a61aaf4` (before any TTS work, with
-      the original MiniZip): `FolderSyncTests` + `KudosBackupFontRestoreTests`
+- [ ] **Device-test both engines.** Core ML needs an iOS 27 device; Sherpa needs
+      iOS 26. **Nothing on this branch has produced audible audio.**
+- [ ] **Pre-existing suite failures, unrelated to TTS.** 9 tests fail
+      identically on commit `2a61aaf4` — before any TTS work and with the
+      original MiniZip: `FolderSyncTests` + `KudosBackupFontRestoreTests`
       case-folding, and `WorkStatLabelTests/categoryColorMatchesAO3sOwnCoding`.
+      Worth their own task.
+- [ ] **Heading detection depends on the CSS selector.** `[measured]` The
+      text-only regex matches 74/104 headings; "Preface" and a work's title
+      match nothing. Fine while Readium supplies `cssSelector`, silent
+      degradation if it ever does not.
 - [ ] **`ReaderSpeechSettingsSection` exceeds the SwiftLint type-body-length
-      warning** (532 lines) after gaining the Core ML section. Non-blocking;
-      split if it grows further.
+      warning** (532 lines) after gaining the Core ML section. Non-blocking.
 - [ ] **x86_64 simulators no longer link** — FluidAudio ships an arm64-only
-      `libtext_processing_rs.a`. Apple Silicon only, or an upstream issue.
+      `libtext_processing_rs.a`.
