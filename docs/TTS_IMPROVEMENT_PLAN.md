@@ -222,6 +222,74 @@ not a quirk.
 
 ---
 
+## Corpus measurements
+
+`Scripts/epub-to-corpus.py` + `KokoroCorpusDiagnosticTests` run the **real
+packer** over real works and report what it does to them. Diagnostic only —
+skipped unless `TEST_RUNNER_KOKORO_CORPUS_DIR` is set.
+
+**One work characterises its own author and nothing else.** Prose style varies
+enormously between fandoms and writers, and each style stresses a different
+part of the pipeline. A measurement showing some feature "isn't a problem" is
+only a statement about the works measured so far, never a verdict on the item.
+Add works from different fandoms and authors as they come.
+
+### Measured 2026-08-22 — 1 work
+
+| | |
+|---|---|
+| Corpus | 1 work, Frozen, 2020, 433k words / 11,960 blocks / 103 chapters |
+| blocks → utterances | 11,960 → **20,230** |
+| est. IPA length | min 4 · p25 103 · med 143 · p75 179 · p95 215 · max 407 |
+| below `preferredMin` 110 | **5,648 (27.9%)** |
+| above `preferredMax` 220 | 505 (2.5%) |
+| above 400 (rushing) | 1 |
+| above 510 (throws) | 0 |
+| pauses | cont 9,171 · para 10,911 · scene **0** · chapter 148 |
+
+**Caveat on this run:** the corpus TSV carries no CSS selector, so
+`KokoroSemanticDocument.classify` fell back to its text-only heading regex,
+which matched 74 of 104 headings. The real app gets `locator.locations.cssSelector`
+from Readium and detects `h2` directly, so the pause counts above are
+harness-specific. The size distribution is not affected.
+
+- [ ] **The packer emits 28% of utterances below its own minimum.** Not
+      style-dependent — structural. `packBlock` runs **per block**, and
+      `packWholeSentences` can only group sentences *within* one block, so
+      every paragraph's remainder is emitted alone however short it is.
+      `mergeShort` only rescues fragments under `shortFragment` (40). With one
+      block per paragraph, that is ~12,000 chances to emit a runt.
+      This is also why the "packer" **increases** unit count by 69% — it is
+      net-splitting, not packing.
+      Given the style vector is indexed by phoneme count, 28% of the work is
+      being voiced with short-utterance style rows the author never implied.
+      Fix: allow merging across adjacent same-kind blocks up to
+      `preferredMax`, or enforce a floor by pulling the next block's opening
+      sentence forward. Interacts with the dialogue item — a short line of
+      *dialogue* should stay short deliberately; a short line of narration
+      should not.
+
+- [ ] **`<hr>` scene breaks are unexercised.** The measured work uses
+      chapter-per-scene and contains no `***`-style markers, so `scene=0` says
+      nothing about the detector. `epub-to-corpus.py` now emits `***` for
+      `<hr>` so a work that uses them will exercise
+      `KokoroSemanticDocument.looksLikeSceneBreak`. Needs a work that has them.
+
+### Predictions this work did not exercise
+
+Recorded so they are not mistaken for resolved. This author writes with
+straight quotes, almost no ALL-CAPS, and almost no non-English — so the
+corresponding items got no signal, not a negative result:
+
+| Item | This work | Still open because |
+|---|---|---|
+| Curly-quote open/close | straight 14,273 · curly 719 | **Inverts the fix**: the opportunity is *promoting* straight quotes to curly open/close by position, giving Kokoro the distinction on all 14k rather than preserving 719. Other authors do post curly. |
+| All-caps letter-spelling | 22 distinct, ~54 uses; most lowercase to lexicon hits so never reach the rule | Fandoms with quirk typing or heavy caps emphasis would hit it hard |
+| Stretched vowels | 9 total | Style-dependent; `AAAAAAH` (7 chars) exceeds the 2–5 window and goes to BART anyway |
+| Non-English | `é` ×14 only | Anime/manga fandoms carry romaji and honorifics throughout |
+| URLs | 3 | Epistolary and social-media-format works are full of them |
+| Numbers | 142, mostly small integers | Estimator under-count needs date/time-heavy prose to show |
+
 ## Prior art — what other Kokoro apps do
 
 License check done because this project is **AGPL-3.0**; Apache-2.0, MIT, BSD
