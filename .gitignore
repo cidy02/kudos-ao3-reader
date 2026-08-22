@@ -58,3 +58,8 @@ Vendor/
 # Config/LocalSigning.xcconfig.example to Config/LocalSigning.xcconfig and
 # fill in your own team ID — never commit the copy.
 Config/LocalSigning.xcconfig
+
+# Patched FluidAudio for Core ML Kokoro TTS (~6.4 MB) — run
+# Scripts/fetch-fluidaudio.sh to materialise it. Pinned upstream revision +
+# Scripts/fluidaudio-kudos.patch are what's tracked, not the tree itself.
+Packages/

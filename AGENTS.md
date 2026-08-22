@@ -83,6 +83,11 @@ branch, touch only its files, and never revert another agent's commits.**
   tip; never commit to `main` directly.
 - **Pushing:** push your feature branch as you go (`git push -u origin <branch>`).
   A `could not resolve host` failure is a transient DNS hiccup — just retry.
+- **First build on a fresh clone:** run **`Scripts/fetch-fluidaudio.sh`**. The
+  Core ML Kokoro TTS engine builds against a patched FluidAudio at
+  `Packages/FluidAudio`, which is gitignored like `Vendor/` (MuPDF) — the repo
+  tracks the pinned upstream revision plus `Scripts/fluidaudio-kudos.patch`,
+  not the 6.4 MB tree. Without it the iOS target fails to resolve.
 - **Verify before commit:** `Scripts/lint.sh` (SwiftLint gate) and `Scripts/test.sh`.
   Build **both** iOS (resolves the Readium SPM graph) and **macOS** (legacy reader,
   no Readium) before claiming a cross-platform change is done. Build with

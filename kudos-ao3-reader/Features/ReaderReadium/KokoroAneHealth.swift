@@ -2,6 +2,9 @@ import Foundation
 
 /// Tracks whether Core ML Kokoro synthesis has ever died on *this* device.
 ///
+/// Only consulted on the OS lines where Core ML runs at all — see
+/// `KokoroAnePlayback.supportsCoreML(for:)`.
+///
 /// The libBNNS fault (FluidAudio #817) is a `SIGSEGV` in
 /// `BNNSGraphContextExecute_v2` — there is no error to catch and no
 /// `do/catch` that can recover it, so the engine cannot degrade itself at
@@ -16,15 +19,16 @@ import Foundation
 ///
 /// | strikes | behaviour                                    |
 /// |---------|----------------------------------------------|
-/// | 0       | ANE (`cpuAndNeuralEngine`) — the fast path    |
-/// | 1       | Core ML on `cpuAndGpu`, avoiding BNNS         |
-/// | 2+      | Core ML abandoned; Sherpa/ONNX takes over     |
+/// | 0       | `KokoroAneComputeUnits.default` — ANE per stage |
+/// | 1       | Core ML, every stage `cpuOnly`                  |
+/// | 2+      | Core ML abandoned; Sherpa/ONNX takes over       |
 nonisolated enum KokoroAneHealth: Sendable {
     enum Tier: Equatable, Sendable {
         /// `cpuAndNeuralEngine` — the reason this engine exists.
         case neuralEngine
-        /// Core ML on `cpuAndGpu`, routing around BNNS.
-        case coreMLAvoidingBnns
+        /// Core ML with every stage on `cpuOnly` — no ANE, and no GPU
+        /// either, since Metal is the other known-bad path on iOS 27.
+        case coreMLCpuOnly
         /// Core ML has died twice here; hand off to Sherpa/ONNX.
         case abandonCoreML
     }
@@ -36,7 +40,7 @@ nonisolated enum KokoroAneHealth: Sendable {
     static func tier(forStrikes strikes: Int) -> Tier {
         switch strikes {
         case ..<1: .neuralEngine
-        case ..<abandonThreshold: .coreMLAvoidingBnns
+        case ..<abandonThreshold: .coreMLCpuOnly
         default: .abandonCoreML
         }
     }

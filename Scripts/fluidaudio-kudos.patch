@@ -1,0 +1,106 @@
+--- a/Package.swift
++++ b/Package.swift
+@@ -13,10 +13,6 @@
+             name: "FluidAudio",
+             targets: ["FluidAudio"]
+         ),
+-        .executable(
+-            name: "fluidaudiocli",
+-            targets: ["FluidAudioCLI"]
+-        ),
+     ],
+     dependencies: [],
+     targets: [
+@@ -28,7 +24,6 @@
+                 "NemoTextProcessing",
+             ],
+             path: "Sources/FluidAudio",
+-            exclude: ["ASR/Parakeet/Unified/benchmark.md"],
+             resources: [
+                 // Keep .process: .copy of a Resources-named directory breaks Apple code signing on iOS.
+                 .process("TTS/LuxTts/G2p/Resources")
+@@ -52,25 +47,6 @@
+             path: "Sources/MachTaskSelfWrapper",
+             publicHeadersPath: "include"
+         ),
+-        .executableTarget(
+-            name: "FluidAudioCLI",
+-            dependencies: ["FluidAudio"],
+-            path: "Sources/FluidAudioCLI",
+-            exclude: ["README.md"],
+-            resources: [
+-                .process("Utils/english.json")
+-            ]
+-        ),
+-        .testTarget(
+-            name: "FluidAudioTests",
+-            dependencies: [
+-                "FluidAudio",
+-                "FluidAudioCLI",
+-            ],
+-            resources: [
+-                .process("TTS/LuxTts/Resources")
+-            ]
+-        ),
+     ],
+     cxxLanguageStandard: .cxx17
+ )
+--- a/Sources/FluidAudio/TTS/G2P/G2PModel.swift
++++ b/Sources/FluidAudio/TTS/G2P/G2PModel.swift
+@@ -215,8 +215,14 @@
+             throw G2PModelError.modelLoadFailed("\(ModelNames.G2P.decoderFile) not found at \(decoderURL.path)")
+         }
+ 
++        // cpuOnly is BNNS. iOS 26.4–26.6 SIGSEGVs in BnnsCpuInferenceOperation
++        // (FluidAudio #817/#844). CPU+GPU keeps G2P on Metal instead.
+         let config = MLModelConfiguration()
+-        config.computeUnits = .cpuOnly
++        config.computeUnits = .cpuAndGPU
++        config.allowLowPrecisionAccumulationOnGPU = true
++        if #available(iOS 17.4, macOS 14.4, *) {
++            config.optimizationHints.reshapeFrequency = .infrequent
++        }
+ 
+         encoder = try MLModel(contentsOf: encoderURL, configuration: config)
+         decoder = try MLModel(contentsOf: decoderURL, configuration: config)
+--- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
++++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
+@@ -209,6 +209,12 @@
+             let cfg = MLModelConfiguration()
+             cfg.computeUnits = computeUnits.units(for: stage)
+             cfg.allowLowPrecisionAccumulationOnGPU = true
++            if #available(iOS 17.4, macOS 14.4, *) {
++                cfg.optimizationHints.reshapeFrequency = .infrequent
++            }
++            if #available(iOS 18.0, macOS 15.0, *) {
++                cfg.optimizationHints.specializationStrategy = .fastPrediction
++            }
+             let stageStart = Date()
+             let model = try MLModel(contentsOf: url, configuration: cfg)
+             let stageElapsed = Date().timeIntervalSince(stageStart) * 1000
+--- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
++++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
+@@ -179,6 +179,14 @@
+         }
+     }
+ 
++    /// Non-async wrapper so Swift binds the throwing `prediction(from:options:)`
++    /// overload instead of the async one (which uses e5rt.concurrentExecutionQueue).
++    private static func synchronousPrediction(
++        model: MLModel, from provider: MLFeatureProvider
++    ) throws -> MLFeatureProvider {
++        try model.prediction(from: provider, options: MLPredictionOptions())
++    }
++
+     private static func predict(
+         stage: KokoroAneStage,
+         model: MLModel,
+@@ -190,7 +198,7 @@
+         let clock = ContinuousClock()
+         let start = clock.now
+         do {
+-            let out = try await model.prediction(from: provider)
++            let out = try Self.synchronousPrediction(model: model, from: provider)
+             timing = milliseconds(start.duration(to: clock.now))
+             return out
+         } catch let error as CancellationError {

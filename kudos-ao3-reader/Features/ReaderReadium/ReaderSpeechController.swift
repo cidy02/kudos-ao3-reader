@@ -11,12 +11,16 @@ import UIKit
 /// and mini player call; it extracts the current chapter's text from Readium's
 /// `Publication.content(from:)` and hands it to a `TTSService`.
 ///
-/// **Engine ladder:** `CoreMLKokoroTTSService` (FluidAudio staged graphs on
-/// the Neural Engine) → `SherpaKokoroTTSService` (sherpa-onnx) →
-/// `SystemTTSService` (Apple `AVSpeechSynthesizer`). Core ML is used whenever
-/// its pack is installed and `KokoroAneHealth` has not recorded repeated
-/// synthesis crashes on this device; Sherpa covers the device where it has.
-/// Selection is re-checked each time speech starts.
+/// **Engine ladder:** `CoreMLKokoroTTSService` (FluidAudio staged Core ML
+/// graphs on the Neural Engine) → `SherpaKokoroTTSService` (sherpa-onnx) →
+/// `SystemTTSService` (Apple `AVSpeechSynthesizer`).
+///
+/// Core ML is used on **iOS 27+** only, where its pack is installed and
+/// `KokoroAneHealth` has not recorded repeated synthesis crashes on this
+/// device. On **iOS 26.x** the libBNNS `SIGSEGV` (FluidAudio #817/#844) makes
+/// it unsafe, so Kokoro means Sherpa/ONNX there — which is why the Sherpa
+/// engine and its voice-pack download are not dead weight. Selection is
+/// re-checked each time speech starts.
 ///
 /// **Audio session:** owned by the active `TTSService` (`.playback` /
 /// `.spokenAudio` / long-form).
@@ -168,10 +172,13 @@ final class ReaderSpeechController {
         )
     }
 
-    /// The Core ML pack is installed *and* synthesis has not repeatedly died
-    /// on this device. See `KokoroAneHealth`.
+    /// Core ML Kokoro is eligible: the OS line is one where it is safe at
+    /// all (iOS 27+ — see `KokoroAnePlayback`), its pack is installed, and
+    /// synthesis has not repeatedly died on this device.
     private var coreMLKokoroIsUsable: Bool {
-        KokoroAneAvailability.isUsableForPlayback && !KokoroAneHealth.hasAbandonedCoreML
+        KokoroAnePlayback.supportsCoreML()
+            && KokoroAneAvailability.isUsableForPlayback
+            && !KokoroAneHealth.hasAbandonedCoreML
     }
 
     /// Falls back to the installed Int8 pack when a requested FP32 benchmark

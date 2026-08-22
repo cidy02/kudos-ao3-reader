@@ -5,6 +5,15 @@ import Foundation
 /// FluidAudio's downloader speaks Hugging Face URL shapes, so Kudos fetches
 /// a zip from GitHub and seeds FluidAudio's on-disk cache instead.
 nonisolated enum KokoroGitHubPack: Sendable {
+    /// To republish (e.g. after adding voices):
+    /// 1. `Scripts/pack-kokoro-ane-github-release.sh` — prints the SHA-256.
+    /// 2. `gh release create <newTag> <zip> --repo cidy02/kudos-ao3-reader`
+    /// 3. Bump `tag` and `expectedSHA256` here.
+    ///
+    /// `tag` is also the install marker's contents, so bumping it makes every
+    /// device treat its existing pack as stale and re-install — which is
+    /// exactly what a new voice set needs. The app reads whatever voices the
+    /// pack contains (`KokoroVoiceCatalog`), so no other code changes.
     static let tag = "kokoro-ane-coreml-fp16-1"
     static let zipFileName = "kokoro-ane-coreml-fp16.zip"
 

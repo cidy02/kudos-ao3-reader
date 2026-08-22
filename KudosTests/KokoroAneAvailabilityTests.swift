@@ -11,11 +11,24 @@ struct KokoroAneAvailabilityTests {
         #expect(KokoroAneAvailability.isUsableForPlayback == KokoroAneAvailability.isPackInstalled)
     }
 
-    @Test func ios264Through266PrefersGpuOverBnns() {
-        #expect(KokoroAnePlayback.prefersGpuOverBnns(for: .init(majorVersion: 26, minorVersion: 4, patchVersion: 0)))
-        #expect(KokoroAnePlayback.prefersGpuOverBnns(for: .init(majorVersion: 26, minorVersion: 6, patchVersion: 0)))
-        #expect(!KokoroAnePlayback.prefersGpuOverBnns(for: .init(majorVersion: 26, minorVersion: 3, patchVersion: 0)))
-        #expect(!KokoroAnePlayback.prefersGpuOverBnns(for: .init(majorVersion: 27, minorVersion: 0, patchVersion: 0)))
+    /// iOS 26.x must never reach the Core ML engine: the libBNNS `SIGSEGV`
+    /// (FluidAudio #817/#844) is a 26.x-line bug and cannot be caught, so
+    /// Kokoro runs on Sherpa/ONNX there instead.
+    @Test func coreMLIsOffLimitsOnTheWholeIos26Line() {
+        for minor in 0 ... 9 {
+            #expect(
+                !KokoroAnePlayback.supportsCoreML(
+                    for: .init(majorVersion: 26, minorVersion: minor, patchVersion: 0)
+                ),
+                "26.\(minor) must not use Core ML"
+            )
+        }
+        #expect(!KokoroAnePlayback.supportsCoreML(for: .init(majorVersion: 18, minorVersion: 0, patchVersion: 0)))
+    }
+
+    @Test func coreMLIsUsedFromIos27Onward() {
+        #expect(KokoroAnePlayback.supportsCoreML(for: .init(majorVersion: 27, minorVersion: 0, patchVersion: 0)))
+        #expect(KokoroAnePlayback.supportsCoreML(for: .init(majorVersion: 28, minorVersion: 2, patchVersion: 1)))
     }
 
     @Test func githubPackURLIsThisReposReleaseAsset() {
