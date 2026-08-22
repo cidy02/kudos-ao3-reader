@@ -60,6 +60,10 @@ struct KokoroCorpusDiagnosticTests {
             all.capsCandidates.formUnion(report.capsCandidates)
             for (k, v) in report.pauses { all.pauses[k, default: 0] += v }
         }
+        // Per-work `sizes` arrive sorted; concatenating them leaves the
+        // aggregate only piecewise-sorted, which made its percentiles nonsense
+        // (p25 above the median). Sort once here.
+        all.sizes.sort()
         if files.count > 1 { out += Self.render(all) }
         // Test stdout goes to the simulator console, not xcodebuild's — write
         // the report next to the corpus so it is actually readable.
