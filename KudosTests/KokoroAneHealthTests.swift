@@ -164,4 +164,67 @@ struct KokoroVoiceCatalogTests {
         #expect(path.contains("Application Support"))
     }
 }
+@Suite("Kokoro pause scaling")
+struct KokoroPauseScalingTests {
+    /// 1 s of speech, loud enough to survive edge-silence trimming.
+    private func speech(seconds: Double = 1.0, rate: Double = 24_000) -> [Float] {
+        let n = Int(seconds * rate)
+        return (0 ..< n).map { 0.3 * sin(Float($0) / 12) }
+    }
+
+    private func trailingSilence(_ samples: [Float]) -> Int {
+        samples.reversed().prefix { $0 == 0 }.count
+    }
+
+    /// The synthesizer compresses speech at 1.5x but a fixed-second pause does
+    /// not move, so gaps ran ~50% long at high speed and short at low.
+    @Test func pauseShrinksAsSpeedRises() {
+        let s = speech()
+        let normal = KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .paragraph, speed: 1.0
+        )
+        let fast = KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .paragraph, speed: 2.0
+        )
+        let slow = KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .paragraph, speed: 0.5
+        )
+        #expect(trailingSilence(fast) < trailingSilence(normal))
+        #expect(trailingSilence(slow) > trailingSilence(normal))
+    }
+
+    @Test func pauseScalesInverselyAndProportionally() {
+        let s = speech()
+        let normal = trailingSilence(KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .chapter, speed: 1.0
+        ))
+        let double = trailingSilence(KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .chapter, speed: 2.0
+        ))
+        // Half the duration at twice the speed, within a sample of rounding.
+        #expect(abs(double * 2 - normal) <= 2)
+    }
+
+    /// Defaulting to 1.0 keeps every existing caller's behaviour identical.
+    @Test func defaultSpeedIsUnchangedBehaviour() {
+        let s = speech()
+        let explicit = KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .scene, speed: 1.0
+        )
+        let defaulted = KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .scene
+        )
+        #expect(explicit.count == defaulted.count)
+    }
+
+    /// A zero or negative rate must not produce a negative sample count.
+    @Test func degenerateSpeedIsClamped() {
+        let s = speech()
+        let zero = KokoroPauseAssembler.assemble(
+            samples: s, sampleRate: 24_000, pauseAfter: .paragraph, speed: 0
+        )
+        #expect(zero.count >= s.count - 1)
+        #expect(trailingSilence(zero) > 0)
+    }
+}
 #endif

@@ -74,7 +74,7 @@ nonisolated enum KokoroUtterancePacker {
         guard !text.isEmpty else { return [] }
 
         let sentences = completeSentences(text).flatMap { sentence in
-            splitOnlyOverModelLimit(sentence, estimator: estimator)
+            splitOnlyOverBudget(sentence, estimator: estimator)
         }
         let merged = mergeShort(sentences, estimator: estimator)
         return packWholeSentences(merged, estimator: estimator)
@@ -98,25 +98,28 @@ nonisolated enum KokoroUtterancePacker {
         return sentences.isEmpty ? [text] : sentences
     }
 
-    /// Split a *single* sentence only when it would overflow Kokoro's 510 IPA
-    /// cap. Prefer `;` `:` `—`, then comma, then words. Never used to chase
-    /// the 175 grouping target.
-    private static func splitOnlyOverModelLimit(
+    /// Split a *single* sentence only when it would overflow the split
+    /// budget. Prefer `;` `:` `—`, then comma, then words. Never used to
+    /// chase the 175 grouping target.
+    ///
+    /// The budget is `splitThreshold` (400), not the 510 model cap: Kokoro
+    /// rushes before it throws, so the cap is far too late to start cutting.
+    private static func splitOnlyOverBudget(
         _ text: String,
         estimator: KokoroPhonemeEstimator
     ) -> [String] {
-        if estimator.estimatePhonemeLength(text) <= KokoroPhonemeBudget.modelLimit {
+        if estimator.estimatePhonemeLength(text) <= KokoroPhonemeBudget.splitThreshold {
             return [text]
         }
         for delimiters in [Character(";") as Character, ":", "—"] {
             let parts = splitKeepingDelimiter(text, delimiters: [delimiters], estimator: estimator)
-            if parts.count > 1 { return parts.flatMap { splitOnlyOverModelLimit($0, estimator: estimator) } }
+            if parts.count > 1 { return parts.flatMap { splitOnlyOverBudget($0, estimator: estimator) } }
         }
         let commaParts = splitKeepingDelimiter(text, delimiters: [","], estimator: estimator)
         if commaParts.count > 1 {
-            return commaParts.flatMap { splitOnlyOverModelLimit($0, estimator: estimator) }
+            return commaParts.flatMap { splitOnlyOverBudget($0, estimator: estimator) }
         }
-        return splitByWordsUnderModelLimit(text, estimator: estimator)
+        return splitByWordsUnderBudget(text, estimator: estimator)
     }
 
     private static func splitKeepingDelimiter(
@@ -131,7 +134,7 @@ nonisolated enum KokoroUtterancePacker {
             current.append(ch)
             if ch == "\"" { inQuote.toggle() }
             if !inQuote, delimiters.contains(ch),
-               estimator.estimatePhonemeLength(current) >= KokoroPhonemeBudget.modelLimit / 2
+               estimator.estimatePhonemeLength(current) >= KokoroPhonemeBudget.splitThreshold / 2
             {
                 let trimmed = current.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty { pieces.append(trimmed) }
@@ -143,7 +146,7 @@ nonisolated enum KokoroUtterancePacker {
         return pieces.count > 1 ? pieces : [text]
     }
 
-    private static func splitByWordsUnderModelLimit(
+    private static func splitByWordsUnderBudget(
         _ text: String,
         estimator: KokoroPhonemeEstimator
     ) -> [String] {
@@ -154,7 +157,7 @@ nonisolated enum KokoroUtterancePacker {
         for word in words {
             let candidate = current.isEmpty ? word : current + " " + word
             if !current.isEmpty,
-               estimator.estimatePhonemeLength(candidate) > KokoroPhonemeBudget.modelLimit
+               estimator.estimatePhonemeLength(candidate) > KokoroPhonemeBudget.splitThreshold
             {
                 pieces.append(current)
                 current = word

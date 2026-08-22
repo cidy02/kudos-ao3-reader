@@ -202,7 +202,7 @@ public final class CoreMLKokoroTTSService: TTSService {
                 manager: manager,
                 revision: lexiconRevision
             )
-            if ipa.count > KokoroPhonemeBudget.modelLimit {
+            if ipa.count > KokoroPhonemeBudget.splitThreshold {
                 let sentences = KokoroUtterancePacker.completeSentences(in: text)
                 if sentences.count > 1 {
                     let mid = max(1, sentences.count / 2)
@@ -222,9 +222,11 @@ public final class CoreMLKokoroTTSService: TTSService {
                     continue
                 }
                 // No sentence or word boundary to cut on: an unspaced CJK run,
-                // a long URL, a keysmash. `KokoroAneVocab.encode` *throws*
-                // above `modelLimit`, which would end the whole Read Aloud
-                // session, so halve the raw text instead. Halving terminates.
+                // a long URL, a keysmash. Splitting is driven by
+                // `splitThreshold` for prosody, but the reason there is a
+                // last resort at all is `modelLimit`: `KokoroAneVocab.encode`
+                // *throws* above it, ending Read Aloud for the whole chapter.
+                // Halve the raw text instead. Halving terminates.
                 if text.count > 1 {
                     let mid = text.index(text.startIndex, offsetBy: text.count / 2)
                     queue.insert(contentsOf: [
@@ -253,7 +255,8 @@ public final class CoreMLKokoroTTSService: TTSService {
             samples.append(contentsOf: KokoroPauseAssembler.assemble(
                 samples: result.samples,
                 sampleRate: Double(result.sampleRate),
-                pauseAfter: pause
+                pauseAfter: pause,
+                speed: speed
             ))
             totalMs += result.timings.totalMs
             phonemeCount += ipa.count

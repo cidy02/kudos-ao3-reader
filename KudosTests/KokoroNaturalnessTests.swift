@@ -141,13 +141,12 @@ final class KokoroNaturalnessTests: XCTestCase {
         let utterances = KokoroUtterancePacker.pack(units: units, estimator: estimator)
         XCTAssertFalse(utterances.isEmpty)
         for utterance in utterances {
+            // The packer now guarantees the *split* budget, well under the
+            // model cap — Kokoro rushes long before `encode` throws. (The
+            // duplicate assertion this replaces checked `modelLimit` twice.)
             XCTAssertLessThanOrEqual(
                 estimator.estimatePhonemeLength(utterance.text),
-                KokoroPhonemeBudget.modelLimit
-            )
-            XCTAssertLessThanOrEqual(
-                estimator.estimatePhonemeLength(utterance.text),
-                KokoroPhonemeBudget.modelLimit
+                KokoroPhonemeBudget.splitThreshold
             )
         }
     }
@@ -162,7 +161,7 @@ final class KokoroNaturalnessTests: XCTestCase {
         let estimator = KokoroPhonemeEstimator()
         let estimate = estimator.estimatePhonemeLength(sentence)
         XCTAssertGreaterThan(estimate, KokoroPhonemeBudget.preferredTarget)
-        XCTAssertLessThan(estimate, KokoroPhonemeBudget.modelLimit)
+        XCTAssertLessThan(estimate, KokoroPhonemeBudget.splitThreshold)
 
         let utterances = KokoroUtterancePacker.pack(
             units: [KokoroNaturalnessCorpus.unit(sentence)],
