@@ -129,11 +129,18 @@ nonisolated enum KokoroUtterancePacker {
     ) -> [String] {
         var pieces: [String] = []
         var current = ""
-        var inQuote = false
+        // Depth, not a toggle: normalization hands us directional quotes, so a
+        // speech that opens in every paragraph and closes in none no longer
+        // flips the flag inside out for the rest of the text.
+        var quoteDepth = 0
         for ch in text {
             current.append(ch)
-            if ch == "\"" { inQuote.toggle() }
-            if !inQuote, delimiters.contains(ch),
+            if ch == KokoroSpeechNormalizer.openQuote {
+                quoteDepth += 1
+            } else if ch == KokoroSpeechNormalizer.closeQuote {
+                quoteDepth = max(0, quoteDepth - 1)
+            }
+            if quoteDepth == 0, delimiters.contains(ch),
                estimator.estimatePhonemeLength(current) >= KokoroPhonemeBudget.splitThreshold / 2
             {
                 let trimmed = current.trimmingCharacters(in: .whitespaces)
