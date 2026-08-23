@@ -55,8 +55,9 @@ nonisolated enum KokoroSemanticDocument {
         }
 
         for unit in units {
-            let raw = unit.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !raw.isEmpty else { continue }
+            let trimmed = unit.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !KokoroBoilerplateFilter.isBoilerplate(trimmed) else { continue }
+            let raw = KokoroBoilerplateFilter.sanitizingURLs(in: trimmed)
             let selector = unit.locator?.locations.cssSelector
             let kind = classify(text: raw, selector: selector)
 
