@@ -14,7 +14,7 @@ nonisolated enum KokoroGitHubPack: Sendable {
     /// device treat its existing pack as stale and re-install — which is
     /// exactly what a new voice set needs. The app reads whatever voices the
     /// pack contains (`KokoroVoiceCatalog`), so no other code changes.
-    static let tag = "kokoro-ane-coreml-fp16-1"
+    static let tag = "kokoro-ane-coreml-fp16-2"
     static let zipFileName = "kokoro-ane-coreml-fp16.zip"
 
     static let downloadURL = URL(
@@ -23,7 +23,7 @@ nonisolated enum KokoroGitHubPack: Sendable {
     )!
 
     static let expectedSHA256 =
-        "44705ed4708d703b18e56f5761d000e183eae883db0ac0aac2d5a701bcf6f6f4"
+        "c8d747b749e66ae4ef6d94f2e7c6028d4ce6aa11e6fd7acc937287404a08fdb4"
 
     static func sha256Hex(of data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()

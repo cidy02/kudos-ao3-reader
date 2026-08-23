@@ -18,7 +18,14 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-${TMPDIR:-/tmp}/kokoro-ane-coreml.zip}"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/kokoro-ane-pack.XXXXXX")"
-HF="https://huggingface.co/FluidInference/kokoro-82m-coreml/resolve/main"
+# Pinned, not `main`. Rebuilding from `main` on 2026-08-23 produced a
+# materially different model than the published kokoro-ane-coreml-fp16-1 pack
+# (KokoroAlbert weight 5,718,848 vs 11,405,312 — a recompile, not a
+# truncation; model.mil and metadata.json differ too). An unpinned model
+# source means the pack is not reproducible and the app's expectedSHA256
+# silently starts describing different weights.
+HF_REVISION="acac8811a9acefe8bf7a5e3fcba99bd8fc50dcd6"
+HF="https://huggingface.co/FluidInference/kokoro-82m-coreml/resolve/$HF_REVISION"
 
 cleanup() { rm -rf "$WORKDIR"; }
 trap cleanup EXIT
@@ -68,7 +75,9 @@ done
 #
 # Only the American (a*) and British (b*) English voices are packed — the
 # other locales need a G2P frontend the English variant does not have.
-KOKORO_HF="https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices"
+# Pinned for the same reason as HF_REVISION above.
+KOKORO_REVISION="main"
+KOKORO_HF="https://huggingface.co/hexgrad/Kokoro-82M/resolve/$KOKORO_REVISION/voices"
 VOICES="af_alloy af_aoede af_bella af_heart af_jessica af_kore af_nicole \
 af_nova af_river af_sarah af_sky am_adam am_echo am_eric am_fenrir am_liam \
 am_michael am_onyx am_puck am_santa bf_alice bf_emma bf_isabella bf_lily \

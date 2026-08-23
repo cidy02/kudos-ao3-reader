@@ -80,8 +80,11 @@ nonisolated struct MiniZip {
         /// caps bound what a hostile archive can make the reader allocate
         /// (per entry, and per restore in total) while comfortably covering
         /// any real library.
-        /// Dense FP16 Kokoro ANE zip: vocoder `weight.bin` is ~98 MB, total
-        /// uncompressed payload ~180 MB. Headroom covers a future denser pack.
+        /// Dense FP16 Kokoro ANE zip. Measured at revision
+        /// `acac8811` with 28 voices: 89 MB compressed, 104 MB uncompressed,
+        /// largest entry the vocoder `weight.bin` at 46.6 MB. (An earlier
+        /// comment here claimed ~98 MB / ~180 MB — that described the older,
+        /// larger-weight upstream revision.) Headroom covers a denser pack.
         static let kokoroAne = Limits(
             maxEntryCount: 10_000,
             maxSingleEntryUncompressedSize: 400_000_000,
