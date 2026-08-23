@@ -87,19 +87,22 @@ struct KokoroCorpusHarvestTests {
 
             // Gap-fill: the 19 works above got no signal on five predictions —
             // quirk typing, romaji/honorifics, URLs, number/date density, and
-            // non-English passages. Each target below narrows by construction
-            // (a relationship, a character, a convention tag) rather than by
-            // bare fandom name, since "Homestuck" alone already proved too
-            // broad to reliably hit the specific convention inside. Every
-            // fandom/tag name was checked canonical against
-            // https://archiveofourown.org/autocomplete/{fandom,tag} first.
+            // non-English passages. Each target below narrows by an
+            // additional convention tag rather than bare fandom name alone,
+            // since "Homestuck" already proved too broad to reliably hit the
+            // specific convention inside. Every fandom/tag name was checked
+            // canonical against https://archiveofourown.org/autocomplete/
+            // {fandom,tag} first. (`Target` only carries `fandom` and
+            // `additionalTags` as tag-narrowing fields — no relationship or
+            // character filter — so every entry below sticks to those two.)
 
-            // Quirk typing: Terezi (ALL-CAPS) and Vriska (8/ampersand-code
-            // substitution) are two of Homestuck's heaviest quirk-typists —
-            // pinning the relationship guarantees their pesterlogs appear,
-            // unlike the bare fandom above.
+            // Quirk typing: "Pesterlog(s)" is Homestuck's own canonical tag
+            // for its trolls' chatlog format, which is exactly where the
+            // heaviest per-character quirk typing (ALL CAPS, no caps, symbol
+            // substitution) lives — unlike the bare fandom above.
             .init(label: "homestuck-quirk-heavy", fandom: "Homestuck",
-                  relationships: "Terezi Pyrope/Vriska Serket", wordsFrom: "20000"),
+                  additionalTags: "Pesterlog(s) (Homestuck)",
+                  sort: .dateUpdated, wordsFrom: "20000"),
 
             // Romaji / honorifics: sport-anime fandoms with dense
             // senpai/kouhai culture. Sorted by date, not kudos — best-liked
@@ -129,10 +132,12 @@ struct KokoroCorpusHarvestTests {
                   wordsFrom: "40000"),
 
             // Non-English passages: fandoms whose fanon leans on real
-            // accented-language dialogue from a canonically bilingual
-            // character (Lance's Spanish) or setting (Miraculous's Paris).
+            // accented-language dialogue — Voltron's Lance is canonically
+            // Cuban and often written code-switching into Spanish, and
+            // `Multilingual` is AO3's own tag for exactly that convention;
+            // Miraculous Ladybug's Paris setting does the same in French.
             .init(label: "voltron-spanish", fandom: "Voltron: Legendary Defender",
-                  characters: "Lance (Voltron)", wordsFrom: "40000"),
+                  additionalTags: "Multilingual", wordsFrom: "40000"),
             .init(label: "miraculous-french", fandom: "Miraculous Ladybug", wordsFrom: "40000"),
         ]
     }
