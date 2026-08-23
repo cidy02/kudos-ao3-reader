@@ -174,6 +174,71 @@ Every headline number gets worse on formatting-diverse input:
   curly quotes; two have *zero* straight. Any fix must handle both, and must
   not assume a work is internally consistent.
 
+### Run 4 — 2026-08-23 · 20 works, gap-fill
+
+Nine targets added specifically to exercise the five predictions Runs 1–3 left
+untested. 20 of 21 harvested (`voltron-spanish` returned no AO3 results).
+
+| | Run 3 (12 works) | Run 4 (20 works) |
+|---|---|---|
+| blocks → utterances | 62,602 → 65,303 | **102,780 → 111,485** |
+| median est. IPA | 153 | 147 |
+| below `preferredMin` | 28.5% | 31.7% |
+| **above 400 (rushing)** | **0** | **0** |
+| **above 510 (throws)** | **0** | **0** |
+| all-caps distinct | 1,308 | 1,519 |
+| quotes straight / curly | 17,874 / 37,066 | 24,299 / 75,837 |
+
+**The `splitThreshold` fix holds on every new convention** — quirk typing,
+honorific-dense sports banter, chat/Twitter/Tumblr formats, stardates. Nothing
+crossed 400 or 510 anywhere in 111,485 utterances.
+
+#### Verdict on the five predictions
+
+1. **Quirk typing — exercised, confirmed.** Tagging by *format*
+   (`Pesterlog(s) (Homestuck)`) rather than fandom found 186 distinct all-caps
+   tokens against the fandom-only sample's 86, plus heavy digit-substitution
+   typing. Sampling by fandom alone undersampled this.
+2. **Honorifics — the premise was WRONG, and the gap never existed.** This
+   document previously asserted the Naruto and Bleach works were "plain English
+   prose". Re-measuring them directly: the Bleach work carries **208**
+   honorific-suffix tokens and the Naruto work **68** (`-san`, `-kun`,
+   `-chan`, `-sama`, `-sensei`, `-nii`), verified against raw text, not regex
+   false positives. The convention was in the corpus from Run 2 onward and the
+   claim of no signal was simply not checked.
+3. **URLs — still uncovered; the hedge failed.** `Twitter` and `Tumblr` tags
+   contributed **zero** organic URLs — those tags mark *subject matter*, not
+   format-with-links. The aggregate rise (28 → 35) came entirely from an
+   unrelated work's repeated credit-header links. Needs a different approach.
+4. **Number/date density — still uncovered; both hedges underperformed.**
+   `time-travel-dates` (0.042/block) and `startrek-stardates` (0.024/block)
+   came in *below* the corpus average (0.064–0.079) — the opposite of the
+   hypothesis. The architectural concern is nonetheless confirmed by reading
+   the code: there is **no digit-expansion logic anywhere in
+   `KokoroSpeechNormalizer`**, so numeric text is genuinely under-counted by
+   the estimator whenever it occurs.
+5. **Non-English — exercised modestly.** A French work adds 19 distinct
+   foreign words. `voltron-spanish` found nothing and was a genuine miss.
+
+#### Two measurement contaminations found — both invalidate earlier counts
+
+- **Decorative Unicode is not foreign text.** Python's `unicodedata` classifies
+  Mathematical Alphanumeric Symbols and Letterlike Symbols — the stylised
+  fancy-font AO3 authors use for *English* headers — as letters. Earlier
+  non-ASCII counts conflated those with genuine diacritics. The "14 accented
+  characters total" figure from Run 1 is unreliable for this reason: one
+  existing work alone carries 127 genuine foreign letters (Spanish, French,
+  Portuguese, German) mixed with 288 decorative characters.
+- **Leetspeak is not numbers.** Quirk typing substitutes digits for letters
+  (`TH3`, `4ND`), which a bare `\d+` counts as numeric. Requiring no adjacent
+  letter dropped the Homestuck work's apparent numeric density from 1.13/block
+  to 0.07/block.
+
+**Lesson, consistent with §5:** three of the five "uncovered" predictions were
+wrong about their own premise — one had signal all along, two had hedges that
+measured the opposite of what was expected. A prediction is not evidence, and
+neither is a plan to test it.
+
 ---
 
 ## 4. Findings and checklist
