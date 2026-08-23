@@ -143,6 +143,18 @@ public nonisolated struct SpeechSpectrum: Equatable, Sendable {
     /// should be spending their travel on.
     public static let dynamicRangeDb = 40.0
 
+    /// Shaping applied after the dB mapping. **This is the visual-feel knob**;
+    /// raise it if the bars sit too high, lower it toward 1.0 for a flatter,
+    /// more literal meter.
+    ///
+    /// Even on a dB scale, continuous speech genuinely *is* loud most of the
+    /// time — accurate, but it leaves the bars hovering near the top with
+    /// little room to move. A gamma above 1 pulls the middle down while
+    /// leaving 0 and 1 fixed, so peaks still reach full height and quiet
+    /// moments drop further: 0.80 becomes 0.70 and 0.60 becomes 0.44, while
+    /// 0.95 stays 0.92.
+    public static let levelGamma = 1.6
+
     /// Map a spectrogram onto a **decibel** scale relative to the clip's peak.
     ///
     /// Linear magnitude is why the bars read as a solid block: hearing is
@@ -169,7 +181,8 @@ public nonisolated struct SpeechSpectrum: Equatable, Sendable {
             SpeechSpectrum(bands: frame.map { magnitude in
                 guard magnitude > 0 else { return 0 }
                 let db = 20 * log10(magnitude / peak)          // <= 0
-                return max(0, (db + dynamicRangeDb) / dynamicRangeDb)
+                let linear = max(0, (db + dynamicRangeDb) / dynamicRangeDb)
+                return pow(linear, levelGamma)
             })
         }
     }
