@@ -425,10 +425,59 @@ mispronounced name is permanent.
       MisakiSwift both use `[Worcester](/wˈʊstər/)`. Reuse rather than invent —
       it gives the respelling UI a serialized form and lets power users paste
       overrides they already have.
-- [ ] **Cast pre-flight.** `[proposal]` On opening a work, phonemize the
-      character/relationship tags, detect which fell through to BART, prompt
-      once. One prompt fixes words that would otherwise be mangled hundreds of
-      times.
+- [ ] **Contextual pronunciation: `the` sandhi.** `[code]` `/ðə/` before a
+      consonant, `/ði/` before a vowel — and the rule is **phonological, not
+      orthographic**, so it must run on phonemes: *the hour* takes `/ði/`
+      (silent h), *the university* takes `/ðə/` (`/j/` glide), *the FBI* takes
+      `/ði/`. A letter-based rule gets all three wrong; a phoneme-based one
+      gets all three free, because G2P has already resolved them.
+      `wordToPhonemes` is `[String: [String]]` — a flat map with no context
+      parameter — so today `the` has exactly one pronunciation everywhere.
+      Feasible because `phonemize` joins words with `parts.joined(separator: " ")`,
+      so word boundaries survive into the IPA string: split on spaces, find the
+      weak form, inspect the next token's first phoneme, swap. Deterministic,
+      no model, no POS. Highest-frequency word in English.
+
+- [ ] **Contextual pronunciation: possessives.** `[code]` `splitWords` keeps
+      `'` inside a word (which is what saves `wasn't`) and `normalizeKey` keeps
+      it in the lookup key, so `Anna's` is looked up as the literal key
+      `anna's`. Contractions are in the Misaki lexicon; **possessives of proper
+      nouns are not**, so they miss every tier and land on BART with the
+      apostrophe attached.
+      English possessive `-s` is regular, picked by the preceding phoneme:
+      `/ɪz/` after a sibilant (Alice's), `/s/` after voiceless (Pat's), `/z/`
+      otherwise (Anna's, Harold's). Derive it rather than guess it.
+      **This also breaks the pronunciation UI and cast pre-flight below**, and
+      that is the bigger problem: a user correcting `Aziraphale` does *not* fix
+      `Aziraphale's` — different key, tier-1 override never matches — and AO3
+      tags supply `Aziraphale`, never the possessive. Fix by emitting a derived
+      companion entry for every correction, which needs only the final phoneme
+      of the base IPA. Plural possessives (`the Winchesters'`) fall out of the
+      same rule.
+
+- [ ] **Cast pre-flight — as ranked, multi-source discovery.** `[proposal]`
+      Originally scoped as "phonemize the AO3 character tags". **Tags are a
+      good seed and a bad set**: they miss Original Characters — often the
+      most-spoken name in the work — along with minor characters the author
+      never tagged, and every place name, invented term, spell, ship and
+      organisation, none of which are ever tagged.
+      Three sources that fail in different directions:
+      | Source | Finds | Misses |
+      |---|---|---|
+      | AO3 tags | canonical cast, free, before playback | OCs, minor names, non-person nouns |
+      | `NLTagger` `.nameType` over the text | untagged people, places, organisations | invented words NER has no prior for |
+      | BART-fallback log | *exactly* what actually missed every tier | only known after it is spoken once |
+      **Frequency is what makes it tractable.** Nobody wants a 200-name prompt,
+      but an OC named every third paragraph and a spear-carrier named twice are
+      not comparable — rank by occurrences × missed-the-lexicon and the top few
+      are worth one prompt each. The whole EPUB is on disk before playback, so
+      the scan can cover the entire work rather than discovering names
+      chapter by chapter.
+      **Caveat:** for an OC there is no correct answer to discover — no
+      lexicon, no authority, only what the reader thinks it sounds like. That
+      argues for making the fix cheap rather than the guess clever, and it is
+      why the possessive derivation above matters more here, not less: an OC's
+      name is exactly the word that recurs as `Rhiannon's`.
 - [ ] **Fandom seed dictionaries.** `[proposal]` The `fandoms` layer exists and
       is unused. Fixing *Hermione* once should hold for every Potter fic.
 
@@ -458,6 +507,57 @@ mispronounced name is permanent.
 
 - [ ] **Fanfic's own conventions.** `[proposal]` ALL-CAPS, `*asterisks*`,
       stretched vowels (`noooooo` → lengthened `ː`), interrobangs, trailing `…`.
+
+### Phase 4b — on-device LLM as an oracle for the ambiguous residue
+
+The device runs iOS 27, so Apple's **Foundation Models** framework is
+available: an on-device model with no download, no memory management to own,
+and guided generation for structured output. That last part is the crux.
+
+**Use it to *choose*, not to *generate*.** Asking a small model for IPA is
+asking for confident, unverifiable, occasionally-wrong phoneme strings, and we
+would have no way to tell a good answer from a bad one. Asking it *"in this
+sentence, is `read` past or present?"* is a two-way classification we can
+constrain, cache, and sanity-check. Everything below is framed that way.
+
+**Run it once, at download, never at playback.** The whole EPUB is on disk
+before a word is spoken; results cache alongside the work. Synthesis latency
+must not depend on a language model.
+
+**Do not point it at the whole text.** The genuinely ambiguous cases are a
+tiny fraction of any work, and the deterministic rules above already cover the
+*regular* ones correctly and far more cheaply. An LLM that re-derives
+possessive allomorphs is slower, less reliable, and adds nondeterminism to
+something that has a rule.
+
+- [ ] **Heteronym disambiguation.** `[proposal]` `read` / `lead` / `live` /
+      `wind` / `tear` / `bow` / `close` / `record` / `present` / `object` /
+      `content` / `refuse` / `produce` / `desert`. These need part of speech
+      and sometimes semantics, which is exactly what rules cannot do and a
+      model can. Only sentences containing one of a closed list are sent, so
+      the work is bounded and small.
+      Note: **Misaki upstream does POS-aware lookup via spaCy; the Swift port
+      dropped it**, so this is a known gap against the reference
+      implementation rather than a novel feature. `NLTagger`'s `.lexicalClass`
+      is the cheaper non-LLM option and should be tried first.
+- [ ] **Speaker attribution for multi-voice.** `[proposal]` Unattributed lines
+      in a back-and-forth (`"Don't."` with no `said X`) are where rule-based
+      attribution fails, and where a model reading a few lines of context does
+      well. Feeds the multi-voice item directly.
+- [ ] **Ambiguous normalisation.** `[proposal]` `St.` as Saint or Street,
+      roman numerals, bare dates, and units — cases where NeMo's rules have to
+      guess and the surrounding sentence resolves it.
+- [ ] **Non-English passage detection.** `[proposal]` Identify language spans
+      so they can at least be handled deliberately rather than sounded out as
+      English.
+
+**Blocked on / risks, to check before building:** Foundation Models needs a
+supported device with Apple Intelligence enabled, so every path must degrade
+to the deterministic rules when it is absent — it is a quality layer, never a
+dependency. A 433k-word work is a real amount of processing at download time,
+which is the main argument for bounding input to ambiguous spans. And model
+output is nondeterministic, so the same work could prepare differently twice;
+caching the decision with the work makes it stable after the first pass.
 
 ### Phase 5 — hard or experimental
 
