@@ -386,6 +386,11 @@ public protocol TTSService: AnyObject {
     /// Callback when speech energy changes (pulsed per fragment).
     var onSpeechEnergyPulse: ((Double, Double) -> Void)? { get set }
 
+    /// Per-band energy for the equalizer. Kokoro measures it from its own PCM;
+    /// Apple infers it from the spelling, because its samples are never ours.
+    /// See `SpeechSpectrum`.
+    var onSpeechSpectrum: ((SpeechSpectrum) -> Void)? { get set }
+
     /// Callback for page syncing.
     var onAdvance: ((Locator) -> Void)? { get set }
 
