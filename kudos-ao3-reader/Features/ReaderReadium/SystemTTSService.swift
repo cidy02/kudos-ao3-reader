@@ -44,6 +44,7 @@ public final class SystemTTSService: TTSService {
     public var onStatusChange: ((TTSServiceStatus) -> Void)?
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
+    public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
     public var onAdvance: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
@@ -197,6 +198,11 @@ public final class SystemTTSService: TTSService {
         speechEnergy = Double.random(in: 0.88 ... 1.0)
         speechEnergySeed = Double(trimmed.unicodeScalars.reduce(0) { ($0 &+ UInt32($1.value)) } % 997) / 997.0
         onSpeechEnergyPulse?(speechEnergy, speechEnergySeed)
+        // AVSpeechSynthesizer renders internally, so there is no signal to
+        // meter — but we do know the word. A spectrum inferred from its
+        // spelling tracks what is actually being said, where the random level
+        // above never could.
+        onSpeechSpectrum?(SpeechSpectrum.forSpoken(word: trimmed))
     }
 
     fileprivate func handleUtteranceEnded(utteranceID: ObjectIdentifier? = nil) {

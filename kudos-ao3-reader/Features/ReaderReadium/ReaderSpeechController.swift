@@ -49,6 +49,11 @@ final class ReaderSpeechController {
     private(set) var speechEnergy: Double = 0
     /// 0…1 seed from the latest spoken fragment — varies per-bar phase.
     private(set) var speechEnergySeed: Double = 0
+    /// Smoothed per-band levels for the equalizer, one entry per bar.
+    /// Kokoro measures these from its own PCM; Apple infers them from the word
+    /// being spoken. See `SpeechSpectrum`.
+    private(set) var speechSpectrum: [Double] =
+        Array(repeating: 0, count: SpeechSpectrum.bandCount)
 
     /// Called with each utterance's locator so the reader can page along with
     /// the voice.
@@ -81,6 +86,15 @@ final class ReaderSpeechController {
     private var speechEnergyTarget: Double = 0
     /// Runs the attack/release smoother while energy is live or speaking.
     private var speechEnergySmoothTask: Task<Void, Never>?
+    private var speechSpectrumTarget: [Double] =
+        Array(repeating: 0, count: SpeechSpectrum.bandCount)
+    /// When the last spectrum frame arrived. A *measured* source (Kokoro)
+    /// streams frames continuously, so decaying between them would fight the
+    /// measurement and flatten real detail; a *pulsed* source (Apple, one
+    /// callback per word) needs the decay or the bars would hang at the last
+    /// word's level. Rather than branch on engine identity, infer it: recent
+    /// frames mean continuous, and the release takes over once they stop.
+    private var lastSpectrumAt: Date?
 
     /// Work metadata for the system Now Playing card (title + author byline).
     private var nowPlayingTitle: String = ""
@@ -269,6 +283,7 @@ final class ReaderSpeechController {
             existing.onStatusChange = nil
             existing.onSpokenTextChange = nil
             existing.onSpeechEnergyPulse = nil
+            existing.onSpeechSpectrum = nil
             existing.onAdvance = nil
             existing.onSpokenRange = nil
             existing.stop()
@@ -319,6 +334,16 @@ final class ReaderSpeechController {
             guard let self else { return }
             self.speechEnergyTarget = energy
             self.speechEnergySeed = seed
+            self.startSpeechEnergySmoothingIfNeeded()
+        }
+
+        service.onSpeechSpectrum = { [weak self] spectrum in
+            guard let self else { return }
+            self.speechSpectrumTarget = spectrum.bands
+            self.lastSpectrumAt = Date()
+            // Keep the single-value envelope in step so anything still reading
+            // `speechEnergy` stays correct.
+            self.speechEnergyTarget = max(self.speechEnergyTarget, spectrum.level)
             self.startSpeechEnergySmoothingIfNeeded()
         }
 
@@ -530,7 +555,32 @@ final class ReaderSpeechController {
 
                 // Ease target down so energy falls during real silence between pulses.
                 // Slightly snappier than a pure DI-smooth release — still smooth, less lag.
-                self.speechEnergyTarget *= 0.90
+                // Only decay a *pulsed* source. A measured spectrogram is
+                // already arriving ~30x a second and decaying between frames
+                // would erase the detail we measured it for.
+                let streaming = self.lastSpectrumAt.map {
+                    Date().timeIntervalSince($0) < 0.12
+                } ?? false
+                if !streaming {
+                    self.speechEnergyTarget *= 0.90
+                    self.speechSpectrumTarget = self.speechSpectrumTarget.map { $0 * 0.90 }
+                }
+
+                // Per band, so bass / formants / sibilance move independently
+                // instead of sharing one scalar.
+                //
+                // A *measured* source needs a much faster release than a pulsed
+                // one. Frames arrive every ~33 ms while this loop runs at 60 Hz;
+                // at the pulsed release (0.16) a peak takes ~0.25 s to fall, so
+                // the next frame always landed before the bar had come down and
+                // the display sat pinned near the top. Tracking the measurement
+                // is the whole point when we actually have one.
+                let releaseAlpha = streaming ? 0.45 : 0.16
+                self.speechSpectrum = zip(self.speechSpectrum, self.speechSpectrumTarget)
+                    .map { current, bandTarget in
+                        let bandAlpha = bandTarget > current ? 0.6 : releaseAlpha
+                        return current + (bandTarget - current) * bandAlpha
+                    }
 
                 let target = self.speechEnergyTarget
                 // Fast attack, moderate release (was 0.11 — felt a touch sluggish).
@@ -540,6 +590,8 @@ final class ReaderSpeechController {
                 if self.speechEnergy < 0.02, target < 0.02 {
                     self.speechEnergy = 0
                     self.speechEnergyTarget = 0
+                    self.speechSpectrum = Array(repeating: 0, count: SpeechSpectrum.bandCount)
+                    self.speechSpectrumTarget = self.speechSpectrum
                     // Keep the loop only while a session might still pulse.
                     if self.status != .playing {
                         self.speechEnergySmoothTask = nil
@@ -557,6 +609,9 @@ final class ReaderSpeechController {
         speechEnergyTarget = 0
         speechEnergy = 0
         speechEnergySeed = 0
+        speechSpectrum = Array(repeating: 0, count: SpeechSpectrum.bandCount)
+        speechSpectrumTarget = speechSpectrum
+        lastSpectrumAt = nil
     }
 
     // MARK: Now Playing (system media / Dynamic Island)
@@ -742,6 +797,8 @@ struct ReaderSpeechMiniPlayer: View {
     /// doesn't fall through to the page and toggle chrome instead.
     private static let hitSize: CGFloat = 44
 
+    @State private var showingSpeechSettings = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // ZStack keeps transport optically centered while waveform/stop
@@ -811,18 +868,39 @@ struct ReaderSpeechMiniPlayer: View {
         // still win hit-testing over this gesture.
         .contentShape(Rectangle())
         .onTapGesture(perform: onBackgroundTap)
+        .sheet(isPresented: $showingSpeechSettings) {
+            ReaderSpeechSettingsSheet()
+        }
     }
 
     /// Compact equalizer: still in silence, dramatic only while speech energy > 0.
+    ///
+    /// Doubles as the way into read-aloud settings from inside the book. It is
+    /// a real `Button`, not a tap gesture on decoration: the bars used to be
+    /// `accessibilityHidden` (correct while purely ornamental), and leaving
+    /// them hidden once they became the only route to the settings would put
+    /// that screen out of reach for VoiceOver entirely.
+    ///
+    /// This does take the waveform out of `onBackgroundTap`'s area — a button
+    /// wins hit-testing over the strip's tap gesture — but the caption line and
+    /// both gutters still reveal chrome, so that gesture keeps most of its
+    /// target.
     private var playingWaveform: some View {
-        NowPlayingEqualizerBars(
-            isPlaying: controller.isPlaying,
-            energy: controller.speechEnergy,
-            energySeed: controller.speechEnergySeed,
-            color: tint
-        )
-        .frame(width: Self.hitSize, height: Self.hitSize)
-        .accessibilityHidden(true)
+        Button {
+            showingSpeechSettings = true
+        } label: {
+            NowPlayingEqualizerBars(
+                isPlaying: controller.isPlaying,
+                spectrum: controller.speechSpectrum,
+                energySeed: controller.speechEnergySeed,
+                color: tint
+            )
+            .frame(width: Self.hitSize, height: Self.hitSize)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Read-aloud settings")
+        .accessibilityHint("Change the voice, speed, or engine")
     }
 
     private var stopButton: some View {
@@ -840,21 +918,26 @@ struct ReaderSpeechMiniPlayer: View {
 
 /// Compact equalizer tuned toward Dynamic Island Now Playing bars.
 ///
-/// **Silence = unmoving.** **Speech = smooth multi-band undulation** driven by
-/// the controller’s already-smoothed `speechEnergy` (not raw pulse jumps).
-/// Moderate carrier speeds + soft peaks read closer to system metering.
+/// **Silence = unmoving.** **Speech = genuine multi-band motion:** each bar is
+/// its own frequency band — pitch, vowel formants, consonant bursts,
+/// sibilance — so `s` sounds spike the top bar while vowels hold the middle.
+///
+/// Previously every bar shared one scalar and differed only by a fixed gain
+/// and a sine phase, which is why no amount of re-feeding could make it look
+/// like real metering: there was no frequency information in the pipeline at
+/// all. The carrier below is now only a small liveliness term on top of a
+/// measured level, not the thing generating the movement.
 private struct NowPlayingEqualizerBars: View {
     let isPlaying: Bool
-    /// 0…1 smoothed level from the speech controller.
-    let energy: Double
+    /// 0…1 smoothed level per band, from `SpeechSpectrum`.
+    let spectrum: [Double]
     /// Varies per spoken fragment so bar phases differ.
     let energySeed: Double
     let color: SwiftUI.Color
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let bandGains: [CGFloat] = [0.72, 1.0, 0.8, 0.9]
-    private let barCount = 4
+    private let barCount = SpeechSpectrum.bandCount
     private let barWidth: CGFloat = 2.5
     private let barSpacing: CGFloat = 1.8
     private let minHeight: CGFloat = 2
@@ -862,7 +945,11 @@ private struct NowPlayingEqualizerBars: View {
     private let silenceThreshold: Double = 0.04
 
     private var isSilent: Bool {
-        !isPlaying || energy < silenceThreshold
+        !isPlaying || (spectrum.max() ?? 0) < silenceThreshold
+    }
+
+    private func level(_ index: Int) -> Double {
+        index < spectrum.count ? min(1, max(0, spectrum[index])) : 0
     }
 
     var body: some View {
@@ -889,9 +976,9 @@ private struct NowPlayingEqualizerBars: View {
         if isSilent {
             return minHeight
         }
-        let e = CGFloat(min(1, max(0, energy)))
+        let e = CGFloat(level(index))
         if reduceMotion {
-            return minHeight + (maxHeight - minHeight) * e * bandGains[index]
+            return minHeight + (maxHeight - minHeight) * e
         }
 
         // Moderate speeds — DI is fluid, not frantic.
@@ -905,11 +992,12 @@ private struct NowPlayingEqualizerBars: View {
         let s2 = abs(sin(time * w2 + p2))
         let carrier = sqrt(0.55 * s1 + 0.45 * s2) // 0…1, less spiky
 
-        // Full travel at high energy; collapses smoothly as envelope falls.
-        let trough: CGFloat = 0.15
+        // The band level is the signal; the carrier only keeps a held level
+        // from looking frozen between frames. A shallow trough means a loud
+        // band stays visibly loud instead of being swung by the oscillator.
+        let trough: CGFloat = 0.88
         let modulated = trough + (1 - trough) * CGFloat(carrier)
-        let level = e * bandGains[index] * modulated
-        return minHeight + (maxHeight - minHeight) * level
+        return minHeight + (maxHeight - minHeight) * e * modulated
     }
 }
 

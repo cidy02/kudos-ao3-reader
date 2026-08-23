@@ -42,6 +42,7 @@ public final class SherpaKokoroTTSService: TTSService {
     public var onStatusChange: ((TTSServiceStatus) -> Void)?
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
+    public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
     public var onAdvance: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 

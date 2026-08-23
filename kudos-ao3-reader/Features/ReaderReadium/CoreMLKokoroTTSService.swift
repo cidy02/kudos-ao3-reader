@@ -32,6 +32,7 @@ public final class CoreMLKokoroTTSService: TTSService {
     public var onStatusChange: ((TTSServiceStatus) -> Void)?
     public var onSpokenTextChange: ((String) -> Void)?
     public var onSpeechEnergyPulse: ((Double, Double) -> Void)?
+    public var onSpeechSpectrum: ((SpeechSpectrum) -> Void)?
     public var onAdvance: ((Locator) -> Void)?
     public var onSpokenRange: ((Locator) -> Void)?
 
@@ -149,7 +150,7 @@ public final class CoreMLKokoroTTSService: TTSService {
                 Log.tts.info(
                     "Kokoro ANE \(clip.timingsMs, privacy: .public)ms phonemes=\(clip.phonemeCount, privacy: .public)"
                 )
-                await self.play(samples: clip.samples, sampleRate: clip.sampleRate)
+                await self.play(clip: clip)
 
                 if let prefetch {
                     do {
@@ -174,6 +175,11 @@ public final class CoreMLKokoroTTSService: TTSService {
         let sampleRate: Double
         let timingsMs: Double
         let phonemeCount: Int
+        /// Per-frame spectrogram, measured off the main actor at synthesis and
+        /// replayed against the playhead. We hold the whole clip before a
+        /// sample plays, so a realtime tap would buy nothing but jitter and an
+        /// audio-thread hop.
+        let spectrum: [SpeechSpectrum]
     }
 
     /// `nonisolated` on purpose: the project builds with
@@ -267,7 +273,8 @@ public final class CoreMLKokoroTTSService: TTSService {
             samples: samples,
             sampleRate: sampleRate,
             timingsMs: totalMs,
-            phonemeCount: phonemeCount
+            phonemeCount: phonemeCount,
+            spectrum: SpeechSpectrum.analyze(samples: samples, sampleRate: sampleRate)
         )
     }
 
@@ -356,7 +363,9 @@ public final class CoreMLKokoroTTSService: TTSService {
         }
     }
 
-    private func play(samples: [Float], sampleRate: Double) async {
+    private func play(clip: PreparedClip) async {
+        let samples = clip.samples
+        let sampleRate = clip.sampleRate
         guard status == .playing, !samples.isEmpty else { return }
         configureEngineGraph(sampleRate: sampleRate)
         do {
@@ -383,6 +392,25 @@ public final class CoreMLKokoroTTSService: TTSService {
         speechEnergy = energy
         speechEnergySeed = Double.random(in: 0...1)
         onSpeechEnergyPulse?(speechEnergy, speechEnergySeed)
+
+        // Walk the measured spectrogram in step with playback. Elapsed time is
+        // accumulated only while `.playing`, so a pause freezes the bars with
+        // the audio instead of letting wall-clock run the display ahead.
+        let spectrum = clip.spectrum
+        let ticker = Task { @MainActor [weak self] in
+            let interval = 1.0 / 30.0
+            var elapsed = 0.0
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard let self, !Task.isCancelled else { return }
+                guard self.status == .playing else { continue }
+                elapsed += interval
+                self.onSpeechSpectrum?(
+                    SpeechSpectrum.frame(in: spectrum, at: elapsed, sampleRate: sampleRate)
+                )
+            }
+        }
+        defer { ticker.cancel() }
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             playerNode.scheduleBuffer(buffer) {
