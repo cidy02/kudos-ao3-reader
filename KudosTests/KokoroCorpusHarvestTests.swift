@@ -84,6 +84,56 @@ struct KokoroCorpusHarvestTests {
                   sort: .dateUpdated, wordsFrom: "30000"),
             .init(label: "messy-texting", additionalTags: "Texting",
                   sort: .dateUpdated, wordsFrom: "20000"),
+
+            // Gap-fill: the 19 works above got no signal on five predictions —
+            // quirk typing, romaji/honorifics, URLs, number/date density, and
+            // non-English passages. Each target below narrows by construction
+            // (a relationship, a character, a convention tag) rather than by
+            // bare fandom name, since "Homestuck" alone already proved too
+            // broad to reliably hit the specific convention inside. Every
+            // fandom/tag name was checked canonical against
+            // https://archiveofourown.org/autocomplete/{fandom,tag} first.
+
+            // Quirk typing: Terezi (ALL-CAPS) and Vriska (8/ampersand-code
+            // substitution) are two of Homestuck's heaviest quirk-typists —
+            // pinning the relationship guarantees their pesterlogs appear,
+            // unlike the bare fandom above.
+            .init(label: "homestuck-quirk-heavy", fandom: "Homestuck",
+                  relationships: "Terezi Pyrope/Vriska Serket", wordsFrom: "20000"),
+
+            // Romaji / honorifics: sport-anime fandoms with dense
+            // senpai/kouhai culture. Sorted by date, not kudos — best-liked
+            // seems to correlate with most-translated (i.e. honorific-free)
+            // register.
+            .init(label: "haikyuu-honorifics", fandom: "Haikyuu!!",
+                  sort: .dateUpdated, wordsFrom: "20000"),
+            .init(label: "kuroko-honorifics", fandom: "Kuroko no Basuke | Kuroko's Basketball",
+                  sort: .dateUpdated, wordsFrom: "20000"),
+
+            // URLs: `Chat Fic` / `Social Media` / `Texting` above found only 3
+            // URLs across 19 works — those tags mostly fake screenshots with
+            // no literal link text. `Twitter` / `Tumblr` fics are more likely
+            // to spell out real-looking URLs as part of the format itself.
+            .init(label: "messy-twitter", additionalTags: "Twitter",
+                  sort: .dateUpdated, wordsFrom: "20000"),
+            .init(label: "messy-tumblr", additionalTags: "Tumblr",
+                  sort: .dateUpdated, wordsFrom: "20000"),
+
+            // Number/date density: no single convention tag exists for this,
+            // so lean on genre. Time-travel fic disambiguates timelines with
+            // explicit dates; Star Trek prose is full of numeric stardates.
+            // Kudos sort is fine here — number density is a content trait,
+            // not a typesetting-quality one.
+            .init(label: "time-travel-dates", additionalTags: "Time Travel Fix-It", wordsFrom: "60000"),
+            .init(label: "startrek-stardates", fandom: "Star Trek: Alternate Original Series (Movies)",
+                  wordsFrom: "40000"),
+
+            // Non-English passages: fandoms whose fanon leans on real
+            // accented-language dialogue from a canonically bilingual
+            // character (Lance's Spanish) or setting (Miraculous's Paris).
+            .init(label: "voltron-spanish", fandom: "Voltron: Legendary Defender",
+                  characters: "Lance (Voltron)", wordsFrom: "40000"),
+            .init(label: "miraculous-french", fandom: "Miraculous Ladybug", wordsFrom: "40000"),
         ]
     }
 
