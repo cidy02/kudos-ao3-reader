@@ -99,7 +99,7 @@ nonisolated enum KokoroSemanticDocument {
             return .blockquote
         }
         let normalized = KokoroSpeechNormalizer.normalize(text)
-        if normalized.first == "\"" { return .dialogue }
+        if normalized.first == KokoroSpeechNormalizer.openQuote { return .dialogue }
         return .paragraph
     }
 
