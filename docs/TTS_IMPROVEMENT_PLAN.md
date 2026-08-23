@@ -248,20 +248,28 @@ neither is a plan to test it.
 Nothing below can be evaluated honestly until this exists, and the ordering of
 everything below is provisional without it.
 
-- [ ] **Audition harness.** `[proposal]` Speak a fixed sample on demand under
+- [x] **Audition harness — done 2026-08-23.** `ReaderSpeechAuditionHarness` +
+      `ReaderSpeechController.audition(text:)`. Three original samples
+      (dialogue / numbers+names / narration), play-stop, shows the engine
+      actually resolved. Deliberately does *not* install remote commands: a
+      Settings preview must not take over Lock Screen transport. `[proposal]` Speak a fixed sample on demand under
       current settings, ideally A/B against the previous setting. Include a
       dialogue-heavy and a numbers/names-heavy sample, not just clean prose.
       Cheapest item here; gates every other one.
 
 ### Phase 1 — defects
 
-- [ ] **Pauses ignore speed.** `[code]` `KokoroPauseAssembler.assemble` inserts
+- [x] **Pauses ignore speed — fixed 2026-08-22.** `[code]` `KokoroPauseAssembler.assemble` inserts
       `pauseSeconds × sampleRate` samples and takes no `speed` parameter, while
       `speed` *is* passed to the synthesizer. At 1.5× the speech compresses and
       the silence does not, so gaps run ~50% long; at 0.75× they run short.
       Fix: thread `speed` through, divide `pauseSeconds` by it.
 
-- [ ] **Curly quotes are collapsed, losing open/close.** `[code]` `[measured]`
+- [x] **Curly quotes collapsed — fixed 2026-08-23** (`31f8ea05`). Preserves
+      `“`/`”`, promotes straight by *position* (whitespace-before means open;
+      a toggle inverts after any unclosed speech, which is normal in fiction).
+      Guillemets mapped — and they had to be: `vocab.encode` **silently drops**
+      unknown characters, so left alone they vanished before the model. `[code]` `[measured]`
       Kokoro's vocab holds `“` (U+201C), `”` (U+201D) **and** `"` as three
       distinct tokens — opening and closing cue different intonation, which is
       the most common prosodic signal in dialogue. `KokoroSpeechNormalizer`
@@ -303,7 +311,10 @@ everything below is provisional without it.
       so the clean fix is to ask it, which needs the model pack installed.
       Blocked on a device/pack run, not on design.
 
-- [ ] **AO3 boilerplate is read aloud.** `[proposal]` "Chapter Text" headers,
+- [x] **AO3 boilerplate — fixed 2026-08-23** (`cbb234c6`). Whole-block
+      equality only. 909 label blocks + AO3's closing plug (19/19 works).
+      URLs become their bare host, not deleted — nearly every hit is
+      mid-sentence and deletion leaves a dangling "at .". `[proposal]` "Chapter Text" headers,
       author's notes, endnotes, tag dumps, bare URLs. A URL spelled out
       mid-chapter is the worst of them. Cheap, disproportionately noticeable.
 
@@ -355,7 +366,8 @@ why this phase is about quality and not tidiness.
       Interacts with the dialogue item below — a short line of *dialogue*
       should stay short deliberately; a short line of narration should not.
 
-- [ ] **Split before the rushing zone, not at the model cap.** `[prior-art]`
+- [x] **Split before the rushing zone — fixed 2026-08-22.** 558 → **0** above
+      400; max 510 → 400. Holds across 111,485 utterances in Run 4. `[prior-art]`
       Kokoro is reported to rush beyond ~400 tokens, and Kokoro-FastAPI sets
       `ABSOLUTE_MAX_TOKENS = 450` against the same 510 model limit. Our
       `KokoroPhonemeBudget.modelLimit = 510` doubles as the split trigger, so a
@@ -422,7 +434,11 @@ mispronounced name is permanent.
 
 ### Phase 4 — expressiveness
 
-- [ ] **Voice blending.** `[prior-art]` A voice pack is a `[510, 256]` fp32
+- [x] **Voice blending — done 2026-08-23.** Half-row SLERP (the granularity
+      the model actually reads: timbre → Noise+Vocoder, style_s →
+      PostAlbert+Prosody). Direction slerped, magnitude lerped separately.
+      Content-addressed `.bin` cache. Marked ceiling: sequential fold is not a
+      true Karcher barycentre for n>2. `[prior-art]` A voice pack is a `[510, 256]` fp32
       tensor, so mixing two voices is a weighted combination —
       Kokoro-FastAPI exposes it as `af_bella(2)+af_heart(1)`. Use **SLERP, not
       a naive average**: averaging vectors pointing different directions
