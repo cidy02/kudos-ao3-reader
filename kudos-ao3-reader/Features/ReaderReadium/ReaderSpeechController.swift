@@ -103,6 +103,13 @@ final class ReaderSpeechController {
         ttsService?.availableVoices ?? ReaderSpeechPreferences.catalogVoices()
     }
 
+    /// Which engine the ladder actually resolved to, for the audition harness.
+    /// Nil before an engine is installed, which reads as Apple because that is
+    /// what an un-prepared controller falls back to.
+    var activeEngineName: String {
+        ttsServiceKind?.displayName ?? ReaderTTSEngineKind.system.displayName
+    }
+
     /// Builds the synthesizer for a publication. Returns quietly when the
     /// publication has no extractable content — the control is then disabled
     /// rather than offering playback that would do nothing.
@@ -405,6 +412,36 @@ final class ReaderSpeechController {
                 resumeLocator = locator
             }
             startSpeech(from: locator ?? resumeLocator)
+        }
+    }
+
+    /// Speaks a one-off sample under the current settings, with no publication
+    /// open — the settings audition harness. Quality here is judged by ear, and
+    /// this is the only way to compare two settings without reading a whole
+    /// chapter.
+    ///
+    /// Deliberately does **not** install remote commands or publish Now Playing:
+    /// a few seconds of preview in Settings must not take over the Lock Screen
+    /// and Control Center transport, which is reader-session scoped.
+    func audition(text: String) {
+        startTask?.cancel()
+        stoppedManually = false
+        ensureEngineForPlayback()
+        applyPreferences()
+        guard let service = ttsService else {
+            status = .unavailable
+            return
+        }
+        let unit = TTSSpeechUnit(text: text, locator: nil)
+        startTask = Task { [weak self] in
+            do {
+                try await service.speak(units: [unit])
+            } catch {
+                Log.tts.error(
+                    "Audition failed: \(error.localizedDescription, privacy: .public)"
+                )
+                self?.status = .stopped
+            }
         }
     }
 

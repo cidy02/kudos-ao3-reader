@@ -43,6 +43,8 @@ struct ReaderSpeechSettingsSection: View {
     }
 
     var body: some View {
+        ReaderSpeechAuditionHarness()
+
         downloadSection
 
         Section {
