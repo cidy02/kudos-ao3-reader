@@ -284,33 +284,56 @@ everything below is provisional without it.
       dialogue test, and `KokoroUtterancePacker.splitKeepingDelimiter`'s
       `inQuote` toggle (becomes open/close tracking, which is more correct).
 
-- [ ] **Shouted words are spelled out letter by letter.** `[code]` After a
-      lexicon miss, `EnglishInitialisms.isCandidate` spells any strict-ASCII
-      all-caps token of **2–5 characters** as letter names (`FBI` →
-      `ˈɛf bˈi ˈI`). Right for initialisms, wrong for fiction: `NOOO` becomes
-      "N-O-O-O", a shouted `DRACO!` becomes "D-R-A-C-O". Only *misses* reach
-      the rule — `STOP`/`WHAT` resolve normally — which is exactly where names
-      and interjections live.
-      Fix in our layer: down-case an all-caps token before G2P unless it is a
-      known initialism. Costs nothing expressively; Kokoro ignores
-      capitalization for emphasis entirely `[prior-art]`.
-      `[measured]` Run 1 saw 22 distinct tokens; Runs 2–3 found **336 then
-      1,308 distinct** (Hetalia 637, chat fic 570). But **the magnitude that
-      matters is still unmeasured, and this item is blocked on it.**
-      The rule only fires on tokens that *miss* the Misaki lexicon. Splitting
-      the corpus by whether a token's lower-case form appears elsewhere in the
-      same work gives 8,065 "shouted" against 1,872 "initialism-ish" — but that
-      over-counts enormously, because the shouted set is dominated by `THE`,
-      `YOU`, `TO`, `NOT`, `WHAT`, which all resolve at lexicon tier 5 and never
-      reach the rule. The genuinely affected set is shouted **proper nouns**
-      (`NEWT`, `ROY`, `GIZA`, `SANAZ`, `NARA`, `NANI` in the corpus) — small,
-      but they are character names, and they recur.
-      **Do not blunt-force down-case.** 1,872 initialism-ish uses include real
-      acronyms where letter-spelling is *correct*, 262 of them in the Halo work
-      alone. The discriminator needed is "is this in the Misaki lexicon", which
-      is precisely what the phonemizer already knows and our layer does not —
-      so the clean fix is to ask it, which needs the model pack installed.
-      Blocked on a device/pack run, not on design.
+- [ ] **Shouted words — measured 2026-08-23. The proposed fix was wrong.**
+      `[measured]` `[code]` After a lexicon miss,
+      `EnglishInitialisms.isCandidate` spells any strict-ASCII all-caps token
+      of **2–5 characters** as letter names (`FBI` → `ˈɛf bˈi ˈI`). The rule
+      only fires on tokens that *miss* the lexicon, and the lexicon is consulted
+      **lower-cased** (`wordToPhonemes[lowered]`), so the discriminator is
+      exactly "is the lower-cased token in the Misaki lexicon".
+
+      This item was blocked on being unable to ask that question. It is no
+      longer: running the real Misaki lexicon (178,646 gold + 186,722 silver)
+      against the corpus answers it directly.
+
+      **The examples in the original write-up were wrong.** `draco`, `newt` and
+      `roy` are all *in* the gold lexicon, so `DRACO!` resolves normally and is
+      never letter-spelled. Of 9,748 all-caps tokens, 1,913 (19.6%) miss and get
+      spelled out, 403 distinct. Classified:
+
+      | share | class | examples |
+      |---|---|---|
+      | 41.7% | no vowel — genuine initialism | `PDF` `TG` `GC` `TV` `WTF` |
+      | 26.2% | initialisms and numerals | `DNA` `UK` `ASL` `AKA` `VII` |
+      | 17.3% | acronyms *and* shouted names | `UNSC` `ODST` `DMLE`; `TOBIO` `LANDO` |
+      | 10.0% | contraction, apostrophe stripped | `IM` `DONT` `YOURE` `HES` `CMON` |
+      | 3.8% | resolves once de-elongated | `YESSS` `YAYYY` `HIMMM` `YOUU` `MEE` |
+
+      **So roughly 68% of these letter-spellings are correct**, and the fix
+      this item proposed — "down-case an all-caps token before G2P unless it is
+      a known initialism" — would break the majority case. Down-casing `PDF`,
+      `DNA`, `UNSC` or Homestuck's `TG`/`GC` makes them worse, not better.
+
+      What is actually broken is two small deterministic classes, both fixable
+      without a heuristic:
+
+      1. **Contractions typed without the apostrophe** (191 occurrences, 15
+         distinct). Try inserting `'` at each interior position and keep a form
+         the lexicon knows.
+      2. **Elongated words** (93 occurrences). Collapse repeated-letter runs
+         and retry. This is also Gemini's "condense prolonged vocalisations"
+         suggestion, arriving from the opposite direction.
+
+      Both are safe *because of where they sit*: they run only after a complete
+      lexicon miss, so `cant` (a real word) resolves first and is never turned
+      into `can't`, and `beer` never reaches de-elongation. Genuine initialisms
+      match neither and fall through to letter-spelling unchanged.
+
+      Shouted **names** are the residue and stay open — they need Phase 3's
+      name discovery, not a spelling rule.
+
+      Caveat: measured against Python Misaki's lexicon, which should match the
+      pack FluidAudio downloads but was not byte-compared.
 
 - [x] **AO3 boilerplate — fixed 2026-08-23** (`cbb234c6`). Whole-block
       equality only. 909 label blocks + AO3's closing plug (19/19 works).
@@ -419,6 +442,27 @@ why this phase is about quality and not tidiness.
       not modelled at all. GPT predicted the mismatch and got the sign
       backwards; the missing stress term is real but far too small to overcome
       the grapheme factor.
+
+- [ ] **Emphasis via stress promotion — the only in-vocabulary lever left.**
+      `[code]` `[proposal]` With the arrows gone (Phase 5) there is no proposal
+      for `<em>`/`<i>`, which fic uses heavily and we currently parse and throw
+      away. DeepSeek's replacement suggestion is the one surviving idea, and
+      unlike the arrows it is **in distribution**: `ˈ` and `ˌ` are both in
+      Misaki's `US_VOCAB`, so promoting secondary stress to primary on an
+      emphasised word emits nothing the English G2P would not itself emit.
+
+      Its proposed implementation is wrong twice and must not be copied:
+      `replacingOccurrences(of: "ˌ", with: "ˈ")` promotes *every* secondary
+      stress in the whole string, giving words several primary stresses and
+      hitting every word rather than the emphasised one. Promotion has to be
+      scoped to one word and to one mark.
+
+      Its own example also argues against it: `/ˈrɛkərd/` → `/rɪˈkɔrd/` is a
+      heteronym whose **vowels** change with the stress, which is a
+      demonstration that stress is not separable from segmental content — the
+      exact hazard it warns about elsewhere. So: promote an existing `ˌ` to
+      `ˈ` only, never add stress to an unstressed syllable, and never touch a
+      function word. Needs Phase 0 and a fixed paragraph.
 
 - [ ] **Do not merge across dialogue boundaries.** `[code]` `[proposal]`
       A standalone `"Don't."` glued into surrounding narration is voiced with a
@@ -727,10 +771,22 @@ to, using the same symbol and the same value 0.7:**
 | `Demo/Inference_LibriTTS.ipynb` | `s_pred = t * s_prev + (1 - t) * s_pred` | 70% **previous** |
 
 Anyone implementing from the paper's formula while taking the constant from the
-code gets the blend backwards — heavy persistence where light was intended. The
-reference implementations, which are what the demos actually sound like, weight
-the **previous** style at 70%. The persistence step operates on the full
-256-vector even though the reference blending above does not.
+code gets the blend backwards — heavy persistence where light was intended.
+
+**Resolved:** put to Grok, which agreed there is no reconciling definition of
+`s_prev` and that the published code contradicts the published algorithm. Its
+recommendation, which is the right one: follow the **code** — 70% previous, 30%
+current — because the notebooks are the authors' own runnable demonstration of
+Algorithm 1 and are what every public port copies. Implement it with the
+discrepancy written down at the call site, or the next reader will "fix" it
+back to the paper.
+
+**Per-half persistence weights are our own idea, not prior art.** The separate
+`alpha`/`beta` weights exist *only* for the reference-style interpolation; the
+persistence step applies one weight to the full 256-vector, in both the paper
+and every implementation. Weighting timbre persistence high (identity should
+not drift) and prosody persistence low (each sentence needs its own rhythm) is
+a reasonable extension, and must be labelled as an extension when tried.
 
 **Adapting it to Kokoro is not mechanical.** StyleTTS 2 *samples* a fresh style
 per sentence via diffusion conditioned on the target text, then blends it with
