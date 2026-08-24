@@ -10,6 +10,7 @@ import UIKit
 struct ReaderSpeechSettingsSection: View {
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
+    @AppStorage(ReaderSpeechPreferences.readAuthorNotesKey) private var readAuthorNotes = true
     @AppStorage(ReaderSpeechPreferences.rateKey)
     private var rate = ReaderSpeechPreferences.defaultRate
     @AppStorage(ReaderSpeechPreferences.pitchKey)
@@ -92,6 +93,12 @@ struct ReaderSpeechSettingsSection: View {
                     .foregroundStyle(.secondary)
                 }
             }
+
+            Toggle("Read author's notes", isOn: $readAuthorNotes)
+                .accessibilityHint(
+                    "Author's notes often carry content warnings. "
+                        + "Turn this off to hear only the story."
+                )
 
             if isKokoroAwaitingVoicePack {
                 Label(

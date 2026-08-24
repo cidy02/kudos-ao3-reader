@@ -54,12 +54,37 @@ nonisolated enum KokoroSemanticDocument {
             open = nil
         }
 
+        // A note span runs from its heading to the end of the blockquote that
+        // follows it. Measured across 12 works, 489 of 518 note headings are
+        // followed immediately by a blockquote, so that is a precise and
+        // self-bounding signal.
+        //
+        // The obvious alternative — suppress until the next heading — is
+        // dangerous: in the same corpus the gap to the next heading has a
+        // median of 38 blocks and over half never reach one at all, so it
+        // would silently swallow chapters of narrative. The 29 headings
+        // followed by a plain paragraph are left spoken on purpose; reading a
+        // note that was meant to be skipped is a far better failure than
+        // skipping a chapter that was meant to be read.
+        let readsNotes = ReaderSpeechPreferences.readAuthorNotes
+        var inSuppressedNote = false
+
         for unit in units {
             let trimmed = unit.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !KokoroBoilerplateFilter.isBoilerplate(trimmed) else { continue }
+            guard !trimmed.isEmpty else { continue }
+            if KokoroBoilerplateFilter.isBoilerplate(trimmed) {
+                inSuppressedNote = !readsNotes && KokoroBoilerplateFilter.isNoteLabel(trimmed)
+                continue
+            }
             let raw = KokoroBoilerplateFilter.sanitizingURLs(in: trimmed)
             let selector = unit.locator?.locations.cssSelector
             let kind = classify(text: raw, selector: selector)
+
+            if inSuppressedNote {
+                // Still inside the note's blockquote; anything else ends it.
+                if kind == .blockquote { continue }
+                inSuppressedNote = false
+            }
 
             if kind == .sceneBreak {
                 flush()
