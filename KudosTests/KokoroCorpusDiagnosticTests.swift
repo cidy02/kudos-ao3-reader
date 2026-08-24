@@ -20,7 +20,7 @@ import Testing
 /// them show up in a work that happens not to use them.
 @Suite("Kokoro corpus diagnostic")
 struct KokoroCorpusDiagnosticTests {
-    private static var corpusDirectory: String {
+    static var corpusDirectory: String {
         let env = ProcessInfo.processInfo.environment
         return env["TEST_RUNNER_KOKORO_CORPUS_DIR"] ?? env["KOKORO_CORPUS_DIR"] ?? ""
     }
@@ -43,9 +43,15 @@ struct KokoroCorpusDiagnosticTests {
         var midSizes: [Int] = []
     }
 
-    @Test func reportPackingDistribution() throws {
+    /// Gated with `.enabled(if:)` rather than a `#require` inside the body.
+    /// A `#require` that fails records an *issue*, so without a corpus this
+    /// reported as a red test on every run — which trained the eye to ignore
+    /// it, and made xcodebuild collect simulator diagnostics for a failure
+    /// that was really "not configured". Disabled tests are reported as
+    /// skipped and cost nothing.
+    @Test(.enabled(if: !KokoroCorpusDiagnosticTests.corpusDirectory.isEmpty))
+    func reportPackingDistribution() throws {
         let dir = Self.corpusDirectory
-        try #require(!dir.isEmpty, "set TEST_RUNNER_KOKORO_CORPUS_DIR to run this")
         let files = try FileManager.default.contentsOfDirectory(atPath: dir)
             .filter { $0.hasSuffix(".tsv") }
             .sorted()

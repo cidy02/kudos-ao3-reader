@@ -29,7 +29,7 @@ import Testing
 /// statistics about them are ever recorded.
 @Suite("Kokoro corpus harvest", .serialized)
 struct KokoroCorpusHarvestTests {
-    private static var destination: String {
+    static var destination: String {
         let env = ProcessInfo.processInfo.environment
         return env["TEST_RUNNER_KOKORO_HARVEST_DIR"] ?? env["KOKORO_HARVEST_DIR"] ?? ""
     }
@@ -142,9 +142,12 @@ struct KokoroCorpusHarvestTests {
         ]
     }
 
-    @Test func harvestCorpusAcrossFormattingConventions() async throws {
+    /// Gated with `.enabled(if:)` for the same reason as the diagnostic
+    /// suite: this one also reaches the network, so "not configured" must
+    /// read as skipped, never as a failure.
+    @Test(.enabled(if: !KokoroCorpusHarvestTests.destination.isEmpty))
+    func harvestCorpusAcrossFormattingConventions() async throws {
         let dir = Self.destination
-        try #require(!dir.isEmpty, "set TEST_RUNNER_KOKORO_HARVEST_DIR to run this")
         try FileManager.default.createDirectory(
             atPath: dir, withIntermediateDirectories: true
         )
