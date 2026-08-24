@@ -487,9 +487,9 @@ why this phase is about quality and not tidiness.
 
 - [x] **Preserve `<br>` as an audible boundary.** `[measured]` `[code]`
       Same defect as the item above, from the other direction: the document
-      handed us a boundary and we glued over it. 15,133 breaks across the
+      handed us a boundary and we glued over it. 9,681 seams across the
       corpus, and the hard-wrapped prose that would justify the join **does
-      not exist here** (0 of 1,180 candidate runs, against a passing positive
+      not exist here** (0 of 632 candidate runs, against a passing positive
       control). Implemented: matching `cssSelector`s flush with
       `endsAtLineBreak` and the packer emits `.line` (0.22 s). Adjacent
       `<p>`s, headings, and scene-break promotion are unchanged. See §6.3.1.
@@ -541,6 +541,34 @@ mispronounced name is permanent.
 - [ ] **Contextual pronunciation: `the` sandhi — port it, don't invent it.**
       `[measured]` `[prior-art]` Two facts found by measurement, both of which
       change this item:
+
+      **0. Verified against the lexicon the app actually downloads**, not a
+      local proxy: `us_lexicon_cache.json` from
+      `FluidInference/kokoro-82m-coreml` — 10 MB, **178,546** lower-cased and
+      **9,226** case-sensitive entries. Every claim below is read out of that
+      file. This matters because the first pass of this measurement used
+      Python Misaki's bundled lexicon, which is *similar* but not the artefact
+      the app loads.
+
+      **It is not one word — it is four, and they are the commonest words in
+      English.** Every one of these is stored as its strong/citation form,
+      which is wrong in running speech:
+
+      | word | real lexicon entry | should be | corpus |
+      |---|---|---|---|
+      | `the` | `ði` | `ðə` / `ði` by context | 105,383 |
+      | `to` | `tu` | `tə` / `tʊ` by context | 67,403 |
+      | `a` | `A` — the FACE diphthong, i.e. the letter name "ay" | `ɐ` | 47,158 |
+      | `am` | `æm` | `ɐm` | 1,451 |
+
+      That is ~221,000 occurrences, close to **9% of every word spoken**. `a`
+      is the most striking: `A` is the vowel in *face*, so "a book" currently
+      reads as "AY book". `a` and `am` need no context at all — they are flat
+      corrections. Only `the` and `to` need the neighbour.
+
+      The in-tree comment claiming the lexicon "gives function words their
+      weak forms (`to` → `tu`)" is half right: `tu` beats the stressed BART
+      citation form, but it is still the strong form, not the weak `tə`.
 
       **1. Our lexicon's entry for `the` is `ði` — the *vowel* form.** So today
       every consonant-initial `the` is the wrong one: "thee book". At
@@ -607,6 +635,13 @@ mispronounced name is permanent.
       roughly two thirds of possessives fall through even for known names.
       Most frequent misses are exactly the predicted shape: `Liv's` (360),
       `Oikawa's` (276), `Tobio's` (233), `Cecil's` (232).
+
+      **Confirmed in the real lexicon: not one possessive is present, while
+      every base is.** `anna` → `ˈɑnə` but `anna's` → absent; `alice` →
+      `ˈælɪs` but `alice's` → absent; likewise `pat`, `james`. `liv` is absent
+      entirely, which is why `Liv's` (360 occurrences) is the single most
+      frequent miss. So the derivation has a base to work from in exactly the
+      cases that matter.
 
       Misaki's own output confirms the target: `Anna's` → `ˈɑnəz` (/z/),
       `Pat's` → `pˈæts` (/s/), `Alice's` → `ˈælɪsᵻz` (/ɪz/ after a sibilant).
@@ -985,8 +1020,8 @@ Implemented and run over the 18 EPUBs (244,535 blocks):
 
 | | |
 |---|---|
-| blocks containing `<br>` | 4,214 (1.7%) — 15,133 breaks |
-| runs of 4+ consecutive broken lines | 1,180 |
+| blocks containing `<br>` | 4,214 (1.7%) — 9,681 seams |
+| runs of 4+ consecutive broken lines | 632 |
 | runs admitting a common `W >= 40` | **0** |
 | runs admitting any common `W` at all | 10, every one at `W` 30–36 |
 
@@ -1004,6 +1039,17 @@ still found no mechanical wrapping.
 
 **So the detector is correct, well-designed, and unnecessary.** GPT's own
 fallback is the whole answer: preserve `<br>` by default.
+
+**Correction (2026-08-24).** The seam figures above were first computed over a
+file set that globbed both `epubs/` and `epubs2/`, which share **9 duplicated
+works** — 38 files for 29 distinct EPUBs. That does not merely scale the
+counts, it double-weights those nine works and so biases every ratio toward
+them. All numbers here are the deduplicated ones: 9,681 seams across 29 unique
+works, 60.9% ending a sentence, 97 enjambment cases (1.0%), and 0 of 632 runs
+matching a wrap-width signature. **Every conclusion survived the correction** —
+the hard-wrap result was zero either way, and the enjambment cost moved from
+0.8% to 1.0%. Caught by an adversarial review noticing that two documents in
+this repo quoted different seam totals.
 
 ### 6.3.1 What we actually do to those breaks — verified end to end
 
