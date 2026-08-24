@@ -8,8 +8,8 @@ import Foundation
 /// macOS, where the package is `platformFilter = ios`), so tests phonemize
 /// through this wrapper with a stand-in lexicon. Playback still goes
 /// through `KokoroAneManager`; this exists only so the recovery rules in
-/// `KokoroAneEnglishPhonemizer.resolveWord` and the `the`/`to` sandhi
-/// post-pass have a reachable test seam.
+/// `KokoroAneEnglishPhonemizer.resolveWord`, the `the`/`to` sandhi
+/// post-pass, and possessive `X's` derivation have a reachable test seam.
 enum KokoroAneEnglishFrontend {
     static func phonemize(
         _ text: String,

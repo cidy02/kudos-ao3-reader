@@ -1,6 +1,6 @@
 --- a/Package.swift
 +++ b/Package.swift
-@@ -13,10 +13,6 @@ let package = Package(
+@@ -13,10 +13,6 @@
              name: "FluidAudio",
              targets: ["FluidAudio"]
          ),
@@ -11,7 +11,7 @@
      ],
      dependencies: [],
      targets: [
-@@ -28,7 +24,6 @@ let package = Package(
+@@ -28,7 +24,6 @@
                  "NemoTextProcessing",
              ],
              path: "Sources/FluidAudio",
@@ -19,10 +19,11 @@
              resources: [
                  // Keep .process: .copy of a Resources-named directory breaks Apple code signing on iOS.
                  .process("TTS/LuxTts/G2p/Resources")
-@@ -52,25 +47,6 @@ let package = Package(
+@@ -51,25 +46,6 @@
+             name: "MachTaskSelfWrapper",
              path: "Sources/MachTaskSelfWrapper",
              publicHeadersPath: "include"
-         ),
+-        ),
 -        .executableTarget(
 -            name: "FluidAudioCLI",
 -            dependencies: ["FluidAudio"],
@@ -41,13 +42,12 @@
 -            resources: [
 -                .process("TTS/LuxTts/Resources")
 -            ]
--        ),
+         ),
      ],
      cxxLanguageStandard: .cxx17
- )
 --- a/Sources/FluidAudio/TTS/G2P/G2PModel.swift
 +++ b/Sources/FluidAudio/TTS/G2P/G2PModel.swift
-@@ -215,8 +215,14 @@ actor G2PModel {
+@@ -215,8 +215,14 @@
              throw G2PModelError.modelLoadFailed("\(ModelNames.G2P.decoderFile) not found at \(decoderURL.path)")
          }
 
@@ -65,7 +65,7 @@
          decoder = try MLModel(contentsOf: decoderURL, configuration: config)
 --- a/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
 +++ b/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
-@@ -12,18 +12,32 @@ import Foundation
+@@ -12,18 +12,36 @@
  ///      (proper nouns, abbreviations like `NATO`)
  ///   4. case-sensitive hit on the normalized lower-case form
  ///   5. lower-cased Misaki lexicon hit — this is what gives function
@@ -80,19 +80,23 @@
 +///      position (`dont` → `don't`) and retry the same maps
 +///   7. after a full miss, collapse elongated letter runs (`yesss` →
 +///      `yes`) and retry the same maps
-+///   8. strict ASCII all-caps initialisms (`FBI`, `ATP`) spelled as
++///   8. after a full miss, if the token is `X's` and `X` is a lexicon
++///      hit, append the possessive allomorph (Misaki `_s`). `James'`
++///      (apostrophe, no `s`) is not handled — `stem_s` requires
++///      `word.endswith('s')`.
++///   9. strict ASCII all-caps initialisms (`FBI`, `ATP`) spelled as
  ///      letter names after a full lexicon miss (issue #710)
 -///   7. BART G2P CoreML fallback for OOV words (injected by the caller)
-+///   9. hyphenated compound split (`tales-to-amaze`) (issue #775)
-+///  10. BART G2P CoreML fallback for OOV words (injected by the caller)
-+///
++///  10. hyphenated compound split (`tales-to-amaze`) (issue #775)
++///  11. BART G2P CoreML fallback for OOV words (injected by the caller)
+ ///
 +/// After all words are resolved, `the`/`The` and `to`/`To` are rewritten
 +/// from the next word's phonemes (Misaki `future_vowel`). The lexicon
 +/// stores only the strong form (`ði`, `tu`), so "the book" otherwise
 +/// says "thee book". Measured in the 20-work corpus: 105,383 `the` and
 +/// 67,403 `to` — about 7% of every word spoken. All-caps `THE`/`TO` are
 +/// not rewritten: Misaki gates those on POS tags we do not have.
- ///
++///
  /// Punctuation supported by the chain's `vocab.json` (`, . ! ? ; …` etc.)
  /// is preserved and attached to the preceding word — Kokoro treats those
  /// tokens as prosody/pause cues, matching upstream `KPipeline.g2p` output.
@@ -103,7 +107,7 @@
 
      private static let logger = AppLogger(category: "KokoroAneEnglishPhonemizer")
 
-@@ -43,7 +57,7 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+@@ -43,7 +61,7 @@
      /// skipped at `KokoroAneVocab.encode` anyway).
      let allowedPunctuation: Set<Character>
 
@@ -112,7 +116,7 @@
          wordToPhonemes: [String: [String]] = [:],
          caseSensitiveWordToPhonemes: [String: [String]] = [:],
          customLexicon: [String: String] = [:],
-@@ -64,7 +78,7 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+@@ -64,7 +82,7 @@
      ///   return skips the word with a warning; a thrown error aborts.
      /// - Throws: `KokoroAneError.inputProcessingFailed` when the input is
      ///   empty or nothing could be resolved.
@@ -121,7 +125,7 @@
          _ text: String,
          fallback: (String) async throws -> [String]?
      ) async throws -> String {
-@@ -77,7 +91,7 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+@@ -77,7 +95,7 @@
          // contractions (`we’re`) survive tokenization intact (issue #774).
          let prepared = Self.normalizeApostrophes(trimmed)
 
@@ -130,7 +134,7 @@
 
          for token in Self.splitWords(prepared) {
              if token.isEmpty { continue }
-@@ -89,19 +103,21 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+@@ -89,19 +107,21 @@
                  // punctuation as its own prosody token, but Misaki output
                  // never puts a space before it.
                  if parts.isEmpty {
@@ -156,7 +160,7 @@
          if joined.isEmpty {
              throw KokoroAneError.inputProcessingFailed(
                  "produced no phonemes for input '\(trimmed)'")
-@@ -109,6 +125,114 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+@@ -109,6 +129,114 @@
          return joined
      }
 
@@ -271,7 +275,7 @@
      // MARK: - Word resolution
 
      private func resolveWord(
-@@ -144,13 +268,24 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+@@ -144,15 +272,60 @@
                      + "falling back to the bundled pronunciation")
          }
 
@@ -301,14 +305,55 @@
 +            return recovered
          }
 
++        // Possessive `X's` after every lexicon miss, including the two
++        // recoveries above. Apostrophe reinsertion currently skips any
++        // token that already contains an apostrophe, so `anna's` never
++        // reaches it, and de-elongation wants a trailing letter run of
++        // two or more, so a single `s` after the apostrophe does not
++        // fire. Placing derivation after those recoveries therefore
++        // costs nothing on possessives; it keeps every "retry a known
++        // lexicon key" path together, and only then synthesises a
++        // pronunciation that is not in the lexicon.
++        //
++        // The load-bearing constraint is the gate, not the position
++        // relative to recoveries. Neural G2P handed the whole token
++        // `Anna's` already applies the clitic (`ˈænəz`); deriving on
++        // top would emit `ˈænəzz`. So we derive only when the
++        // possessive itself missed every lexicon tier AND the base
++        // (token minus `'s`) is a lexicon hit. If the base is unknown
++        // (`Liv's` — 360 occurrences, the most frequent miss — and
++        // `liv` is absent from the real cache) we do nothing and let
++        // G2P have the whole token, as today.
++        //
++        // Measured over a 20-work corpus: 5,896 proper-noun possessives,
++        // 462 distinct. When the base is in the lexicon the possessive
++        // is there only ~37% of the time. The real `us_lexicon_cache.json`
++        // has not one possessive (`anna's`, `alice's`, `pat's`,
++        // `james's` all absent) while every base is present.
++        //
++        // `James'` (apostrophe, no `s`) is out of scope: Misaki's
++        // `stem_s` requires `word.endswith('s')`, and the apostrophe-only
++        // plural possessive is a different reading (`Winchesters'` does
++        // not grow a syllable).
++        if let derived = lexiconPhonemesByDerivingPossessive(word) {
++            return derived
++        }
++
          // After a full lexicon miss, read strict ASCII all-caps tokens of a
-@@ -210,13 +345,121 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+         // small length range as letter-name initialisms (`FBI`, `ATP`)
+         // instead of letting BART G2P sound them out as a word (issue #710).
+@@ -210,13 +383,172 @@
          return resolved.joined(separator: " ")
      }
 
 -    // MARK: - Letter-name initialisms (issue #710)
 +    // MARK: - Lexicon lookup and fanfic recoveries
-+
+
+-    /// Spell a token as a sequence of letter names using the per-letter
+-    /// entries in the case-sensitive lexicon (`FBI` → `ˈɛf bˈi ˈI`). See
+-    /// ``EnglishInitialisms/spell(_:letterTokens:render:separator:)`` —
+-    /// returns `nil` if any letter is missing so the caller falls through
+-    /// to its normal fallback rather than emitting a partial word.
 +    /// The four-dictionary lookup used for a direct lexicon hit. Recoveries
 +    /// below call this on their reconstructed spelling so they cannot drift
 +    /// from the maps a normal word uses.
@@ -387,6 +432,57 @@
 +        return nil
 +    }
 +
++    /// Derive `X's` from a known stem `X` using Misaki's `_s` allomorph.
++    ///
++    /// Ported from `misaki/en.py` (MIT), not from the textbook rule. The
++    /// textbook version gets three details wrong: the voiceless set is
++    /// exactly `ptkfθ` (not "all voiceless consonants" — `s`/`ʃ` are
++    /// voiceless but sibilant, and `h` is absent); the American epenthetic
++    /// vowel is `ᵻ` (U+1D7B), not `ɪ`; and `ptkfθ` is tested first. We are
++    /// US-only, so there is no British `ɪ` branch.
++    ///
++    /// The affricates in the sibilant set are the single codepoints `ʧ`
++    /// (U+02A7) and `ʤ` (U+02A4), not the two-character sequences `tʃ`/
++    /// `dʒ`. Comparing Swift `Character`s against the digraphs silently
++    /// fails.
++    ///
++    /// Returns `nil` unless the token ends in `'s` (so `James'` is not
++    /// handled) and the stem is already a lexicon hit. The stem is looked
++    /// up through the same four maps a normal word uses; G2P is never
++    /// consulted, which is the double-clitic gate.
++    private func lexiconPhonemesByDerivingPossessive(_ word: String) -> String? {
++        // Misaki `stem_s` requires `word.endswith('s')`. A trailing
++        // apostrophe with no `s` (`James'`, `Winchesters'`) is a different
++        // reading and must not grow a syllable.
++        guard word.count > 2, word.lowercased().hasSuffix("'s") else {
++            return nil
++        }
++        let stem = String(word.dropLast(2))
++        guard let stemPhonemes = lexiconPhonemes(for: stem) else {
++            return nil
++        }
++        return Self.appendingPossessiveAllomorph(to: stemPhonemes)
++    }
++
++    /// Misaki `_s`, US-only. `stem[-1]` is the last `Character` of the
++    /// joined IPA string.
++    private static func appendingPossessiveAllomorph(to stem: String) -> String? {
++        guard let last = stem.last else { return nil }
++        if possessiveVoiceless.contains(last) {
++            return stem + "s"
++        }
++        if possessiveSibilants.contains(last) {
++            return stem + "ᵻz"
++        }
++        return stem + "z"
++    }
++
++    /// Exactly five phonemes, from `misaki/en.py`. Not "all voiceless".
++    private static let possessiveVoiceless = Set<Character>("ptkfθ")
++
++    /// Affricates are `ʧ`/`ʤ`, not `tʃ`/`dʒ`.
++    private static let possessiveSibilants = Set<Character>("szʃʒʧʤ")
++
 +    /// Length of the trailing run of one repeated letter, when it is at least
 +    /// two long. `nil` for a token ending in punctuation or a lone letter.
 +    private static func trailingLetterRun(_ word: String) -> (letter: Character, length: Int)? {
@@ -421,18 +517,13 @@
 +        let key = normalizeKey(candidate)
 +        return key.count == 3 && key.hasSuffix("'s") && (key.first?.isLetter ?? false)
 +    }
-
--    /// Spell a token as a sequence of letter names using the per-letter
--    /// entries in the case-sensitive lexicon (`FBI` → `ˈɛf bˈi ˈI`). See
--    /// ``EnglishInitialisms/spell(_:letterTokens:render:separator:)`` —
--    /// returns `nil` if any letter is missing so the caller falls through
--    /// to its normal fallback rather than emitting a partial word.
++
      private func spellAsLetterNames(_ word: String) -> String? {
          EnglishInitialisms.spell(word) { caseSensitiveWordToPhonemes[$0] }
      }
 --- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
 +++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
-@@ -209,6 +209,12 @@ public actor KokoroAneModelStore {
+@@ -209,6 +209,12 @@
              let cfg = MLModelConfiguration()
              cfg.computeUnits = computeUnits.units(for: stage)
              cfg.allowLowPrecisionAccumulationOnGPU = true
@@ -447,7 +538,7 @@
              let stageElapsed = Date().timeIntervalSince(stageStart) * 1000
 --- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
 +++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
-@@ -179,6 +179,14 @@ public struct KokoroAneSynthesizer {
+@@ -179,6 +179,14 @@
          }
      }
 
@@ -462,7 +553,7 @@
      private static func predict(
          stage: KokoroAneStage,
          model: MLModel,
-@@ -190,7 +198,7 @@ public struct KokoroAneSynthesizer {
+@@ -190,7 +198,7 @@
          let clock = ContinuousClock()
          let start = clock.now
          do {

@@ -710,8 +710,8 @@ mispronounced name is permanent.
       weak form, inspect the next token's first phoneme, swap. Deterministic,
       no model, no POS. Highest-frequency word in English.
 
-- [ ] **Contextual pronunciation: possessives — measured, and worse than
-      stated.** `[measured]` The corpus holds **5,896** proper-noun possessives
+- [x] **Contextual pronunciation: possessives — implemented 2026-08-24.**
+      `[measured]` The corpus holds **5,896** proper-noun possessives
       across 462 distinct forms. **36.7% miss the lexicon entirely** (base and
       possessive both), and — the number that matters — when the base name *is*
       in the lexicon, the possessive is there only **36.6%** of the time. So
@@ -729,6 +729,14 @@ mispronounced name is permanent.
       Misaki's own output confirms the target: `Anna's` → `ˈɑnəz` (/z/),
       `Pat's` → `pˈæts` (/s/), `Alice's` → `ˈælɪsᵻz` (/ɪz/ after a sibilant).
       The rule is real and the reference gets it right.
+
+      **Implemented 2026-08-24** in `KokoroAneEnglishPhonemizer.resolveWord`,
+      after the two fanfic recoveries and before letter-name initialisms.
+      Apostrophe reinsertion skips any token that already contains an
+      apostrophe, so `anna's` does not reach it; de-elongation wants a
+      trailing letter run of two or more, so a single `s` after the
+      apostrophe does not fire. The gate is the load-bearing part: derive
+      only when the stem is a lexicon hit. `James'` is out of scope.
 
       **The reference implementation, verbatim** (`misaki/en.py`, MIT) — port
       this rather than paraphrasing the textbook rule, because the textbook

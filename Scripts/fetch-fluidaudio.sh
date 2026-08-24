@@ -96,12 +96,20 @@ Pinned at upstream commit \`$COMMIT\`.
    stores only the strong form (\`ði\`, \`tu\`), so "the book" otherwise
    says "thee book" — 105,383 + 67,403 corpus hits, about 7% of every
    word. All-caps \`THE\`/\`TO\` are left alone (POS-gated in Misaki).
+7. **English possessive \`X's\`** (\`KokoroAneEnglishPhonemizer.swift\`) —
+   after a complete lexicon miss, if the token is \`X's\` and \`X\` is a
+   lexicon hit, append Misaki's \`_s\` allomorph (\`ptkfθ\` → \`s\`,
+   sibilants → \`ᵻz\`, else \`z\`). Gated on the stem already being
+   known: G2P on the whole token already applies the clitic. \`James'\`
+   (apostrophe, no \`s\`) is out of scope. The real lexicon has not one
+   possessive while every base is present; 5,896 corpus hits, ~37%
+   coverage when the base is known.
 
 Patches 2–4 exist to route around the iOS 26.x libBNNS \`SIGSEGV\`
 (FluidAudio #817 / #844). Kudos additionally does not run the Core ML engine
 at all on iOS 26 — see \`KokoroAnePlayback\`. Patch 5 is a fanfic-frontend
-recovery; patch 6 is the Misaki \`the\`/\`to\` weak-form post-pass. Neither
-changes compute-unit routing.
+recovery; patch 6 is the Misaki \`the\`/\`to\` weak-form post-pass; patch 7
+is possessive allomorph derivation. None of 5–7 change compute-unit routing.
 EOF
 
 echo "FluidAudio $VERSION ready at Packages/FluidAudio"
