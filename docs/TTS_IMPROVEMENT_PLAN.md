@@ -763,10 +763,68 @@ EPUB is therefore a *single* author line break, never a paragraph the exporter
 mangled. The decision we face is narrower than assumed — not "is this break
 real?" but "is this single, deliberate break prosodic or cosmetic?".
 
-That still leaves hard-wrapped prose imported from elsewhere, which is exactly
-what GPT's line-length statistics detect. But it removes the largest failure
-mode, and it means our current rejoining is more destructive than it looked:
-we are rejoining breaks AO3 has already told us were single and deliberate.
+That still leaves hard-wrapped prose imported from elsewhere. **Measured: it
+does not occur.** `[measured]`
+
+GPT proposed a sharper test than line-length variance, and it is a good one:
+under greedy word wrap at width `W`, every non-final line must satisfy
+`L_i <= W < L_i + 1 + len(firstWordOf(i+1))` — the line fits, and the next
+word did not. Intersect that interval across a run of lines and a mechanical
+wrap leaves a common `W`; deliberate line breaks do not.
+
+Implemented and run over the 18 EPUBs (244,535 blocks):
+
+| | |
+|---|---|
+| blocks containing `<br>` | 4,214 (1.7%) — 15,133 breaks |
+| runs of 4+ consecutive broken lines | 1,180 |
+| runs admitting a common `W >= 40` | **0** |
+| runs admitting any common `W` at all | 10, every one at `W` 30–36 |
+
+**Positive control passes**, which is the only reason the zero is worth
+anything: real prose wrapped at 60, 72, 76 and 80 characters is detected every
+time, with the true width inside the inferred interval. The detector works and
+finds nothing. The ten low-`W` hits are the coincidence GPT warned about —
+short line-oriented text fitting a narrow budget; a verse control lands at
+`W` 9–10 the same way, which is what the width floor is for.
+
+Caveats: these EPUBs carry Calibre's classes, so this measures what reaches
+the reader rather than what AO3 emitted; and the corpus was selected *for*
+messy formatting, so it is biased toward finding line-oriented content — and
+still found no mechanical wrapping.
+
+**So the detector is correct, well-designed, and unnecessary.** GPT's own
+fallback is the whole answer: preserve `<br>` by default.
+
+### 6.3.1 What we actually do to those breaks — verified end to end
+
+`[code]` The chain from AO3's server to our audio:
+
+1. AO3 stores a single author newline as `<br>` (`paragraph_maker.rb`), having
+   already promoted every multi-line break to a `<p>`.
+2. Readium's `HTMLResourceContentIterator` calls `flushText()` when it meets a
+   `br` tag, so each broken line arrives as its **own** `TextualContentElement`
+   and therefore its own `TTSSpeechUnit`.
+3. `TTSService.concatenateForSentenceContext` space-joins adjacent units, and
+   `splitIntoContextualSentences` re-splits on sentence boundaries — so a
+   break that is not a sentence end is **erased**.
+
+Every step verified in source. The join is not gratuitous: G2P is per-word, and
+an isolated `read` gets the citation form rather than the verb. But the effect
+is that chat fic, epistolary works, transcripts and verse — 15,133 breaks —
+are flattened into running prose, and the measurement above says nothing is
+gained by it.
+
+- [ ] **Preserve `<br>` as an audible boundary while keeping lexical context.**
+      `[proposal]` GPT's framing is the right one and costs nothing: decide
+      *"may G2P see across this?"* separately from *"should the listener hear
+      it?"*. Keep the join for phonemes, insert a short pause at the seam.
+
+      The discriminator is already in hand and needs no new parsing: units
+      split by `<br>` share a `cssSelector` (they came from one `<p>`), where
+      units from adjacent paragraphs do not. Needs a boundary shorter than
+      `.paragraph`'s 0.32 s — a line is not a paragraph — and it must not
+      fire between two ordinary `<p>`s.
 
 ### 6.4 The Thai fine-tune numbers are real and were mislabelled
 
