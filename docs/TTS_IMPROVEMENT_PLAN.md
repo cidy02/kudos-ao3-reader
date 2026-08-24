@@ -533,6 +533,34 @@ why this phase is about quality and not tidiness.
 
 ### Phase 3 — pronunciation
 
+> **Reframed 2026-08-24 by measurement.** The possessive item below is one
+> third of a larger, cheaper win. The downloaded lexicon has **patchy regular
+> inflection coverage** — `walking`, `walked`, `cats`, `asked` are present but
+> `wanted`, `belongs`, `characters`, `companies`, `towards` are **absent** —
+> and Misaki compensates with three stemmers (`stem_s`, `stem_ed`,
+> `stem_ing`) that derive the inflected form from a base the lexicon *does*
+> hold. We ported none of them.
+>
+> Measured over 2.44M corpus words: **113,827 reach the G2P fallback (4.7%),
+> and the three stemmers recover 49,457 of them — 43.4%**, about 2% of every
+> word spoken.
+>
+> | branch | recovered |
+> |---|---|
+> | `-s` (plurals, possessives, `that's`) | 34,751 |
+> | `-ed` | 14,022 |
+> | `-ing` | 684 |
+>
+> Most frequent: `wanted` 1546, `that's` 2081 combined, `towards` 927,
+> `makes` 737, `minutes` 610, `opened` 478, `characters` 423. Proper-noun
+> possessives (`Jim's` 453) are a small slice of the `-s` branch.
+>
+> All three share one helper shape — find a known stem, look it up, append the
+> allomorph — so the possessive work is the same code with a narrower trigger.
+> `_ed` and `_ing` carry US tapping rules (`US_TAUS`) that must be ported
+> verbatim, not paraphrased.
+
+
 Fanfic's hardest speech problem, and the one place this app has an advantage no
 general-purpose engine can have: **AO3 tags every work with its characters,
 relationships and fandoms** (`AO3Models.swift`). That is a curated list of
