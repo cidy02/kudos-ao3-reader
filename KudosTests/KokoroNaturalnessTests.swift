@@ -151,6 +151,42 @@ final class KokoroNaturalnessTests: XCTestCase {
         }
     }
 
+    /// Digits are the one thing the grapheme factor cannot cover: `1985` is
+    /// four characters and speaks as a whole year. The reference lengths are
+    /// **measured**, by running real Misaki G2P (espeak fallback for OOV
+    /// names) over each string — not derived from the estimator, or this would
+    /// only be asserting the formula against itself.
+    ///
+    /// Before `digitPhonemeBonus` the first case estimated 43 against a real
+    /// 64 and the second 52 against a real 102 — under by half. An
+    /// under-estimate is not fatal (synthesis re-splits on the true phoneme
+    /// count) but that split cuts at the midpoint, blind to prosody.
+    func testNumericTextIsNotEstimatedBelowItsRealPhonemeLength() {
+        let estimator = KokoroPhonemeEstimator()
+        let measured: [(text: String, realPhonemes: Int)] = [
+            ("She was born in 1985 and died in 2011.", 64),
+            ("Stardate 41153.7, log entry 2, section 15.", 102),
+            ("The bill came to 1247 credits and 38 pence.", 67),
+        ]
+        for case_ in measured {
+            XCTAssertGreaterThanOrEqual(
+                estimator.estimatePhonemeLength(case_.text),
+                case_.realPhonemes,
+                "under-estimated \(case_.text)"
+            )
+        }
+    }
+
+    /// The digit term must stay a *tail* fix. Prose carries no digits, so its
+    /// estimate has to be exactly what it was before the term existed —
+    /// otherwise every chunk boundary in the app moves, which is a tuning
+    /// change and needs ears, not a bug fix.
+    func testProseEstimateIsUnaffectedByTheDigitTerm() {
+        let estimator = KokoroPhonemeEstimator()
+        let prose = "She walked to the window and looked out at the rain."
+        XCTAssertEqual(estimator.estimatePhonemeLength(prose), 59)
+    }
+
     func testLongCompleteSentenceIsNotCutToHitTheGroupingTarget() {
         let sentence = """
         When she finally reached the end of the corridor, the portraits had \

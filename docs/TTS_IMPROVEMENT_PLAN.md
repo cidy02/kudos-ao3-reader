@@ -1,6 +1,7 @@
 # Read Aloud quality — findings report and work checklist
 
-Status: **investigation complete, no items implemented.** Follows T-208
+Status: **investigation complete; implementation in progress, and four
+external reviews verified against primary sources (§6).** Follows T-208
 (Core ML Kokoro on iOS 27+, Sherpa/ONNX on iOS 26). Tracked as T-209.
 
 Architecture: [`TTS_KOKORO_ARCHITECTURE.md`](TTS_KOKORO_ARCHITECTURE.md) ·
@@ -377,14 +378,47 @@ why this phase is about quality and not tidiness.
       Potter work hits exactly 510** — the model cap — so this is not
       hypothetical. Rare per work, but a single rushed sentence is audible.
 
-- [ ] **Replace the estimator with real phoneme counts.** `[code]`
-      `KokoroPhonemeEstimator` guesses IPA length as graphemes × 1.15, but the
-      NeMo normalizer expands numbers before G2P ("2024" → 4 graphemes → ~20
-      IPA), so a date-heavy paragraph can estimate ~200 and exceed the cap.
-      `prepareClip`'s runtime re-check catches it and splits, so it is correct
-      but wasteful — G2P re-runs on the halves. Pack against
-      `manager.phonemes(for:)`, already cached per session. Deletes the
-      estimator, and makes every number in §3 exact.
+- [x] **Estimator: digit term added 2026-08-23. Full replacement dropped.**
+      `[measured]` The number prediction above was right and understated. Real
+      Misaki G2P (espeak fallback for OOV names) over 7,000 grouped corpus
+      utterances puts a **digit at ~10.3 phoneme characters against a letter's
+      ~0.92**, and digit density was by far the strongest predictor of an
+      under-estimate — the worst-undercounting groups carried roughly **500x**
+      the digit density of median text. Measured single cases: a two-year
+      sentence estimated **43 against a real 64**; a stardate line estimated
+      **52 against a real 102**, under by half.
+
+      `KokoroPhonemeEstimator.digitPhonemeBonus = 9` is a *tail* fix by design:
+      p99 ratio 1.04 → 1.00, median untouched at 0.866 → 0.865, because most
+      prose holds no digits. Moving the median would move every chunk boundary
+      in the app, which is a tuning change and needs ears.
+
+      **Replacing the estimator outright is now not worth doing.** It would
+      make the whole packer async and re-run G2P on every candidate grouping it
+      considers and discards, and `prepareClip` already enforces the true count
+      against `splitThreshold`. The estimator's job is to be cheap and roughly
+      right, and with the digit term it is.
+
+- [ ] **The estimator over-estimates by 15%, and that is currently correct.**
+      `[measured]` Real phoneme length is **0.866x the estimate** (p5 0.79,
+      p95 0.94), stable across all 20 works (0.850–0.891). So the budget
+      constants do not mean what they say — `preferredTarget 175` really lands
+      at **~152** phonemes, `splitThreshold 400` at **~346**.
+
+      This was worth checking and is worth *not* changing. Upstream `VOICES.md`
+      puts the sweet spot at 100–200 phonemes, whose midpoint is 150; the real
+      centre of ~152 sits on it. Removing the bias would move the real centre
+      to 175 and off that midpoint. The open question is only whether
+      `splitThreshold`'s real ~346 should be raised toward a real ~400 to cut
+      the number of prosody resets — the one change here with a plausible
+      audible upside, and it needs Phase 0.
+
+      Cause: English IPA is *shorter* than English spelling (`through` is seven
+      letters and three phonemes), so a 1.15x grapheme factor over-shoots even
+      though stress marks — a measured **12.8%** of a real phoneme string — are
+      not modelled at all. GPT predicted the mismatch and got the sign
+      backwards; the missing stress term is real but far too small to overcome
+      the grapheme factor.
 
 - [ ] **Do not merge across dialogue boundaries.** `[code]` `[proposal]`
       A standalone `"Don't."` glued into surrounding narration is voiced with a
@@ -573,12 +607,29 @@ caching the decision with the work makes it stable after the first pass.
       ships English voices only and the English variant has no other frontend.
       At minimum detect and handle gracefully.
 
-- [ ] **Intonation arrows — A/B only, do not ship blind.** `[code]`
-      `[proposal]` The vocab carries `→ ↓ ↗ ↘` (level, downstep, rising,
-      falling) and we emit none. **The tokens are verified to exist; the
-      model's response to them in arbitrary positions is not.** Feeding a model
-      tokens outside its training distribution usually degrades. Needs Phase 0
-      and a fixed test paragraph.
+- [x] **Intonation arrows — DROPPED 2026-08-23, the premise was false.**
+      `[measured]` All four external reviewers independently recommended
+      emitting the vocab's `→ ↓ ↗ ↘` as English intonation. All four were
+      wrong about what those glyphs are. They are **Mandarin lexical tones**:
+      `misaki/zh.py` `ZHG2P.retone` maps the Chao tone letters straight onto
+      them — `˥`→`→` (tone 1), `˧˥`→`↗` (tone 2), `˧˩˧`→`↓` (tone 3),
+      `˥˩`→`↘` (tone 4). Misaki's English vocabulary does not contain them
+      (`US_VOCAB`/`GB_VOCAB` in `misaki/en.py`; `EN_PHONES.md` lists 49
+      phonemes, stress as `ˈ`/`ˌ`, no arrows), and the Japanese path has its
+      arrow emission **commented out** in favour of `_ ^ -`.
+
+      So this was never "use a token we already have". Emitting `↗` into
+      English asks a model for a Mandarin tone contour on an English syllable —
+      out of distribution in the strict sense, and plausibly acting on the
+      adjacent segment rather than the phrase. DeepSeek's "Japanese accent
+      nucleus / heiban / kaku" reading is contradicted at the source; it also
+      argued that vocab membership proves the model saw them in training, which
+      does not follow — the vocab is shared across every language Kokoro
+      supports.
+
+      **The lesson is worth more than the item.** Four independent reviewers
+      agreeing looked like strong evidence and was not evidence at all: none of
+      them had read `zh.py`. Held at `[proposal]` for exactly this reason.
 
 ---
 
@@ -621,7 +672,121 @@ strong as the corpus behind it — always cite the run.
 
 ---
 
-## 6. Prior art
+## 6. External review — what survived verification
+
+Four models reviewed the pipeline from
+[`TTS_EXTERNAL_REVIEW_PROMPT.md`](TTS_EXTERNAL_REVIEW_PROMPT.md). Every
+checkable claim was then verified against primary sources, because a
+confident, well-written suggestion is not evidence. Two did not survive.
+
+| Claim | Source | Verdict |
+|---|---|---|
+| Style vector splits 128 timbre / 128 prosody | GPT | **Verified** — in our own code |
+| StyleTTS 2 blends style vectors across sentences | Grok | **Verified** — but paper and code disagree on direction |
+| AO3 rewrites linebreaks before storing | GPT | **Verified** — and narrower than claimed, usefully |
+| Thai fine-tune duration numbers | GPT | **Verified**, but mislabelled as correlation |
+| Arrows are Japanese pitch accent | DeepSeek | **Contradicted** — they are Mandarin tones (§4, Phase 5) |
+| Estimator undercounts phoneme length | GPT | **Contradicted** — it over-counts by 15% (§4, Phase 2) |
+
+### 6.1 The style vector splits in half, and the halves do different jobs
+
+`[code]` Verified in the vendored source, not inferred:
+`KokoroAneVoicePack.slice(for:)` returns `(styleS, styleTimbre)` where
+`[0..<128]` is `style_timbre` and `[128..<256]` is `style_s`. Tracing the
+synthesizer inputs, they go to genuinely different stages:
+
+* `style_s` → **PostAlbert** (duration prediction) and **Prosody** (F0/N)
+* `style_timbre` → the **Noise/F0-curve** stage and the **Vocoder**
+
+Corroborated upstream, and this is the useful part: StyleTTS 2's own LibriTTS
+notebook blends the two halves with **separate weights** —
+`ref = alpha * ref + (1 - alpha) * ref_s[:, :128]` against
+`s = beta * s + (1 - beta) * ref_s[:, 128:]`, with `alpha = 0.3` and
+`beta = 0.7`–`0.9`. Treating the 256-vector as one unit is not how its own
+authors treat it.
+
+**Consequence for any style-row experiment:** move the halves independently.
+All duration risk lives in `style_s`; mismatching `style_timbre` cannot change
+speaking rate because it never reaches the duration predictor. That splits one
+risky experiment into a safe half and a dangerous half.
+
+### 6.2 StyleTTS 2 style persistence — real, and the weight is a trap
+
+`[prior-art]` arXiv:2306.07691 **Appendix B.3, "Consistent Long-Form
+Generation"**, Algorithm 1. The latent style space is described as convex, so a
+combination of two style vectors is another style vector, letting the current
+sentence be conditioned on the previous one.
+
+**The paper and the official code disagree about which side the weight applies
+to, using the same symbol and the same value 0.7:**
+
+| Source | Expression | α = 0.7 means |
+|---|---|---|
+| Paper, Algorithm 1 | `s_curr ← α·s_curr + (1−α)·s_prev` | 70% **current** |
+| `Demo/Inference_LJSpeech.ipynb` | `s_pred = alpha * s_prev + (1 - alpha) * s_pred` | 70% **previous** |
+| `Demo/Inference_LibriTTS.ipynb` | `s_pred = t * s_prev + (1 - t) * s_pred` | 70% **previous** |
+
+Anyone implementing from the paper's formula while taking the constant from the
+code gets the blend backwards — heavy persistence where light was intended. The
+reference implementations, which are what the demos actually sound like, weight
+the **previous** style at 70%. The persistence step operates on the full
+256-vector even though the reference blending above does not.
+
+**Adapting it to Kokoro is not mechanical.** StyleTTS 2 *samples* a fresh style
+per sentence via diffusion conditioned on the target text, then blends it with
+the previous. Kokoro has no diffusion sampler — the vector is a deterministic
+lookup by phoneme count. So the analogue is blending two length-selected rows,
+which is a materially weaker claim than "StyleTTS 2 does this". Worth trying,
+since `KokoroVoiceBlend` already SLERPs style vectors, but the 0.7 carries no
+authority here.
+
+### 6.3 AO3 rewrites linebreaks before storing — and that *helps*
+
+`[prior-art]` `lib/html_cleaner.rb` `add_paragraphs_to_text` ("Adding
+paragraphs in place of linebreaks") runs on `content` **before**
+`Sanitize.clean`, through the `sanitize_ac_params` before-action, and the
+result is what gets stored and later exported. `lib/paragraph_maker.rb`
+`split_text_at_newlines` maps:
+
+| Author typed | AO3 stores |
+|---|---|
+| one newline | `<br>` |
+| two newlines | a new `<p>` |
+| three or more | a new `<p>` plus `<p>&nbsp;</p>` |
+| `<br><br>` | two `<p>`s — **the `<br>`s are removed** |
+| `<br>` already inside a `<p>` | kept as-is |
+
+GPT read this as provenance being destroyed. It is closer to the opposite, and
+this is the most useful thing to come out of the review: **AO3 has already
+promoted every multi-line break to a paragraph.** A `<br>` surviving into our
+EPUB is therefore a *single* author line break, never a paragraph the exporter
+mangled. The decision we face is narrower than assumed — not "is this break
+real?" but "is this single, deliberate break prosodic or cosmetic?".
+
+That still leaves hard-wrapped prose imported from elsewhere, which is exactly
+what GPT's line-length statistics detect. But it removes the largest failure
+mode, and it means our current rejoining is more destructive than it looked:
+we are rejoining breaks AO3 has already told us were single and deliberate.
+
+### 6.4 The Thai fine-tune numbers are real and were mislabelled
+
+`[prior-art]` The numbers are in `kunato/wayu-kokoro-thai-v1`,
+`kokoro_thai/infer.py`, in the `build_voice_pack` docstring. They are **not**
+correlations, as reported to me — the docstring labels them
+`(pred/true duration, 1.00 = correct)`:
+
+* style from the clip itself — 0.96
+* style from a length-matched clip — 0.97
+* one fixed 4-second reference — 0.76, i.e. 1.26x too fast
+
+So 0.76 means predicted durations are 76% of true, not r=0.76. The direction
+supports length-matched rows and argues against a fixed narration row. But it
+is one author-stated measurement in a docstring on a Thai fine-tune, with no
+backing table found in the repo, so it is suggestive rather than decisive.
+
+---
+
+## 7. Prior art
 
 Licence-checked because this project is **AGPL-3.0**; Apache-2.0, MIT, BSD and
 ISC are all one-way compatible *into* AGPL-3.0.
@@ -676,7 +841,7 @@ of. Relevant when tuning pause lengths.
 
 ---
 
-## 7. Housekeeping and known defects
+## 8. Housekeeping and known defects
 
 - [ ] **Speed changes need a restart.** `[code]` `CoreMLKokoroTTSService.speak`
       captures `currentSpeed` into a local at start, so the slider does nothing
