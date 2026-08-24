@@ -536,7 +536,41 @@ mispronounced name is permanent.
       MisakiSwift both use `[Worcester](/wˈʊstər/)`. Reuse rather than invent —
       it gives the respelling UI a serialized form and lets power users paste
       overrides they already have.
-- [ ] **Contextual pronunciation: `the` sandhi.** `[code]` `/ðə/` before a
+- [ ] **Contextual pronunciation: `the` sandhi — port it, don't invent it.**
+      `[measured]` `[prior-art]` Two facts found by measurement, both of which
+      change this item:
+
+      **1. Our lexicon's entry for `the` is `ði` — the *vowel* form.** So today
+      every consonant-initial `the` is the wrong one: "thee book". At
+      **105,388 occurrences** in the 20-work corpus this is plausibly the
+      highest-frequency single mispronunciation in the pipeline, and it is a
+      defect rather than a missing feature.
+
+      **2. Misaki already solves this, and we can read the answer.** Python
+      Misaki gets every hard case right — `the book` → `ðə`, `the apple` →
+      `ði`, `the hour` → `ði` (silent h), `the university` → `ðə` (the `/j/`
+      glide), `the FBI` → `ði`. `misaki/en.py`:
+
+          elif word in ('the', 'The') or (word == 'THE' and tag == 'DT'):
+              return 'ði' if ctx.future_vowel == True else 'ðə', 4
+
+      Note `== True`, not truthiness: `future_vowel` is tri-state, so an
+      **unknown** neighbour falls back to `ðə` — the opposite of our current
+      constant. `future_vowel` is computed by scanning the *next* token's
+      phoneme string for its first vowel / consonant / punctuation character
+      (`VOWELS = frozenset('AIOQWYaiuæɑɒɔəɛɜɪʊʌᵻ')`); punctuation yields
+      unknown. Misaki is MIT, so this is portable as-is.
+
+      It is also not one word: the same context drives `to` → `tə`/`tʊ` and
+      the weak form of `am`. Porting the *mechanism* gets those free.
+
+      **The architectural catch:** our `phonemize` resolves words left to
+      right and independently, so nothing knows the next word's phonemes yet.
+      Resolve into `(word, phonemes)` pairs first, walk backwards to compute
+      the context, apply weak forms, then join — rather than restructuring the
+      resolution order.
+
+      Original note follows. `[code]` `/ðə/ before a
       consonant, `/ði/` before a vowel — and the rule is **phonological, not
       orthographic**, so it must run on phonemes: *the hour* takes `/ði/`
       (silent h), *the university* takes `/ðə/` (`/j/` glide), *the FBI* takes
@@ -549,7 +583,20 @@ mispronounced name is permanent.
       weak form, inspect the next token's first phoneme, swap. Deterministic,
       no model, no POS. Highest-frequency word in English.
 
-- [ ] **Contextual pronunciation: possessives.** `[code]` `splitWords` keeps
+- [ ] **Contextual pronunciation: possessives — measured, and worse than
+      stated.** `[measured]` The corpus holds **5,896** proper-noun possessives
+      across 462 distinct forms. **36.7% miss the lexicon entirely** (base and
+      possessive both), and — the number that matters — when the base name *is*
+      in the lexicon, the possessive is there only **36.6%** of the time. So
+      roughly two thirds of possessives fall through even for known names.
+      Most frequent misses are exactly the predicted shape: `Liv's` (360),
+      `Oikawa's` (276), `Tobio's` (233), `Cecil's` (232).
+
+      Misaki's own output confirms the target: `Anna's` → `ˈɑnəz` (/z/),
+      `Pat's` → `pˈæts` (/s/), `Alice's` → `ˈælɪsᵻz` (/ɪz/ after a sibilant).
+      The rule is real and the reference gets it right.
+
+      Original note follows. `[code]` `splitWords` keeps
       `'` inside a word (which is what saves `wasn't`) and `normalizeKey` keeps
       it in the lookup key, so `Anna's` is looked up as the literal key
       `anna's`. Contractions are in the Misaki lexicon; **possessives of proper
