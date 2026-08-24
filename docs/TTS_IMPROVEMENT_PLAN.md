@@ -294,9 +294,31 @@ everything below is provisional without it.
       a numeral, not an elongated word (`XXXII` was collapsing to `xi`). The
       second guard removed **42 of 73** de-elongation hits — unguarded, that
       rule did more harm than good.
+      An adversarial review then found four more defects, every one by
+      replaying the **real** lexicon rather than reading the code:
+      collapsing *every* repeated run flattened a word's own spelling
+      (`GOODD` → `god`, `SOONN` → `son`, `ALLL` → `al`); `normalizeKey` keeps
+      `'` and drops `-`, so `P-S` became `p'-s` → `p's` → "peas" past a raw
+      length check; the numeral guard tested the whole token, so `XXX-II`
+      (32) collapsed to `xi` (11); and apostrophe reinsertion was quadratic
+      with no length cap, so an unbroken keysmash paid for a search that
+      cannot succeed.
+
+      The elongation fix is the one worth remembering: collapse only the
+      **trailing** run, because that is where written elongation lands — a
+      writer holds the last sound — and try a native double before a single
+      so `ALLL` is `all`. A 60,000-word collision scan then found no wrong
+      recoveries.
+
       The logic lives in gitignored `Packages/`, so it survives only through
       `Scripts/fluidaudio-kudos.patch`; the patch was regenerated and verified
       to apply to a fresh pinned clone with the result byte-matching.
+
+      **Method note.** Three rounds of defects, none found by inspection —
+      the spec was wrong, then the guards were wrong, then the guards had
+      holes. Every one surfaced by replaying the algorithm against real
+      lexicon data. For anything that consults a large external dictionary,
+      replaying it is the review; reading the diff is not.
       `[measured]` `[code]` After a lexicon miss,
       `EnglishInitialisms.isCandidate` spells any strict-ASCII all-caps token
       of **2–5 characters** as letter names (`FBI` → `ˈɛf bˈi ˈI`). The rule
