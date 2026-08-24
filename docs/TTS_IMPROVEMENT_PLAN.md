@@ -647,6 +647,34 @@ mispronounced name is permanent.
       `Pat's` → `pˈæts` (/s/), `Alice's` → `ˈælɪsᵻz` (/ɪz/ after a sibilant).
       The rule is real and the reference gets it right.
 
+      **The reference implementation, verbatim** (`misaki/en.py`, MIT) — port
+      this rather than paraphrasing the textbook rule, because the textbook
+      version gets three details wrong:
+
+          def _s(self, stem):
+              if not stem: return None
+              elif stem[-1] in 'ptkfθ':      return stem + 's'
+              elif stem[-1] in 'szʃʒʧʤ':     return stem + 'ᵻ' + 'z'   # 'ɪ' if british
+              return stem + 'z'
+
+      1. The voiceless set is **`ptkfθ` — five phonemes**, not "all voiceless
+         consonants". `s` and `ʃ` are voiceless but belong to the sibilant
+         branch, and `h` is absent entirely.
+      2. The epenthetic vowel is **`ᵻ`** for American English, not `ɪ`. That
+         matches the observed `ˈælɪsᵻz` for *Alice's*.
+      3. Order matters — `ptkfθ` is tested **before** the sibilants.
+
+      And the gate that makes it safe, from `stem_s`: it derives **only when
+      the stem is already known to the lexicon** (`is_known`). For `anna's` it
+      strips `'s`, confirms `anna` resolves, looks that up, and appends the
+      allomorph. That is exactly the boundary the double-clitic hazard
+      requires, arrived at independently and then found in the reference.
+
+      Note `James'` — apostrophe with no `s` — fails `stem_s`'s
+      `word.endswith('s')` test and is not handled at all; it falls through to
+      G2P. So the apostrophe-only plural possessive is out of scope for the
+      derivation, not something to special-case.
+
       **The sibilant set is `/s z ʃ ʒ tʃ dʒ/`**, hardcoded in `misaki/en.py`
       as the string `szʃʒʧʤ` — note the single-codepoint affricates `ʧ`/`ʤ`,
       not the two-character digraphs, which is a real trap for a Swift port
