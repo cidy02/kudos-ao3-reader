@@ -1,6 +1,6 @@
 --- a/Package.swift
 +++ b/Package.swift
-@@ -13,10 +13,6 @@
+@@ -13,10 +13,6 @@ let package = Package(
              name: "FluidAudio",
              targets: ["FluidAudio"]
          ),
@@ -11,7 +11,7 @@
      ],
      dependencies: [],
      targets: [
-@@ -28,7 +24,6 @@
+@@ -28,7 +24,6 @@ let package = Package(
                  "NemoTextProcessing",
              ],
              path: "Sources/FluidAudio",
@@ -19,7 +19,7 @@
              resources: [
                  // Keep .process: .copy of a Resources-named directory breaks Apple code signing on iOS.
                  .process("TTS/LuxTts/G2p/Resources")
-@@ -52,25 +47,6 @@
+@@ -52,25 +47,6 @@ let package = Package(
              path: "Sources/MachTaskSelfWrapper",
              publicHeadersPath: "include"
          ),
@@ -47,10 +47,10 @@
  )
 --- a/Sources/FluidAudio/TTS/G2P/G2PModel.swift
 +++ b/Sources/FluidAudio/TTS/G2P/G2PModel.swift
-@@ -215,8 +215,14 @@
+@@ -215,8 +215,14 @@ actor G2PModel {
              throw G2PModelError.modelLoadFailed("\(ModelNames.G2P.decoderFile) not found at \(decoderURL.path)")
          }
- 
+
 +        // cpuOnly is BNNS. iOS 26.4–26.6 SIGSEGVs in BnnsCpuInferenceOperation
 +        // (FluidAudio #817/#844). CPU+GPU keeps G2P on Metal instead.
          let config = MLModelConfiguration()
@@ -60,57 +60,22 @@
 +        if #available(iOS 17.4, macOS 14.4, *) {
 +            config.optimizationHints.reshapeFrequency = .infrequent
 +        }
- 
+
          encoder = try MLModel(contentsOf: encoderURL, configuration: config)
          decoder = try MLModel(contentsOf: decoderURL, configuration: config)
---- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
-+++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
-@@ -209,6 +209,12 @@
-             let cfg = MLModelConfiguration()
-             cfg.computeUnits = computeUnits.units(for: stage)
-             cfg.allowLowPrecisionAccumulationOnGPU = true
-+            if #available(iOS 17.4, macOS 14.4, *) {
-+                cfg.optimizationHints.reshapeFrequency = .infrequent
-+            }
-+            if #available(iOS 18.0, macOS 15.0, *) {
-+                cfg.optimizationHints.specializationStrategy = .fastPrediction
-+            }
-             let stageStart = Date()
-             let model = try MLModel(contentsOf: url, configuration: cfg)
-             let stageElapsed = Date().timeIntervalSince(stageStart) * 1000
---- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
-+++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
-@@ -179,6 +179,14 @@
-         }
-     }
- 
-+    /// Non-async wrapper so Swift binds the throwing `prediction(from:options:)`
-+    /// overload instead of the async one (which uses e5rt.concurrentExecutionQueue).
-+    private static func synchronousPrediction(
-+        model: MLModel, from provider: MLFeatureProvider
-+    ) throws -> MLFeatureProvider {
-+        try model.prediction(from: provider, options: MLPredictionOptions())
-+    }
-+
-     private static func predict(
-         stage: KokoroAneStage,
-         model: MLModel,
-@@ -190,7 +198,7 @@
-         let clock = ContinuousClock()
-         let start = clock.now
-         do {
--            let out = try await model.prediction(from: provider)
-+            let out = try Self.synchronousPrediction(model: model, from: provider)
-             timing = milliseconds(start.duration(to: clock.now))
-             return out
-         } catch let error as CancellationError {
 --- a/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
 +++ b/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
-@@ -14,16 +14,21 @@
+@@ -12,18 +12,32 @@ import Foundation
+ ///      (proper nouns, abbreviations like `NATO`)
+ ///   4. case-sensitive hit on the normalized lower-case form
  ///   5. lower-cased Misaki lexicon hit — this is what gives function
- ///      words their weak forms (`to` → `tu`), instead of the BART G2P
- ///      citation form (`tˈO`) that over-stresses them (issue #691)
+-///      words their weak forms (`to` → `tu`), instead of the BART G2P
+-///      citation form (`tˈO`) that over-stresses them (issue #691)
 -///   6. strict ASCII all-caps initialisms (`FBI`, `ATP`) spelled as
++///      words their citation forms (`to` → `tu`) instead of the BART G2P
++///      stressed form (`tˈO`) that over-stresses them (issue #691).
++///      `tu` is still the strong form; the running-speech weak forms
++///      (`tə` / `tʊ`) are applied after every word is resolved.
 +///   6. after a full miss, reinsert an apostrophe at each interior
 +///      position (`dont` → `don't`) and retry the same maps
 +///   7. after a full miss, collapse elongated letter runs (`yesss` →
@@ -120,6 +85,13 @@
 -///   7. BART G2P CoreML fallback for OOV words (injected by the caller)
 +///   9. hyphenated compound split (`tales-to-amaze`) (issue #775)
 +///  10. BART G2P CoreML fallback for OOV words (injected by the caller)
++///
++/// After all words are resolved, `the`/`The` and `to`/`To` are rewritten
++/// from the next word's phonemes (Misaki `future_vowel`). The lexicon
++/// stores only the strong form (`ði`, `tu`), so "the book" otherwise
++/// says "thee book". Measured in the 20-work corpus: 105,383 `the` and
++/// 67,403 `to` — about 7% of every word spoken. All-caps `THE`/`TO` are
++/// not rewritten: Misaki gates those on POS tags we do not have.
  ///
  /// Punctuation supported by the chain's `vocab.json` (`, . ! ? ; …` etc.)
  /// is preserved and attached to the preceding word — Kokoro treats those
@@ -128,19 +100,19 @@
  /// is NOT expanded: the laishere vocab carries those tokens directly.
 -struct KokoroAneEnglishPhonemizer: Sendable {
 +public struct KokoroAneEnglishPhonemizer: Sendable {
- 
+
      private static let logger = AppLogger(category: "KokoroAneEnglishPhonemizer")
- 
-@@ -43,7 +48,7 @@
+
+@@ -43,7 +57,7 @@ struct KokoroAneEnglishPhonemizer: Sendable {
      /// skipped at `KokoroAneVocab.encode` anyway).
      let allowedPunctuation: Set<Character>
- 
+
 -    init(
 +    public init(
          wordToPhonemes: [String: [String]] = [:],
          caseSensitiveWordToPhonemes: [String: [String]] = [:],
          customLexicon: [String: String] = [:],
-@@ -64,7 +69,7 @@
+@@ -64,7 +78,7 @@ struct KokoroAneEnglishPhonemizer: Sendable {
      ///   return skips the word with a warning; a thrown error aborts.
      /// - Throws: `KokoroAneError.inputProcessingFailed` when the input is
      ///   empty or nothing could be resolved.
@@ -149,10 +121,160 @@
          _ text: String,
          fallback: (String) async throws -> [String]?
      ) async throws -> String {
-@@ -144,13 +149,24 @@
+@@ -77,7 +91,7 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+         // contractions (`we’re`) survive tokenization intact (issue #774).
+         let prepared = Self.normalizeApostrophes(trimmed)
+
+-        var parts: [String] = []
++        var parts: [PhonemePart] = []
+
+         for token in Self.splitWords(prepared) {
+             if token.isEmpty { continue }
+@@ -89,19 +103,21 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+                 // punctuation as its own prosody token, but Misaki output
+                 // never puts a space before it.
+                 if parts.isEmpty {
+-                    parts.append(String(ch))
++                    parts.append(PhonemePart(sourceWord: "", surface: String(ch)))
+                 } else {
+-                    parts[parts.count - 1].append(ch)
++                    parts[parts.count - 1].surface.append(ch)
+                 }
+                 continue
+             }
+
+             if let ipa = try await resolveWord(token, fallback: fallback) {
+-                parts.append(ipa)
++                parts.append(PhonemePart(sourceWord: token, surface: ipa))
+             }
+         }
+
+-        let joined = parts.joined(separator: " ")
++        applyFunctionWordSandhi(&parts)
++
++        let joined = parts.map(\.surface).joined(separator: " ")
+         if joined.isEmpty {
+             throw KokoroAneError.inputProcessingFailed(
+                 "produced no phonemes for input '\(trimmed)'")
+@@ -109,6 +125,114 @@ struct KokoroAneEnglishPhonemizer: Sendable {
+         return joined
+     }
+
++    // MARK: - Function-word sandhi (`the` / `to`)
++
++    /// One resolved word, plus any punctuation later glued onto it.
++    ///
++    /// The splitter appends commas and the like to the preceding part, so a
++    /// surface can be `"ði,"`. The source word is kept separately so the
++    /// sandhi pass can match `the`/`to` without reading that comma as a
++    /// phoneme.
++    private struct PhonemePart {
++        let sourceWord: String
++        var surface: String
++    }
++
++    /// Rewrite `the`/`The` and `to`/`To` from the following phoneme.
++    ///
++    /// Ported from Misaki (`misaki/en.py`); not invented. `future_vowel` is
++    /// tri-state (`nil` / `true` / `false`) and the two rules treat unknown
++    /// differently: `the` falls back to `ðə`, `to` keeps the lexicon's `tu`.
++    /// Matching on truthiness would invert the common case.
++    ///
++    /// Only these four spellings. `a`/`an`/`am`/`in` and all-caps `THE`/`TO`
++    /// are POS-gated in Misaki; without a tagger, a context-free override
++    /// would turn the letter name "A" into a schwa.
++    private func applyFunctionWordSandhi(_ parts: inout [PhonemePart]) {
++        for index in parts.indices {
++            let word = parts[index].sourceWord
++            guard word == "the" || word == "The" || word == "to" || word == "To" else {
++                continue
++            }
++            let vowel = futureVowel(after: index, in: parts)
++            let (_, punct) = splitTrailingPunctuation(parts[index].surface)
++            let rewritten: String
++            switch word {
++            case "the", "The":
++                // Misaki: `'ði' if ctx.future_vowel == True else 'ðə'`.
++                switch vowel {
++                case true: rewritten = "ði"
++                case false: rewritten = "ðə"
++                case nil: rewritten = "ðə"
++                }
++            case "to", "To":
++                // Misaki: `{None: golds['to'], False: 'tə', True: 'tʊ'}`.
++                switch vowel {
++                case true: rewritten = "tʊ"
++                case false: rewritten = "tə"
++                case nil:
++                    // Lexicon gold (`tu`) is already on the surface. Keep it,
++                    // and keep any punctuation already attached.
++                    continue
++                }
++            default:
++                continue
++            }
++            parts[index].surface = rewritten + punct
++        }
++    }
++
++    /// `nil` when this part already carries trailing punctuation (the next
++    /// token in Misaki was that comma, not the word after it) or when there
++    /// is no next part. Otherwise scan the next part's phonemes.
++    private func futureVowel(after index: Int, in parts: [PhonemePart]) -> Bool? {
++        let (_, punct) = splitTrailingPunctuation(parts[index].surface)
++        if !punct.isEmpty { return nil }
++        let next = index + 1
++        guard next < parts.count else { return nil }
++        return Self.classifyFutureVowel(parts[next].surface)
++    }
++
++    /// Misaki `token_context`: walk the next phoneme string left to right
++    /// for the first character that is a vowel, a consonant, or non-quote
++    /// punctuation. Stress marks (`ˈˌ`) are neither, so `ˈæpəl` still
++    /// counts as vowel-initial — taking `phonemes.first` would miss it.
++    /// Punctuation ⇒ unknown. Vowel ⇒ true. Consonant ⇒ false.
++    private static func classifyFutureVowel(_ phonemes: String) -> Bool? {
++        for character in phonemes {
++            if misakiNonQuotePuncts.contains(character) { return nil }
++            if misakiVowels.contains(character) { return true }
++            if misakiConsonants.contains(character) { return false }
++        }
++        return nil
++    }
++
++    /// Strip a suffix of vocab punctuation so a rewrite of `"ði,"` can put
++    /// the comma back on `"ðə"`.
++    private func splitTrailingPunctuation(_ surface: String) -> (stem: String, punctuation: String) {
++        var end = surface.endIndex
++        while end > surface.startIndex {
++            let previous = surface.index(before: end)
++            guard allowedPunctuation.contains(surface[previous]) else { break }
++            end = previous
++        }
++        if end == surface.endIndex {
++            return (surface, "")
++        }
++        return (String(surface[..<end]), String(surface[end...]))
++    }
++
++    /// From `misaki/en.py`. Diphthong shorthands `A I O Q W Y` are first-class
++    /// in the laishere vocab, so they count as vowels here too.
++    private static let misakiVowels = Set<Character>("AIOQWYaiuæɑɒɔəɛɜɪʊʌᵻ")
++
++    /// From `misaki/en.py`. Note IPA `ɡ` (U+0261), not ASCII `g` — a stand-in
++    /// lexicon that uses `g` would skip it and then see the following vowel.
++    private static let misakiConsonants = Set<Character>("bdfhjklmnpstvwzðŋɡɹɾʃʒʤʧθ")
++
++    /// Misaki `NON_QUOTE_PUNCTS` = `PUNCTS` minus `"“”`.
++    private static let misakiNonQuotePuncts = Set<Character>(";:,.!?—…")
++
+     // MARK: - Word resolution
+
+     private func resolveWord(
+@@ -144,13 +268,24 @@ struct KokoroAneEnglishPhonemizer: Sendable {
                      + "falling back to the bundled pronunciation")
          }
- 
+
 -        if let phonemes = caseSensitiveWordToPhonemes[word]
 -            ?? caseSensitiveWordToPhonemes[normalized]
 -            ?? wordToPhonemes[lowered]
@@ -178,12 +300,12 @@
 -            return phonemes.joined()
 +            return recovered
          }
- 
+
          // After a full lexicon miss, read strict ASCII all-caps tokens of a
-@@ -210,13 +226,121 @@
+@@ -210,13 +345,121 @@ struct KokoroAneEnglishPhonemizer: Sendable {
          return resolved.joined(separator: " ")
      }
- 
+
 -    // MARK: - Letter-name initialisms (issue #710)
 +    // MARK: - Lexicon lookup and fanfic recoveries
 +
@@ -299,7 +421,7 @@
 +        let key = normalizeKey(candidate)
 +        return key.count == 3 && key.hasSuffix("'s") && (key.first?.isLetter ?? false)
 +    }
- 
+
 -    /// Spell a token as a sequence of letter names using the per-letter
 -    /// entries in the case-sensitive lexicon (`FBI` → `ˈɛf bˈi ˈI`). See
 -    /// ``EnglishInitialisms/spell(_:letterTokens:render:separator:)`` —
@@ -308,3 +430,44 @@
      private func spellAsLetterNames(_ word: String) -> String? {
          EnglishInitialisms.spell(word) { caseSensitiveWordToPhonemes[$0] }
      }
+--- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
++++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
+@@ -209,6 +209,12 @@ public actor KokoroAneModelStore {
+             let cfg = MLModelConfiguration()
+             cfg.computeUnits = computeUnits.units(for: stage)
+             cfg.allowLowPrecisionAccumulationOnGPU = true
++            if #available(iOS 17.4, macOS 14.4, *) {
++                cfg.optimizationHints.reshapeFrequency = .infrequent
++            }
++            if #available(iOS 18.0, macOS 15.0, *) {
++                cfg.optimizationHints.specializationStrategy = .fastPrediction
++            }
+             let stageStart = Date()
+             let model = try MLModel(contentsOf: url, configuration: cfg)
+             let stageElapsed = Date().timeIntervalSince(stageStart) * 1000
+--- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
++++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneSynthesizer.swift
+@@ -179,6 +179,14 @@ public struct KokoroAneSynthesizer {
+         }
+     }
+
++    /// Non-async wrapper so Swift binds the throwing `prediction(from:options:)`
++    /// overload instead of the async one (which uses e5rt.concurrentExecutionQueue).
++    private static func synchronousPrediction(
++        model: MLModel, from provider: MLFeatureProvider
++    ) throws -> MLFeatureProvider {
++        try model.prediction(from: provider, options: MLPredictionOptions())
++    }
++
+     private static func predict(
+         stage: KokoroAneStage,
+         model: MLModel,
+@@ -190,7 +198,7 @@ public struct KokoroAneSynthesizer {
+         let clock = ContinuousClock()
+         let start = clock.now
+         do {
+-            let out = try await model.prediction(from: provider)
++            let out = try Self.synchronousPrediction(model: model, from: provider)
+             timing = milliseconds(start.duration(to: clock.now))
+             return out
+         } catch let error as CancellationError {
