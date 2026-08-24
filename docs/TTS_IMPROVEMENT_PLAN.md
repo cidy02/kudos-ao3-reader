@@ -443,27 +443,6 @@ why this phase is about quality and not tidiness.
       backwards; the missing stress term is real but far too small to overcome
       the grapheme factor.
 
-- [ ] **Emphasis via stress promotion — the only in-vocabulary lever left.**
-      `[code]` `[proposal]` With the arrows gone (Phase 5) there is no proposal
-      for `<em>`/`<i>`, which fic uses heavily and we currently parse and throw
-      away. DeepSeek's replacement suggestion is the one surviving idea, and
-      unlike the arrows it is **in distribution**: `ˈ` and `ˌ` are both in
-      Misaki's `US_VOCAB`, so promoting secondary stress to primary on an
-      emphasised word emits nothing the English G2P would not itself emit.
-
-      Its proposed implementation is wrong twice and must not be copied:
-      `replacingOccurrences(of: "ˌ", with: "ˈ")` promotes *every* secondary
-      stress in the whole string, giving words several primary stresses and
-      hitting every word rather than the emphasised one. Promotion has to be
-      scoped to one word and to one mark.
-
-      Its own example also argues against it: `/ˈrɛkərd/` → `/rɪˈkɔrd/` is a
-      heteronym whose **vowels** change with the stress, which is a
-      demonstration that stress is not separable from segmental content — the
-      exact hazard it warns about elsewhere. So: promote an existing `ˌ` to
-      `ˈ` only, never add stress to an unstressed syllable, and never touch a
-      function word. Needs Phase 0 and a fixed paragraph.
-
 - [ ] **Do not merge across dialogue boundaries.** `[code]` `[proposal]`
       A standalone `"Don't."` glued into surrounding narration is voiced with a
       long-form style row instead of its own. `KokoroSemanticDocument` already
@@ -471,6 +450,26 @@ why this phase is about quality and not tidiness.
       place it or `.blockquote` is consulted is `isBody()`, which treats them
       exactly like `.paragraph`. hexgrad specifically improved Kokoro's short
       utterances `[prior-art]`, so short lines are a strength to use.
+
+- [ ] **Preserve `<br>` as an audible boundary.** `[measured]` `[code]`
+      Same defect as the item above, from the other direction: the document
+      hands us a boundary and we glue over it. Chain verified end to end in
+      §6.3.1 — AO3 stores a single author newline as `<br>`, Readium's
+      `HTMLResourceContentIterator` calls `flushText()` on it so each line
+      arrives as its own unit, and `concatenateForSentenceContext` space-joins
+      them straight back together. 15,133 breaks across the corpus, and the
+      hard-wrapped prose that would justify the join **does not exist here**
+      (0 of 1,180 candidate runs, against a passing positive control).
+
+      The join is not pointless — G2P is per-word and an isolated `read` gets
+      the citation form — so the fix is GPT's split: let phonemes see across
+      the break, let the listener hear it. Discriminator needs no new parsing:
+      units split by `<br>` share a `cssSelector`, units from adjacent
+      paragraphs do not. Needs a boundary shorter than `.paragraph`'s 0.32 s.
+
+      Worth doing with the dialogue item above, not separately — both are
+      "stop merging across a boundary the document already gave us", and they
+      touch the same two functions.
 
 - [ ] **Revisit the packing band (A/B).** `[prior-art]` Ours is min 110 /
       target 175 / max 220; Kokoro-FastAPI ships min **175** / max **250** —
@@ -560,6 +559,27 @@ mispronounced name is permanent.
       is unused. Fixing *Hermione* once should hold for every Potter fic.
 
 ### Phase 4 — expressiveness
+
+- [ ] **Emphasis via stress promotion — the only in-vocabulary lever left.**
+      `[code]` `[proposal]` With the arrows gone (Phase 5) there is no proposal
+      for `<em>`/`<i>`, which fic uses heavily and we currently parse and throw
+      away. DeepSeek's replacement suggestion is the one surviving idea, and
+      unlike the arrows it is **in distribution**: `ˈ` and `ˌ` are both in
+      Misaki's `US_VOCAB`, so promoting secondary stress to primary on an
+      emphasised word emits nothing the English G2P would not itself emit.
+
+      Its proposed implementation is wrong twice and must not be copied:
+      `replacingOccurrences(of: "ˌ", with: "ˈ")` promotes *every* secondary
+      stress in the whole string, giving words several primary stresses and
+      hitting every word rather than the emphasised one. Promotion has to be
+      scoped to one word and to one mark.
+
+      Its own example also argues against it: `/ˈrɛkərd/` → `/rɪˈkɔrd/` is a
+      heteronym whose **vowels** change with the stress, which is a
+      demonstration that stress is not separable from segmental content — the
+      exact hazard it warns about elsewhere. So: promote an existing `ˌ` to
+      `ˈ` only, never add stress to an unstressed syllable, and never touch a
+      function word. Needs Phase 0 and a fixed paragraph.
 
 - [x] **Voice blending — done 2026-08-23.** Half-row SLERP (the granularity
       the model actually reads: timbre → Noise+Vocoder, style_s →
