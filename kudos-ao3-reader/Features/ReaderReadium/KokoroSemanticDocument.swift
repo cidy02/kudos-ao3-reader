@@ -112,6 +112,13 @@ nonisolated enum KokoroSemanticDocument {
                 flush(endsAtLineBreak: true)
             } else if let current = open, canJoin(current, kind: kind) {
                 open?.text = join(current.text, raw)
+                // Track the selector of the unit just absorbed, not the one
+                // the block opened with. A paragraph that does not end a
+                // sentence joins into the *next* paragraph's first line, and
+                // if the block kept its original selector the `<br>` seam
+                // that follows inside that next paragraph would be compared
+                // against the wrong element and silently missed.
+                open?.selector = selector
                 continue
             }
 

@@ -166,5 +166,28 @@ struct KokoroLineBreakTests {
         #expect(utterances[0].text == "She began to read the letter.")
         #expect(utterances[0].pauseAfter == .paragraph)
     }
+    /// A paragraph that does not end a sentence still joins into the next
+    /// paragraph's first line — that behaviour predates this change and is
+    /// deliberate. But the merged block kept the *first* paragraph's
+    /// selector, so the `<br>` seam that follows inside the second paragraph
+    /// was invisible and its lines ran together.
+    ///
+    /// The stored selector has to track the last unit absorbed, because that
+    /// is what the next seam is compared against.
+    @Test func aCrossParagraphJoinDoesNotHideTheFollowingLineSeam() {
+        let units = [
+            unit("She began to", selector: "html > body > p:nth-child(1)"),
+            unit("read the letter", selector: "html > body > p:nth-child(2)"),
+            unit("and then she wept.", selector: "html > body > p:nth-child(2)")
+        ]
+        let utterances = KokoroUtterancePacker.pack(units: units)
+        let pauses = utterances.map(\.pauseAfter)
+        #expect(
+            pauses.contains(.line),
+            "the seam inside the second paragraph should be a line pause, got \(pauses)"
+        )
+        let spoken = KokoroUtterancePacker.reconstructedText(from: utterances)
+        #expect(spoken == "She began to read the letter and then she wept.")
+    }
 }
 #endif
