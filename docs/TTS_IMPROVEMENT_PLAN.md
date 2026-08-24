@@ -608,6 +608,43 @@ mispronounced name is permanent.
       `g2p_en` notably does *not* implement it and emits `DH AH0` always, so
       this is a real differentiator rather than table stakes.
 
+      **Implemented 2026-08-24 for `the`/`The` and `to`/`To` only**, as a
+      post-pass over `(word, phonemes)` parts in
+      `KokoroAneEnglishPhonemizer.phonemize`. `a`/`an`/`am`/`in` and
+      all-caps `THE`/`TO` remain out of scope (POS-gated in Misaki; we
+      have no tagger).
+
+      **Impact, measured over the corpus with the real lexicon: 153,735 of
+      168,711 `the`/`to` occurrences (91.1%) now get a different form.**
+
+      | | count |
+      |---|---|
+      | `the` → `ðə` — previously "thee" | 90,456 |
+      | `to` → `tə` | 56,919 |
+      | `to` → `tʊ` | 6,360 |
+      | already correct | 14,976 |
+
+      Only 12,642 `the` were right before, because `ði` is only correct before
+      a vowel and prose is mostly consonant-initial. That is roughly **6% of
+      every word spoken** changing to the correct vowel.
+
+      **Verified against the reference at scale, not just by unit test.**
+      Replaying the ported algorithm over the real `us_lexicon_cache.json` and
+      real corpus sentences, then comparing its `the`/`to` choices to Misaki's
+      own output on the same text: **98.51% agreement across 2,760 tokens**.
+      Every disagreement was accounted for — Misaki gluing an opening quote to
+      the token, the deliberately out-of-scope all-caps `THE`/`TO`, harness
+      token misalignment on things like `bit--`, and one genuine consequence
+      of the scope limit below.
+
+      **The `a` scope has a knock-on effect worth knowing.** Because we leave
+      `a` as the lexicon's `A` (a vowel), `to a` comes out `tʊ`, where Misaki
+      gives `tə` — Misaki resolves `a` to `ɐ` first, and `ɐ` is not in its own
+      `VOWELS` set, so its scan finds nothing and falls through to unknown.
+      Ours is arguably the more consistent answer, but it is a divergence
+      created by not porting the POS-gated `a` rule, and it would disappear if
+      that rule ever lands.
+
       **The architectural catch:** our `phonemize` resolves words left to
       right and independently, so nothing knows the next word's phonemes yet.
       Resolve into `(word, phonemes)` pairs first, walk backwards to compute

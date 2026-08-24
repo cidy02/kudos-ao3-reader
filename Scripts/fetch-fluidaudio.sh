@@ -90,11 +90,18 @@ Pinned at upstream commit \`$COMMIT\`.
    complete lexicon miss and before letter-name initialisms, try apostrophe
    reinsertion (\`dont\` → \`don't\`) and de-elongation (\`yesss\` → \`yes\`).
    \`cant\` / \`beer\` never reach these because they hit the lexicon first.
+6. **English \`the\`/\`to\` sandhi** (\`KokoroAneEnglishPhonemizer.swift\`) —
+   after every word is resolved, rewrite \`the\`/\`The\` and \`to\`/\`To\`
+   from the following phoneme (Misaki \`future_vowel\`). The bundled lexicon
+   stores only the strong form (\`ði\`, \`tu\`), so "the book" otherwise
+   says "thee book" — 105,383 + 67,403 corpus hits, about 7% of every
+   word. All-caps \`THE\`/\`TO\` are left alone (POS-gated in Misaki).
 
 Patches 2–4 exist to route around the iOS 26.x libBNNS \`SIGSEGV\`
 (FluidAudio #817 / #844). Kudos additionally does not run the Core ML engine
 at all on iOS 26 — see \`KokoroAnePlayback\`. Patch 5 is a fanfic-frontend
-recovery; it does not change compute-unit routing.
+recovery; patch 6 is the Misaki \`the\`/\`to\` weak-form post-pass. Neither
+changes compute-unit routing.
 EOF
 
 echo "FluidAudio $VERSION ready at Packages/FluidAudio"
