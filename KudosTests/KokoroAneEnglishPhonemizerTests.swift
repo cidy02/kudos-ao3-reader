@@ -40,6 +40,11 @@ struct KokoroAneEnglishPhonemizerRecoveryTests {
         "i": ["ˈ", "I"],
         "l": ["ˈ", "ɛ", "l"],
         "xi": ["z", "ˈ", "aɪ"],
+        // Native-double traps: each pair is a real word whose spelling already
+        // doubles, next to the shorter word an over-eager collapse produced.
+        "good": ["ɡ", "ˈ", "ʊ", "d"], "god": ["ɡ", "ˈ", "ɑ", "d"],
+        "soon": ["s", "ˈ", "u", "n"], "son": ["s", "ˈ", "ʌ", "n"],
+        "all": ["ˈ", "ɔ", "l"], "al": ["ˈ", "æ", "l"],
     ]
 
     /// Per-letter names used to spell all-caps initialisms. Enough of
@@ -238,6 +243,49 @@ struct KokoroAneEnglishPhonemizerRecoveryTests {
         let mee = try await phonemize("MEE") { await recorder.g2p($0) }
         #expect(yesss == expectedYes)
         #expect(mee == expectedMe)
+    }
+    /// Written elongation lands on the *end* of a word — a writer holds the
+    /// last sound. Collapsing every run at once flattened the word's own
+    /// spelling too, so `GOODD` resolved to `god` and `SOONN` to `son`.
+    /// Found by replaying the real lexicon, not by inspection.
+    @Test func elongationDoesNotFlattenAWordsOwnDoubleLetter() async throws {
+        let recorder = FallbackRecorder()
+        let cases = [("GOODD", "good"), ("SOONN", "soon"), ("ALLL", "all")]
+        for item in cases {
+            let actual = try await phonemize(item.0) { await recorder.g2p($0) }
+            let expected = try await phonemize(item.1) { await recorder.g2p($0) }
+            #expect(actual == expected, "\(item.0) should read as \(item.1), got \(actual)")
+        }
+    }
+
+    /// `normalizeKey` keeps `'` and drops `-`, so the candidate `p'-s` is four
+    /// characters — past a raw length check — yet still normalizes to `p's`.
+    @Test func hyphenDoesNotSmuggleALetterPluralPastTheGuard() async throws {
+        let recorder = FallbackRecorder()
+        let actual = try await phonemize("P-S") { await recorder.g2p($0) }
+        let peas = try await phonemize("p's") { await recorder.g2p($0) }
+        #expect(actual != peas, "P-S must not read as a letter plural (\(actual))")
+    }
+
+    /// The numeral guard has to tolerate decoration: testing the whole token
+    /// let `XXX-II` through, where it collapsed to `x-i` and resolved as XI.
+    @Test func decoratedRomanNumeralsStayNumerals() async throws {
+        let recorder = FallbackRecorder()
+        let actual = try await phonemize("XXX-II") { await recorder.g2p($0) }
+        let xi = try await phonemize("xi") { await recorder.g2p($0) }
+        #expect(actual != xi, "XXX-II (32) must not read as XI (11): \(actual)")
+    }
+    /// Apostrophe reinsertion is quadratic in token length, and fanfic
+    /// supplies unbroken keysmashes and long URLs. Nothing longer than the
+    /// lexicon's longest key can match, so long tokens must not pay for the
+    /// search — they should fall straight through to G2P.
+    @Test func veryLongTokensSkipTheApostropheSearch() async throws {
+        let recorder = FallbackRecorder()
+        let keysmash = String(repeating: "asdfghjkl", count: 12)   // 108 chars
+        let actual = try await phonemize(keysmash) { await recorder.g2p($0) }
+        #expect(actual.contains("<g2p:"), "long token should reach G2P, got \(actual)")
+        let seen = await recorder.words
+        #expect(seen == [keysmash], "expected one G2P call, got \(seen.count)")
     }
 }
 #endif

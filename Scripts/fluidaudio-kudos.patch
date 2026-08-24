@@ -180,10 +180,11 @@
          }
  
          // After a full lexicon miss, read strict ASCII all-caps tokens of a
-@@ -210,6 +226,118 @@
+@@ -210,13 +226,121 @@
          return resolved.joined(separator: " ")
      }
  
+-    // MARK: - Letter-name initialisms (issue #710)
 +    // MARK: - Lexicon lookup and fanfic recoveries
 +
 +    /// The four-dictionary lookup used for a direct lexicon hit. Recoveries
@@ -215,7 +216,9 @@
 +    /// spelled `P S` / `B S`. Measured: 22 occurrences in the corpus, all
 +    /// of them wrong.
 +    private func lexiconPhonemesByReinsertingApostrophe(_ lowered: String) -> String? {
-+        guard lowered.count >= 2, !lowered.contains("'") else { return nil }
++        guard lowered.count >= 2, lowered.count <= Self.longestRecoverableWord,
++            !lowered.contains("'")
++        else { return nil }
 +
 +        var index = lowered.index(after: lowered.startIndex)
 +        while index < lowered.endIndex {
@@ -228,74 +231,80 @@
 +        return nil
 +    }
 +
-+    /// Collapse runs of the same letter and retry the lexicon. Longer
-+    /// (3+) runs are tried first so `yesss` becomes `yes` without waiting
-+    /// on a 2-letter pass; doubled letters (`youu` → `you`, `mee` → `me`)
-+    /// are the fallback. Only a reconstructed form that actually hits is
-+    /// accepted, so `PDF` / `TG` fall through unchanged.
++    /// Collapse the **trailing** run of a repeated letter and retry the
++    /// lexicon (`yesss` → `yes`, `mee` → `me`).
++    ///
++    /// Only the trailing run, because that is where written elongation lands
++    /// — a writer holds the *last* sound. Collapsing every run at once also
++    /// flattened the word's own spelling, which turned `GOODD` into `god`,
++    /// `SOONN` into `son` and `COOLL` into `col`.
++    ///
++    /// A native double is tried before a single, so `ALLL` reads as `all`
++    /// rather than `al`. Where both hit, the doubled form is the commoner
++    /// word and the better guess: `SCOTTT` is `scott`, not `scot`.
 +    private func lexiconPhonemesByCollapsingElongation(_ lowered: String) -> String? {
-+        // A token spelled only from Roman numeral letters is a numeral, not an
-+        // elongated word, and collapsing runs destroys its value: `II` became
-+        // `i`, and `XXXII` (32) became `xi` (11). Measured: 42 of 73
-+        // de-elongation hits in the corpus were this, so the rule did more
-+        // harm than good without the guard. Real words made of those letters
-+        // (`mill`, `civil`) resolved at the lexicon step and never arrive.
-+        guard !lowered.allSatisfy({ Self.romanNumeralLetters.contains($0) }) else {
++        // Numeral guard, tolerant of decoration: `XXX-II` and `XX's` are still
++        // numerals, and testing the whole token let them through.
++        let letters = lowered.filter(\.isLetter)
++        guard !letters.isEmpty,
++            !letters.allSatisfy({ Self.romanNumeralLetters.contains($0) })
++        else {
 +            return nil
 +        }
-+        for minimumRun in [3, 2] {
-+            let collapsed = Self.collapseLetterRuns(lowered, minimumRun: minimumRun)
-+            // A collapse down to one letter is never a word recovery — `LL`
-+            // would read as `l`. Leave those to letter-name spelling.
-+            guard collapsed != lowered, collapsed.count >= 2 else { continue }
-+            if let hit = lexiconPhonemes(for: collapsed) {
++
++        guard let run = Self.trailingLetterRun(lowered) else { return nil }
++        for target in [2, 1] where target < run.length {
++            let candidate = lowered.dropLast(run.length)
++                + String(repeating: run.letter, count: target)
++            // A collapse to a single character is never a word recovery.
++            guard candidate.count >= 2 else { continue }
++            if let hit = lexiconPhonemes(for: String(candidate)) {
 +                return hit
 +            }
 +        }
 +        return nil
 +    }
 +
++    /// Length of the trailing run of one repeated letter, when it is at least
++    /// two long. `nil` for a token ending in punctuation or a lone letter.
++    private static func trailingLetterRun(_ word: String) -> (letter: Character, length: Int)? {
++        guard let last = word.last, last.isLetter else { return nil }
++        var length = 0
++        for character in word.reversed() {
++            guard character == last else { break }
++            length += 1
++        }
++        return length >= 2 ? (last, length) : nil
++    }
++
 +    private static let romanNumeralLetters = Set("ivxlcdm")
++
++    /// Longest token apostrophe reinsertion will try.
++    ///
++    /// The search is quadratic — one candidate per interior position, each
++    /// normalized in full — so an unbroken keysmash or a long URL would spend
++    /// real time proving what is already known: the longest key in the
++    /// shipped lexicon is 45 characters, so nothing longer than that can
++    /// match any entry however the apostrophe is placed. Fanfic supplies both
++    /// kinds of token, and the word splitter has no length cap of its own.
++    private static let longestRecoverableWord = 48
 +
 +    /// `p's`, `d's` — a one-letter stem pluralised, which the lexicon holds
 +    /// but which is never what an all-caps token in fiction meant.
 +    private static func isLetterPlural(_ candidate: String) -> Bool {
-+        candidate.count == 3 && candidate.hasSuffix("'s") && (candidate.first?.isLetter ?? false)
++        // Against the *normalized* key, not the raw candidate: `normalizeKey`
++        // keeps `'` and drops `-`, so `P-S` yields the candidate `p'-s` —
++        // four characters, so it slipped a raw length check — which still
++        // normalizes to `p's` and hits the lexicon as "peas".
++        let key = normalizeKey(candidate)
++        return key.count == 3 && key.hasSuffix("'s") && (key.first?.isLetter ?? false)
 +    }
-+
-+    /// Replace each run of `minimumRun` or more identical letters with a
-+    /// single copy of that letter. Non-letters (digits, hyphens) are kept
-+    /// as written so we don't invent a new token shape.
-+    private static func collapseLetterRuns(_ word: String, minimumRun: Int) -> String {
-+        guard !word.isEmpty else { return word }
-+
-+        var output = ""
-+        output.reserveCapacity(word.count)
-+        var runCharacter: Character?
-+        var runCount = 0
-+
-+        func flush() {
-+            guard let runCharacter else { return }
-+            if runCharacter.isLetter && runCount >= minimumRun {
-+                output.append(runCharacter)
-+            } else {
-+                output.append(contentsOf: String(repeating: String(runCharacter), count: runCount))
-+            }
-+        }
-+
-+        for character in word {
-+            if character == runCharacter {
-+                runCount += 1
-+            } else {
-+                flush()
-+                runCharacter = character
-+                runCount = 1
-+            }
-+        }
-+        flush()
-+        return output
-+    }
-+
-     // MARK: - Letter-name initialisms (issue #710)
  
-     /// Spell a token as a sequence of letter names using the per-letter
+-    /// Spell a token as a sequence of letter names using the per-letter
+-    /// entries in the case-sensitive lexicon (`FBI` → `ˈɛf bˈi ˈI`). See
+-    /// ``EnglishInitialisms/spell(_:letterTokens:render:separator:)`` —
+-    /// returns `nil` if any letter is missing so the caller falls through
+-    /// to its normal fallback rather than emitting a partial word.
+     private func spellAsLetterNames(_ word: String) -> String? {
+         EnglishInitialisms.spell(word) { caseSensitiveWordToPhonemes[$0] }
+     }
