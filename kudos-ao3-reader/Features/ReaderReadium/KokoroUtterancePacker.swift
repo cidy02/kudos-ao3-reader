@@ -31,11 +31,20 @@ nonisolated enum KokoroUtterancePacker {
             if block.kind == .heading {
                 pause = .chapter
             } else {
+                // Look ahead past scene breaks so a `* * *` between two
+                // spoken blocks still widens the preceding pause via `max`
+                // below, rather than being mistaken for the next neighbour.
+                // `endsAtLineBreak` is weaker than that lookahead: a line
+                // followed by a heading still gets `.chapter`, and the last
+                // line of a broken `<p>` is not flagged, so it keeps
+                // `.paragraph` (or `.scene` after promotion).
                 let next = blocks.dropFirst(index + 1).first { $0.kind != .sceneBreak }
                 if next == nil {
                     pause = .paragraph
                 } else if next?.kind == .heading {
                     pause = .chapter
+                } else if block.endsAtLineBreak {
+                    pause = .line
                 } else {
                     pause = .paragraph
                 }

@@ -485,25 +485,27 @@ why this phase is about quality and not tidiness.
       exactly like `.paragraph`. hexgrad specifically improved Kokoro's short
       utterances `[prior-art]`, so short lines are a strength to use.
 
-- [ ] **Preserve `<br>` as an audible boundary.** `[measured]` `[code]`
+- [x] **Preserve `<br>` as an audible boundary.** `[measured]` `[code]`
       Same defect as the item above, from the other direction: the document
-      hands us a boundary and we glue over it. Chain verified end to end in
-      §6.3.1 — AO3 stores a single author newline as `<br>`, Readium's
-      `HTMLResourceContentIterator` calls `flushText()` on it so each line
-      arrives as its own unit, and `concatenateForSentenceContext` space-joins
-      them straight back together. 15,133 breaks across the corpus, and the
-      hard-wrapped prose that would justify the join **does not exist here**
-      (0 of 1,180 candidate runs, against a passing positive control).
+      handed us a boundary and we glued over it. 15,133 breaks across the
+      corpus, and the hard-wrapped prose that would justify the join **does
+      not exist here** (0 of 1,180 candidate runs, against a passing positive
+      control). Implemented: matching `cssSelector`s flush with
+      `endsAtLineBreak` and the packer emits `.line` (0.22 s). Adjacent
+      `<p>`s, headings, and scene-break promotion are unchanged. See §6.3.1.
 
-      The join is not pointless — G2P is per-word and an isolated `read` gets
-      the citation form — so the fix is GPT's split: let phonemes see across
-      the break, let the listener hear it. Discriminator needs no new parsing:
-      units split by `<br>` share a `cssSelector`, units from adjacent
-      paragraphs do not. Needs a boundary shorter than `.paragraph`'s 0.32 s.
+- [ ] **Apple TTS still merges `<br>` seams.** `[code]` The line pause is a
+      **Kokoro-only** change: `KokoroSemanticDocument` treats a shared
+      `cssSelector` as a seam, but the Apple path still runs
+      `TTSService.concatenateForSentenceContext`, which space-joins adjacent
+      units regardless. So the same chapter reads as running prose on the
+      fallback engine and as separate lines on Kokoro.
 
-      Worth doing with the dialogue item above, not separately — both are
-      "stop merging across a boundary the document already gave us", and they
-      touch the same two functions.
+      Apple renders internally and gives us no way to insert silence inside an
+      utterance, so the fix there is to split into separate
+      `AVSpeechUtterance`s at the seam and let the natural inter-utterance gap
+      carry it — a different mechanism for the same intent, and worth doing
+      only if the Kokoro version survives listening.
 
 - [ ] **Revisit the packing band (A/B).** `[prior-art]` Ours is min 110 /
       target 175 / max 220; Kokoro-FastAPI ships min **175** / max **250** —
@@ -564,6 +566,20 @@ mispronounced name is permanent.
       It is also not one word: the same context drives `to` → `tə`/`tʊ` and
       the weak form of `am`. Porting the *mechanism* gets those free.
 
+      **Independently confirmed in three other engines**, and they agree on
+      the trigger: Festival (`postlex_the_vs_thee`), Flite (`the_iy_ax`), and
+      eSpeak NG — which does it not as a rule but as a *dynamic phoneme*,
+      `the D@2` in `en_list`, where `@2` is documented as "schwa, changes to I
+      before a vowel". Running `espeak-ng` here confirms the behaviour on the
+      cases that matter: `the university` → `ðə` (the `/j/` glide counts as a
+      consonant), `the one` → `ðə` (`/w/` likewise), `the hour` → `ðɪ`,
+      `the house` → `ðə`. Note `/h/` is **not** special-cased anywhere — *the
+      hour* only works because its lexicon entry already begins with a vowel,
+      which is the whole argument for running this on phonemes.
+
+      `g2p_en` notably does *not* implement it and emits `DH AH0` always, so
+      this is a real differentiator rather than table stakes.
+
       **The architectural catch:** our `phonemize` resolves words left to
       right and independently, so nothing knows the next word's phonemes yet.
       Resolve into `(word, phonemes)` pairs first, walk backwards to compute
@@ -595,6 +611,42 @@ mispronounced name is permanent.
       Misaki's own output confirms the target: `Anna's` → `ˈɑnəz` (/z/),
       `Pat's` → `pˈæts` (/s/), `Alice's` → `ˈælɪsᵻz` (/ɪz/ after a sibilant).
       The rule is real and the reference gets it right.
+
+      **The sibilant set is `/s z ʃ ʒ tʃ dʒ/`**, hardcoded in `misaki/en.py`
+      as the string `szʃʒʧʤ` — note the single-codepoint affricates `ʧ`/`ʤ`,
+      not the two-character digraphs, which is a real trap for a Swift port
+      comparing `Character`s. Flite instead defines the set *negatively* by
+      feature (fricative or affricate, excluding dental/labial/velar), which
+      excludes `/θ ð f v/` structurally rather than by enumeration and is the
+      more robust formulation if we ever extend it.
+
+      **Two edge cases, verified by running `espeak-ng` here rather than taken
+      on trust:**
+
+      | input | output | reading |
+      |---|---|---|
+      | `James's` | `dʒˈeɪmzᵻz` | extra syllable |
+      | `James'` | `dʒˈeɪmz` | **no** extra syllable |
+      | `the Winchesters'` | `ðə wˈɪntʃɛstɚz` | plural possessive, no extra syllable |
+      | `the FBI's` | `ðɪ ˌɛfbˌiːˈaɪz` | initialism, `/z/` after `/aɪ/` |
+
+      So the apostrophe-only form is **not** pronounced like `'s`; the
+      orthographic distinction is real and a derivation rule has to respect
+      it, or every `Winchesters'` grows a syllable.
+
+      **The hazard that must shape the spec:** `espeak-ng` handed the whole
+      token `Anna's` returns `ˈænəz` — it has *already* applied the clitic. A
+      G2P fallback given the full token therefore needs no help, and adding
+      our own derivation on top would double it (`ˈænəzz`). The derivation is
+      only correct where the **base** resolved from the lexicon and the
+      possessive did not — which is exactly the 63.4% case measured above, and
+      exactly what a tier-1 user correction produces. Getting this boundary
+      wrong is worse than not doing it at all.
+
+      Licences for anything reusable: Misaki Apache-2.0, Festival MIT/X11,
+      g2p_en Apache-2.0, CMUdict BSD-2-Clause — all AGPL-compatible. eSpeak NG
+      is GPL-3.0: compatible, but not permissive, so it constrains differently.
+      Flite's "BSD-like" is unconfirmed and must be read before use.
 
       Original note follows. `[code]` `splitWords` keeps
       `'` inside a word (which is what saves `wasn't`) and `normalizeKey` keeps
@@ -962,26 +1014,19 @@ fallback is the whole answer: preserve `<br>` by default.
 2. Readium's `HTMLResourceContentIterator` calls `flushText()` when it meets a
    `br` tag, so each broken line arrives as its **own** `TextualContentElement`
    and therefore its own `TTSSpeechUnit`.
-3. `TTSService.concatenateForSentenceContext` space-joins adjacent units, and
-   `splitIntoContextualSentences` re-splits on sentence boundaries — so a
-   break that is not a sentence end is **erased**.
+3. Apple TTS still space-joins adjacent units in
+   `TTSService.concatenateForSentenceContext`. Kokoro no longer does:
+   `KokoroSemanticDocument` treats a shared `cssSelector` as a `<br>` seam,
+   flushes the open block with `endsAtLineBreak`, and the packer emits a
+   `.line` pause (0.22 s) rather than `.paragraph`. Adjacent `<p>`s (different
+   selectors) are unchanged.
 
-Every step verified in source. The join is not gratuitous: G2P is per-word, and
-an isolated `read` gets the citation form rather than the verb. But the effect
-is that chat fic, epistolary works, transcripts and verse — 15,133 breaks —
-are flattened into running prose, and the measurement above says nothing is
-gained by it.
-
-- [ ] **Preserve `<br>` as an audible boundary while keeping lexical context.**
-      `[proposal]` GPT's framing is the right one and costs nothing: decide
-      *"may G2P see across this?"* separately from *"should the listener hear
-      it?"*. Keep the join for phonemes, insert a short pause at the seam.
-
-      The discriminator is already in hand and needs no new parsing: units
-      split by `<br>` share a `cssSelector` (they came from one `<p>`), where
-      units from adjacent paragraphs do not. Needs a boundary shorter than
-      `.paragraph`'s 0.32 s — a line is not a paragraph — and it must not
-      fire between two ordinary `<p>`s.
+- [x] **Preserve `<br>` as an audible boundary.** Implemented as a `.line`
+      pause between same-selector units, not as a G2P-cross-break join: each
+      broken line is already its own `TTSSpeechUnit`, and packing is
+      per-block. The last line of a broken `<p>` keeps `.paragraph`; a
+      following heading still wins via lookahead; scene-break promotion via
+      `max` is unchanged.
 
 ### 6.4 The Thai fine-tune numbers are real and were mislabelled
 

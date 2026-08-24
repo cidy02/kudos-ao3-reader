@@ -91,14 +91,37 @@ final class KokoroNaturalnessTests: XCTestCase {
         XCTAssertTrue(KokoroSpeechNormalizer.normalize(KokoroNaturalnessCorpus.interrupted).contains("—"))
     }
 
-    func testLineBreakFragmentsStillJoin() {
+    /// A `<br>` that cuts a sentence in half is now **spoken as two
+    /// utterances** with a `.line` pause, not merged.
+    ///
+    /// This test used to assert the opposite, and it kept passing after the
+    /// change because `reconstructedText` re-joins the texts with a space —
+    /// so the string assertion held while the behaviour it was written to
+    /// guard had reversed. Renamed and rewritten to say what actually
+    /// happens.
+    ///
+    /// The cost is real but measured: across the 18-EPUB corpus only **141 of
+    /// 17,926** seams (0.8%) cut a sentence mid-flow — a line that neither
+    /// ends in terminal punctuation nor is followed by a capital. Every other
+    /// seam either ends a sentence outright (62.8%) or ends a complete but
+    /// unpunctuated line, which is what chat fic is made of. The word-level
+    /// guard below is the part still worth keeping: no seam may leave a
+    /// single word stranded as its own utterance, where G2P would fall back
+    /// to a citation form.
+    func testLineBreakSplitsIntoSeparateUtterancesWithoutStrandingAWord() {
         let utterances = KokoroUtterancePacker.pack(units: [
             KokoroNaturalnessCorpus.unit("She began to", selector: "html > body > p"),
             KokoroNaturalnessCorpus.unit("read the letter.", selector: "html > body > p")
         ])
+        XCTAssertEqual(utterances.count, 2, "a <br> seam should split, not merge")
+        XCTAssertEqual(utterances.first?.pauseAfter, .line)
+
+        // Nothing may be lost or reordered by the split.
         let spoken = KokoroUtterancePacker.reconstructedText(from: utterances)
         XCTAssertEqual(spoken, "She began to read the letter.")
-        XCTAssertFalse(utterances.contains { $0.text == "read" })
+
+        // A lone word would reach G2P with no sentence around it.
+        XCTAssertFalse(utterances.contains { $0.text.split(separator: " ").count == 1 })
     }
 
     func testHonorificsAndInitialsStayWithTheSentence() {

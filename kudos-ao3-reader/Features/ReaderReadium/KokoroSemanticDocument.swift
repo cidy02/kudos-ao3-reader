@@ -6,9 +6,14 @@ import ReadiumShared
 nonisolated public enum KokoroBoundary: Int, Sendable, Comparable {
     case none = 0
     case continuation = 1
-    case paragraph = 2
-    case scene = 3
-    case chapter = 4
+    /// A `<br>` inside one `<p>`. Weaker than a paragraph and stronger than a
+    /// mid-sentence packer split; `max` still promotes to `.paragraph` /
+    /// `.scene` / `.chapter` when the lookahead asks for it. Raw values are
+    /// in-memory only, so renumbering is safe.
+    case line = 2
+    case paragraph = 3
+    case scene = 4
+    case chapter = 5
 
     public static func < (lhs: KokoroBoundary, rhs: KokoroBoundary) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -18,6 +23,7 @@ nonisolated public enum KokoroBoundary: Int, Sendable, Comparable {
         switch self {
         case .none: 0
         case .continuation: 0.14
+        case .line: 0.22
         case .paragraph: 0.32
         case .scene: 0.85
         case .chapter: 1.25
@@ -38,6 +44,10 @@ nonisolated struct KokoroSemanticBlock: Equatable, Sendable {
     var text: String
     var locator: Locator?
     var selector: String?
+    /// True when the next unit shared this block's cssSelector — Readium's
+    /// signal that a `<br>` split one `<p>`. The last line of that `<p>` is
+    /// a normal paragraph end and keeps this false.
+    var endsAtLineBreak: Bool = false
 }
 
 nonisolated enum KokoroSemanticDocument {
@@ -45,9 +55,10 @@ nonisolated enum KokoroSemanticDocument {
         var open: KokoroSemanticBlock?
         var result: [KokoroSemanticBlock] = []
 
-        func flush() {
+        func flush(endsAtLineBreak: Bool = false) {
             guard var block = open else { return }
             block.text = KokoroSpeechNormalizer.normalize(block.text)
+            block.endsAtLineBreak = endsAtLineBreak
             if !block.text.isEmpty || block.kind == .sceneBreak {
                 result.append(block)
             }
@@ -97,7 +108,9 @@ nonisolated enum KokoroSemanticDocument {
                 continue
             }
 
-            if let current = open, canJoin(current, kind: kind, selector: selector) {
+            if let current = open, isLineBreakSeam(current, kind: kind, selector: selector) {
+                flush(endsAtLineBreak: true)
+            } else if let current = open, canJoin(current, kind: kind) {
                 open?.text = join(current.text, raw)
                 continue
             }
@@ -157,16 +170,29 @@ nonisolated enum KokoroSemanticDocument {
 
     private static func canJoin(
         _ open: KokoroSemanticBlock,
+        kind: KokoroSemanticBlock.Kind
+    ) -> Bool {
+        if open.kind == .heading || open.kind == .sceneBreak { return false }
+        if kind == .heading || kind == .sceneBreak { return false }
+        if endsUtterance(open.text) { return false }
+        return isBody(open.kind) && isBody(kind)
+    }
+
+    /// Units split by a `<br>` share a cssSelector (they came from one
+    /// `<p>`); units from adjacent paragraphs do not. Matching selectors
+    /// used to force a merge before `endsUtterance` ran, which is why chat
+    /// fic, verse, and transcripts were read as running prose. Headings and
+    /// scene breaks still never participate — they rejected that shortcut
+    /// too, and a heading that started joining would swallow the title.
+    private static func isLineBreakSeam(
+        _ open: KokoroSemanticBlock,
         kind: KokoroSemanticBlock.Kind,
         selector: String?
     ) -> Bool {
         if open.kind == .heading || open.kind == .sceneBreak { return false }
         if kind == .heading || kind == .sceneBreak { return false }
-        if let left = open.selector, let right = selector, left == right {
-            return true
-        }
-        if endsUtterance(open.text) { return false }
-        return isBody(open.kind) && isBody(kind)
+        guard let left = open.selector, let right = selector else { return false }
+        return left == right
     }
 
     private static func isBody(_ kind: KokoroSemanticBlock.Kind) -> Bool {

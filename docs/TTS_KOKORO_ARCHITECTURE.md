@@ -63,13 +63,14 @@ uncatchable. Escalation is per-device and permanent:
 
 ## Text handling
 
-Readium emits a content element per HTML block **and** each `<br>`. Fanfic
-often breaks a sentence across those elements. Core ML playback uses
-`TTSSpeechUnit.kokoroUtterances`: semantic blocks (heading / paragraph /
-dialogue / scene break), conservative apostrophe normalization, phoneme-aware
-packing toward ~175 IPA characters, and structure-based pauses after Kokoro's
-edge silence is trimmed. Apple TTS still uses `packedChunks`. See
-`docs/TTS_KOKORO_NATURALNESS.md`.
+Readium emits a content element per HTML block **and** each `<br>`. Units
+split by a `<br>` share a `cssSelector` and become a `.line` pause (0.22 s)
+rather than running prose; adjacent `<p>`s do not share a selector and keep
+`.paragraph`. Core ML playback uses `TTSSpeechUnit.kokoroUtterances`:
+semantic blocks (heading / paragraph / dialogue / scene break), conservative
+apostrophe normalization, phoneme-aware packing toward ~175 IPA characters,
+and structure-based pauses after Kokoro's edge silence is trimmed. Apple TTS
+still uses `packedChunks`. See `docs/TTS_KOKORO_NATURALNESS.md`.
 
 A phoneme string over `KokoroAneConstants.maxPhonemeLength` (510) makes
 `KokoroAneVocab.encode` throw, which would end Read Aloud for the whole
