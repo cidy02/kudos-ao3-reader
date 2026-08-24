@@ -60,7 +60,10 @@ struct WorkStatLabelTests {
         #expect(WorkStat.categoryColor("Gen") == .green)
         #expect(WorkStat.categoryColor("M/M") == .blue)
         #expect(WorkStat.categoryColor("Multi") == .purple)
-        #expect(WorkStat.categoryColor("Other") == .gray)
+        // Black, not gray: AO3's own Symbols Key badge for "Other" sits on
+        // solid black. Changed deliberately in b4f8faba; this assertion was
+        // left behind and has failed ever since.
+        #expect(WorkStat.categoryColor("Other") == .black)
         #expect(WorkStat.categoryColor("Not A Category") == nil)
     }
 

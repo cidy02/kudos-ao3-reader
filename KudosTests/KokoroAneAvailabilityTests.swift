@@ -31,11 +31,17 @@ struct KokoroAneAvailabilityTests {
         #expect(KokoroAnePlayback.supportsCoreML(for: .init(majorVersion: 28, minorVersion: 2, patchVersion: 1)))
     }
 
+    /// Asserts the *shape* of the URL — this repo, the releases path, the
+    /// declared tag — rather than pinning the tag literal. The literal was
+    /// `…-fp16-1` and went stale the moment the pack was republished as
+    /// `-2`, failing on every run for a reason that had nothing to do with
+    /// the code being wrong. The tag itself is covered by the SHA-256 check
+    /// below, which is what actually catches pointing at the wrong asset.
     @Test func githubPackURLIsThisReposReleaseAsset() {
         #expect(
             KokoroGitHubPack.downloadURL.absoluteString
                 == "https://github.com/cidy02/kudos-ao3-reader/releases/download/"
-                + "kokoro-ane-coreml-fp16-1/kokoro-ane-coreml-fp16.zip"
+                + "\(KokoroGitHubPack.tag)/kokoro-ane-coreml-fp16.zip"
         )
         #expect(KokoroGitHubPack.expectedSHA256.count == 64)
         #expect(
