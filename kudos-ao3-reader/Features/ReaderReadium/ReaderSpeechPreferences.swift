@@ -13,6 +13,7 @@ import ReadiumShared
 /// voice is a product choice we don't offer.
 enum ReaderSpeechPreferences {
     static let engineKey = "readerSpeechEngine"
+    static let readAuthorNotesKey = "readerSpeechReadAuthorNotes"
     static let voiceIDKey = "readerSpeechVoiceID"
     static let rateKey = "readerSpeechRate"
     static let pitchKey = "readerSpeechPitch"
@@ -33,6 +34,19 @@ enum ReaderSpeechPreferences {
     static var voiceIdentifier: String {
         get { UserDefaults.standard.string(forKey: voiceIDKey) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: voiceIDKey) }
+    }
+
+    /// Whether Read Aloud speaks the body of an author's note.
+    ///
+    /// Defaults to **true**, which is also the pre-existing behaviour: only
+    /// the bare `Notes` / `Summary` heading was ever dropped, never the note
+    /// itself. Kept as the default deliberately — notes routinely carry
+    /// content and trigger warnings, and someone listening with the screen off
+    /// would never see one that had been silently skipped. Opting out is a
+    /// choice the reader makes, not one made for them.
+    static var readAuthorNotes: Bool {
+        get { UserDefaults.standard.object(forKey: readAuthorNotesKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: readAuthorNotesKey) }
     }
 
     /// Empty means Automatic. Unknown values intentionally also resolve as

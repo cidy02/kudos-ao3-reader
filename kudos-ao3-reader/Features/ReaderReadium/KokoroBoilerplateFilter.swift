@@ -40,6 +40,12 @@ nonisolated enum KokoroBoilerplateFilter {
 
     /// True for a block that is nothing but AO3 scaffolding and should be
     /// dropped rather than spoken.
+    /// A section heading that introduces an author's note, as opposed to the
+    /// archive's closing plug. Only these open a suppressible note span.
+    static func isNoteLabel(_ text: String) -> Bool {
+        labels.contains(KokoroSpeechNormalizer.normalize(text))
+    }
+
     static func isBoilerplate(_ text: String) -> Bool {
         let normalized = KokoroSpeechNormalizer.normalize(text)
         return labels.contains(normalized) || normalized == kudosPlug
