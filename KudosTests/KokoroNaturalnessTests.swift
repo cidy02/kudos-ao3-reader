@@ -96,32 +96,33 @@ final class KokoroNaturalnessTests: XCTestCase {
     ///
     /// This test used to assert the opposite, and it kept passing after the
     /// change because `reconstructedText` re-joins the texts with a space —
-    /// so the string assertion held while the behaviour it was written to
-    /// guard had reversed. Renamed and rewritten to say what actually
-    /// happens.
+    /// so the string assertion held while the behaviour it guarded had
+    /// reversed. Rewritten to say what actually happens.
     ///
-    /// The cost is real but measured: across the 18-EPUB corpus only **141 of
-    /// 17,926** seams (0.8%) cut a sentence mid-flow — a line that neither
-    /// ends in terminal punctuation nor is followed by a capital. Every other
-    /// seam either ends a sentence outright (62.8%) or ends a complete but
-    /// unpunctuated line, which is what chat fic is made of. The word-level
-    /// guard below is the part still worth keeping: no seam may leave a
-    /// single word stranded as its own utterance, where G2P would fall back
-    /// to a citation form.
-    func testLineBreakSplitsIntoSeparateUtterancesWithoutStrandingAWord() {
+    /// The cost is real and measured. Across 29 unique corpus works there are
+    /// 9,681 seams; 60.9% follow a line that ends in terminal punctuation, so
+    /// the pause is free. Of the rest, only **97 — 1.0% of all seams** — are
+    /// followed by a lowercase-initial line, which is the signature of a
+    /// sentence genuinely continuing. Those lose G2P context across the split.
+    ///
+    /// An earlier version of this comment promised that no seam may strand a
+    /// one-word utterance. **It does not, and should not.** One-word lines are
+    /// 10.5% of all lines inside broken blocks, and measuring what they
+    /// actually are settles it: names, social handles and sign-offs —
+    /// `mimi`, `umbridge`, `tangtwins`, `sincerely`. Those *want* their own
+    /// utterance and their own pause. Not one of them was a heteronym, so the
+    /// citation-form hazard that would justify a guard does not occur here.
+    func testLineBreakSplitsIntoSeparateUtterances() {
         let utterances = KokoroUtterancePacker.pack(units: [
             KokoroNaturalnessCorpus.unit("She began to", selector: "html > body > p"),
             KokoroNaturalnessCorpus.unit("read the letter.", selector: "html > body > p")
         ])
-        XCTAssertEqual(utterances.count, 2, "a <br> seam should split, not merge")
-        XCTAssertEqual(utterances.first?.pauseAfter, .line)
+        XCTAssertEqual(utterances.map(\.pauseAfter), [.line, .paragraph])
+        XCTAssertEqual(utterances.map(\.text), ["She began to", "read the letter."])
 
         // Nothing may be lost or reordered by the split.
         let spoken = KokoroUtterancePacker.reconstructedText(from: utterances)
         XCTAssertEqual(spoken, "She began to read the letter.")
-
-        // A lone word would reach G2P with no sentence around it.
-        XCTAssertFalse(utterances.contains { $0.text.split(separator: " ").count == 1 })
     }
 
     func testHonorificsAndInitialsStayWithTheSentence() {

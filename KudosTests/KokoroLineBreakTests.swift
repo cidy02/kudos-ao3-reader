@@ -45,16 +45,15 @@ struct KokoroLineBreakTests {
             unit("are you there", selector: "html > body > p:nth-child(1)")
         ]
         let blocks = KokoroSemanticDocument.blocks(from: units)
-        #expect(blocks.count == 2)
-        #expect(blocks[0].endsAtLineBreak)
-        #expect(!blocks[1].endsAtLineBreak)
+        // Compare projections rather than subscripting: `#expect` is
+        // non-fatal, so indexing after a failed count assertion traps out of
+        // range and a reverted behaviour reads as a crash, not a failure.
+        #expect(blocks.map(\.endsAtLineBreak) == [true, false])
 
         let utterances = KokoroUtterancePacker.pack(units: units)
         #expect(utterances.count == 2)
-        #expect(utterances[0].pauseAfter == .line)
-        #expect(utterances[1].pauseAfter == .paragraph)
-        #expect(utterances[0].text == "hey")
-        #expect(utterances[1].text == "are you there")
+        #expect(utterances.map(\.pauseAfter) == [.line, .paragraph])
+        #expect(utterances.map(\.text) == ["hey", "are you there"])
         #expect(
             KokoroUtterancePacker.reconstructedText(from: utterances)
                 == "hey are you there"
@@ -68,8 +67,7 @@ struct KokoroLineBreakTests {
         ]
         let utterances = KokoroUtterancePacker.pack(units: units)
         #expect(utterances.count == 2)
-        #expect(utterances[0].pauseAfter == .paragraph)
-        #expect(utterances[1].pauseAfter == .paragraph)
+        #expect(utterances.map(\.pauseAfter) == [.paragraph, .paragraph])
         #expect(
             KokoroUtterancePacker.reconstructedText(from: utterances)
                 == "Rain stitched the windows. He opened the letter."
@@ -91,9 +89,7 @@ struct KokoroLineBreakTests {
 
         let utterances = KokoroUtterancePacker.pack(units: units)
         #expect(utterances.count == 3)
-        #expect(utterances[0].pauseAfter == .line)
-        #expect(utterances[1].pauseAfter == .paragraph)
-        #expect(utterances[2].pauseAfter == .paragraph)
+        #expect(utterances.map(\.pauseAfter) == [.line, .paragraph, .paragraph])
         #expect(
             KokoroUtterancePacker.reconstructedText(from: utterances)
                 == "hey are you there? She put the phone down."
@@ -106,10 +102,8 @@ struct KokoroLineBreakTests {
             unit("Rain stitched the windows.", selector: "html > body > p:nth-child(2)")
         ]
         let utterances = KokoroUtterancePacker.pack(units: units)
-        #expect(utterances.count == 2)
-        #expect(utterances[0].text == "Chapter 12")
-        #expect(utterances[0].pauseAfter == .chapter)
-        #expect(utterances[1].text == "Rain stitched the windows.")
+        #expect(utterances.map(\.text) == ["Chapter 12", "Rain stitched the windows."])
+        #expect(utterances.map(\.pauseAfter) == [.chapter, .paragraph])
     }
 
     @Test func sceneBreakStillPromotesThePrecedingPause() {
@@ -119,9 +113,8 @@ struct KokoroLineBreakTests {
             unit("Dawn came anyway.", selector: "html > body > p:nth-child(3)")
         ]
         let utterances = KokoroUtterancePacker.pack(units: units)
-        #expect(utterances.count == 2)
-        #expect(utterances[0].pauseAfter == .scene)
-        #expect(utterances[1].text == "Dawn came anyway.")
+        #expect(utterances.map(\.text) == ["He opened the letter.", "Dawn came anyway."])
+        #expect(utterances.map(\.pauseAfter) == [.scene, .paragraph])
         #expect(!KokoroUtterancePacker.reconstructedText(from: utterances).contains("*"))
     }
 
@@ -147,11 +140,10 @@ struct KokoroLineBreakTests {
             unit("Chapter 2", selector: "html > body > h2")
         ]
         let utterances = KokoroUtterancePacker.pack(units: units)
-        #expect(utterances.count == 3)
-        #expect(utterances[0].pauseAfter == .line)
-        #expect(utterances[1].pauseAfter == .chapter)
-        #expect(utterances[2].pauseAfter == .chapter)
-        #expect(utterances[2].text == "Chapter 2")
+        // The heading itself is `.chapter` too — `pack()` gives every heading
+        // `.chapter` unconditionally, before any lookahead runs.
+        #expect(utterances.map(\.pauseAfter) == [.line, .chapter, .chapter])
+        #expect(utterances.last?.text == "Chapter 2")
     }
 
     /// Adjacent `<p>`s that do not end an utterance still merge. That path
@@ -162,9 +154,8 @@ struct KokoroLineBreakTests {
             unit("read the letter.", selector: "html > body > p:nth-child(2)")
         ]
         let utterances = KokoroUtterancePacker.pack(units: units)
-        #expect(utterances.count == 1)
-        #expect(utterances[0].text == "She began to read the letter.")
-        #expect(utterances[0].pauseAfter == .paragraph)
+        #expect(utterances.map(\.text) == ["She began to read the letter."])
+        #expect(utterances.map(\.pauseAfter) == [.paragraph])
     }
     /// A paragraph that does not end a sentence still joins into the next
     /// paragraph's first line — that behaviour predates this change and is
