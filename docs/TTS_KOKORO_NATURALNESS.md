@@ -44,7 +44,8 @@ fallback). PCM was concatenated as generated. The Core ML graphs are
 - Conservative `KokoroSpeechNormalizer` (apostrophes, ellipses, dashes,
   quotes, whitespace). Does not rewrite prose.
 - `KokoroSemanticDocument` groups Readium units into heading / paragraph /
-  dialogue / blockquote / scene-break using CSS selectors + text.
+  dialogue / blockquote / scene-break using CSS selectors + text. Units that
+  share a `cssSelector` are a `<br>` seam, not a merge.
 - `KokoroUtterancePacker` packs those blocks to ~110–220 IPA characters,
   merges short fragments, balances long-paragraph leftovers.
 - `KokoroPauseAssembler` trims edge silence (zero-crossing) and inserts
@@ -84,6 +85,7 @@ Short fragments under 40 estimated IPA chars merge with neighbors in the
 | Boundary | Duration |
 |---|---|
 | Continuation in a packed paragraph | 140 ms |
+| Line (`<br>` inside one `<p>`) | 220 ms |
 | Paragraph | 320 ms |
 | Scene break | 850 ms |
 | Chapter heading | 1250 ms |
