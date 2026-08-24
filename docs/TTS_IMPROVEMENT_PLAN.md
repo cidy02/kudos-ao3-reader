@@ -242,6 +242,24 @@ neither is a plan to test it.
 
 ---
 
+## 3b. Owner decisions — 2026-08-24
+
+Recorded because they change what gets built, and because several items below
+were written before they were made.
+
+| Question | Decision |
+|---|---|
+| How to surface name corrections | **Both** a silent ranked list in Read Aloud settings **and** long-press-to-fix while reading. **No upfront prompt** — playback is never interrupted. |
+| Multi-voice dialogue (per-character voices) | **Skip for now.** Speaker attribution is unreliable in fic and a line in the wrong voice is worse than one narrator throughout. |
+| On-device LLM oracle (Phase 4b) | **Deferred** — "we will come back to that". Do not build it; leave the four items open and untouched. |
+| Changes that need an ear (line pause, packing band, stress emphasis) | **Ship as defaults**, with the plan recording exactly what each value rests on and what would change it. |
+
+The last one is a standing instruction for everything below: pick the
+best-evidenced value, make it the default, write down the evidence. Do not add
+a setting per tuning knob, and do not land code disabled.
+
+---
+
 ## 4. Findings and checklist
 
 ### Phase 0 — make quality judgeable
@@ -825,7 +843,9 @@ mispronounced name is permanent.
       shrinks magnitude and audibly flattens the voice. Turns 28 voices into an
       unbounded set and makes the next item far cheaper.
 
-- [ ] **Multi-voice dialogue.** `[proposal]` The biggest single upgrade
+- [ ] **Multi-voice dialogue — DEFERRED by owner decision (§3b).** Do not
+      build. Attribution errors are more audible than the benefit.
+      `[proposal]` The biggest single upgrade
       available, unlocked by going from 1 voice to 28. **27.7% of blocks in the
       measured work open with a quote** `[measured]`. Parse attribution, assign
       per character from the tags already in hand, keep the narrator distinct.
