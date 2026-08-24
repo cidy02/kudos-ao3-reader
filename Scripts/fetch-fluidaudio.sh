@@ -86,10 +86,15 @@ Pinned at upstream commit \`$COMMIT\`.
    \`MLModel.prediction(from:)\` instead of \`await\`. The async API hops to
    \`com.apple.e5rt.concurrentExecutionQueue\`, the faulting queue in every
    Kudos crash log.
+5. **English frontend** (\`KokoroAneEnglishPhonemizer.swift\`) — after a
+   complete lexicon miss and before letter-name initialisms, try apostrophe
+   reinsertion (\`dont\` → \`don't\`) and de-elongation (\`yesss\` → \`yes\`).
+   \`cant\` / \`beer\` never reach these because they hit the lexicon first.
 
 Patches 2–4 exist to route around the iOS 26.x libBNNS \`SIGSEGV\`
 (FluidAudio #817 / #844). Kudos additionally does not run the Core ML engine
-at all on iOS 26 — see \`KokoroAnePlayback\`.
+at all on iOS 26 — see \`KokoroAnePlayback\`. Patch 5 is a fanfic-frontend
+recovery; it does not change compute-unit routing.
 EOF
 
 echo "FluidAudio $VERSION ready at Packages/FluidAudio"

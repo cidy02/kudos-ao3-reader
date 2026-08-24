@@ -284,7 +284,19 @@ everything below is provisional without it.
       dialogue test, and `KokoroUtterancePacker.splitKeepingDelimiter`'s
       `inQuote` toggle (becomes open/close tracking, which is more correct).
 
-- [ ] **Shouted words — measured 2026-08-23. The proposed fix was wrong.**
+- [x] **Shouted words — fixed 2026-08-23. The proposed fix was wrong.**
+      Two recoveries in `KokoroAneEnglishPhonemizer.resolveWord`, placed after
+      a complete lexicon miss and before `EnglishInitialisms.isCandidate`:
+      apostrophe reinsertion (169 occurrences) and de-elongation (31). Both
+      carry a guard found by replaying the algorithm against the real lexicon:
+      a one-letter stem plus `'s` is a letter *plural*, not a contraction
+      (`PS` was reading as "peas"), and a token spelled only from `ivxlcdm` is
+      a numeral, not an elongated word (`XXXII` was collapsing to `xi`). The
+      second guard removed **42 of 73** de-elongation hits — unguarded, that
+      rule did more harm than good.
+      The logic lives in gitignored `Packages/`, so it survives only through
+      `Scripts/fluidaudio-kudos.patch`; the patch was regenerated and verified
+      to apply to a fresh pinned clone with the result byte-matching.
       `[measured]` `[code]` After a lexicon miss,
       `EnglishInitialisms.isCandidate` spells any strict-ASCII all-caps token
       of **2–5 characters** as letter names (`FBI` → `ˈɛf bˈi ˈI`). The rule

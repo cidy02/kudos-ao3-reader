@@ -104,3 +104,198 @@
              timing = milliseconds(start.duration(to: clock.now))
              return out
          } catch let error as CancellationError {
+--- a/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
++++ b/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
+@@ -14,16 +14,21 @@
+ ///   5. lower-cased Misaki lexicon hit — this is what gives function
+ ///      words their weak forms (`to` → `tu`), instead of the BART G2P
+ ///      citation form (`tˈO`) that over-stresses them (issue #691)
+-///   6. strict ASCII all-caps initialisms (`FBI`, `ATP`) spelled as
++///   6. after a full miss, reinsert an apostrophe at each interior
++///      position (`dont` → `don't`) and retry the same maps
++///   7. after a full miss, collapse elongated letter runs (`yesss` →
++///      `yes`) and retry the same maps
++///   8. strict ASCII all-caps initialisms (`FBI`, `ATP`) spelled as
+ ///      letter names after a full lexicon miss (issue #710)
+-///   7. BART G2P CoreML fallback for OOV words (injected by the caller)
++///   9. hyphenated compound split (`tales-to-amaze`) (issue #775)
++///  10. BART G2P CoreML fallback for OOV words (injected by the caller)
+ ///
+ /// Punctuation supported by the chain's `vocab.json` (`, . ! ? ; …` etc.)
+ /// is preserved and attached to the preceding word — Kokoro treats those
+ /// tokens as prosody/pause cues, matching upstream `KPipeline.g2p` output.
+ /// Unlike the StyleTTS2 frontend, Misaki diphthong shorthand (`A O I Y W`)
+ /// is NOT expanded: the laishere vocab carries those tokens directly.
+-struct KokoroAneEnglishPhonemizer: Sendable {
++public struct KokoroAneEnglishPhonemizer: Sendable {
+ 
+     private static let logger = AppLogger(category: "KokoroAneEnglishPhonemizer")
+ 
+@@ -43,7 +48,7 @@
+     /// skipped at `KokoroAneVocab.encode` anyway).
+     let allowedPunctuation: Set<Character>
+ 
+-    init(
++    public init(
+         wordToPhonemes: [String: [String]] = [:],
+         caseSensitiveWordToPhonemes: [String: [String]] = [:],
+         customLexicon: [String: String] = [:],
+@@ -64,7 +69,7 @@
+     ///   return skips the word with a warning; a thrown error aborts.
+     /// - Throws: `KokoroAneError.inputProcessingFailed` when the input is
+     ///   empty or nothing could be resolved.
+-    func phonemize(
++    public func phonemize(
+         _ text: String,
+         fallback: (String) async throws -> [String]?
+     ) async throws -> String {
+@@ -144,13 +149,24 @@
+                     + "falling back to the bundled pronunciation")
+         }
+ 
+-        if let phonemes = caseSensitiveWordToPhonemes[word]
+-            ?? caseSensitiveWordToPhonemes[normalized]
+-            ?? wordToPhonemes[lowered]
+-            ?? wordToPhonemes[normalized],
+-            !phonemes.isEmpty
++        if let phonemes = lexiconPhonemes(for: word) {
++            return phonemes
++        }
++
++        // Fanfic often strips apostrophes (`DONT`, `im`) or elongates letters
++        // for emphasis (`YESSS`, `youu`). Recover those to a lexicon hit
++        // BEFORE spelling all-caps as letter names.
++        //
++        // Both recoveries run only after a complete lexicon miss — that
++        // ordering is the safety property. `cant` is a real English word so
++        // it resolved above and is never turned into `can't`; `beer` has a
++        // doubled letter but also resolved above, so it never de-elongates.
++        // Genuine initialisms (`PDF`, `TG`, `DNA`) match neither recovery
++        // and fall through to letter-spelling unchanged.
++        if let recovered = lexiconPhonemesByReinsertingApostrophe(lowered)
++            ?? lexiconPhonemesByCollapsingElongation(lowered)
+         {
+-            return phonemes.joined()
++            return recovered
+         }
+ 
+         // After a full lexicon miss, read strict ASCII all-caps tokens of a
+@@ -210,6 +226,118 @@
+         return resolved.joined(separator: " ")
+     }
+ 
++    // MARK: - Lexicon lookup and fanfic recoveries
++
++    /// The four-dictionary lookup used for a direct lexicon hit. Recoveries
++    /// below call this on their reconstructed spelling so they cannot drift
++    /// from the maps a normal word uses.
++    private func lexiconPhonemes(for candidate: String) -> String? {
++        let normalized = Self.normalizeKey(candidate)
++        let lowered = candidate.lowercased()
++        guard let phonemes = caseSensitiveWordToPhonemes[candidate]
++            ?? caseSensitiveWordToPhonemes[normalized]
++            ?? wordToPhonemes[lowered]
++            ?? wordToPhonemes[normalized],
++            !phonemes.isEmpty
++        else {
++            return nil
++        }
++        return phonemes.joined()
++    }
++
++    /// Insert a single ASCII apostrophe at each interior position of the
++    /// lowercased token and keep the first form the lexicon knows
++    /// (`dont` → `don't`, `im` → `i'm`, `cmon` → `c'mon`). Tokens that
++    /// already contain an apostrophe are left alone — they already missed
++    /// as written, and a second apostrophe is not a contraction.
++    ///
++    /// A single letter followed by `'s` is rejected: the lexicon carries
++    /// `p's`/`d's`/`b's` as letter *plurals*, so without this `PS` (the
++    /// postscript) reads as "peas" and `BS` as "bees" instead of being
++    /// spelled `P S` / `B S`. Measured: 22 occurrences in the corpus, all
++    /// of them wrong.
++    private func lexiconPhonemesByReinsertingApostrophe(_ lowered: String) -> String? {
++        guard lowered.count >= 2, !lowered.contains("'") else { return nil }
++
++        var index = lowered.index(after: lowered.startIndex)
++        while index < lowered.endIndex {
++            let candidate = String(lowered[..<index]) + "'" + String(lowered[index...])
++            if !Self.isLetterPlural(candidate), let hit = lexiconPhonemes(for: candidate) {
++                return hit
++            }
++            index = lowered.index(after: index)
++        }
++        return nil
++    }
++
++    /// Collapse runs of the same letter and retry the lexicon. Longer
++    /// (3+) runs are tried first so `yesss` becomes `yes` without waiting
++    /// on a 2-letter pass; doubled letters (`youu` → `you`, `mee` → `me`)
++    /// are the fallback. Only a reconstructed form that actually hits is
++    /// accepted, so `PDF` / `TG` fall through unchanged.
++    private func lexiconPhonemesByCollapsingElongation(_ lowered: String) -> String? {
++        // A token spelled only from Roman numeral letters is a numeral, not an
++        // elongated word, and collapsing runs destroys its value: `II` became
++        // `i`, and `XXXII` (32) became `xi` (11). Measured: 42 of 73
++        // de-elongation hits in the corpus were this, so the rule did more
++        // harm than good without the guard. Real words made of those letters
++        // (`mill`, `civil`) resolved at the lexicon step and never arrive.
++        guard !lowered.allSatisfy({ Self.romanNumeralLetters.contains($0) }) else {
++            return nil
++        }
++        for minimumRun in [3, 2] {
++            let collapsed = Self.collapseLetterRuns(lowered, minimumRun: minimumRun)
++            // A collapse down to one letter is never a word recovery — `LL`
++            // would read as `l`. Leave those to letter-name spelling.
++            guard collapsed != lowered, collapsed.count >= 2 else { continue }
++            if let hit = lexiconPhonemes(for: collapsed) {
++                return hit
++            }
++        }
++        return nil
++    }
++
++    private static let romanNumeralLetters = Set("ivxlcdm")
++
++    /// `p's`, `d's` — a one-letter stem pluralised, which the lexicon holds
++    /// but which is never what an all-caps token in fiction meant.
++    private static func isLetterPlural(_ candidate: String) -> Bool {
++        candidate.count == 3 && candidate.hasSuffix("'s") && (candidate.first?.isLetter ?? false)
++    }
++
++    /// Replace each run of `minimumRun` or more identical letters with a
++    /// single copy of that letter. Non-letters (digits, hyphens) are kept
++    /// as written so we don't invent a new token shape.
++    private static func collapseLetterRuns(_ word: String, minimumRun: Int) -> String {
++        guard !word.isEmpty else { return word }
++
++        var output = ""
++        output.reserveCapacity(word.count)
++        var runCharacter: Character?
++        var runCount = 0
++
++        func flush() {
++            guard let runCharacter else { return }
++            if runCharacter.isLetter && runCount >= minimumRun {
++                output.append(runCharacter)
++            } else {
++                output.append(contentsOf: String(repeating: String(runCharacter), count: runCount))
++            }
++        }
++
++        for character in word {
++            if character == runCharacter {
++                runCount += 1
++            } else {
++                flush()
++                runCharacter = character
++                runCount = 1
++            }
++        }
++        flush()
++        return output
++    }
++
+     // MARK: - Letter-name initialisms (issue #710)
+ 
+     /// Spell a token as a sequence of letter names using the per-letter
