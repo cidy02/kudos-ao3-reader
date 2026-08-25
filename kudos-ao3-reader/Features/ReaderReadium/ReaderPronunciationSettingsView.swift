@@ -23,6 +23,12 @@ struct ReaderPronunciationSettingsView: View {
     /// something the engine actually guessed at further up.
     var characterTags: [String] = []
 
+    /// Phonemises the open chapter without speaking it, so this list can be
+    /// filled in *before* a name is heard mangled. `nil` from global Settings,
+    /// which has no chapter, and on any device where the Core ML frontend is
+    /// not the engine — sherpa-onnx exposes no G2P to ask.
+    var onScanChapter: (() async -> Int?)?
+
     private let store = KokoroPronunciationStore()
 
     private let guesses = KokoroGuessedWordStore()
@@ -33,6 +39,8 @@ struct ReaderPronunciationSettingsView: View {
     @State private var isAdding = false
     @State private var showingImportResult = false
     @State private var importMessage = ""
+    @State private var isScanning = false
+    @State private var scanMessage: String?
 
     private struct Entry: Identifiable, Equatable {
         var word: String
@@ -42,6 +50,27 @@ struct ReaderPronunciationSettingsView: View {
 
     var body: some View {
         List {
+            if onScanChapter != nil {
+                Section {
+                    Button {
+                        runScan()
+                    } label: {
+                        HStack {
+                            Label("Scan this chapter", systemImage: "text.magnifyingglass")
+                            Spacer()
+                            if isScanning { ProgressView() }
+                        }
+                    }
+                    .disabled(isScanning)
+                } footer: {
+                    Text(scanMessage
+                        ?? "Reads the chapter through the pronunciation stage "
+                            + "only — no audio — and lists the names it would "
+                            + "have to guess at, so they can be fixed before "
+                            + "you hear them.")
+                }
+            }
+
             if entries.isEmpty && guessed.isEmpty {
                 Section {
                     ContentUnavailableView {
@@ -234,6 +263,28 @@ struct ReaderPronunciationSettingsView: View {
     private func dismissGuesses(at offsets: IndexSet) {
         for index in offsets { try? guesses.forget(guessed[index].word) }
         reload()
+    }
+
+    private func runScan() {
+        isScanning = true
+        scanMessage = nil
+        Task {
+            let found = await onScanChapter?()
+            isScanning = false
+            switch found {
+            case .none:
+                // Distinct from zero: nothing ran, rather than nothing found.
+                scanMessage = "Could not scan this chapter."
+            case 0:
+                scanMessage = "Nothing new — every word in this chapter is "
+                    + "already in the dictionary or corrected."
+            case let count?:
+                scanMessage = count == 1
+                    ? "Found 1 new word."
+                    : "Found \(count) new words."
+            }
+            reload()
+        }
     }
 
     private func delete(at offsets: IndexSet) {

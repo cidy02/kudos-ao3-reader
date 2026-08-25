@@ -12,6 +12,9 @@ struct ReaderSpeechSettingsSection: View {
     /// cast first. Empty from global Settings.
     var characterTags: [String] = []
 
+    /// Pre-flight scan of the open chapter. `nil` from global Settings.
+    var onScanChapter: (() async -> Int?)?
+
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
     @AppStorage(ReaderSpeechPreferences.readAuthorNotesKey) private var readAuthorNotes = true
@@ -131,7 +134,10 @@ struct ReaderSpeechSettingsSection: View {
             }
 
             NavigationLink {
-                ReaderPronunciationSettingsView(characterTags: characterTags)
+                ReaderPronunciationSettingsView(
+                    characterTags: characterTags,
+                    onScanChapter: onScanChapter
+                )
             } label: {
                 LabeledContent("Pronunciations", value: pronunciationCountLabel)
             }

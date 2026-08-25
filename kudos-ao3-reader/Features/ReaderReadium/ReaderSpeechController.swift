@@ -361,6 +361,68 @@ final class ReaderSpeechController {
         ttsServiceRuntimeConfiguration = runtimeConfiguration
     }
 
+    /// Finds the words this chapter would be guessed at, without speaking it.
+    ///
+    /// The pronunciation list is otherwise retrospective — a name has to be
+    /// mangled once before it can be corrected. This runs the same frontend
+    /// over the same chapter text and records the same fallbacks, so the list
+    /// is populated before the first tap.
+    ///
+    /// - Returns: how many distinct words were newly recorded, or `nil` when a
+    ///   scan could not run at all.
+    func scanChapterForPronunciation(from locator: Locator?) async -> Int? {
+        guard let publication, KokoroCastPreflight.isAvailable else { return nil }
+        let units = await Self.chapterUnits(
+            from: locator ?? resumeLocator, in: publication
+        )
+        guard !units.isEmpty else { return nil }
+        return try? await KokoroCastPreflight.scan(
+            texts: units.map(\.text),
+            isPlaying: status == .playing
+        )
+    }
+
+    /// The current chapter's text, as speech units.
+    ///
+    /// Shared by playback and the pronunciation pre-flight so the two cannot
+    /// disagree about where a chapter ends.
+    private static func chapterUnits(
+        from startLoc: Locator?,
+        in publication: Publication
+    ) async -> [TTSSpeechUnit] {
+        guard let content = publication.content(from: startLoc) else {
+            Log.tts.error("Publication has no ContentService — cannot extract read-aloud text")
+            return []
+        }
+
+        // `content(from:)` already starts at `startLoc`. Take the first
+        // spine resource's remaining text and stop at the next href —
+        // do not also filter by `startLoc.href`, which can disagree on
+        // URL form and yield an empty chapter.
+        var chapterHref: AnyURL?
+        var units: [TTSSpeechUnit] = []
+        for await element in content.sequence() {
+            if Task.isCancelled { return [] }
+            if chapterHref == nil {
+                chapterHref = element.locator.href
+            } else if element.locator.href != chapterHref {
+                break
+            }
+            guard let textElement = element as? TextualContentElement else { continue }
+
+            // Use Readium's normalized text for synthesis. The locator
+            // quote preserves raw XHTML whitespace, which must stay out
+            // of the sentence chunker or pretty-printed markup can
+            // create a false paragraph boundary mid-sentence.
+            guard let text = textElement.text,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { continue }
+
+            units.append(TTSSpeechUnit(text: text, locator: textElement.locator))
+        }
+        return units
+    }
+
     /// Starts at `locator` (normally the reader's current position) or resumes
     /// where it left off. Walks only the current spine resource — not the rest
     /// of the publication — so a long work does not stall the first tap.
@@ -373,37 +435,9 @@ final class ReaderSpeechController {
         startTask?.cancel()
         startTask = Task {
             do {
-                guard let content = publication.content(from: startLoc) else {
-                    Log.tts.error("Publication has no ContentService — cannot extract read-aloud text")
-                    return
-                }
-
-                // `content(from:)` already starts at `startLoc`. Take the first
-                // spine resource's remaining text and stop at the next href —
-                // do not also filter by `startLoc.href`, which can disagree on
-                // URL form and yield an empty chapter.
-                var chapterHref: AnyURL?
-                var units: [TTSSpeechUnit] = []
-                for await element in content.sequence() {
-                    if Task.isCancelled { return }
-                    if chapterHref == nil {
-                        chapterHref = element.locator.href
-                    } else if element.locator.href != chapterHref {
-                        break
-                    }
-                    guard let textElement = element as? TextualContentElement else { continue }
-
-                    // Use Readium's normalized text for synthesis. The locator
-                    // quote preserves raw XHTML whitespace, which must stay out
-                    // of the sentence chunker or pretty-printed markup can
-                    // create a false paragraph boundary mid-sentence.
-                    guard let text = textElement.text,
-                          !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    else { continue }
-
-                    units.append(TTSSpeechUnit(text: text, locator: textElement.locator))
-                }
-
+                let units = await Self.chapterUnits(
+                    from: startLoc, in: publication
+                )
                 guard !units.isEmpty else {
                     Log.tts.error("No extractable text in the current chapter")
                     return

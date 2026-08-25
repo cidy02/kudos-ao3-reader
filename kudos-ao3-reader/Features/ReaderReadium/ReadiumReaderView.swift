@@ -96,6 +96,25 @@ struct ReadiumReaderView: View {
     /// The afterword's own AO3 boilerplate — "Please drop by the Archive and
     /// comment…" — links straight at `/works/<id>/comments/new`, which this
     /// work's native comments sheet already covers. Opens that instead of the
+    /// The work's cast, for ranking the pronunciation list.
+    ///
+    /// `workCharacters` is only populated once the work has been refreshed
+    /// from AO3 — EPUB subjects arrive uncategorised — so fall back to the
+    /// flat union rather than ranking by nothing.
+    /// `namesFromCharacterTags` strips the `(Fandom)` disambiguator either
+    /// way, so the wider set costs only precision in a prior.
+    private var speechCastTags: [String] {
+        if work.workCharacters.isEmpty { return work.workTags }
+        return work.workCharacters + work.workRelationships
+    }
+
+    /// `nil` where the Core ML frontend is not the engine, which is what
+    /// hides the scan button rather than offering one that cannot work.
+    private var scanChapterForPronunciation: (() async -> Int?)? {
+        guard KokoroCastPreflight.isAvailable else { return nil }
+        return { await speech.scanChapterForPronunciation(from: book.currentLocator) }
+    }
+
     /// AO3 web form when the URL is for *this* work.
     ///
     /// The link itself is untouched (nothing removed from the EPUB) and every
@@ -301,16 +320,9 @@ struct ReadiumReaderView: View {
                 initialChapterPosition: currentAO3Chapter
             )
             .sheet(isPresented: $showingSpeechSettings) {
-                // `workCharacters` is only populated once the work has been
-                // refreshed from AO3 — EPUB subjects arrive uncategorised — so
-                // fall back to the flat union rather than showing nothing.
-                // `namesFromCharacterTags` strips the `(Fandom)` disambiguator
-                // either way, so passing the wider set costs only precision in
-                // a prior.
                 ReaderSpeechSettingsSheet(
-                    characterTags: work.workCharacters.isEmpty
-                        ? work.workTags
-                        : work.workCharacters + work.workRelationships
+                    characterTags: speechCastTags,
+                    onScanChapter: scanChapterForPronunciation
                 )
             }
             .sheet(item: $correctingPronunciation) { target in
