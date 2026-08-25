@@ -16,9 +16,14 @@ import SwiftUI
 struct ReaderPronunciationSettingsView: View {
     private let store = KokoroPronunciationStore()
 
+    private let guesses = KokoroGuessedWordStore()
+
     @State private var entries: [Entry] = []
+    @State private var guessed: [KokoroGuessedWordStore.Entry] = []
     @State private var editing: Entry?
     @State private var isAdding = false
+    @State private var showingImportResult = false
+    @State private var importMessage = ""
 
     private struct Entry: Identifiable, Equatable {
         var word: String
@@ -28,7 +33,7 @@ struct ReaderPronunciationSettingsView: View {
 
     var body: some View {
         List {
-            if entries.isEmpty {
+            if entries.isEmpty && guessed.isEmpty {
                 Section {
                     ContentUnavailableView {
                         Label("No corrections yet", systemImage: "character.bubble")
@@ -65,6 +70,33 @@ struct ReaderPronunciationSettingsView: View {
                     )
                 }
             }
+
+            if !guessed.isEmpty {
+                Section {
+                    ForEach(guessed, id: \.word) { guess in
+                        Button {
+                            editing = Entry(word: guess.word, ipa: "")
+                        } label: {
+                            LabeledContent(guess.word) {
+                                Text("\(guess.count)")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .onDelete(perform: dismissGuesses)
+                } header: {
+                    Text("Words I guessed at")
+                } footer: {
+                    // Say plainly what the number is, or it reads as a score.
+                    Text(
+                        "No dictionary had these, so their pronunciation was "
+                            + "guessed — usually character names. The number is "
+                            + "how often each came up. Tap one to correct it."
+                    )
+                }
+            }
         }
         .appThemedScroll()
         .appThemedRows()
@@ -72,10 +104,31 @@ struct ReaderPronunciationSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { isAdding = true } label: {
-                    Label("Add", systemImage: "plus")
+                Menu {
+                    Button { isAdding = true } label: {
+                        Label("Add Pronunciation", systemImage: "plus")
+                    }
+                    Divider()
+                    // The `[word](/phonemes/)` notation is shared with
+                    // Kokoro-FastAPI and MisakiSwift, so a list kept for
+                    // another frontend pastes straight in, and one built here
+                    // is worth sharing with someone in the same fandom.
+                    Button { importFromClipboard() } label: {
+                        Label("Paste Corrections", systemImage: "doc.on.clipboard")
+                    }
+                    Button { copyAll() } label: {
+                        Label("Copy All", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(entries.isEmpty)
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
                 }
             }
+        }
+        .alert("Pasted Corrections", isPresented: $showingImportResult) {
+            Button("OK") {}
+        } message: {
+            Text(importMessage)
         }
         .sheet(isPresented: $isAdding) {
             ReaderPronunciationEditor(word: "", ipa: "") { word, ipa in
@@ -96,6 +149,11 @@ struct ReaderPronunciationSettingsView: View {
         entries = store.overrides()
             .map { Entry(word: $0.key, ipa: $0.value) }
             .sorted { $0.word.localizedStandardCompare($1.word) == .orderedAscending }
+        // Anything already corrected is no longer a guess — it resolves from
+        // tier 1 now — so keep it out of the list even if the store still has
+        // it from before the correction.
+        let corrected = Set(entries.map(\.word))
+        guessed = guesses.ranked().filter { !corrected.contains($0.word) }
     }
 
     private func save(word: String, ipa: String) {
@@ -103,6 +161,55 @@ struct ReaderPronunciationSettingsView: View {
         let ipa = ipa.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty, !ipa.isEmpty else { return }
         try? store.setOverride(ipa, for: word)
+        // A corrected word stops being a guess, so drop it rather than
+        // leaving it to be re-offered.
+        try? guesses.forget(word)
+        reload()
+    }
+
+    /// Read `[word](/phonemes/)` entries from the clipboard.
+    ///
+    /// Reports what happened either way: a silent no-op on a paste that did
+    /// not parse leaves the reader with no idea whether the app or their text
+    /// was at fault.
+    private func importFromClipboard() {
+        let text = UIPasteboard.general.string ?? ""
+        let parsed = KokoroInlinePronunciation.entries(in: text)
+        guard !parsed.isEmpty else {
+            importMessage = text.isEmpty
+                ? "The clipboard is empty."
+                : "No corrections found. The format is [word](/phonemes/)."
+            showingImportResult = true
+            return
+        }
+        // Last wins on duplicates — the parser preserves them deliberately so
+        // this choice is made here rather than hidden in the parse.
+        for entry in parsed {
+            try? store.setOverride(entry.phonemes, for: entry.word)
+            try? guesses.forget(entry.word)
+        }
+        importMessage = parsed.count == 1
+            ? "Added 1 correction."
+            : "Added \(parsed.count) corrections."
+        showingImportResult = true
+        reload()
+    }
+
+    /// Put every correction on the clipboard in the shared notation.
+    private func copyAll() {
+        let rendered = KokoroInlinePronunciation.text(
+            for: entries.map { .init(word: $0.word, phonemes: $0.ipa) }
+        )
+        UIPasteboard.general.string = rendered
+        importMessage = entries.count == 1
+            ? "Copied 1 correction."
+            : "Copied \(entries.count) corrections."
+        showingImportResult = true
+    }
+
+    /// Swiping a guess away means "stop offering me this one".
+    private func dismissGuesses(at offsets: IndexSet) {
+        for index in offsets { try? guesses.forget(guessed[index].word) }
         reload()
     }
 

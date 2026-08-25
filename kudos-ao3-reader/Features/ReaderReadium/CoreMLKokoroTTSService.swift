@@ -77,6 +77,14 @@ public final class CoreMLKokoroTTSService: TTSService {
         // *after* the first utterances synthesize (and it is a hard error in
         // Swift 6 language mode).
         await manager.setEnglishCustomLexicon(lexicon)
+        // Record what the model had to guess at, so the reader can correct it
+        // later. Buffered, not written per word: the observer fires inside
+        // synthesis and a disk write there would sit on the path that has to
+        // keep audio fed. Flushed when playback stops.
+        let collector = guessedWords
+        await manager.setNeuralFallbackObserver { word in
+            collector.add(word)
+        }
         #else
         status = .unavailable
         return
@@ -317,7 +325,38 @@ public final class CoreMLKokoroTTSService: TTSService {
 
     public func stop() {
         resetPlayback(notifyStopped: true)
+        guessedWords.flush()
     }
+
+    /// Buffers words the model guessed at, and writes them once at the end.
+    ///
+    /// A final class with a lock rather than an actor: the observer closure is
+    /// `@Sendable` and synchronous, called from inside synthesis, so it cannot
+    /// await. The lock is held only to append to an array.
+    final class GuessedWordCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var pending: [String] = []
+        private let store = KokoroGuessedWordStore()
+
+        func add(_ word: String) {
+            lock.lock()
+            pending.append(word)
+            lock.unlock()
+        }
+
+        /// Write and clear. Failure is deliberately silent: this is a
+        /// convenience list, and losing it must never interrupt reading.
+        func flush() {
+            lock.lock()
+            let batch = pending
+            pending.removeAll(keepingCapacity: true)
+            lock.unlock()
+            guard !batch.isEmpty else { return }
+            try? store.record(batch)
+        }
+    }
+
+    private let guessedWords = GuessedWordCollector()
 
     public func setVoice(id: String) {
         if availableVoices.contains(where: { $0.identifier == id }) {
