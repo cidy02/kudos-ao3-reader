@@ -23,7 +23,11 @@ struct KokoroAneEnglishWeakFormTests {
     /// uses IPA `ɡ` (U+0261), because ASCII `g` is not in Misaki's
     /// consonant set and would be skipped through to the following vowel.
     private let words: [String: [String]] = [
-        "the": ["ð", "i"],
+        // A SENTINEL, not the real gold. With `ði` here, every assertion of
+        // `ði` below would pass whether or not the sandhi pass ran — which is
+        // exactly how two of these tests were vacuous. `ðX` is never a correct
+        // output, so any `ði`/`ðə` result proves the pass rewrote it.
+        "the": ["ð", "X"],
         "to": ["t", "u"],
         "book": ["b", "ˈ", "ʊ", "k"],
         "apple": ["ˈ", "æ", "p", "ə", "l"],
@@ -48,12 +52,14 @@ struct KokoroAneEnglishWeakFormTests {
 
     private func phonemize(
         _ text: String,
+        customLexicon: [String: String] = [:],
         allowedPunctuation: Set<Character> = [],
         fallback: @escaping (String) async throws -> [String]?
     ) async throws -> String {
         try await KokoroAneEnglishFrontend.phonemize(
             text,
             wordToPhonemes: words,
+            customLexicon: customLexicon,
             allowedPunctuation: allowedPunctuation,
             fallback: fallback
         )
@@ -135,11 +141,14 @@ struct KokoroAneEnglishWeakFormTests {
     }
 
     /// All-caps `THE` is POS-gated in Misaki (`tag == 'DT'`). Without a
-    /// tagger we leave it as the lexicon's `ði`.
+    /// tagger we leave it as whatever the lexicon holds.
     @Test func allCapsTHEIsNotRewritten() async throws {
         let recorder = FallbackRecorder()
         let actual = try await phonemize("THE book") { await recorder.g2p($0) }
-        #expect(actual == "ði bˈʊk")
+        // The sentinel gold, untouched. Asserting `ði` here was ambiguous —
+        // it could mean "left alone" or "rewritten to the vowel form".
+        // `ðX` can only mean the pass skipped it, which is the point.
+        #expect(actual == "ðX bˈʊk")
         let recorded = await recorder.words
         #expect(recorded.isEmpty)
     }
@@ -220,6 +229,43 @@ struct KokoroAneEnglishWeakFormTests {
         #expect(actual == "jˈɛs hˈɪm bˈʊk ˈæpəl")
         let recorded = await recorder.words
         #expect(recorded.isEmpty)
+    }
+    // MARK: - Adversarial-review fixes
+
+    /// A custom entry is tier 1 and outranks this pass. Before the guard, the
+    /// reader's own correction was looked up and then silently overwritten in
+    /// every context — and the public API documents `["to": "tə"]` as its
+    /// example, so this is the first thing anyone would try.
+    @Test func aCustomPronunciationIsNotOverwritten() async throws {
+        let recorder = FallbackRecorder()
+        let actual = try await phonemize(
+            "to apple", customLexicon: ["to": "CUSTOM"]
+        ) { await recorder.g2p($0) }
+        #expect(actual == "CUSTOM ˈæpəl", "custom entry must win over the sandhi pass")
+    }
+
+    /// Misaki excludes `"`, `\u{201C}` and `\u{201D}` from `NON_QUOTE_PUNCTS`, so a
+    /// quoted title stays transparent and the vowel behind it still counts.
+    /// Fic is full of these, so it is a live path rather than a corner case.
+    @Test func aQuoteDoesNotHideTheFollowingVowel() async throws {
+        let recorder = FallbackRecorder()
+        let actual = try await phonemize(
+            "to \u{201C}apple\u{201D}", allowedPunctuation: ["\u{201C}", "\u{201D}"]
+        ) { await recorder.g2p($0) }
+        #expect(
+            actual.hasPrefix("tʊ"),
+            "a quote must not end the vowel context, got \(actual)"
+        )
+    }
+
+    /// The counterpart: a real non-quote mark *does* end it, so `to` keeps the
+    /// lexicon's `tu` rather than guessing from across the comma.
+    @Test func aCommaDoesEndTheVowelContext() async throws {
+        let recorder = FallbackRecorder()
+        let actual = try await phonemize(
+            "to, apple", allowedPunctuation: [","]
+        ) { await recorder.g2p($0) }
+        #expect(actual.hasPrefix("tu,"), "a comma should leave the gold form, got \(actual)")
     }
 }
 #endif

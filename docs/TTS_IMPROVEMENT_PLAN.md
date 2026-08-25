@@ -533,13 +533,15 @@ why this phase is about quality and not tidiness.
 
 ### Phase 3 — pronunciation
 
-> **Reframed 2026-08-24 by measurement.** The possessive item below is one
-> third of a larger, cheaper win. The downloaded lexicon has **patchy regular
-> inflection coverage** — `walking`, `walked`, `cats`, `asked` are present but
-> `wanted`, `belongs`, `characters`, `companies`, `towards` are **absent** —
-> and Misaki compensates with three stemmers (`stem_s`, `stem_ed`,
-> `stem_ing`) that derive the inflected form from a base the lexicon *does*
-> hold. We ported none of them.
+> **Implemented 2026-08-24.** The possessive item below was one third of a
+> larger, cheaper win. The downloaded lexicon has **patchy regular inflection
+> coverage** — `walking`, `walked`, `cats`, `asked` are present but `wanted`,
+> `belongs`, `characters`, `companies`, `towards` are **absent** — and Misaki
+> compensates with three stemmers (`stem_s`, `stem_ed`, `stem_ing`) that
+> derive the inflected form from a base the lexicon *does* hold. All three
+> now run at the same `resolveWord` gate as the possessive derivation, US-only,
+> with `US_TAUS` tapping ported verbatim (`noticed` → `nˈOɾəst`, `sitting` →
+> `ɾɪŋ`). Possessive `X's` is the `"'s"` branch of `stem_s`.
 >
 > Measured over 2.44M corpus words: **113,827 reach the G2P fallback (4.7%),
 > and the three stemmers recover 49,457 of them — 43.4%**, about 2% of every
@@ -554,11 +556,6 @@ why this phase is about quality and not tidiness.
 > Most frequent: `wanted` 1546, `that's` 2081 combined, `towards` 927,
 > `makes` 737, `minutes` 610, `opened` 478, `characters` 423. Proper-noun
 > possessives (`Jim's` 453) are a small slice of the `-s` branch.
->
-> All three share one helper shape — find a known stem, look it up, append the
-> allomorph — so the possessive work is the same code with a narrower trigger.
-> `_ed` and `_ing` carry US tapping rules (`US_TAUS`) that must be ported
-> verbatim, not paraphrased.
 
 
 Fanfic's hardest speech problem, and the one place this app has an advantage no
@@ -710,6 +707,51 @@ mispronounced name is permanent.
       weak form, inspect the next token's first phoneme, swap. Deterministic,
       no model, no POS. Highest-frequency word in English.
 
+- [ ] **Weak-form pass: four findings from adversarial review (2026-08-24).**
+      `[code]` Two of the six checks came back sound — the tri-state genuinely
+      distinguishes `nil` from `false` on every path, and the vowel /
+      consonant / punctuation sets match upstream character-for-character
+      (20 / 25 / 8). The rest:
+
+      1. **Custom overrides are overwritten — the serious one.** Tier-1
+         custom-lexicon entries are consulted first, then the post-pass
+         rewrites `the`/`to` regardless. This contradicts the override
+         contract, whose own API documentation uses `["to": "tə"]` as its
+         example, and it breaks the pronunciation editor: a reader correcting
+         `the` would have it silently discarded in every context. **Fix: skip
+         the rewrite when the word has a custom entry.** No weak-form test
+         supplies a custom lexicon, which is exactly why nothing caught it.
+
+      2. **Quotes wrongly terminate the vowel context.** The pass treats any
+         trailing punctuation on the current part as unknown, but Misaki
+         excludes `"` `“` `”` from `NON_QUOTE_PUNCTS` so they stay
+         transparent. `to “apple”` yields `tu` where Misaki gives `tʊ`. The
+         character set is right; an earlier shortcut bypasses it. Fic is full
+         of quoted titles, so this is a live path.
+
+      3. **Two tests are vacuous.** `theAppleTakesTheVowelForm` and
+         `theHourTakesTheVowelForm` pass with the feature removed, because
+         `ði` is already the lexicon gold — they assert what the lexicon would
+         have produced anyway. The `ðə` cases do the real work.
+
+      4. **`an` is a second scope knock-on.** The real lexicon holds `an` as
+         `æn`, not Misaki's `ɐn`, so `to an art museum` sees the vowel `æ` and
+         gives `tʊ` where Misaki gives `tə`. Beyond the documented `a`
+         exception, with no fixture. Deliberate-scope divergence, not a
+         porting error.
+
+
+- [x] **Regular inflection stemmers (`stem_s` / `stem_ed` / `stem_ing`) — implemented 2026-08-24.**
+      `[measured]` `[code]` The possessive item below was the first third of
+      this. All three Misaki stemmers now run at the same `resolveWord` point,
+      in order `-s`, `-ed`, `-ing`, US-only. Each keeps the existing gate:
+      derive only when the inflected form misses every lexicon tier AND the
+      stem is a lexicon hit. `US_TAUS` tapping is ported verbatim, not
+      paraphrased: `noticed` (stem `nˈOɾəs`) → `nˈOɾəst`, `sitting` → `ɾɪŋ`,
+      a `t`-final stem preceded by a taut (`waited` ← `wˈAt`) → `ɾᵻd`.
+      Possessive `X's` falls out of `stem_s`'s `"'s"` branch; `KokoroAneEnglishPossessiveTests`
+      is unchanged.
+
 - [x] **Contextual pronunciation: possessives — implemented 2026-08-24.**
       `[measured]` The corpus holds **5,896** proper-noun possessives
       across 462 distinct forms. **36.7% miss the lexicon entirely** (base and
@@ -731,7 +773,8 @@ mispronounced name is permanent.
       The rule is real and the reference gets it right.
 
       **Implemented 2026-08-24** in `KokoroAneEnglishPhonemizer.resolveWord`,
-      after the two fanfic recoveries and before letter-name initialisms.
+      after the two fanfic recoveries and before letter-name initialisms,
+      and **widened the same day** from possessive-only to all three stemmers.
       Apostrophe reinsertion skips any token that already contains an
       apostrophe, so `anna's` does not reach it; de-elongation wants a
       trailing letter run of two or more, so a single `s` after the
