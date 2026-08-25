@@ -1404,9 +1404,17 @@ of. Relevant when tuning pause lengths.
 | `?` | Rising intonation on yes/no questions |
 | `!` | Higher energy (one is enough) |
 
-- [ ] **Check for stacked pauses.** `[prior-art]` `…` already yields 0.5–1 s
-      from the model and `KokoroPauseAssembler` then appends a structural pause
-      on top — an ellipsis at a paragraph end may be getting ~1.3 s.
+- [x] **Check for stacked pauses — checked 2026-08-25, they do not stack.**
+      `[measured]` The worry was that `…` yields 0.5–1 s from the model and
+      `KokoroPauseAssembler` then appends a structural pause on top, so an
+      ellipsis at a paragraph end would run ~1.3 s. It does not, because
+      `trimEdgeSilence` runs **first** and cuts the model's trailing silence
+      back to `keepEdgeSeconds` (20 ms). Measured on a synthetic clip with
+      0.10 s of tone and 0.80 s of trailing silence: assembling with
+      `.paragraph` gives **0.44 s**, not the 1.22 s the stack would produce.
+      The ordering is the entire reason, so it is pinned by
+      `testAModelPauseIsNotStackedOnTopOfTheStructuralOne` — swapping those
+      two steps would reintroduce the stack without failing anything else.
 - [ ] **Default speed 0.9, not 1.0.** `[prior-art]` Audiobook narration is
       widely recommended at 0.9 (1.05 for ads). One line in
       `ReaderSpeechPreferences.defaultRate`, but it changes everyone's
@@ -1422,9 +1430,14 @@ of. Relevant when tuning pause lengths.
 
 ## 8. Housekeeping and known defects
 
-- [ ] **Speed changes need a restart.** `[code]` `CoreMLKokoroTTSService.speak`
-      captures `currentSpeed` into a local at start, so the slider does nothing
-      until the next utterance batch.
+- [x] **Speed changes need a restart — fixed 2026-08-25.** `[code]`
+      `CoreMLKokoroTTSService.speak` captured `currentSpeed` into a local at
+      start, so the slider did nothing until the next utterance batch — and
+      since a batch is a whole chapter, effectively never. Each clip now reads
+      the live value, so a change lands one clip later (the next is already
+      prefetched at the old rate). Voice stays captured deliberately:
+      switching narrator mid-chapter should finish in the voice it started
+      in.
 - [ ] **Republish the pack with 28 voices.**
       `Scripts/pack-kokoro-ane-github-release.sh` → `gh release create` → bump
       `tag` and `expectedSHA256` in `KokoroGitHubPack`. The published release is
