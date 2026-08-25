@@ -45,7 +45,8 @@ fallback). PCM was concatenated as generated. The Core ML graphs are
   quotes, whitespace). Does not rewrite prose.
 - `KokoroSemanticDocument` groups Readium units into heading / paragraph /
   dialogue / blockquote / scene-break using CSS selectors + text. Units that
-  share a `cssSelector` are a `<br>` seam, not a merge.
+  share a `cssSelector` are a `<br>` seam, not a merge. `.dialogue` does
+  not join adjacent non-dialogue; adjacent dialogue still may.
 - `KokoroUtterancePacker` packs those blocks to ~110–220 IPA characters,
   merges short fragments, balances long-paragraph leftovers.
 - `KokoroPauseAssembler` trims edge silence (zero-crossing) and inserts
@@ -56,7 +57,9 @@ fallback). PCM was concatenated as generated. The Core ML graphs are
 - MiniZip: component-wise extract paths, symlink-resolved staging root,
   directory-entry trailing slash, skip `__MACOSX` / `._*`.
 
-Apple TTS still uses `packedChunks`. Sherpa remains compiled out.
+Apple TTS uses `packedChunks`, partitioned on a shared `cssSelector` so a
+`<br>` is a new `AVSpeechUtterance` rather than running prose. Sherpa's
+`sentenceChunks` path still concatenates for G2P context.
 
 ## 4. Chunking algorithm
 

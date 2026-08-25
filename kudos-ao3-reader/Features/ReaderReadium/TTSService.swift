@@ -62,15 +62,24 @@ public struct TTSSpeechUnit: Hashable, Sendable {
     /// Keeps the system engine's existing paragraph-oriented chunking while
     /// retaining a precise source range whenever the generated text occurs in
     /// the element's Readium locator.
+    ///
+    /// Units split by a `<br>` share a `cssSelector` (they came from one
+    /// `<p>`); units from adjacent paragraphs do not. Apple cannot insert
+    /// silence inside an `AVSpeechUtterance`, so each seam is its own
+    /// utterance and `postUtteranceDelay` (0.22 s, matching Kokoro's
+    /// `.line`) carries the pause. `sentenceChunks` still concatenates —
+    /// that path is G2P context for Sherpa, not Apple.
     @MainActor
     public static func packedChunks(
         from units: [TTSSpeechUnit],
         maxLength: Int = 250
     ) -> [TTSSpeechUnit] {
-        packAdjacent(
-            splitIntoContextualSentences(from: units, maxLength: maxLength),
-            maxLength: maxLength
-        )
+        groupsSeparatedByLineBreakSeams(units).flatMap { group in
+            packAdjacent(
+                splitIntoContextualSentences(from: group, maxLength: maxLength),
+                maxLength: maxLength
+            )
+        }
     }
 
     /// Gives Kokoro complete sentences, including those Readium split across
@@ -172,9 +181,42 @@ public struct TTSSpeechUnit: Hashable, Sendable {
         let spans: [(range: Range<String.Index>, locator: Locator?)]
     }
 
-    /// Space-joins Readium content elements so a sentence broken by `<br>`
-    /// (or a split inline run) is one G2P input. No extra space before
-    /// attaching punctuation.
+    /// Units split by a `<br>` share a cssSelector; adjacent `<p>`s do not.
+    /// Same discriminator as `KokoroSemanticDocument.isLineBreakSeam`. A
+    /// `nil` selector never matches — that would make the seam vacuous.
+    /// Selector is taken from the unit just absorbed, not the one the run
+    /// opened with, so a cross-paragraph join cannot hide the `<br>` inside
+    /// the next paragraph.
+    private static func groupsSeparatedByLineBreakSeams(
+        _ units: [TTSSpeechUnit]
+    ) -> [[TTSSpeechUnit]] {
+        var groups: [[TTSSpeechUnit]] = []
+        var current: [TTSSpeechUnit] = []
+        var lastSelector: String?
+
+        for unit in units {
+            let piece = unit.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !piece.isEmpty else { continue }
+
+            let selector = unit.locator?.locations.cssSelector
+            if let lastSelector, let selector, lastSelector == selector, !current.isEmpty {
+                groups.append(current)
+                current = [unit]
+            } else {
+                current.append(unit)
+            }
+            lastSelector = selector
+        }
+        if !current.isEmpty {
+            groups.append(current)
+        }
+        return groups
+    }
+
+    /// Space-joins Readium content elements so a sentence broken across
+    /// adjacent blocks (or a split inline run) is one G2P input. No extra
+    /// space before attaching punctuation. Callers that must honour a
+    /// `<br>` seam (shared cssSelector) partition first; see `packedChunks`.
     private static func concatenateForSentenceContext(_ units: [TTSSpeechUnit]) -> JoinedSpeechText {
         var text = ""
         var spans: [(range: Range<String.Index>, locator: Locator?)] = []
