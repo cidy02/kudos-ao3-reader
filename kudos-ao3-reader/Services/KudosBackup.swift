@@ -625,9 +625,9 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
     /// Only corrections. The guessed-word log is deliberately not carried: it
     /// regenerates the moment anything is played, so backing it up would be
     /// paying to move something reconstructible.
-    static func capture(store: KokoroPronunciationStore = KokoroPronunciationStore())
-        -> KudosBackupPronunciations
-    {
+    static func capture(
+        store: KokoroPronunciationStore = KokoroPronunciationStore()
+    ) -> KudosBackupPronunciations {
         let file = store.load()
         return KudosBackupPronunciations(
             global: file.global, fandoms: file.fandoms, works: file.works
