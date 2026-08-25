@@ -1,4 +1,5 @@
 #if os(iOS)
+import FluidAudio
 import SwiftUI
 
 /// Edit the pronunciation overrides Read Aloud applies before anything else.
@@ -127,6 +128,24 @@ struct ReaderPronunciationEditor: View {
     @State var ipa: String
     let onSave: (String, String) -> Void
 
+    /// The phonemes a respelling resolves to, shown live so the reader can see
+    /// what will actually be stored before committing to it.
+    @State private var preview: String?
+
+    /// Respelling needs the real G2P, which lives behind the voice pack. Ask
+    /// the availability flag rather than the installer: `readyManager()` seeds
+    /// the cache from GitHub, and a settings text field must never start a
+    /// 180MB download as a side effect of typing.
+    private var canRespell: Bool { KokoroAneAvailability.isPackInstalled }
+
+    /// What gets stored: pasted phonemes as-is, otherwise the respelling's
+    /// conversion, otherwise the raw text so nothing is silently discarded.
+    private var resolvedIPA: String {
+        let trimmed = ipa.trimmingCharacters(in: .whitespacesAndNewlines)
+        if KokoroRespelling.looksLikeIPA(trimmed) { return trimmed }
+        return preview ?? trimmed
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -136,16 +155,27 @@ struct ReaderPronunciationEditor: View {
                         .autocorrectionDisabled()
                 }
                 Section {
-                    TextField("Phonemes", text: $ipa)
+                    TextField("her-MY-oh-nee", text: $ipa)
                         .monospaced()
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    if let preview, preview != ipa {
+                        LabeledContent("Phonemes") {
+                            Text(preview).monospaced().foregroundStyle(.secondary)
+                        }
+                    }
                 } header: {
                     Text("Pronunciation")
                 } footer: {
-                    // Naming the notation matters: a reader who types "her-MY-oh-nee"
-                    // here and hears nothing has no way to know why.
-                    Text("IPA phonemes, e.g. hɜɹmˈIəni. Case matters.")
+                    // Say what the notation is. A reader who types a respelling
+                    // and hears nothing has no way to work out why.
+                    Text(
+                        canRespell
+                            ? "Spell it out in syllables, capitalising the stressed "
+                                + "one: her-MY-oh-nee. Phonemes are also accepted."
+                            : "IPA phonemes, e.g. hɜɹmˈIəni. Install the Kokoro "
+                                + "voice pack to spell pronunciations out instead."
+                    )
                 }
             }
             .appThemedScroll()
@@ -158,7 +188,7 @@ struct ReaderPronunciationEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(word, ipa)
+                        onSave(word, resolvedIPA)
                         dismiss()
                     }
                     .disabled(
@@ -169,6 +199,24 @@ struct ReaderPronunciationEditor: View {
             }
         }
         .presentationDetents([.medium])
+        .task(id: ipa) { await updatePreview() }
+    }
+
+    /// Convert the respelling on each edit. Cheap enough to run per keystroke:
+    /// it is a handful of lexicon lookups, and the model is never invoked.
+    private func updatePreview() async {
+        let trimmed = ipa.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canRespell, !trimmed.isEmpty, !KokoroRespelling.looksLikeIPA(trimmed) else {
+            preview = nil
+            return
+        }
+        guard let manager = try? await CoreMLKokoroPackInstaller.shared.readyManager() else {
+            preview = nil
+            return
+        }
+        preview = try? await KokoroRespelling.ipa(forRespelling: trimmed) { syllable in
+            try? await manager.phonemes(for: syllable)
+        }
     }
 }
 #endif
