@@ -27,6 +27,18 @@ struct ReaderFanRoundAction: Identifiable {
     /// Outline-vs-fill alone is too subtle for some symbols.
     var isEmphasized = false
     let action: () -> Void
+    /// Optional long-press. Used by Read Aloud to reach its settings without
+    /// first starting playback — the mini-player's waveform is the other way
+    /// in, and that only exists once something is already being read.
+    var longPressAction: (() -> Void)?
+
+    /// Attach a long press without repeating the whole initialiser at the call
+    /// site, which is already long enough to obscure what it configures.
+    func withLongPress(_ handler: @escaping () -> Void) -> ReaderFanRoundAction {
+        var copy = self
+        copy.longPressAction = handler
+        return copy
+    }
 }
 
 /// The top-right "more" button that fans open into labelled menu pills plus a row
@@ -183,6 +195,15 @@ struct ReaderFanMenu: View {
                 .contentShape(.capsule)
         }
         .buttonStyle(.plain)
+        // Long press is additive: the tap action is unchanged, and a control
+        // without one behaves exactly as before.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                guard action.isEnabled, let longPress = action.longPressAction else { return }
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                longPress()
+            }
+        )
         .background {
             if action.isEmphasized {
                 Capsule().fill(action.tint)
@@ -196,6 +217,13 @@ struct ReaderFanMenu: View {
         .disabled(!action.isEnabled)
         .accessibilityLabel(action.accessibilityLabel)
         .accessibilityHint(action.isEnabled ? "" : "Coming soon")
+        // VoiceOver cannot long-press, so the same destination is offered as a
+        // custom action rather than being unreachable.
+        .accessibilityActions {
+            if action.isEnabled, let longPress = action.longPressAction {
+                Button("Read Aloud settings", action: longPress)
+            }
+        }
         .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
     }
 

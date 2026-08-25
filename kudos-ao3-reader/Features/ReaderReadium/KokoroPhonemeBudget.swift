@@ -7,9 +7,13 @@ import Foundation
 nonisolated enum KokoroPhonemeBudget: Sendable {
     /// Soft grouping target when packing *whole sentences* together.
     /// Never a reason to cut a sentence in half.
-    static let preferredTarget = 175
-    static let preferredMin = 110
-    static let preferredMax = 220
+    /// Read from `ReaderSpeechTuning`, defaulting to the shipped values, so
+    /// the band can be A/B'd on real works. `VOICES.md` calls 100–200 the
+    /// sweet spot and Kokoro-FastAPI ships 175/250 — the right answer is a
+    /// listening question, not a measurable one.
+    static var preferredTarget: Int { ReaderSpeechTuning.current.packTarget }
+    static var preferredMin: Int { ReaderSpeechTuning.current.packMin }
+    static var preferredMax: Int { ReaderSpeechTuning.current.packMax }
     static let softUpper = 250
 
     /// Where a complete sentence may be split. Deliberately **below**
@@ -20,7 +24,7 @@ nonisolated enum KokoroPhonemeBudget: Sendable {
     ///
     /// Corpus run 3 measured **558 utterances above 400** across 12
     /// formatting-diverse works, with four of them touching exactly 510.
-    static let splitThreshold = 400
+    static var splitThreshold: Int { ReaderSpeechTuning.current.splitThreshold }
 
     /// Hard model cap from `KokoroAneConstants.maxPhonemeLength`. Above this
     /// `KokoroAneVocab.encode` *throws*, which would end Read Aloud for the
