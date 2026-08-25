@@ -967,12 +967,35 @@ mispronounced name is permanent.
       stays empty until an AO3 refresh. From global Settings no tags are passed
       and the ordering degrades to plain guess count, exactly as before.
 
-      **The name is still wrong, and that is a real limit.** `rank` maps over
-      the guessed log, so a word the engine has never guessed at cannot appear
-      however heavily it is tagged — the list is *retrospective*, not a
-      pre-flight. Making it a true pre-flight means running G2P over the
-      chapter without synthesising and collecting the fallbacks, which is the
-      genuinely useful version and is not built.
+      **The pre-flight is now real — built 2026-08-25.** `rank` maps over the
+      guessed log, so until now a word the engine had never guessed at could
+      not appear however heavily it was tagged: the list was *retrospective*,
+      and the reader had to hear a name mangled once before they could fix it.
+
+      G2P turns out to be separable from synthesis, which is the whole reason
+      this is possible: `KokoroAneManager.phonemes(for:)` runs the frontend and
+      nothing else, and the fallback observer fires from that same path —
+      upstream documents the observer as existing precisely so a frontend can
+      offer "words I guessed at" for correction. `KokoroCastPreflight.scan`
+      phonemises the chapter, records what fell through, and the list is
+      populated before the first tap. Reached from *Scan this chapter* in the
+      pronunciation list.
+
+      Two things it is careful about. **There is exactly one fallback
+      observer**, and `setNeuralFallbackObserver` replaces rather than adds, so
+      scanning during playback would redirect the engine's own guesses into the
+      scan's collector and lose the very words the reader wants — refused with
+      `.playbackActive`, and the observer is always cleared afterwards.
+      **`isAvailable` matches the three conditions playback uses to choose Core
+      ML** (safe OS line, pack installed, engine not already abandoned on this
+      device), not just the pack, so the button does not appear where it cannot
+      work.
+
+      **Core ML only, and unverified on a device.** sherpa-onnx takes text and
+      returns audio with no exposed frontend, so on iOS 26 there is nothing to
+      ask. The simulator has no pack, so `isAvailable` is false there and the
+      button cannot be exercised — the guards are unit-tested, the scan itself
+      is not.
 
       **NER is not wired either**, for the same reason: `recognisedNames(in:)`
       needs the chapter text, and the settings sheet has the work but not its
@@ -1524,8 +1547,11 @@ of. Relevant when tuning pause lengths.
       text-only regex matches 74/104 headings; "Preface" and a work's title
       match nothing. Fine while Readium supplies `cssSelector`, silent
       degradation if it ever does not.
-- [ ] **`ReaderSpeechSettingsSection` exceeds the SwiftLint type-body-length
-      warning** (556 lines as of 2026-08-25, up from 532) after gaining the
+- [ ] **Two speech files exceed their SwiftLint length warnings.**
+      `ReaderSpeechController` is at 780 lines against a 700 limit (it was
+      already over at 760; the pronunciation pre-flight added the rest).
+      `ReaderSpeechSettingsSection` exceeds type-body-length (556 lines as of
+      2026-08-25, up from 532) after gaining the
       Core ML section and the Developer Settings link. Non-blocking, but it
       only grows: the natural split is to lift each engine's block into its
       own view, the way `ReaderSpeechDeveloperSettingsView` already is.

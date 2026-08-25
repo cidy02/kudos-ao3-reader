@@ -13,12 +13,18 @@ struct ReaderSpeechSettingsSheet: View {
     /// The reader knows which work is open; global Settings does not.
     var characterTags: [String] = []
 
+    /// The reader can phonemise the open chapter; global Settings cannot.
+    var onScanChapter: (() async -> Int?)?
+
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
-                ReaderSpeechSettingsSection(characterTags: characterTags)
+                ReaderSpeechSettingsSection(
+                    characterTags: characterTags,
+                    onScanChapter: onScanChapter
+                )
             }
             .navigationTitle("Read Aloud")
             .navigationBarTitleDisplayMode(.inline)
