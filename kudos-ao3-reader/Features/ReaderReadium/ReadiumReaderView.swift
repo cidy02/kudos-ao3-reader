@@ -301,7 +301,17 @@ struct ReadiumReaderView: View {
                 initialChapterPosition: currentAO3Chapter
             )
             .sheet(isPresented: $showingSpeechSettings) {
-                ReaderSpeechSettingsSheet()
+                // `workCharacters` is only populated once the work has been
+                // refreshed from AO3 — EPUB subjects arrive uncategorised — so
+                // fall back to the flat union rather than showing nothing.
+                // `namesFromCharacterTags` strips the `(Fandom)` disambiguator
+                // either way, so passing the wider set costs only precision in
+                // a prior.
+                ReaderSpeechSettingsSheet(
+                    characterTags: work.workCharacters.isEmpty
+                        ? work.workTags
+                        : work.workCharacters + work.workRelationships
+                )
             }
             .sheet(item: $correctingPronunciation) { target in
                 ReaderPronunciationEditor(word: target.word, ipa: target.existing) { word, ipa in

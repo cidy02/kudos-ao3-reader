@@ -10,12 +10,15 @@ import SwiftUI
 /// the first is worse than no second surface. It carries the audition harness
 /// with it, so a setting can be changed and heard without closing the sheet.
 struct ReaderSpeechSettingsSheet: View {
+    /// The reader knows which work is open; global Settings does not.
+    var characterTags: [String] = []
+
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
-                ReaderSpeechSettingsSection()
+                ReaderSpeechSettingsSection(characterTags: characterTags)
             }
             .navigationTitle("Read Aloud")
             .navigationBarTitleDisplayMode(.inline)
