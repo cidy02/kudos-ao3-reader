@@ -19,11 +19,10 @@
              resources: [
                  // Keep .process: .copy of a Resources-named directory breaks Apple code signing on iOS.
                  .process("TTS/LuxTts/G2p/Resources")
-@@ -51,25 +46,6 @@
-             name: "MachTaskSelfWrapper",
+@@ -52,25 +47,6 @@
              path: "Sources/MachTaskSelfWrapper",
              publicHeadersPath: "include"
--        ),
+         ),
 -        .executableTarget(
 -            name: "FluidAudioCLI",
 -            dependencies: ["FluidAudio"],
@@ -42,9 +41,10 @@
 -            resources: [
 -                .process("TTS/LuxTts/Resources")
 -            ]
-         ),
+-        ),
      ],
      cxxLanguageStandard: .cxx17
+ )
 --- a/Sources/FluidAudio/TTS/G2P/G2PModel.swift
 +++ b/Sources/FluidAudio/TTS/G2P/G2PModel.swift
 @@ -215,8 +215,14 @@
@@ -161,7 +161,7 @@
          if joined.isEmpty {
              throw KokoroAneError.inputProcessingFailed(
                  "produced no phonemes for input '\(trimmed)'")
-@@ -109,6 +130,114 @@
+@@ -109,6 +130,131 @@
          return joined
      }
  
@@ -192,6 +192,16 @@
 +        for index in parts.indices {
 +            let word = parts[index].sourceWord
 +            guard word == "the" || word == "The" || word == "to" || word == "To" else {
++                continue
++            }
++            // A custom entry is tier 1 and outranks everything, including this
++            // pass. Without this guard the reader's own correction is looked
++            // up, then silently overwritten here in every context — and the
++            // public API documents `["to": "tə"]` as its example, so this is
++            // the exact case someone would try first.
++            if customLexicon[word] != nil
++                || customLexicon[Self.normalizeKey(word)] != nil
++            {
 +                continue
 +            }
 +            let vowel = futureVowel(after: index, in: parts)
@@ -227,7 +237,14 @@
 +    /// is no next part. Otherwise scan the next part's phonemes.
 +    private func futureVowel(after index: Int, in parts: [PhonemePart]) -> Bool? {
 +        let (_, punct) = splitTrailingPunctuation(parts[index].surface)
-+        if !punct.isEmpty { return nil }
++        // Only a *non-quote* mark ends the context. Misaki excludes `"`, `“`
++        // and `”` from `NON_QUOTE_PUNCTS` precisely so a quoted title stays
++        // transparent: `to “apple”` must still see the vowel and take `tʊ`.
++        // The set below is right; it was this earlier shortcut that treated
++        // every attached mark, quotes included, as unknown.
++        if punct.contains(where: { Self.misakiNonQuotePuncts.contains($0) }) {
++            return nil
++        }
 +        let next = index + 1
 +        guard next < parts.count else { return nil }
 +        return Self.classifyFutureVowel(parts[next].surface)
@@ -276,7 +293,7 @@
      // MARK: - Word resolution
  
      private func resolveWord(
-@@ -144,13 +273,65 @@
+@@ -144,13 +290,65 @@
                      + "falling back to the bundled pronunciation")
          }
  
@@ -348,7 +365,7 @@
          }
  
          // After a full lexicon miss, read strict ASCII all-caps tokens of a
-@@ -210,13 +391,297 @@
+@@ -210,13 +408,297 @@
          return resolved.joined(separator: " ")
      }
  
@@ -652,6 +669,40 @@
      private func spellAsLetterNames(_ word: String) -> String? {
          EnglishInitialisms.spell(word) { caseSensitiveWordToPhonemes[$0] }
      }
+--- a/Sources/FluidAudio/TTS/KokoroAne/KokoroAneManager.swift
++++ b/Sources/FluidAudio/TTS/KokoroAne/KokoroAneManager.swift
+@@ -304,11 +304,30 @@
+     /// and vocab-supported punctuation kept as prosody/pause tokens.
+     private func phonemize(text: String) async throws -> String {
+         let phonemizer = await ensureEnglishPhonemizer()
++        let observer = neuralFallbackObserver
+         return try await phonemizer.phonemize(text) { word in
+-            try await G2PModel.shared.phonemize(word: word)
++            // Every word arriving here missed the custom lexicon, the Misaki
++            // lexicon and every recovery — it is a genuine guess. That is the
++            // only place the distinction is visible, so it is the only place
++            // the observer can be told.
++            observer?(word)
++            return try await G2PModel.shared.phonemize(word: word)
+         }
+     }
+ 
++    /// Called with each word that reaches the neural G2P fallback.
++    ///
++    /// Exists so a frontend can offer "words I guessed at" for correction.
++    /// The words are the ones no dictionary knew — in fanfiction, mostly
++    /// character names — and they are exactly the set worth showing a reader.
++    /// Purely observational: it cannot change what is spoken.
++    private var neuralFallbackObserver: (@Sendable (String) -> Void)?
++
++    /// Install or clear the fallback observer. Pass `nil` to stop observing.
++    public func setNeuralFallbackObserver(_ observer: (@Sendable (String) -> Void)?) {
++        neuralFallbackObserver = observer
++    }
++
+     /// Build (and cache) the English frontend: chain vocab → allowed
+     /// token/punctuation sets, Misaki lexicon cache → weak-form maps.
+     /// On any failure returns a transient G2P-only frontend (current
 --- a/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
 +++ b/Sources/FluidAudio/TTS/KokoroAne/Pipeline/KokoroAneModelStore.swift
 @@ -209,6 +209,12 @@
