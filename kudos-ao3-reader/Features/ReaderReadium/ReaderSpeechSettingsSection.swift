@@ -132,6 +132,15 @@ struct ReaderSpeechSettingsSection: View {
                 LabeledContent("Pronunciations", value: pronunciationCountLabel)
             }
 
+            NavigationLink {
+                ReaderSpeechDeveloperSettingsView()
+            } label: {
+                LabeledContent(
+                    "Developer Settings",
+                    value: ReaderSpeechTuning.isModified ? "Modified" : "Default"
+                )
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Speed")

@@ -986,7 +986,40 @@ mispronounced name is permanent.
       `KokoroSemanticBlock` carries `selector` but only ever tests it for
       `h1-6`, `blockquote`, `hr` — the inline signal is discarded.
 
-- [ ] **Fanfic's own conventions.** `[proposal]` ALL-CAPS, `*asterisks*`,
+- [x] **Fanfic's own conventions — measured 2026-08-25; mostly nothing to do.**
+      `[measured]` Counted across 98,384 corpus paragraphs. The honest result
+      is that these either have no lever or are already handled correctly, and
+      one of them would be actively wrong to implement.
+
+      | convention | count | verdict |
+      |---|---|---|
+      | ALL-CAPS run (3+ words) | 1,106 | no lever |
+      | `*asterisks*` | 190 | **not emphasis** — already right |
+      | elongated vowels | 149 | already de-elongated |
+      | `_underscores_` | 27 | negligible |
+      | `~tildes~` | 9 | negligible |
+      | `s p a c e d  o u t` | 2 | negligible |
+
+      **`*asterisks*` are stage directions, not emphasis.** The corpus says so
+      plainly: `*hours later*`, `*click*`, `*ahem*`, `*sighs*`. Treating them
+      as emphasis — which is what this item assumed — would stress roleplay
+      notation. They are already handled correctly by two mechanisms that
+      happen to compose: the scene-break filter requires the *whole* line be
+      decorative, so `***` becomes a scene pause while `*ahem*` does not; and
+      `*` is absent from Kokoro's vocab, so `encode` drops it and the word is
+      spoken bare.
+
+      **ALL-CAPS is the common one and has no phoneme lever.** It is shouting,
+      but each word resolves from the lower-cased lexicon and is spoken
+      normally. Kokoro ignores capitalisation entirely, and the emphasis
+      measurement above already established that 68.1% of emphasised words
+      carry primary stress and therefore have nothing to promote. Adding `!`
+      is the only remaining idea and is speculative — it changes punctuation
+      the author did not write.
+
+      Elongated vowels (`Noooo`) are already collapsed by the de-elongation
+      stemmer, which is a deliberate trade: the lexicon form is intelligible,
+      the held vowel is not reproducible without a duration lever we lack. `[proposal]` ALL-CAPS, `*asterisks*`,
       stretched vowels (`noooooo` → lengthened `ː`), interrobangs, trailing `…`.
 
 ### Phase 4b — on-device LLM as an oracle for the ambiguous residue

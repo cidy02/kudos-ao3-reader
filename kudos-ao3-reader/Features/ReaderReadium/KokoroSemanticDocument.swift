@@ -19,14 +19,19 @@ nonisolated public enum KokoroBoundary: Int, Sendable, Comparable {
         lhs.rawValue < rhs.rawValue
     }
 
+    /// Read from `ReaderSpeechTuning` rather than hard-coded, so the developer
+    /// panel changes real playback and not just the audition sample. Every
+    /// value defaults to the constant it replaced, so an untouched install is
+    /// byte-for-byte the same behaviour.
     public var pauseSeconds: Double {
+        let tuning = ReaderSpeechTuning.current
         switch self {
-        case .none: 0
-        case .continuation: 0.14
-        case .line: 0.22
-        case .paragraph: 0.32
-        case .scene: 0.85
-        case .chapter: 1.25
+        case .none: return 0
+        case .continuation: return tuning.continuationPause
+        case .line: return tuning.linePause
+        case .paragraph: return tuning.paragraphPause
+        case .scene: return tuning.scenePause
+        case .chapter: return tuning.chapterPause
         }
     }
 }
@@ -191,7 +196,10 @@ nonisolated enum KokoroSemanticDocument {
         // `<br>` seams are a different boundary (shared cssSelector) and
         // still flush before this runs, so quoted chat-fic lines keep the
         // audible `.line` pause.
-        if (open.kind == .dialogue) != (kind == .dialogue) { return false }
+        // Toggleable so the barrier can be A/B'd by ear against merging.
+        let barrierEnabled = ReaderSpeechTuning.current.dialogueBarrier
+        let exactlyOneIsDialogue = (open.kind == .dialogue) != (kind == .dialogue)
+        if barrierEnabled, exactlyOneIsDialogue { return false }
         return isBody(open.kind) && isBody(kind)
     }
 
@@ -208,6 +216,7 @@ nonisolated enum KokoroSemanticDocument {
     ) -> Bool {
         if open.kind == .heading || open.kind == .sceneBreak { return false }
         if kind == .heading || kind == .sceneBreak { return false }
+        guard ReaderSpeechTuning.current.lineBreakPauses else { return false }
         guard let left = open.selector, let right = selector else { return false }
         return left == right
     }

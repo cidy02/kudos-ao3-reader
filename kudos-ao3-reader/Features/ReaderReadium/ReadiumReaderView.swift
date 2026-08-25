@@ -136,6 +136,9 @@ struct ReadiumReaderView: View {
     /// The word the reader picked "Fix Pronunciation" on. Wrapped because
     /// `String` is not `Identifiable` and `.sheet(item:)` needs identity.
     @State private var correctingPronunciation: PronunciationTarget?
+    /// Read Aloud settings, reachable by long-pressing the fan button before
+    /// playback has started.
+    @State private var showingSpeechSettings = false
     /// Note editor queued from inside the Contents sheet, opened only once that
     /// sheet has finished dismissing (see the `onDismiss` on the panel sheet).
     @State private var pendingNoteAfterPanelDismiss: ReadingAnnotation?
@@ -297,6 +300,9 @@ struct ReadiumReaderView: View {
                 context: .init(savedWork: work),
                 initialChapterPosition: currentAO3Chapter
             )
+            .sheet(isPresented: $showingSpeechSettings) {
+                ReaderSpeechSettingsSheet()
+            }
             .sheet(item: $correctingPronunciation) { target in
                 ReaderPronunciationEditor(word: target.word, ipa: target.existing) { word, ipa in
                     let store = KokoroPronunciationStore()
@@ -1299,7 +1305,12 @@ struct ReadiumReaderView: View {
             withAnimation(.snappy(duration: 0.35)) {
                 toggleReadingAloud()
             }
-        })
+        }
+        // Long press reaches Read Aloud settings without starting playback.
+        // The mini-player's waveform is the other way in, and that only exists
+        // once something is already being read — so before this, the settings
+        // were unreachable in the state where you most want to change them.
+        .withLongPress { showingSpeechSettings = true })
         let rotationLocked = orientationLock.isLocked
         actions.append(ReaderFanRoundAction(
             id: "rotationLock",
