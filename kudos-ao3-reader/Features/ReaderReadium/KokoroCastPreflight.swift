@@ -69,9 +69,6 @@ enum KokoroCastPreflight {
         let manager = try await CoreMLKokoroPackInstaller.shared.readyManager()
         let collector = Collector()
         await manager.setNeuralFallbackObserver { word in collector.add(word) }
-        // Always cleared: leaving a scan's observer installed would send the
-        // next playback's guesses into a collector nobody reads.
-        defer { Task { await manager.setNeuralFallbackObserver(nil) } }
 
         for text in texts {
             if Task.isCancelled { break }
@@ -80,12 +77,27 @@ enum KokoroCastPreflight {
             _ = try? await manager.phonemes(for: text)
         }
         // Same text, one pass, while we have it in hand.
-        return ScanResult(
+        let result = ScanResult(
             newWords: collector.flush(),
             recognisedNames: KokoroCastDiscovery.recognisedNames(
                 in: texts.joined(separator: " ")
             )
         )
+        // Cleared inline, deliberately not in a `defer`.
+        //
+        // Swift has no async `defer`, so doing this as
+        // `defer { Task { await ...(nil) } }` hands the clear to an
+        // unstructured task that can run *after* a later `speak()` has
+        // installed playback's own observer — wiping it, and silently costing
+        // every guessed word for that session. That is exactly the clobbering
+        // the `.playbackActive` guard above prevents, arriving from the other
+        // side.
+        //
+        // Nothing between the install and here throws (the loop swallows with
+        // `try?`), so this is reached on every path, cancellation included. Any
+        // future `try` added above must clear before it propagates.
+        await manager.setNeuralFallbackObserver(nil)
+        return result
         #else
         throw ScanError.unavailable
         #endif
