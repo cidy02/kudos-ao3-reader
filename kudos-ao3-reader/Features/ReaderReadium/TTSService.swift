@@ -67,8 +67,8 @@ public struct TTSSpeechUnit: Hashable, Sendable {
     /// `<p>`); units from adjacent paragraphs do not. Apple cannot insert
     /// silence inside an `AVSpeechUtterance`, so each seam is its own
     /// utterance and `postUtteranceDelay` (0.22 s, matching Kokoro's
-    /// `.line`) carries the pause. `sentenceChunks` still concatenates —
-    /// that path is G2P context for Sherpa, not Apple.
+    /// `.line`) carries the pause. `sentenceChunks` groups the same way for
+    /// Sherpa, so all three engines agree about where a line ends.
     @MainActor
     public static func packedChunks(
         from units: [TTSSpeechUnit],
@@ -91,7 +91,18 @@ public struct TTSSpeechUnit: Hashable, Sendable {
         from units: [TTSSpeechUnit],
         maxLength: Int = 250
     ) -> [TTSSpeechUnit] {
-        splitIntoContextualSentences(from: units, maxLength: maxLength)
+        // Same `<br>` grouping the Apple path uses. Sherpa is the only caller,
+        // and without this the iOS 26 engine read chat fic, epistolary works
+        // and verse as running prose while Core ML and Apple both broke the
+        // lines — three engines disagreeing about the same chapter is worse
+        // than any one of them being wrong.
+        //
+        // Sherpa generates one chunk per call and plays them in sequence, so a
+        // split is audible on its own without a pause parameter to thread
+        // through.
+        groupsSeparatedByLineBreakSeams(units).flatMap { group in
+            splitIntoContextualSentences(from: group, maxLength: maxLength)
+        }
     }
 
     /// Semantic + phoneme-aware utterances for Neural Engine Kokoro. Apple
