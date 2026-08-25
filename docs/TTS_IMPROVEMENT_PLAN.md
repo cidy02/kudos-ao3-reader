@@ -1178,13 +1178,45 @@ caching the decision with the work makes it stable after the first pass.
 
 ### Phase 5 — hard or experimental
 
-- [ ] **Cross-chunk prosody context.** `[proposal]` Every chunk is synthesized
-      with no knowledge of the one before it, so prosody resets at every
-      boundary. This is the "reading a list of sentences" quality that
-      separates chunked TTS from continuous, and it is the real ceiling on
-      flow — no amount of pause tuning reaches it. Standard fix: carry a few
-      words of context into each chunk and trim the overlap from the audio.
-      Costs synthesis time and is fiddly.
+- [ ] **Cross-chunk prosody context — feasibility settled 2026-08-25, not
+      built.** `[code]` Every chunk is synthesized with no knowledge of the one
+      before it, so prosody resets at every boundary. This is the "reading a
+      list of sentences" quality that separates chunked TTS from continuous,
+      and it is the real ceiling on flow — no amount of pause tuning reaches
+      it.
+
+      **The style-persistence route (§6.2) does not work here, and §6.2 should
+      not be read as saying it does.** Both public entry points take
+      `voice: String?` — a *name* — and `runChain` resolves the pack
+      internally; there is no style-vector parameter. `KokoroVoiceBlend` gets
+      its blend in by writing a synthetic `[510, 256]` pack to disk and
+      referring to it by name, so per-chunk persistence would mean a ~522 KB
+      file per utterance, and we still could not observe which row the previous
+      chunk selected. Not viable without patching FluidAudio.
+
+      **The overlap route is viable, and exactly computable.** Everything it
+      needs is already public on `KokoroAneSynthesisResult`:
+      `predictedDurations` (acoustic-frame counts per input token, aligned
+      one-to-one with `inputIds`) and `acousticFrames`. Upstream documents
+      those as existing so callers can derive timestamps "without re-aligning
+      the synthesized audio", which is precisely the trim problem. So:
+
+      1. Prepend the previous chunk's last *n* phonemes to this chunk's IPA.
+      2. Synthesize.
+      3. `P` = prefix tokens. `KokoroAneVocab` is public including its
+         `map: [Character: Int32]`, and `encode` **skips unmapped characters**
+         — so `P` is the count of prefix characters present in the map, not
+         `prefix.count`. Getting that wrong clips real speech.
+      4. Trim `predictedDurations[1...P]` frames (index 0 is BOS), converting
+         frames to samples by `samples.count / acousticFrames`.
+
+      Costs one extra synthesis of *n* phonemes per chunk. **Deliberately not
+      built:** it puts a computed cut at every chunk boundary, and whether it
+      helps or introduces an audible seam is a question only listening can
+      answer — on a device, since the simulator has no pack. Build it behind a
+      Developer Settings control defaulting to *off* (carry = 0 phonemes), the
+      way the rest of the unproven values are, so the shipped path is unchanged
+      until someone has heard it.
 
 - [ ] **Non-English passages.** `[proposal]` English G2P mangles them. The pack
       ships English voices only and the English variant has no other frontend.
@@ -1331,9 +1363,17 @@ a reasonable extension, and must be labelled as an extension when tried.
 per sentence via diffusion conditioned on the target text, then blends it with
 the previous. Kokoro has no diffusion sampler — the vector is a deterministic
 lookup by phoneme count. So the analogue is blending two length-selected rows,
-which is a materially weaker claim than "StyleTTS 2 does this". Worth trying,
-since `KokoroVoiceBlend` already SLERPs style vectors, but the 0.7 carries no
-authority here.
+which is a materially weaker claim than "StyleTTS 2 does this".
+
+**And we cannot deliver it anyway** (checked 2026-08-25). `KokoroVoiceBlend`
+does SLERP style vectors, but it applies them by writing a synthetic voice pack
+to disk and passing its *name* — `synthesizeFromPhonemes(_:voice:speed:)` takes
+`String?` and resolves the pack internally, with no style-vector parameter. A
+per-chunk blend would mean a ~522 KB file per utterance, and the row the
+previous chunk actually used is not observable. Cross-chunk continuity is
+reachable through the **overlap-and-trim** route instead (Phase 5), which needs
+no patch. Left here because the 0.7 discrepancy is worth keeping recorded if
+anyone patches FluidAudio later.
 
 ### 6.3 AO3 rewrites linebreaks before storing — and that *helps*
 
