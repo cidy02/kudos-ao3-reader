@@ -189,21 +189,11 @@ struct ReaderFanMenu: View {
             return action.isEnabled ? Color.primary : Color.primary.opacity(0.45)
         }()
 
-        Button(action: action.action) {
+        LongPressableRoundAction(action: action) {
             roundActionGlyph(action, color: glyphColor)
                 .frame(width: Self.roundActionWidth, height: Self.roundActionHeight)
                 .contentShape(.capsule)
         }
-        .buttonStyle(.plain)
-        // Long press is additive: the tap action is unchanged, and a control
-        // without one behaves exactly as before.
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
-                guard action.isEnabled, let longPress = action.longPressAction else { return }
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                longPress()
-            }
-        )
         .background {
             if action.isEmphasized {
                 Capsule().fill(action.tint)
@@ -225,6 +215,59 @@ struct ReaderFanMenu: View {
             }
         }
         .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
+    }
+
+    /// A round action whose tap and long press do not both fire.
+    ///
+    /// `simultaneousGesture` runs *alongside* the button's own gesture, so a
+    /// hold satisfies the long press **and** the button's tap on release. On
+    /// Read Aloud that meant holding opened settings and toggled playback —
+    /// exactly what the long press exists to avoid. The flag swallows the tap
+    /// that follows a completed hold.
+    ///
+    /// A separate view because the flag needs `@State`, which a helper
+    /// function cannot hold.
+    private struct LongPressableRoundAction<Content: View>: View {
+        let action: ReaderFanRoundAction
+        @ViewBuilder var content: () -> Content
+        @State private var longPressFired = false
+        @State private var gestureActive = false
+
+        var body: some View {
+            Button {
+                if longPressFired {
+                    longPressFired = false
+                    return
+                }
+                action.action()
+            } label: {
+                content()
+            }
+            .buttonStyle(.plain)
+            // Clears once per touch, so a hold the user slides out of —
+            // which fires the long press but never delivers the button's tap
+            // — cannot leave the flag set and swallow the *next* real tap.
+            // `gestureActive` is what makes it once-per-touch: `onChanged`
+            // also fires on finger movement, and clearing on every one of
+            // those would wipe the flag the hold just set.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        guard !gestureActive else { return }
+                        gestureActive = true
+                        longPressFired = false
+                    }
+                    .onEnded { _ in gestureActive = false }
+            )
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                    guard action.isEnabled, let longPress = action.longPressAction else { return }
+                    longPressFired = true
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    longPress()
+                }
+            )
+        }
     }
 
     /// Symbol + transitions. Rotation lock also spins the circular arrows once

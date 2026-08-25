@@ -267,6 +267,75 @@ final class TTSSpeechUnitTests: XCTestCase {
         XCTAssertEqual(chunks.map(\.text), ["sincerely", "Ari"])
     }
 
+
+    // MARK: - Apple's structural pauses
+
+    /// Apple used a flat postUtteranceDelay for every utterance, so a chapter
+    /// break sounded exactly like a mid-sentence split and the developer
+    /// panel's pause sliders did nothing on that engine.
+    func testPackedChunksTagsALineBoundaryAtASeam() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("hey", selector: "html > body > p:nth-child(1)"),
+            unit("are you there", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.pauseAfter), [.line, .paragraph])
+    }
+
+    /// The final chunk closes a paragraph, not a line — otherwise every
+    /// paragraph would end with the shorter gap.
+    func testPackedChunksEndsOnAParagraphBoundary() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("A complete sentence.", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.pauseAfter), [.paragraph])
+    }
+
+    /// A unit built directly carries no boundary, so callers that predate this
+    /// keep the flat delay rather than silently changing.
+    func testAUnitBuiltDirectlyHasNoBoundary() {
+        XCTAssertNil(TTSSpeechUnit(text: "plain").pauseAfter)
+    }
+
+    /// The defect this pins: labelling by position made every mid-group
+    /// boundary a `.continuation` (0.14s). Real paragraph breaks are the
+    /// common case there, and that would have shortened them from the 0.22s
+    /// that shipped — a regression dressed up as an improvement.
+    func testAParagraphBreakIsNotLabelledAContinuation() {
+        let first = String(repeating: "The rain had not stopped falling. ", count: 5)
+        let second = String(repeating: "He said nothing at all to her. ", count: 5)
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit(first, selector: "html > body > p:nth-child(1)"),
+            unit(second, selector: "html > body > p:nth-child(2)")
+        ])
+        XCTAssertGreaterThan(chunks.count, 1)
+        XCTAssertFalse(chunks.dropLast().contains { $0.pauseAfter == .continuation })
+        XCTAssertEqual(chunks.last?.pauseAfter, .paragraph)
+    }
+
+    /// A sentence too long for one utterance is the only true continuation:
+    /// the split falls mid-sentence, so the gap should be the shortest one.
+    func testALengthDrivenSplitIsAContinuation() {
+        let long = String(repeating: "and the rain kept falling on the roof ", count: 12)
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit(long, selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertGreaterThan(chunks.count, 1)
+        XCTAssertEqual(chunks.first?.pauseAfter, .continuation)
+    }
+
+    /// Kokoro packs consecutive sentences of one paragraph into a single
+    /// utterance, so it has no boundary for the gap between them. Apple splits
+    /// them only because of its length cap, and `nil` keeps the flat sentence
+    /// pause that already shipped instead of inventing a shorter one.
+    func testASentenceBoundaryInsideAParagraphKeepsTheFlatPause() {
+        let sentence = String(repeating: "The clock ticked on and on and on. ", count: 8)
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit(sentence, selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertGreaterThan(chunks.count, 1)
+        XCTAssertNil(chunks.first?.pauseAfter)
+    }
+
     private func unit(_ text: String, selector: String) -> TTSSpeechUnit {
         TTSSpeechUnit(
             text: text,

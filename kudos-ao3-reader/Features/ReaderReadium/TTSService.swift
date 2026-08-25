@@ -53,10 +53,27 @@ public enum TTSServiceStatus: Equatable {
 public struct TTSSpeechUnit: Hashable, Sendable {
     public let text: String
     public let locator: Locator?
+    /// Structural gap that should follow this unit.
+    ///
+    /// Kokoro gets its pauses from `KokoroUtterance`, which carries the same
+    /// idea. Apple had none: every utterance took a flat `postUtteranceDelay`,
+    /// so a chapter break sounded exactly like a mid-sentence split. Carrying
+    /// the boundary here lets the fallback engine use the same hierarchy —
+    /// and lets the developer panel's pause sliders affect it rather than
+    /// silently doing nothing on that path.
+    ///
+    /// `nil` means "not classified", which keeps the old flat behaviour for
+    /// any caller that builds units directly.
+    public let pauseAfter: KokoroBoundary?
 
-    public init(text: String, locator: Locator? = nil) {
+    public init(
+        text: String,
+        locator: Locator? = nil,
+        pauseAfter: KokoroBoundary? = nil
+    ) {
         self.text = text
         self.locator = locator
+        self.pauseAfter = pauseAfter
     }
 
     /// Keeps the system engine's existing paragraph-oriented chunking while
@@ -74,11 +91,54 @@ public struct TTSSpeechUnit: Hashable, Sendable {
         from units: [TTSSpeechUnit],
         maxLength: Int = 250
     ) -> [TTSSpeechUnit] {
-        groupsSeparatedByLineBreakSeams(units).flatMap { group in
-            packAdjacent(
+        // Classify each boundary by what actually separates the two chunks.
+        // An earlier version labelled purely by position, which made every
+        // mid-group boundary a `.continuation` (0.14s) — but `<br>` seams are
+        // ~1% of paragraphs, so almost all of those are real paragraph breaks
+        // and it would have *shortened* them from the old flat 0.22s.
+        let groups = groupsSeparatedByLineBreakSeams(units)
+        return groups.enumerated().flatMap { index, group in
+            let isLastGroup = index == groups.count - 1
+            let packed = packAdjacent(
                 splitIntoContextualSentences(from: group, maxLength: maxLength),
                 maxLength: maxLength
             )
+            return packed.enumerated().map { position, unit in
+                let next = position + 1 < packed.count ? packed[position + 1] : nil
+                let boundary: KokoroBoundary?
+                if let next {
+                    if unit.locator?.locations.cssSelector
+                        != next.locator?.locations.cssSelector {
+                        // Different source block: a paragraph break.
+                        boundary = .paragraph
+                    } else if !KokoroSemanticDocument.endsUtterance(unit.text) {
+                        // Same block, no terminal punctuation: this is the
+                        // length-driven split of one long sentence.
+                        //
+                        // `endsUtterance` deliberately does not treat a curly
+                        // close-quote as a wrapper — see the barrier and
+                        // `curlyQuotedDialogueDoesNotSwallowTheNextParagraph`.
+                        // So a fragment ending `."` lands here and takes the
+                        // shorter gap. That only happens *within* one block
+                        // (separate blocks take the `.paragraph` branch
+                        // above), where a rapid exchange is the likely
+                        // content anyway.
+                        boundary = .continuation
+                    } else {
+                        // Same block, sentence ended. Kokoro has no boundary
+                        // for this because it packs such sentences into one
+                        // utterance; `nil` keeps the flat sentence pause,
+                        // which is what shipped and is already right.
+                        boundary = nil
+                    }
+                } else {
+                    // End of a group is a `<br>` seam, except the last.
+                    boundary = isLastGroup ? .paragraph : .line
+                }
+                return TTSSpeechUnit(
+                    text: unit.text, locator: unit.locator, pauseAfter: boundary
+                )
+            }
         }
     }
 

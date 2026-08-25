@@ -6,8 +6,12 @@ import SwiftUI
 ///
 /// Everything here changes **real playback**, not the audition sample — a
 /// control that only moved the preview would answer a question nobody asked.
-/// Values apply to the next utterance, so a change made mid-chapter is audible
-/// within a sentence or two without restarting.
+///
+/// When a change lands differs by control, and each section says so. Pauses
+/// are read as a clip is assembled, so they reach the next clip not already
+/// prefetched. Chunk sizes and the boundary toggles are consumed when the
+/// chapter's utterance plan is built — once, before playback — so they apply
+/// from the next chapter or after restarting Read Aloud.
 ///
 /// Every default is the shipped constant, and the header says plainly when
 /// anything has been moved — a listening report is worthless if it is unclear
@@ -24,8 +28,6 @@ struct ReaderSpeechDeveloperSettingsView: View {
     @AppStorage(ReaderSpeechTuning.chapterPauseKey)
     private var chapterPause = ReaderSpeechTuning.defaultChapterPause
 
-    @AppStorage(ReaderSpeechTuning.packTargetKey)
-    private var packTarget = ReaderSpeechTuning.defaultPackTarget
     @AppStorage(ReaderSpeechTuning.packMinKey)
     private var packMin = ReaderSpeechTuning.defaultPackMin
     @AppStorage(ReaderSpeechTuning.packMaxKey)
@@ -39,6 +41,13 @@ struct ReaderSpeechDeveloperSettingsView: View {
     var body: some View {
         List {
             Section {
+                Label(
+                    "Sizes and boundaries affect Kokoro only. Pauses affect "
+                        + "Kokoro and Apple; Sherpa has no structural pauses.",
+                    systemImage: "info.circle"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 pause("Between chunks", $continuationPause,
                       note: "Mid-sentence split. Shipped 0.14s.")
                 pause("Line break", $linePause,
@@ -50,12 +59,18 @@ struct ReaderSpeechDeveloperSettingsView: View {
             } header: {
                 Text("Pauses")
             } footer: {
-                Text("Applies to the next utterance, so changes are audible "
-                    + "without restarting playback.")
+                // Corrected after review: the original claim was wrong.
+                Text("Pauses reach the next clip that has not been prepared "
+                    + "yet — playback prefetches one ahead, so expect a "
+                    + "sentence or two of delay.")
             }
 
             Section {
-                phonemes("Target", $packTarget, range: ReaderSpeechTuning.packRange)
+                // No "Target" control. `KokoroPhonemeBudget.preferredTarget`
+                // exists but production packing never reads it — grouping is
+                // driven by `preferredMax` and the orphan-tail merge by
+                // `preferredMin`. A slider for it would move a number nothing
+                // consults, which is worse than not offering it.
                 phonemes("Minimum", $packMin, range: ReaderSpeechTuning.packRange)
                 phonemes("Maximum", $packMax, range: ReaderSpeechTuning.packRange)
                 phonemes("Split above", $splitThreshold, range: ReaderSpeechTuning.splitRange)
@@ -77,7 +92,10 @@ struct ReaderSpeechDeveloperSettingsView: View {
                 Text("Boundaries")
             } footer: {
                 Text("Off restores the older behaviour of merging these into "
-                    + "the surrounding prose, for comparison.")
+                    + "the surrounding prose. Chunking is decided for the whole "
+                    + "chapter before playback starts, so these and the sizes "
+                    + "above apply from the next chapter or after restarting "
+                    + "Read Aloud — not mid-chapter.")
             }
 
             Section {
@@ -100,7 +118,6 @@ struct ReaderSpeechDeveloperSettingsView: View {
         .onChange(of: paragraphPause) { ReaderSpeechTuning.invalidate() }
         .onChange(of: scenePause) { ReaderSpeechTuning.invalidate() }
         .onChange(of: chapterPause) { ReaderSpeechTuning.invalidate() }
-        .onChange(of: packTarget) { ReaderSpeechTuning.invalidate() }
         .onChange(of: packMin) { ReaderSpeechTuning.invalidate() }
         .onChange(of: packMax) { ReaderSpeechTuning.invalidate() }
         .onChange(of: splitThreshold) { ReaderSpeechTuning.invalidate() }
