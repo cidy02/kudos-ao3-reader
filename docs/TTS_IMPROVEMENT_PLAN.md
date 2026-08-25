@@ -430,7 +430,7 @@ why this phase is about quality and not tidiness.
       design. The cost is **fragmentation**: every extra utterance is another
       independent synthesis with its own prosody reset (see Phase 5).
 
-- [ ] **~~28% of utterances fall below the packer's own minimum.~~** superseded `[measured]`
+- [x] **~~28% of utterances fall below the packer's own minimum.~~** superseded `[measured]`
       `[code]` Structural, not stylistic. `packBlock` runs **per block** and
       `packWholeSentences` can only group sentences *within* one block, so
       every paragraph's remainder is emitted alone however short it is;
@@ -602,11 +602,11 @@ mispronounced name is permanent.
 
       Correcting a word forgets it from the list, so it moves into Corrections
       rather than appearing in both.
-- [ ] **Adopt the established inline syntax.** `[prior-art]` Kokoro-FastAPI and
+- [x] **Adopt the established inline syntax.** `[prior-art]` Kokoro-FastAPI and
       MisakiSwift both use `[Worcester](/wˈʊstər/)`. Reuse rather than invent —
       it gives the respelling UI a serialized form and lets power users paste
       overrides they already have.
-- [ ] **Contextual pronunciation: `the` sandhi — port it, don't invent it.**
+- [x] **Contextual pronunciation: `the` sandhi — port it, don't invent it.**
       `[measured]` `[prior-art]` Two facts found by measurement, both of which
       change this item:
 
@@ -732,7 +732,7 @@ mispronounced name is permanent.
       weak form, inspect the next token's first phoneme, swap. Deterministic,
       no model, no POS. Highest-frequency word in English.
 
-- [ ] **Weak-form pass: four findings from adversarial review (2026-08-24).**
+- [x] **Weak-form pass: four findings from adversarial review (2026-08-24).**
       `[code]` Two of the six checks came back sound — the tri-state genuinely
       distinguishes `nil` from `false` on every path, and the vowel /
       consonant / punctuation sets match upstream character-for-character
@@ -955,7 +955,37 @@ mispronounced name is permanent.
       per character from the tags already in hand, keep the narrator distinct.
       Largest item on this list.
 
-- [ ] **Emphasis from EPUB markup.** `[code]` `<em>`/`<i>`/`<strong>` is
+- [ ] **Emphasis from EPUB markup — rule built, wiring BLOCKED.**
+      `[measured]` `[code]` `KokoroEmphasis` implements the rule and is tested;
+      what is missing is any way to know a word was emphasised.
+
+      **Readium discards it before we see it.** `TextContentElement` carries an
+      `attributes: [ContentAttribute]` array, but
+      `HTMLResourceContentIterator` only ever populates `.accessibilityLabel`
+      (for images) and `.language`. There is no emphasis or style attribute,
+      so `<em>`/`<i>`/`<strong>` never reaches `TTSSpeechUnit`. The plan said
+      this markup was "parsed and discarded" — it is discarded by *Readium*,
+      not by our layer, which is a materially harder problem.
+
+      Readium is an SPM dependency (`readium/swift-toolkit`), not vendored the
+      way FluidAudio is, so there is no patch hook equivalent to
+      `fluidaudio-kudos.patch`.
+
+      Two routes, neither cheap. **Fork or upstream a change to Readium** so
+      the iterator emits an emphasis attribute — cleanest, slowest, and an
+      upstream PR is plausible since the data is already in the DOM it walks.
+      Or **parse the EPUB XHTML ourselves** alongside Readium's text and match
+      spans by offset — we already hold the file, but aligning raw markup
+      against Readium's *normalised* text is exactly the class of fragile
+      matching that goes wrong silently.
+
+      **The rule itself is measured and settled**, so whichever route lands,
+      the hard part is done: an emphasised word must carry primary stress.
+      15.4% of single-word spans change (5.7% promote a lone secondary, 9.6%
+      stress a weak form); 68.1% already carry primary stress and correctly get
+      nothing.
+
+- [ ] **Emphasis from EPUB markup (original note).** `[code]` `<em>`/`<i>`/`<strong>` is
       authorial stress, and in fic italics also mark internal thought.
       `KokoroSemanticBlock` carries `selector` but only ever tests it for
       `h1-6`, `blockquote`, `hr` — the inline signal is discarded.
