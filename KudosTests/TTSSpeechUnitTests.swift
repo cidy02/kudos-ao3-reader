@@ -233,6 +233,40 @@ final class TTSSpeechUnitTests: XCTestCase {
         )
     }
 
+
+    // MARK: - Sherpa (sentenceChunks) must agree with the other two engines
+
+    /// Sherpa is the iOS 26 engine and was the odd one out: Core ML and Apple
+    /// both broke `<br>` lines while this path space-joined them, so the same
+    /// chapter read differently depending on which engine was chosen.
+    func testSentenceChunksSplitsAtASharedSelectorSeam() {
+        let chunks = TTSSpeechUnit.sentenceChunks(from: [
+            unit("hey", selector: "html > body > p:nth-child(1)"),
+            unit("are you there", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), ["hey", "are you there"])
+    }
+
+    /// The counterpart: adjacent paragraphs have different selectors and must
+    /// still join, or this becomes "never merge anything".
+    func testSentenceChunksStillJoinsAdjacentParagraphs() {
+        let chunks = TTSSpeechUnit.sentenceChunks(from: [
+            unit("She began to", selector: "html > body > p:nth-child(1)"),
+            unit("read the letter.", selector: "html > body > p:nth-child(2)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), ["She began to read the letter."])
+    }
+
+    /// A one-word line stays its own chunk — 10.5% of lines inside broken
+    /// blocks are names, handles and sign-offs, which want their own delivery.
+    func testSentenceChunksKeepsAOneWordLineSeparate() {
+        let chunks = TTSSpeechUnit.sentenceChunks(from: [
+            unit("sincerely", selector: "html > body > p:nth-child(1)"),
+            unit("Ari", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), ["sincerely", "Ari"])
+    }
+
     private func unit(_ text: String, selector: String) -> TTSSpeechUnit {
         TTSSpeechUnit(
             text: text,
