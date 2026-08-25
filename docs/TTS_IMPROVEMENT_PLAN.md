@@ -569,14 +569,39 @@ is already tier 1 of the phonemizer's resolution order — it beats the Misaki
 lexicon and the BART fallback `[code]`. **It has no UI at all**, so today a
 mispronounced name is permanent.
 
-- [ ] **Pronunciation-fix UI.** `[proposal]` Long-press a word while reading →
-      "Fix pronunciation". The reader already has selection.
-- [ ] **Respelling input, not IPA.** `[proposal]` Nobody types `hɜːrˈmaɪəni`.
-      Accept `her-MY-oh-nee`, convert with the lexicon already on disk, take
-      stress from the capitalised syllable. Without this the store is unusable.
-- [ ] **"Words I guessed at."** `[proposal]` Log BART fallbacks locally and
-      offer them as a review list. The fallback is already a distinct branch in
-      `KokoroAneEnglishPhonemizer`, so this is nearly free.
+- [x] **Pronunciation-fix UI — done 2026-08-25.** Both surfaces per §3b: a
+      ranked list in Read Aloud settings and "Fix Pronunciation" in the
+      reader's selection menu, no upfront prompt. Readium dispatches selection
+      actions through the responder chain, so it needed the same three-part
+      wiring as Highlight and Add Note. Both present the same editor and write
+      through the same store.
+- [x] **Respelling input — done 2026-08-25.** Accepts `her-MY-oh-nee` and
+      converts by sending each syllable through the same G2P the reader uses,
+      so no phoneme table is invented. Stress lands before the stressed
+      syllable's **vowel** (`wˈɑnt`, not `ˈwɑnt`) — the lexicon's own
+      convention, and the boundary placement I wrote first would have produced
+      strings the model never saw. All-capitals means "no marked stress", since
+      the capital only reads as emphasis when something else is lower-case.
+- [x] **"Words I guessed at" — done 2026-08-25.** `[measured]` A word reaches
+      the neural fallback only after missing the custom lexicon, the Misaki
+      lexicon and every recovery, so it is a genuine guess. Observed via a new
+      `setNeuralFallbackObserver` hook on `KokoroAneManager` (patch 8) — the
+      fallback closure is built inside the manager, so the app could not see it
+      otherwise.
+
+      **Ranking is what makes it usable.** A work yields ~1,700 distinct
+      fallbacks, which is a wall of text; the top ten cover a median **46%** of
+      that work's occurrences. Measured leaders are exactly the intended
+      target: `Marvolo` 570, `Purilla` 464, `Lucius` 461, `Severus` 392.
+
+      Buffered behind a lock and flushed on stop rather than written per word —
+      the observer fires inside synthesis, and disk I/O there would sit on the
+      path that has to keep audio fed. Capped at 500 entries, dropping
+      least-frequent: a name said once is the least worth keeping and returns
+      on its own if it recurs.
+
+      Correcting a word forgets it from the list, so it moves into Corrections
+      rather than appearing in both.
 - [ ] **Adopt the established inline syntax.** `[prior-art]` Kokoro-FastAPI and
       MisakiSwift both use `[Worcester](/wˈʊstər/)`. Reuse rather than invent —
       it gives the respelling UI a serialized form and lets power users paste
