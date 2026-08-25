@@ -91,7 +91,14 @@ public final class CoreMLKokoroTTSService: TTSService {
         #endif
 
         status = .playing
-        let speed = currentSpeed
+        // Speed is deliberately *not* captured here. It used to be, which
+        // meant dragging the rate slider did nothing until the next batch —
+        // for a chapter-long batch, effectively never. Each clip reads the
+        // live value instead, so a change lands one clip later (the next one
+        // is already prefetched and rendered at the old rate).
+        //
+        // Voice stays captured: switching narrator mid-chapter should finish
+        // the chapter in the voice it started in.
         let voice = currentVoice
 
         activeTask = Task { @MainActor [weak self] in
@@ -120,7 +127,7 @@ public final class CoreMLKokoroTTSService: TTSService {
                             isLast: index == utterances.indices.last,
                             manager: manager,
                             voice: voice,
-                            speed: speed,
+                            speed: self.currentSpeed,
                             lexiconRevision: lexiconRevision
                         )
                     }
@@ -145,7 +152,7 @@ public final class CoreMLKokoroTTSService: TTSService {
                             isLast: nextIndex == utterances.indices.last,
                             manager: manager,
                             voice: voice,
-                            speed: speed,
+                            speed: self.currentSpeed,
                             lexiconRevision: lexiconRevision
                         )
                     }

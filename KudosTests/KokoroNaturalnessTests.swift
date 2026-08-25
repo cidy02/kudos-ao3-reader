@@ -326,5 +326,38 @@ final class KokoroNaturalnessTests: XCTestCase {
         XCTAssertGreaterThan(sentences.count, packed.count)
         XCTAssertGreaterThanOrEqual(packed.count, 1)
     }
+
+    /// Answers the "stacked pauses" question from the improvement plan: `…`
+    /// makes the model emit 0.5–1 s of its own silence, and the assembler
+    /// then appends a structural pause — so an ellipsis at a paragraph end
+    /// was suspected of running ~1.3 s.
+    ///
+    /// It does not, because `trimEdgeSilence` runs *first* and cuts the
+    /// model's trailing silence back to `keepEdgeSeconds`. The pause the
+    /// listener hears is the structural one, near enough alone. Pinned as a
+    /// test because the ordering is the entire reason, and swapping those two
+    /// steps would reintroduce the stack without failing anything else.
+    func testAModelPauseIsNotStackedOnTopOfTheStructuralOne() {
+        let rate = KokoroPauseAssembler.sampleRate
+        let speech = (0 ..< Int(0.10 * rate)).map { index in
+            sin(Float(index) * 0.05) * 0.5
+        }
+        // What an ellipsis leaves at the end of the clip.
+        let modelSilence = [Float](repeating: 0, count: Int(0.80 * rate))
+
+        let assembled = KokoroPauseAssembler.assemble(
+            samples: speech + modelSilence,
+            sampleRate: rate,
+            pauseAfter: .paragraph
+        )
+
+        let seconds = Double(assembled.count) / rate
+        let stacked = 0.10 + 0.80 + KokoroBoundary.paragraph.pauseSeconds
+        let expected = 0.10 + KokoroPauseAssembler.keepEdgeSeconds
+            + KokoroBoundary.paragraph.pauseSeconds
+        XCTAssertLessThan(seconds, stacked - 0.2)
+        XCTAssertEqual(seconds, expected, accuracy: 0.05)
+    }
 }
+
 #endif
