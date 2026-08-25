@@ -182,6 +182,16 @@ nonisolated enum KokoroSemanticDocument {
         if open.kind == .heading || open.kind == .sceneBreak { return false }
         if kind == .heading || kind == .sceneBreak { return false }
         if endsUtterance(open.text) { return false }
+        // Dialogue is a different delivery from narration: the voice pack
+        // indexes style by phoneme count, so a short quoted line glued into
+        // surrounding prose is voiced as long-form. hexgrad improved Kokoro's
+        // short utterances; use that rather than merging it away.
+        // Adjacent dialogue still joins — a back-and-forth that arrived as
+        // fragments of one paragraph must not become one inference per line.
+        // `<br>` seams are a different boundary (shared cssSelector) and
+        // still flush before this runs, so quoted chat-fic lines keep the
+        // audible `.line` pause.
+        if (open.kind == .dialogue) != (kind == .dialogue) { return false }
         return isBody(open.kind) && isBody(kind)
     }
 

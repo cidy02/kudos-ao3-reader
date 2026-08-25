@@ -159,6 +159,92 @@ final class TTSSpeechUnitTests: XCTestCase {
         XCTAssertEqual(chunks.map(\.text), ["She said hello."])
     }
 
+    /// Apple `packedChunks` must not space-join units that share a
+    /// cssSelector — that is Readium's signal a `<br>` split one `<p>`.
+    /// Without a selector this assertion is vacuous.
+    func testPackedChunksSplitsAtSharedSelectorLineBreakSeam() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("hey", selector: "html > body > p:nth-child(1)"),
+            unit("are you there", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), ["hey", "are you there"])
+    }
+
+    /// Complete sentences still pack together up to 250 characters. If the
+    /// seam only stopped concatenation and `packAdjacent` still ran across
+    /// it, this pair would collapse to one utterance.
+    func testPackedChunksDoesNotGlueCompleteSentencesAcrossALineBreakSeam() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("Hello.", selector: "html > body > p:nth-child(1)"),
+            unit("How are you?", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), ["Hello.", "How are you?"])
+    }
+
+    /// One-word lines inside a broken `<p>` are names, handles, and
+    /// sign-offs — they want their own utterance. Same discriminator.
+    func testPackedChunksKeepsAOneWordLineAsItsOwnUtterance() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("mimi", selector: "html > body > p:nth-child(1)"),
+            unit("are you there", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), ["mimi", "are you there"])
+    }
+
+    /// Adjacent `<p>`s do not share a selector, so the existing join/pack
+    /// behaviour is unchanged: a mid-sentence wrap across paragraphs is
+    /// still one G2P input.
+    func testPackedChunksStillJoinsAdjacentParagraphs() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("She began to", selector: "html > body > p:nth-child(1)"),
+            unit("read the letter.", selector: "html > body > p:nth-child(2)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), ["She began to read the letter."])
+    }
+
+    /// A paragraph that does not end a sentence still joins into the next
+    /// paragraph's first line, but that join must not hide the `<br>` seam
+    /// inside the second paragraph. Selector tracking follows the unit just
+    /// absorbed, matching `KokoroSemanticDocument`.
+    func testPackedChunksDoesNotHideALineSeamAfterACrossParagraphJoin() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("She began to", selector: "html > body > p:nth-child(1)"),
+            unit("read the letter", selector: "html > body > p:nth-child(2)"),
+            unit("and then she wept.", selector: "html > body > p:nth-child(2)")
+        ])
+        XCTAssertEqual(chunks.map(\.text), [
+            "She began to read the letter",
+            "and then she wept."
+        ])
+    }
+
+    /// Word highlighting keys off each utterance's locator. Splitting at the
+    /// seam must keep each line's own highlight, not a concatenated quote
+    /// covering both — otherwise `willSpeakRange` maps into the wrong span.
+    func testPackedChunksPreservesEachLinesLocatorAcrossASeam() {
+        let chunks = TTSSpeechUnit.packedChunks(from: [
+            unit("hey", selector: "html > body > p:nth-child(1)"),
+            unit("are you there", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map { $0.locator?.text.highlight }, ["hey", "are you there"])
+        XCTAssertEqual(
+            chunks.map { $0.locator?.locations.cssSelector },
+            ["html > body > p:nth-child(1)", "html > body > p:nth-child(1)"]
+        )
+    }
+
+    private func unit(_ text: String, selector: String) -> TTSSpeechUnit {
+        TTSSpeechUnit(
+            text: text,
+            locator: Locator(
+                href: AnyURL(string: "chapter.xhtml")!,
+                mediaType: .xhtml,
+                locations: .init(otherLocations: ["cssSelector": .string(selector)]),
+                text: .init(highlight: text)
+            )
+        )
+    }
+
     private func makeLocator(highlight: String) -> Locator {
         Locator(
             href: URL(string: "https://example.invalid/chapter.xhtml")!,

@@ -495,13 +495,14 @@ why this phase is about quality and not tidiness.
       backwards; the missing stress term is real but far too small to overcome
       the grapheme factor.
 
-- [ ] **Do not merge across dialogue boundaries.** `[code]` `[proposal]`
-      A standalone `"Don't."` glued into surrounding narration is voiced with a
-      long-form style row instead of its own. `KokoroSemanticDocument` already
-      classifies `.dialogue` and **that classification is dead** — the only
-      place it or `.blockquote` is consulted is `isBody()`, which treats them
-      exactly like `.paragraph`. hexgrad specifically improved Kokoro's short
-      utterances `[prior-art]`, so short lines are a strength to use.
+- [x] **Do not merge across dialogue boundaries.** `[code]` A standalone
+      `"Don't."` glued into surrounding narration was voiced with a long-form
+      style row instead of its own. `canJoin` now refuses when exactly one
+      side is `.dialogue`. Adjacent dialogue still joins, so a back-and-forth
+      that arrived as fragments of one paragraph does not become one inference
+      per line. `<br>` seams still flush first (shared cssSelector), so quoted
+      chat-fic keeps the `.line` pause. hexgrad improved Kokoro's short
+      utterances `[prior-art]`; short lines are a strength to use.
 
 - [x] **Preserve `<br>` as an audible boundary.** `[measured]` `[code]`
       Same defect as the item above, from the other direction: the document
@@ -512,18 +513,13 @@ why this phase is about quality and not tidiness.
       `endsAtLineBreak` and the packer emits `.line` (0.22 s). Adjacent
       `<p>`s, headings, and scene-break promotion are unchanged. See §6.3.1.
 
-- [ ] **Apple TTS still merges `<br>` seams.** `[code]` The line pause is a
-      **Kokoro-only** change: `KokoroSemanticDocument` treats a shared
-      `cssSelector` as a seam, but the Apple path still runs
-      `TTSService.concatenateForSentenceContext`, which space-joins adjacent
-      units regardless. So the same chapter reads as running prose on the
-      fallback engine and as separate lines on Kokoro.
-
-      Apple renders internally and gives us no way to insert silence inside an
-      utterance, so the fix there is to split into separate
-      `AVSpeechUtterance`s at the seam and let the natural inter-utterance gap
-      carry it — a different mechanism for the same intent, and worth doing
-      only if the Kokoro version survives listening.
+- [x] **Apple TTS still merges `<br>` seams.** `[code]` The line pause was
+      Kokoro-only: `packedChunks` now partitions on the same discriminator
+      (shared `cssSelector`) before concatenating, so each seam is its own
+      `AVSpeechUtterance` and `postUtteranceDelay` (0.22 s, matching `.line`)
+      carries the pause. Apple cannot insert silence inside an utterance.
+      `sentenceChunks` still concatenates — that path is G2P context for
+      Sherpa, not Apple. Adjacent `<p>`s (different selectors) still join.
 
 - [ ] **Revisit the packing band (A/B).** `[prior-art]` Ours is min 110 /
       target 175 / max 220; Kokoro-FastAPI ships min **175** / max **250** —
@@ -1279,12 +1275,13 @@ this repo quoted different seam totals.
 2. Readium's `HTMLResourceContentIterator` calls `flushText()` when it meets a
    `br` tag, so each broken line arrives as its **own** `TextualContentElement`
    and therefore its own `TTSSpeechUnit`.
-3. Apple TTS still space-joins adjacent units in
-   `TTSService.concatenateForSentenceContext`. Kokoro no longer does:
-   `KokoroSemanticDocument` treats a shared `cssSelector` as a `<br>` seam,
-   flushes the open block with `endsAtLineBreak`, and the packer emits a
-   `.line` pause (0.22 s) rather than `.paragraph`. Adjacent `<p>`s (different
-   selectors) are unchanged.
+3. Both engines honour the seam. Kokoro: `KokoroSemanticDocument` treats a
+   shared `cssSelector` as a `<br>` seam, flushes the open block with
+   `endsAtLineBreak`, and the packer emits a `.line` pause (0.22 s) rather
+   than `.paragraph`. Apple: `packedChunks` partitions on the same
+   discriminator before concatenating, so each seam is a separate
+   `AVSpeechUtterance` and `postUtteranceDelay` (also 0.22 s) carries the
+   pause. Adjacent `<p>`s (different selectors) are unchanged on both paths.
 
 - [x] **Preserve `<br>` as an audible boundary.** Implemented as a `.line`
       pause between same-selector units, not as a G2P-cross-break join: each

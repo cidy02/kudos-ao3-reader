@@ -70,7 +70,10 @@ rather than running prose; adjacent `<p>`s do not share a selector and keep
 semantic blocks (heading / paragraph / dialogue / scene break), conservative
 apostrophe normalization, phoneme-aware packing toward ~175 IPA characters,
 and structure-based pauses after Kokoro's edge silence is trimmed. Apple TTS
-still uses `packedChunks`. See `docs/TTS_KOKORO_NATURALNESS.md`.
+uses `packedChunks`, which now splits at a shared `cssSelector` (`<br>`
+seam) into separate `AVSpeechUtterance`s; `postUtteranceDelay` carries the
+pause. Adjacent `<p>`s still pack together. See
+`docs/TTS_KOKORO_NATURALNESS.md`.
 
 A phoneme string over `KokoroAneConstants.maxPhonemeLength` (510) makes
 `KokoroAneVocab.encode` throw, which would end Read Aloud for the whole
