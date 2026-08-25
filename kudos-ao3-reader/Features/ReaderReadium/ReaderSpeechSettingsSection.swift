@@ -8,6 +8,10 @@ import UIKit
 /// and Settings). Preferences persist via `@AppStorage` / UserDefaults and are
 /// picked up by `ReaderSpeechController` on the next utterance.
 struct ReaderSpeechSettingsSection: View {
+    /// Passed through to the pronunciation list so it can rank the work's own
+    /// cast first. Empty from global Settings.
+    var characterTags: [String] = []
+
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
     @AppStorage(ReaderSpeechPreferences.readAuthorNotesKey) private var readAuthorNotes = true
@@ -127,7 +131,7 @@ struct ReaderSpeechSettingsSection: View {
             }
 
             NavigationLink {
-                ReaderPronunciationSettingsView()
+                ReaderPronunciationSettingsView(characterTags: characterTags)
             } label: {
                 LabeledContent("Pronunciations", value: pronunciationCountLabel)
             }

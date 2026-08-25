@@ -14,6 +14,15 @@ import SwiftUI
 /// everywhere, and a layer picker on an empty list is a worse first
 /// impression than a list that just works.
 struct ReaderPronunciationSettingsView: View {
+    /// The work's AO3 character tags, when opened from the reader.
+    ///
+    /// Empty from global Settings, which has no work in hand — and the ranking
+    /// degrades to plain guess-count order there, exactly as it behaved
+    /// before. Tags are a *prior*, never evidence: a name the lexicon already
+    /// knows is never listed however prominent it is. All they do is move
+    /// something the engine actually guessed at further up.
+    var characterTags: [String] = []
+
     private let store = KokoroPronunciationStore()
 
     private let guesses = KokoroGuessedWordStore()
@@ -153,7 +162,21 @@ struct ReaderPronunciationSettingsView: View {
         // tier 1 now — so keep it out of the list even if the store still has
         // it from before the correction.
         let corrected = Set(entries.map(\.word))
-        guessed = guesses.ranked().filter { !corrected.contains($0.word) }
+        // Ranked through `KokoroCastDiscovery` rather than by raw count: a
+        // work produces ~1,700 distinct fallbacks, of which the top ten cover
+        // a median 46% of occurrences, so the ordering is what makes the list
+        // worth showing at all.
+        let remaining = guesses.ranked().filter { !corrected.contains($0.word) }
+        // Reorders the real entries rather than rebuilding them: `Entry` also
+        // carries `lastSeen`, and reconstructing it from a candidate would be
+        // inventing a date.
+        let order = KokoroCastDiscovery
+            .rank(guessed: remaining, characterTags: characterTags)
+            .enumerated()
+            .reduce(into: [String: Int]()) { $0[$1.element.word] = $1.offset }
+        guessed = remaining.sorted {
+            (order[$0.word] ?? .max) < (order[$1.word] ?? .max)
+        }
     }
 
     private func save(word: String, ipa: String) {

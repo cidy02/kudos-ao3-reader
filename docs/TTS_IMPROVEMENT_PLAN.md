@@ -957,6 +957,28 @@ mispronounced name is permanent.
       argues for making the fix cheap rather than the guess clever, and it is
       why the possessive derivation above matters more here, not less: an OC's
       name is exactly the word that recurs as `Rhiannon's`.
+
+      **Partly wired 2026-08-25 — two of three sources.** `KokoroCastDiscovery`
+      was built and tested but called by nothing. The pronunciation list now
+      ranks through it, and the reader passes the work's own cast: opened via
+      the fan menu's long press, `ReaderSpeechSettingsSheet` forwards
+      `workCharacters + workRelationships`, falling back to the flat `workTags`
+      union because EPUB subjects arrive uncategorised and `workCharacters`
+      stays empty until an AO3 refresh. From global Settings no tags are passed
+      and the ordering degrades to plain guess count, exactly as before.
+
+      **The name is still wrong, and that is a real limit.** `rank` maps over
+      the guessed log, so a word the engine has never guessed at cannot appear
+      however heavily it is tagged — the list is *retrospective*, not a
+      pre-flight. Making it a true pre-flight means running G2P over the
+      chapter without synthesising and collecting the fallbacks, which is the
+      genuinely useful version and is not built.
+
+      **NER is not wired either**, for the same reason: `recognisedNames(in:)`
+      needs the chapter text, and the settings sheet has the work but not its
+      extracted text. That is the source that finds OCs — the case the caveat
+      above says matters most — so it is the more valuable of the two
+      remaining pieces.
 - [ ] **Fandom seed dictionaries.** `[proposal]` The `fandoms` layer exists and
       is unused. Fixing *Hermione* once should hold for every Potter fic.
 
