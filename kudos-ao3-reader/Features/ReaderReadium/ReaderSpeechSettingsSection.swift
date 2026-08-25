@@ -13,7 +13,7 @@ struct ReaderSpeechSettingsSection: View {
     var characterTags: [String] = []
 
     /// Pre-flight scan of the open chapter. `nil` from global Settings.
-    var onScanChapter: (() async -> Int?)?
+    var onScanChapter: (() async -> KokoroCastPreflight.ScanResult?)?
 
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""

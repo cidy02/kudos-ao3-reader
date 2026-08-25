@@ -14,7 +14,7 @@ struct ReaderSpeechSettingsSheet: View {
     var characterTags: [String] = []
 
     /// The reader can phonemise the open chapter; global Settings cannot.
-    var onScanChapter: (() async -> Int?)?
+    var onScanChapter: (() async -> KokoroCastPreflight.ScanResult?)?
 
     @Environment(\.dismiss) private var dismiss
 

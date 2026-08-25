@@ -368,9 +368,10 @@ final class ReaderSpeechController {
     /// over the same chapter text and records the same fallbacks, so the list
     /// is populated before the first tap.
     ///
-    /// - Returns: how many distinct words were newly recorded, or `nil` when a
-    ///   scan could not run at all.
-    func scanChapterForPronunciation(from locator: Locator?) async -> Int? {
+    /// - Returns: what the scan found, or `nil` when it could not run at all.
+    func scanChapterForPronunciation(
+        from locator: Locator?
+    ) async -> KokoroCastPreflight.ScanResult? {
         guard let publication, KokoroCastPreflight.isAvailable else { return nil }
         let units = await Self.chapterUnits(
             from: locator ?? resumeLocator, in: publication

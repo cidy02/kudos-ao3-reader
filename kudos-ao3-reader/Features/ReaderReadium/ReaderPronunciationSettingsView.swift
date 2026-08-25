@@ -27,7 +27,7 @@ struct ReaderPronunciationSettingsView: View {
     /// filled in *before* a name is heard mangled. `nil` from global Settings,
     /// which has no chapter, and on any device where the Core ML frontend is
     /// not the engine — sherpa-onnx exposes no G2P to ask.
-    var onScanChapter: (() async -> Int?)?
+    var onScanChapter: (() async -> KokoroCastPreflight.ScanResult?)?
 
     private let store = KokoroPronunciationStore()
 
@@ -41,6 +41,8 @@ struct ReaderPronunciationSettingsView: View {
     @State private var importMessage = ""
     @State private var isScanning = false
     @State private var scanMessage: String?
+    /// Only a scan can produce these — nothing else here has the chapter text.
+    @State private var recognisedNames: Set<String> = []
 
     private struct Entry: Identifiable, Equatable {
         var word: String
@@ -200,7 +202,11 @@ struct ReaderPronunciationSettingsView: View {
         // carries `lastSeen`, and reconstructing it from a candidate would be
         // inventing a date.
         let order = KokoroCastDiscovery
-            .rank(guessed: remaining, characterTags: characterTags)
+            .rank(
+                guessed: remaining,
+                characterTags: characterTags,
+                recognisedNames: recognisedNames
+            )
             .enumerated()
             .reduce(into: [String: Int]()) { $0[$1.element.word] = $1.offset }
         guessed = remaining.sorted {
@@ -271,7 +277,7 @@ struct ReaderPronunciationSettingsView: View {
         Task {
             let found = await onScanChapter?()
             isScanning = false
-            switch found {
+            switch found?.newWords {
             case .none:
                 // Distinct from zero: nothing ran, rather than nothing found.
                 scanMessage = "Could not scan this chapter."
@@ -283,6 +289,7 @@ struct ReaderPronunciationSettingsView: View {
                     ? "Found 1 new word."
                     : "Found \(count) new words."
             }
+            recognisedNames = found?.recognisedNames ?? []
             reload()
         }
     }
