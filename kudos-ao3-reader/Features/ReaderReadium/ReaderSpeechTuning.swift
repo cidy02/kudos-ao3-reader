@@ -13,6 +13,13 @@ import Foundation
 /// **These affect real playback, not just the audition sample.** A knob that
 /// only moved the preview would answer a question nobody asked.
 ///
+/// When a change lands is not uniform, and the panel says so rather than
+/// implying otherwise. Pauses are read as each clip is assembled, so they
+/// reach the next clip not already prefetched — a sentence or two. Chunk
+/// sizes and the boundary toggles are consumed when the chapter's utterance
+/// plan is built, which happens once before playback, so they apply from the
+/// next chapter or after restarting Read Aloud.
+///
 /// Every value defaults to the shipped constant, so an untouched install
 /// behaves exactly as it does today and "reset" is always available.
 nonisolated enum ReaderSpeechTuning {

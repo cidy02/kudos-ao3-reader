@@ -1,4 +1,5 @@
 import Foundation
+import ReadiumShared
 import Testing
 @testable import Kudos
 
@@ -46,13 +47,17 @@ struct ReaderSpeechTuningTests {
         }
     }
 
-    /// Same for the packing band, which the chunker reads.
+    /// Deliberately `preferredMax`, not `preferredTarget`. Review established
+    /// that packing consumes only `preferredMax` (grouping) and `preferredMin`
+    /// (the orphan-tail merge) — `preferredTarget` is read by nothing, which is
+    /// why the panel no longer offers it. Asserting through it would have
+    /// tested a number with no consumer.
     @Test func aChangedBandReachesThePhonemeBudget() {
         withCleanDefaults {
-            #expect(KokoroPhonemeBudget.preferredTarget == 175)
-            UserDefaults.standard.set(90, forKey: ReaderSpeechTuning.packTargetKey)
+            #expect(KokoroPhonemeBudget.preferredMax == 220)
+            UserDefaults.standard.set(90, forKey: ReaderSpeechTuning.packMaxKey)
             ReaderSpeechTuning.invalidate()
-            #expect(KokoroPhonemeBudget.preferredTarget == 90)
+            #expect(KokoroPhonemeBudget.preferredMax == 90)
         }
     }
 
@@ -100,11 +105,72 @@ struct ReaderSpeechTuningTests {
 
     /// Turning the barrier off must actually restore the older merging
     /// behaviour, or the comparison the panel promises is not real.
+    ///
+    /// This asserted only the stored flag until review pointed out it never
+    /// packed anything — it would have passed with the whole feature reverted.
+    /// It now runs the packer and compares utterance counts.
     @Test func theDialogueBarrierToggleChangesPacking() {
+        let units = [
+            // No terminal punctuation: `endsUtterance` would otherwise block
+            // the join on its own and the barrier would look inert.
+            unit("He hesitated at the door", "html > body > p:nth-child(1)"),
+            unit("\u{201C}Don't.\u{201D}", "html > body > p:nth-child(2)")
+        ]
         withCleanDefaults {
+            let withBarrier = KokoroUtterancePacker.pack(units: units)
             UserDefaults.standard.set(false, forKey: ReaderSpeechTuning.dialogueBarrierKey)
             ReaderSpeechTuning.invalidate()
-            #expect(!ReaderSpeechTuning.current.dialogueBarrier)
+            let without = KokoroUtterancePacker.pack(units: units)
+            let detail = "got \(withBarrier.count) vs \(without.count)"
+            #expect(withBarrier.count > without.count,
+                    "the barrier should keep dialogue separate; \(detail)")
         }
+    }
+
+    /// Same for line-break pauses: the flag has to change what the packer
+    /// produces, not merely what the panel stored.
+    @Test func theLineBreakToggleChangesPacking() {
+        let units = [
+            unit("hey", "html > body > p:nth-child(1)"),
+            unit("are you there", "html > body > p:nth-child(1)")
+        ]
+        withCleanDefaults {
+            let withPauses = KokoroUtterancePacker.pack(units: units)
+            #expect(withPauses.contains { $0.pauseAfter == .line })
+            UserDefaults.standard.set(false, forKey: ReaderSpeechTuning.lineBreakPausesKey)
+            ReaderSpeechTuning.invalidate()
+            let without = KokoroUtterancePacker.pack(units: units)
+            #expect(!without.contains { $0.pauseAfter == .line })
+        }
+    }
+
+    /// The maximum is what grouping actually consumes, so a smaller one must
+    /// produce more utterances from the same text.
+    @Test func aSmallerMaximumProducesMoreUtterances() {
+        // Several sentences: `preferredMax` bounds how many are grouped into
+        // one utterance, so a single sentence can never demonstrate it — the
+        // first version of this test used one and passed either way.
+        let text = "She walked to the window. The rain had not stopped. "
+            + "She turned back. He said nothing. The clock ticked on."
+        let units = [unit(text, "html > body > p:nth-child(1)")]
+        withCleanDefaults {
+            let wide = KokoroUtterancePacker.pack(units: units)
+            UserDefaults.standard.set(60, forKey: ReaderSpeechTuning.packMaxKey)
+            ReaderSpeechTuning.invalidate()
+            let narrow = KokoroUtterancePacker.pack(units: units)
+            let detail = "got \(narrow.count) vs \(wide.count)"
+            #expect(narrow.count > wide.count, "a tighter maximum should split more; \(detail)")
+        }
+    }
+
+    private func unit(_ text: String, _ selector: String) -> TTSSpeechUnit {
+        TTSSpeechUnit(
+            text: text,
+            locator: Locator(
+                href: AnyURL(string: "chapter.xhtml")!,
+                mediaType: .xhtml,
+                locations: .init(otherLocations: ["cssSelector": .string(selector)])
+            )
+        )
     }
 }

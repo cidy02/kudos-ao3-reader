@@ -81,7 +81,10 @@ public final class SystemTTSService: TTSService {
             .map { unit in
                 TTSSpeechUnit(
                     text: ReaderSpeechPreferences.cleanUtteranceText(unit.text),
-                    locator: unit.locator
+                    locator: unit.locator,
+                    // Must be carried through: dropping it here silently
+                    // reverted every utterance to the flat pause.
+                    pauseAfter: unit.pauseAfter
                 )
             }
             .filter { chunk in
@@ -179,7 +182,12 @@ public final class SystemTTSService: TTSService {
             // Pre-Kokoro EngineBridge (ReaderSpeechController at 863d33c2^).
             utterance.rate = ReaderSpeechPreferences.avSpeechRate
             utterance.pitchMultiplier = ReaderSpeechPreferences.avPitch
-            utterance.postUtteranceDelay = ReaderSpeechPreferences.sentencePause
+            // The structural gap when the chunker classified one, falling
+            // back to the flat sentence pause when it did not. Before this,
+            // every Apple utterance took the same delay, so a chapter break
+            // sounded exactly like a mid-sentence split.
+            utterance.postUtteranceDelay = chunk.pauseAfter?.pauseSeconds
+                ?? ReaderSpeechPreferences.sentencePause
             if !currentVoiceId.isEmpty {
                 utterance.voice = AVSpeechSynthesisVoice(identifier: currentVoiceId)
             }

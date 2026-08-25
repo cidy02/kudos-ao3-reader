@@ -228,7 +228,9 @@ nonisolated enum KokoroSemanticDocument {
         }
     }
 
-    private static func endsUtterance(_ text: String) -> Bool {
+    /// Internal rather than private so the Apple chunker can classify its own
+    /// boundaries with the same rules instead of duplicating them.
+    static func endsUtterance(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let last = trimmed.last else { return false }
         if ")]}\"".contains(last) {
