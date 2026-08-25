@@ -45,11 +45,23 @@ enum KokoroCastPreflight {
         case unavailable
     }
 
+    struct ScanResult: Equatable, Sendable {
+        /// Distinct words newly recorded.
+        var newWords: Int
+        /// Names on-device NER found in the same text.
+        ///
+        /// Carried back rather than stored, because this is the third ranking
+        /// source and nothing else in the app has the chapter text to compute
+        /// it from. It is a *prior*: it cannot add a word to the list, only
+        /// move one the engine actually guessed at further up. That is what
+        /// surfaces an OC — the most-spoken name in many works, and the one
+        /// AO3 tags never carry.
+        var recognisedNames: Set<String>
+    }
+
     /// Phonemises `texts` and records every word the frontend had to guess at.
-    ///
-    /// - Returns: how many distinct words were newly recorded.
     @discardableResult
-    static func scan(texts: [String], isPlaying: Bool) async throws -> Int {
+    static func scan(texts: [String], isPlaying: Bool) async throws -> ScanResult {
         guard !isPlaying else { throw ScanError.playbackActive }
         guard isAvailable else { throw ScanError.unavailable }
 
@@ -67,7 +79,13 @@ enum KokoroCastPreflight {
             // paragraph must not cost the rest of the chapter's findings.
             _ = try? await manager.phonemes(for: text)
         }
-        return collector.flush()
+        // Same text, one pass, while we have it in hand.
+        return ScanResult(
+            newWords: collector.flush(),
+            recognisedNames: KokoroCastDiscovery.recognisedNames(
+                in: texts.joined(separator: " ")
+            )
+        )
         #else
         throw ScanError.unavailable
         #endif

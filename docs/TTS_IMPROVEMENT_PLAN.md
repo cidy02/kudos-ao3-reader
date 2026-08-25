@@ -997,11 +997,18 @@ mispronounced name is permanent.
       button cannot be exercised — the guards are unit-tested, the scan itself
       is not.
 
-      **NER is not wired either**, for the same reason: `recognisedNames(in:)`
-      needs the chapter text, and the settings sheet has the work but not its
-      extracted text. That is the source that finds OCs — the case the caveat
-      above says matters most — so it is the more valuable of the two
-      remaining pieces.
+      **All three sources are now wired.** NER was the last one, and it was
+      only blocked because `recognisedNames(in:)` needs the chapter text, which
+      nothing outside playback had. The pre-flight has it, so the scan runs NER
+      over the same text in the same pass and hands the names back with its
+      result. That is the source that finds Original Characters — often the
+      most-spoken name in a work, and the one AO3 tags never carry — which the
+      caveat above says matters most.
+
+      It follows that NER names are available only *after* a scan; before one,
+      ranking uses tags alone. Carried back in the result rather than cached,
+      because nothing else has the text to recompute them from and a stale set
+      would silently rank one chapter's names against another's.
 - [ ] **Fandom seed dictionaries.** `[proposal]` The `fandoms` layer exists and
       is unused. Fixing *Hermione* once should hold for every Potter fic.
 
