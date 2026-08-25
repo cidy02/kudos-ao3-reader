@@ -97,6 +97,7 @@ extension KudosBackupService {
             annotations: annotations.compactMap(KudosBackupAnnotation.init),
             savedSearches: savedSearches.map(KudosBackupSavedSearch.init),
             settings: .capture(defaults: defaults),
+            pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
 

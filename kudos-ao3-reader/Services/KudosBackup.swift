@@ -498,6 +498,16 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// `BackupVersion.isSupported` only accepts 1…8.
     let savedSearches: [KudosBackupSavedSearch]
     let settings: KudosBackupSettings
+    /// Read-aloud pronunciation corrections. Hand-made, unreconstructible, and
+    /// small, so they travel with the reader rather than being stranded on one
+    /// device.
+    ///
+    /// Additive optional, deliberately **without** a version bump — the same
+    /// choice `savedSearches` made above and for the same reason: Android's
+    /// `BackupVersion.isSupported` accepts only 1…8, so bumping would make
+    /// every archive this app writes unreadable there. Archives lacking the key
+    /// decode as empty, and Android ignores a key it does not know.
+    let pronunciations: KudosBackupPronunciations
     /// Carrying tombstones with the backup means a fresh install/reinstall restoring
     /// this file inherits the source device's deletion history, instead of having zero
     /// tombstone knowledge and silently resurrecting anything deleted after export.
@@ -515,6 +525,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         annotations: [KudosBackupAnnotation] = [],
         savedSearches: [KudosBackupSavedSearch] = [],
         settings: KudosBackupSettings,
+        pronunciations: KudosBackupPronunciations = .empty,
         tombstones: [KudosBackupTombstone] = []
     ) {
         self.version = version
@@ -527,6 +538,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.readingQueueMemberships = readingQueueMemberships
         self.annotations = annotations
         self.savedSearches = savedSearches
+        self.pronunciations = pronunciations
         self.settings = settings
         self.tombstones = tombstones
     }
@@ -543,6 +555,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case annotations
         case savedSearches
         case settings
+        case pronunciations
         case tombstones
     }
 
@@ -574,10 +587,82 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
             forKey: .savedSearches
         ) ?? []
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
+        pronunciations = try container.decodeIfPresent(
+            KudosBackupPronunciations.self,
+            forKey: .pronunciations
+        ) ?? .empty
         tombstones = try container.decodeIfPresent(
             [KudosBackupTombstone].self,
             forKey: .tombstones
         ) ?? []
+    }
+}
+
+/// The three layers of `KokoroPronunciationStore`, carried verbatim.
+///
+/// Word and phoneme strings only — no schema of our own beyond the layering,
+/// because the phonemizer's own key semantics (case-sensitive, exact spelling)
+/// are what make an entry work, and re-shaping them here would be a second
+/// place to get that wrong.
+nonisolated struct KudosBackupPronunciations: Codable, Equatable {
+    static let empty = KudosBackupPronunciations(global: [:], fandoms: [:], works: [:])
+
+    var global: [String: String]
+    var fandoms: [String: [String: String]]
+    var works: [String: [String: String]]
+
+    var isEmpty: Bool { global.isEmpty && fandoms.isEmpty && works.isEmpty }
+
+    init(global: [String: String], fandoms: [String: [String: String]],
+         works: [String: [String: String]]) {
+        self.global = global
+        self.fandoms = fandoms
+        self.works = works
+    }
+
+    /// Read the reader's corrections off disk for export.
+    ///
+    /// Only corrections. The guessed-word log is deliberately not carried: it
+    /// regenerates the moment anything is played, so backing it up would be
+    /// paying to move something reconstructible.
+    static func capture(store: KokoroPronunciationStore = KokoroPronunciationStore())
+        -> KudosBackupPronunciations
+    {
+        let file = store.load()
+        return KudosBackupPronunciations(
+            global: file.global, fandoms: file.fandoms, works: file.works
+        )
+    }
+
+    /// Merge restored corrections into whatever is already on this device.
+    ///
+    /// Merge, not replace, and the **archive wins** on a conflict: restoring is
+    /// an explicit act, and a reader who restores a backup expects to get the
+    /// corrections in it. Entries only on this device are kept, because losing
+    /// a correction that the archive simply never knew about would be a silent
+    /// deletion of hand-made work.
+    func apply(to store: KokoroPronunciationStore = KokoroPronunciationStore()) throws {
+        guard !isEmpty else { return }
+        var file = store.load()
+        global.forEach { file.global[$0.key] = $0.value }
+        for (fandom, entries) in fandoms {
+            entries.forEach { file.fandoms[fandom, default: [:]][$0.key] = $0.value }
+        }
+        for (work, entries) in works {
+            entries.forEach { file.works[work, default: [:]][$0.key] = $0.value }
+        }
+        try store.save(file)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        global = try container.decodeIfPresent([String: String].self, forKey: .global) ?? [:]
+        fandoms = try container.decodeIfPresent(
+            [String: [String: String]].self, forKey: .fandoms
+        ) ?? [:]
+        works = try container.decodeIfPresent(
+            [String: [String: String]].self, forKey: .works
+        ) ?? [:]
     }
 }
 
@@ -1537,6 +1622,7 @@ enum KudosBackupService {
             annotations: annotations.compactMap(KudosBackupAnnotation.init),
             savedSearches: savedSearches.map(KudosBackupSavedSearch.init),
             settings: .capture(defaults: defaults),
+            pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
         return KudosBackupContents(
@@ -2403,6 +2489,13 @@ enum KudosBackupService {
             }
             settings.apply(to: defaults)
         }
+        // Applied on every mode, including replaceLibrary. Corrections are not
+        // library content — they are how the reader wants words said — so a
+        // full library replacement should not silently discard them. Failure is
+        // swallowed for the same reason the export tolerates a missing file:
+        // losing a restore over a pronunciation write would be the worse
+        // outcome by a wide margin.
+        try? contents.manifest.pronunciations.apply()
         return KudosBackupRestoreSummary(
             // Count what was actually applied — tombstone-suppressed works are skipped
             // and must not inflate the user-facing "N works restored" confirmation.
