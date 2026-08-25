@@ -50,7 +50,7 @@
 @@ -215,8 +215,14 @@
              throw G2PModelError.modelLoadFailed("\(ModelNames.G2P.decoderFile) not found at \(decoderURL.path)")
          }
-
+ 
 +        // cpuOnly is BNNS. iOS 26.4–26.6 SIGSEGVs in BnnsCpuInferenceOperation
 +        // (FluidAudio #817/#844). CPU+GPU keeps G2P on Metal instead.
          let config = MLModelConfiguration()
@@ -60,12 +60,12 @@
 +        if #available(iOS 17.4, macOS 14.4, *) {
 +            config.optimizationHints.reshapeFrequency = .infrequent
 +        }
-
+ 
          encoder = try MLModel(contentsOf: encoderURL, configuration: config)
          decoder = try MLModel(contentsOf: decoderURL, configuration: config)
 --- a/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
 +++ b/Sources/FluidAudio/TTS/KokoroAne/G2P/English/KokoroAneEnglishPhonemizer.swift
-@@ -12,18 +12,36 @@
+@@ -12,18 +12,37 @@
  ///      (proper nouns, abbreviations like `NATO`)
  ///   4. case-sensitive hit on the normalized lower-case form
  ///   5. lower-cased Misaki lexicon hit — this is what gives function
@@ -80,23 +80,24 @@
 +///      position (`dont` → `don't`) and retry the same maps
 +///   7. after a full miss, collapse elongated letter runs (`yesss` →
 +///      `yes`) and retry the same maps
-+///   8. after a full miss, if the token is `X's` and `X` is a lexicon
-+///      hit, append the possessive allomorph (Misaki `_s`). `James'`
-+///      (apostrophe, no `s`) is not handled — `stem_s` requires
-+///      `word.endswith('s')`.
++///   8. after a full miss, try Misaki's three inflection stemmers in
++///      order (`stem_s`, `stem_ed`, `stem_ing`) and append the matching
++///      US allomorph. Possessive `X's` is the `"'s"` branch of `stem_s`,
++///      not a special case. `James'` (apostrophe, no `s`) is not handled
++///      — `stem_s` requires `word.endswith('s')`.
 +///   9. strict ASCII all-caps initialisms (`FBI`, `ATP`) spelled as
  ///      letter names after a full lexicon miss (issue #710)
 -///   7. BART G2P CoreML fallback for OOV words (injected by the caller)
 +///  10. hyphenated compound split (`tales-to-amaze`) (issue #775)
 +///  11. BART G2P CoreML fallback for OOV words (injected by the caller)
- ///
++///
 +/// After all words are resolved, `the`/`The` and `to`/`To` are rewritten
 +/// from the next word's phonemes (Misaki `future_vowel`). The lexicon
 +/// stores only the strong form (`ði`, `tu`), so "the book" otherwise
 +/// says "thee book". Measured in the 20-work corpus: 105,383 `the` and
 +/// 67,403 `to` — about 7% of every word spoken. All-caps `THE`/`TO` are
 +/// not rewritten: Misaki gates those on POS tags we do not have.
-+///
+ ///
  /// Punctuation supported by the chain's `vocab.json` (`, . ! ? ; …` etc.)
  /// is preserved and attached to the preceding word — Kokoro treats those
  /// tokens as prosody/pause cues, matching upstream `KPipeline.g2p` output.
@@ -104,19 +105,19 @@
  /// is NOT expanded: the laishere vocab carries those tokens directly.
 -struct KokoroAneEnglishPhonemizer: Sendable {
 +public struct KokoroAneEnglishPhonemizer: Sendable {
-
+ 
      private static let logger = AppLogger(category: "KokoroAneEnglishPhonemizer")
-
-@@ -43,7 +61,7 @@
+ 
+@@ -43,7 +62,7 @@
      /// skipped at `KokoroAneVocab.encode` anyway).
      let allowedPunctuation: Set<Character>
-
+ 
 -    init(
 +    public init(
          wordToPhonemes: [String: [String]] = [:],
          caseSensitiveWordToPhonemes: [String: [String]] = [:],
          customLexicon: [String: String] = [:],
-@@ -64,7 +82,7 @@
+@@ -64,7 +83,7 @@
      ///   return skips the word with a warning; a thrown error aborts.
      /// - Throws: `KokoroAneError.inputProcessingFailed` when the input is
      ///   empty or nothing could be resolved.
@@ -125,16 +126,16 @@
          _ text: String,
          fallback: (String) async throws -> [String]?
      ) async throws -> String {
-@@ -77,7 +95,7 @@
+@@ -77,7 +96,7 @@
          // contractions (`we’re`) survive tokenization intact (issue #774).
          let prepared = Self.normalizeApostrophes(trimmed)
-
+ 
 -        var parts: [String] = []
 +        var parts: [PhonemePart] = []
-
+ 
          for token in Self.splitWords(prepared) {
              if token.isEmpty { continue }
-@@ -89,19 +107,21 @@
+@@ -89,19 +108,21 @@
                  // punctuation as its own prosody token, but Misaki output
                  // never puts a space before it.
                  if parts.isEmpty {
@@ -146,13 +147,13 @@
                  }
                  continue
              }
-
+ 
              if let ipa = try await resolveWord(token, fallback: fallback) {
 -                parts.append(ipa)
 +                parts.append(PhonemePart(sourceWord: token, surface: ipa))
              }
          }
-
+ 
 -        let joined = parts.joined(separator: " ")
 +        applyFunctionWordSandhi(&parts)
 +
@@ -160,10 +161,10 @@
          if joined.isEmpty {
              throw KokoroAneError.inputProcessingFailed(
                  "produced no phonemes for input '\(trimmed)'")
-@@ -109,6 +129,114 @@
+@@ -109,6 +130,114 @@
          return joined
      }
-
+ 
 +    // MARK: - Function-word sandhi (`the` / `to`)
 +
 +    /// One resolved word, plus any punctuation later glued onto it.
@@ -273,12 +274,12 @@
 +    private static let misakiNonQuotePuncts = Set<Character>(";:,.!?—…")
 +
      // MARK: - Word resolution
-
+ 
      private func resolveWord(
-@@ -144,15 +272,60 @@
+@@ -144,13 +273,65 @@
                      + "falling back to the bundled pronunciation")
          }
-
+ 
 -        if let phonemes = caseSensitiveWordToPhonemes[word]
 -            ?? caseSensitiveWordToPhonemes[normalized]
 -            ?? wordToPhonemes[lowered]
@@ -303,57 +304,57 @@
          {
 -            return phonemes.joined()
 +            return recovered
-         }
-
-+        // Possessive `X's` after every lexicon miss, including the two
-+        // recoveries above. Apostrophe reinsertion currently skips any
-+        // token that already contains an apostrophe, so `anna's` never
-+        // reaches it, and de-elongation wants a trailing letter run of
-+        // two or more, so a single `s` after the apostrophe does not
-+        // fire. Placing derivation after those recoveries therefore
-+        // costs nothing on possessives; it keeps every "retry a known
-+        // lexicon key" path together, and only then synthesises a
-+        // pronunciation that is not in the lexicon.
++        }
++
++        // Regular inflection after every lexicon miss, including the two
++        // recoveries above. The downloaded lexicon has patchy coverage of
++        // the regular suffixes: `walking` / `walked` / `cats` / `asked`
++        // are present, but `wanted` / `belongs` / `characters` /
++        // `companies` / `towards` are absent. Misaki compensates with
++        // three stemmers (`stem_s`, `stem_ed`, `stem_ing`) that derive
++        // the inflected form from a base the lexicon does hold.
++        //
++        // Measured over 2.44M corpus words: 113,827 reach the G2P
++        // fallback (4.7%), and the three stemmers recover 49,457 of
++        // them — 43.4%, about 2% of every word spoken. The `-s` branch
++        // is 34,751 of those (plurals, possessives, `that's`); `-ed` is
++        // 14,022; `-ing` is 684. Possessive `X's` is not a special case
++        // — it is the `"'s"` branch of `stem_s`.
++        //
++        // Apostrophe reinsertion skips any token that already contains
++        // an apostrophe, so `anna's` / `that's` never reach it, and
++        // de-elongation wants a trailing letter run of two or more, so
++        // a single `s` / `d` / `g` does not fire. Placing derivation
++        // after those recoveries therefore costs nothing on inflected
++        // forms; it keeps every "retry a known lexicon key" path
++        // together, and only then synthesises a pronunciation that is
++        // not in the lexicon.
 +        //
 +        // The load-bearing constraint is the gate, not the position
 +        // relative to recoveries. Neural G2P handed the whole token
 +        // `Anna's` already applies the clitic (`ˈænəz`); deriving on
-+        // top would emit `ˈænəzz`. So we derive only when the
-+        // possessive itself missed every lexicon tier AND the base
-+        // (token minus `'s`) is a lexicon hit. If the base is unknown
-+        // (`Liv's` — 360 occurrences, the most frequent miss — and
-+        // `liv` is absent from the real cache) we do nothing and let
-+        // G2P have the whole token, as today.
-+        //
-+        // Measured over a 20-work corpus: 5,896 proper-noun possessives,
-+        // 462 distinct. When the base is in the lexicon the possessive
-+        // is there only ~37% of the time. The real `us_lexicon_cache.json`
-+        // has not one possessive (`anna's`, `alice's`, `pat's`,
-+        // `james's` all absent) while every base is present.
++        // top would emit `ˈænəzz`. The same is true of `wanted` and
++        // `walking`. So we derive only when the inflected form itself
++        // missed every lexicon tier AND the stem is a lexicon hit. If
++        // the stem is unknown we do nothing and let G2P have the whole
++        // token, as today.
 +        //
 +        // `James'` (apostrophe, no `s`) is out of scope: Misaki's
 +        // `stem_s` requires `word.endswith('s')`, and the apostrophe-only
 +        // plural possessive is a different reading (`Winchesters'` does
 +        // not grow a syllable).
-+        if let derived = lexiconPhonemesByDerivingPossessive(word) {
-+            return derived
-+        }
-+
++        if let inflected = lexiconPhonemesByStemmingInflection(word) {
++            return inflected
+         }
+ 
          // After a full lexicon miss, read strict ASCII all-caps tokens of a
-         // small length range as letter-name initialisms (`FBI`, `ATP`)
-         // instead of letting BART G2P sound them out as a word (issue #710).
-@@ -210,13 +383,172 @@
+@@ -210,13 +391,297 @@
          return resolved.joined(separator: " ")
      }
-
+ 
 -    // MARK: - Letter-name initialisms (issue #710)
 +    // MARK: - Lexicon lookup and fanfic recoveries
-
--    /// Spell a token as a sequence of letter names using the per-letter
--    /// entries in the case-sensitive lexicon (`FBI` → `ˈɛf bˈi ˈI`). See
--    /// ``EnglishInitialisms/spell(_:letterTokens:render:separator:)`` —
--    /// returns `nil` if any letter is missing so the caller falls through
--    /// to its normal fallback rather than emitting a partial word.
++
 +    /// The four-dictionary lookup used for a direct lexicon hit. Recoveries
 +    /// below call this on their reconstructed spelling so they cannot drift
 +    /// from the maps a normal word uses.
@@ -432,56 +433,181 @@
 +        return nil
 +    }
 +
-+    /// Derive `X's` from a known stem `X` using Misaki's `_s` allomorph.
++    /// Derive a regular inflection from a known stem.
 +    ///
-+    /// Ported from `misaki/en.py` (MIT), not from the textbook rule. The
-+    /// textbook version gets three details wrong: the voiceless set is
-+    /// exactly `ptkfθ` (not "all voiceless consonants" — `s`/`ʃ` are
-+    /// voiceless but sibilant, and `h` is absent); the American epenthetic
-+    /// vowel is `ᵻ` (U+1D7B), not `ɪ`; and `ptkfθ` is tested first. We are
-+    /// US-only, so there is no British `ɪ` branch.
-+    ///
-+    /// The affricates in the sibilant set are the single codepoints `ʧ`
-+    /// (U+02A7) and `ʤ` (U+02A4), not the two-character sequences `tʃ`/
-+    /// `dʒ`. Comparing Swift `Character`s against the digraphs silently
-+    /// fails.
-+    ///
-+    /// Returns `nil` unless the token ends in `'s` (so `James'` is not
-+    /// handled) and the stem is already a lexicon hit. The stem is looked
-+    /// up through the same four maps a normal word uses; G2P is never
-+    /// consulted, which is the double-clitic gate.
-+    private func lexiconPhonemesByDerivingPossessive(_ word: String) -> String? {
-+        // Misaki `stem_s` requires `word.endswith('s')`. A trailing
-+        // apostrophe with no `s` (`James'`, `Winchesters'`) is a different
-+        // reading and must not grow a syllable.
-+        guard word.count > 2, word.lowercased().hasSuffix("'s") else {
++    /// Ported from `misaki/en.py` (MIT) `stem_s` / `stem_ed` / `stem_ing`,
++    /// tried in that order, US-only. Possessive `X's` is the `"'s"` branch
++    /// of `stem_s`; it is not special-cased here. The stem is looked up
++    /// through the same four maps a normal word uses; G2P is never
++    /// consulted, which is the double-application gate.
++    private func lexiconPhonemesByStemmingInflection(_ word: String) -> String? {
++        phonemesByStemmingS(word)
++            ?? phonemesByStemmingEd(word)
++            ?? phonemesByStemmingIng(word)
++    }
++
++    /// Misaki `stem_s`. Suffix checks are case-insensitive so `CATS` and
++    /// `Anna's` still match; the sliced stem keeps the original spelling
++    /// so a case-sensitive proper-noun entry (`Anna`) still hits.
++    private func phonemesByStemmingS(_ word: String) -> String? {
++        let lowered = word.lowercased()
++        guard word.count >= 3, lowered.hasSuffix("s") else { return nil }
++
++        let stem: String
++        if !lowered.hasSuffix("ss"),
++            lexiconPhonemes(for: String(word.dropLast())) != nil
++        {
++            stem = String(word.dropLast())
++        } else if (lowered.hasSuffix("'s")
++                || (word.count > 4 && lowered.hasSuffix("es") && !lowered.hasSuffix("ies")))
++            && lexiconPhonemes(for: String(word.dropLast(2))) != nil
++        {
++            stem = String(word.dropLast(2))
++        } else if word.count > 4, lowered.hasSuffix("ies"),
++            lexiconPhonemes(for: String(word.dropLast(3)) + "y") != nil
++        {
++            stem = String(word.dropLast(3)) + "y"
++        } else {
 +            return nil
 +        }
-+        let stem = String(word.dropLast(2))
-+        guard let stemPhonemes = lexiconPhonemes(for: stem) else {
-+            return nil
-+        }
-+        return Self.appendingPossessiveAllomorph(to: stemPhonemes)
++        guard let ipa = lexiconPhonemes(for: stem) else { return nil }
++        return Self.appendingSAllomorph(to: ipa)
 +    }
 +
 +    /// Misaki `_s`, US-only. `stem[-1]` is the last `Character` of the
-+    /// joined IPA string.
-+    private static func appendingPossessiveAllomorph(to stem: String) -> String? {
++    /// joined IPA string. The textbook version gets three details wrong:
++    /// the voiceless set is exactly `ptkfθ` (not "all voiceless
++    /// consonants" — `s`/`ʃ` are voiceless but sibilant, and `h` is
++    /// absent); the American epenthetic vowel is `ᵻ` (U+1D7B), not `ɪ`;
++    /// and `ptkfθ` is tested first. Affricates are the single codepoints
++    /// `ʧ` (U+02A7) and `ʤ` (U+02A4), not the two-character sequences
++    /// `tʃ`/`dʒ`.
++    private static func appendingSAllomorph(to stem: String) -> String? {
 +        guard let last = stem.last else { return nil }
-+        if possessiveVoiceless.contains(last) {
++        if sAllomorphVoiceless.contains(last) {
 +            return stem + "s"
 +        }
-+        if possessiveSibilants.contains(last) {
++        if sAllomorphSibilants.contains(last) {
 +            return stem + "ᵻz"
 +        }
 +        return stem + "z"
 +    }
 +
++    /// Misaki `stem_ed`.
++    private func phonemesByStemmingEd(_ word: String) -> String? {
++        let lowered = word.lowercased()
++        guard word.count >= 4, lowered.hasSuffix("d") else { return nil }
++
++        let stem: String
++        if !lowered.hasSuffix("dd"),
++            lexiconPhonemes(for: String(word.dropLast())) != nil
++        {
++            stem = String(word.dropLast())
++        } else if word.count > 4, lowered.hasSuffix("ed"), !lowered.hasSuffix("eed"),
++            lexiconPhonemes(for: String(word.dropLast(2))) != nil
++        {
++            stem = String(word.dropLast(2))
++        } else {
++            return nil
++        }
++        guard let ipa = lexiconPhonemes(for: stem) else { return nil }
++        return Self.appendingEdAllomorph(to: ipa)
++    }
++
++    /// Misaki `_ed`, US-only. The British `ɪ` sibilant-vowel and the
++    /// `self.british` half of `british or len(stem) < 2` are dropped; the
++    /// `len(stem) < 2` half stays, because that is what keeps `stem[-2]`
++    /// from reading off the front of a one-phoneme stem. The tapping
++    /// branch is `US_TAUS` verbatim — `noticed` gets its flap from the
++    /// American stem `nˈOɾəs` plus `/t/` after `/s/`, and a stem ending
++    /// `t` preceded by a taut (waited, `wˈAt`) becomes `ɾᵻd`.
++    private static func appendingEdAllomorph(to stem: String) -> String? {
++        guard let last = stem.last else { return nil }
++        if edAllomorphVoiceless.contains(last) {
++            return stem + "t"
++        }
++        if last == "d" {
++            return stem + "ᵻd"
++        }
++        if last != "t" {
++            return stem + "d"
++        }
++        if stem.count < 2 {
++            return stem + "ɪd"
++        }
++        if let taut = characterBeforeLast(in: stem), usTaus.contains(taut) {
++            return String(stem.dropLast()) + "ɾᵻd"
++        }
++        return stem + "ᵻd"
++    }
++
++    /// Misaki `stem_ing`. The doubled-consonant / `cking` test is
++    /// `re.search(r'([bcdgklmnprstvxz])\1ing$|cking$', word)` on the
++    /// lower-cased token.
++    private func phonemesByStemmingIng(_ word: String) -> String? {
++        let lowered = word.lowercased()
++        guard word.count >= 5, lowered.hasSuffix("ing") else { return nil }
++
++        let stem: String
++        if word.count > 5, lexiconPhonemes(for: String(word.dropLast(3))) != nil {
++            stem = String(word.dropLast(3))
++        } else if lexiconPhonemes(for: String(word.dropLast(3)) + "e") != nil {
++            stem = String(word.dropLast(3)) + "e"
++        } else if word.count > 5, Self.hasIngOrthographicDoubling(lowered),
++            lexiconPhonemes(for: String(word.dropLast(4))) != nil
++        {
++            stem = String(word.dropLast(4))
++        } else {
++            return nil
++        }
++        guard let ipa = lexiconPhonemes(for: stem) else { return nil }
++        return Self.appendingIngAllomorph(to: ipa)
++    }
++
++    /// Misaki `_ing`, US-only. The British `əː` reject is dropped. A stem
++    /// ending `t` preceded by a taut becomes `ɾɪŋ` (`sitting` → `sˈɪɾɪŋ`);
++    /// every other stem just takes `ɪŋ`.
++    private static func appendingIngAllomorph(to stem: String) -> String? {
++        guard let last = stem.last else { return nil }
++        if stem.count > 1, last == "t",
++            let taut = characterBeforeLast(in: stem), usTaus.contains(taut)
++        {
++            return String(stem.dropLast()) + "ɾɪŋ"
++        }
++        return stem + "ɪŋ"
++    }
++
++    /// Misaki `re.search(r'([bcdgklmnprstvxz])\1ing$|cking$', word)`.
++    private static func hasIngOrthographicDoubling(_ lowered: String) -> Bool {
++        if lowered.hasSuffix("cking") { return true }
++        guard lowered.hasSuffix("ing"), lowered.count >= 5 else { return false }
++        let lastOfDouble = lowered[lowered.index(lowered.endIndex, offsetBy: -4)]
++        let firstOfDouble = lowered[lowered.index(lowered.endIndex, offsetBy: -5)]
++        return lastOfDouble == firstOfDouble && ingDoubleConsonants.contains(lastOfDouble)
++    }
++
++    private static func characterBeforeLast(in stem: String) -> Character? {
++        guard stem.count >= 2 else { return nil }
++        return stem[stem.index(before: stem.index(before: stem.endIndex))]
++    }
++
 +    /// Exactly five phonemes, from `misaki/en.py`. Not "all voiceless".
-+    private static let possessiveVoiceless = Set<Character>("ptkfθ")
++    private static let sAllomorphVoiceless = Set<Character>("ptkfθ")
 +
 +    /// Affricates are `ʧ`/`ʤ`, not `tʃ`/`dʒ`.
-+    private static let possessiveSibilants = Set<Character>("szʃʒʧʤ")
++    private static let sAllomorphSibilants = Set<Character>("szʃʒʧʤ")
++
++    /// Misaki `_ed` voiceless set. Note `t` is absent: a `t`-final stem
++    /// goes to the tapping / `ᵻd` branches, not to `/t/`.
++    private static let edAllomorphVoiceless = Set<Character>("pkfθʃsʧ")
++
++    /// Misaki `US_TAUS = frozenset('AIOWYiuæɑəɛɪɹʊʌ')`. Tapping is this
++    /// set, not "any vowel".
++    private static let usTaus = Set<Character>("AIOWYiuæɑəɛɪɹʊʌ")
++
++    /// The consonant class in Misaki's `ing` doubling regex. `f`/`h`/`j`/
++    /// `q`/`w`/`y` are deliberately absent.
++    private static let ingDoubleConsonants = Set<Character>("bcdgklmnprstvxz")
 +
 +    /// Length of the trailing run of one repeated letter, when it is at least
 +    /// two long. `nil` for a token ending in punctuation or a lone letter.
@@ -517,7 +643,12 @@
 +        let key = normalizeKey(candidate)
 +        return key.count == 3 && key.hasSuffix("'s") && (key.first?.isLetter ?? false)
 +    }
-+
+ 
+-    /// Spell a token as a sequence of letter names using the per-letter
+-    /// entries in the case-sensitive lexicon (`FBI` → `ˈɛf bˈi ˈI`). See
+-    /// ``EnglishInitialisms/spell(_:letterTokens:render:separator:)`` —
+-    /// returns `nil` if any letter is missing so the caller falls through
+-    /// to its normal fallback rather than emitting a partial word.
      private func spellAsLetterNames(_ word: String) -> String? {
          EnglishInitialisms.spell(word) { caseSensitiveWordToPhonemes[$0] }
      }
@@ -541,7 +672,7 @@
 @@ -179,6 +179,14 @@
          }
      }
-
+ 
 +    /// Non-async wrapper so Swift binds the throwing `prediction(from:options:)`
 +    /// overload instead of the async one (which uses e5rt.concurrentExecutionQueue).
 +    private static func synchronousPrediction(
