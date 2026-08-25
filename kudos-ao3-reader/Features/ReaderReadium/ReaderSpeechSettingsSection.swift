@@ -33,6 +33,15 @@ struct ReaderSpeechSettingsSection: View {
         voices.sorted()
     }
 
+    /// Count of global overrides, so the row shows whether anything is set
+    /// without opening it. Read on each render rather than cached: the list
+    /// behind it writes to disk, and a stale count is worse than a cheap read
+    /// of a file that is empty for most readers.
+    private var pronunciationCountLabel: String {
+        let count = KokoroPronunciationStore().overrides().count
+        return count == 0 ? "None" : "\(count)"
+    }
+
     private var selectedVoiceLabel: String {
         if voiceID.isEmpty {
             return "Automatic (best available)"
@@ -115,6 +124,12 @@ struct ReaderSpeechSettingsSection: View {
                 voicePicker
             } label: {
                 LabeledContent("Voice", value: selectedVoiceLabel)
+            }
+
+            NavigationLink {
+                ReaderPronunciationSettingsView()
+            } label: {
+                LabeledContent("Pronunciations", value: pronunciationCountLabel)
             }
 
             VStack(alignment: .leading, spacing: 8) {

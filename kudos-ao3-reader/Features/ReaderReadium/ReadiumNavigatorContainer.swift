@@ -37,6 +37,7 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
     /// Readium routes custom editing actions through the responder chain.
     var onHighlight: () -> Void = {}
     var onAddNote: () -> Void = {}
+    var onFixPronunciation: () -> Void = {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -46,6 +47,7 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
         let host = ReaderHighlightHostController(navigator: controller)
         host.onHighlight = onHighlight
         host.onAddNote = onAddNote
+        host.onFixPronunciation = onFixPronunciation
         context.coordinator.update(
             readingMode: readingMode,
             dismissSurface: dismissSurface,
@@ -60,6 +62,7 @@ struct ReadiumNavigatorContainer: UIViewControllerRepresentable {
     func updateUIViewController(_ host: ReaderHighlightHostController, context: Context) {
         host.onHighlight = onHighlight
         host.onAddNote = onAddNote
+        host.onFixPronunciation = onFixPronunciation
         context.coordinator.update(
             readingMode: readingMode,
             dismissSurface: dismissSurface,
