@@ -17,37 +17,57 @@ nonisolated struct KokoroPronunciationStore: Sendable {
 
     private let url: URL
 
+    /// Where corrections live now.
+    ///
+    /// **Not** under `TTS_Models/`. That directory is marked
+    /// `isExcludedFromBackup` because it holds the ~180MB model pack, which is
+    /// re-downloadable and has no business in a device backup — but the flag
+    /// is set on the *directory*, so anything inside inherits it. Corrections
+    /// are the opposite kind of data: small, hand-made, and impossible to
+    /// reconstruct. They belong where the backup can see them.
+    static func defaultURL() -> URL {
+        let support = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first!
+        return support.appendingPathComponent("kokoro-pronunciations.json", isDirectory: false)
+    }
+
+    /// The pre-move location, read once so corrections made before this change
+    /// are not orphaned.
+    private static func legacyURL() -> URL {
+        let support = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first!
+        return support.appendingPathComponent(
+            "TTS_Models/kokoro-pronunciations.json", isDirectory: false
+        )
+    }
+
     init(url: URL? = nil) {
-        if let url {
-            self.url = url
-        } else {
-            let support = FileManager.default.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first!
-            self.url = support.appendingPathComponent(
-                "TTS_Models/kokoro-pronunciations.json",
-                isDirectory: false
-            )
-        }
+        self.url = url ?? Self.defaultURL()
     }
 
     func load() -> File {
-        guard let data = try? Data(contentsOf: url),
-              let file = try? JSONDecoder().decode(File.self, from: data)
-        else {
-            return Self.empty
+        if let data = try? Data(contentsOf: url),
+           let file = try? JSONDecoder().decode(File.self, from: data) {
+            return file
         }
-        return file
+        // Fall back to the pre-move location exactly once, so a reader who
+        // made corrections before they were moved out of the backup-excluded
+        // model directory does not silently lose them.
+        if url == Self.defaultURL(),
+           let data = try? Data(contentsOf: Self.legacyURL()),
+           let file = try? JSONDecoder().decode(File.self, from: data) {
+            try? save(file)
+            return file
+        }
+        return Self.empty
     }
 
     func save(_ file: File) throws {
         let folder = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var directory = folder
-        try? directory.setResourceValues(values)
+        // Deliberately NOT excluded from backup — see `defaultURL()`.
         let data = try JSONEncoder().encode(file)
         try data.write(to: url, options: .atomic)
     }
