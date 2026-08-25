@@ -75,7 +75,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         EditingAction(title: "Highlight",
                       action: #selector(ReaderHighlightHostController.kudosHighlightSelection(_:))),
         EditingAction(title: "Add Note",
-                      action: #selector(ReaderHighlightHostController.kudosAddNoteToSelection(_:)))
+                      action: #selector(ReaderHighlightHostController.kudosAddNoteToSelection(_:))),
+        EditingAction(title: "Fix Pronunciation",
+                      action: #selector(ReaderHighlightHostController.kudosFixPronunciation(_:)))
     ]
 
     /// The text the reader currently has selected, if any.

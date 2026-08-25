@@ -133,6 +133,9 @@ struct ReadiumReaderView: View {
     @State private var searchModel = ReaderSearchModel()
     /// The highlight whose note is being written, if the editor is open.
     @State private var editingNote: ReadingAnnotation?
+    /// The word the reader picked "Fix Pronunciation" on. Wrapped because
+    /// `String` is not `Identifiable` and `.sheet(item:)` needs identity.
+    @State private var correctingPronunciation: PronunciationTarget?
     /// Note editor queued from inside the Contents sheet, opened only once that
     /// sheet has finished dismissing (see the `onDismiss` on the panel sheet).
     @State private var pendingNoteAfterPanelDismiss: ReadingAnnotation?
@@ -294,6 +297,15 @@ struct ReadiumReaderView: View {
                 context: .init(savedWork: work),
                 initialChapterPosition: currentAO3Chapter
             )
+            .sheet(item: $correctingPronunciation) { target in
+                ReaderPronunciationEditor(word: target.word, ipa: target.existing) { word, ipa in
+                    let store = KokoroPronunciationStore()
+                    let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let phonemes = ipa.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty, !phonemes.isEmpty else { return }
+                    try? store.setOverride(phonemes, for: trimmed)
+                }
+            }
             .sheet(item: $editingNote) { annotation in
                 ReaderNoteEditor(annotation: annotation) {
                     try? modelContext.save()
@@ -496,7 +508,8 @@ struct ReadiumReaderView: View {
                         onDismissInteractionActiveChange: handleDismissInteractionActiveChange,
                         onDismissDragEnded: handleDismissDragEnded,
                         onHighlight: { createAnnotationFromSelection(withNote: false) },
-                        onAddNote: { createAnnotationFromSelection(withNote: true) }
+                        onAddNote: { createAnnotationFromSelection(withNote: true) },
+                        onFixPronunciation: { beginPronunciationCorrection() }
                     )
                     .ignoresSafeArea()
                     if !book.hasPresentedFirstPage {
@@ -572,6 +585,34 @@ struct ReadiumReaderView: View {
     }
 
     // MARK: In-book annotations
+
+    /// One word the reader asked to correct, plus whatever override it already
+    /// has so the editor opens pre-filled rather than blank.
+    struct PronunciationTarget: Identifiable, Equatable {
+        let word: String
+        let existing: String
+        var id: String { word }
+    }
+
+    /// Opens the pronunciation editor on the current selection.
+    ///
+    /// Takes the FIRST word of the selection: the store is keyed per word, and
+    /// a reader who sweeps a whole name plus trailing punctuation should still
+    /// land on something the phonemizer will look up. Spelling is preserved
+    /// exactly, because FluidAudio consults a case-sensitive lexicon first.
+    private func beginPronunciationCorrection() {
+        guard let raw = book.currentSelection?.locator.text.highlight else { return }
+        let word = raw
+            .split(whereSeparator: { $0.isWhitespace })
+            .first
+            .map { $0.trimmingCharacters(in: CharacterSet.alphanumerics.union(
+                CharacterSet(charactersIn: "'-")).inverted) } ?? ""
+        guard !word.isEmpty else { return }
+        correctingPronunciation = PronunciationTarget(
+            word: word,
+            existing: KokoroPronunciationStore().overrides()[word] ?? ""
+        )
+    }
 
     /// Creates a highlight from the reader's current text selection, optionally
     /// opening the note editor straight afterwards.

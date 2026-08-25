@@ -2,8 +2,9 @@ import CryptoKit
 import Foundation
 
 /// Persistent Misaki-compatible pronunciation overrides. Empty by default —
-/// G2P is used unless an explicit IPA entry exists. UI editing is out of
-/// scope; the on-disk shape already supports global / fandom / work layers.
+/// G2P is used unless an explicit IPA entry exists, and entries here are
+/// tier 1 of the phonemizer's resolution order, ahead of the Misaki lexicon
+/// and the neural fallback.
 nonisolated struct KokoroPronunciationStore: Sendable {
     struct File: Codable, Equatable, Sendable {
         var version: Int
@@ -49,6 +50,56 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         try? directory.setResourceValues(values)
         let data = try JSONEncoder().encode(file)
         try data.write(to: url, options: .atomic)
+    }
+
+    /// Which layer an override belongs to. Work beats fandom beats global,
+    /// matching the merge order in ``lexicon(fandom:workID:)``.
+    enum Layer: Equatable, Sendable {
+        case global
+        case fandom(String)
+        case work(String)
+    }
+
+    /// Overrides in one layer, for display and editing.
+    func overrides(in layer: Layer = .global) -> [String: String] {
+        let file = load()
+        switch layer {
+        case .global: return file.global
+        case .fandom(let key): return file.fandoms[key] ?? [:]
+        case .work(let key): return file.works[key] ?? [:]
+        }
+    }
+
+    /// Add or replace one override.
+    ///
+    /// The key keeps the caller's exact spelling: FluidAudio consults a
+    /// case-sensitive custom lexicon before the lower-cased one, so `Anna`
+    /// and `anna` are deliberately distinct entries rather than folded.
+    func setOverride(_ ipa: String, for word: String, in layer: Layer = .global) throws {
+        var file = load()
+        switch layer {
+        case .global: file.global[word] = ipa
+        case .fandom(let key): file.fandoms[key, default: [:]][word] = ipa
+        case .work(let key): file.works[key, default: [:]][word] = ipa
+        }
+        try save(file)
+    }
+
+    /// Remove one override, and drop the layer's dictionary when it empties
+    /// so the file does not accumulate empty objects per work.
+    func removeOverride(for word: String, in layer: Layer = .global) throws {
+        var file = load()
+        switch layer {
+        case .global:
+            file.global[word] = nil
+        case .fandom(let key):
+            file.fandoms[key]?[word] = nil
+            if file.fandoms[key]?.isEmpty == true { file.fandoms[key] = nil }
+        case .work(let key):
+            file.works[key]?[word] = nil
+            if file.works[key]?.isEmpty == true { file.works[key] = nil }
+        }
+        try save(file)
     }
 
     /// Merges layers. Work wins over fandom over global. Exact spelling is

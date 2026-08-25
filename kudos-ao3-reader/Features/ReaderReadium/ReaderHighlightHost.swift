@@ -17,6 +17,9 @@ final class ReaderHighlightHostController: UIViewController {
     var onHighlight: (() -> Void)?
     /// Fired when the reader picks "Add Note".
     var onAddNote: (() -> Void)?
+    /// Fired when the reader picks "Fix Pronunciation" — the selected word is
+    /// read from the navigator's current selection by the SwiftUI layer.
+    var onFixPronunciation: (() -> Void)?
 
     private let navigator: UIViewController
 
@@ -57,8 +60,17 @@ final class ReaderHighlightHostController: UIViewController {
         onAddNote?()
     }
 
+    @objc func kudosFixPronunciation(_: Any?) {
+        onFixPronunciation?()
+    }
+
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(kudosHighlightSelection(_:)) || action == #selector(kudosAddNoteToSelection(_:)) {
+        let ours: Set<Selector> = [
+            #selector(kudosHighlightSelection(_:)),
+            #selector(kudosAddNoteToSelection(_:)),
+            #selector(kudosFixPronunciation(_:))
+        ]
+        if ours.contains(action) {
             return true
         }
         return super.canPerformAction(action, withSender: sender)
