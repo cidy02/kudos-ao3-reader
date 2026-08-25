@@ -491,22 +491,40 @@ public final class SherpaKokoroTTSService: TTSService {
         startsPlayback: Bool = true
     ) -> ScheduledPlayback? {
         guard status == .playing, !Task.isCancelled else { return nil }
-        guard let format = playbackFormat,
-              let buffer = AVAudioPCMBuffer(
-                pcmFormat: format,
-                frameCapacity: AVAudioFrameCount(samples.count)
-              )
-        else { return nil }
+        guard let format = playbackFormat else { return nil }
 
-        buffer.frameLength = AVAudioFrameCount(samples.count)
+        // Structural silence, appended to the clip itself.
+        //
+        // Sherpa queues clips back to back, so the only gap between them was
+        // whatever the generation boundary happened to cost — a chapter break
+        // and a mid-sentence split sounded identical, and the pause sliders
+        // in Developer Settings did nothing on this engine. Zero samples are
+        // the whole mechanism: no scheduling change, and `nil` (an unclassified
+        // unit) pads nothing, so any caller that predates this is unaffected.
+        let silenceFrames = Int((unit.pauseAfter?.pauseSeconds ?? 0) * format.sampleRate)
+        let totalFrames = samples.count + max(0, silenceFrames)
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(totalFrames)
+        ) else { return nil }
+
+        buffer.frameLength = AVAudioFrameCount(totalFrames)
+        guard let dest = buffer.floatChannelData?[0] else { return nil }
         samples.withUnsafeBufferPointer { src in
-            guard let base = src.baseAddress, let dest = buffer.floatChannelData?[0] else { return }
+            guard let base = src.baseAddress else { return }
             dest.update(from: base, count: samples.count)
+        }
+        if totalFrames > samples.count {
+            dest.advanced(by: samples.count)
+                .update(repeating: 0, count: totalFrames - samples.count)
         }
 
         let playerNode = playerNode
         let scheduledAt = Date()
-        let audioSeconds = Double(samples.count) / format.sampleRate
+        // Counts the silence: this figure feeds the queue floor, which asks
+        // how much wall-clock audio is scheduled ahead, not how much of it is
+        // speech.
+        let audioSeconds = Double(totalFrames) / format.sampleRate
         var streamContinuation: AsyncStream<Void>.Continuation?
         let consumption = AsyncStream<Void>(bufferingPolicy: .bufferingNewest(1)) {
             streamContinuation = $0

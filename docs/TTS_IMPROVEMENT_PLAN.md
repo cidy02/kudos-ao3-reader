@@ -521,6 +521,30 @@ why this phase is about quality and not tidiness.
       `sentenceChunks` still concatenates — that path is G2P context for
       Sherpa, not Apple. Adjacent `<p>`s (different selectors) still join.
 
+- [x] **All three engines now vary the gap by structure — 2026-08-25.** Two
+      engines were still flat after the item above. **Apple** gave every
+      utterance the same `postUtteranceDelay`, so a chapter break sounded
+      exactly like a mid-sentence split. **Sherpa** queued clips back to back,
+      so its only gap was whatever the generation boundary happened to cost.
+      `TTSSpeechUnit` now carries a `pauseAfter: KokoroBoundary?`; Apple reads
+      it into `postUtteranceDelay`, and Sherpa appends that many zero samples
+      to the clip. `nil` means unclassified and keeps the old flat behaviour,
+      so a caller that builds units directly is unaffected.
+
+      Classification is **structural, not positional**: a different source
+      block is a `.paragraph`, no terminal punctuation is the length-driven
+      split of one sentence (`.continuation`), a `<br>` seam is `.line`, and a
+      sentence boundary *inside* one block stays `nil` — Kokoro has no
+      boundary for that case because it packs those sentences into a single
+      utterance. The first version labelled by position and would have made
+      nearly every paragraph break a `.continuation`, **shortening** real
+      breaks from 0.22 s to 0.14 s. `<br>` seams are ~1% of paragraphs, so
+      position is a bad proxy for structure.
+
+      Needs listening on a device: neither engine has been heard yet, and the
+      pause values themselves are still the unproven ones Developer Settings
+      exists to settle.
+
 - [ ] **Revisit the packing band (A/B).** `[prior-art]` Ours is min 110 /
       target 175 / max 220; Kokoro-FastAPI ships min **175** / max **250** —
       their minimum is our target. Their band is tuned for continuous
@@ -1407,16 +1431,22 @@ of. Relevant when tuning pause lengths.
       still the 1-voice build.
 - [ ] **Device-test both engines.** Core ML needs an iOS 27 device; Sherpa needs
       iOS 26. **Nothing on this branch has produced audible audio.**
-- [ ] **Pre-existing suite failures, unrelated to TTS.** 9 tests fail
-      identically on commit `2a61aaf4` — before any TTS work and with the
+- [x] **Pre-existing suite failures — fixed 2026-08-25.** 9 tests failed
+      identically on commit `2a61aaf4`, before any TTS work and with the
       original MiniZip: `FolderSyncTests` + `KudosBackupFontRestoreTests`
       case-folding, and `WorkStatLabelTests/categoryColorMatchesAO3sOwnCoding`.
-      Worth their own task.
+      All three now pass; the full suite is **1,485 tests / 0 failures** in
+      ~22s. That last number is the point: these failures were making
+      `xcodebuild` run `simctl diagnose --timeout=600` on every run, which is
+      why the suite used to take over an hour.
 - [ ] **Heading detection depends on the CSS selector.** `[measured]` The
       text-only regex matches 74/104 headings; "Preface" and a work's title
       match nothing. Fine while Readium supplies `cssSelector`, silent
       degradation if it ever does not.
 - [ ] **`ReaderSpeechSettingsSection` exceeds the SwiftLint type-body-length
-      warning** (532 lines) after gaining the Core ML section. Non-blocking.
+      warning** (556 lines as of 2026-08-25, up from 532) after gaining the
+      Core ML section and the Developer Settings link. Non-blocking, but it
+      only grows: the natural split is to lift each engine's block into its
+      own view, the way `ReaderSpeechDeveloperSettingsView` already is.
 - [ ] **x86_64 simulators no longer link** — FluidAudio ships an arm64-only
       `libtext_processing_rs.a`.

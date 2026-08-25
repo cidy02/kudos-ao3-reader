@@ -42,8 +42,9 @@ struct ReaderSpeechDeveloperSettingsView: View {
         List {
             Section {
                 Label(
-                    "Sizes and boundaries affect Kokoro only. Pauses affect "
-                        + "Kokoro and Apple; Sherpa has no structural pauses.",
+                    "Pauses affect all three engines. Chunk sizes and the "
+                        + "boundary toggles affect Kokoro only — Apple and "
+                        + "Sherpa chunk by length.",
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
@@ -91,11 +92,12 @@ struct ReaderSpeechDeveloperSettingsView: View {
             } header: {
                 Text("Boundaries")
             } footer: {
-                Text("Off restores the older behaviour of merging these into "
-                    + "the surrounding prose. Chunking is decided for the whole "
-                    + "chapter before playback starts, so these and the sizes "
-                    + "above apply from the next chapter or after restarting "
-                    + "Read Aloud — not mid-chapter.")
+                Text("Kokoro only. Off restores the older behaviour of "
+                    + "merging these into the surrounding prose. Chunking is "
+                    + "decided for the whole chapter before playback starts, "
+                    + "so these and the sizes above apply from the next "
+                    + "chapter or after restarting Read Aloud — not "
+                    + "mid-chapter.")
             }
 
             Section {

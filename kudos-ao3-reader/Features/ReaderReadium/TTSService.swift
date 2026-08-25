@@ -91,57 +91,65 @@ public struct TTSSpeechUnit: Hashable, Sendable {
         from units: [TTSSpeechUnit],
         maxLength: Int = 250
     ) -> [TTSSpeechUnit] {
-        // Classify each boundary by what actually separates the two chunks.
-        // An earlier version labelled purely by position, which made every
-        // mid-group boundary a `.continuation` (0.14s) — but `<br>` seams are
-        // ~1% of paragraphs, so almost all of those are real paragraph breaks
-        // and it would have *shortened* them from the old flat 0.22s.
         let groups = groupsSeparatedByLineBreakSeams(units)
         return groups.enumerated().flatMap { index, group in
-            let isLastGroup = index == groups.count - 1
-            let packed = packAdjacent(
-                splitIntoContextualSentences(from: group, maxLength: maxLength),
-                maxLength: maxLength
+            tagBoundaries(
+                packAdjacent(
+                    splitIntoContextualSentences(from: group, maxLength: maxLength),
+                    maxLength: maxLength
+                ),
+                isLastGroup: index == groups.count - 1
             )
-            return packed.enumerated().map { position, unit in
-                let next = position + 1 < packed.count ? packed[position + 1] : nil
-                let boundary: KokoroBoundary?
-                if let next {
-                    if unit.locator?.locations.cssSelector
-                        != next.locator?.locations.cssSelector {
-                        // Different source block: a paragraph break.
-                        boundary = .paragraph
-                    } else if !KokoroSemanticDocument.endsUtterance(unit.text) {
-                        // Same block, no terminal punctuation: this is the
-                        // length-driven split of one long sentence.
-                        //
-                        // `endsUtterance` deliberately does not treat a curly
-                        // close-quote as a wrapper — see the barrier and
-                        // `curlyQuotedDialogueDoesNotSwallowTheNextParagraph`.
-                        // So a fragment ending `."` lands here and takes the
-                        // shorter gap. That only happens *within* one block
-                        // (separate blocks take the `.paragraph` branch
-                        // above), where a rapid exchange is the likely
-                        // content anyway.
-                        boundary = .continuation
-                    } else {
-                        // Same block, sentence ended. Kokoro has no boundary
-                        // for this because it packs such sentences into one
-                        // utterance; `nil` keeps the flat sentence pause,
-                        // which is what shipped and is already right.
-                        boundary = nil
-                    }
-                } else {
-                    // End of a group is a `<br>` seam, except the last.
-                    boundary = isLastGroup ? .paragraph : .line
-                }
-                return TTSSpeechUnit(
-                    text: unit.text, locator: unit.locator, pauseAfter: boundary
-                )
-            }
         }
     }
 
+    /// Labels the gap that follows each chunk, by what actually separates it
+    /// from the next one.
+    ///
+    /// An earlier version labelled purely by position, which made every
+    /// mid-group boundary a `.continuation` (0.14s) — but `<br>` seams are
+    /// ~1% of paragraphs, so almost all of those are real paragraph breaks
+    /// and it would have *shortened* them from the flat 0.22s that shipped.
+    private static func tagBoundaries(
+        _ chunks: [TTSSpeechUnit],
+        isLastGroup: Bool
+    ) -> [TTSSpeechUnit] {
+        chunks.enumerated().map { position, unit in
+            let next = position + 1 < chunks.count ? chunks[position + 1] : nil
+            let boundary: KokoroBoundary?
+            if let next {
+                if unit.locator?.locations.cssSelector
+                    != next.locator?.locations.cssSelector {
+                    // Different source block: a paragraph break.
+                    boundary = .paragraph
+                } else if !KokoroSemanticDocument.endsUtterance(unit.text) {
+                    // Same block, no terminal punctuation: the length-driven
+                    // split of one long sentence.
+                    //
+                    // `endsUtterance` deliberately does not treat a curly
+                    // close-quote as a wrapper — see the barrier and
+                    // `curlyQuotedDialogueDoesNotSwallowTheNextParagraph`. So
+                    // a fragment ending in one lands here and takes the
+                    // shorter gap. That only happens *within* one block
+                    // (separate blocks take `.paragraph` above), where a
+                    // rapid exchange is the likely content anyway.
+                    boundary = .continuation
+                } else {
+                    // Same block, sentence ended. Kokoro has no boundary for
+                    // this because it packs such sentences into one
+                    // utterance; `nil` keeps the flat sentence pause, which
+                    // is what shipped and is already right.
+                    boundary = nil
+                }
+            } else {
+                // End of a group is a `<br>` seam, except the last.
+                boundary = isLastGroup ? .paragraph : .line
+            }
+            return TTSSpeechUnit(
+                text: unit.text, locator: unit.locator, pauseAfter: boundary
+            )
+        }
+    }
     /// Gives Kokoro complete sentences, including those Readium split across
     /// `<br>` / adjacent block elements. G2P is per-word; an isolated fragment
     /// like "read" is pronounced as a citation form instead of the verb in
@@ -157,11 +165,17 @@ public struct TTSSpeechUnit: Hashable, Sendable {
         // lines — three engines disagreeing about the same chapter is worse
         // than any one of them being wrong.
         //
-        // Sherpa generates one chunk per call and plays them in sequence, so a
-        // split is audible on its own without a pause parameter to thread
-        // through.
-        groupsSeparatedByLineBreakSeams(units).flatMap { group in
-            splitIntoContextualSentences(from: group, maxLength: maxLength)
+        // Sherpa generates one chunk per call and plays them in sequence, so
+        // a split is audible on its own — but every split sounded *the same*,
+        // because the only gap was whatever the generation boundary happened
+        // to cost. Tagged the same way as the Apple path so a chapter break
+        // and a mid-sentence split differ there too.
+        let groups = groupsSeparatedByLineBreakSeams(units)
+        return groups.enumerated().flatMap { index, group in
+            tagBoundaries(
+                splitIntoContextualSentences(from: group, maxLength: maxLength),
+                isLastGroup: index == groups.count - 1
+            )
         }
     }
 

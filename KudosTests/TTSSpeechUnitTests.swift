@@ -336,6 +336,17 @@ final class TTSSpeechUnitTests: XCTestCase {
         XCTAssertNil(chunks.first?.pauseAfter)
     }
 
+    /// Sherpa queued clips back to back, so every split sounded the same —
+    /// the only gap was whatever the generation boundary cost. It now carries
+    /// the same classification the Apple path does.
+    func testSentenceChunksCarryBoundariesForSherpa() {
+        let chunks = TTSSpeechUnit.sentenceChunks(from: [
+            unit("hey", selector: "html > body > p:nth-child(1)"),
+            unit("are you there", selector: "html > body > p:nth-child(1)")
+        ])
+        XCTAssertEqual(chunks.map(\.pauseAfter), [.line, .paragraph])
+    }
+
     private func unit(_ text: String, selector: String) -> TTSSpeechUnit {
         TTSSpeechUnit(
             text: text,
