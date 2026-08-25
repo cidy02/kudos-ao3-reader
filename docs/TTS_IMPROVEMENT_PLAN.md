@@ -276,6 +276,21 @@ everything below is provisional without it.
       dialogue-heavy and a numbers/names-heavy sample, not just clean prose.
       Cheapest item here; gates every other one.
 
+- [x] **The other half of Phase 0 — done 2026-08-25.** The harness auditions a
+      *fixed sample*, which answers "how does this setting sound" but not "how
+      does this setting sound **on the work I am reading**" — and the settings
+      it auditioned were compile-time constants, so A/B meant rebuilding.
+      Developer Settings now exposes every unproven value (pauses, chunk band,
+      split threshold, the two boundary toggles) and they change real
+      playback, not the sample. Defaults are the shipped constants exactly, so
+      an untouched install is unchanged, and the panel says plainly when
+      anything has been moved — a listening report is worthless if it is
+      unclear which build it describes.
+
+      Reachable mid-read: long-press the Read Aloud button in the reader fan
+      menu, which opens the speech options without needing playback to have
+      started.
+
 ### Phase 1 — defects
 
 - [x] **Pauses ignore speed — fixed 2026-08-22.** `[code]` `KokoroPauseAssembler.assemble` inserts
@@ -474,7 +489,7 @@ why this phase is about quality and not tidiness.
       against `splitThreshold`. The estimator's job is to be cheap and roughly
       right, and with the digit term it is.
 
-- [ ] **The estimator over-estimates by 15%, and that is currently correct.**
+- [x] **The estimator over-estimates by 15%, and that is currently correct.**
       `[measured]` Real phoneme length is **0.866x the estimate** (p5 0.79,
       p95 0.94), stable across all 20 works (0.850–0.891). So the budget
       constants do not mean what they say — `preferredTarget 175` really lands
@@ -487,6 +502,12 @@ why this phase is about quality and not tidiness.
       `splitThreshold`'s real ~346 should be raised toward a real ~400 to cut
       the number of prosody resets — the one change here with a plausible
       audible upside, and it needs Phase 0.
+
+      **Phase 0 now exists.** Developer Settings → Chunk size → *Split above*
+      is that slider, and it changes real playback, not the sample. To try the
+      raise: set it to **460** (≈400 real, given the 0.866 factor) and compare
+      a long descriptive passage against the shipped 400. Everything else in
+      this item is settled and should not be re-derived.
 
       Cause: English IPA is *shorter* than English spelling (`through` is seven
       letters and three phonemes), so a 1.15x grapheme factor over-shoots even
@@ -550,6 +571,12 @@ why this phase is about quality and not tidiness.
       their minimum is our target. Their band is tuned for continuous
       narration, so the answer is probably a narration band plus a dialogue
       exception, not one global band.
+
+      Now A/B-able: Developer Settings → Chunk size → *Minimum* / *Maximum*.
+      Remember the 0.866 factor when reading either number — the sliders are
+      in estimated phonemes, so Kokoro-FastAPI's real 175/250 is about
+      **202/289** on these. Chunk sizes are consumed when the chapter's plan
+      is built, so change them between chapters, not mid-playback.
 
 ### Phase 3 — pronunciation
 
@@ -1419,12 +1446,31 @@ of. Relevant when tuning pause lengths.
       widely recommended at 0.9 (1.05 for ads). One line in
       `ReaderSpeechPreferences.defaultRate`, but it changes everyone's
       experience — A/B first.
-- [ ] **Normalization escape hatch.** `[prior-art]` Kokoro-FastAPI exposes
-      `normalization_options: {normalize: false}` because normalization "can
-      incorrectly remove or change some phrases". We stack two normalizers
-      (`KokoroSpeechNormalizer`, then NeMo `EnglishTextNormalizer`) with no way
-      to inspect or disable either. A debug toggle at minimum, so a
-      mispronunciation can be traced to the right stage.
+- [ ] **Normalization escape hatch — not the one-line toggle this was
+      written as.** `[code]` Kokoro-FastAPI exposes `normalization_options:
+      {normalize: false}` because normalization "can incorrectly remove or
+      change some phrases". We stack two normalizers with no way to inspect or
+      disable either. Checked 2026-08-25, and **neither stage takes a toggle
+      cheaply**:
+
+      1. `KokoroSpeechNormalizer` is ours but **load-bearing for structure**,
+         not just pronunciation. It is what converts straight quotes *to*
+         curly, and `classify` detects dialogue by testing the normalised
+         first character against `openQuote`; `KokoroBoilerplateFilter` and
+         `KokoroPhonemeBudget` normalise before matching too. Disabling it
+         globally would silently reclassify every dialogue block, so an
+         honest toggle has to be scoped to the phonemiser input alone.
+      2. NeMo's `EnglishTextNormalizer` is `internal` to FluidAudio
+         (`TTS/Shared/EnglishTextNormalizer.swift`, called from
+         `KokoroAneManager.swift:223`). It is not reachable from our module at
+         all — no toggle, and not even a *preview* — without adding a `public`
+         to `Scripts/fluidaudio-kudos.patch`, which is more upstream-bump
+         maintenance for a debug affordance.
+
+      So the realistic shape is a **read-only preview** of stage 1 in
+      Developer Settings, and stage 2 stays opaque unless the patch grows. Not
+      started: worth doing when a real mispronunciation needs tracing, rather
+      than speculatively.
 
 ---
 
