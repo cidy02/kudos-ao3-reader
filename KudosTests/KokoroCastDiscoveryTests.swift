@@ -95,5 +95,43 @@ struct KokoroCastDiscoveryTests {
         )
         #expect(names.contains("Sarah Connor") || names.contains("Sarah"))
     }
+
+    /// The defect this pins, and why every other test here missed it.
+    ///
+    /// The guessed log only ever holds the phonemiser's *normalised* key: the
+    /// observer is handed `fallback(normalized)` and the store only trims
+    /// whitespace, so a real entry is `"severus"`, never `"Severus"`. Every
+    /// other fixture in this suite seeds capitalised words the store cannot
+    /// contain, so `tagged.contains(entry.word)` looked fine here while being
+    /// permanently false in production — both priors were dead for exactly the
+    /// proper nouns the ranking exists for.
+    @Test func priorsMatchTheLowercasedFormTheLogActuallyStores() {
+        let ranked = KokoroCastDiscovery.rank(
+            guessed: [guess("severus", 5), guess("mundane", 9)],
+            characterTags: ["Severus Snape (Harry Potter)"]
+        )
+        #expect(ranked.first?.word == "severus")
+        #expect(ranked.first?.isTaggedCharacter == true)
+    }
+
+    /// NER runs with `.joinNames`, so it returns "Severus Snape" as one span
+    /// while the log stores single words. Matching only the whole span would
+    /// have silently disabled the third source in the case it was added for.
+    @Test func aJoinedNerSpanStillMatchesItsIndividualWords() {
+        let ranked = KokoroCastDiscovery.rank(
+            guessed: [guess("rhiannon", 5), guess("mundane", 6)],
+            recognisedNames: ["Rhiannon Vance"]
+        )
+        #expect(ranked.first?.word == "rhiannon")
+        #expect(ranked.first?.isRecognisedName == true)
+    }
+
+    /// Possessives normalise to a different key, so they are a separate entry.
+    /// Recorded because it is the known gap the plan calls out, not a bug here.
+    @Test func normalisationKeepsApostrophesAndDropsPunctuation() {
+        #expect(KokoroCastDiscovery.normalizedKey("Anna's") == "anna's")
+        #expect(KokoroCastDiscovery.normalizedKey("\u{201C}Don\u{2019}t.\u{201D}") == "dont")
+        #expect(KokoroCastDiscovery.normalizedKey("Severus") == "severus")
+    }
 }
 #endif

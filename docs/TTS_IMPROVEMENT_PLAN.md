@@ -1594,6 +1594,25 @@ of. Relevant when tuning pause lengths.
       text-only regex matches 74/104 headings; "Preface" and a work's title
       match nothing. Fine while Readium supplies `cssSelector`, silent
       degradation if it ever does not.
+- [ ] **Test isolation: the tuning suite mutates process-global state.**
+      `[code]` `ReaderSpeechTuningTests` writes real `UserDefaults` keys and
+      invalidates the shared `ReaderSpeechTuning` snapshot cache. `.serialized`
+      orders tests *within* that suite only, so any other suite that reads a
+      tuning value while it runs — the packing and boundary suites all do,
+      through `KokoroBoundary.pauseSeconds` and `KokoroPhonemeBudget` — can
+      observe a mutated value. It has not been seen to flake, but nothing
+      prevents it. The real fix is a test-injectable defaults suite rather than
+      `UserDefaults.standard`.
+
+- [ ] **Apple's paragraph gaps land at the wrong boundaries when sentences are
+      packed.** `[code]` `packAdjacent` merges sentences from adjacent blocks
+      and keeps only the *first* unit's locator, so `tagBoundaries` compares the
+      block each chunk *starts* in. A chunk that begins in paragraph 1 and ends
+      inside paragraph 2 is followed by a `.paragraph` gap even though the
+      boundary falls mid-paragraph, while the real break inside it gets none.
+      Low impact — it is 0.32s vs 0.22s on the fallback engine — but the fix
+      needs `packAdjacent` to carry the last locator as well as the first.
+
 - [ ] **Two speech files exceed their SwiftLint length warnings.**
       `ReaderSpeechController` is at 780 lines against a 700 limit (it was
       already over at 760; the pronunciation pre-flight added the rest).

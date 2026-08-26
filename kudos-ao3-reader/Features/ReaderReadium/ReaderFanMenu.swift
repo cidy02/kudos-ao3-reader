@@ -57,6 +57,14 @@ struct ReaderFanRoundAction: Identifiable {
 /// button on dismiss, which is the effect Apple Books uses. Everything inside a
 /// container is one glass system, so neighbouring shapes also blend as they
 /// separate instead of popping in independently.
+/// Long enough to cover the release that follows a hold, short enough that a
+/// deliberate tap afterwards is never eaten. The hold opens a sheet over the
+/// button, so there is nothing to tap inside the window.
+///
+/// File scope because `LongPressableRoundAction` is generic, and a generic
+/// type cannot hold a static stored property.
+private let readerFanSuppressTapWindow: TimeInterval = 1.0
+
 struct ReaderFanMenu: View {
     @Binding var isOpen: Bool
     let pills: [ReaderFanMenuPill]
@@ -230,13 +238,23 @@ struct ReaderFanMenu: View {
     private struct LongPressableRoundAction<Content: View>: View {
         let action: ReaderFanRoundAction
         @ViewBuilder var content: () -> Content
-        @State private var longPressFired = false
-        @State private var gestureActive = false
+        /// When the long press last fired. A timestamp rather than a flag
+        /// because it expires on its own: the long press presents a sheet,
+        /// which cancels the touch sequence, so neither the button's action
+        /// nor `DragGesture.onEnded` is guaranteed to arrive and any flag we
+        /// set could latch forever. The previous flag pair did exactly that
+        /// and cost one dead tap after every long press.
+        @State private var longPressedAt: Date?
 
         var body: some View {
             Button {
-                if longPressFired {
-                    longPressFired = false
+                // `simultaneousGesture` runs alongside the button's own
+                // gesture, so a completed hold satisfies the long press *and*
+                // the tap on release. Swallow only the tap that belongs to
+                // that hold — anything later than the window is a real tap.
+                if let longPressedAt,
+                   Date().timeIntervalSince(longPressedAt) < readerFanSuppressTapWindow {
+                    self.longPressedAt = nil
                     return
                 }
                 action.action()
@@ -244,25 +262,10 @@ struct ReaderFanMenu: View {
                 content()
             }
             .buttonStyle(.plain)
-            // Clears once per touch, so a hold the user slides out of —
-            // which fires the long press but never delivers the button's tap
-            // — cannot leave the flag set and swallow the *next* real tap.
-            // `gestureActive` is what makes it once-per-touch: `onChanged`
-            // also fires on finger movement, and clearing on every one of
-            // those would wipe the flag the hold just set.
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !gestureActive else { return }
-                        gestureActive = true
-                        longPressFired = false
-                    }
-                    .onEnded { _ in gestureActive = false }
-            )
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                     guard action.isEnabled, let longPress = action.longPressAction else { return }
-                    longPressFired = true
+                    longPressedAt = Date()
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     longPress()
                 }
