@@ -91,6 +91,33 @@ nonisolated enum KokoroCastDiscovery {
         return names
     }
 
+    /// The keys a name can match under: the whole name, plus each word.
+    ///
+    /// `recognisedNames` uses `.joinNames`, so NER returns "Severus Snape" as
+    /// one span — but the guessed log stores single words, so a joined span
+    /// alone would never match. Tags are split for the same reason a reader
+    /// hears "Granger" far more often than the full form.
+    private static func lookupKeys(_ name: String) -> [String] {
+        var keys = [normalizedKey(name)]
+        for part in name.split(whereSeparator: { $0.isWhitespace }) {
+            let key = normalizedKey(String(part))
+            if key.count > 2 { keys.append(key) }
+        }
+        return keys.filter { !$0.isEmpty }
+    }
+
+    /// Mirrors FluidAudio's `KokoroAneEnglishPhonemizer.normalizeKey`
+    /// (lowercase, keep only letters/digits/apostrophe). That one is internal
+    /// to the package and cannot be called, so it is reproduced — if upstream
+    /// changes it, the priors go quietly dead again.
+    static func normalizedKey(_ word: String) -> String {
+        let allowed = CharacterSet.letters.union(.decimalDigits)
+            .union(CharacterSet(charactersIn: "'"))
+        return String(String.UnicodeScalarView(
+            word.lowercased().unicodeScalars.filter { allowed.contains($0) }
+        ))
+    }
+
     /// Merge the three sources into one ranked list.
     ///
     /// - Parameter guessed: what the engine actually had to guess at.
@@ -102,14 +129,22 @@ nonisolated enum KokoroCastDiscovery {
         characterTags: [String] = [],
         recognisedNames: Set<String> = []
     ) -> [Candidate] {
-        let tagged = namesFromCharacterTags(characterTags)
+        // Both priors keep source capitalisation ("Severus"), but the guessed
+        // log only ever holds the phonemiser's *normalised* key ("severus") —
+        // the observer is handed `fallback(normalized)`, and the store only
+        // trims whitespace. Comparing them raw made both priors dead for every
+        // proper noun, which is the only kind of word this ranking is for, so
+        // both sides are normalised here.
+        let tagged = Set(namesFromCharacterTags(characterTags).flatMap(lookupKeys))
+        let recognised = Set(recognisedNames.flatMap(lookupKeys))
         return guessed
             .map { entry in
-                Candidate(
+                let key = normalizedKey(entry.word)
+                return Candidate(
                     word: entry.word,
                     guessCount: entry.count,
-                    isTaggedCharacter: tagged.contains(entry.word),
-                    isRecognisedName: recognisedNames.contains(entry.word)
+                    isTaggedCharacter: tagged.contains(key),
+                    isRecognisedName: recognised.contains(key)
                 )
             }
             .sorted {

@@ -501,8 +501,23 @@ public final class SherpaKokoroTTSService: TTSService {
         // in Developer Settings did nothing on this engine. Zero samples are
         // the whole mechanism: no scheduling change, and `nil` (an unclassified
         // unit) pads nothing, so any caller that predates this is unaffected.
-        let silenceFrames = Int((unit.pauseAfter?.pauseSeconds ?? 0) * format.sampleRate)
-        let totalFrames = samples.count + max(0, silenceFrames)
+        // Divided by speed for the same reason `KokoroPauseAssembler` does it:
+        // sherpa compresses the *speech* at 1.5x but a fixed-second pause
+        // stays put, so gaps ran ~50% long at high rates and short at low.
+        // A pause is a fraction of the surrounding speech, not a duration.
+        let silenceScale = Double(max(0.1, currentSpeed))
+        let silenceFrames = Int(
+            (unit.pauseAfter?.pauseSeconds ?? 0) / silenceScale * format.sampleRate
+        )
+        // Trimmed before the pause is appended, for the same reason the Core ML
+        // assembler does it: otherwise the structural gap stacks on whatever
+        // edge silence the model already emitted, and an ellipsis at a
+        // paragraph end runs roughly twice as long as asked. A clip with no
+        // trailing silence comes back unchanged.
+        let speech = KokoroPauseAssembler.trimEdgeSilence(
+            samples: samples, sampleRate: format.sampleRate
+        )
+        let totalFrames = speech.count + max(0, silenceFrames)
         guard let buffer = AVAudioPCMBuffer(
             pcmFormat: format,
             frameCapacity: AVAudioFrameCount(totalFrames)
@@ -510,13 +525,13 @@ public final class SherpaKokoroTTSService: TTSService {
 
         buffer.frameLength = AVAudioFrameCount(totalFrames)
         guard let dest = buffer.floatChannelData?[0] else { return nil }
-        samples.withUnsafeBufferPointer { src in
+        speech.withUnsafeBufferPointer { src in
             guard let base = src.baseAddress else { return }
-            dest.update(from: base, count: samples.count)
+            dest.update(from: base, count: speech.count)
         }
-        if totalFrames > samples.count {
-            dest.advanced(by: samples.count)
-                .update(repeating: 0, count: totalFrames - samples.count)
+        if totalFrames > speech.count {
+            dest.advanced(by: speech.count)
+                .update(repeating: 0, count: totalFrames - speech.count)
         }
 
         let playerNode = playerNode

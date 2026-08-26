@@ -93,9 +93,6 @@ struct ReadiumReaderView: View {
     @State private var previewingOriginal: URL?
     @State private var rebuildError: String?
 
-    /// The afterword's own AO3 boilerplate — "Please drop by the Archive and
-    /// comment…" — links straight at `/works/<id>/comments/new`, which this
-    /// work's native comments sheet already covers. Opens that instead of the
     /// The work's cast, for ranking the pronunciation list.
     ///
     /// `workCharacters` is only populated once the work has been refreshed
@@ -115,6 +112,9 @@ struct ReadiumReaderView: View {
         return { await speech.scanChapterForPronunciation(from: book.currentLocator) }
     }
 
+    /// The afterword's own AO3 boilerplate — "Please drop by the Archive and
+    /// comment…" — links straight at `/works/<id>/comments/new`, which this
+    /// work's native comments sheet already covers. Opens that instead of the
     /// AO3 web form when the URL is for *this* work.
     ///
     /// The link itself is untouched (nothing removed from the EPUB) and every
@@ -319,7 +319,14 @@ struct ReadiumReaderView: View {
                 context: .init(savedWork: work),
                 initialChapterPosition: currentAO3Chapter
             )
-            .sheet(isPresented: $showingSpeechSettings) {
+            // `onDismiss` is what makes the Speed slider in this sheet reach
+            // the running engine: `setRate` is only ever called from
+            // `applyPreferences()`, so without this the slider wrote
+            // UserDefaults and playback carried on at the old rate until the
+            // Display panel happened to be opened.
+            .sheet(isPresented: $showingSpeechSettings, onDismiss: {
+                speech.applyPreferences()
+            }) {
                 ReaderSpeechSettingsSheet(
                     characterTags: speechCastTags,
                     onScanChapter: scanChapterForPronunciation

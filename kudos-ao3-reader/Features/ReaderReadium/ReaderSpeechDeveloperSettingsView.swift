@@ -42,9 +42,10 @@ struct ReaderSpeechDeveloperSettingsView: View {
         List {
             Section {
                 Label(
-                    "Pauses affect all three engines. Chunk sizes and the "
-                        + "boundary toggles affect Kokoro only — Apple and "
-                        + "Sherpa chunk by length.",
+                    "Kokoro uses all of these. Apple and Sherpa chunk by "
+                        + "length, so they only ever produce the first three "
+                        + "gaps — scene and chapter are Kokoro-only, as are "
+                        + "chunk sizes and the boundary toggles.",
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
@@ -55,8 +56,8 @@ struct ReaderSpeechDeveloperSettingsView: View {
                       note: "A <br> inside one paragraph. Shipped 0.22s — chosen "
                           + "only because it sits between the two around it.")
                 pause("Paragraph", $paragraphPause, note: "Shipped 0.32s.")
-                pause("Scene break", $scenePause, note: "Shipped 0.85s.")
-                pause("Chapter", $chapterPause, note: "Shipped 1.25s.")
+                pause("Scene break", $scenePause, note: "Shipped 0.85s. Kokoro only.")
+                pause("Chapter", $chapterPause, note: "Shipped 1.25s. Kokoro only.")
             } header: {
                 Text("Pauses")
             } footer: {

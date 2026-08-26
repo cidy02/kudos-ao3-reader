@@ -66,10 +66,10 @@ struct ReaderPronunciationSettingsView: View {
                     .disabled(isScanning)
                 } footer: {
                     Text(scanMessage
-                        ?? "Reads the chapter through the pronunciation stage "
-                            + "only — no audio — and lists the names it would "
-                            + "have to guess at, so they can be fixed before "
-                            + "you hear them.")
+                        ?? "Reads from here to the end of the chapter through "
+                            + "the pronunciation stage only — no audio — and "
+                            + "lists the names it would have to guess at, so "
+                            + "they can be fixed before you hear them.")
                 }
             }
 
@@ -282,12 +282,16 @@ struct ReaderPronunciationSettingsView: View {
                 // Distinct from zero: nothing ran, rather than nothing found.
                 scanMessage = "Could not scan this chapter."
             case 0:
-                scanMessage = "Nothing new — every word in this chapter is "
+                // Says "from here" because the walk starts at the reading
+                // position, not the top of the chapter.
+                scanMessage = "Nothing to fix — every word from here on is "
                     + "already in the dictionary or corrected."
             case let count?:
+                // "guessed at", not "new": a rescan finds the same words
+                // again, and the count does not claim they are discoveries.
                 scanMessage = count == 1
-                    ? "Found 1 new word."
-                    : "Found \(count) new words."
+                    ? "1 word would be guessed at."
+                    : "\(count) words would be guessed at."
             }
             recognisedNames = found?.recognisedNames ?? []
             reload()

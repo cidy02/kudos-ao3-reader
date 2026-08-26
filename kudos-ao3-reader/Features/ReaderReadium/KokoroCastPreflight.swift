@@ -20,18 +20,31 @@ import FluidAudio
 /// **Core ML only.** sherpa-onnx takes text and returns audio with no exposed
 /// frontend, so on iOS 26 there is nothing to ask. `isAvailable` says so rather
 /// than offering a button that cannot work.
-enum KokoroCastPreflight {
+/// `nonisolated` like every sibling helper here: the module builds with
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without it the whole-chapter
+/// NER pass and the guessed-word file write would both run on the main actor
+/// and freeze the sheet for seconds on a long chapter.
+nonisolated enum KokoroCastPreflight {
     /// Whether a scan can run at all.
     ///
-    /// The same three conditions playback uses to pick Core ML — a safe OS
-    /// line, the pack installed, and synthesis not already abandoned on this
-    /// device — because the scan runs the same frontend. Checking only for the
-    /// pack would offer a button on a device where the engine is not used.
+    /// Everything playback consults before it speaks through Core ML: a safe
+    /// OS line, the pack installed, synthesis not already abandoned on this
+    /// device — and the engine the reader actually chose. Checking only the
+    /// pack offered the button where the engine is never used.
     static var isAvailable: Bool {
         #if canImport(FluidAudio)
-        KokoroAnePlayback.supportsCoreML()
-            && KokoroAneAvailability.isUsableForPlayback
-            && !KokoroAneHealth.hasAbandonedCoreML
+        guard KokoroAnePlayback.supportsCoreML(),
+              KokoroAneAvailability.isUsableForPlayback,
+              !KokoroAneHealth.hasAbandonedCoreML
+        else { return false }
+        // Capability is not the same as selection: a reader who has chosen
+        // Apple in Settings keeps that engine even with the pack installed, and
+        // a scan would then describe a pronunciation they never hear. The pack
+        // is already established above, so `modelDownloaded: true`.
+        return ReaderTTSEngineKind.effective(
+            requestedRawValue: ReaderSpeechPreferences.engineIdentifier,
+            modelDownloaded: true
+        ) == .kokoro
         #else
         false
         #endif
@@ -46,7 +59,11 @@ enum KokoroCastPreflight {
     }
 
     struct ScanResult: Equatable, Sendable {
-        /// Distinct words newly recorded.
+        /// Distinct words this scan had to guess at.
+        ///
+        /// Not "newly recorded": a rescan of the same chapter guesses at the
+        /// same words and reports the same number. Naming it otherwise made
+        /// the message claim a discovery it had not made.
         var newWords: Int
         /// Names on-device NER found in the same text.
         ///

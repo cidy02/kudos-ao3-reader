@@ -377,9 +377,12 @@ final class ReaderSpeechController {
             from: locator ?? resumeLocator, in: publication
         )
         guard !units.isEmpty else { return nil }
+        // `.paused` counts: playback installed the observer at `speak()` and
+        // still owns it, so a scan would clear it and the rest of the session
+        // would record nothing. Only a stopped session has no claim on it.
         return try? await KokoroCastPreflight.scan(
             texts: units.map(\.text),
-            isPlaying: status == .playing
+            isPlaying: status == .playing || status == .paused
         )
     }
 
