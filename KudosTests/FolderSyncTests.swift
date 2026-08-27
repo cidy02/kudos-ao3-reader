@@ -11,6 +11,41 @@ extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct FolderSyncTests {
+    /// The welcome cover asking the reader to enable sync kept reappearing on
+    /// every launch for anyone who chose their folder in **Settings** rather
+    /// than in onboarding: `connect` stored the bookmark, but only
+    /// onboarding's call site recorded the flag the cover reads. Recording it
+    /// inside `connect` is what makes every caller — and any future one —
+    /// agree that a connected folder is a configured one.
+    @Test func connectingAFolderRecordsItAsConfigured() throws {
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+
+        #expect(!defaults.bool(forKey: FolderSyncOnboardingState.configuredKey))
+
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+
+        #expect(defaults.bool(forKey: FolderSyncOnboardingState.configuredKey))
+        #expect(FolderSyncService.snapshot(defaults: defaults).isConnected)
+    }
+
+    /// Disconnecting deliberately must not re-arm the prompt: the reader has
+    /// already answered the question once, and asking again would read as the
+    /// app second-guessing them. `isConnected` goes false, the flag stays.
+    @Test func disconnectingDoesNotReArmTheOnboardingPrompt() throws {
+        let defaults = try testDefaults()
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        FolderSyncService.disconnect(defaults: defaults)
+
+        #expect(!FolderSyncService.snapshot(defaults: defaults).isConnected)
+        #expect(defaults.bool(forKey: FolderSyncOnboardingState.configuredKey))
+    }
+
     @Test func syncUpWritesReadableSyncDirectory() async throws {
         let container = try container()
         let context = container.mainContext
