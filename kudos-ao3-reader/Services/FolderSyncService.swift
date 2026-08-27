@@ -169,6 +169,13 @@ enum FolderSyncService {
         defaults.set(folderURL.lastPathComponent, forKey: folderDisplayNameKey)
         defaults.set(folderURL.path, forKey: folderPathKey)
         defaults.set("", forKey: lastErrorKey)
+        // Connecting a folder *is* configuring one, so record it here rather
+        // than at the call sites. Settings and onboarding both connect, but
+        // only onboarding used to record it, which left the welcome cover
+        // reappearing on every launch for anyone who chose their folder in
+        // Settings. Keeping it at the single point every caller routes through
+        // is what stops a third caller reintroducing that.
+        FolderSyncOnboardingState.recordConfigured(defaults: defaults)
     }
 
     static func disconnect(defaults: UserDefaults = .standard) {

@@ -199,11 +199,20 @@ struct ContentView: View {
     /// or permanently dismissed. Dismissing without "Don't remind me again" doesn't touch
     /// either persisted flag — `dismissedSyncFolderOnboardingThisSession` is what actually
     /// closes the cover for the rest of this launch, so it correctly reappears next time.
+    ///
+    /// A connected folder suppresses it outright, whatever the flag says. The
+    /// flag is set when a folder is chosen, but it only ever *started* true
+    /// after onboarding's own connect, so anyone who picked their folder in
+    /// Settings kept being asked to enable sync they had already enabled.
+    /// Asking the service is the truth; the flag is a record of the answer.
+    /// It still counts on its own, so someone who connected and then
+    /// deliberately disconnected is not asked all over again.
     private var syncFolderOnboardingPresented: Binding<Bool> {
         Binding(
             get: {
                 hasCompletedOnboarding
                     && !hasConfiguredSyncFolder
+                    && !FolderSyncService.snapshot().isConnected
                     && !syncOnboardingDismissedPermanently
                     && !dismissedSyncFolderOnboardingThisSession
             },
