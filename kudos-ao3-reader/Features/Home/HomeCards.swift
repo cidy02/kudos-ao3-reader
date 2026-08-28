@@ -67,7 +67,7 @@ struct WorkCoverCard: View {
         }
         // The reader pushed from this card zooms out of it, and collapses back into
         // it on dismiss. No-ops where no namespace is provided.
-        .workCardZoomSource(work.id, in: zoomNamespace)
+        .workCardZoomSource(work.zoomKey, in: zoomNamespace)
     }
 
     private var cardStats: some View {
@@ -173,7 +173,7 @@ struct AO3WorkCoverCard: View {
                 }
             }
         }
-        .workCardZoomSource(work.id, in: zoomNamespace)
+        .workCardZoomSource(work.zoomKey, in: zoomNamespace)
         .remoteWorkContextMenu(work: work)
     }
 

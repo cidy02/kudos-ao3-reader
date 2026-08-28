@@ -20,6 +20,40 @@ private struct WorkCardTransitionNamespaceKey: EnvironmentKey {
     static let defaultValue: Namespace.ID? = nil
 }
 
+/// The identity a work is matched on for the zoom pair.
+///
+/// The model that represents "this work" changes shape between a remote card and the
+/// destination it opens. `AO3WorkSummary.id` is AO3's own numeric work id; `SavedWork.id`
+/// is a UUID minted fresh at import time with no relationship to it whatsoever. A remote
+/// card only ever knows the AO3 id, while the reader it pushes resolves to a `SavedWork`
+/// — so keying the pair on each model's raw `id` meant a remote card's advertised source
+/// could never equal its own destination's, and every remote card (Home Subscriptions,
+/// Library's remote Marked-for-Later entries, Account's bookmarks and account-works
+/// lists) silently fell back to a plain push. Nothing reports it: `matchedTransitionSource`
+/// takes `some Hashable`, so an `Int` that can never equal a `UUID` is not a compiler
+/// error, and an unmatched pair is just an ordinary push.
+///
+/// Both sides normalize onto the AO3 id when one exists (`SavedWork.ao3WorkID`, set the
+/// moment a remote work resolves to a local one), and only fall back to the `SavedWork`'s
+/// own UUID for a work with no AO3 origin — an imported PDF/HTML/text file — where no
+/// remote card ever exists to need matching.
+enum WorkZoomKey: Hashable {
+    case ao3(Int)
+    case local(UUID)
+}
+
+extension SavedWork {
+    /// See `WorkZoomKey`.
+    var zoomKey: WorkZoomKey {
+        ao3WorkID.map(WorkZoomKey.ao3) ?? .local(id)
+    }
+}
+
+extension AO3WorkSummary {
+    /// See `WorkZoomKey`. Every remote summary has an AO3 id by definition.
+    var zoomKey: WorkZoomKey { .ao3(id) }
+}
+
 extension EnvironmentValues {
     /// Set once per tab stack; read by cards and by their pushed destinations.
     var workCardTransitionNamespace: Namespace.ID? {

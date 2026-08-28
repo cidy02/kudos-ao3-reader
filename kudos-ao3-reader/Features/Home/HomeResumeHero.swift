@@ -262,6 +262,6 @@ private struct UnblurredHomeResumeHero: View {
                         y: themeManager.appTheme.carouselCardShadow.y)
         )
         .contentShape(RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous))
-        .workCardZoomSource(work.id, in: zoomNamespace)
+        .workCardZoomSource(work.zoomKey, in: zoomNamespace)
     }
 }
