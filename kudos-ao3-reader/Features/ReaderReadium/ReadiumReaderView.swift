@@ -107,7 +107,7 @@ struct ReadiumReaderView: View {
 
     /// `nil` where the Core ML frontend is not the engine, which is what
     /// hides the scan button rather than offering one that cannot work.
-    private var scanChapterForPronunciation: (() async -> KokoroCastPreflight.ScanResult?)? {
+    private var scanChapterForPronunciation: (() async -> Result<KokoroCastPreflight.ScanResult, Error>)? {
         guard KokoroCastPreflight.isAvailable else { return nil }
         return { await speech.scanChapterForPronunciation(from: book.currentLocator) }
     }
