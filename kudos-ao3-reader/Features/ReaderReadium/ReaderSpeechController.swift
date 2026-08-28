@@ -368,22 +368,41 @@ final class ReaderSpeechController {
     /// over the same chapter text and records the same fallbacks, so the list
     /// is populated before the first tap.
     ///
-    /// - Returns: what the scan found, or `nil` when it could not run at all.
+    /// - Returns: what the scan found, or the reason it could not run.
+    ///
+    /// A `Result` rather than an optional because the causes are genuinely
+    /// different and the reader can act on some of them — stopping Read Aloud
+    /// is a fix, a pack that will not compile is not. Collapsing them into
+    /// `nil` produced one unactionable "Could not scan this chapter".
     func scanChapterForPronunciation(
         from locator: Locator?
-    ) async -> KokoroCastPreflight.ScanResult? {
-        guard let publication, KokoroCastPreflight.isAvailable else { return nil }
+    ) async -> Result<KokoroCastPreflight.ScanResult, Error> {
+        guard let publication else {
+            Log.tts.error("Pre-flight found no prepared publication")
+            return .failure(KokoroCastPreflight.ScanError.unavailable)
+        }
+        guard KokoroCastPreflight.isAvailable else {
+            return .failure(KokoroCastPreflight.ScanError.unavailable)
+        }
         let units = await Self.chapterUnits(
             from: locator ?? resumeLocator, in: publication
         )
-        guard !units.isEmpty else { return nil }
-        // `.paused` counts: playback installed the observer at `speak()` and
-        // still owns it, so a scan would clear it and the rest of the session
-        // would record nothing. Only a stopped session has no claim on it.
-        return try? await KokoroCastPreflight.scan(
-            texts: units.map(\.text),
-            isPlaying: status == .playing || status == .paused
-        )
+        guard !units.isEmpty else {
+            Log.tts.error("Pre-flight found no extractable text in the current chapter")
+            return .failure(KokoroCastPreflight.ScanError.noText)
+        }
+        do {
+            // `.paused` counts: playback installed the observer at `speak()`
+            // and still owns it, so a scan would clear it and the rest of the
+            // session would record nothing. Only a stopped session has no
+            // claim on it.
+            return .success(try await KokoroCastPreflight.scan(
+                texts: units.map(\.text),
+                isPlaying: status == .playing || status == .paused
+            ))
+        } catch {
+            return .failure(error)
+        }
     }
 
     /// The current chapter's text, as speech units.

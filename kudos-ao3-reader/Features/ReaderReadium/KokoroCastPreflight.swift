@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import os
 #if canImport(FluidAudio)
 import FluidAudio
 #endif
@@ -53,9 +54,18 @@ nonisolated enum KokoroCastPreflight {
     enum ScanError: Error, Equatable {
         /// Playback owns the fallback observer while it runs, and there is
         /// exactly one. Scanning mid-playback would silently redirect the
-        /// engine's own guesses into the scan and lose them.
+        /// engine's own guesses into the scan and lose them. Paused counts:
+        /// the session still owns it.
         case playbackActive
+        /// Core ML Kokoro is not the engine that will speak.
         case unavailable
+        /// The chapter walk produced nothing to phonemise.
+        case noText
+        /// The engine exists but would not start — a pack that failed to seed,
+        /// a cache directory that could not be made, a chain that would not
+        /// initialize. Carries the underlying reason, because "could not scan"
+        /// on its own is unactionable.
+        case engineFailed(String)
     }
 
     struct ScanResult: Equatable, Sendable {
@@ -83,7 +93,19 @@ nonisolated enum KokoroCastPreflight {
         guard isAvailable else { throw ScanError.unavailable }
 
         #if canImport(FluidAudio)
-        let manager = try await CoreMLKokoroPackInstaller.shared.readyManager()
+        // Wrapped so the caller can say *why*. `readyManager` throws from four
+        // separate places (seeding the cache, making the directory, compiling
+        // the chain, writing the marker) and swallowing them all into one
+        // "could not scan" told the reader nothing they could act on.
+        let manager: KokoroAneManager
+        do {
+            manager = try await CoreMLKokoroPackInstaller.shared.readyManager()
+        } catch {
+            Log.tts.error(
+                "Pre-flight could not ready the Kokoro manager: \(error.localizedDescription, privacy: .public)"
+            )
+            throw ScanError.engineFailed(error.localizedDescription)
+        }
         let collector = Collector()
         await manager.setNeuralFallbackObserver { word in collector.add(word) }
 

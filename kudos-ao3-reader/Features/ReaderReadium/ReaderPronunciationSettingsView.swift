@@ -27,7 +27,7 @@ struct ReaderPronunciationSettingsView: View {
     /// filled in *before* a name is heard mangled. `nil` from global Settings,
     /// which has no chapter, and on any device where the Core ML frontend is
     /// not the engine — sherpa-onnx exposes no G2P to ask.
-    var onScanChapter: (() async -> KokoroCastPreflight.ScanResult?)?
+    var onScanChapter: (() async -> Result<KokoroCastPreflight.ScanResult, Error>)?
 
     private let store = KokoroPronunciationStore()
 
@@ -275,26 +275,51 @@ struct ReaderPronunciationSettingsView: View {
         isScanning = true
         scanMessage = nil
         Task {
-            let found = await onScanChapter?()
-            isScanning = false
-            switch found?.newWords {
-            case .none:
-                // Distinct from zero: nothing ran, rather than nothing found.
-                scanMessage = "Could not scan this chapter."
-            case 0:
-                // Says "from here" because the walk starts at the reading
-                // position, not the top of the chapter.
-                scanMessage = "Nothing to fix — every word from here on is "
-                    + "already in the dictionary or corrected."
-            case let count?:
-                // "guessed at", not "new": a rescan finds the same words
-                // again, and the count does not claim they are discoveries.
-                scanMessage = count == 1
-                    ? "1 word would be guessed at."
-                    : "\(count) words would be guessed at."
+            guard let outcome = await onScanChapter?() else {
+                isScanning = false
+                return
             }
-            recognisedNames = found?.recognisedNames ?? []
+            isScanning = false
+            switch outcome {
+            case let .success(result):
+                if result.newWords == 0 {
+                    // Says "from here" because the walk starts at the reading
+                    // position, not the top of the chapter.
+                    scanMessage = "Nothing to fix — every word from here on is "
+                        + "already in the dictionary or corrected."
+                } else {
+                    // "guessed at", not "new": a rescan finds the same words
+                    // again, and the count does not claim they are discoveries.
+                    scanMessage = result.newWords == 1
+                        ? "1 word would be guessed at."
+                        : "\(result.newWords) words would be guessed at."
+                }
+                recognisedNames = result.recognisedNames
+            case let .failure(error):
+                scanMessage = Self.message(for: error)
+            }
             reload()
+        }
+    }
+
+    /// Every one of these used to read "Could not scan this chapter", which
+    /// told the reader nothing — two of them are things they can fix in a
+    /// second, and one is a real engine failure worth reporting.
+    private static func message(for error: Error) -> String {
+        switch error as? KokoroCastPreflight.ScanError {
+        case .playbackActive:
+            return "Stop Read Aloud first — pausing is not enough, it keeps "
+                + "using the pronunciation engine."
+        case .unavailable:
+            return "Needs the Kokoro voice as the active engine. Check Voice "
+                + "in Read Aloud settings."
+        case .noText:
+            return "No readable text from here to the end of the chapter. "
+                + "Try from the start of a chapter."
+        case let .engineFailed(reason):
+            return "The voice engine would not start: \(reason)"
+        case .none:
+            return "Could not scan: \(error.localizedDescription)"
         }
     }
 
