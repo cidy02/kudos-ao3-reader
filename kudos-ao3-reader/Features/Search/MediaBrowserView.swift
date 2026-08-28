@@ -23,6 +23,9 @@ struct MediaBrowserView: View {
     /// Per-category derived stats, recomputed off the render/main path (see
     /// `recomputeStats`); the cards read this rather than deriving inline.
     @State private var statsByCategory: [String: CategoryStats] = [:]
+    /// Set once `cardsReady` has waited as long as it is willing to for counts
+    /// (a warm cache beats it; a cold one does not) — see `load`.
+    @State private var countsSettled = false
     /// Shared, per-launch cache of each category's fandom list.
     private let catalog = FandomCatalog.shared
     #if os(macOS)
@@ -32,6 +35,18 @@ struct MediaBrowserView: View {
     #endif
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
+
+    /// Whether the cards can be drawn complete — every category's counts are in,
+    /// or `load`'s grace period has expired and we show what we have (names plus
+    /// a count placeholder) rather than keep the reader on a skeleton.
+    /// `fandomCount` is the right thing to check: it and `savedCount` /
+    /// `recentFandoms` all come out of the same `recomputeStats` pass, so a
+    /// category with its count has its downloaded count and chips too.
+    private var cardsReady: Bool {
+        guard !categories.isEmpty else { return false }
+        return countsSettled
+            || categories.allSatisfy { statsByCategory[$0.id]?.fandomCount != nil }
+    }
 
     var body: some View {
         Group {
@@ -47,7 +62,11 @@ struct MediaBrowserView: View {
                     Button("Try Again") { Task { await load() } }
                 }
             case .loaded:
-                categoryList
+                // The names arrive a whole round of requests before the counts
+                // do, so revealing here would show every card with its title
+                // and an empty stat line that pops a beat later. Keep the
+                // skeleton up until the cards can be drawn complete.
+                if cardsReady { categoryList } else { CategoryCardSkeletonList() }
             }
         }
         .task { if categories.isEmpty { await load() } }
@@ -245,25 +264,51 @@ struct MediaBrowserView: View {
         }
     }
 
+    @ViewBuilder
     private func statsLine(_ stats: CategoryStats?) -> some View {
-        FlowLayout(spacing: 16, rowSpacing: 4) {
-            if let count = stats?.fandomCount {
+        if let count = stats?.fandomCount {
+            FlowLayout(spacing: 16, rowSpacing: 4) {
                 statItem("books.vertical", "\(count.formatted()) fandoms")
                 if let works = stats?.workCount {
                     statItem("doc.text", "~\(compact(works)) works")
                 }
-            } else {
-                // Counts for this category are still loading (or being recomputed) —
-                // show a quiet stat-line skeleton instead of a "Counting…" spinner.
-                SkeletonBlock(height: 11, width: 104, cornerRadius: 4)
-                    .skeletonShimmer()
+                if let saved = stats?.savedCount, saved > 0 {
+                    statItem(WorkActionLabels.downloadedSymbol, "\(saved) downloaded")
+                }
             }
-            if let saved = stats?.savedCount, saved > 0 {
-                statItem(WorkActionLabels.downloadedSymbol, "\(saved) downloaded")
-            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        } else {
+            loadingStats
         }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
+    }
+
+    /// Placeholder for a card still waiting on its counts — the cold-cache path
+    /// `cardsReady` deliberately lets through (see `load`).
+    ///
+    /// Shaped like what is actually coming, rather than the single bar this used
+    /// to be: three stat lines, because three separate numbers are loading
+    /// (fandoms, works, downloaded) and at a masonry column's width they wrap
+    /// one per line; then the "Recently read" label and a chip under it. Same
+    /// block metrics as `CategoryCardSkeleton` so the full skeleton and this one
+    /// speak the same placeholder language.
+    ///
+    /// The recently-read rows are reserved for every card, but only categories
+    /// the reader has actually read from will fill them — the rest collapse by
+    /// two rows when their counts land. Reserving is still the better trade:
+    /// under-reserving made every card grow instead.
+    private var loadingStats: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SkeletonBlock(height: 13, width: 96, cornerRadius: 4)
+            SkeletonBlock(height: 13, width: 78, cornerRadius: 4)
+            SkeletonBlock(height: 13, width: 88, cornerRadius: 4)
+            SkeletonBlock(height: 11, width: 92, cornerRadius: 3)
+                .padding(.top, 6)
+            SkeletonBlock(height: 28, width: 116, cornerRadius: 14)
+                .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .skeletonShimmer()
     }
 
     private func statItem(_ symbol: String, _ text: String) -> some View {
@@ -442,9 +487,29 @@ struct MediaBrowserView: View {
 
     private func load() async {
         phase = .loading
+        countsSettled = false
         do {
             categories = try await AO3Client.shared.mediaCategories()
             phase = .loaded
+            // The names land a whole round of requests before the counts do, so
+            // `cardsReady` holds the skeleton until the counts arrive and the
+            // cards can be drawn complete rather than filling in under the
+            // reader. That wait has to be bounded, hence the grace below:
+            // FandomCatalog serves a warm disk cache almost immediately (and
+            // `recomputeStats` debounces 150ms on top), so a warm launch beats
+            // the deadline and never shows a half-filled card — while a cold
+            // cache, which needs a request per category, falls through to
+            // names-plus-count-placeholders instead of holding a skeleton for
+            // seconds. It also stops one category's failed index request, whose
+            // count stays nil for good, from stranding Browse on the skeleton.
+            //
+            // Deliberately not cancelled when `loadMissing` returns early: on a
+            // warm-but-slow launch (a large library makes the stats pass itself
+            // slow) that deadline is the only thing left to reveal the cards.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(800))
+                countsSettled = true
+            }
             // Fill in per-category fandom counts/lists in the background; the cards
             // update as each lands.
             await catalog.loadMissing(for: categories)

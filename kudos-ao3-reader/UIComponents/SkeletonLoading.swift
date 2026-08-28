@@ -18,19 +18,23 @@ struct SkeletonBlock: View {
     var cornerRadius: CGFloat = 6
 
     var body: some View {
-        // `.frame(width:)` for a fixed size, not `.frame(maxWidth:)` — a max is
-        // only an upper bound, and a bare RoundedRectangle has no intrinsic size
-        // of its own to fall back to, so a caller-specified width was silently
-        // ignored by any layout that queries this view's *ideal* size rather
-        // than just handing it the full proposed width (FlowLayout does this
-        // when wrapping) — the block collapsed toward zero instead of actually
-        // rendering at the width asked for. Confirmed on device: recently-read
-        // chip placeholders (inside a FlowLayout) rendered as thin slivers
-        // instead of the pill widths they were given.
+        // `idealWidth` + `maxWidth`, not a hard `.frame(width:)` and not a bare
+        // `.frame(maxWidth:)` — this block has to answer two different layouts
+        // correctly:
+        //   * A layout that asks for the *ideal* size (FlowLayout does, when
+        //     wrapping). A bare RoundedRectangle has no intrinsic size, so a
+        //     plain `maxWidth` upper bound left the caller's width silently
+        //     ignored and the block collapsed to a sliver (recently-read chip
+        //     placeholders, confirmed on device). `idealWidth` answers that.
+        //   * A layout that proposes a *narrower* width than was asked for — a
+        //     MasonryLayout column, a narrow device. A hard `width:` is a
+        //     minimum as well as a maximum, so the block (and the whole card
+        //     around it) rendered wider than its column and overlapped the
+        //     neighbouring one. `maxWidth` with no `minWidth` lets it shrink.
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(.quaternary)
-            .frame(width: width, height: height, alignment: .leading)
-            .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
+            .frame(height: height)
+            .frame(idealWidth: width, maxWidth: width ?? .infinity, alignment: .leading)
     }
 }
 
