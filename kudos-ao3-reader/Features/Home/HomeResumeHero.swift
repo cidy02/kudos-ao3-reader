@@ -82,19 +82,28 @@ struct HomeResumeHero: View {
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .localWorkContextMenu(work: work, onSelect: onSelect)
         } else {
-            // .cardNavigation, not a NavigationLink wrapping the visible hero as its
-            // label: the hero's author name is its own tappable byline now (see
-            // UnblurredHomeResumeHero), and a Button/NavigationLink nested inside
-            // another NavigationLink's label doesn't reliably get its own
-            // independent tap. cardNavigation instead puts an invisible background
-            // NavigationLink behind the content — the same technique AO3WorkRow and
-            // WorkRow already use for exactly this reason — so a tap on the byline
-            // opens the author (and briefly suppresses the background link via
-            // AppRouter.cardNavigationSuppressed) while a tap anywhere else on the
-            // card still opens the reader.
-            UnblurredHomeResumeHero(work: work)
-                .cardNavigation(to: LocalWorkDestination.reader(work), accessibilityLabel: work.title)
-                .localWorkContextMenu(work: work, onSelect: onSelect)
+            // A NavigationLink wrapping the hero, like every other card in
+            // HomeView — *not* `.cardNavigation`.
+            //
+            // `cardNavigation` puts an invisible link in the *background* and
+            // relies on the enclosing List to make the whole row activate it
+            // ("The List still makes the whole card tappable" — its own doc).
+            // Every other caller is inside a `List`. Home is a ScrollView, so
+            // there was no row activation, and the hero's own background and
+            // `contentShape` sit in front of that invisible link: the card
+            // simply did not respond to taps.
+            //
+            // The byline keeps its own tap because it is a Button inside the
+            // link's label, which takes the touch within its own bounds; the
+            // author push also sets `AppRouter.cardNavigationSuppressed`, so a
+            // reader/work push landing from the same touch dismisses itself
+            // rather than burying the profile.
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                UnblurredHomeResumeHero(work: work)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(work.title)
+            .localWorkContextMenu(work: work, onSelect: onSelect)
         }
     }
 }
