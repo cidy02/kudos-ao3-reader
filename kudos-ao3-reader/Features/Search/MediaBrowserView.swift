@@ -14,6 +14,9 @@ struct MediaBrowserView: View {
 
     #if os(iOS)
     @Environment(ThemeManager.self) private var themeManager
+    /// Set by BrowseView on the stack; pairs a category card with the fandom list
+    /// it pushes. Absent elsewhere (Search's idle state), where the helper no-ops.
+    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     #endif
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var library: [SavedWork]
 
@@ -129,6 +132,12 @@ struct MediaBrowserView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        // On the NavigationLink itself, not on the card inside its
+                        // label: the system pairs the transition with the link that
+                        // performs the push, and marking a nested subview instead
+                        // leaves the pair unmatched — which degrades silently to an
+                        // ordinary push (verified on device before this moved).
+                        .workCardZoomSource(category.id, in: zoomNamespace)
                         .onAppear { visibleCategoryIDs.insert(category.id) }
                         .onDisappear { visibleCategoryIDs.remove(category.id) }
                     }

@@ -9,6 +9,9 @@ struct FandomListView: View {
     /// Called with the chosen fandom name; the host runs the search and pops back.
     let onSelect: (String) -> Void
 
+    /// The other half of the Browse zoom pair — set by BrowseView on the stack.
+    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
+
     @State private var fandoms: [AO3Fandom] = []
     /// Names normalized once per load (`WorkSearchIndex.normalize`) so the live
     /// filter is a plain substring pass — a category holds up to tens of
@@ -68,6 +71,11 @@ struct FandomListView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .hidesFloatingTabBar()
+            // Zooms out of the category card that pushed it. Keyed on the same
+            // `category.id` that card advertises — one String on both ends, so
+            // there is no cross-type mismatch to get wrong here (see WorkZoomKey
+            // for the one that bit the work cards).
+            .workCardZoomDestination(category.id, in: zoomNamespace)
             .task { if fandoms.isEmpty { await load() } }
     }
 
