@@ -23,10 +23,12 @@ struct LocalWorkDestinationView: View {
     /// is never mistaken for a fresh, possibly-spurious push.
     @State private var appearedAt: Date?
 
-    /// The card this screen was opened from — the other half of the zoom pair.
-    private var sourceWorkID: UUID {
+    /// The card this screen was opened from — the other half of the zoom pair. See
+    /// `WorkZoomKey`: a raw `SavedWork.id` would never match a remote card's advertised
+    /// source, since a remote card only ever knows the AO3 id.
+    private var zoomKey: WorkZoomKey {
         switch destination {
-        case let .reader(work), let .detail(work): work.id
+        case let .reader(work), let .detail(work): work.zoomKey
         }
     }
 
@@ -42,7 +44,7 @@ struct LocalWorkDestinationView: View {
         // On the *pushed view as a whole*, not inside the switch: the transition
         // describes this screen's own push, so a modifier buried on one branch of a
         // `Group` never registers it.
-        .workCardZoomDestination(sourceWorkID, in: zoomNamespace)
+        .workCardZoomDestination(zoomKey, in: zoomNamespace)
         // Author byline taps can also activate the row NavigationLink. Dismiss must
         // be async — SwiftUI often ignores dismiss() inside the same navigation
         // transaction as the push (profile stayed buried until the user pressed Back).
