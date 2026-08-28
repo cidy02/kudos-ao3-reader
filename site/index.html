@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kudos — Native AO3 Reader</title>
+  <meta name="description" content="A free, open-source, ad-free native reader for Archive of Our Own.">
+  <link rel="stylesheet" href="styles.css">
+  <meta property="og:title" content="Kudos — Native AO3 Reader">
+  <meta property="og:description" content="A free, open-source, ad-free native reader for Archive of Our Own.">
+  <meta property="og:image" content="assets/github-social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header>
+    <nav class="site-nav" aria-label="Primary">
+      <div class="nav-content">
+        <a href="#top" class="nav-wordmark">Kudos</a>
+        <a href="https://github.com/cidy02/kudos-ao3-reader" class="nav-github">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <!-- 1. Hero -->
+    <section id="top" class="hero container reveal" aria-labelledby="hero-title">
+      <h1 id="hero-title">Kudos</h1>
+      <p class="tagline">A free, open-source, ad-free native reader for Archive of Our Own.</p>
+
+      <div class="cta-group">
+        <a href="https://github.com/cidy02/kudos-ao3-reader" class="cta-button">View on GitHub</a>
+        <a href="#join-in" class="cta-button">Build from source</a>
+      </div>
+
+      <div class="device-frame device-frame--hero">
+        <img
+          src="assets/screenshot-reader.png"
+          width="1206"
+          height="2622"
+          alt="Reader — offline EPUB page in dark theme with serif body text">
+      </div>
+    </section>
+
+    <!-- 2. The colorful proof -->
+    <section class="colorful-proof container reveal" aria-labelledby="proof-title">
+      <h2 id="proof-title">No two shelves look alike.</h2>
+      <p class="section-lede">AO3 has no cover art, so every card gets a deterministic color from its title.</p>
+
+      <div class="device-frame device-frame--proof">
+        <img
+          src="assets/screenshot-library.png"
+          width="1206"
+          height="2622"
+          loading="lazy"
+          alt="Library — Reading Now and Saved for Later rows of multi-colored work cards">
+      </div>
+    </section>
+
+    <!-- 3. Feature narrative -->
+    <section class="features container" aria-labelledby="features-title">
+      <h2 id="features-title" class="visually-hidden">What you can do</h2>
+
+      <div class="feature-beat reveal">
+        <div class="feature-text">
+          <h3>Read offline with native EPUBs.</h3>
+          <p>Import a work once, then read it on-device with light, sepia, or dark themes and custom typography.</p>
+        </div>
+        <div class="feature-image">
+          <div class="device-frame">
+            <!--
+              Same asset as the hero by design: hero identifies the product;
+              this beat explains the offline/theme capability. Only four real
+              screenshots exist for five product-photo slots; repeating the calm
+              reader keeps the multi-hue library unique to the proof section.
+            -->
+            <img
+              src="assets/screenshot-reader.png"
+              width="1206"
+              height="2622"
+              loading="lazy"
+              alt="Reader — offline EPUB page in dark theme with serif body text">
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-beat feature-beat--reverse reveal">
+        <div class="feature-text">
+          <h3>Organize your library locally.</h3>
+          <p>Manage works with Reading Queues, Collections, Save for Later, and on-device history.</p>
+        </div>
+        <div class="feature-image">
+          <div class="device-frame">
+            <img
+              src="assets/screenshot-work-detail.png"
+              width="1206"
+              height="2622"
+              loading="lazy"
+              alt="Work detail — summary, metadata, and quick actions including queue, collection, and download">
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-beat reveal">
+        <div class="feature-text">
+          <h3>Native search and browse.</h3>
+          <p>Run faceted search and browse by fandom with the full metadata density AO3 readers expect. Ratings, warnings, tags, and sort controls stay visible.</p>
+        </div>
+        <div class="feature-image">
+          <div class="device-frame">
+            <img
+              src="assets/screenshot-filters.png"
+              width="1206"
+              height="2622"
+              loading="lazy"
+              alt="Filters — sort, rating, match mode, and archive-warning include/exclude controls">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Platforms -->
+    <section class="platforms container reveal" aria-labelledby="platforms-title">
+      <h2 id="platforms-title">Platforms</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>iPhone, iPad, and Mac</h3>
+          <p>Build from source in Xcode. There is no App Store or TestFlight listing from this repository.</p>
+          <a href="#join-in" class="card-link">See the build steps</a>
+        </div>
+        <div class="card">
+          <h3>Android</h3>
+          <p>Install the pre-release APK from GitHub Releases. There is no Play Store listing; the app can check GitHub for newer APKs after install.</p>
+          <a href="https://github.com/cidy02/kudos-ao3-reader/releases" class="card-link">Open Releases</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Privacy & open source -->
+    <section class="privacy container reveal" aria-labelledby="privacy-title">
+      <h2 id="privacy-title">Privacy &amp; open source</h2>
+      <p class="commitment">Free and AGPL-3.0 forever.</p>
+      <p>No ads, no analytics, no tracking, no telemetry.</p>
+      <p>Kudos is an independent, unofficial personal project. It is not affiliated with, endorsed by, or connected to the Organization for Transformative Works (OTW) or Archive of Our Own (AO3). It does not use an official AO3 API; it scrapes public HTML. Session credentials stay on-device in the Keychain.</p>
+      <p><a href="https://github.com/cidy02/kudos-ao3-reader/blob/main/LICENSE">View AGPL-3.0 License</a></p>
+    </section>
+
+    <!-- 6. Join in -->
+    <section id="join-in" class="join-in container reveal" aria-labelledby="join-title">
+      <h2 id="join-title">Join in</h2>
+      <p class="section-lede">Try the app, report bugs, or contribute code.</p>
+
+      <div class="grid-3 join-grid">
+        <article class="card join-card">
+          <div class="join-card-body">
+            <h3>Try it</h3>
+            <p><strong>Apple:</strong> open <code>AO3_App_OpenSource.xcodeproj</code> in Xcode and build the <code>AO3_App_OpenSource</code> scheme (product name: Kudos):</p>
+            <pre><code>xcodebuild -project AO3_App_OpenSource.xcodeproj \
+  -scheme AO3_App_OpenSource \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  CODE_SIGNING_ALLOWED=NO build</code></pre>
+            <p><strong>Android:</strong> install a pre-release APK from <a href="https://github.com/cidy02/kudos-ao3-reader/releases">GitHub Releases</a>.</p>
+          </div>
+          <a href="https://github.com/cidy02/kudos-ao3-reader" class="cta-button cta-button--small">Open the repository</a>
+        </article>
+
+        <article class="card join-card">
+          <div class="join-card-body">
+            <h3>Report a bug</h3>
+            <p>If you find a bug while using the app, please open an issue.</p>
+          </div>
+          <a href="https://github.com/cidy02/kudos-ao3-reader/issues" class="cta-button cta-button--small">Issues tracker</a>
+        </article>
+
+        <article class="card join-card">
+          <div class="join-card-body">
+            <h3>Contribute</h3>
+            <p>Fork the repository and open a pull request. The README covers the build, test, and lint steps this project runs on every change.</p>
+          </div>
+          <a href="https://github.com/cidy02/kudos-ao3-reader#for-contributors" class="cta-button cta-button--small">Read the README</a>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <!-- 7. Footer -->
+  <footer class="site-footer">
+    <div class="container">
+      <p>Not affiliated with OTW or AO3.</p>
+      <p class="footer-links">
+        <a href="https://github.com/cidy02/kudos-ao3-reader">GitHub</a>
+        <a href="https://github.com/cidy02/kudos-ao3-reader/blob/main/LICENSE">AGPL-3.0 License</a>
+        <a href="https://github.com/cidy02/kudos-ao3-reader/issues">Issues</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
