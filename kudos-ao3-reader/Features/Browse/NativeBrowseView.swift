@@ -9,6 +9,7 @@ struct BrowseView: View {
     @Environment(AppRouter.self) private var router
 
     @State private var path = NavigationPath()
+    @Namespace private var cardZoomNamespace
 
     /// A pushed fandom → its native work results.
     private struct FandomRoute: Hashable { let name: String }
@@ -41,6 +42,14 @@ struct BrowseView: View {
                     }
                 }
         }
+        // On the NavigationStack itself, not inside its content: views built by
+        // `navigationDestination` are hosted by the stack, so a value injected
+        // into the root content's subtree never reaches them — the category card
+        // would advertise a source the fandom list could not see, and the pair
+        // would degrade to a plain push. Same placement as HomeView. The
+        // `workCard`-prefixed helpers are generic over any Hashable id and are
+        // reused here rather than duplicated for categories.
+        .environment(\.workCardTransitionNamespace, cardZoomNamespace)
     }
 }
 
