@@ -67,7 +67,7 @@ struct FandomListView: View {
                     await AO3Client.shared.invalidateCachedResponses()
                     await refresh()
                 }
-                .searchable(text: $query, prompt: "Filter \(category.name)")
+                .searchable(text: $query, prompt: "Search \(category.name)")
                 // Floats the filter field in the bottom bar instead of the navigation
                 // bar, matching Settings and the rest of iOS 26: on a long list your
                 // thumb is already down there, and the field stops eating the top of
