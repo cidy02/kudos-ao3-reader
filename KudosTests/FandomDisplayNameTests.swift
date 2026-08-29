@@ -154,4 +154,51 @@ struct FandomDisplayNameTests {
         #expect(FandomDisplayName.split("Some Show – All Media Types").qualifier == "- All Media Types")
         #expect(FandomDisplayName.split("Some Show — All Media Types").qualifier == "- All Media Types")
     }
+
+    // MARK: - Defects Codex found reviewing this against the full index
+
+    @Test func peelingASuffixLeavesNoDashBehind() {
+        // 15 rows rendered a title ending in " -": the outer suffix came off but
+        // the separator that had joined it did not.
+        #expect(FandomDisplayName.split("classmates - RPF").title == "classmates")
+        #expect(FandomDisplayName.split("Deadpool & Wolverine - (Movie 2024)").title == "Deadpool & Wolverine")
+    }
+
+    @Test func aSuffixExposedByAnotherIsAlsoPeeled() {
+        // The single-pass version was not a fixed point: stripping the dash tail
+        // uncovered an RPF that was never looked at again, leaving 62 titles
+        // still ending in "RPF".
+        #expect(FandomDisplayName.split("Political RPF - US 21st c.").title == "Political")
+        #expect(FandomDisplayName.split("Canadian Musician RPF (C6D)").title == "Canadian Musician")
+    }
+
+    @Test func rpfIsMatchedWhateverItsCase() {
+        #expect(FandomDisplayName.split("Kamen Rider Blade Rpf").title == "Kamen Rider Blade")
+    }
+
+    @Test func allMediaTypesIsFoundWithoutADashToo() {
+        // "Digimon: All Media Types" used to keep the whole thing bold, then
+        // once fixed left a trailing colon.
+        #expect(FandomDisplayName.split("Digimon: All Media Types").title == "Digimon")
+        #expect(FandomDisplayName.split("Hulk-All Media Types").title == "Hulk")
+    }
+
+    @Test func theUnicodeHyphenSeparatesToo() {
+        // U+2010, visually identical to a hyphen-minus.
+        let split = FandomDisplayName.split("Dreaming of Sunshine \u{2010} Silver Queen")
+        #expect(split.title == "Dreaming of Sunshine")
+        #expect(split.qualifier == "- Silver Queen")
+    }
+
+    @Test func aJapaneseSubtitleKeepsItsClosingDash() {
+        // 42 names use the "-Subtitle-" convention. Nothing is peeled off them,
+        // so the debris trim must never see them.
+        for name in ["Lamento -BEYOND THE VOID-", "Bad Wife -Mizuho-", "CAGE-CLOSE-"] {
+            #expect(FandomDisplayName.split(name).title == name)
+        }
+    }
+
+    @Test func blankInputSurvives() {
+        #expect(!FandomDisplayName.split("   ").title.isEmpty)
+    }
 }
