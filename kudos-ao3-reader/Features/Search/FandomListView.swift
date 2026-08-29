@@ -150,33 +150,43 @@ private struct FandomListRow: View {
     let fandom: AO3Fandom
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "books.vertical")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.tint)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(nameLines, id: \.offset) { line in
-                    Text(line.text)
-                        .foregroundStyle(.primary)
+                Text(primaryName)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // The other names this fandom is tagged under, demoted to one
+                // quiet line: on a list this long they are context, not what
+                // you are scanning for. Joined rather than stacked so a
+                // three-name tag costs one extra line instead of two.
+                if !aliases.isEmpty {
+                    Text(aliases.joined(separator: " · "))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .font(.body)
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let count = fandom.workCount {
                 HStack(spacing: 4) {
+                    // Secondary, not tinted: the glyph is the same on every row,
+                    // so in accent red it competed with the name for attention
+                    // while carrying no per-row information.
                     Image(systemName: "doc.text")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
                     Text(count.formatted())
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        // Fixed column, trailing-aligned: without it the glyph
+                        // slides left or right with the digit count and no two
+                        // rows line up. Wide enough for AO3's largest fandoms
+                        // (~700k) at this size.
+                        .frame(minWidth: 58, alignment: .trailing)
                 }
                 .font(.footnote)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
                 .accessibilityLabel("\(count.formatted()) works")
@@ -186,11 +196,20 @@ private struct FandomListRow: View {
         .contentShape(Rectangle())
     }
 
-    private var nameLines: [(offset: Int, text: String)] {
+    /// AO3 writes a multilingual fandom tag as `original | romanization |
+    /// localized` — "僕のヒーローアカデミア | Boku no Hero Academia | My Hero
+    /// Academia (Anime & Manga)" — so the last segment is the one an
+    /// English-locale reader is scanning for. Single-segment tags ("Marvel")
+    /// are their own primary and have no aliases.
+    private var nameParts: [String] {
         let parts = fandom.name
-            .split(separator: "|", omittingEmptySubsequences: false)
+            .split(separator: "|")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let lines = parts.isEmpty ? [fandom.name] : parts
-        return lines.enumerated().map { ($0.offset, $0.element) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? [fandom.name] : parts
     }
+
+    private var primaryName: String { nameParts[nameParts.count - 1] }
+
+    private var aliases: [String] { Array(nameParts.dropLast()) }
 }
