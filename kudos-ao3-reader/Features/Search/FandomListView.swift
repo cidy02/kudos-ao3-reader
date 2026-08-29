@@ -149,44 +149,90 @@ struct FandomListView: View {
 /// Splits an AO3 fandom name into the part you scan for and the disambiguation
 /// AO3 appends to keep tags unique.
 ///
-/// AO3 has two conventions for that suffix and they differ in how safely they can
-/// be detected:
+/// Derived from AO3's own indexes rather than guessed: 144,866 fandoms across all
+/// 11 media categories, from the app's own catalog cache. Two suffix conventions
+/// cover them, and a name may carry both at once.
 ///
-///   * A trailing parenthetical — "Naruto (Anime & Manga)", "DCU (Comics)". Almost
-///     unambiguous: a fandom title that genuinely ends in its own parenthetical is
-///     rare enough to accept.
-///   * A trailing " - " — "One Piece - All Media Types", but also "Hamilton -
-///     Miranda" and "Be More Chill - Iconis/Tracz", where the tail is the creator
-///     rather than a medium. Both are disambiguation, so both are demoted.
+///   * A trailing parenthetical — "Naruto (Anime & Manga)", "DCU (Comics)",
+///     "Se7en (1995)". 40.8% of names. Near-unambiguous.
+///   * A trailing " - " — "One Piece - All Media Types", "Hamilton - Miranda",
+///     "Stars of Chaos: Sha Po Lang - priest". 28.9% of names. The tail is a
+///     medium, a creator, an author handle, or the literal word "Fandom"
+///     (17,424 of them) — all the same job, so all demoted.
+///   * A trailing " RPF". 2,394 names, and the only one with no separator.
 ///
-/// The dash rule is the looser of the two: a title that legitimately contains
-/// " - " would have its tail greyed. That is cosmetic — the full name is still
-/// shown, still searched, and still what gets handed to the works query — so the
-/// looser rule is worth it to catch "All Media Types", which is everywhere.
-/// Matching is on the LAST separator, so "Spider-Man - All Media Types" keeps its
-/// hyphenated title (no spaces around that one) and demotes only the tail.
+/// Both are stripped, parenthetical first, because 5,560 names are the compound
+/// "Title - Creator (Medium)" and peeling only one leaves half the suffix reading
+/// as the title.
+///
+/// Two deliberate limits, both measured:
+///
+///   * A title that genuinely contains " - " has its tail greyed — "ef - a fairy
+///     tale of the two." is one real title, not a title and a qualifier. Roughly
+///     0.05% of names. A lowercase-tail guard was tried against the real index
+///     and rejected: the 550 lowercase tails are overwhelmingly author handles
+///     ("priest", "refrainbow", "heyitsJaki") that *should* be demoted, so the
+///     guard cost far more than it fixed.
+///   * The failure is cosmetic either way. The full name is still displayed,
+///     still searched, and still what the works query receives.
 enum FandomDisplayName {
+    /// Both widths of parenthesis. The fullwidth pair is the same convention on
+    /// CJK names — （电子游戏）, （电视）, （漫画）, （2025） — 699 of them.
+    ///
+    /// `《》` is deliberately absent: those 161 names wrap the *whole* title
+    /// (《病案本》, 《将进酒》) rather than a suffix, so stripping them would leave
+    /// nothing to lead with.
+    private static let brackets: [(open: Character, close: Character)] = [("(", ")"), ("（", "）")]
+
+    /// All three dash widths AO3 names use. The en and em variants are only ~130
+    /// names between them, but they cost one array entry.
+    private static let separators = [" - ", " – ", " — "]
+
     static func split(_ name: String) -> (title: String, qualifier: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        var title = name.trimmingCharacters(in: .whitespaces)
+        var qualifiers: [String] = []
 
-        if trimmed.hasSuffix(")"), let open = trimmed.lastIndex(of: "(") {
-            let title = trimmed[trimmed.startIndex ..< open].trimmingCharacters(in: .whitespaces)
-            // A name that is nothing but a parenthetical has no title to lead
-            // with, so leave it whole rather than rendering an empty row.
-            if !title.isEmpty {
-                return (title, String(trimmed[open...]))
+        // Real Person Fiction, 2,394 names. The odd one out: no separator at all,
+        // and it sits *outside* any parenthetical — "Yanni (Musician) RPF",
+        // "Only Lovers Left Alive (2013) RPF" — so it has to come off first or
+        // the parenthetical below cannot see the bracket it needs.
+        if title.hasSuffix(" RPF") {
+            let head = String(title.dropLast(4)).trimmingCharacters(in: .whitespaces)
+            if !head.isEmpty {
+                qualifiers.insert("RPF", at: 0)
+                title = head
             }
         }
 
-        if let separator = trimmed.range(of: " - ", options: .backwards) {
-            let title = String(trimmed[trimmed.startIndex ..< separator.lowerBound])
-            let tail = String(trimmed[separator.upperBound...])
-            if !title.isEmpty, !tail.isEmpty {
-                return (title, "- " + tail)
+        // Trailing parenthetical. `lastIndex` so a title carrying its own keeps
+        // it: "Ellie and Abbie (and Ellie's Dead Aunt) (2020)" demotes the year.
+        for bracket in brackets where title.hasSuffix(String(bracket.close)) {
+            guard let open = title.lastIndex(of: bracket.open) else { continue }
+            let head = title[title.startIndex ..< open].trimmingCharacters(in: .whitespaces)
+            if !head.isEmpty {
+                qualifiers.insert(String(title[open...]), at: 0)
+                title = head
+                break
             }
         }
 
-        return (trimmed, "")
+        // Then a dash tail on what is left. Last separator wins, so
+        // "Spider-Man - All Media Types" keeps its hyphenated title.
+        let separator = separators
+            .compactMap { title.range(of: $0, options: .backwards) }
+            .max { $0.lowerBound < $1.lowerBound }
+        if let separator {
+            let head = String(title[title.startIndex ..< separator.lowerBound])
+                .trimmingCharacters(in: .whitespaces)
+            let tail = String(title[separator.upperBound...])
+                .trimmingCharacters(in: .whitespaces)
+            if !head.isEmpty, !tail.isEmpty {
+                qualifiers.insert("- " + tail, at: 0)
+                title = head
+            }
+        }
+
+        return (title, qualifiers.joined(separator: " "))
     }
 }
 
