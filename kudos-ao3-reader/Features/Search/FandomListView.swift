@@ -146,16 +146,67 @@ struct FandomListView: View {
     }
 }
 
+/// Splits an AO3 fandom name into the part you scan for and the disambiguation
+/// AO3 appends to keep tags unique.
+///
+/// AO3 has two conventions for that suffix and they differ in how safely they can
+/// be detected:
+///
+///   * A trailing parenthetical — "Naruto (Anime & Manga)", "DCU (Comics)". Almost
+///     unambiguous: a fandom title that genuinely ends in its own parenthetical is
+///     rare enough to accept.
+///   * A trailing " - " — "One Piece - All Media Types", but also "Hamilton -
+///     Miranda" and "Be More Chill - Iconis/Tracz", where the tail is the creator
+///     rather than a medium. Both are disambiguation, so both are demoted.
+///
+/// The dash rule is the looser of the two: a title that legitimately contains
+/// " - " would have its tail greyed. That is cosmetic — the full name is still
+/// shown, still searched, and still what gets handed to the works query — so the
+/// looser rule is worth it to catch "All Media Types", which is everywhere.
+/// Matching is on the LAST separator, so "Spider-Man - All Media Types" keeps its
+/// hyphenated title (no spaces around that one) and demotes only the tail.
+enum FandomDisplayName {
+    static func split(_ name: String) -> (title: String, qualifier: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+
+        if trimmed.hasSuffix(")"), let open = trimmed.lastIndex(of: "(") {
+            let title = trimmed[trimmed.startIndex ..< open].trimmingCharacters(in: .whitespaces)
+            // A name that is nothing but a parenthetical has no title to lead
+            // with, so leave it whole rather than rendering an empty row.
+            if !title.isEmpty {
+                return (title, String(trimmed[open...]))
+            }
+        }
+
+        if let separator = trimmed.range(of: " - ", options: .backwards) {
+            let title = String(trimmed[trimmed.startIndex ..< separator.lowerBound])
+            let tail = String(trimmed[separator.upperBound...])
+            if !title.isEmpty, !tail.isEmpty {
+                return (title, "- " + tail)
+            }
+        }
+
+        return (trimmed, "")
+    }
+}
+
 private struct FandomListRow: View {
     let fandom: AO3Fandom
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(primaryName)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // One Text, two runs: the qualifier stays on the title's line and
+                // wraps with it, but in footnote grey it stops competing. Splitting
+                // it into its own view would cost a line on nearly every row.
+                (
+                    Text(splitName.title).foregroundStyle(.primary)
+                        + Text(splitName.qualifier.isEmpty ? "" : " " + splitName.qualifier)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                )
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
 
                 // The other names this fandom is tagged under, demoted to one
                 // quiet line: on a list this long they are context, not what
@@ -210,6 +261,8 @@ private struct FandomListRow: View {
     }
 
     private var primaryName: String { nameParts[nameParts.count - 1] }
+
+    private var splitName: (title: String, qualifier: String) { FandomDisplayName.split(primaryName) }
 
     private var aliases: [String] { Array(nameParts.dropLast()) }
 }
