@@ -137,7 +137,7 @@ struct MediaBrowserView: View {
                         // performs the push, and marking a nested subview instead
                         // leaves the pair unmatched — which degrades silently to an
                         // ordinary push (verified on device before this moved).
-                        .workCardZoomSource(category.id, in: zoomNamespace)
+                        .workCardZoomSource(BrowseZoomKey.category(category.id), in: zoomNamespace)
                         .onAppear { visibleCategoryIDs.insert(category.id) }
                         .onDisappear { visibleCategoryIDs.remove(category.id) }
                     }

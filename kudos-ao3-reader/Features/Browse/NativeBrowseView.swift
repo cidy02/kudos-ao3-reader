@@ -5,6 +5,22 @@ import SwiftUI
 /// app's own card/list system. The AO3 website is a secondary "Open AO3 Website"
 /// fallback (`AO3WebBrowserView`), not the primary experience. Architecture is kept
 /// extensible (Tags / Collections / People can become sibling sections later).
+/// What Browse's zoom pairs are matched on.
+///
+/// Browse pushes twice down one stack — category card → fandom list → works —
+/// and both hops share the single namespace BrowseView declares, so both keys
+/// live in one id space. Raw Strings would put a category name and a fandom name
+/// in that space together, and AO3 has no rule against a fandom tag reading
+/// exactly like a media category ("Theater"). That collision would not fail
+/// loudly; it would zoom out of the wrong card. Tagging the case keeps the hops
+/// disjoint. Same lesson as `WorkZoomKey`, which exists because two raw `id`s in
+/// one namespace could never match — this is the mirror case, where two could
+/// match when they should not.
+enum BrowseZoomKey: Hashable {
+    case category(String)
+    case fandom(String)
+}
+
 struct BrowseView: View {
     @Environment(AppRouter.self) private var router
 
@@ -57,6 +73,9 @@ struct BrowseView: View {
 /// Reuses `AO3WorkRow`, `SearchPaginationBar`, and the polite `AO3Client.search`.
 struct FandomWorksView: View {
     let fandom: String
+
+    /// The other half of the fandom-row zoom — set by BrowseView on the stack.
+    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
     @Environment(AO3AuthService.self) private var auth
     @State private var results: [AO3WorkSummary] = []
@@ -140,6 +159,8 @@ struct FandomWorksView: View {
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .hidesFloatingTabBar()
+            // Zooms out of the fandom row that pushed it.
+            .workCardZoomDestination(BrowseZoomKey.fandom(fandom), in: zoomNamespace)
             .toolbar { toolbarContent }
             .filterPanelPresentation(isPresented: $showingFilters) {
                 AO3FilterPanel(
