@@ -177,62 +177,121 @@ struct FandomListView: View {
 ///     still searched, and still what the works query receives.
 enum FandomDisplayName {
     /// Both widths of parenthesis. The fullwidth pair is the same convention on
-    /// CJK names — （电子游戏）, （电视）, （漫画）, （2025） — 699 of them.
+    /// CJK names — （电子游戏）, （电视）, （漫画）, （2025）.
     ///
-    /// `《》` is deliberately absent: those 161 names wrap the *whole* title
-    /// (《病案本》, 《将进酒》) rather than a suffix, so stripping them would leave
-    /// nothing to lead with.
+    /// `《》`, `【】`, `「」`, `[]` are deliberately absent. Their use in the index
+    /// mixes whole-title wrappers (《病案本》), title punctuation (`Tu[ism]`) and
+    /// ad-hoc metadata, so no one reading of them is safe.
     private static let brackets: [(open: Character, close: Character)] = [("(", ")"), ("（", "）")]
 
-    /// All three dash widths AO3 names use. The en and em variants are only ~130
-    /// names between them, but they cost one array entry.
-    private static let separators = [" - ", " – ", " — "]
+    /// Every spaced dash that appears as a separator in the index, including
+    /// U+2010 HYPHEN, which is visually identical to a hyphen-minus and shows up
+    /// in three names ("Dreaming of Sunshine ‐ Silver Queen").
+    private static let separators = [" - ", " – ", " — ", " ‐ "]
+
+    /// Debris a peeled suffix leaves on the end of the title: "classmates - RPF"
+    /// would otherwise render as "classmates -", and "Digimon: All Media Types"
+    /// as "Digimon:".
+    private static let debris = CharacterSet(charactersIn: " -–—‐:")
 
     static func split(_ name: String) -> (title: String, qualifier: String) {
         var title = name.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return (name, "") }
         var qualifiers: [String] = []
 
-        // Real Person Fiction, 2,394 names. The odd one out: no separator at all,
-        // and it sits *outside* any parenthetical — "Yanni (Musician) RPF",
-        // "Only Lovers Left Alive (2013) RPF" — so it has to come off first or
-        // the parenthetical below cannot see the bracket it needs.
-        if title.hasSuffix(" RPF") {
-            let head = String(title.dropLast(4)).trimmingCharacters(in: .whitespaces)
-            if !head.isEmpty {
-                qualifiers.insert("RPF", at: 0)
-                title = head
-            }
-        }
+        // Each form appears at most once, but they stack in any order, so the
+        // rules run in a loop with a fired-flag each rather than a single pass.
+        //
+        // The loop is what catches "Political RPF - US 21st c.", where the RPF
+        // is only exposed once the dash tail comes off — a single pass left 62
+        // titles still ending in "RPF". The flags are what stop it running away:
+        // an unguarded loop also peeled a title's *own* parenthetical on the
+        // second turn, turning "Ellie and Abbie (and Ellie's Dead Aunt) (2020)"
+        // into "Ellie and Abbie". A second bracket or dash belongs to the title.
+        var tookRPF = false
+        var tookAllMediaTypes = false
+        var tookBracket = false
+        var tookSeparator = false
 
-        // Trailing parenthetical. `lastIndex` so a title carrying its own keeps
-        // it: "Ellie and Abbie (and Ellie's Dead Aunt) (2020)" demotes the year.
-        for bracket in brackets where title.hasSuffix(String(bracket.close)) {
-            guard let open = title.lastIndex(of: bracket.open) else { continue }
-            let head = title[title.startIndex ..< open].trimmingCharacters(in: .whitespaces)
-            if !head.isEmpty {
-                qualifiers.insert(String(title[open...]), at: 0)
-                title = head
-                break
-            }
-        }
+        for _ in 0 ..< 4 {
+            let before = title
 
-        // Then a dash tail on what is left. Last separator wins, so
-        // "Spider-Man - All Media Types" keeps its hyphenated title.
-        let separator = separators
-            .compactMap { title.range(of: $0, options: .backwards) }
-            .max { $0.lowerBound < $1.lowerBound }
-        if let separator {
-            let head = String(title[title.startIndex ..< separator.lowerBound])
-                .trimmingCharacters(in: .whitespaces)
-            let tail = String(title[separator.upperBound...])
-                .trimmingCharacters(in: .whitespaces)
-            if !head.isEmpty, !tail.isEmpty {
-                qualifiers.insert("- " + tail, at: 0)
-                title = head
+            // Real Person Fiction. Case-insensitive: the index also has "Rpf"
+            // and "rpf". Only the spaced form — matching an unspaced "RPF"
+            // would cut into names that merely end in those letters.
+            if !tookRPF,
+               let range = title.range(of: " RPF", options: [.caseInsensitive, .backwards]),
+               range.upperBound == title.endIndex {
+                let head = tidied(String(title[title.startIndex ..< range.lowerBound]))
+                if !head.isEmpty {
+                    qualifiers.insert(
+                        String(title[range.lowerBound...]).trimmingCharacters(in: .whitespaces), at: 0
+                    )
+                    title = head
+                    tookRPF = true
+                }
             }
+
+            // "All Media Types" attached with something other than " - ":
+            // "Digimon: All Media Types", "Hulk-All Media Types". A literal, so
+            // it stays high-confidence — this is the one tail common enough
+            // (18k names) to be worth naming outright.
+            if !tookAllMediaTypes,
+               let range = title.range(of: "All Media Types", options: [.caseInsensitive, .backwards]),
+               range.upperBound == title.endIndex {
+                let head = tidied(String(title[title.startIndex ..< range.lowerBound]))
+                if !head.isEmpty {
+                    qualifiers.insert("- " + String(title[range.lowerBound...]), at: 0)
+                    title = head
+                    tookAllMediaTypes = true
+                }
+            }
+
+            // Trailing parenthetical. `lastIndex` so a title carrying its own
+            // keeps it: "Ellie and Abbie (and Ellie's Dead Aunt) (2020)".
+            for bracket in brackets where !tookBracket && title.hasSuffix(String(bracket.close)) {
+                guard let open = title.lastIndex(of: bracket.open) else { continue }
+                let head = tidied(String(title[title.startIndex ..< open]))
+                if !head.isEmpty {
+                    qualifiers.insert(String(title[open...]), at: 0)
+                    title = head
+                    tookBracket = true
+                    break
+                }
+            }
+
+            // Dash tail, last separator wins so "Spider-Man - All Media Types"
+            // keeps its hyphenated title.
+            let separator = tookSeparator ? nil : separators
+                .compactMap { title.range(of: $0, options: .backwards) }
+                .max { $0.lowerBound < $1.lowerBound }
+            if let separator {
+                let head = tidied(String(title[title.startIndex ..< separator.lowerBound]))
+                let tail = String(title[separator.upperBound...])
+                    .trimmingCharacters(in: .whitespaces)
+                if !head.isEmpty, !tail.isEmpty {
+                    qualifiers.insert("- " + tail, at: 0)
+                    title = head
+                    tookSeparator = true
+                }
+            }
+
+            if title == before { break }
         }
 
         return (title, qualifiers.joined(separator: " "))
+    }
+
+    /// Trims separator debris off a freshly-peeled title. Only ever applied to a
+    /// head the parser just cut, never to a whole name — so the Japanese
+    /// "-Subtitle-" convention ("Lamento -BEYOND THE VOID-", 42 names) keeps its
+    /// closing dash, because nothing was peeled off it in the first place.
+    private static func tidied(_ text: String) -> String {
+        var out = text.trimmingCharacters(in: .whitespaces)
+        while let last = out.unicodeScalars.last, debris.contains(last) {
+            out.unicodeScalars.removeLast()
+        }
+        return out.trimmingCharacters(in: .whitespaces)
     }
 }
 
