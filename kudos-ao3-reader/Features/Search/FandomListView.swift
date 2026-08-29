@@ -68,6 +68,12 @@ struct FandomListView: View {
                     await refresh()
                 }
                 .searchable(text: $query, prompt: "Filter \(category.name)")
+                // Floats the filter field in the bottom bar instead of the navigation
+                // bar, matching Settings and the rest of iOS 26: on a long list your
+                // thumb is already down there, and the field stops eating the top of
+                // the content. `.searchable` still owns the field and its behaviour —
+                // this only says where the system should put it.
+                .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
                 .task(id: query) { await applyFilter() }
             }
         }
