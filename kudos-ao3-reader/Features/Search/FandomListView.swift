@@ -48,6 +48,11 @@ struct FandomListView: View {
                         FandomListRow(fandom: fandom)
                     }
                     .buttonStyle(.plain)
+                    // This row is the source for the next hop: the works list it pushes
+                    // zooms out of it. On the Button — the control that performs the
+                    // navigation — for the same reason the category card marks its
+                    // NavigationLink rather than the card nested inside it.
+                    .workCardZoomSource(BrowseZoomKey.fandom(fandom.name), in: zoomNamespace)
                     .cardRow()
                 }
                 // Card-based list, matching the Media Browser it's pushed from.
@@ -75,7 +80,7 @@ struct FandomListView: View {
             // `category.id` that card advertises — one String on both ends, so
             // there is no cross-type mismatch to get wrong here (see WorkZoomKey
             // for the one that bit the work cards).
-            .workCardZoomDestination(category.id, in: zoomNamespace)
+            .workCardZoomDestination(BrowseZoomKey.category(category.id), in: zoomNamespace)
             .task { if fandoms.isEmpty { await load() } }
     }
 
