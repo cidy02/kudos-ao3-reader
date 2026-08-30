@@ -1,0 +1,390 @@
+name	agent	decision	reason
+A Court of Thorns and Roses Series - Sarah J. Maas	claude	DEMOTE	author
+A Court of Thorns and Roses Series - Sarah J. Maas	codex	DEMOTE	author
+A Court of Thorns and Roses Series - Sarah J. Maas	gemini	DEMOTE	Author disambiguator
+A Court of Thorns and Roses Series - Sarah J. Maas	grok	DEMOTE	author name
+A Song of Ice and Fire - George R. R. Martin	claude	DEMOTE	author
+A Song of Ice and Fire - George R. R. Martin	codex	DEMOTE	author
+A Song of Ice and Fire - George R. R. Martin	gemini	DEMOTE	Author disambiguator
+A Song of Ice and Fire - George R. R. Martin	grok	DEMOTE	author name
+A View from the Bridge - Miller	codex	DEMOTE	Miller is playwright Arthur Miller.
+A View from the Bridge - Miller	gemini	DEMOTE	Arthur Miller is the author
+All For The Game - Nora Sakavic	claude	DEMOTE	author
+All For The Game - Nora Sakavic	codex	DEMOTE	author
+All For The Game - Nora Sakavic	gemini	DEMOTE	Author disambiguator
+All For The Game - Nora Sakavic	grok	DEMOTE	author name
+Annabel Lee - Edgar Allan Poe	codex	DEMOTE	Edgar Allan Poe is the poem’s author.
+Annabel Lee - Edgar Allan Poe	gemini	DEMOTE	Edgar Allan Poe is the author
+Annabel Lee - Edgar Allan Poe	grok	DEMOTE	Edgar Allan Poe, poem's author
+Anthem - Ayn Rand	claude	DEMOTE	author
+Anthem - Ayn Rand	codex	DEMOTE	author
+Anthem - Ayn Rand	gemini	DEMOTE	Author disambiguator
+Anthem - Ayn Rand	grok	DEMOTE	author name
+Aokana - Four Rhythms Across the Blue	codex	KEEP	Official game title includes Four Rhythms Across the Blue.
+Aokana - Four Rhythms Across the Blue	gemini	KEEP	Official subtitle of the visual novel
+Aokana - Four Rhythms Across the Blue	grok	KEEP	visual novel's official English title
+Assistant to the Villain - Hannah Nicole Maehrer	codex	DEMOTE	Hannah Nicole Maehrer is the novel’s author.
+Assistant to the Villain - Hannah Nicole Maehrer	gemini	DEMOTE	Hannah Nicole Maehrer is the author
+Assistant to the Villain - Hannah Nicole Maehrer	grok	DEMOTE	Hannah Nicole Maehrer, novel's author
+Avatar (Movies - Cameron)	claude	DEMOTE	director, inside parenthetical
+Avatar (Movies - Cameron)	codex	DEMOTE	director
+Avatar (Movies - Cameron)	gemini	DEMOTE	Director disambiguator
+Avatar (Movies - Cameron)	grok	DEMOTE	film director name
+Bleak House - Charles Dickens	codex	DEMOTE	Charles Dickens is the credited author.
+Bleak House - Charles Dickens	gemini	DEMOTE	Charles Dickens is the author
+Bleak House - Charles Dickens	grok	DEMOTE	Charles Dickens, novel's author
+Bloodline of the Holy Grail - Laurence Gardner	codex	DEMOTE	Laurence Gardner is the credited author.
+Bloodline of the Holy Grail - Laurence Gardner	gemini	DEMOTE	Laurence Gardner is the author
+Bloodline of the Holy Grail - Laurence Gardner	grok	DEMOTE	Laurence Gardner, book's author
+Bogatyr Series - Juraj Červenák	codex	DEMOTE	Juraj Červenák wrote the Bogatyr series.
+Bogatyr Series - Juraj Červenák	gemini	DEMOTE	Juraj Červenák is the author
+Bogatyr Series - Juraj Červenák	grok	DEMOTE	Juraj Červenák, series author
+Bonnie & Clyde - Wildhorn/Black/Menchell	codex	DEMOTE	Wildhorn, Black, and Menchell are musical creators.
+Bonnie & Clyde - Wildhorn/Black/Menchell	gemini	DEMOTE	Musical creators and composers
+Bonnie & Clyde - Wildhorn/Black/Menchell	grok	DEMOTE	musical composer, lyricist, book-writer
+Bridgerton Series - Julia Quinn	claude	DEMOTE	author
+Bridgerton Series - Julia Quinn	codex	DEMOTE	author
+Bridgerton Series - Julia Quinn	gemini	DEMOTE	Author disambiguator
+Bridgerton Series - Julia Quinn	grok	DEMOTE	author name
+COLD FEVER - Konohara Narise	codex	DEMOTE	Konohara Narise is the credited author.
+COLD FEVER - Konohara Narise	gemini	DEMOTE	Konohara Narise is the author
+COLD FEVER - Konohara Narise	grok	DEMOTE	Konohara Narise, novel's author
+Cantata - Fir & Fireweed	codex	DEMOTE	Fir & Fireweed is Cantata’s author.
+Cantata - Fir & Fireweed	gemini	DEMOTE	Fir & Fireweed is the author
+Cantata - Fir & Fireweed	grok	DEMOTE	Fir & Fireweed, IF authors
+Cemetery Boys - Aiden Thomas	codex	DEMOTE	Aiden Thomas is the credited author.
+Cemetery Boys - Aiden Thomas	gemini	DEMOTE	Aiden Thomas is the author
+Cemetery Boys - Aiden Thomas	grok	DEMOTE	Aiden Thomas, novel's author
+Charlie and the Chocolate Factory - Shaiman/Shaiman & Wittman/Greig	codex	DEMOTE	Shaiman, Wittman, and Greig are musical creators.
+Charlie and the Chocolate Factory - Shaiman/Shaiman & Wittman/Greig	gemini	DEMOTE	Musical composers and lyricists
+Charlie and the Chocolate Factory - Shaiman/Shaiman & Wittman/Greig	grok	DEMOTE	musical composer, lyricists, book-writer
+Children of the Corn - Stephen King	claude	DEMOTE	author
+Children of the Corn - Stephen King	codex	DEMOTE	author
+Children of the Corn - Stephen King	gemini	DEMOTE	Author disambiguator
+Children of the Corn - Stephen King	grok	DEMOTE	author name
+Chóng Zú Zhī Péng Yǒu Yě Hěn Měi Wèi - Xuán Zhū	codex	DEMOTE	Xuán Zhū is the credited webnovel author.
+Chóng Zú Zhī Péng Yǒu Yě Hěn Měi Wèi - Xuán Zhū	gemini	DEMOTE	Xuán Zhū is the author
+Chóng Zú Zhī Péng Yǒu Yě Hěn Měi Wèi - Xuán Zhū	grok	DEMOTE	Xuán Zhū, novel's author
+Clown in a Cornfield Series - Adam Cesare	claude	DEMOTE	author
+Clown in a Cornfield Series - Adam Cesare	codex	DEMOTE	author
+Clown in a Cornfield Series - Adam Cesare	gemini	DEMOTE	Author disambiguator
+Clown in a Cornfield Series - Adam Cesare	grok	DEMOTE	author name
+Diamonds and Toads - Charles Perrault	claude	DEMOTE	author
+Diamonds and Toads - Charles Perrault	codex	DEMOTE	author
+Diamonds and Toads - Charles Perrault	gemini	DEMOTE	Author disambiguator
+Diamonds and Toads - Charles Perrault	grok	DEMOTE	fairy tale author
+Dragon's Winter Series - Elizabeth A. Lynn	codex	DEMOTE	Elizabeth A. Lynn is the series author.
+Dragon's Winter Series - Elizabeth A. Lynn	gemini	DEMOTE	Elizabeth A. Lynn is the author
+Dragon's Winter Series - Elizabeth A. Lynn	grok	DEMOTE	Elizabeth A. Lynn, series author
+EPIC - Jorge Rivera-Herrans (Albums)	claude	DEMOTE	composer
+EPIC - Jorge Rivera-Herrans (Albums)	codex	DEMOTE	creator and medium
+EPIC - Jorge Rivera-Herrans (Albums)	gemini	DEMOTE	Creator and format disambiguator
+EPIC - Jorge Rivera-Herrans (Albums)	grok	DEMOTE	creator name
+Eden - Stanisław Lem	claude	DEMOTE	author
+Eden - Stanisław Lem	codex	DEMOTE	author
+Eden - Stanisław Lem	gemini	DEMOTE	Author disambiguator
+Eden - Stanisław Lem	grok	DEMOTE	author name
+Elfhome Series - Wen Spencer	claude	DEMOTE	author
+Elfhome Series - Wen Spencer	codex	DEMOTE	author
+Elfhome Series - Wen Spencer	gemini	DEMOTE	Author disambiguator
+Elfhome Series - Wen Spencer	grok	DEMOTE	author name
+Ella Enchanted - Gail Carson Levine	codex	DEMOTE	Gail Carson Levine is the novel’s author.
+Ella Enchanted - Gail Carson Levine	gemini	DEMOTE	Gail Carson Levine is the author
+Ella Enchanted - Gail Carson Levine	grok	DEMOTE	Gail Carson Levine, novel's author
+Elm Stone Saga - Shayla Morgansen	claude	DEMOTE	author
+Elm Stone Saga - Shayla Morgansen	codex	DEMOTE	author
+Elm Stone Saga - Shayla Morgansen	gemini	DEMOTE	Author disambiguator
+Elm Stone Saga - Shayla Morgansen	grok	DEMOTE	author name
+Escam Series - scribbleshrimp	codex	DEMOTE	scribbleshrimp created Escam.
+Escam Series - scribbleshrimp	gemini	DEMOTE	scribbleshrimp is the creator
+Escam Series - scribbleshrimp	grok	DEMOTE	scribbleshrimp, original-series author
+Fairy Tale Reform School - Jen Calonita	claude	DEMOTE	author
+Fairy Tale Reform School - Jen Calonita	codex	DEMOTE	author
+Fairy Tale Reform School - Jen Calonita	gemini	DEMOTE	Author disambiguator
+Fairy Tale Reform School - Jen Calonita	grok	DEMOTE	author name
+GAIMAN Neil - Works	claude	DEMOTE	"Works" is a qualifier
+GAIMAN Neil - Works	codex	DEMOTE	works category
+GAIMAN Neil - Works	gemini	DEMOTE	Creator works disambiguator
+GAIMAN Neil - Works	grok	DEMOTE	author works qualifier
+Game Changers Series - Rachel Reid	claude	DEMOTE	author
+Game Changers Series - Rachel Reid	codex	DEMOTE	author
+Game Changers Series - Rachel Reid	gemini	DEMOTE	Author disambiguator
+Game Changers Series - Rachel Reid	grok	DEMOTE	author name
+Girl in Pieces - Kathleen Glasgow	codex	DEMOTE	Kathleen Glasgow is the novel’s author.
+Girl in Pieces - Kathleen Glasgow	gemini	DEMOTE	Kathleen Glasgow is the author
+Girl in Pieces - Kathleen Glasgow	grok	DEMOTE	Kathleen Glasgow, novel's author
+Good Omens - Neil Gaiman & Terry Pratchett	claude	DEMOTE	two authors
+Good Omens - Neil Gaiman & Terry Pratchett	codex	DEMOTE	authors
+Good Omens - Neil Gaiman & Terry Pratchett	gemini	DEMOTE	Authors disambiguator
+Good Omens - Neil Gaiman & Terry Pratchett	grok	DEMOTE	author names
+Hamilton - Miranda	claude	DEMOTE	composer
+Hamilton - Miranda	codex	DEMOTE	creator
+Hamilton - Miranda	gemini	DEMOTE	Creator disambiguator
+Hamilton - Miranda	grok	DEMOTE	creator name
+Harry Potter - J. K. Rowling	claude	DEMOTE	author
+Harry Potter - J. K. Rowling	codex	DEMOTE	author
+Harry Potter - J. K. Rowling	gemini	DEMOTE	Author disambiguator
+Harry Potter - J. K. Rowling	grok	DEMOTE	author name
+Heaven Official's Blessing - Moxiang Tongxiu	claude	DEMOTE	author
+Heaven Official's Blessing - Moxiang Tongxiu	codex	DEMOTE	author
+Heaven Official's Blessing - Moxiang Tongxiu	gemini	DEMOTE	Author disambiguator
+Heaven Official's Blessing - Moxiang Tongxiu	grok	DEMOTE	author name
+History of the Peloponnesian Wars - Thucydides	claude	DEMOTE	author
+History of the Peloponnesian Wars - Thucydides	codex	DEMOTE	author
+History of the Peloponnesian Wars - Thucydides	gemini	DEMOTE	Author disambiguator
+History of the Peloponnesian Wars - Thucydides	grok	DEMOTE	ancient historian author
+How Dare You Attack My Support! - Liáng Cí	codex	DEMOTE	Liáng Cí is the credited webnovel author.
+How Dare You Attack My Support! - Liáng Cí	gemini	DEMOTE	Liáng Cí is the author
+How Dare You Attack My Support! - Liáng Cí	grok	DEMOTE	Liáng Cí, webnovel's author
+Hunger Games Trilogy - Suzanne Collins	claude	DEMOTE	author
+Hunger Games Trilogy - Suzanne Collins	codex	DEMOTE	author
+Hunger Games Trilogy - Suzanne Collins	gemini	DEMOTE	Author disambiguator
+Hunger Games Trilogy - Suzanne Collins	grok	DEMOTE	author name
+IT (Movies - Muschietti)	claude	DEMOTE	director, inside parenthetical
+IT (Movies - Muschietti)	codex	DEMOTE	director
+IT (Movies - Muschietti)	gemini	DEMOTE	Director disambiguator
+IT (Movies - Muschietti)	grok	DEMOTE	film director name
+IT - Stephen King	claude	DEMOTE	author
+IT - Stephen King	codex	DEMOTE	author
+IT - Stephen King	gemini	DEMOTE	Author disambiguator
+IT - Stephen King	grok	DEMOTE	author name
+InuYasha - A Feudal Fairy Tale	claude	KEEP	real subtitle of InuYasha
+InuYasha - A Feudal Fairy Tale	codex	KEEP	official series subtitle
+InuYasha - A Feudal Fairy Tale	gemini	KEEP	Official subtitle of the series
+InuYasha - A Feudal Fairy Tale	grok	KEEP	official series subtitle
+Jasper Dent Series - Barry Lyga	codex	DEMOTE	Barry Lyga is the series author.
+Jasper Dent Series - Barry Lyga	gemini	DEMOTE	Barry Lyga is the author
+Jasper Dent Series - Barry Lyga	grok	DEMOTE	Barry Lyga, series author
+KING Stephen - Works	claude	DEMOTE	"Works" is a qualifier
+KING Stephen - Works	codex	DEMOTE	works category
+KING Stephen - Works	gemini	DEMOTE	Creator works disambiguator
+KING Stephen - Works	grok	DEMOTE	author works qualifier
+Knights of the Old Republic II - The Sith Lords	codex	KEEP	The Sith Lords is the official sequel subtitle.
+Knights of the Old Republic II - The Sith Lords	gemini	KEEP	Official video game subtitle
+Knights of the Old Republic II - The Sith Lords	grok	KEEP	game's official subtitle
+La Belle Dame Sans Merci - John Keats	codex	DEMOTE	John Keats is the poem’s author.
+La Belle Dame Sans Merci - John Keats	gemini	DEMOTE	John Keats is the author
+La Belle Dame Sans Merci - John Keats	grok	DEMOTE	John Keats, poem's author
+Les Rougon-Macquart - Émile Zola	claude	DEMOTE	author
+Les Rougon-Macquart - Émile Zola	codex	DEMOTE	author
+Les Rougon-Macquart - Émile Zola	gemini	DEMOTE	Author disambiguator
+Les Rougon-Macquart - Émile Zola	grok	DEMOTE	author name
+Lightlark Series - Alex Aster	codex	DEMOTE	Alex Aster is the credited series author.
+Lightlark Series - Alex Aster	gemini	DEMOTE	Alex Aster is the author
+Lightlark Series - Alex Aster	grok	DEMOTE	Alex Aster, series author
+Lights Out - Navessa Allen	codex	DEMOTE	Navessa Allen is the novel’s author.
+Lights Out - Navessa Allen	gemini	DEMOTE	Navessa Allen is the author
+Lights Out - Navessa Allen	grok	DEMOTE	Navessa Allen, novel's author
+Looney Tunes - World of Mayhem	codex	KEEP	World of Mayhem is the game’s official subtitle.
+Looney Tunes - World of Mayhem	gemini	KEEP	Official video game subtitle
+Looney Tunes - World of Mayhem	grok	KEEP	official mobile-game subtitle
+Madhouse at the End of the Earth - Julian Sancton	codex	DEMOTE	Julian Sancton is the book’s author.
+Madhouse at the End of the Earth - Julian Sancton	gemini	DEMOTE	Julian Sancton is the author
+Madhouse at the End of the Earth - Julian Sancton	grok	DEMOTE	Julian Sancton, book's author
+Masters of Rome - Colleen McCullough	claude	DEMOTE	author
+Masters of Rome - Colleen McCullough	codex	DEMOTE	author
+Masters of Rome - Colleen McCullough	gemini	DEMOTE	Author disambiguator
+Masters of Rome - Colleen McCullough	grok	DEMOTE	author name
+Midcentury NYC Series - Cat Sebastian	claude	DEMOTE	author
+Midcentury NYC Series - Cat Sebastian	codex	DEMOTE	author
+Midcentury NYC Series - Cat Sebastian	gemini	DEMOTE	Author disambiguator
+Midcentury NYC Series - Cat Sebastian	grok	DEMOTE	author name
+Modao Zushi - Moxiang Tongxiu & Related Fandoms	claude	DEMOTE	author plus related-fandoms
+Modao Zushi - Moxiang Tongxiu & Related Fandoms	codex	DEMOTE	author and related fandoms
+Modao Zushi - Moxiang Tongxiu & Related Fandoms	gemini	DEMOTE	Author and fandom category disambiguator
+Modao Zushi - Moxiang Tongxiu & Related Fandoms	grok	DEMOTE	author and related fandoms
+Módào Zǔshī - Mòxiāng Tóngxiù	claude	DEMOTE	author, romanised
+Módào Zǔshī - Mòxiāng Tóngxiù	codex	DEMOTE	author
+Módào Zǔshī - Mòxiāng Tóngxiù	gemini	DEMOTE	Author disambiguator
+Módào Zǔshī - Mòxiāng Tóngxiù	grok	DEMOTE	author name
+Nemuri Kyoushirou - Shibata Renzaburou	codex	DEMOTE	Renzaburō Shibata is the credited creator.
+Nemuri Kyoushirou - Shibata Renzaburou	gemini	DEMOTE	Shibata Renzaburou is the author
+Nemuri Kyoushirou - Shibata Renzaburou	grok	DEMOTE	Shibata Renzaburō, series author
+Nikolai Series - Leigh Bardugo	claude	DEMOTE	author
+Nikolai Series - Leigh Bardugo	codex	DEMOTE	author
+Nikolai Series - Leigh Bardugo	gemini	DEMOTE	Author disambiguator
+Nikolai Series - Leigh Bardugo	grok	DEMOTE	author name
+Nutcracker and the Mouse King - E. T. A. Hoffmann	claude	DEMOTE	author
+Nutcracker and the Mouse King - E. T. A. Hoffmann	codex	DEMOTE	author
+Nutcracker and the Mouse King - E. T. A. Hoffmann	gemini	DEMOTE	Author disambiguator
+Nutcracker and the Mouse King - E. T. A. Hoffmann	grok	DEMOTE	author name
+Omniscient Reader - Sing-Shong	claude	DEMOTE	author
+Omniscient Reader - Sing-Shong	codex	DEMOTE	author
+Omniscient Reader - Sing-Shong	gemini	DEMOTE	Author disambiguator
+Omniscient Reader - Sing-Shong	grok	DEMOTE	author name
+PRATCHETT Terry - Works	claude	DEMOTE	"Works" is a qualifier
+PRATCHETT Terry - Works	codex	DEMOTE	works category
+PRATCHETT Terry - Works	gemini	DEMOTE	Creator works disambiguator
+PRATCHETT Terry - Works	grok	DEMOTE	author works qualifier
+Percy Jackson and the Olympians - Rick Riordan	claude	DEMOTE	author
+Percy Jackson and the Olympians - Rick Riordan	codex	DEMOTE	author
+Percy Jackson and the Olympians - Rick Riordan	gemini	DEMOTE	Author disambiguator
+Percy Jackson and the Olympians - Rick Riordan	grok	DEMOTE	author name
+Picnic at Hanging Rock - Joan Lindsay	codex	DEMOTE	Joan Lindsay is the novel’s author.
+Picnic at Hanging Rock - Joan Lindsay	gemini	DEMOTE	Joan Lindsay is the author
+Picnic at Hanging Rock - Joan Lindsay	grok	DEMOTE	Joan Lindsay, novel's author
+Political RPF - Irish 20th-21st c.	codex	DEMOTE	Irish period qualifier in Political RPF taxonomy.
+Political RPF - Irish 20th-21st c.	gemini	DEMOTE	Nationality and era disambiguator
+Political RPF - Irish 20th-21st c.	grok	DEMOTE	RPF era/region fandom qualifier
+Pounded In The Butt By Fan Fiction Hosting Website AO3's Hugo Award Nomination - Chuck Tingle	codex	DEMOTE	Chuck Tingle is the work’s author.
+Pounded In The Butt By Fan Fiction Hosting Website AO3's Hugo Award Nomination - Chuck Tingle	gemini	DEMOTE	Chuck Tingle is the author
+Pounded In The Butt By Fan Fiction Hosting Website AO3's Hugo Award Nomination - Chuck Tingle	grok	DEMOTE	Chuck Tingle, story's author
+Project Hail Mary - Andy Weir	claude	DEMOTE	author
+Project Hail Mary - Andy Weir	codex	DEMOTE	author
+Project Hail Mary - Andy Weir	gemini	DEMOTE	Author disambiguator
+Project Hail Mary - Andy Weir	grok	DEMOTE	author name
+Quánzhí Gāoshǒu - Húdié Lán	claude	DEMOTE	author Butterfly Blue
+Quánzhí Gāoshǒu - Húdié Lán	codex	DEMOTE	author
+Quánzhí Gāoshǒu - Húdié Lán	gemini	DEMOTE	Author disambiguator
+Quánzhí Gāoshǒu - Húdié Lán	grok	DEMOTE	author name
+Radio Silence - Alice Oseman	codex	DEMOTE	Alice Oseman is the credited author.
+Radio Silence - Alice Oseman	gemini	DEMOTE	Alice Oseman is the author
+Radio Silence - Alice Oseman	grok	DEMOTE	Alice Oseman, novel's author
+Raven Cycle - Maggie Stiefvater	claude	DEMOTE	author
+Raven Cycle - Maggie Stiefvater	codex	DEMOTE	author
+Raven Cycle - Maggie Stiefvater	gemini	DEMOTE	Author disambiguator
+Raven Cycle - Maggie Stiefvater	grok	DEMOTE	author name
+Red White & Royal Blue - Casey McQuiston	claude	DEMOTE	author
+Red White & Royal Blue - Casey McQuiston	codex	DEMOTE	author
+Red White & Royal Blue - Casey McQuiston	gemini	DEMOTE	Author disambiguator
+Red White & Royal Blue - Casey McQuiston	grok	DEMOTE	author name
+Seveneves - Neal Stephenson	claude	DEMOTE	author
+Seveneves - Neal Stephenson	codex	DEMOTE	author
+Seveneves - Neal Stephenson	gemini	DEMOTE	Author disambiguator
+Seveneves - Neal Stephenson	grok	DEMOTE	author name
+Sherlock Holmes - Arthur Conan Doyle	claude	DEMOTE	author
+Sherlock Holmes - Arthur Conan Doyle	codex	DEMOTE	author
+Sherlock Holmes - Arthur Conan Doyle	gemini	DEMOTE	Author disambiguator
+Sherlock Holmes - Arthur Conan Doyle	grok	DEMOTE	author name
+Shetland - Ann Cleeves	codex	DEMOTE	Ann Cleeves wrote the Shetland series.
+Shetland - Ann Cleeves	gemini	DEMOTE	Ann Cleeves is the author
+Shetland - Ann Cleeves	grok	DEMOTE	Ann Cleeves, series author
+Simon Snow Series - Rainbow Rowell	claude	DEMOTE	author
+Simon Snow Series - Rainbow Rowell	codex	DEMOTE	author
+Simon Snow Series - Rainbow Rowell	gemini	DEMOTE	Author disambiguator
+Simon Snow Series - Rainbow Rowell	grok	DEMOTE	author name
+Sins of the Fathers Series - Cora Reilly	codex	DEMOTE	Cora Reilly wrote the series.
+Sins of the Fathers Series - Cora Reilly	gemini	DEMOTE	Cora Reilly is the author
+Sins of the Fathers Series - Cora Reilly	grok	DEMOTE	Cora Reilly, series author
+Six of Crows Series - Leigh Bardugo	claude	DEMOTE	author
+Six of Crows Series - Leigh Bardugo	codex	DEMOTE	author
+Six of Crows Series - Leigh Bardugo	gemini	DEMOTE	Author disambiguator
+Six of Crows Series - Leigh Bardugo	grok	DEMOTE	author name
+Star Wars Legends: Crucible - Troy Denning	codex	DEMOTE	Troy Denning is the credited author.
+Star Wars Legends: Crucible - Troy Denning	gemini	DEMOTE	Troy Denning is the author
+Star Wars Legends: Crucible - Troy Denning	grok	DEMOTE	Troy Denning, novel's author
+Star Wars Legends: The Bounty Hunter Wars - K. W. Jeter	codex	DEMOTE	K. W. Jeter is the credited trilogy author.
+Star Wars Legends: The Bounty Hunter Wars - K. W. Jeter	gemini	DEMOTE	K. W. Jeter is the author
+Star Wars Legends: The Bounty Hunter Wars - K. W. Jeter	grok	DEMOTE	K. W. Jeter, trilogy's author
+Strange Tales from a Chinese Studio - Pu Songling	codex	DEMOTE	Pu Songling is the collection’s author.
+Strange Tales from a Chinese Studio - Pu Songling	gemini	DEMOTE	Pu Songling is the author
+Strange Tales from a Chinese Studio - Pu Songling	grok	DEMOTE	Pu Songling, collection's author
+Sucker Bait - Isaac Asimov	codex	DEMOTE	Isaac Asimov is the credited author.
+Sucker Bait - Isaac Asimov	gemini	DEMOTE	Isaac Asimov is the author
+Sucker Bait - Isaac Asimov	grok	DEMOTE	Isaac Asimov, novella's author
+Talents Series - David Lubar	codex	DEMOTE	David Lubar is the series author.
+Talents Series - David Lubar	gemini	DEMOTE	David Lubar is the author
+Talents Series - David Lubar	grok	DEMOTE	David Lubar, series author
+The Arcana Chronicles - Kresley Cole	codex	DEMOTE	Kresley Cole wrote the series.
+The Arcana Chronicles - Kresley Cole	gemini	DEMOTE	Kresley Cole is the author
+The Arcana Chronicles - Kresley Cole	grok	DEMOTE	Kresley Cole, series author
+The Butterfly on the Bund - Zhang Yutong & Ye Jianfeng/Hua An & Zhao Xinyuan	codex	DEMOTE	Names are musical’s book, lyrics, and music creators.
+The Butterfly on the Bund - Zhang Yutong & Ye Jianfeng/Hua An & Zhao Xinyuan	gemini	DEMOTE	Musical composers and lyricists
+The Butterfly on the Bund - Zhang Yutong & Ye Jianfeng/Hua An & Zhao Xinyuan	grok	DEMOTE	musical composers and librettists
+The Card Apprentice - Fang Xiang	codex	DEMOTE	Fang Xiang is the credited webnovel author.
+The Card Apprentice - Fang Xiang	gemini	DEMOTE	Fang Xiang is the author
+The Card Apprentice - Fang Xiang	grok	DEMOTE	Fang Xiang, webnovel's author
+The Chronicles of Never After - Melissa de la Cruz	codex	DEMOTE	Melissa de la Cruz is the series author.
+The Chronicles of Never After - Melissa de la Cruz	gemini	DEMOTE	Melissa de la Cruz is the author
+The Chronicles of Never After - Melissa de la Cruz	grok	DEMOTE	Melissa de la Cruz, series author
+The Divine Comedy - Dante Alighieri	codex	DEMOTE	Dante Alighieri is the poem’s author.
+The Divine Comedy - Dante Alighieri	gemini	DEMOTE	Dante Alighieri is the author
+The Divine Comedy - Dante Alighieri	grok	DEMOTE	Dante Alighieri, poem's author
+The Emperor's Edge Series - Lindsay Buroker	codex	DEMOTE	Lindsay Buroker is the credited series author.
+The Emperor's Edge Series - Lindsay Buroker	gemini	DEMOTE	Lindsay Buroker is the author
+The Emperor's Edge Series - Lindsay Buroker	grok	DEMOTE	Lindsay Buroker, series author
+The Four Great Constables Series - Woon Swee Oan	codex	DEMOTE	Woon Swee Oan wrote the novel series.
+The Four Great Constables Series - Woon Swee Oan	gemini	DEMOTE	Woon Swee Oan is the author
+The Four Great Constables Series - Woon Swee Oan	grok	DEMOTE	Woon Swee Oan, wuxia author
+The Goblin Emperor Series - Katherine Addison	claude	DEMOTE	author
+The Goblin Emperor Series - Katherine Addison	codex	DEMOTE	author
+The Goblin Emperor Series - Katherine Addison	gemini	DEMOTE	Author disambiguator
+The Goblin Emperor Series - Katherine Addison	grok	DEMOTE	author name
+The Grave Robbers' Chronicles - Xu Lei	claude	DEMOTE	author
+The Grave Robbers' Chronicles - Xu Lei	codex	DEMOTE	author
+The Grave Robbers' Chronicles - Xu Lei	gemini	DEMOTE	Author disambiguator
+The Grave Robbers' Chronicles - Xu Lei	grok	DEMOTE	author name
+The Heroes of Olympus - Rick Riordan	claude	DEMOTE	author
+The Heroes of Olympus - Rick Riordan	codex	DEMOTE	author
+The Heroes of Olympus - Rick Riordan	gemini	DEMOTE	Author disambiguator
+The Heroes of Olympus - Rick Riordan	grok	DEMOTE	author name
+The Hobbit - J. R. R. Tolkien	claude	DEMOTE	author
+The Hobbit - J. R. R. Tolkien	codex	DEMOTE	author
+The Hobbit - J. R. R. Tolkien	gemini	DEMOTE	Author disambiguator
+The Hobbit - J. R. R. Tolkien	grok	DEMOTE	author name
+The Lord of the Rings - J. R. R. Tolkien	claude	DEMOTE	author
+The Lord of the Rings - J. R. R. Tolkien	codex	DEMOTE	author
+The Lord of the Rings - J. R. R. Tolkien	gemini	DEMOTE	Author disambiguator
+The Lord of the Rings - J. R. R. Tolkien	grok	DEMOTE	author name
+The Mortal Instruments Series - Cassandra Clare	claude	DEMOTE	author
+The Mortal Instruments Series - Cassandra Clare	codex	DEMOTE	author
+The Mortal Instruments Series - Cassandra Clare	gemini	DEMOTE	Author disambiguator
+The Mortal Instruments Series - Cassandra Clare	grok	DEMOTE	author name
+The Outsiders - S. E. Hinton	claude	DEMOTE	author
+The Outsiders - S. E. Hinton	codex	DEMOTE	author
+The Outsiders - S. E. Hinton	gemini	DEMOTE	Author disambiguator
+The Outsiders - S. E. Hinton	grok	DEMOTE	author name
+The Peasants - Władysław Reymont	codex	DEMOTE	Władysław Reymont is the credited author.
+The Peasants - Władysław Reymont	gemini	DEMOTE	Władysław Reymont is the author
+The Peasants - Władysław Reymont	grok	DEMOTE	Władysław Reymont, novel's author
+The Scum Villain's Self-Saving System - Mòxiāng Tóngxiù	claude	DEMOTE	author
+The Scum Villain's Self-Saving System - Mòxiāng Tóngxiù	codex	DEMOTE	author
+The Scum Villain's Self-Saving System - Mòxiāng Tóngxiù	gemini	DEMOTE	Author disambiguator
+The Scum Villain's Self-Saving System - Mòxiāng Tóngxiù	grok	DEMOTE	author name
+The Shadowhunter Chronicles - Cassandra Clare	claude	DEMOTE	author
+The Shadowhunter Chronicles - Cassandra Clare	codex	DEMOTE	author
+The Shadowhunter Chronicles - Cassandra Clare	gemini	DEMOTE	Author disambiguator
+The Shadowhunter Chronicles - Cassandra Clare	grok	DEMOTE	author name
+The Silmarillion and other histories of Middle-Earth - J. R. R. Tolkien	claude	DEMOTE	author
+The Silmarillion and other histories of Middle-Earth - J. R. R. Tolkien	codex	DEMOTE	author
+The Silmarillion and other histories of Middle-Earth - J. R. R. Tolkien	gemini	DEMOTE	Author disambiguator
+The Silmarillion and other histories of Middle-Earth - J. R. R. Tolkien	grok	DEMOTE	author name
+The Smiling Proud Wanderer - Jin Yong	codex	DEMOTE	Jin Yong is the novel’s author.
+The Smiling Proud Wanderer - Jin Yong	gemini	DEMOTE	Jin Yong is the author
+The Smiling Proud Wanderer - Jin Yong	grok	DEMOTE	Jin Yong, novel's author
+The Three Musketeers (Movies - Lester)	claude	DEMOTE	director, inside parenthetical
+The Three Musketeers (Movies - Lester)	codex	DEMOTE	director
+The Three Musketeers (Movies - Lester)	gemini	DEMOTE	Director disambiguator
+The Three Musketeers (Movies - Lester)	grok	DEMOTE	film director name
+The Three Musketeers - Ludwig	codex	DEMOTE	Ludwig is adaptor Ken Ludwig.
+The Three Musketeers - Ludwig	gemini	DEMOTE	Ken Ludwig is the playwright
+The Three Musketeers - Ludwig	grok	DEMOTE	Ken Ludwig, play adapter
+The Undivine Comedy - Zygmunt Krasiński	codex	DEMOTE	Zygmunt Krasiński wrote the play.
+The Undivine Comedy - Zygmunt Krasiński	gemini	DEMOTE	Zygmunt Krasiński is the author
+The Undivine Comedy - Zygmunt Krasiński	grok	DEMOTE	Zygmunt Krasiński, play's author
+The Unofficial History of the Wulin - Gǔ Lóng	claude	DEMOTE	author Gu Long
+The Unofficial History of the Wulin - Gǔ Lóng	codex	DEMOTE	author
+The Unofficial History of the Wulin - Gǔ Lóng	gemini	DEMOTE	Author disambiguator
+The Unofficial History of the Wulin - Gǔ Lóng	grok	DEMOTE	author name
+Thrive in Catastrophe - Jiāo Táng Dōng Guā	claude	DEMOTE	author
+Thrive in Catastrophe - Jiāo Táng Dōng Guā	codex	DEMOTE	author
+Thrive in Catastrophe - Jiāo Táng Dōng Guā	gemini	DEMOTE	Author disambiguator
+Thrive in Catastrophe - Jiāo Táng Dōng Guā	grok	DEMOTE	author name
+Twilight Series - Stephenie Meyer	claude	DEMOTE	author
+Twilight Series - Stephenie Meyer	codex	DEMOTE	author
+Twilight Series - Stephenie Meyer	gemini	DEMOTE	Author disambiguator
+Twilight Series - Stephenie Meyer	grok	DEMOTE	author name
+Vampire: The Masquerade - Various Authors (Choice of Games)	codex	DEMOTE	Choice of Games developer; various authors disambiguate.
+Vampire: The Masquerade - Various Authors (Choice of Games)	gemini	DEMOTE	Authors and publisher disambiguator
+Vampire: The Masquerade - Various Authors (Choice of Games)	grok	DEMOTE	Choice of Games authors qualifier
+Warriors - Erin Hunter	claude	DEMOTE	author
+Warriors - Erin Hunter	codex	DEMOTE	author
+Warriors - Erin Hunter	gemini	DEMOTE	Author pseudonym disambiguator
+Warriors - Erin Hunter	grok	DEMOTE	author name
+Watamote - No Matter How I Look At It It's You Guys' Fault I'm Unpopular!	codex	KEEP	Official English title includes the full phrase.
+Watamote - No Matter How I Look At It It's You Guys' Fault I'm Unpopular!	gemini	KEEP	Full translated title of the series
+Watamote - No Matter How I Look At It It's You Guys' Fault I'm Unpopular!	grok	KEEP	manga's official English title
+Witch of Blackbird Pond - Elizabeth George Speare	claude	DEMOTE	author
+Witch of Blackbird Pond - Elizabeth George Speare	codex	DEMOTE	author
+Witch of Blackbird Pond - Elizabeth George Speare	gemini	DEMOTE	Author disambiguator
+Witch of Blackbird Pond - Elizabeth George Speare	grok	DEMOTE	author name

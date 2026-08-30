@@ -63,3 +63,4 @@ Config/LocalSigning.xcconfig
 # Scripts/fetch-fluidaudio.sh to materialise it. Pinned upstream revision +
 # Scripts/fluidaudio-kudos.patch are what's tracked, not the tree itself.
 Packages/
+Scripts/fandom-audit/fandom-audit.sqlite
