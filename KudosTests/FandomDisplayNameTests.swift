@@ -44,7 +44,10 @@ struct FandomDisplayNameTests {
     }
 
     @Test func aPlainNameHasNoQualifier() {
-        for name in ["Marvel Cinematic Universe", "Sherlock Holmes & Related Fandoms", "Haikyuu!!"] {
+        // "Sherlock Holmes & Related Fandoms" used to sit in this list. It was
+        // never a plain name — it is an umbrella-grouped tag, and asserting it
+        // had no qualifier was asserting the bug.
+        for name in ["Marvel Cinematic Universe", "Doctor Who", "Haikyuu!!"] {
             let split = FandomDisplayName.split(name)
             #expect(split.title == name, "\(name) should stay whole")
             #expect(split.qualifier.isEmpty)
@@ -200,5 +203,176 @@ struct FandomDisplayNameTests {
 
     @Test func blankInputSurvives() {
         #expect(!FandomDisplayName.split("   ").title.isEmpty)
+    }
+
+    // MARK: - Umbrella grouping (A)
+
+    @Test func relatedFandomsIsASuffix() {
+        let split = FandomDisplayName.split("Sherlock Holmes & Related Fandoms")
+        #expect(split.title == "Sherlock Holmes")
+        #expect(split.qualifier == "& Related Fandoms")
+    }
+
+    @Test func onlyTheLastRelatedFandomsSplits() {
+        // The series ampersand belongs to the title.
+        #expect(FandomDisplayName.split("Spirou & Fantasio & Related Fandoms").title == "Spirou & Fantasio")
+    }
+
+    @Test func relatedFandomsNeedsItsSeparator() {
+        // Both are titles, not grouped tags: no " & " or " and " before the phrase.
+        for name in ["Eason-Related Fandoms", "Chinese Related Fandoms"] {
+            let split = FandomDisplayName.split(name)
+            #expect(split.title == name, "\(name) should stay whole")
+            #expect(split.qualifier.isEmpty)
+        }
+    }
+
+    @Test func relatedFandomsUncoversWhatItWraps() {
+        // It sits outside the parenthetical, so peeling it must expose the (TV).
+        let split = FandomDisplayName.split("Bridgerton (TV) & Related Fandoms")
+        #expect(split.title == "Bridgerton")
+        #expect(split.qualifier == "(TV) & Related Fandoms")
+    }
+
+    @Test func theLowercaseSpellingCountsToo() {
+        #expect(FandomDisplayName.split("Arsène Lupin & related fandoms").title == "Arsène Lupin")
+        #expect(FandomDisplayName.split("Red Hood and Related Fandoms").title == "Red Hood")
+    }
+
+    // MARK: - Glued RPF (C)
+
+    @Test func rpfNeedsNoSpaceAtAll() {
+        // 47 names glue it on. Across all 144,866 the only Latin-letter-preceded
+        // match is hetamyuRPF, which genuinely is RPF.
+        #expect(FandomDisplayName.split("hetamyuRPF").title == "hetamyu")
+        #expect(FandomDisplayName.split("英国演员RPF").title == "英国演员")
+        #expect(FandomDisplayName.split("真人rpf").title == "真人")
+    }
+
+    @Test func aBareRPFIsItsOwnTitle() {
+        // Nothing to lead with otherwise.
+        #expect(FandomDisplayName.split("RPF").title == "RPF")
+    }
+
+    @Test func gluedRPFStacksWithABracket() {
+        let split = FandomDisplayName.split("The Notebook(2004)RPF")
+        #expect(split.title == "The Notebook")
+        #expect(split.qualifier == "(2004) RPF")
+    }
+
+    // MARK: - Localized media umbrella (D)
+
+    @Test func theMediaUmbrellaIsMatchedInEverySpellingWeHaveSeen() {
+        for (name, title) in [
+            ("刺客信条-所有媒体类型", "刺客信条"),
+            ("蝙蝠俠-所有媒體型別", "蝙蝠俠"),
+            ("蝙蝠俠 - 所有媒體類型", "蝙蝠俠"),
+            ("Capitão América - Todos os Tipos de Mídia", "Capitão América"),
+            ("Capitán América - Todos los tipos de medios", "Capitán América"),
+        ] {
+            #expect(FandomDisplayName.split(name).title == title, "\(name)")
+        }
+    }
+
+    // MARK: - Mixed-width brackets (E)
+
+    @Test func aBracketPairMayMixWidths() {
+        // 16 names open one width and close the other.
+        #expect(FandomDisplayName.split("BLEACH(Anime&Manga）").title == "BLEACH")
+        #expect(FandomDisplayName.split("南风知我意(TV）").title == "南风知我意")
+        #expect(FandomDisplayName.split("第三日（原创作品)").title == "第三日")
+    }
+
+    @Test func aCloserWithNoOpenerIsTitle() {
+        // The band's name really is three closing parens.
+        #expect(FandomDisplayName.split("Sunn O)))").title == "Sunn O)))")
+        #expect(FandomDisplayName.split("1967)").title == "1967)")
+    }
+
+    @Test func aSmileyIsNotAParenthetical() {
+        #expect(FandomDisplayName.split("MYSTERIOUS MURDER DIY :)").title == "MYSTERIOUS MURDER DIY :)")
+    }
+
+    // MARK: - Glued Fandom (B)
+
+    @Test func fandomGluedByADashIsASuffix() {
+        for (name, title) in [
+            ("The Expanse-Fandom", "The Expanse"),
+            ("Creepypasta-fandom", "Creepypasta"),
+            ("杀死你的旅程—Fandom", "杀死你的旅程"),
+            ("Jinkx Monsoon- Fandom", "Jinkx Monsoon"),
+            ("Fanfic -Fandom", "Fanfic"),
+        ] {
+            #expect(FandomDisplayName.split(name).title == title, "\(name)")
+        }
+    }
+
+    @Test func fandomWithoutADashIsPartOfTheTitle() {
+        // The narrowness is the point: no dash, no split.
+        for name in ["Pizza Fandom", "Celebrity Fiction"] {
+            #expect(FandomDisplayName.split(name).title == name, "\(name) should stay whole")
+        }
+    }
+
+    // MARK: - Identity
+
+    @Test func siblingsShareADisplayTitleButNotAnIdentity() {
+        // 534 stems exist both bare and parenthesized. The parsed title is a
+        // display string and must never be treated as the fandom's identity —
+        // these two are different fandoms that render the same title.
+        let older = FandomDisplayName.split("Doctor Who (1963)")
+        let newer = FandomDisplayName.split("Doctor Who (2005)")
+        #expect(older.title == newer.title)
+        #expect(older.qualifier != newer.qualifier)
+    }
+
+    // MARK: - Adversarial cases contributed by Gemini's review
+
+    @Test func aTitleWithItsOwnParentheticalKeepsItThroughADashTail() {
+        let split = FandomDisplayName.split("The (Unfinished) Story - Author (Novel)")
+        #expect(split.title == "The (Unfinished) Story")
+        #expect(split.qualifier == "- Author (Novel)")
+    }
+
+    @Test func stackedMixedWidthBracketsPeelOnlyTheOuter() {
+        let split = FandomDisplayName.split("My Show (Season 1)（2024)")
+        #expect(split.title == "My Show (Season 1)")
+        #expect(split.qualifier == "（2024)")
+    }
+
+    @Test func aBookBracketTitleKeepsItsWrapperButLosesTheQualifier() {
+        let split = FandomDisplayName.split("《病案本》 (Novel)")
+        #expect(split.title == "《病案本》")
+        #expect(split.qualifier == "(Novel)")
+    }
+
+    @Test func anUnopenedCloserSurvivesAlongsideARealQualifier() {
+        let split = FandomDisplayName.split("Sunn O))) (Band)")
+        #expect(split.title == "Sunn O)))")
+        #expect(split.qualifier == "(Band)")
+    }
+
+    @Test func relatedFandomsWithoutItsConjunctionStaysWhole() {
+        let split = FandomDisplayName.split("Sherlock Holmes Related Fandoms")
+        #expect(split.title == "Sherlock Holmes Related Fandoms")
+        #expect(split.qualifier.isEmpty)
+    }
+
+    @Test func aNameThatIsNothingButASuffixKeepsItself() {
+        // No stem to lead with, so every rule must decline.
+        for bare in ["  RPF  ", "  - Fandom  ", "  - All Media Types  ", "  & Related Fandoms  "] {
+            let split = FandomDisplayName.split(bare)
+            #expect(split.title == bare.trimmingCharacters(in: .whitespaces), "\(bare)")
+            #expect(split.qualifier.isEmpty, "\(bare)")
+        }
+    }
+
+    @Test func aTitleEndingInItsOwnParentheticalKeepsIt() {
+        // Required by the plan's definition of done and missing until Codex's
+        // review caught it: the band is "f(x)", so the one-shot bracket rule has
+        // to be spent on "(Band)" and leave "(x)" alone.
+        let split = FandomDisplayName.split("f(x) (Band)")
+        #expect(split.title == "f(x)")
+        #expect(split.qualifier == "(Band)")
     }
 }

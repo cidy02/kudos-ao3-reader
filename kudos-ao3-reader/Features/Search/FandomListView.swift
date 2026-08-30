@@ -176,23 +176,59 @@ struct FandomListView: View {
 ///   * The failure is cosmetic either way. The full name is still displayed,
 ///     still searched, and still what the works query receives.
 enum FandomDisplayName {
-    /// Both widths of parenthesis. The fullwidth pair is the same convention on
-    /// CJK names — （电子游戏）, （电视）, （漫画）, （2025）.
+    /// Closing brackets that can end a qualifier, either width. The fullwidth
+    /// pair is the same convention on CJK names — （电子游戏）, （电视）, （漫画）.
+    ///
+    /// Openers are searched independently of the closer rather than as fixed
+    /// pairs: 16 names in the index mix the widths ("BLEACH(Anime&Manga）",
+    /// "第三日（原创作品)"), and a pair list would either miss those or bind an
+    /// opener of the wrong width that happens to sit earlier in the name.
     ///
     /// `《》`, `【】`, `「」`, `[]` are deliberately absent. Their use in the index
-    /// mixes whole-title wrappers (《病案本》), title punctuation (`Tu[ism]`) and
-    /// ad-hoc metadata, so no one reading of them is safe.
-    private static let brackets: [(open: Character, close: Character)] = [("(", ")"), ("（", "）")]
+    /// mixes whole-title wrappers (《病案本》), furigana (`炎の蜃気楼[ミラージュ]`)
+    /// and ad-hoc metadata, so no one reading of them is safe.
+    private static let closingBrackets: Set<Character> = [")", "）"]
 
     /// Every spaced dash that appears as a separator in the index, including
     /// U+2010 HYPHEN, which is visually identical to a hyphen-minus and shows up
     /// in three names ("Dreaming of Sunshine ‐ Silver Queen").
     private static let separators = [" - ", " – ", " — ", " ‐ "]
 
+    /// The dash characters that can glue a suffix on with no space around it.
+    private static let dashes: Set<Character> = ["-", "–", "—", "‐"]
+
+    /// The media-umbrella phrase, in the five spellings the index actually uses.
+    /// Named outright rather than left to the dash rule because it is the single
+    /// most common tail (18k names) and appears attached by delimiters the dash
+    /// rule does not recognise — "Digimon: All Media Types", "Hulk-All Media
+    /// Types", "刺客信条-所有媒体类型".
+    ///
+    /// Measured, not guessed: Simplified 8, Traditional 1 + 1 (two variants),
+    /// Portuguese 5, Spanish 5. No speculative translations — an unused spelling
+    /// is a rule nobody can test.
+    private static let mediaUmbrellas = [
+        "All Media Types",
+        "所有媒体类型",
+        "所有媒體類型",
+        "所有媒體型別",
+        "Todos os Tipos de Mídia",
+        "Todos los tipos de medios",
+    ]
+
+    /// The umbrella-grouping tail, with its leading separator included in the
+    /// needle. That leading space is load-bearing: it keeps `Eason-Related
+    /// Fandoms` and `Chinese Related Fandoms` — which are titles, not grouped
+    /// tags — out of the rule.
+    private static let relatedFandoms = [" & Related Fandoms", " and Related Fandoms"]
+
     /// Debris a peeled suffix leaves on the end of the title: "classmates - RPF"
     /// would otherwise render as "classmates -", and "Digimon: All Media Types"
     /// as "Digimon:".
     private static let debris = CharacterSet(charactersIn: " -–—‐:")
+
+    /// A suffix a rule was able to cut off: what is left of the title, and the
+    /// piece that came away.
+    private typealias Peel = (head: String, qualifier: String)
 
     static func split(_ name: String) -> (title: String, qualifier: String) {
         var title = name.trimmingCharacters(in: .whitespaces)
@@ -208,78 +244,112 @@ enum FandomDisplayName {
         // an unguarded loop also peeled a title's *own* parenthetical on the
         // second turn, turning "Ellie and Abbie (and Ellie's Dead Aunt) (2020)"
         // into "Ellie and Abbie". A second bracket or dash belongs to the title.
-        var tookRPF = false
-        var tookAllMediaTypes = false
-        var tookBracket = false
-        var tookSeparator = false
+        //
+        // Order is load-bearing in one place: the parenthetical must be tried
+        // before the dash tail, or "À Tout le Monde (Set Me Free) - Megadeth
+        // (Music Video)" loses the parenthetical belonging to its title on the
+        // next turn.
+        var taken = Set<String>()
+        let rules: [(name: String, cut: (String) -> Peel?)] = [
+            ("relatedFandoms", takeRelatedFandoms),
+            ("rpf", takeRPF),
+            ("mediaUmbrella", takeMediaUmbrella),
+            ("bracket", takeBracket),
+            ("separator", takeSeparator),
+            ("gluedFandom", takeGluedFandom),
+        ]
 
-        for _ in 0 ..< 4 {
+        for _ in 0 ..< rules.count {
             let before = title
-
-            // Real Person Fiction. Case-insensitive: the index also has "Rpf"
-            // and "rpf". Only the spaced form — matching an unspaced "RPF"
-            // would cut into names that merely end in those letters.
-            if !tookRPF,
-               let range = title.range(of: " RPF", options: [.caseInsensitive, .backwards]),
-               range.upperBound == title.endIndex {
-                let head = tidied(String(title[title.startIndex ..< range.lowerBound]))
-                if !head.isEmpty {
-                    qualifiers.insert(
-                        String(title[range.lowerBound...]).trimmingCharacters(in: .whitespaces), at: 0
-                    )
-                    title = head
-                    tookRPF = true
-                }
+            for rule in rules where !taken.contains(rule.name) {
+                guard let peel = rule.cut(title), !peel.head.isEmpty else { continue }
+                qualifiers.insert(peel.qualifier, at: 0)
+                title = peel.head
+                taken.insert(rule.name)
             }
-
-            // "All Media Types" attached with something other than " - ":
-            // "Digimon: All Media Types", "Hulk-All Media Types". A literal, so
-            // it stays high-confidence — this is the one tail common enough
-            // (18k names) to be worth naming outright.
-            if !tookAllMediaTypes,
-               let range = title.range(of: "All Media Types", options: [.caseInsensitive, .backwards]),
-               range.upperBound == title.endIndex {
-                let head = tidied(String(title[title.startIndex ..< range.lowerBound]))
-                if !head.isEmpty {
-                    qualifiers.insert("- " + String(title[range.lowerBound...]), at: 0)
-                    title = head
-                    tookAllMediaTypes = true
-                }
-            }
-
-            // Trailing parenthetical. `lastIndex` so a title carrying its own
-            // keeps it: "Ellie and Abbie (and Ellie's Dead Aunt) (2020)".
-            for bracket in brackets where !tookBracket && title.hasSuffix(String(bracket.close)) {
-                guard let open = title.lastIndex(of: bracket.open) else { continue }
-                let head = tidied(String(title[title.startIndex ..< open]))
-                if !head.isEmpty {
-                    qualifiers.insert(String(title[open...]), at: 0)
-                    title = head
-                    tookBracket = true
-                    break
-                }
-            }
-
-            // Dash tail, last separator wins so "Spider-Man - All Media Types"
-            // keeps its hyphenated title.
-            let separator = tookSeparator ? nil : separators
-                .compactMap { title.range(of: $0, options: .backwards) }
-                .max { $0.lowerBound < $1.lowerBound }
-            if let separator {
-                let head = tidied(String(title[title.startIndex ..< separator.lowerBound]))
-                let tail = String(title[separator.upperBound...])
-                    .trimmingCharacters(in: .whitespaces)
-                if !head.isEmpty, !tail.isEmpty {
-                    qualifiers.insert("- " + tail, at: 0)
-                    title = head
-                    tookSeparator = true
-                }
-            }
-
             if title == before { break }
         }
 
         return (title, qualifiers.joined(separator: " "))
+    }
+
+    /// Umbrella grouping. Tried first because it sits outside everything else —
+    /// "Bridgerton (TV) & Related Fandoms" only exposes its "(TV)" once this is
+    /// gone. Backwards, so "Spirou & Fantasio & Related Fandoms" keeps the
+    /// ampersand belonging to the series.
+    private static func takeRelatedFandoms(_ title: String) -> Peel? {
+        for needle in relatedFandoms {
+            guard let range = title.range(of: needle, options: [.caseInsensitive, .backwards]),
+                  range.upperBound == title.endIndex else { continue }
+            return (
+                tidied(String(title[title.startIndex ..< range.lowerBound])),
+                String(title[range.lowerBound...]).trimmingCharacters(in: .whitespaces)
+            )
+        }
+        return nil
+    }
+
+    /// Real Person Fiction. No leading space required: 47 names glue it on
+    /// ("hetamyuRPF", "中国音乐剧演员RPF", "真人rpf"), and across all 144,866 the
+    /// only Latin-letter-preceded match is hetamyuRPF, which genuinely is RPF.
+    /// A bare "RPF" survives on the empty-head guard in `split`.
+    private static func takeRPF(_ title: String) -> Peel? {
+        guard let range = title.range(of: "RPF", options: [.caseInsensitive, .backwards]),
+              range.upperBound == title.endIndex else { return nil }
+        return (
+            tidied(String(title[title.startIndex ..< range.lowerBound])),
+            String(title[range.lowerBound...]).trimmingCharacters(in: .whitespaces)
+        )
+    }
+
+    private static func takeMediaUmbrella(_ title: String) -> Peel? {
+        for umbrella in mediaUmbrellas {
+            guard let range = title.range(of: umbrella, options: [.caseInsensitive, .backwards]),
+                  range.upperBound == title.endIndex else { continue }
+            return (
+                tidied(String(title[title.startIndex ..< range.lowerBound])),
+                "- " + String(title[range.lowerBound...])
+            )
+        }
+        return nil
+    }
+
+    /// Trailing parenthetical. The opener is the later of the two widths, so a
+    /// mixed pair binds correctly; `lastIndex` also means a title carrying its
+    /// own parenthetical keeps it. A closer with no opener at all is title —
+    /// the band "Sunn O)))".
+    private static func takeBracket(_ title: String) -> Peel? {
+        guard let last = title.last, closingBrackets.contains(last),
+              let open = [title.lastIndex(of: "("), title.lastIndex(of: "（")].compactMap({ $0 }).max()
+        else { return nil }
+        return (tidied(String(title[title.startIndex ..< open])), String(title[open...]))
+    }
+
+    /// Dash tail, last separator wins so "Spider-Man - All Media Types" keeps
+    /// its hyphenated title.
+    private static func takeSeparator(_ title: String) -> Peel? {
+        guard let separator = separators
+            .compactMap({ title.range(of: $0, options: .backwards) })
+            .max(by: { $0.lowerBound < $1.lowerBound })
+        else { return nil }
+        let tail = String(title[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
+        guard !tail.isEmpty else { return nil }
+        return (tidied(String(title[title.startIndex ..< separator.lowerBound])), "- " + tail)
+    }
+
+    /// "Fandom" glued on with a dash and no spacing the separator rule
+    /// recognises — "The Expanse-Fandom", "杀死你的旅程—Fandom", "Jinkx Monsoon-
+    /// Fandom". Deliberately last, so a properly spaced " - " still wins, and
+    /// deliberately narrow: an unspaced dash followed by anything at all would
+    /// eat real subtitles like "「云熠」对家总裁有点怪-办公室篇". Requiring the dash
+    /// also leaves "Pizza Fandom" alone.
+    private static func takeGluedFandom(_ title: String) -> Peel? {
+        guard let range = title.range(of: "Fandom", options: [.caseInsensitive, .backwards]),
+              range.upperBound == title.endIndex else { return nil }
+        let beforeWord = String(title[title.startIndex ..< range.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+        guard let joiner = beforeWord.last, dashes.contains(joiner) else { return nil }
+        return (tidied(beforeWord), "- " + String(title[range.lowerBound...]))
     }
 
     /// Trims separator debris off a freshly-peeled title. Only ever applied to a
