@@ -64,3 +64,5 @@ Config/LocalSigning.xcconfig
 # Scripts/fluidaudio-kudos.patch are what's tracked, not the tree itself.
 Packages/
 Scripts/fandom-audit/fandom-audit.sqlite
+Scripts/fandom-audit/watchdog.log
+Scripts/fandom-audit/runner.log
