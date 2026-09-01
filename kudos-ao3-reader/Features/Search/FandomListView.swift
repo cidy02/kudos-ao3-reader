@@ -233,6 +233,25 @@ enum FandomDisplayName {
     static func split(_ name: String) -> (title: String, qualifier: String) {
         var title = name.trimmingCharacters(in: .whitespaces)
         guard !title.isEmpty else { return (name, "") }
+
+        // Names whose dash tail is really part of the title — "InuYasha - A
+        // Feudal Fairy Tale", "Dragon Age: Origins - Awakening". Nothing in the
+        // string says so; it takes knowing the work, which is why this is a list
+        // rather than a rule (three general rules were measured and rejected —
+        // see discussions/fandom-name-disambiguation.md).
+        //
+        // It disables ONLY the dash rule, not the whole function. A listed name
+        // can still carry a perfectly ordinary suffix of another kind:
+        // "Ich bin ein Star - Holt mich hier raus! (Germany TV)" keeps its dash
+        // tail and should still lose "(Germany TV)". Returning early here — the
+        // first version of this — left both bold.
+        //
+        // Matched on the trimmed primary, which is the string the agents judged,
+        // rather than on whatever a bracket rule leaves behind. Fail-open: an
+        // unlisted name gets every rule, so the worst an incomplete list can do
+        // is today's behaviour.
+        let keepsDashTail = FandomDisplayExceptions.keepWhole.contains(title)
+
         var qualifiers: [String] = []
 
         // Each form appears at most once, but they stack in any order, so the
@@ -250,7 +269,7 @@ enum FandomDisplayName {
         // (Music Video)" loses the parenthetical belonging to its title on the
         // next turn.
         var taken = Set<String>()
-        let rules: [(name: String, cut: (String) -> Peel?)] = [
+        var rules: [(name: String, cut: (String) -> Peel?)] = [
             ("relatedFandoms", takeRelatedFandoms),
             ("rpf", takeRPF),
             ("mediaUmbrella", takeMediaUmbrella),
@@ -258,6 +277,9 @@ enum FandomDisplayName {
             ("separator", takeSeparator),
             ("gluedFandom", takeGluedFandom),
         ]
+        if keepsDashTail {
+            rules.removeAll { $0.name == "separator" }
+        }
 
         for _ in 0 ..< rules.count {
             let before = title

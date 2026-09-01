@@ -375,4 +375,47 @@ struct FandomDisplayNameTests {
         #expect(split.title == "f(x)")
         #expect(split.qualifier == "(Band)")
     }
+
+    // MARK: - The curated exceptions
+
+    @Test func aNameOnTheKeepWholeListKeepsItsDashTail() {
+        // The whole point of the list: these read as "Title - Suffix" and are not.
+        for name in ["InuYasha - A Feudal Fairy Tale", "Dragon Age: Origins - Awakening"] {
+            let split = FandomDisplayName.split(name)
+            #expect(split.title == name, "\(name) should stay whole")
+            #expect(split.qualifier.isEmpty)
+        }
+    }
+
+    @Test func anExceptionStillLosesASuffixOfAnotherKind() {
+        // Grok's counterexample in review. The dash tail belongs to the title,
+        // but "(Germany TV)" is an ordinary qualifier — an early return out of
+        // `split`, which is what the first version did, left both bold.
+        for (name, title, qualifier) in [
+            ("Ich bin ein Star - Holt mich hier raus! (Germany TV)",
+             "Ich bin ein Star - Holt mich hier raus!", "(Germany TV)"),
+            ("Cat Game - The Cat Collector! (Mino Games Video Game)",
+             "Cat Game - The Cat Collector!", "(Mino Games Video Game)"),
+            ("Daniel - The Wizard (Movie 2004)", "Daniel - The Wizard", "(Movie 2004)"),
+        ] {
+            let split = FandomDisplayName.split(name)
+            #expect(split.title == title, "\(name)")
+            #expect(split.qualifier == qualifier, "\(name)")
+        }
+    }
+
+    @Test func theExceptionListIsKeyedOnWhatSplitActuallyReceives() {
+        // `split` is handed the last "|" segment, not the raw multilingual tag.
+        // 11 of the first 28 exceptions differ between the two, so a list keyed
+        // on raw tags would silently no-op for those while looking correct.
+        #expect(FandomDisplayExceptions.keepWhole.contains("Coil - A Circle of Children"))
+        #expect(!FandomDisplayExceptions.keepWhole.contains("Dennou Coil | Coil - A Circle of Children"))
+    }
+
+    @Test func anUnlistedNameStillGetsTheOrdinaryRules() {
+        // Fail-open: an incomplete list degrades to today's behaviour, never worse.
+        let split = FandomDisplayName.split("Harry Potter - J. K. Rowling")
+        #expect(split.title == "Harry Potter")
+        #expect(split.qualifier == "- J. K. Rowling")
+    }
 }
