@@ -5,7 +5,7 @@
 // discussions/fandom-name-disambiguation.md), so these were classified
 // offline by several AI agents with web search and are shipped as data.
 //
-// 30 entries, matched against the name `split` actually receives:
+// 32 entries, matched against the name `split` actually receives:
 // the last '|' segment of the tag, not the whole multilingual tag.
 
 enum FandomDisplayExceptions {
@@ -20,6 +20,7 @@ enum FandomDisplayExceptions {
         "Dancouga - Super Beast Machine God",
         "Daniel - The Wizard (Movie 2004)",
         "Dio - Distraught Overlord",
+        "Dracula vs. Frankenstein - Duell der Giganten (Audio Drama)",
         "Dragon Age: Origins - Awakening",
         "Emma - A Victorian Romance",
         "Ich bin ein Star - Holt mich hier raus! (Germany TV)",
@@ -37,6 +38,7 @@ enum FandomDisplayExceptions {
         "SCP - Containment Breach",
         "Saint Seiya: Episode G - Assassin",
         "Saint Seiya: Next Dimension - Myth of Hades",
+        "Tatakau Shisho - The Book of Bantorra",
         "Vampire: The Masquerade - Swansong",
         "Watamote - No Matter How I Look At It It's You Guys' Fault I'm Unpopular!",
         "Who Are You - School 2015",
