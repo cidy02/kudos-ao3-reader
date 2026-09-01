@@ -151,13 +151,28 @@ def cmd_batch(args):
     db = connect()
     # Highest exposure first: a fandom with 300k works is seen constantly, one
     # with 1 work may never be scrolled to. Coverage is measured in works, not rows.
-    rows = db.execute(
-        "SELECT f.name FROM fandom f "
-        "WHERE f.ambiguous = 1 "
-        "  AND NOT EXISTS (SELECT 1 FROM verdict v WHERE v.name = f.name) "
-        "ORDER BY f.work_count DESC LIMIT ? OFFSET ?",
-        (args.size, args.from_rank),
-    ).fetchall()
+    #
+    # --for-agent cuts the names THAT agent has not seen, rather than the names
+    # nobody has seen. That is what makes the run self-healing: when an agent is
+    # rate-limited for a few rounds the others carry on, and the gap is filled
+    # automatically once it comes back, instead of leaving those names with two
+    # verdicts where the design calls for three.
+    if args.for_agent:
+        rows = db.execute(
+            "SELECT f.name FROM fandom f "
+            "WHERE f.ambiguous = 1 "
+            "  AND NOT EXISTS (SELECT 1 FROM verdict v WHERE v.name = f.name AND v.agent = ?) "
+            "ORDER BY f.work_count DESC LIMIT ? OFFSET ?",
+            (args.for_agent, args.size, args.from_rank),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT f.name FROM fandom f "
+            "WHERE f.ambiguous = 1 "
+            "  AND NOT EXISTS (SELECT 1 FROM verdict v WHERE v.name = f.name) "
+            "ORDER BY f.work_count DESC LIMIT ? OFFSET ?",
+            (args.size, args.from_rank),
+        ).fetchall()
     if not rows:
         print("nothing left to classify", file=sys.stderr)
         return
@@ -234,6 +249,14 @@ def cmd_status(args):
     print(f"  unanimous              {len(agreed)}")
     print(f"  split (human queue)    {len(split)}")
     print(f"  agreed KEEP            {len(keeps)}   <-- these become exceptions")
+    per_agent = db.execute(
+        "SELECT agent, count(*) FROM verdict GROUP BY agent ORDER BY 2 DESC").fetchall()
+    if per_agent:
+        print("  per-agent coverage     " + "  ".join(f"{a}={n}" for a, n in per_agent))
+    short = db.execute(
+        "SELECT count(*) FROM (SELECT name FROM verdict GROUP BY name HAVING count(*) < 3)"
+    ).fetchone()[0]
+    print(f"  under 3 verdicts       {short}   <-- backfill with: batch --for-agent <name>")
     for name in keeps[:20]:
         print(f"      {name}")
     if split:
@@ -325,6 +348,8 @@ def main():
     p.add_argument("--size", type=int, default=50)
     p.add_argument("--from-rank", type=int, default=0)
     p.add_argument("--note", default="")
+    p.add_argument("--for-agent", default=None,
+                   help="cut names this agent has not voted on yet (backfill)")
     p.set_defaults(fn=cmd_batch)
     p = sub.add_parser("ingest")
     p.add_argument("agent"); p.add_argument("file"); p.add_argument("--batch", type=int)
