@@ -70,7 +70,7 @@ EOF
 cat "$WORK/keeps.txt"
 } > "$WORK/keeps.prompt"
 node "$CODEX" task "$(cat "$WORK/keeps.prompt")" > "$WORK/keeps.out" 2>&1
-echo "  WRONG calls found: $(grep -cE '^[0-9]+[[:space:]]+WRONG' "$WORK/keeps.out" 2>/dev/null || echo 0)"
+echo "  WRONG calls found: $(grep -cE '^[0-9]+[[:space:]]+WRONG' "$WORK/keeps.out" 2>/dev/null || true)"
 grep -E '^[0-9]+[[:space:]]+WRONG' "$WORK/keeps.out" 2>/dev/null | head -20
 
 echo
@@ -99,7 +99,7 @@ EOF
 cat "$WORK/demotes.txt"
 } > "$WORK/demotes.prompt"
 node "$CODEX" task "$(cat "$WORK/demotes.prompt")" > "$WORK/demotes.out" 2>&1
-WRONG=$(grep -cE '^[0-9]+[[:space:]]+WRONG' "$WORK/demotes.out" 2>/dev/null || echo 0)
+WRONG=$(grep -cE '^[0-9]+[[:space:]]+WRONG' "$WORK/demotes.out" 2>/dev/null || true)
 echo "  missed exceptions found: $WRONG"
 grep -E '^[0-9]+[[:space:]]+WRONG' "$WORK/demotes.out" 2>/dev/null | head -30
 

@@ -51,7 +51,7 @@ for round in $(seq 1 "$ROUNDS"); do
     wait $P1 $P2 $P3
 
     for agent in codex gemini grok; do
-        got=$(grep -cE '^[0-9]+[[:space:]]+(DEMOTE|KEEP|UNSURE)' "$WORK/$agent.txt" 2>/dev/null || echo 0)
+        got=$(grep -cE '^[0-9]+[[:space:]]+(DEMOTE|KEEP|UNSURE)' "$WORK/$agent.txt" 2>/dev/null || true)
         # A short reply means the agent hit a limit or drifted off format. Record
         # what did come back rather than discarding the whole round; the missing
         # names simply stay unclassified and get re-cut later.

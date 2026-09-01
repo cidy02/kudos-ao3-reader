@@ -54,7 +54,7 @@ run_agent() {                  # $1 agent
     esac
 
     local got
-    got=$(grep -cE '^[0-9]+[[:space:]]+(DEMOTE|KEEP|UNSURE)' "$out" 2>/dev/null || echo 0)
+    got=$(grep -cE '^[0-9]+[[:space:]]+(DEMOTE|KEEP|UNSURE)' "$out" 2>/dev/null || true)
     echo "    $agent: $got/$count"
     # A short reply means a limit or a format drift. Keep what came back; the rest
     # stay unassigned for this agent and are re-cut next round.

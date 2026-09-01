@@ -33,9 +33,11 @@ last_total=-1
 
 while true; do
     # 1. Runner alive? A bare `pgrep -f run-agents.sh` also matches the script's
-    #    own parallel agent subshells, so count only the parent (PPID 1).
+    #    own parallel agent subshells, so count only the parent: PPID 1 if it
+    #    outlived its launcher, or this watchdog's PID if we started it.
     parent=$(pgrep -f "run-agents.sh" 2>/dev/null | while read -r pid; do
-        [ "$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')" = "1" ] && echo "$pid"
+        ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+        { [ "$ppid" = "1" ] || [ "$ppid" = "$$" ]; } && echo "$pid"
     done | head -1)
 
     if [ -z "$parent" ]; then
