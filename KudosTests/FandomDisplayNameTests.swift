@@ -171,8 +171,13 @@ struct FandomDisplayNameTests {
         // The single-pass version was not a fixed point: stripping the dash tail
         // uncovered an RPF that was never looked at again, leaving 62 titles
         // still ending in "RPF".
-        #expect(FandomDisplayName.split("Political RPF - US 21st c.").title == "Political")
-        #expect(FandomDisplayName.split("Canadian Musician RPF (C6D)").title == "Canadian Musician")
+        //
+        // Nearly all of those 62 were the "Political RPF - <region>" family, and
+        // they now keep their RPF on purpose — it is part of the fandom's own name
+        // (see FandomRPFUmbrellas). Across the whole 142,933-tag index this is the
+        // only tag left where a later pass still has to expose an RPF that should
+        // come off: "- Fandom" peels first, uncovering an RPF on a real fandom.
+        #expect(FandomDisplayName.split("Roblox RPF - Fandom").title == "Roblox")
     }
 
     @Test func rpfIsMatchedWhateverItsCase() {
@@ -242,11 +247,14 @@ struct FandomDisplayNameTests {
     // MARK: - Glued RPF (C)
 
     @Test func rpfNeedsNoSpaceAtAll() {
-        // 47 names glue it on. Across all 144,866 the only Latin-letter-preceded
-        // match is hetamyuRPF, which genuinely is RPF.
-        #expect(FandomDisplayName.split("hetamyuRPF").title == "hetamyu")
-        #expect(FandomDisplayName.split("英国演员RPF").title == "英国演员")
-        #expect(FandomDisplayName.split("真人rpf").title == "真人")
+        // 49 names glue it on with no separating space.
+        //
+        // This used to assert hetamyuRPF, 英国演员RPF and 真人rpf. Those keep their
+        // RPF now: "英国演员" is "British actor" and "真人" is "real person" —
+        // categories, not works, so the RPF is the name (see FandomRPFUmbrellas).
+        // These still strip, because a head carrying a bracket is a real work.
+        #expect(FandomDisplayName.split("The Notebook(2004)RPF").title == "The Notebook")
+        #expect(FandomDisplayName.split("超级小品秀（电视）RPF").title == "超级小品秀")
     }
 
     @Test func aBareRPFIsItsOwnTitle() {
@@ -417,5 +425,114 @@ struct FandomDisplayNameTests {
         let split = FandomDisplayName.split("Harry Potter - J. K. Rowling")
         #expect(split.title == "Harry Potter")
         #expect(split.qualifier == "- J. K. Rowling")
+    }
+
+    // MARK: - RPF umbrellas
+
+    @Test func anRPFUmbrellaKeepsItsRPF() {
+        // "Sports RPF" is the fandom's own name. Stripping the RPF left a bold
+        // "Sports", which names nothing anyone writes for. 1,477 tags, 1.46M works.
+        for name in ["Sports RPF", "Video Blogging RPF", "Actor RPF", "Music RPF",
+                     "Political RPF", "Historical RPF", "Formula 1 RPF", "Motorsport RPF",
+                     // Were asserted the other way before the umbrella set existed.
+                     "Canadian Musician RPF", "英国演员RPF", "真人rpf"] {
+            let split = FandomDisplayName.split(name)
+            #expect(split.title == name, "\(name) is an umbrella; its RPF is part of the name")
+            #expect(split.qualifier.isEmpty)
+        }
+    }
+
+    @Test func anRPFSuffixOnARealFandomStillDemotes() {
+        // The other half: these heads are fandoms in their own right, so the RPF
+        // really is a qualifier and must keep behaving as one.
+        let potter = FandomDisplayName.split("Harry Potter RPF")
+        #expect(potter.title == "Harry Potter")
+        #expect(potter.qualifier == "RPF")
+
+        let supernatural = FandomDisplayName.split("Supernatural (TV 2005) RPF")
+        #expect(supernatural.title == "Supernatural")
+        #expect(supernatural.qualifier == "(TV 2005) RPF")
+    }
+
+    @Test func aRealWorkStripsItsRPFEvenWithNoNonRPFWorks() {
+        // The work-count proxy asks "does this head have works of its own", which
+        // is not "is this head a real title". Drag queens are real people, so every
+        // RuPaul's Drag Race work is RPF and the head scores zero — but it is
+        // plainly a show, and bolding the whole tag would be wrong. A head still
+        // carrying its bracket is a work, never a category, so it strips.
+        for (name, title, qualifier) in [
+            ("RuPaul's Drag Race (US) RPF", "RuPaul's Drag Race", "(US) RPF"),
+            ("Super Sketch Show (TV) RPF", "Super Sketch Show", "(TV) RPF"),
+            ("8 Mile (2002) RPF", "8 Mile", "(2002) RPF"),
+        ] {
+            let split = FandomDisplayName.split(name)
+            #expect(split.title == title, "\(name) should lead with \(title)")
+            #expect(split.qualifier == qualifier)
+        }
+    }
+
+    @Test func aRegionalPoliticalTagKeepsItsRPF() {
+        // The dash tail comes off first and exposes "Political RPF", which must
+        // then survive the RPF rule rather than decaying to a bare "Political".
+        let split = FandomDisplayName.split("Political RPF - US 21st c.")
+        #expect(split.title == "Political RPF")
+        #expect(split.qualifier == "- US 21st c.")
+    }
+
+    // MARK: - Structured qualifiers
+
+    @Test func qualifiersAreKeptSeparateAndKinded() {
+        // 7,222 tags carry two or more. They stay a list so a layout can place the
+        // medium and the creator in different parts of a card.
+        let split = FandomDisplayName.split("IT (Movies - Muschietti)")
+        #expect(split.title == "IT")
+        #expect(split.parts.count == 1)
+        #expect(split.parts.first?.kind == .parenthetical)
+        #expect(split.parts.first?.text == "(Movies - Muschietti)")
+
+        let potter = FandomDisplayName.split("Harry Potter - J. K. Rowling")
+        #expect(potter.parts.map(\.kind) == [.creator])
+        #expect(potter.parts.first?.text == "- J. K. Rowling")
+    }
+
+    @Test func joinedQualifierMatchesTheParts() {
+        // The rendered string is derived from the parts, in original order.
+        let split = FandomDisplayName.split("Supernatural (TV 2005) RPF")
+        #expect(split.parts.map(\.kind) == [.parenthetical, .rpf])
+        #expect(split.qualifier == split.parts.map(\.text).joined(separator: " "))
+    }
+
+    @Test func partsKeepTheOrderTheyHadInTheName() {
+        // The rules peel from the end, so without the insert-at-front the list
+        // would come out reversed and a layout reading parts left-to-right would
+        // render the name inside out.
+        for name in ["Supernatural (TV 2005) RPF",
+                     "Political RPF - US 21st c.",
+                     "Good Omens (TV) RPF",
+                     "Bridgerton (TV) & Related Fandoms"] {
+            let split = FandomDisplayName.split(name)
+            var cursor = name.startIndex
+            for part in split.parts {
+                let needle = part.text.hasPrefix("- ") ? String(part.text.dropFirst(2)) : part.text
+                guard let found = name.range(of: needle, range: cursor ..< name.endIndex) else {
+                    Issue.record("\(needle) missing from \(name) after \(cursor)")
+                    continue
+                }
+                cursor = found.upperBound
+            }
+        }
+    }
+
+    @Test func theOriginalNameIsKeptBecauseSplittingIsLossy() {
+        // 1,519 tags (1.6%) do not survive title + qualifier: tidied() eats the
+        // delimiter it cut against. Anything needing the real tag reads `original`.
+        for name in ["Digimon Adventure: (Anime 2020)",
+                     "The Hundred Line -Last Defense Academy- (Video Game)",
+                     "Vampire: The Masquerade – Bloodlines (Video Game)"] {
+            let split = FandomDisplayName.split(name)
+            #expect(split.original == name)
+            let rebuilt = split.qualifier.isEmpty ? split.title : split.title + " " + split.qualifier
+            #expect(rebuilt != name, "\(name) is a known lossy case; if it now round-trips, tighten this test")
+        }
     }
 }
