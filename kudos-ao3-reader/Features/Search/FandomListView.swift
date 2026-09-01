@@ -175,6 +175,58 @@ struct FandomListView: View {
 ///     guard cost far more than it fixed.
 ///   * The failure is cosmetic either way. The full name is still displayed,
 ///     still searched, and still what the works query receives.
+/// One disambiguator peeled off a fandom tag, and which form it took.
+///
+/// Kinds name the *shape* the parser recognised, not a guaranteed meaning: a
+/// `.parenthetical` is usually the medium ("(TV 2005)", "(Anime & Manga)") and a
+/// `.creator` is usually an author or studio ("- J. K. Rowling"), but AO3 is a
+/// folksonomy and neither is a promise.
+nonisolated struct FandomQualifier: Hashable, Sendable {
+    enum Kind: String, Hashable, Sendable, CaseIterable {
+        case parenthetical
+        case creator
+        case rpf
+        case allMediaTypes
+        case relatedFandoms
+        case fandomSuffix
+    }
+
+    let kind: Kind
+    let text: String
+}
+
+/// A fandom tag split into the part worth reading big and the parts that only
+/// disambiguate it.
+///
+/// The qualifiers stay a list rather than one joined string so a layout can put
+/// the medium, the creator and the RPF marker in different places on a card.
+/// 7,222 tags carry two or more, and `qualifier` renders them the way the list
+/// row does today: in the order they appeared in the original name.
+nonisolated struct FandomName: Hashable, Sendable {
+    /// The tag exactly as AO3 spells it. Splitting is deliberately not reversible:
+    /// `tidied` eats the delimiter it cut against, so "Digimon Adventure: (Anime
+    /// 2020)" loses its colon and the Japanese subtitle convention in "The Hundred
+    /// Line -Last Defense Academy- (Video Game)" loses its closing dash. 1,519 tags
+    /// (1.6%) do not survive a title + qualifier round trip, so anything that needs
+    /// the real name — a search query, a cache key — reads this rather than
+    /// rebuilding one. `parts` is for laying the name out, not for reassembling it.
+    let original: String
+    let title: String
+    /// In the order they appear in `original`, left to right: the rules peel from
+    /// the end, and each peel is inserted at the front to undo that.
+    let parts: [FandomQualifier]
+    /// Stored, not computed: the list row reads this on every row it draws, and a
+    /// category holds tens of thousands of fandoms.
+    let qualifier: String
+
+    init(original: String, title: String, parts: [FandomQualifier]) {
+        self.original = original
+        self.title = title
+        self.parts = parts
+        qualifier = parts.map(\.text).joined(separator: " ")
+    }
+}
+
 enum FandomDisplayName {
     /// Closing brackets that can end a qualifier, either width. The fullwidth
     /// pair is the same convention on CJK names — （电子游戏）, （电视）, （漫画）.
@@ -230,9 +282,17 @@ enum FandomDisplayName {
     /// piece that came away.
     private typealias Peel = (head: String, qualifier: String)
 
-    static func split(_ name: String) -> (title: String, qualifier: String) {
+    /// One suffix convention: what to call it when it fires, which kind of
+    /// qualifier it produces, and how to cut it off.
+    private struct Rule {
+        let name: String
+        let kind: FandomQualifier.Kind
+        let cut: (String) -> Peel?
+    }
+
+    static func split(_ name: String) -> FandomName {
         var title = name.trimmingCharacters(in: .whitespaces)
-        guard !title.isEmpty else { return (name, "") }
+        guard !title.isEmpty else { return FandomName(original: name, title: name, parts: []) }
 
         // Names whose dash tail is really part of the title — "InuYasha - A
         // Feudal Fairy Tale", "Dragon Age: Origins - Awakening". Nothing in the
@@ -252,7 +312,7 @@ enum FandomDisplayName {
         // is today's behaviour.
         let keepsDashTail = FandomDisplayExceptions.keepWhole.contains(title)
 
-        var qualifiers: [String] = []
+        var qualifiers: [FandomQualifier] = []
 
         // Each form appears at most once, but they stack in any order, so the
         // rules run in a loop with a fired-flag each rather than a single pass.
@@ -269,13 +329,13 @@ enum FandomDisplayName {
         // (Music Video)" loses the parenthetical belonging to its title on the
         // next turn.
         var taken = Set<String>()
-        var rules: [(name: String, cut: (String) -> Peel?)] = [
-            ("relatedFandoms", takeRelatedFandoms),
-            ("rpf", takeRPF),
-            ("mediaUmbrella", takeMediaUmbrella),
-            ("bracket", takeBracket),
-            ("separator", takeSeparator),
-            ("gluedFandom", takeGluedFandom),
+        var rules: [Rule] = [
+            Rule(name: "relatedFandoms", kind: .relatedFandoms, cut: takeRelatedFandoms),
+            Rule(name: "rpf", kind: .rpf, cut: takeRPF),
+            Rule(name: "mediaUmbrella", kind: .allMediaTypes, cut: takeMediaUmbrella),
+            Rule(name: "bracket", kind: .parenthetical, cut: takeBracket),
+            Rule(name: "separator", kind: .creator, cut: takeSeparator),
+            Rule(name: "gluedFandom", kind: .fandomSuffix, cut: takeGluedFandom),
         ]
         if keepsDashTail {
             rules.removeAll { $0.name == "separator" }
@@ -285,14 +345,14 @@ enum FandomDisplayName {
             let before = title
             for rule in rules where !taken.contains(rule.name) {
                 guard let peel = rule.cut(title), !peel.head.isEmpty else { continue }
-                qualifiers.insert(peel.qualifier, at: 0)
+                qualifiers.insert(FandomQualifier(kind: rule.kind, text: peel.qualifier), at: 0)
                 title = peel.head
                 taken.insert(rule.name)
             }
             if title == before { break }
         }
 
-        return (title, qualifiers.joined(separator: " "))
+        return FandomName(original: name, title: title, parts: qualifiers)
     }
 
     /// Umbrella grouping. Tried first because it sits outside everything else —
@@ -318,10 +378,20 @@ enum FandomDisplayName {
     private static func takeRPF(_ title: String) -> Peel? {
         guard let range = title.range(of: "RPF", options: [.caseInsensitive, .backwards]),
               range.upperBound == title.endIndex else { return nil }
-        return (
-            tidied(String(title[title.startIndex ..< range.lowerBound])),
-            String(title[range.lowerBound...]).trimmingCharacters(in: .whitespaces)
-        )
+        let head = tidied(String(title[title.startIndex ..< range.lowerBound]))
+        // For most tags the RPF is a suffix on a fandom that exists without it —
+        // "Harry Potter RPF" leaves "Harry Potter", which is a fandom. For the
+        // umbrella tags it is the name itself: stripping "Sports RPF" left a bold
+        // "Sports", which names nothing anyone writes for. 1,477 tags, 1.46M works.
+        //
+        // Membership is corpus-derived, not hand-listed — a head counts as a real
+        // fandom only if non-RPF tags sharing it hold works of their own. See
+        // Scripts/fandom-audit/gen-rpf-umbrellas.py. Keyed on the head as this rule
+        // sees it, which is not always the final title: RPF is peeled before the
+        // bracket, so "Super Sketch Show (TV) RPF" arrives here still carrying its
+        // "(TV)". Fail-open — an unlisted head strips exactly as it always did.
+        guard !FandomRPFUmbrellas.keepAttached.contains(head) else { return nil }
+        return (head, String(title[range.lowerBound...]).trimmingCharacters(in: .whitespaces))
     }
 
     private static func takeMediaUmbrella(_ title: String) -> Peel? {
@@ -472,7 +542,7 @@ private struct FandomListRow: View {
 
     private var primaryName: String { nameParts[nameParts.count - 1] }
 
-    private var splitName: (title: String, qualifier: String) { FandomDisplayName.split(primaryName) }
+    private var splitName: FandomName { FandomDisplayName.split(primaryName) }
 
     private var aliases: [String] { Array(nameParts.dropLast()) }
 }
