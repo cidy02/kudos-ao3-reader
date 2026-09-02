@@ -386,11 +386,11 @@ enum FandomDisplayName {
         //
         // Membership is corpus-derived, not hand-listed — a head counts as a real
         // fandom only if non-RPF tags sharing it hold works of their own. See
-        // Scripts/fandom-audit/gen-rpf-umbrellas.py. Keyed on the head as this rule
+        // Scripts/fandom-audit/gen-umbrellas.py. Keyed on the head as this rule
         // sees it, which is not always the final title: RPF is peeled before the
         // bracket, so "Super Sketch Show (TV) RPF" arrives here still carrying its
         // "(TV)". Fail-open — an unlisted head strips exactly as it always did.
-        guard !FandomRPFUmbrellas.keepAttached.contains(head) else { return nil }
+        guard !FandomUmbrellas.rpfKeepAttached.contains(head) else { return nil }
         return (head, String(title[range.lowerBound...]).trimmingCharacters(in: .whitespaces))
     }
 
@@ -441,7 +441,12 @@ enum FandomDisplayName {
         let beforeWord = String(title[title.startIndex ..< range.lowerBound])
             .trimmingCharacters(in: .whitespaces)
         guard let joiner = beforeWord.last, dashes.contains(joiner) else { return nil }
-        return (tidied(beforeWord), "- " + String(title[range.lowerBound...]))
+        let head = tidied(beforeWord)
+        // Same shape as the RPF umbrellas: "Multi-Fandom" marks a crossover, and
+        // there is no fandom called "Multi", so peeling left a bold stub naming
+        // nothing across 6,659 works. Corpus-derived, same rule and threshold.
+        guard !FandomUmbrellas.fandomKeepAttached.contains(head) else { return nil }
+        return (head, "- " + String(title[range.lowerBound...]))
     }
 
     /// Trims separator debris off a freshly-peeled title. Only ever applied to a

@@ -174,7 +174,7 @@ struct FandomDisplayNameTests {
         //
         // Nearly all of those 62 were the "Political RPF - <region>" family, and
         // they now keep their RPF on purpose — it is part of the fandom's own name
-        // (see FandomRPFUmbrellas). Across the whole 142,933-tag index this is the
+        // (see FandomUmbrellas). Across the whole 142,933-tag index this is the
         // only tag left where a later pass still has to expose an RPF that should
         // come off: "- Fandom" peels first, uncovering an RPF on a real fandom.
         #expect(FandomDisplayName.split("Roblox RPF - Fandom").title == "Roblox")
@@ -247,14 +247,15 @@ struct FandomDisplayNameTests {
     // MARK: - Glued RPF (C)
 
     @Test func rpfNeedsNoSpaceAtAll() {
-        // 49 names glue it on with no separating space.
+        // 49 names glue it on. Across all 144,866 the only Latin-letter-preceded
+        // match is hetamyuRPF, which genuinely is RPF.
         //
-        // This used to assert hetamyuRPF, 英国演员RPF and 真人rpf. Those keep their
-        // RPF now: "英国演员" is "British actor" and "真人" is "real person" —
-        // categories, not works, so the RPF is the name (see FandomRPFUmbrellas).
-        // These still strip, because a head carrying a bracket is a real work.
+        // None of these carry works, so the umbrella set never protects them —
+        // it only covers tags a reader can actually reach (see FandomUmbrellas).
+        #expect(FandomDisplayName.split("hetamyuRPF").title == "hetamyu")
+        #expect(FandomDisplayName.split("英国演员RPF").title == "英国演员")
+        #expect(FandomDisplayName.split("真人rpf").title == "真人")
         #expect(FandomDisplayName.split("The Notebook(2004)RPF").title == "The Notebook")
-        #expect(FandomDisplayName.split("超级小品秀（电视）RPF").title == "超级小品秀")
     }
 
     @Test func aBareRPFIsItsOwnTitle() {
@@ -434,8 +435,7 @@ struct FandomDisplayNameTests {
         // "Sports", which names nothing anyone writes for. 1,477 tags, 1.46M works.
         for name in ["Sports RPF", "Video Blogging RPF", "Actor RPF", "Music RPF",
                      "Political RPF", "Historical RPF", "Formula 1 RPF", "Motorsport RPF",
-                     // Were asserted the other way before the umbrella set existed.
-                     "Canadian Musician RPF", "英国演员RPF", "真人rpf"] {
+                     "Rock Music RPF", "Men's Football RPF", "Chinese Actor RPF"] {
             let split = FandomDisplayName.split(name)
             #expect(split.title == name, "\(name) is an umbrella; its RPF is part of the name")
             #expect(split.qualifier.isEmpty)
@@ -548,5 +548,23 @@ struct FandomDisplayNameTests {
         #expect(staged.qualifier == "- Suemitsu Actor RPF")
 
         #expect(FandomDisplayName.split("classmates - RPF").title == "classmates")
+    }
+
+    @Test func multiFandomKeepsItsFandomSuffix() {
+        // Same shape as the RPF umbrellas, through the glued-Fandom rule instead:
+        // "Multi-Fandom" marks a crossover and there is no fandom called "Multi",
+        // so peeling it left a bold stub naming nothing across 6,659 works — the
+        // single largest tag the rule touches.
+        let split = FandomDisplayName.split("Multi-Fandom")
+        #expect(split.title == "Multi-Fandom")
+        #expect(split.qualifier.isEmpty)
+    }
+
+    @Test func aRealFandomStillLosesAGluedFandomSuffix() {
+        // The other half: The Expanse is a fandom in its own right, so the glued
+        // "Fandom" really is a qualifier and still comes off.
+        let split = FandomDisplayName.split("The Expanse-Fandom")
+        #expect(split.title == "The Expanse")
+        #expect(split.qualifier == "- Fandom")
     }
 }
