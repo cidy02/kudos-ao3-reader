@@ -567,4 +567,19 @@ struct FandomDisplayNameTests {
         #expect(split.title == "The Expanse")
         #expect(split.qualifier == "- Fandom")
     }
+
+    @Test func aLowVolumeRealFandomStillLosesItsRPF() {
+        // Gemini's catch on the umbrella threshold: at 100 these were swallowed.
+        // "Ming Dynasty" holds 96 works of its own and "Tang Dynasty" 13, so both
+        // are real fandoms and their RPF is a genuine qualifier — but they sat
+        // under the line and rendered bold in full. 333 tags had a head in that
+        // range. The threshold is 10 now, measured rather than picked: below 3 it
+        // strips "Actor" and "Music", whose 3 works are unrelated tags colliding
+        // on one head; above 10 it starts eating real fandoms.
+        let ming = FandomDisplayName.split("Ming Dynasty RPF")
+        #expect(ming.title == "Ming Dynasty")
+        #expect(ming.qualifier == "RPF")
+
+        #expect(FandomDisplayName.split("Tang Dynasty RPF").title == "Tang Dynasty")
+    }
 }
