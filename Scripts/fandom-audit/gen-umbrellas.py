@@ -15,11 +15,22 @@ and that is decided by the corpus rather than by hand:
     totalling more than THRESHOLD works.
 
 "Supernatural" carries 275,355 works of its own, so stripping is safe. "Sports"
-carries zero — nobody writes for "Sports", they write for "Sports RPF". Two
-leaks have to be closed first or the vocabulary poisons itself: tags containing
-"RPF" anywhere (not merely at the end) must be excluded, because otherwise
-"Political RPF - US 21st c." contributes "Political" to the vocabulary and
-licenses stripping the very tag it came from.
+carries zero — nobody writes for "Sports", they write for "Sports RPF".
+
+The threshold was measured, not picked. Sweeping it against heads that must be
+kept (Sports, Actor, Music, Political) and heads that must strip (Ming Dynasty,
+Tang Dynasty, Supernatural, Harry Potter) leaves a clean band from 3 to 10:
+
+    N=1            wrongly strips Actor and Music, whose 3 works are two
+                   unrelated tags that happen to reduce to the same head
+    N=3 .. N=10    no errors in either direction
+    N=25, N=50     wrongly keeps Tang Dynasty (13 works)
+    N=100          wrongly keeps Ming Dynasty (96) and Tang Dynasty
+
+10 is the top of that band. An earlier version used 100 on the reasoning that
+erring high is free — it is not. Too low strips a category and leaves a bold
+stub naming nothing; too high swallows a real low-volume fandom, and there are
+333 tags whose head sits in that range.
 
 Shipped rather than computed at runtime because FandomCatalog is a cache: it is
 empty on first launch and can be cleared, and a tag must not render two ways
@@ -46,14 +57,6 @@ UMBRELLAS = ["All Media Types", "所有媒体类型", "所有媒體類型", "所
              "Todos os Tipos de Mídia", "Todos los tipos de medios"]
 RELATED = [" & Related Fandoms", " and Related Fandoms"]
 DEBRIS = " -–—‐:"
-# Substring, not \brpf\b: there is no word boundary in "hetamyuRPF" or
-# "真人rpf", so the anchored form let 31 glued tags into the vocabulary.
-# Over-excluding is the safe direction — it only shrinks the vocabulary,
-# which keeps more RPFs attached and never invents a meaningless stub.
-HAS_RPF = re.compile(r"rpf", re.I)
-# The glued form only — "& Related Fandoms" is a different rule and a tag
-# carrying it is still a perfectly good vote for its own head.
-HAS_GLUED_FANDOM = re.compile(r"[-–—‐]\s*fandoms?\s*$", re.I)
 
 
 def tidied(text):
@@ -152,7 +155,7 @@ def swift_quote(text):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--threshold", type=int, default=100,
+    ap.add_argument("--threshold", type=int, default=10,
                     help="minimum works for a head to count as a real fandom")
     ap.add_argument("--min-works", type=int, default=1,
                     help="only protect tags carrying at least this many works")
@@ -171,14 +174,21 @@ def main():
     # One vocabulary per suffix, each excluding the tags it is meant to judge.
     # A vocabulary poisons itself otherwise: "Political RPF - US 21st c." would
     # contribute "Political" and license stripping the very tag it came from.
+    #
+    # Membership is decided by the parser, not by a regex over the raw name. A
+    # regex has to guess where the suffix sits and gets it wrong at both ends:
+    # \brpf\b missed "hetamyuRPF" (no word boundary), and a "-Fandom$" pattern
+    # misses "Multi-Fandom RPF", which peels down to "Multi" and would then vote
+    # against the very entry protecting it. Asking which rules actually fired
+    # cannot drift from what the app does, because it is the same decision.
     vocabulary, fandom_vocabulary = collections.Counter(), collections.Counter()
     for name, works in rows:
-        title, _, _ = split(name, keep_whole)
+        title, taken, _ = split(name, keep_whole)
         if not title:
             continue
-        if not HAS_RPF.search(name):
+        if "rpf" not in taken:
             vocabulary[title] += works
-        if not HAS_GLUED_FANDOM.search(name):
+        if "gluedFandom" not in taken:
             fandom_vocabulary[title] += works
 
     # Judge on the final title — that is the string the reader would be left
@@ -199,11 +209,17 @@ def main():
     def collect(rule, vocabulary):
         heads, tags, bracketed, unseen = set(), 0, 0, 0
         for name, works in rows:
-            # Only protect tags a reader can actually encounter. A tag with no
-            # works is invisible, so keeping its suffix buys nothing and risks
+            # Only judge tags a reader can actually encounter. A tag with no works
+            # is invisible, so letting it nominate a head buys nothing and risks
             # real names: "Jinkx Monsoon- Fandom" and "hetamyuRPF" have no works
             # and are not umbrellas, and protecting them was plain over-reach.
             # This is what reduces the glued-Fandom set to its one real member.
+            #
+            # Note this gates which heads get NOMINATED, not which tags are
+            # protected. The shipped set is heads, so once a tag with works puts
+            # "Multi" in it, every zero-work spelling reducing to "Multi" is
+            # protected too. That is intended — they are the same fandom — but it
+            # is a head-level policy, not a per-tag one.
             if works < args.min_works:
                 unseen += 1
                 continue
