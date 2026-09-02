@@ -583,3 +583,37 @@ struct FandomDisplayNameTests {
         #expect(FandomDisplayName.split("Tang Dynasty RPF").title == "Tang Dynasty")
     }
 }
+
+/// Which alias names can carry an italic, and which would only get a machine
+/// slant. AO3 tags a multilingual fandom as `original | romanization | localized`,
+/// and the row italicizes the other names — but italic is a Latin convention.
+struct FandomScriptTests {
+    @Test func latinAliasesTakeItalic() {
+        for name in ["Boku no Hero Academia", "Shingeki no Kyojin", "Bangtan Boys", "Hellaverse"] {
+            #expect(FandomScript.hasItalicForm(name), "\(name) is Latin and has a real italic")
+        }
+    }
+
+    @Test func scriptsWithNoItalicStayUpright() {
+        // Asking for an italic here gets the upright glyphs skewed, which on dense
+        // CJK at caption size blurs the strokes that tell characters apart.
+        for name in ["僕のヒーローアカデミア", "原神", "방탄소년단", "文豪ストレイドッグス",
+                     "บรรยากาศรัก เดอะซีรีส์", "魔道祖师"] {
+            #expect(!FandomScript.hasItalicForm(name), "\(name) has no italic form")
+        }
+    }
+
+    @Test func cyrillicKeepsItsItalic() {
+        // Unlike CJK, Cyrillic has a designed italic — and a genuinely different
+        // letterform rather than a slant — so it is deliberately not in the list.
+        #expect(FandomScript.hasItalicForm("Otbleski Eterny"))
+        #expect(FandomScript.hasItalicForm("Отблески Этерны"))
+    }
+
+    @Test func aMixedNameStaysUpright() {
+        // Half a slanted string reads as a rendering fault, and mixed names are
+        // common in this index.
+        #expect(!FandomScript.hasItalicForm("文豪ストレイドッグス Bungou Stray Dogs"))
+        #expect(!FandomScript.hasItalicForm("Hikaru no Go（真人电视）"))
+    }
+}
