@@ -548,18 +548,21 @@ private struct FandomListRow: View {
 
             if let count = fandom.workCount {
                 HStack(spacing: 4) {
-                    // Secondary, not tinted: the glyph is the same on every row,
-                    // so in accent red it competed with the name for attention
-                    // while carrying no per-row information.
-                    Image(systemName: "doc.text")
-                        .font(.caption.weight(.semibold))
                     Text(count.formatted())
                         .monospacedDigit()
-                        // Fixed column, trailing-aligned: without it the glyph
-                        // slides left or right with the digit count and no two
-                        // rows line up. Wide enough for AO3's largest fandoms
-                        // (~700k) at this size.
+                        // Fixed column, trailing-aligned. The digits are what the
+                        // eye compares down the list, so they need a straight
+                        // right edge; the column also keeps the block one width,
+                        // which is what stops the name beside it ending in a
+                        // different place on every row. Wide enough for AO3's
+                        // largest fandoms (~700k) at this size.
                         .frame(minWidth: 58, alignment: .trailing)
+                    // Trailing the number, and secondary rather than tinted: the
+                    // glyph is the same on every row, so in accent red it competed
+                    // with the name for attention while carrying no per-row
+                    // information.
+                    Image(systemName: "doc.text")
+                        .font(.caption.weight(.semibold))
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
