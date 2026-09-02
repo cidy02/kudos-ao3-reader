@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the set of RPF umbrella heads whose "RPF" must stay attached.
+"""Generate the sets of umbrella heads whose trailing suffix must stay attached.
 
 The display parser strips a trailing "RPF": "Harry Potter RPF" renders as bold
 "Harry Potter" with a grey "RPF", which is right — RPF modifies a fandom that
@@ -25,7 +25,7 @@ Shipped rather than computed at runtime because FandomCatalog is a cache: it is
 empty on first launch and can be cleared, and a tag must not render two ways
 depending on cache state.
 
-    python3 gen-rpf-umbrellas.py [--threshold 100] > FandomRPFUmbrellas.swift
+    python3 gen-umbrellas.py [--threshold 100] > FandomUmbrellas.swift
 """
 
 import argparse
@@ -51,6 +51,9 @@ DEBRIS = " -–—‐:"
 # Over-excluding is the safe direction — it only shrinks the vocabulary,
 # which keeps more RPFs attached and never invents a meaningless stub.
 HAS_RPF = re.compile(r"rpf", re.I)
+# The glued form only — "& Related Fandoms" is a different rule and a tag
+# carrying it is still a perfectly good vote for its own head.
+HAS_GLUED_FANDOM = re.compile(r"[-–—‐]\s*fandoms?\s*$", re.I)
 
 
 def tidied(text):
@@ -124,9 +127,9 @@ def split(name, keep_whole):
     """
     title = name.strip()
     if not title:
-        return name, set(), None
+        return name, set(), {}
     rules = [r for r in RULES if not (r[0] == "separator" and title in keep_whole)]
-    taken, rpf_head = set(), None
+    taken, heads = set(), {}
     for _ in range(len(rules)):
         before = title
         for rule_name, cut in rules:
@@ -135,13 +138,12 @@ def split(name, keep_whole):
             peel = cut(title)
             if not peel or not peel[0]:
                 continue
-            if rule_name == "rpf":
-                rpf_head = peel[0]
+            heads[rule_name] = peel[0]
             title = peel[0]
             taken.add(rule_name)
         if title == before:
             break
-    return title, taken, rpf_head
+    return title, taken, heads
 
 
 def swift_quote(text):
@@ -151,7 +153,9 @@ def swift_quote(text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--threshold", type=int, default=100,
-                    help="minimum non-RPF works for a head to count as a real fandom")
+                    help="minimum works for a head to count as a real fandom")
+    ap.add_argument("--min-works", type=int, default=1,
+                    help="only protect tags carrying at least this many works")
     args = ap.parse_args()
 
     keep_whole = set()
@@ -164,16 +168,21 @@ def main():
     db = sqlite3.connect(DB)
     rows = db.execute("SELECT primary_name, work_count FROM fandom").fetchall()
 
-    vocabulary = collections.Counter()
+    # One vocabulary per suffix, each excluding the tags it is meant to judge.
+    # A vocabulary poisons itself otherwise: "Political RPF - US 21st c." would
+    # contribute "Political" and license stripping the very tag it came from.
+    vocabulary, fandom_vocabulary = collections.Counter(), collections.Counter()
     for name, works in rows:
-        if HAS_RPF.search(name):
-            continue
         title, _, _ = split(name, keep_whole)
-        if title:
+        if not title:
+            continue
+        if not HAS_RPF.search(name):
             vocabulary[title] += works
+        if not HAS_GLUED_FANDOM.search(name):
+            fandom_vocabulary[title] += works
 
     # Judge on the final title — that is the string the reader would be left
-    # looking at — but key the set on the head the rule tests.
+    # looking at — but key each set on the head its own rule tests.
     #
     # A head still carrying its bracket names something specific rather than a
     # bare category: AO3 adds "(TV)", "(2002)", "(US)", "(Musicians)" to
@@ -187,43 +196,68 @@ def main():
     # people, and "8 Mile (2002) RPF" would have gone bold in full. The proxy
     # answers "does this head have works of its own", which is not the same
     # question as "is this head a real title".
-    heads, tags, bracketed = set(), 0, 0
-    for name, works in rows:
-        title, taken, rpf_head = split(name, keep_whole)
-        if "rpf" not in taken or not rpf_head:
-            continue
-        if vocabulary.get(title, 0) > args.threshold:
-            continue
-        if rpf_head.endswith(")") or rpf_head.endswith("）"):
-            bracketed += 1
-            continue
-        heads.add(rpf_head)
-        tags += 1
-    print(f"excluded {bracketed} bracket-carrying heads as real works", file=sys.stderr)
+    def collect(rule, vocabulary):
+        heads, tags, bracketed, unseen = set(), 0, 0, 0
+        for name, works in rows:
+            # Only protect tags a reader can actually encounter. A tag with no
+            # works is invisible, so keeping its suffix buys nothing and risks
+            # real names: "Jinkx Monsoon- Fandom" and "hetamyuRPF" have no works
+            # and are not umbrellas, and protecting them was plain over-reach.
+            # This is what reduces the glued-Fandom set to its one real member.
+            if works < args.min_works:
+                unseen += 1
+                continue
+            title, taken, head = split(name, keep_whole)
+            if rule not in taken or not head.get(rule):
+                continue
+            if vocabulary.get(title, 0) > args.threshold:
+                continue
+            if head[rule].endswith(")") or head[rule].endswith("）"):
+                bracketed += 1
+                continue
+            heads.add(head[rule])
+            tags += 1
+        print(f"  {rule}: {len(heads)} heads across {tags} tags "
+              f"({bracketed} bracket-carrying heads excluded as named things, "
+              f"{unseen} tags skipped as having no works)", file=sys.stderr)
+        return heads
 
-    print(f"generated from {len(rows)} tags, threshold {args.threshold}: "
-          f"{len(heads)} heads across {tags} tags", file=sys.stderr)
+    print(f"from {len(rows)} tags, threshold {args.threshold}:", file=sys.stderr)
+    rpf_heads = collect("rpf", vocabulary)
+    fandom_heads = collect("gluedFandom", fandom_vocabulary)
 
     out = [
-        "// Generated by Scripts/fandom-audit/gen-rpf-umbrellas.py — do not edit by hand.",
+        "// Generated by Scripts/fandom-audit/gen-umbrellas.py — do not edit by hand.",
         "//",
-        "// Heads whose trailing \"RPF\" is part of the fandom's own name rather than a",
-        "// suffix on a fandom that exists without it. \"Sports RPF\" is the canonical tag;",
-        "// nobody writes for a fandom called \"Sports\", so stripping the RPF left a bold",
-        "// \"Sports\" that named nothing. \"Harry Potter RPF\" is the opposite: Harry Potter",
-        "// is a fandom in its own right, so the RPF is a genuine qualifier.",
+        "// Heads whose trailing suffix is part of the fandom's own name rather than a",
+        "// qualifier on a fandom that exists without it. \"Sports RPF\" is the canonical",
+        "// tag; nobody writes for a fandom called \"Sports\", so stripping the RPF left a",
+        "// bold \"Sports\" naming nothing. \"Multi-Fandom\" is the same shape: it marks a",
+        "// crossover, and there is no fandom called \"Multi\". \"Harry Potter RPF\" is the",
+        "// opposite — Harry Potter is a fandom in its own right, so its RPF is a genuine",
+        "// qualifier and comes off.",
         "//",
         "// Membership is decided by the corpus, not by hand: a head qualifies as a real",
-        f"// fandom only if non-RPF tags carrying that same head hold more than {args.threshold} works",
-        "// between them. Regenerate whenever the catalog is refreshed.",
+        f"// fandom only if tags without that suffix, carrying the same head, hold more than",
+        f"// {args.threshold} works between them. Only tags carrying at least {args.min_works} work are",
+        "// protected at all — an unread tag is invisible, so keeping its suffix buys",
+        "// nothing and risks demoting a real name. Regenerate when the catalog refreshes.",
         "",
-        "// A generated wall of string literals; the size rules are not meaningful here.",
-        "// swiftlint:disable file_length type_body_length",
-        "enum FandomRPFUmbrellas {",
-        "    static let keepAttached: Set<String> = [",
+        "// A generated wall of string literals; the size rule is not meaningful here.",
+        "// swiftlint:disable type_body_length",
+        "enum FandomUmbrellas {",
+        "    /// Heads whose trailing \"RPF\" must stay attached.",
+        "    static let rpfKeepAttached: Set<String> = [",
     ]
-    out += [f'        "{swift_quote(h)}",' for h in sorted(heads)]
-    out += ["    ]", "}", "// swiftlint:enable file_length type_body_length"]
+    out += [f'        "{swift_quote(h)}",' for h in sorted(rpf_heads)]
+    out += [
+        "    ]",
+        "",
+        "    /// Heads whose trailing \"Fandom\" must stay attached.",
+        "    static let fandomKeepAttached: Set<String> = [",
+    ]
+    out += [f'        "{swift_quote(h)}",' for h in sorted(fandom_heads)]
+    out += ["    ]", "}", "// swiftlint:enable type_body_length"]
     print("\n".join(out))
 
 
