@@ -46,7 +46,11 @@ UMBRELLAS = ["All Media Types", "所有媒体类型", "所有媒體類型", "所
              "Todos os Tipos de Mídia", "Todos los tipos de medios"]
 RELATED = [" & Related Fandoms", " and Related Fandoms"]
 DEBRIS = " -–—‐:"
-HAS_RPF = re.compile(r"\brpf\b", re.I)
+# Substring, not \brpf\b: there is no word boundary in "hetamyuRPF" or
+# "真人rpf", so the anchored form let 31 glued tags into the vocabulary.
+# Over-excluding is the safe direction — it only shrinks the vocabulary,
+# which keeps more RPFs attached and never invents a meaningless stub.
+HAS_RPF = re.compile(r"rpf", re.I)
 
 
 def tidied(text):
@@ -171,13 +175,18 @@ def main():
     # Judge on the final title — that is the string the reader would be left
     # looking at — but key the set on the head the rule tests.
     #
-    # A head still carrying its bracket is a work, not a category: AO3 only adds
-    # "(TV)", "(2002)", "(Podcast)" to disambiguate an actual title, and no
-    # category tag has one. Without this the work-count proxy misfires on shows
-    # whose fandom is ENTIRELY RPF — "RuPaul's Drag Race" has no non-RPF works
-    # because drag queens are real people, and "8 Mile (2002)" would have gone
-    # bold in full. The proxy answers "does this head have works of its own",
-    # which is not the same question as "is this head a real title".
+    # A head still carrying its bracket names something specific rather than a
+    # bare category: AO3 adds "(TV)", "(2002)", "(US)", "(Musicians)" to
+    # disambiguate a named thing, and category tags never carry one. Not always a
+    # *work* — "National Football League (US)" and "TwoSet Violin (Musicians)" are
+    # entities — but that distinction does not matter here. What must be prevented
+    # is a bold stub naming nothing, and those name something; "Sports" does not.
+    #
+    # Without this the work-count proxy misfires on shows whose fandom is ENTIRELY
+    # RPF — "RuPaul's Drag Race" has no non-RPF works because drag queens are real
+    # people, and "8 Mile (2002) RPF" would have gone bold in full. The proxy
+    # answers "does this head have works of its own", which is not the same
+    # question as "is this head a real title".
     heads, tags, bracketed = set(), 0, 0
     for name, works in rows:
         title, taken, rpf_head = split(name, keep_whole)
