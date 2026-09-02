@@ -535,4 +535,18 @@ struct FandomDisplayNameTests {
             #expect(rebuilt != name, "\(name) is a known lossy case; if it now round-trips, tighten this test")
         }
     }
+
+    @Test func protectingAnRPFDoesNotProtectTheWholeName() {
+        // Codex flagged that the protection is not terminal: takeRPF declines for a
+        // protected head, but a later rule can still peel past it. That is real —
+        // 18 tags, 170 works — and it is what should happen. "Stage Play Touken
+        // Ranbu" is a work and "Suemitsu Actor RPF" is telling you which staging.
+        // Making protection terminal would send both of these bold in full, and the
+        // second already has a test above pinning the current result.
+        let staged = FandomDisplayName.split("Stage Play Touken Ranbu - Suemitsu Actor RPF")
+        #expect(staged.title == "Stage Play Touken Ranbu")
+        #expect(staged.qualifier == "- Suemitsu Actor RPF")
+
+        #expect(FandomDisplayName.split("classmates - RPF").title == "classmates")
+    }
 }
