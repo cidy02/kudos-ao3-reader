@@ -525,10 +525,16 @@ private struct FandomListRow: View {
                 // The other names this fandom is tagged under. A tier below the
                 // qualifier rather than level with it: 13% of rows show both, and
                 // in matching styles they read as one blurred block instead of
-                // "what this is" followed by "what else it is called". Joined
-                // rather than stacked so a three-name tag costs one line, not two.
-                if !aliases.isEmpty {
-                    aliasText
+                // "what this is" followed by "what else it is called".
+                //
+                // One per line. These were joined with a middot to keep a row
+                // short, but a stack is what a list of names wants: each is a
+                // whole name, and reading them off a column beats picking them
+                // out of a run separated by a character that also appears inside
+                // titles. It costs a line on the 2,371 tags carrying two aliases
+                // and nothing on the 140,537 carrying one or none.
+                ForEach(Array(aliases.enumerated()), id: \.offset) { _, alias in
+                    aliasText(alias)
                         .font(.caption)
                         // Size carries the tier, not colour. `.tertiary` here was
                         // ~3:1 against every card surface — under WCAG AA, and
@@ -599,13 +605,9 @@ private struct FandomListRow: View {
     ///
     /// Cyrillic keeps the italic: it has a real one, and a genuinely different
     /// letterform rather than a slant.
-    private var aliasText: Text {
-        aliases.enumerated().reduce(Text(verbatim: "")) { running, entry in
-            let (index, alias) = entry
-            let separator = index == 0 ? Text(verbatim: "") : Text(verbatim: " · ")
-            let name = Text(alias)
-            return running + separator + (FandomScript.hasItalicForm(alias) ? name.italic() : name)
-        }
+    private func aliasText(_ alias: String) -> Text {
+        let name = Text(alias)
+        return FandomScript.hasItalicForm(alias) ? name.italic() : name
     }
 
 }
