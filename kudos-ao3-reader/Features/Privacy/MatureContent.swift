@@ -282,7 +282,7 @@ struct SensitiveWorkCoverCard: View {
                     // overlay is still hit-testable across its full bounds by
                     // default, which would otherwise swallow the onTapGesture below.
                     .overlay {
-                        RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
                             .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
                             .allowsHitTesting(false)
                     }

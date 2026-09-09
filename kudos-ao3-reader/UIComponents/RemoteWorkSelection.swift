@@ -182,13 +182,15 @@ struct SelectableAO3WorkRow: View {
     let work: AO3WorkSummary
     let expandAll: Bool
     let controller: RemoteWorkSelectionController
+    var presentation: AO3WorkRow.Presentation = .standard
 
     var body: some View {
         let row = AO3WorkRow(
             work: work,
             expandAll: expandAll,
             isSelecting: controller.isSelecting,
-            isSelected: controller.selection.contains(work.id)
+            isSelected: controller.selection.contains(work.id),
+            presentation: presentation
         )
         if controller.isSelecting {
             let isSelected = controller.selection.contains(work.id)

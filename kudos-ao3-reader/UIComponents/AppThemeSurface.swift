@@ -216,6 +216,9 @@ private struct CardRow: ViewModifier {
     /// hairline — the selection outline for a row, at its true outer edge (the row's
     /// own background), rather than an inset overlay drawn on the row's content.
     var isSelected: Bool
+    /// Opt-in fandom hue for redesigned work rows. Nil preserves the established
+    /// solid card surface for every other list.
+    var tintHue: Double?
     var cornerRadius: CGFloat
     var verticalPadding: CGFloat
     var interCardSpacing: CGFloat
@@ -232,13 +235,13 @@ private struct CardRow: ViewModifier {
             ))
             .listRowBackground(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(theme.appTheme.cardSurface)
+                    .fill(cardFill)
                     // Hairline edge for crisp separation on flat Light/Sepia backdrops —
                     // or the accent-color selection outline, at the same true card edge.
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .strokeBorder(
-                                isSelected ? Color.accentColor : theme.appTheme.cardBorder,
+                                isSelected ? Color.accentColor : cardBorder,
                                 lineWidth: isSelected ? 2 : 0.5
                             )
                     )
@@ -255,6 +258,17 @@ private struct CardRow: ViewModifier {
                     ))
             )
     }
+
+    private var cardFill: AnyShapeStyle {
+        if let tintHue {
+            return AnyShapeStyle(theme.appTheme.workCardGradient(hue: tintHue))
+        }
+        return AnyShapeStyle(theme.appTheme.cardSurface)
+    }
+
+    private var cardBorder: Color {
+        tintHue.map(theme.appTheme.workCardBorder) ?? theme.appTheme.cardBorder
+    }
 }
 
 extension View {
@@ -270,12 +284,14 @@ extension View {
     /// the `ForEach` itself) wherever rows are individually selectable.
     func cardRow(
         isSelected: Bool = false,
+        tintHue: Double? = nil,
         cornerRadius: CGFloat = CardListMetrics.cornerRadius,
         verticalPadding: CGFloat = CardListMetrics.innerVertical,
         interCardSpacing: CGFloat = CardListMetrics.interCardSpacing
     ) -> some View {
         modifier(CardRow(
             isSelected: isSelected,
+            tintHue: tintHue,
             cornerRadius: cornerRadius,
             verticalPadding: verticalPadding,
             interCardSpacing: interCardSpacing
