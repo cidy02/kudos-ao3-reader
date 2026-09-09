@@ -4,6 +4,11 @@ import SwiftUI
 /// summary is clamped to a few lines; an expand toggle reveals the full summary
 /// plus the work's tags (like AO3's blurb) without opening the work.
 struct AO3WorkRow: View {
+    enum Presentation: Equatable {
+        case standard
+        case searchLedger
+    }
+
     let work: AO3WorkSummary
     /// Driven by the list's "expand/collapse all" toggle; each card follows it
     /// (and can still be toggled individually afterwards).
@@ -12,6 +17,9 @@ struct AO3WorkRow: View {
     /// and the caller is expected to route taps to selection instead of navigation.
     var isSelecting: Bool = false
     var isSelected: Bool = false
+    /// Search opts into the redesign without changing the shared row in Browse,
+    /// Account, Authors, or Library before those screens receive their own pass.
+    var presentation: Presentation = .standard
 
     @Environment(AppRouter.self) private var router
     @State private var expanded = false
@@ -39,9 +47,9 @@ struct AO3WorkRow: View {
     var body: some View {
         Group {
             if isSelecting {
-                card
+                presentedCard
             } else {
-                card.remoteWorkContextMenu(work: work)
+                presentedCard.remoteWorkContextMenu(work: work)
             }
         }
         // Follow the global expand/collapse-all toggle (also applies on first
@@ -49,7 +57,17 @@ struct AO3WorkRow: View {
         .onChange(of: expandAll, initial: true) { _, value in expanded = value }
     }
 
-    private var card: some View {
+    @ViewBuilder
+    private var presentedCard: some View {
+        switch presentation {
+        case .standard:
+            standardCard
+        case .searchLedger:
+            searchLedgerCard
+        }
+    }
+
+    private var standardCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Title + author share a tight block so the hierarchy reads as one unit.
             // AO3's own quadrant tag grid trails the row, in this app's chip
@@ -155,23 +173,7 @@ struct AO3WorkRow: View {
 
             // Stats wrap to a second line rather than truncating when they don't fit
             // (long ratings like "Teen And Up Audiences" no longer clip the row).
-            WorkListStatsRow(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.categories,
-                warnings: work.warnings,
-                completion: WorkCompletionStatus(isComplete: work.isComplete),
-                language: work.language,
-                wordCount: work.words,
-                chapters: work.chapters,
-                comments: work.comments,
-                kudos: work.kudos,
-                bookmarks: work.bookmarks,
-                hits: work.hits,
-                // AO3WorkSummary (the Search-result blurb model) only carries a single
-                // "revised_at" date, unlike SavedWork which tracks both — see WorkRow.
-                // It shows in the card's bottom-left corner, not here.
-                isExpanded: expanded
-            )
+            statsRow(showsTopStats: true)
 
             // Date bottom-left, expand control bottom-right — omitted
             // entirely (not just hidden) when there's nothing to show:
@@ -197,12 +199,123 @@ struct AO3WorkRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Search's denser ledger composition: fandom palette first, readable title
+    /// and summary, one icon signal tray, then plain bullet-delimited metadata.
+    private var searchLedgerCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                if let primaryFandom {
+                    Button { router.searchAO3(.fandom, primaryFandom) } label: {
+                        WorkFandomKicker(
+                            fandom: primaryFandom,
+                            hue: workHue,
+                            hiddenCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
+                        )
+                    }
+                    .buttonStyle(.borderless)
+                }
+                Spacer(minLength: 0)
+                if isExpandable {
+                    expandButton
+                }
+                if isSelecting {
+                    WorkSelectionBubble(isSelected: isSelected)
+                }
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(work.title)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    AO3AuthorBylineView(
+                        names: work.authors,
+                        identities: work.authorIdentities,
+                        font: .subheadline,
+                        compact: true
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                WorkStatusIconGrid(
+                    rating: work.rating.isEmpty ? nil : work.rating,
+                    categories: work.categories,
+                    warnings: work.warnings,
+                    completion: WorkCompletionStatus(isComplete: work.isComplete),
+                    tileSize: 22,
+                    announcesToVoiceOver: true,
+                    showsTray: true
+                )
+            }
+
+            if !work.summary.isEmpty {
+                Text(work.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(expanded ? nil : 3)
+                    .multilineTextAlignment(.leading)
+                    .animation(nil, value: expanded)
+            }
+
+            if expanded {
+                chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                chipGroup("Archive Warnings", work.warnings, field: .warning)
+                chipGroup("Relationships", work.relationships, field: .relationship)
+                chipGroup("Characters", work.characters, field: .character)
+                chipGroup("Additional Tags", additionalTags, field: .freeform)
+            }
+
+            statsRow(showsTopStats: false)
+
+            if !work.dateUpdated.isEmpty {
+                WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
+            }
+        }
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func statsRow(showsTopStats: Bool) -> some View {
+        WorkListStatsRow(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.categories,
+            warnings: work.warnings,
+            completion: WorkCompletionStatus(isComplete: work.isComplete),
+            language: work.language,
+            wordCount: work.words,
+            chapters: work.chapters,
+            comments: work.comments,
+            kudos: work.kudos,
+            bookmarks: work.bookmarks,
+            hits: work.hits,
+            // AO3WorkSummary carries only AO3's single revised date, rendered
+            // separately by both presentations.
+            isExpanded: expanded,
+            showsTopStats: showsTopStats
+        )
+    }
+
+    private var nonemptyFandoms: [String] {
+        work.fandoms.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private var primaryFandom: String? {
+        nonemptyFandoms.first
+    }
+
+    private var workHue: Double {
+        CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+    }
+
     /// Expand/collapse control, bottom-right of the card. A bordered circular
     /// button (not plain text) so it reads as a tappable affordance; borderless
     /// interaction would blend into the background. Captures its own tap so it
     /// never triggers the row's navigation link.
+    @ViewBuilder
     private var expandButton: some View {
-        Button {
+        let button = Button {
             // No `withAnimation`: these rows live in a `List`, and animating a
             // row's height change makes it composite a snapshot of the old cell
             // over the new one. The two layouts differ in height, so every
@@ -214,11 +327,21 @@ struct AO3WorkRow: View {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.circle)
-        .controlSize(.small)
-        .tint(.accentColor)
-        .accessibilityLabel(expanded ? "Show less" : "Show more")
+        if presentation == .searchLedger {
+            button
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .minimumHitTarget()
+                .accessibilityLabel(expanded ? "Show less" : "Show more")
+        } else {
+            button
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .controlSize(.small)
+                .tint(.accentColor)
+                .minimumHitTarget()
+                .accessibilityLabel(expanded ? "Show less" : "Show more")
+        }
     }
 
     /// AO3's freeform/additional tags, defensively filtered against the categorized

@@ -297,6 +297,11 @@ struct WorkTopStatsRow: View {
 /// a real accessible summary of the same facts elsewhere (`WorkTopStatsRow`'s
 /// own text chips, or the card's title/stats row).
 struct WorkStatusIconGrid: View {
+    enum Arrangement {
+        case grid
+        case strip
+    }
+
     var rating: String?
     var categories: [String] = []
     var warnings: [String] = []
@@ -311,6 +316,12 @@ struct WorkStatusIconGrid: View {
     /// VoiceOver stop instead of staying fully hidden. Default false matches
     /// every existing caller, which keeps its own accessible text elsewhere.
     var announcesToVoiceOver: Bool = false
+    /// The established AO3-like quadrant remains the default. Compact redesigned
+    /// covers opt into a single horizontal signal strip.
+    var arrangement: Arrangement = .grid
+    /// Adds the translucent signal tray used by the redesign while keeping the
+    /// existing bare-grid callers unchanged.
+    var showsTray: Bool = false
 
     private var items: [WorkTopStatsRow.Item] {
         WorkTopStatsRow(
@@ -340,21 +351,51 @@ struct WorkStatusIconGrid: View {
     private var multiQuadrantSize: CGFloat { tileSize / 2 }
 
     var body: some View {
-        let items = items
-        let grid = VStack(spacing: gap) {
-            HStack(spacing: gap) {
-                tile(!items.isEmpty ? items[0] : nil)
-                tile(items.count > 1 ? items[1] : nil)
-            }
-            HStack(spacing: gap) {
-                tile(items.count > 2 ? items[2] : nil)
-                tile(items.count > 3 ? items[3] : nil)
-            }
-        }
+        let resolvedItems = items
         if announcesToVoiceOver {
-            grid.combinedAccessibilityRow(items.map(\.accessibilityLabel).joined(separator: ", "))
+            presentedIcons(resolvedItems)
+                .combinedAccessibilityRow(resolvedItems.map(\.accessibilityLabel).joined(separator: ", "))
         } else {
-            grid.accessibilityHidden(true)
+            presentedIcons(resolvedItems).accessibilityHidden(true)
+        }
+    }
+
+    @ViewBuilder
+    private func presentedIcons(_ items: [WorkTopStatsRow.Item]) -> some View {
+        if showsTray {
+            iconLayout(items)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                }
+        } else {
+            iconLayout(items)
+        }
+    }
+
+    @ViewBuilder
+    private func iconLayout(_ items: [WorkTopStatsRow.Item]) -> some View {
+        switch arrangement {
+        case .grid:
+            VStack(spacing: gap) {
+                HStack(spacing: gap) {
+                    tile(!items.isEmpty ? items[0] : nil)
+                    tile(items.count > 1 ? items[1] : nil)
+                }
+                HStack(spacing: gap) {
+                    tile(items.count > 2 ? items[2] : nil)
+                    tile(items.count > 3 ? items[3] : nil)
+                }
+            }
+        case .strip:
+            HStack(spacing: gap) {
+                ForEach(0 ..< 4, id: \.self) { index in
+                    tile(items.indices.contains(index) ? items[index] : nil)
+                }
+            }
         }
     }
 
@@ -571,6 +612,9 @@ struct WorkListStatsRow: View {
     /// (`WorkUpdatedDateBadge`), not down here with the rest of the stats.
     var datePublished: String?
     var isExpanded: Bool = false
+    /// The Search ledger already presents these four facts in its icon grid;
+    /// other list rows retain the established text chips by default.
+    var showsTopStats: Bool = true
 
     /// Settings → Library → "Show zero counts". On (the default) every stat
     /// keeps its place even at zero, so a card's stat row has the same shape
@@ -652,7 +696,9 @@ struct WorkListStatsRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            topStatsRow
+            if showsTopStats {
+                topStatsRow
+            }
             if !secondaryItems.isEmpty {
                 FlowLayout(spacing: 8, rowSpacing: 5) {
                     ForEach(Array(secondaryItems.enumerated()), id: \.offset) { index, item in

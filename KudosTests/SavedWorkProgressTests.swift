@@ -71,6 +71,34 @@ struct SavedWorkProgressTests {
         #expect(work().readingProgress == nil)
     }
 
+    @Test func coverActivityHonorsExplicitPresentation() {
+        // Recently Updated supplies a footer but no explicit progress. The saved
+        // reading position must not replace its "+N new" state with a progress ring.
+        #expect(WorkCoverCard.resolvedProgress(
+            explicit: nil, footer: "+3 new", isFinished: false, saved: 0.45
+        ) == nil)
+        #expect(WorkCoverCard.resolvedProgress(
+            explicit: 1.4, footer: "Reading", isFinished: false, saved: 0.45
+        ) == 1)
+        #expect(WorkCoverCard.resolvedProgress(
+            explicit: -0.2, footer: "Reading", isFinished: false, saved: 0.45
+        ) == 0)
+        #expect(WorkCoverCard.resolvedProgress(
+            explicit: nil, footer: nil, isFinished: true, saved: 0.45
+        ) == 1)
+        #expect(WorkCoverCard.resolvedProgress(
+            explicit: nil, footer: nil, isFinished: false, saved: 0.45
+        ) == 0.45)
+    }
+
+    @Test func coverPaletteUsesPrimaryFandomBeforeTitle() {
+        let first = CoverArt.workHue(fandoms: ["Doctor Who"], title: "First Work")
+        let second = CoverArt.workHue(fandoms: ["Doctor Who"], title: "Another Work")
+        #expect(first == second)
+        #expect(CoverArt.workHue(fandoms: [], title: "First Work") == CoverArt.hue(for: "First Work"))
+        #expect((0 ... 1).contains(first))
+    }
+
     // MARK: Readium reader progress (the iOS path)
 
     /// A minimal persisted Readium locator carrying an overall progression.

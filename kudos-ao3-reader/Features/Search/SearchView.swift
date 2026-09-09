@@ -258,8 +258,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
                     Section {
                         ForEach(results) { work in
-                            SelectableAO3WorkRow(work: work, expandAll: expandAllCards, controller: bulkSelection)
-                                .cardRow(isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id))
+                            SelectableAO3WorkRow(
+                                work: work,
+                                expandAll: expandAllCards,
+                                controller: bulkSelection,
+                                presentation: .searchLedger
+                            )
+                            .cardRow(
+                                isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
+                                tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+                            )
                         }
                     }
 

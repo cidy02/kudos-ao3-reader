@@ -8,15 +8,20 @@ struct WorkCoverCard: View {
     var footer: String?
     var progress: Double?
 
+    @Environment(ThemeManager.self) private var themeManager
     /// Set per tab stack; the pushed reader zooms out of this card. See
     /// `WorkCardZoomTransition.swift`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
     var body: some View {
-        WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
-            VStack(alignment: .leading, spacing: 7) {
+        WorkSummaryCardSurface(hue: hue) {
+            VStack(alignment: .leading, spacing: 5) {
+                if let primaryFandom {
+                    WorkFandomKicker(fandom: primaryFandom, hue: hue)
+                }
+
                 Text(work.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline.weight(.bold))
                     // Two lines, then "…". A third line costs real card height
                     // for a fraction of a title, and long fandom titles are
                     // common enough that they decided the card's size more often
@@ -25,26 +30,24 @@ struct WorkCoverCard: View {
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // A flexible spacer on both sides of the grid, not just below it —
-                // matches the Reading Queue mini-cards (ReadingQueues.gridCell),
-                // which center their icon grid between the title above and
-                // author/fandom below with even space on each side, rather than
-                // leaving it glued to the title.
-                Spacer(minLength: 4)
+                Spacer(minLength: 0)
 
-                cardStats
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                Spacer(minLength: 4)
-
-                if !work.author.isEmpty {
-                    CardMetaLabel(text: work.author, symbol: "person", accessibilityLabel: "Author: \(work.author)")
-                        .font(.caption)
+                if let progressValue {
+                    progressRing(progressValue)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                } else if let footer {
+                    updateBadge(footer)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
 
-                if let fandom = work.workFandoms.first, !fandom.isEmpty {
-                    CardMetaLabel(text: fandom, symbol: "books.vertical", accessibilityLabel: "Fandom: \(fandom)")
-                        .font(.caption2)
+                Spacer(minLength: 0)
+
+                if !work.author.isEmpty {
+                    Text(work.author)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .combinedAccessibilityRow("Author: \(work.author)")
                 }
 
                 // Only preservation stays on the card. It is the one status the app
@@ -57,12 +60,8 @@ struct WorkCoverCard: View {
                         .font(.caption2)
                 }
 
-                if let progressValue {
-                    progressGroup(progressValue)
-                } else if let footer {
-                    WorkStateBadge(text: footer, symbol: footerSymbol)
-                        .font(.caption2)
-                }
+                cardStats
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         // The reader pushed from this card zooms out of it, and collapses back into
@@ -76,55 +75,82 @@ struct WorkCoverCard: View {
             categories: work.workCategories,
             warnings: work.workWarnings,
             completion: work.completionStatus,
-            // Matches AO3WorkRow's search-results tileSize — this card has more
-            // room to spend on it than the Reading Queue mini-cards do.
-            tileSize: 27,
-            announcesToVoiceOver: true
+            tileSize: 24,
+            announcesToVoiceOver: true,
+            arrangement: .strip,
+            showsTray: true
         )
     }
 
+    private var primaryFandom: String? {
+        work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private var hue: Double {
+        CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+    }
+
     private var progressValue: Double? {
-        if let progress { return min(1, max(0, progress)) }
-        if work.isFinished { return 1 }
-        return work.readingProgress.map { min(1, max(0, $0)) }
+        Self.resolvedProgress(
+            explicit: progress,
+            footer: footer,
+            isFinished: work.isFinished,
+            saved: work.readingProgress
+        )
     }
 
-    private var progressText: String {
-        // The bar's trailing label already shows the percent, so don't echo a footer
-        // that's itself a percentage (the Readium reading-progress label) — that's the
-        // duplicate. A chapter footer ("Ch 3") carries different info and is kept.
-        if let footer, !footer.hasSuffix("%") { return footer }
-        guard let progressValue else { return "Progress" }
-        return progressValue >= 1 ? "Finished" : "Reading"
+    /// Explicit caller intent wins. A caller-supplied footer with no explicit
+    /// progress is an update/status presentation and must not be replaced by the
+    /// model's incidental reading progress (Recently Updated's `+N new` case).
+    static func resolvedProgress(
+        explicit: Double?,
+        footer: String?,
+        isFinished: Bool,
+        saved: Double?
+    ) -> Double? {
+        if let explicit { return min(1, max(0, explicit)) }
+        guard footer == nil else { return nil }
+        if isFinished { return 1 }
+        return saved.map { min(1, max(0, $0)) }
     }
 
-    private var footerSymbol: String {
-        if work.isFinished { return "checkmark.circle.fill" }
-        if footer?.contains("new") == true { return "sparkle" }
-        return "clock"
-    }
-
-    private func progressGroup(_ value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Text(progressText)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Text("\(Int((value * 100).rounded()))%")
-                    .font(.caption2.monospacedDigit())
+    private func progressRing(_ value: Double) -> some View {
+        let percent = Int((value * 100).rounded())
+        let state = value >= 1 ? "Finished" : "Reading"
+        let accent = themeManager.appTheme.workCardAccent(hue: hue)
+        return ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.14), lineWidth: 5)
+            Circle()
+                .trim(from: 0, to: value)
+                .stroke(accent, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            VStack(spacing: 0) {
+                Text("\(percent)%")
+                    .font(.headline.monospacedDigit().weight(.bold))
+                    .foregroundStyle(.primary)
+                Text(state.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.5)
                     .foregroundStyle(.secondary)
             }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
-                    Capsule().fill(.tint)
-                        .frame(width: geo.size.width * max(0.03, value))
-                }
-            }
-            .frame(height: 5)
         }
+        .frame(width: 68, height: 68)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Reading progress")
+        .accessibilityValue("\(percent) percent, \(state)")
+    }
+
+    private func updateBadge(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.monospacedDigit().weight(.bold))
+            .tracking(0.5)
+            .lineLimit(1)
+            .foregroundStyle(themeManager.appTheme.workCardAccent(hue: hue))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(.ultraThinMaterial, in: Capsule())
+            .combinedAccessibilityRow(text)
     }
 }
 
@@ -137,7 +163,7 @@ struct AO3WorkCoverCard: View {
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
     var body: some View {
-        WorkSummaryCardSurface(hue: CoverArt.hue(for: work.title)) {
+        WorkSummaryCardSurface(hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)) {
             VStack(alignment: .leading, spacing: 7) {
                 // Matches the local card — see `WorkCoverCard`.
                 Text(work.title)
@@ -205,7 +231,7 @@ struct SelectableWorkCoverCard: View {
                     .padding(8)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
                     .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
             }
     }
@@ -237,8 +263,8 @@ struct WorkSelectionBubble: View {
 
 private struct WorkSummaryCardSurface<Content: View>: View {
     @Environment(ThemeManager.self) private var themeManager
-    /// Stable per-title hue (0...1) used to tint the card so adjacent cards stay
-    /// distinguishable — replaces the per-title cover art the summary layout dropped.
+    /// Stable per-fandom hue (0...1) used to tint the card so the same subject has
+    /// one visual identity across surfaces.
     var hue: Double?
     @ViewBuilder var content: () -> Content
 
@@ -295,12 +321,16 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                 }
             )
             .background(
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
                     .fill(themeManager.appTheme.carouselCardSurface)
                     .overlay(hueTint)
                     .overlay(
-                        RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                            .strokeBorder(themeManager.appTheme.carouselCardBorder(hue: hue), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
+                            .strokeBorder(
+                                hue.map(themeManager.appTheme.workCardBorder)
+                                    ?? themeManager.appTheme.carouselCardBorder(hue: nil),
+                                lineWidth: 0.5
+                            )
                     )
                     .shadow(color: themeManager.appTheme.carouselCardShadow.color,
                             radius: themeManager.appTheme.carouselCardShadow.radius,
@@ -308,15 +338,15 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                             y: themeManager.appTheme.carouselCardShadow.y)
             )
             .contentShape(
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
             )
     }
 
     @ViewBuilder
     private var hueTint: some View {
         if let hue {
-            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                .fill(themeManager.appTheme.carouselCardTint(hue: hue))
+            RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
+                .fill(themeManager.appTheme.workCardGradient(hue: hue))
         }
     }
 }
