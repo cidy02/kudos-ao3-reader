@@ -191,6 +191,35 @@ struct SearchFiltersTests {
         #expect(AO3SearchFilters.rangeExpression(from: "  ", to: "  ") == nil)
     }
 
+    @Test func languageSearchFiltersByNativeNameAndKeepsAnyFirst() {
+        let all = FilterLanguagePicker.matching("")
+        #expect(all.first == .any)
+        #expect(all.count == FilterLanguagePicker.selectableCount + 1)
+
+        let english = FilterLanguagePicker.matching("English")
+        #expect(english.contains { $0.id == "en" })
+        #expect(!english.contains(.any))
+
+        let czech = FilterLanguagePicker.matching("cestina")
+        #expect(czech.contains { $0.id == "cs" })
+
+        let arabic = FilterLanguagePicker.matching("العربية")
+        #expect(arabic.contains { $0.id == "ar" })
+
+        #expect(FilterLanguagePicker.matching("xyzzy-not-a-language").isEmpty)
+    }
+
+    @Test func rangeSliderDomainExpandsPastTheDefaultMaximum() {
+        #expect(FilterRangeSlider.integer(from: "5000") == 5_000)
+        #expect(FilterRangeSlider.integer(from: "") == nil)
+        #expect(FilterRangeSlider.integer(from: "  ") == nil)
+        // Non-ASCII digits are rejected the same way the field binding strips them.
+        #expect(FilterRangeSlider.integer(from: "٥٠٠") == nil)
+        #expect(FilterRangeSlider.expandedMaximum(defaultMaximum: 200_000, values: [10, 20]) == 200_000)
+        #expect(FilterRangeSlider.expandedMaximum(defaultMaximum: 200_000, values: [500_000]) == 1_000_000)
+        #expect(FilterRangeSlider.expandedMaximum(defaultMaximum: 200_000, values: []) == 200_000)
+    }
+
     @Test func sortColumnsCarryTheDirectionAReaderExpects() {
         // Names read forwards; counts and dates read biggest/newest first.
         #expect(AO3SearchFilters.Sort.workTitle.naturalDirection == .ascending)

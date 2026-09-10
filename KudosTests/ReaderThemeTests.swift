@@ -41,6 +41,17 @@ struct ReaderThemeTests {
         #expect(ReaderTheme.light.appElevatedBackground == nil)
     }
 
+    /// Include and exclude must stay distinct even when the app accent is red —
+    /// they resolve through success vs error, not `.tint`.
+    @Test func includeColorDiffersFromExcludeColorOnEveryTheme() {
+        for theme in ReaderTheme.allCases {
+            #expect(theme.includeColor == theme.statusSuccessColor)
+            #expect(theme.excludeColor == theme.errorColor)
+            #expect(theme.includeColor != theme.excludeColor)
+            #expect(theme.statusSuccessColor != theme.errorColor)
+        }
+    }
+
     // MARK: - Letter-spacing clamp (UI-9)
 
     /// Readium (iOS) only accepts non-negative letter-spacing

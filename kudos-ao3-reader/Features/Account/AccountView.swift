@@ -977,7 +977,7 @@ struct AccountView: View {
                             .cardRow()
                     }
                 }
-                AO3AuthorSeriesSection(model: model)
+                AO3AuthorSeriesSection(model: model, showsNewSeriesOnAO3: true)
             }
         }
     }
