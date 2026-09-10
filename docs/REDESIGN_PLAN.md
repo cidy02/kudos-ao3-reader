@@ -427,15 +427,16 @@ re-reviews settled work and nobody reviews their own.
 | `6d2b318` | Claude | §3c, next steps; 1a recorded complete | unreviewed | Doc only. |
 | `1004a81` | Claude | Audit the Codex review; unify the two identical metadata builders | unreviewed | **Wants a non-Claude reviewer** — it touches `WorkStat`, which every work surface formats through. Unverified tests (CI builds the app target only). |
 | `74680bb` | Codex | T-213: locator chapter titles, `@ScaledMetric` accessibility pass, `SensitiveWorkRow` navigation rework, Saved-for-Later split | Claude ✓ (design/logic only) | Committed by the owner mid-session as WIP. Reviewed by reading, not by building: no toolchain here. Call sites consistent, polarity flip complete, parses clean. Its stale-doc updates and ledger rows were missing and are supplied in the commit below. Saved-for-Later split diverges from 1c/1d — kept on the owner's call, recorded in §3. |
+| `ca9b158` | Claude | Session durability on background; bound the family-count cache; 5 mutation-checked tests | unreviewed | **Wants a non-Claude reviewer.** Fixes two defects found verifying Grok's layer. Tests unverified — CI builds the app target only. |
 | `2e25947` | Claude | Page blocks internal, not private | unreviewed | **iOS build green.** Fixes `cc5a890`. |
 | `6d1a08d` | Claude | Tests for `myCopySummary` and the warning figure form | unreviewed | **Unverified by anything here** — CI builds the app target only, so `KudosTests` is never compiled. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
-| `725695e` | Grok | Local reading log: sessions, favorites, fandom watermarks; v8 additive backup; reader start/end hooks | unreviewed | Wants a non-Grok reviewer. Parse-check clean. **CI has not compiled this.** Tests exist but CI builds the app target only. Manifest stays v8 (Android only accepts 1…8). Not seen on a device. |
-| `561f848` | Grok | AO3 collections + challenges networking (`AO3Client+Collections/Challenges`, matching/association are Open-on-AO3 only) | unreviewed | Wants a non-Grok reviewer. Writes unexercised against a live AO3 session. `URLSession(` in Services still exactly two constructors. |
-| `bac3397` | Grok | AO3 writing-surface networking (work/chapter/series/draft/bulk/tags) + tag autocomplete wrapper | unreviewed | Wants a non-Grok reviewer. Reuses `autocompleteTags`; no second URL builder. Writes unexercised. Series create from `/series/new` is Open on AO3. |
-| `a0913bf` | Grok | Fandom sibling-family grouping (`1al`/`1am`/`1an`); category work total marked approximate | unreviewed | Wants a non-Grok reviewer. Group id is sorted original names, never the parsed title. Not seen. |
-| `5100add` | Grok | `includeColor`; searchable language picker; five range sliders; `1ay`/`1az` empty states | unreviewed | Wants a non-Grok reviewer. `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching code. `1ba` comment-posting note is stale. `1ax` SavedSearch naming+list already exist. |
+| `725695e` | Grok | Local reading log: sessions, favorites, fandom watermarks; v8 additive backup; reader start/end hooks | Claude ✓ (design/logic only) | Verified by reading, not by building or running. Parse-check clean. **CI has not compiled this.** Tests exist but CI builds the app target only. Manifest stays v8 (Android only accepts 1…8). Not seen on a device. |
+| `561f848` | Grok | AO3 collections + challenges networking (`AO3Client+Collections/Challenges`, matching/association are Open-on-AO3 only) | Claude ✓ (design/logic only) | Verified by reading, not by building or running. Writes unexercised against a live AO3 session. `URLSession(` in Services still exactly two constructors. |
+| `bac3397` | Grok | AO3 writing-surface networking (work/chapter/series/draft/bulk/tags) + tag autocomplete wrapper | Claude ✓ (design/logic only) | Verified by reading, not by building or running. Reuses `autocompleteTags`; no second URL builder. Writes unexercised. Series create from `/series/new` is Open on AO3. |
+| `a0913bf` | Grok | Fandom sibling-family grouping (`1al`/`1am`/`1an`); category work total marked approximate | Claude ✓ (design/logic only) | Verified by reading, not by building or running. Group id is sorted original names, never the parsed title. Not seen. |
+| `5100add` | Grok | `includeColor`; searchable language picker; five range sliders; `1ay`/`1az` empty states | Claude ✓ (design/logic only) | Verified by reading, not by building or running. `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching code. `1ba` comment-posting note is stale. `1ax` SavedSearch naming+list already exist. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -498,6 +499,57 @@ mutation check was by reading, not by running.
 
 **Left for screens:** Phase 9–12 layouts, `1bv` editor (mockup), `1bb`, the
 Search paging pill.
+
+### 2026-09-10 — Verification pass over Grok's and Codex's work
+
+Ran mechanically rather than by reading: a string sweep for removed
+affordances, a diff of interaction modifiers, a token comparison against §1,
+and a targeted check of every claim the two made.
+
+**No features were dropped.** 31 user-facing strings disappeared across 88
+commits; all but two are section headers absorbed by the figure strip, facts
+card and tally strip. Of those two, `"See all in progress"` was an
+accessibility label replaced by `SectionRuleHeader`'s own `"See all \(title)"`,
+and `"Saved for Later in Kudos"` was the header disambiguating the local shelf
+from the AO3 one, correctly gone with the approved split. Interaction
+affordances show no net loss anywhere — `swipeActions` 0/0, `contextMenu` 0/0,
+`ToolbarItem` 3/3, and `searchable`, `Menu` and `onDelete` each gained one.
+
+**One real density change, and it is the spec's.** The ledger rows that
+replaced standard rows on Home, Library and Account show six fewer facts by
+default — language, comments, kudos, bookmarks, hits, published date. All are
+reachable through the row's disclosure, which Codex made always-available by
+widening `isExpandableWork` to `presentation == .ledger || …`. Before that, a
+comment of ours claimed a ledger row "has no summary and no tag groups, so
+there is nothing for an expand control to reveal", which was wrong and would
+have left those six unreachable on three screens.
+
+**Spec tokens all match**, including through Codex's `@ScaledMetric` pass,
+which preserved the spec bases exactly: 32, 15.5, 11, 16.5, 11.5.
+
+**Grok's claims all verified true** — the v8 manifest decodes older archives
+through a custom `init(from:)` using `decodeIfPresent`, all three new models
+reach all three export call sites, restore inserts them with snapshot ids,
+deletions are tombstoned, and `FandomFamily.id(originalNames:)` sorts original
+names rather than the parsed title.
+
+**Two defects found and fixed** (`ca9b158`):
+
+1. **Reading sessions were lost whenever iOS reclaimed a backgrounded app.**
+   The row was written only by `endSession`, which runs from the reader's
+   `onDisappear` — and that never fires when the OS jettisons a backgrounded
+   process. The bias ran the wrong way: the longer the session, the likelier it
+   vanished, so "hours read" would have undercounted invisibly. `pauseSession`
+   now writes the row too, both writers going through one `persist()` keyed by
+   a `recordID` fixed at session start so a resumed visit stays one row.
+2. **`FandomFamilyExactCountCache` was unbounded.** Capped at 128, oldest-first,
+   matching the ceiling the networking policy names twice. No TTL, deliberately
+   — it holds a work count rather than page HTML.
+
+**What the pass cannot tell you**, unchanged and now larger: 2,150 lines of
+tests CI never compiles, 42 write call sites never exercised against live AO3,
+and no screen seen on a device. The density change above is exactly the kind of
+judgement that needs eyes rather than a grep.
 
 ### 2026-09-10 — Codex's T-213 pass (`74680bb`), and what it found in ours
 
