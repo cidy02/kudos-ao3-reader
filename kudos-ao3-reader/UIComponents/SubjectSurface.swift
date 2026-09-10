@@ -639,6 +639,13 @@ struct GlassCircleButton<Label: View>: View {
     var palette: SubjectPalette?
     /// Rides the top-trailing corner — the active-filter count in spec 1k.
     var badge: String?
+    /// Spoken name for the control. Carried as a parameter rather than left to
+    /// the call site, because attaching `.accessibilityLabel` outside the button
+    /// changes its type, and the convenience initialisers that pin a concrete
+    /// chrome type (see `SubjectScreenScaffold`) constrain exactly that type.
+    /// Named `accessibilityName` rather than `accessibilityLabel` so it never
+    /// reads as a shadow of the view modifier of that name.
+    var accessibilityName: String
     let action: () -> Void
     @ViewBuilder var label: () -> Label
 
@@ -678,6 +685,7 @@ struct GlassCircleButton<Label: View>: View {
         }
         .buttonStyle(.plain)
         .minimumHitTarget()
+        .accessibilityLabel(accessibilityName)
     }
 }
 
