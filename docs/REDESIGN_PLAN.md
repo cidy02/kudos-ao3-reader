@@ -425,6 +425,7 @@ re-reviews settled work and nobody reviews their own.
 | `cc5a890` | Claude | Retire the section control; My copy sheet; Comments as form rows | unreviewed | **Wants a non-Claude reviewer** — it changes this screen's whole navigation. Red on access levels; fixed in `2e25947`. |
 | `6d2b318` | Claude | §3c, next steps; 1a recorded complete | unreviewed | Doc only. |
 | `1004a81` | Claude | Audit the Codex review; unify the two identical metadata builders | unreviewed | **Wants a non-Claude reviewer** — it touches `WorkStat`, which every work surface formats through. Unverified tests (CI builds the app target only). |
+| `74680bb` | Codex | T-213: locator chapter titles, `@ScaledMetric` accessibility pass, `SensitiveWorkRow` navigation rework, Saved-for-Later split | Claude ✓ (design/logic only) | Committed by the owner mid-session as WIP. Reviewed by reading, not by building: no toolchain here. Call sites consistent, polarity flip complete, parses clean. Its stale-doc updates and ledger rows were missing and are supplied in the commit below. Saved-for-Later split diverges from 1c/1d — kept on the owner's call, recorded in §3. |
 | `2e25947` | Claude | Page blocks internal, not private | unreviewed | **iOS build green.** Fixes `cc5a890`. |
 | `6d1a08d` | Claude | Tests for `myCopySummary` and the warning figure form | unreviewed | **Unverified by anything here** — CI builds the app target only, so `KudosTests` is never compiled. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
@@ -439,6 +440,53 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Codex's T-213 pass (`74680bb`), and what it found in ours
+
+Committed by the owner as `wip - codex hit usage limit`, so it is a cut-off
+session's work rather than a finished one. It parses clean and its call sites are
+consistent; what it lacked was the bookkeeping, which this entry and the rows
+below supply.
+
+**It disproved a claim we had made three times.** The resume card said the
+chapter's title was unavailable because `SavedWork` stores only a spine index.
+Readium's persisted locator carries the publication's own label, and
+`WorkReadingPosition.title(from:)` reads it — so the card names the real chapter,
+and front matter ("Preface", "Afterword") verbatim instead of inventing a number
+for it. Tested, including the invalid-locator fallback. **That is exactly the
+trap this file warns about in two other entries, and we were the ones in it.**
+
+**It fixed an accessibility gap in the shared components.** `SubjectHeaderBlock`,
+`SectionRuleHeader` and `WorkLedgerRow` were built with fixed point sizes and
+`lineLimit(2)`. They now use `@ScaledMetric`, unclamp their line limits at
+accessibility sizes, wrap the header subtitle in a `FlowLayout` instead of an
+`HStack`, and swap the ledger row's `HStack` for a `VStack` through `AnyLayout`.
+The codebase's own `HomeResumeHero` already did this; the redesign's components
+did not follow it.
+
+**It reworked `SensitiveWorkRow`'s navigation flag** — `providesNavigation: true`
+became `usesInlineNavigation: false`, with `contentInsets` moved inside the
+privacy boundary so tapping a card's padding reveals and selects exactly as its
+content does. The polarity flip was applied completely: no stale callers remain,
+and the single opt-in is the Library dashboard's `ScrollView`.
+
+**It separated Saved for Later from AO3's Marked for Later.** Library's shelf had
+merged the local queue with the user's AO3 Marked-for-Later list; the two are now
+distinct, with AO3's list living only in Account. Kept at the owner's direction.
+**Recorded as a deliberate divergence, because the artboards say otherwise:** 1c
+lists *"Saved for Later (local + the AO3 'Marked for Later' card …)"*, 1d lists
+*"the AO3 'Marked for Later' row"*, and both draw it as an ordinary work
+card/row carrying a small **"AO3" badge** at the top-right (radius 5, black 40 %,
+`700 8px`, `.08em`, white 80 %). What the spec does support is the framing —
+its own build note calls Saved for Later "a permanent queue that happens to be
+reachable here". No AO3 provenance badge exists anywhere in the app, which may be
+why the merge read as confusing enough to remove. **Open work:** if the shelf ever
+merges again, it needs that badge first.
+
+**What T-213 said it would verify and did not:** the iOS suite, SwiftLint, the
+macOS build, and theme/accessibility screenshots. None can run from this
+container — no toolchain, no simulator — so they remain unrun, not merely
+unreported.
 
 ### 2026-09-10 — Audit of the Codex review, and finding 6 paid
 
@@ -632,12 +680,15 @@ disagrees with `WorkWarningStatus.color`.
 **The Read tile left the quick-action grid.** The resume card is that action
 now; two controls for one action, a thumb-length apart, is a coin toss.
 
-**Two facts 1a states that the app does not have:** the chapter's *title* and a
-pages-left estimate. `SavedWork` stores a spine index and a last-read date, so
-the card says "Chapter 3" and when — the same substitution `HomeResumeHero`
-already makes, waiting on the same local reading log. A work nobody here has
-opened gets **no ring**, rather than a 0% one that would claim a browsed remote
-work is being tracked.
+**~~Two facts 1a states that the app does not have~~ — one, and it was wrong.**
+This entry claimed the chapter's *title* was unavailable and that `SavedWork`
+stored only a spine index, so the card said "Chapter 3". **Codex disproved that
+in `74680bb`:** Readium's persisted locator already carries the publication's own
+label, and `WorkReadingPosition.title(from:)` reads it. The card now names the
+real chapter — and front matter verbatim ("Preface", "Afterword") rather than
+inventing a chapter number for it. Only the pages-left estimate is genuinely
+absent. A work nobody here has opened still gets **no ring**, rather than a 0%
+one that would claim a browsed remote work is being tracked.
 
 **Left on artboard 1a**, in the order the page runs: the summary in its serif
 face; the ON AO3 action chips (Kudos / Subscribe / Bookmark / Mark for Later);
@@ -862,11 +913,18 @@ canvas's inline CSS, not eyeballed). **Not** verified by build or by eye — see
 - Continue Reading's own header is now `SectionRuleHeader` too, with the
   collapse caret bound to the cover strip rather than the hero.
 
-**Known gap, deliberate:** spec 1b puts the *chapter's title* under
-"Chapter 12". `SavedWork` stores only `lastSpineIndex`, never a chapter title,
-so the hero shows the last-read date instead — a real fact rather than an
-invented one. Marked `TODO` in `HomeResumeHero.swift`; it wants the same local
-reading log that artboards `1ah`/`1ai` depend on.
+**~~Known gap, deliberate~~ — closed, and the premise was false.** This said
+spec 1b's chapter title was unavailable because `SavedWork` stores only
+`lastSpineIndex`. Readium's locator carried the publication's label the whole
+time; `74680bb` reads it through `WorkReadingPosition`. The last-read date now
+backs the label up for legacy records rather than standing in for it.
+
+**This was wrong for two sessions, in three documents, and in the code's own
+comments.** It is the same failure §3's later entries name twice over: a claim
+that the app lacks data, written from reasoning rather than from a grep, that
+then gets copied forward because it reads like a settled fact. `1ah`/`1ai` still
+want a local reading log — a *history* of sessions is genuinely absent — but the
+chapter title never depended on it.
 
 **CI finding:** the first `Unsigned IPA` run proved the SDK question is
 settled — `macos-26` runners carry **Xcode 26.6 with iOS SDK 26.5**, which
@@ -979,7 +1037,9 @@ Two candidates, in order of value:
   `SubjectPalette` or a `ReaderTheme` extension so Light and Sepia get a real
   answer rather than a dark one.
 - **Artboards labelled "Needs building"** in the canvas depend on data the app
-  does not have (a local reading log, per-queue completion state, featured
+  does not have (a local reading log — meaning a *history* of sessions, which
+  really is absent; the current position is stored, see `74680bb`), per-queue
+  completion state, featured
   fandoms per category, AO3 write endpoints). Those are separate engineering
   tasks; the redesign should not fake them. Where a screen cannot be honest,
   build the layout and leave the data path as an explicit `TODO` with the
