@@ -255,6 +255,33 @@ struct HomeSectionListView: View {
             .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+
+            filterChipRail
+                .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+    }
+
+    /// What is currently filtering this page, as chips, with the way to change
+    /// them pinned at the trailing edge (spec 1ad, 1k).
+    ///
+    /// The count on the dashed chip excludes sort: sort is always set to
+    /// something, so counting it would mean the button never reads as "no
+    /// filters" even on a page showing everything.
+    private var filterChipRail: some View {
+        SubjectFilterRail(
+            onOpenFilters: { showingFilters = true },
+            activeFilterCount: filters.summaryLabels(includesSort: false).count
+        ) {
+            ForEach(filters.summaryLabels(), id: \.self) { label in
+                SubjectChip(
+                    text: label.text,
+                    style: .tinted,
+                    systemImage: label.symbol,
+                    palette: scopePalette
+                )
+            }
         }
     }
 
