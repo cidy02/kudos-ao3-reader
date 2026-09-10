@@ -54,6 +54,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @Query private var syncTombstones: [SyncTombstone]
     @Query(sort: \ReadingAnnotation.createdAt) private var readingAnnotations: [ReadingAnnotation]
     @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
+    @Query(sort: \ReadingSession.startedAt) private var readingSessions: [ReadingSession]
+    @Query(sort: \ReadingFavorite.createdAt) private var readingFavorites: [ReadingFavorite]
+    @Query(sort: \FandomReadWatermark.lastVisitedAt)
+    private var fandomReadWatermarks: [FandomReadWatermark]
 
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
@@ -762,6 +766,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 readingQueues: readingQueues,
                 annotations: readingAnnotations,
                 savedSearches: savedSearches,
+                readingSessions: readingSessions,
+                readingFavorites: readingFavorites,
+                fandomReadWatermarks: fandomReadWatermarks,
                 tombstones: syncTombstones
             )
         } catch {
@@ -934,6 +941,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 readingQueues: readingQueues,
                 annotations: readingAnnotations,
                 savedSearches: savedSearches,
+                readingSessions: readingSessions,
+                readingFavorites: readingFavorites,
+                fandomReadWatermarks: fandomReadWatermarks,
                 tombstones: syncTombstones
             )
             let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

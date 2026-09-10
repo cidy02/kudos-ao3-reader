@@ -48,6 +48,9 @@ struct ReaderView: View {
     @State private var isLoading = true
     @State private var landNextChapterOnLastPage = false
     @State private var availableWidth: CGFloat = 0
+    /// Snapshot at session start so a reopen of an already-finished work does
+    /// not count as another finishing session.
+    @State private var finishedWhenSessionStarted = false
     @State private var workActions = AO3WorkActionsModel()
 
     /// Window width at which a two-page spread becomes available.
@@ -177,11 +180,20 @@ struct ReaderView: View {
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
             .task(id: work.id) { await load() }
-            .onAppear(perform: wireController)
+            .onAppear {
+                wireController()
+                finishedWhenSessionStarted = work.isFinished
+                ReadingLogService.startSession(for: work, now: Date())
+            }
             .onDisappear {
                 // Flush the exact final position so resume lands precisely, even if
                 // the last scroll's debounce window hadn't elapsed before we left.
                 flushProgress()
+                ReadingLogService.endSession(
+                    for: work,
+                    now: Date(),
+                    didFinish: work.isFinished && !finishedWhenSessionStarted
+                )
                 try? modelContext.save()
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 // Breaks the controller ↔ view retain cycle (A7-F3) — safe if
@@ -198,7 +210,20 @@ struct ReaderView: View {
             .onReceive(NotificationCenter.default.publisher(
                 for: NSApplication.willTerminateNotification)) { _ in
                 flushProgress()
+                ReadingLogService.endSession(
+                    for: work,
+                    now: Date(),
+                    didFinish: work.isFinished && !finishedWhenSessionStarted
+                )
                 try? modelContext.save()
+            }
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSApplication.didResignActiveNotification)) { _ in
+                ReadingLogService.pauseSession(for: work, now: Date())
+            }
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSApplication.didBecomeActiveNotification)) { _ in
+                ReadingLogService.resumeSession(for: work, now: Date())
             }
             .onChange(of: currentIndex) { _, _ in
                 if !isLoading { loadCurrentChapter() }
