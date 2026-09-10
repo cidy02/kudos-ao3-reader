@@ -54,6 +54,46 @@ struct WorkStatLabelTests {
         #expect(WorkStat.displayDate("not a date") == "not a date")
     }
 
+    @Test func searchLedgerMetadataKeepsUnitsAndZeroCountPreference() {
+        var work = AO3WorkSummary(
+            id: 1,
+            title: "Title",
+            authors: ["Author"],
+            fandoms: ["Fandom"],
+            rating: "General Audiences",
+            warnings: [],
+            categories: ["Gen"],
+            isComplete: true,
+            dateUpdated: "12 Feb 2026",
+            tags: [],
+            summary: "Summary",
+            language: " English ",
+            words: 84_210,
+            chapters: "11/11",
+            comments: 212,
+            kudos: 3_204,
+            bookmarks: 486,
+            hits: 61_904,
+            seriesTitle: nil,
+            seriesURL: nil,
+            seriesPosition: nil
+        )
+        #expect(AO3WorkRow.ledgerMetadata(for: work, showsZeroStats: false) == [
+            "English", "84,210 words", "11/11", "212 comments",
+            "3,204 kudos", "486 bookmarks", "61,904 hits",
+        ])
+
+        work.words = nil
+        work.comments = nil
+        work.kudos = 0
+        work.bookmarks = nil
+        work.hits = 0
+        #expect(AO3WorkRow.ledgerMetadata(for: work, showsZeroStats: false) == ["English", "11/11"])
+        #expect(AO3WorkRow.ledgerMetadata(for: work, showsZeroStats: true) == [
+            "English", "0 words", "11/11", "0 comments", "0 kudos", "0 bookmarks", "0 hits",
+        ])
+    }
+
     @Test func categoryColorMatchesAO3sOwnCoding() {
         #expect(WorkStat.categoryColor("F/F") == .red)
         #expect(WorkStat.categoryColor("F/M") == .pink)

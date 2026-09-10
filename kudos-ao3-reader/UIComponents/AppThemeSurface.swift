@@ -216,8 +216,8 @@ private struct CardRow: ViewModifier {
     /// hairline — the selection outline for a row, at its true outer edge (the row's
     /// own background), rather than an inset overlay drawn on the row's content.
     var isSelected: Bool
-    /// Opt-in fandom hue for redesigned work rows. Nil preserves the established
-    /// solid card surface for every other list.
+    /// Opt-in fandom hue for redesigned ledger rows. Nil preserves the
+    /// established solid card surface for every other list.
     var tintHue: Double?
     var cornerRadius: CGFloat
     var verticalPadding: CGFloat
@@ -261,13 +261,13 @@ private struct CardRow: ViewModifier {
 
     private var cardFill: AnyShapeStyle {
         if let tintHue {
-            return AnyShapeStyle(theme.appTheme.workCardGradient(hue: tintHue))
+            return AnyShapeStyle(theme.appTheme.workLedgerGradient(hue: tintHue))
         }
         return AnyShapeStyle(theme.appTheme.cardSurface)
     }
 
     private var cardBorder: Color {
-        tintHue.map(theme.appTheme.workCardBorder) ?? theme.appTheme.cardBorder
+        tintHue.map(theme.appTheme.workLedgerBorder) ?? theme.appTheme.cardBorder
     }
 }
 
