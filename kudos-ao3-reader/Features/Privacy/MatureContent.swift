@@ -121,6 +121,16 @@ struct SensitiveWorkRow: View {
     /// Forwarded to `WorkRow` so a screen that has moved to the redesign's
     /// compact ledger row gets it here too, blurred or not.
     var presentation: WorkRow.Presentation = .standard
+    /// False when the caller wraps this row in its own `NavigationLink`.
+    ///
+    /// The row normally navigates through `cardNavigation`, which puts an
+    /// invisible link in the row's *background* and relies on the enclosing
+    /// `List` to make the whole row activate it. Outside a `List` — the Library
+    /// dashboard is a `ScrollView` — nothing activates that link and the row
+    /// simply does not respond to taps (the same trap `HomeResumeHero` documents
+    /// at length). Such callers supply a real link and turn this off, rather than
+    /// nesting one link inside another.
+    var providesNavigation: Bool = true
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -235,6 +245,8 @@ struct SensitiveWorkRow: View {
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else if !providesNavigation {
+            row
         } else {
             switch openMode {
             case .detail:
