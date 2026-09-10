@@ -1,0 +1,91 @@
+name: Unsigned IPA
+
+# Builds a sideloadable, unsigned .ipa and attaches it to the run as an
+# artifact, so every commit on a redesign branch has a build you can install
+# with AltStore / Sideloadly / SideStore.
+#
+# It is a separate workflow from ci.yml on purpose. ci.yml deliberately omits a
+# build job because this project targets an iOS SDK that GitHub-hosted runner
+# images have historically lagged behind (see the note at the top of that file);
+# keeping the build here means a runner image without the SDK reddens only this
+# workflow, and the lint gate stays meaningful.
+#
+# It also doubles as the compile check for agents working on this repo from a
+# Linux container, where no Swift toolchain exists at all.
+#
+# If hosted runners cannot build this SDK yet, the fix is one of:
+#   - point `runs-on` at a self-hosted macOS runner with the right Xcode, or
+#   - run `Scripts/build-unsigned-ipa.sh` locally, which is what this calls.
+
+on:
+  push:
+    branches:
+      - 'codex/kudos-redesign'
+      - 'claude/**'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag or SHA to build'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: Build unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Select newest Xcode
+        run: |
+          ls /Applications | grep -i '^Xcode' || true
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos || true
+
+      # Both prerequisites are gitignored: MuPDF is ~48 MB of built binaries and
+      # FluidAudio is a patched checkout of a pinned upstream revision. Cache the
+      # expensive one; the other is a clone plus a 106-line patch.
+      - name: Cache MuPDF xcframework
+        id: mupdf-cache
+        uses: actions/cache@v4
+        with:
+          path: Vendor/MuPDF.xcframework
+          key: mupdf-${{ runner.os }}-${{ hashFiles('Scripts/build-mupdf.sh') }}
+
+      - name: Build MuPDF
+        if: steps.mupdf-cache.outputs.cache-hit != 'true'
+        run: Scripts/build-mupdf.sh
+
+      - name: Fetch FluidAudio
+        run: Scripts/fetch-fluidaudio.sh
+
+      - name: Build unsigned IPA
+        run: Scripts/build-unsigned-ipa.sh
+
+      - name: Upload IPA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kudos-unsigned-${{ github.sha }}
+          path: .build/ipa/*.ipa
+          if-no-files-found: warn
+          retention-days: 30
+
+      # The build log is the useful half when the IPA step fails, and a failed
+      # xcodebuild on this repo is usually a missing SDK rather than bad code.
+      - name: Report
+        if: failure()
+        run: |
+          echo "The IPA build failed. Check, in this order:"
+          echo "  1. Does this runner's Xcode ship the iOS SDK the project targets?"
+          echo "     IPHONEOS_DEPLOYMENT_TARGET is in AO3_App_OpenSource.xcodeproj/project.pbxproj."
+          echo "  2. Did Vendor/MuPDF.xcframework and Packages/FluidAudio get built/fetched?"
+          echo "  3. Is it an actual compile error in the diff?"
