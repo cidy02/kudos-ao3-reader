@@ -29,23 +29,36 @@ a fresh export if you need the interactive version.
 
 ## 0. Environment constraint — read this first
 
-**This branch has been worked on from a Linux container with no Swift
+**This branch is being worked on from a Linux container with no Swift
 toolchain.** `xcodebuild`, `swift`, `swiftlint` and `swiftformat` are all
-absent, so `Scripts/verify.sh` (and every gate inside it) **has not been run**
-on the redesign commits.
+absent locally, so `Scripts/verify.sh` and every gate inside it **have not been
+run** on these commits.
 
-Consequences, stated plainly:
+**The compile gate is CI instead.** `.github/workflows/unsigned-ipa.yml` builds
+the iOS target on a `macos-26` runner and uploads an unsigned, sideloadable
+`.ipa` per commit. Check it before trusting any commit here — a green run means
+the branch *compiles*, and an artifact means it links and packages.
 
-- No commit on this branch has been compiled. Syntax and type errors are
-  possible. Everything has been written conservatively (no clever generics, no
-  new concurrency, no `any`/existential tricks) to keep that risk low, and each
-  new file is self-contained enough to fix in isolation.
-- The human screenshot gate in `AGENTS.md` has not been satisfied for any of it.
-- **First thing a macOS-capable agent should do on picking this up:** build the
-  iOS target, fix whatever the compiler finds, and commit that as its own
-  "make the redesign branch compile" commit before adding screens.
+Verified so far:
 
-Nothing here should be merged toward `merge-test` until that has happened.
+| Commit | iOS build | Artifact |
+|---|---|---|
+| `2d3696c` | ✅ green | `Kudos-unsigned-2d3696c…` (40 MB) |
+
+What CI still does **not** cover:
+
+- **SwiftLint / SwiftFormat** — `ci.yml` runs those separately; check it too.
+- **The macOS target.** Only iOS is built here. Anything touching
+  `#if os(iOS)` needs `Scripts/build-macos.sh` locally. Two such bugs were
+  already caught by re-reading (see the `2d3696c` entry in §3).
+- **The test suite.** `Scripts/test.sh` needs a booted simulator.
+- **Anything visual.** The human screenshot gate in `AGENTS.md` is unsatisfied
+  for every screen here. A green build says the layout compiles, not that it
+  looks like the artboard — and several changes (the hidden navigation bar in
+  particular, see §3) genuinely need a device.
+
+Nothing here should be merged toward `merge-test` until the lint, macOS and
+test gates have run and someone has looked at the screens.
 
 ---
 
