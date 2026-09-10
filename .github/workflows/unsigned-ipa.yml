@@ -29,12 +29,22 @@ on:
         required: false
         default: ''
 
-# Deliberately NOT cancel-in-progress. The point of this workflow is an IPA per
-# commit, and the MuPDF build alone runs for minutes — cancelling on every push
-# meant a run never finished, so no commit ever got an artifact. Runs queue
-# instead; the cache makes every run after the first a great deal shorter.
+# Keyed on the commit, not the branch, so every commit really does get its own
+# IPA — which is the point of this workflow.
+#
+# Two earlier attempts got this wrong. `cancel-in-progress: true` killed each run
+# on the next push, so no run ever finished. Setting it to `false` was closer but
+# not enough: GitHub keeps only ONE *pending* run per concurrency group, so a
+# fresh push still supersedes a queued run, and commits pushed in a burst were
+# silently skipped. A per-SHA group has no such collision.
+#
+# The cost is real: runs go in parallel rather than in a queue, and each is
+# several minutes of a macOS runner. The MuPDF cache keeps that to the app build
+# alone after the first run. If the minutes matter more than per-commit
+# artifacts, move back to `${{ github.ref }}` with cancel-in-progress false and
+# accept that only the newest commit of a burst is built.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
