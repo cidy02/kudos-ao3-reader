@@ -99,6 +99,54 @@ with a shared language file rather than with a screen.
 All of the above are in
 [`kudos-ao3-reader/UIComponents/SubjectSurface.swift`](../kudos-ao3-reader/UIComponents/SubjectSurface.swift).
 
+### 1a. The measured inventory — what the spec actually repeats
+
+That table was written by reading screens. This one was counted:
+
+```
+Scripts/redesign-spec-inventory.py                # shared shapes, ranked
+Scripts/redesign-spec-inventory.py --signature 23 # every artboard using shape #23
+Scripts/redesign-spec-inventory.py --board 1m     # one screen's shapes, most-shared first
+```
+
+> 818 distinct shapes across 12,709 elements.
+> 103 of them appear in 8+ artboards and account for **65% of every element drawn.**
+
+Ranked by how many *artboards* use a shape, not how many times it is drawn — a
+chip drawn forty times in one screen is that screen's list; a chip drawn once
+each in forty screens is the design system.
+
+| # | Boards | Uses | What it is | Built? |
+|---|---|---|---|---|
+| 3 | 75 | 174 | 34pt glass circle, blur 14 | ✅ `GlassCircleButton` |
+| 4 | 69 | 605 | `.5px` hairline | ✅ used throughout |
+| 5 | 68 | 116 | `700 10px`, `.11em`, uppercase | ✅ `SubjectKicker` (page) |
+| 6 | 63 | 80 | `26×2.5` rule | ✅ `SubjectKicker` (page) |
+| 7 | 62 | 77 | page wash, **380pt** | ✅ `subjectWash` default |
+| 10 · 12 | 41 · 38 | 176 | tab item, selected pill / plain | ⚪️ **iOS 26's own tab bar** — not ours |
+| 13 | 35 | 135 | radius 14 panel, `.5px` border | ✅ `SubjectStatStrip` ground |
+| 14 | 33 | 146 | `22×2.5` rule | ✅ `SubjectKicker` (card) |
+| 16 | 30 | **659** | `400 15px/1.3` body text | ✅ ambient |
+| 17 | 30 | 126 | `600 11px`, `.07em`, uppercase form heading | ❌ **form section header** |
+| 21 | 28 | 97 | `700 11px`, `.13em`, uppercase scope tab | ❌ **scope tab strip** |
+| 22 · 35 | 27 · 21 | 60 | 44pt bar, 14pt gutter | ✅ `SubjectScreenScaffold` |
+| 23 | 26 | **300** | row, `gap 10`, `padding 12×14` | ❌ **form row** |
+| 24 · 39 · 61 | 26 · 20 · 14 | 71 | `700 32px`, `-.02em` | ✅ `SubjectHeaderBlock` |
+| 25 | 24 | 127 | row, `gap 12`, `padding 11×14` | ❌ **hub row** |
+| 26 · 46 | 23 · 18 | 47 | **104pt** gradient header banner | ❌ **compact page header** |
+| 32 | 21 | 62 | `500 11px` monospace figure | ❌ **monospace figure** |
+| 41 | 19 | 111 | `700 9px`, `.11em` | ✅ `SubjectKicker` (compact) |
+| 45 · 52 | 18 · 14 | 295 | signal tray + its 22pt tiles | ✅ `WorkStatusIconGrid` |
+| 55 | 14 | 56 | `700 7.5px` rounded rating letter | ✅ inside the tray |
+| 58 | 14 | 17 | 36×5 sheet grabber | ⚪️ `.presentationDragIndicator` |
+
+Two findings worth more than the table. **Shape #7 says the wash is 380pt in 62
+artboards** — the `subjectWash` default is the spec's own number, and 1a's 620
+is the exception, not a guess. And **the two most-used unbuilt shapes are rows,
+not decoration**: #23 alone is 300 elements across 26 artboards, all of them in
+the form and settings screens of Phases 5, 6, 11 and 12. Those roughly fifty
+artboards are built from about six shapes.
+
 ### Measured tokens (converted from the spec's CSS)
 
 Do not re-derive these by eye from the canvas; they are already converted.
@@ -134,13 +182,58 @@ Do not re-derive these by eye from the canvas; they are already converted.
 
 ---
 
-## 2. Build order — by reachability
+## 2. Build order — parts first, then screens in reachability order
 
-The owner's instruction is to build **in order of reachability**: the five tab
-roots first, then what their rows push to, then sheets over those.
+**Changed 2026-09-10, at the owner's direction.** The original order was purely
+by reachability: tab roots, then what they push to, then sheets. That is still
+how *screens* get assembled, and the phase table below is unchanged. What comes
+before it is new.
+
+Build **every shared part first, then assemble screens out of them.** The reason
+is in §1a: 103 shapes account for 65% of the canvas, and going screen by screen
+means meeting them one at a time, in the order the screens happen to need them.
+Every screen built so far has turned up another part that should have existed
+already — `SubjectFieldLabel`, `pageBodyRow`, `panelGutter`,
+`kickerTrailingCount`, a warning figure colour — each obvious afterwards and
+none visible in advance. Discovering a part mid-screen also means designing it
+against one caller, which is how a shared component ends up with the first
+screen's assumptions baked into it.
+
+So the sequence is:
+
+1. **Count, don't guess.** `Scripts/redesign-spec-inventory.py` ranks shapes by
+   how many artboards use them. A shape in twenty artboards is a component; a
+   shape in one is that screen's own business and should stay there.
+2. **Check what already exists** before naming anything new.
+   `docs/ARCHITECTURE_MAP.md` and `UIComponents/` hold most of it, and two
+   entries in §1a's table turned out to be *the platform's* — the floating tab
+   bar in 41 artboards is iOS 26's own, and the sheet grabber in 14 is
+   `.presentationDragIndicator`. Neither is ours to build, and both looked like
+   major shared components until someone checked.
+3. **Build the part, with every caller in view.** `--signature N` lists every
+   artboard that uses a shape; read three or four of them before fixing the API,
+   so the shape of the type comes from the spread rather than from whichever
+   screen is being built today.
+4. **Then assemble screens**, in the reachability order below.
+
+### The parts still to build
+
+Ranked as §1a ranks them. Each unlocks far more than the screen that motivates
+it, which is the whole point of doing them first.
+
+| Part | Boards | Uses | Notes |
+|---|---|---|---|
+| **Form row** | 26 | 300 | `gap 10`, `padding 12×14`. Every filter, form and settings screen in Phases 5, 6, 11, 12. |
+| **Hub row** | 24 | 127 | `gap 12`, `padding 11×14`. The Account hub and its subsections. Close enough to the form row to be worth one type with two densities — read both before deciding. |
+| **Form section header** | 30 | 126 | `600 11px`, `.07em`, uppercase, `padding 20 4 8`. The heading over a group of form rows. Related to `SubjectFieldLabel` but not identical; check before adding a second. |
+| **Scope tab strip** | 28 | 97 | `700 11px`, `.13em`, uppercase — "Following / Posted / Saved". The hub screens' own segmented control. |
+| **Compact page header** | 23 | 47 | A **104pt** gradient banner, `padding 14 14 0`. Every Account subsection (`1o`–`1ac`) opens with it. This is Phase 6's shared header, and building it is most of Phase 6's layout. |
+| **Monospace figure** | 21 | 62 | `500 11px` `ui-monospace` — dates and counts at the trailing edge of a row. Probably a modifier, not a view. |
 
 Tabs are `home, library, browse, account, search` (`AppTab` in
 `App/AppRouter.swift`).
+
+### Assembly order (unchanged)
 
 | Phase | Screens (artboard ids) | Status |
 |---|---|---|
@@ -226,6 +319,8 @@ re-reviews settled work and nobody reviews their own.
 | `029eddb` | Claude | Outline tool reads unlabelled artboards; `Cell.tint` | unreviewed | **iOS build green.** |
 | `ed3eacb` | Claude | Stop `cardList()`'s backdrop hiding every wash | unreviewed | **Wants a non-Claude reviewer, and a screenshot.** Fixes a defect in five already-landed screens; see §3. Not compiled at time of writing, never seen. |
 | `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | **iOS build green** (10m29s). Not seen. |
+| `5a6a12e` | Claude | Serif summary; ON AO3 chips; `SubjectFieldLabel`; page row helpers | unreviewed | Build pending at time of writing. |
+| `f8c2ff6` | Claude | `redesign-spec-inventory.py` — rank shapes by artboard spread | unreviewed | Tooling; ran against the committed canvas. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
 
@@ -238,6 +333,35 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Parts before screens, and what counting the canvas showed
+
+**The owner redirected the approach mid-session:** build the shared elements
+first, then the screens, rather than discovering parts screen by screen. §2 now
+says so, and `Scripts/redesign-spec-inventory.py` (`f8c2ff6`) is what makes it
+actionable — it counts how many artboards use each element shape, so "shared"
+is a measurement rather than a judgement.
+
+Three things fell out of the first run that were not visible from any screen:
+
+1. **The two biggest unbuilt shapes are rows.** One padded row shape is drawn
+   300 times across 26 artboards, another 127 times across 24. Both live in the
+   form, filter and settings screens — Phases 5, 6, 11 and 12, roughly fifty
+   artboards, built from about six shapes between them. Nothing in the
+   screen-by-screen order would have reached them for a long time.
+2. **Two apparent components are the platform's.** The tab item in 41 artboards
+   is iOS 26's own floating tab bar, and the 36×5 grabber in 14 is
+   `.presentationDragIndicator`. Both ranked high enough to look like major
+   shared work; neither is ours. Checking what already exists — including what
+   the OS provides — belongs *before* naming a type, and is now step 2 of §2.
+3. **The wash default was right by measurement, not by luck.** 62 artboards
+   draw the page gradient at exactly 380pt, which is `subjectWash`'s default.
+   Artboard 1a's 620 is a genuine exception rather than a number someone
+   guessed.
+
+The general lesson matches the one two entries below: prefer the check that
+*measures* over the one that reasons. The spec is a data set, and it will answer
+questions about itself far more reliably than reading it will.
 
 ### 2026-09-10 — The wash was never drawing (Claude, `ed3eacb`)
 
@@ -327,7 +451,7 @@ work is being tracked.
 
 **Left on artboard 1a**, in the order the page runs: the summary in its serif
 face; the ON AO3 action chips (Kudos / Subscribe / Bookmark / Mark for Later);
-the tag clusters as `SubjectChip` groups under kicker labels; the grouped
+the tag clusters as `SubjectChip` groups under field labels; the grouped
 series/collection/publication card; the kudos·comments·bookmarks·hits strip; the
 two outline buttons; and the **My copy** row with the sheet it opens — which is
 screen 2 of the artboard, and is today's Library tab rearranged. The four-way
