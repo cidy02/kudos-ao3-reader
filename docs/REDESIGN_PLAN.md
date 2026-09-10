@@ -257,9 +257,8 @@ header, ledger rows, transparent title-less bar) and the chrome swap lands
 separately, **where someone with a simulator can check it**. Both modifiers
 exist; only the staged one is wired.
 
-**Still to do on these screens:** the filter chip rail. It needs
-`LibraryFilters.summaryLabels`, which does not exist yet —
-`AO3SearchFilters.summaryLabels()` is the precedent to mirror.
+**Still to do on these screens:** nothing — the filter chip rail landed in
+`3f9a5ab` with `LibraryFilters.summaryLabels`.
 
 ### 2026-09-10 — Phase 0: shared language (Claude, `9ee86ba`)
 
@@ -335,6 +334,32 @@ cached `Vendor/MuPDF.xcframework` but the script writes to `build-mupdf/` and
 installs nowhere, and the script redirects each slice's compiler output to its
 own log file, so a failure surfaced as a bare `exit code 2`. Both fixed here;
 the MuPDF `ios-sim` failure itself is still undiagnosed.
+
+---
+
+## 3b. Open decisions the spec and the code disagree about
+
+Where an artboard contradicts a *reasoned* decision already in the codebase,
+the artboard wins — it is the owner's design call — but the reasoning should be
+answered, not silently dropped. Anything in this list needs a human or a
+simulator, not another blind edit.
+
+### The paging control (spec 1k vs. `SearchPaginationBar`)
+
+Spec 1k replaces the page **scrubber** with a page **sheet**: "the number as a
+field, the ten nearby pages as tiles, and First / Last for the ends".
+
+`SearchPaginationBar`'s own doc comment argues the opposite case at length, and
+argues it well: a slider is how iOS moves through a long ordered set, "because a
+thumb travelling 300pt can address 5,000 pages and a row of pills cannot". Ten
+tiles cannot reach page 2,731 of 5,000 either — the field can, which is
+presumably why 1k puts one there.
+
+The pill itself already matches 1k (prev, a tappable position label, next). Only
+the sheet differs. **Not changed blind**: swapping a control whose rationale is
+written down, without being able to use either version, is how a considered
+decision gets lost to a mockup. Whoever has a simulator should build both and
+pick.
 
 ---
 
