@@ -41,9 +41,14 @@ the branch *compiles*, and an artifact means it links and packages.
 
 Verified so far:
 
-| Commit | iOS build | Artifact |
+| Commit | iOS build | Notes |
 |---|---|---|
-| `2d3696c` | ✅ green | `Kudos-unsigned-2d3696c…` (40 MB) |
+| `2d3696c` | ✅ green | First verified commit. Validates `SubjectSurface`, `SubjectScreen`, the Home hero, `SectionRuleHeader`. |
+| `3f9a5ab` | ✅ green | Validates `WorkRow.ledger`, `scopeHue`, `Color.hueComponent`, `WorkLedgerRow`, `LibraryFilters.summaryLabels`, the chip rail. |
+
+Builds are published to **[Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
+as a rolling per-branch pre-release tagged `build-<branch>`, and to each run's
+artifacts for per-commit history. See the README.
 
 What CI still does **not** cover:
 
@@ -132,7 +137,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **0** | Shared language + fixes to the foundation | ✅ done |
 | **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b`, `1ad`, `1ae`, `1af` done. `1ag` (Subscriptions) not started — it is the Account tab's list reached from Home, so it lands with Phase 6's `1p`. |
 | **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Left: Collections previewing four miniature works in ledger mode, and the Recently Deleted row. |
-| **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 row done, screen not |
+| **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 the row (Codex) and the results header, figure strip, sort control and chip rail are done. Left: the filter panel's own restyle (`1ao`–`1au`), the tag picker (`1av`/`1aw`), Save Search (`1ax`), and the paging switcher pill. |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | ⬜ |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | ⬜ |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | ⬜ |
@@ -190,12 +195,15 @@ re-reviews settled work and nobody reviews their own.
 | `37bfac2` | Claude | Pin MuPDF clone; `SubjectScreen.swift` scaffold + ledger row | unreviewed | MuPDF pin verified by building it in CI. |
 | `2d3696c` | Claude | Commit the canvas + outline tool; fix 3 compile errors in the new components | unreviewed | **iOS build green, IPA produced.** First verified commit on the branch. |
 | `493fca9` | Claude | Stop the IPA workflow cancelling its own runs | unreviewed | Superseded by `98d6006`. |
-| `835440d` | Claude | `WorkRow.ledger`; `scopeHue`; Home section pages | unreviewed | Build result pending at time of writing. |
-| `3f9a5ab` | Claude | `LibraryFilters.summaryLabels` + filter chip rail | unreviewed | Build result pending at time of writing. |
+| `835440d` | Claude | `WorkRow.ledger`; `scopeHue`; Home section pages | unreviewed | Compiles (via `3f9a5ab`). |
+| `3f9a5ab` | Claude | `LibraryFilters.summaryLabels` + filter chip rail | unreviewed | **iOS build green.** Validates the whole ledger-row layer. |
 | `aa56105` | Claude | Record CI as the compile gate in §0 | unreviewed | Doc only. |
 | `3d81236` | Claude | `SubjectChip.pill`; Library quick filters at spec metrics | unreviewed | Not compiled at time of writing. |
 | `98d6006` | Claude | Per-SHA concurrency so every commit gets an IPA | unreviewed | CI config. |
-| `3a5a0d6` | Claude | Library dashboard Shelves/Ledger (1c/1d); `providesNavigation` | unreviewed | Not compiled at time of writing. |
+| `3a5a0d6` | Claude | Library dashboard Shelves/Ledger (1c/1d); `providesNavigation` | unreviewed | Build pending at time of writing. |
+| `bf17bcb` | Claude | README: where to find the IPAs | unreviewed | Doc only. |
+| `19a0c61` | Claude | Publish the IPA to Releases, not just artifacts | unreviewed | Release step unverified at time of writing. |
+| `388d246` | Claude | Search results header, artboard 1k | unreviewed | Build pending at time of writing. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
