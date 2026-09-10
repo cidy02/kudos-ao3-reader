@@ -66,10 +66,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @State private var refreshedPublished: String?
     @State private var resolvedExisting = false
 
-    /// The selected top-level section. Plain view state, like Account's
-    /// `selectedTab`: it survives child pushes (the root view stays alive) and
-    /// deliberately resets on a fresh open rather than persisting globally.
-    @State var selectedTab: WorkDetailTab = .overview
+    /// Drives artboard 1a screen 2 — everything this device holds about the
+    /// work, behind the My copy row at the foot of the page.
+    @State var showingMyCopy = false
     /// Long summaries start collapsed; this is the Show More toggle.
     @State var summaryExpanded = false
 
@@ -131,18 +130,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     var body: some View {
         List {
             heroSection
-            sectionPickerSection
             statusSection
-            switch selectedTab {
-            case .overview:
-                overviewSections
-            case .tags:
-                tagSections
-            case .discussion:
-                discussionSections
-            case .library:
-                librarySections
-            }
+            pageSections
         }
         .cardList()
         // Spec 1a washes the page in the work's own hue and runs it 620pt down,
@@ -186,6 +175,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         .sheet(isPresented: $showingAddToQueue) {
             if let work = localWork { AddToQueueView(work: work) }
         }
+        .sheet(isPresented: $showingMyCopy) { myCopySheet }
         .sheet(isPresented: $showingSeriesQueuePrompt) {
             if let seriesPrompt {
                 SeriesPreservationPromptSheet(
@@ -291,40 +281,29 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         return work.readingProgress ?? 0
     }
 
-    private var sectionPickerSection: some View {
-        Section {
-            sectionPicker
-                .accountControlCardRow()
-        }
-    }
-
-    /// The four-segment section control. A native `.segmented` picker caps its
-    /// labels' Dynamic Type scaling rather than reflowing, so at accessibility
-    /// sizes four words ("Overview"/"Discussion"/…) become unreadably clipped
-    /// (runtime-confirmed, HIG review §5). At those sizes fall back to a `.menu`
-    /// picker — the same `dynamicTypeSize.isAccessibilitySize` reflow idiom
-    /// `WorkDetailOverviewSections.quickActionColumns` uses — which keeps every
-    /// label at full size behind a compact tappable row. The picker's content is
-    /// built once so the two styles can't drift.
-    ///
-    /// Both branches keep `.labelsHidden()`: "Work Details Section" is an
-    /// accessibility/identity string, not product copy, and a `.menu` picker
-    /// renders its label as a visible leading title — so dropping the modifier on
-    /// that branch alone would surface internal naming to anyone running an
-    /// accessibility text size. `.labelsHidden()` only hides the label visually;
-    /// VoiceOver still announces it, and the menu still shows the selected tab as
-    /// its value, matching the segmented control's information density.
+    /// Artboard 1a is one continuous page, so this is the whole of it below the
+    /// identity block. Two `Group`s because a `ViewBuilder` takes ten children
+    /// and the page has eleven blocks — the split is arbitrary and the order is
+    /// the artboard's.
     @ViewBuilder
-    private var sectionPicker: some View {
-        let picker = Picker("Work Details Section", selection: $selectedTab) {
-            ForEach(WorkDetailTab.allCases) { tab in
-                Text(tab.rawValue).tag(tab)
-            }
+    private var pageSections: some View {
+        Group {
+            summarySection
+            ao3ActionsSection
+            tagSections
+            quickActionsSection
+            factsCardSection
         }
-        if dynamicTypeSize.isAccessibilitySize {
-            picker.pickerStyle(.menu).labelsHidden()
-        } else {
-            picker.pickerStyle(.segmented).labelsHidden()
+        Group {
+            archiveStatsSection
+            commentsSection
+            pageActionsSection
+            seriesSection
+            // Local-only: a remote work has no origin to report and nothing converted.
+            if let work = localWork {
+                WorkProvenanceSections(work: work)
+            }
+            myCopySection
         }
     }
 
@@ -368,6 +347,35 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 .cardRow()
             }
         }
+    }
+
+    /// Artboard 1a screen 2. The spec draws it as a sheet over the dimmed page,
+    /// titled "My copy · Private to this device" — the distinction the whole
+    /// screen turns on, since everything above it on the page is AO3's and
+    /// everything in here is this device's.
+    ///
+    /// Its content is `librarySections`, unchanged. That was the Library tab a
+    /// moment ago and it is the same set of facts and actions the artboard
+    /// lists; moving it behind a row rather than a segment is the change, and
+    /// rewriting it at the same time would have made both harder to review.
+    private var myCopySheet: some View {
+        NavigationStack {
+            List { librarySections }
+                .cardList()
+                .subjectScreenWash(palette: workPalette, washHeight: 220)
+                .navigationTitle("My copy")
+            #if !os(macOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showingMyCopy = false }
+                    }
+                }
+        }
+        #if !os(macOS)
+        .presentationDragIndicator(.visible)
+        #endif
     }
 
     // MARK: - Toolbar (favorite + more)

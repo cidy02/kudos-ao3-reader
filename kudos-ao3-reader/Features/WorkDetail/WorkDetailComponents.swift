@@ -15,17 +15,6 @@ import SwiftUI
 // `WorkDetailIdentityBlock.swift` when it took artboard 1a's treatment: it is
 // no longer a card, so it no longer belongs in a file about card chrome.
 
-/// The four top-level Work Details sections, mirroring Account's
-/// Overview / Reading / Writing / Activity segmented control.
-enum WorkDetailTab: String, CaseIterable, Identifiable {
-    case overview = "Overview"
-    case tags = "Tags"
-    case discussion = "Discussion"
-    case library = "Library"
-
-    var id: String { rawValue }
-}
-
 /// One state-aware shortcut tile for the Overview quick-action grid. Same card
 /// chrome as `AccountShortcutGridTile`; `detail` carries the current state
 /// ("In 2 Queues"), and `isBusy` swaps the glyph for a spinner while a

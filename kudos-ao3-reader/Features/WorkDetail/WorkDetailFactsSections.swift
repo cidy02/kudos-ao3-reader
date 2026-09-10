@@ -156,7 +156,7 @@ extension WorkDetailView {
                 label: "Comments",
                 isHighlighted: true,
                 accessibilityText: "Comments, " + printed + ", opens the discussion",
-                action: { withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .discussion } }
+                action: { workActions.startViewingComments(context: commentsWorkContext) }
             ))
         } else if let comments = displayComments {
             cells.append(SubjectStatStrip.Cell(
@@ -219,7 +219,7 @@ extension WorkDetailView {
                         tagCount: work.tags.count,
                         collectionCount: work.collections.count
                     ),
-                    action: { withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .library } }
+                    action: { showingMyCopy = true }
                 )
                 .pageBodyRow(top: 10)
             }

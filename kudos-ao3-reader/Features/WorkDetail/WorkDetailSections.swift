@@ -105,66 +105,63 @@ extension WorkDetailView {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Discussion section
+    // MARK: - Comments
 
+    /// The ways into the discussion, as a labelled group of form rows.
+    ///
+    /// Artboard 1a offers only the accented COMMENTS cell in its tally strip,
+    /// and that cell is wired — but it is one way in, and this screen has three.
+    /// Chapter comments and Write a Comment are reachable from nowhere else on
+    /// the page, so dropping them to match a mock would be exactly the
+    /// scanability regression `AGENTS.md` forbids.
+    ///
+    /// The links stay value-based. A destination-based `NavigationLink` would
+    /// sit outside the stack's path and be discarded by the author-byline push
+    /// made from inside Comments — see `AO3CommentsRoute`.
     @ViewBuilder
-    var discussionSections: some View {
+    var commentsSection: some View {
         if let id = ao3WorkID {
             Section {
-                Group {
-                    // Value-based, not `NavigationLink { CommentsView(…) }`: a
-                    // destination-based link would sit outside the stack's path and be
-                    // discarded by the author-byline push made from inside Comments.
-                    // See `AO3CommentsRoute`.
-                    NavigationLink(
-                        value: AO3CommentsRoute(workID: id, context: commentsWorkContext)
-                    ) {
-                        HStack {
-                            Label("All Comments", systemImage: "bubble.left.and.bubble.right")
-                            Spacer()
-                            if let comments = displayComments {
-                                Text(comments.formatted())
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                        }
-                    }
-                    .accessibilityValue(displayComments.map { "\($0.formatted()) comments" } ?? "")
+                VStack(alignment: .leading, spacing: 9) {
+                    SubjectFieldLabel(text: "Comments", style: .formGroup)
 
-                    // A single-chapter work has no per-chapter view worth opening;
-                    // unknown totals ("5/?") keep the entry available.
-                    if SavedWork.totalChapterCount(from: displayChapters) != 1 {
-                        NavigationLink(
-                            value: AO3CommentsRoute(
-                                workID: id, context: commentsWorkContext,
-                                focusesChapter: true
+                    VStack(spacing: 0) {
+                        NavigationLink(value: AO3CommentsRoute(workID: id, context: commentsWorkContext)) {
+                            SubjectFormRow(
+                                label: "All comments",
+                                value: displayComments.map { $0.formatted() } ?? "",
+                                showsDisclosure: true
                             )
-                        ) {
-                            Label("Chapter Comments", systemImage: "book")
                         }
-                    }
+                        .buttonStyle(.plain)
 
-                    NavigationLink(
-                        value: AO3CommentsRoute(
-                            workID: id, context: commentsWorkContext,
-                            composes: true
-                        )
-                    ) {
-                        Label("Write a Comment", systemImage: "pencil")
+                        // A single-chapter work has no per-chapter view worth
+                        // opening; unknown totals ("5/?") keep the entry.
+                        if SavedWork.totalChapterCount(from: displayChapters) != 1 {
+                            SubjectRowSeparator()
+                            NavigationLink(value: AO3CommentsRoute(
+                                workID: id, context: commentsWorkContext, focusesChapter: true
+                            )) {
+                                SubjectFormRow(label: "Chapter comments", value: "", showsDisclosure: true)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        SubjectRowSeparator()
+                        NavigationLink(value: AO3CommentsRoute(
+                            workID: id, context: commentsWorkContext, composes: true
+                        )) {
+                            SubjectFormRow(label: "Write a comment", value: "", showsDisclosure: true)
+                        }
+                        .buttonStyle(.plain)
                     }
+                    .subjectPanel()
+
+                    Text("Comment pages load when you open them; nothing is fetched in advance.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
-                .cardRow()
-            } header: {
-                Text("Comments")
-            } footer: {
-                Text("Comment pages load when you open them; nothing is fetched in advance.")
-            }
-        } else {
-            Section {
-                Text("This work isn't linked to AO3, so its comments aren't available here.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .cardRow()
+                .pageBodyRow(top: 24)
             }
         }
     }

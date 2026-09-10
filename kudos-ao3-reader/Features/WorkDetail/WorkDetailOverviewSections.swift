@@ -207,7 +207,7 @@ extension WorkDetailView {
             systemImage: "bubble.left.and.bubble.right",
             detail: displayComments.map { $0.formatted() }
         ) {
-            withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .discussion }
+            workActions.startViewingComments(context: commentsWorkContext)
         }
     }
 
