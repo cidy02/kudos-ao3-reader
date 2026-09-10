@@ -30,6 +30,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Query(filter: #Predicate<SavedWork> { $0.isPendingDeletion }) private var deletedWorks: [SavedWork]
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
     @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
+    /// Shelves or ledger, for the whole dashboard — artboards 1c and 1d. One key
+    /// for the page rather than one per section: the spec draws this as a single
+    /// decision about how the page reads, and a page half in each mode is
+    /// neither of them.
+    @AppStorage("library.dashboard.layout") private var dashboardLayout: WorkSectionLayout = .shelves
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -373,6 +378,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
             hasItems: !sectionWorks.isEmpty,
+            layout: dashboardLayout,
             onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
@@ -397,6 +403,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
             hasItems: hasItems || showSkeleton,
+            layout: dashboardLayout,
             onSeeAll: hasItems ? { path.append(kind) } : nil
         ) {
             if showSkeleton {
@@ -590,6 +597,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                                     Label("Select", systemImage: "checklist")
                                 }
                             }
+                            // Spec 1c puts the layout choice in the "…" rather
+                            // than on the page: it is set once and then lived
+                            // with, unlike Filters, which is changed constantly
+                            // and keeps its own button.
+                            Picker("Layout", selection: $dashboardLayout) {
+                                ForEach(WorkSectionLayout.allCases, id: \.self) { layout in
+                                    Label(layout.title, systemImage: layout.symbol).tag(layout)
+                                }
+                            }
                         })
                         : nil
                 ].compactMap { $0 })
@@ -709,6 +725,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     @ViewBuilder
     private func localCarouselCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
+        switch dashboardLayout {
+        case .shelves: localCoverCard(work: work, footer: footer, progress: progress)
+        case .ledger: localLedgerRow(work: work)
+        }
+    }
+
+    @ViewBuilder
+    private func localCoverCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
         if isSelecting {
             SensitiveWorkCoverCard(
                 work: work,
@@ -726,6 +750,48 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         }
+    }
+
+    /// Artboard 1d's row. `footer` and `progress` are dropped deliberately: the
+    /// ledger row carries the reading ring itself, from the work's own state, so
+    /// a section's per-card footer ("+2 new", "Ch 3") has nowhere to sit and
+    /// nothing to add — 1d prints the same row in every section.
+    ///
+    /// The row paints its own wash here, unlike in a `List`, because a dashboard
+    /// section is a `VStack` with no row background to hand the job to.
+    @ViewBuilder
+    private func localLedgerRow(work: SavedWork) -> some View {
+        let row = SensitiveWorkRow(
+            work: work,
+            openMode: .reader,
+            onSelect: selectAction(for: work),
+            isSelecting: isSelecting,
+            isSelected: selection.contains(work.id),
+            onToggleSelection: { toggleSelection(work) },
+            presentation: .ledger,
+            providesNavigation: false
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 15)
+        .background(ledgerRowBackground(for: work))
+
+        if isSelecting {
+            row
+        } else {
+            NavigationLink(value: LocalWorkDestination.reader(work)) { row }
+                .buttonStyle(.plain)
+        }
+    }
+
+    private func ledgerRowBackground(for work: SavedWork) -> some View {
+        let palette = themeManager.appTheme.subjectPalette(
+            hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+        )
+        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+        return rowShape
+            .fill(themeManager.appTheme.cardSurface)
+            .overlay(rowShape.fill(palette.rowWash))
+            .overlay(rowShape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
     }
 
     private func toggleSelection(_ work: SavedWork) {
