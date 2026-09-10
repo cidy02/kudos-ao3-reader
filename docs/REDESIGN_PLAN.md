@@ -53,6 +53,7 @@ Verified so far:
 | `d4f64b8` | ✅ green | Restored `CategoryStats.clusterFandoms`. Validates Browse's panels **and** Account's header in one run. |
 | `0abc06f` | ✅ green | The build stamp (`CURRENT_PROJECT_VERSION`, `KudosBuildCommit`) and About reading it. |
 | `029eddb` | ✅ green | `SubjectStatStrip.Cell.tint`. |
+| `d74cc7e` | ✅ green | Work Detail's artboard-1a identity block, and the `cardList()` wash fix under it. 10m29s — an ordinary run, whatever §3 says was read off a stale API response. |
 
 Builds are published to **[Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
 as a rolling per-branch pre-release tagged `build-<branch>`, and to each run's
@@ -223,7 +224,8 @@ re-reviews settled work and nobody reviews their own.
 | `0abc06f` | Claude | Build stamp in `CURRENT_PROJECT_VERSION` + About | unreviewed | **iOS build green.** |
 | `029eddb` | Claude | Outline tool reads unlabelled artboards; `Cell.tint` | unreviewed | **iOS build green.** |
 | `ed3eacb` | Claude | Stop `cardList()`'s backdrop hiding every wash | unreviewed | **Wants a non-Claude reviewer, and a screenshot.** Fixes a defect in five already-landed screens; see §3. Not compiled at time of writing, never seen. |
-| `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | Not compiled at time of writing. Not seen. |
+| `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | **iOS build green** (10m29s). Not seen. |
+| `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | Behaviour-neutral. **Its commit message states a false reason** — see `2f39a0d` and §3. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -416,6 +418,20 @@ thorough:
    and did once that was tried.
 4. **Brace and `#if` balance checks.** Cheap, and they catch a truncated edit —
    but they are structural only. They cannot see a missing *member*.
+
+**And one anti-pattern, which cost a commit message that says something false.**
+Polling a run's job list can serve a cached response: the `steps` array keeps
+saying `in_progress` long after the job has finished. Four polls in a row
+returned byte-identical data — including an `updated_at` frozen at the second
+the job *started* — and that was read as "the build is still going" rather than
+as "this response has not changed". A build that had taken 10m29s and gone green
+was written up in `5ea4e0e` as having ground for half an hour.
+
+So: **judge elapsed time from timestamps, not from repeated identical
+responses.** A run's `created_at` and `updated_at` are in every reply; if
+`updated_at` is not advancing, the response is stale, not the build. Reading the
+*run* (`list_workflow_runs`) rather than its jobs gave the true state
+immediately.
 
 **The trap that cost a build:** mid-refactor, an insertion landed at the wrong
 anchor, and `git checkout -- <file>` was used to recover. That reverts the whole
