@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="csrf-token" content="draft-csrf==">
+  <title>Post New Work</title>
+</head>
+<body>
+<div id="main">
+  <h2 class="heading">Post New Work</h2>
+  <form action="/works" method="post" id="work-form" class="verbose post work">
+    <input type="hidden" name="authenticity_token" value="draft-csrf==">
+    <select name="work[rating_string]" id="work_rating_string">
+      <option value="" selected="selected">Please select a rating</option>
+      <option value="General Audiences">General Audiences</option>
+    </select>
+    <input type="checkbox" name="work[archive_warning_strings][]" value="Choose Not To Use Archive Warnings">
+    <input type="text" name="work[fandom_string]" id="work_fandom" value="">
+    <input type="text" name="work[title]" id="work_title" value="">
+    <select id="work_language_id" name="work[language_id]">
+      <option value="">Please select a language</option>
+      <option value="1">English</option>
+    </select>
+    <textarea name="work[chapter_attributes][content]" id="content"></textarea>
+    <ul class="actions">
+      <li><input type="submit" name="save_button" value="Save As Draft"></li>
+      <li><input type="submit" name="preview_button" value="Preview"></li>
+      <li><input type="submit" name="post_button" value="Post"></li>
+    </ul>
+  </form>
+</div>
+</body>
+</html>

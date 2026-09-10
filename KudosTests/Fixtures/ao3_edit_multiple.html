@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="csrf-token" content="bulk-csrf==">
+  <title>Edit Multiple Works</title>
+</head>
+<body>
+<div id="main">
+  <h2 class="heading">Edit Multiple Works</h2>
+  <p class="caution notice">Your edits will be applied to all of the following works:</p>
+  <ul>
+    <li class="work"><a href="/works/11">The Weight of Water</a></li>
+    <li class="work"><a href="/works/22">Salt and Static</a></li>
+    <li class="work"><a href="/works/33">Long Way from Home</a></li>
+  </ul>
+  <form class="verbose post" action="/users/tester/works/update_multiple" method="post">
+    <input type="hidden" name="_method" value="patch">
+    <input type="hidden" name="authenticity_token" value="bulk-csrf==">
+    <input type="hidden" name="work_ids[]" value="11">
+    <input type="hidden" name="work_ids[]" value="22">
+    <input type="hidden" name="work_ids[]" value="33">
+    <select name="work[rating_string]" id="work_rating_string">
+      <option value="" selected="selected"></option>
+      <option value="General Audiences">General Audiences</option>
+      <option value="Explicit">Explicit</option>
+    </select>
+    <input type="checkbox" name="work[archive_warning_strings][]" value="Choose Not To Use Archive Warnings">
+    <input type="checkbox" name="work[archive_warning_strings][]" value="No Archive Warnings Apply">
+    <input type="text" name="work[fandom_string]" value="">
+    <input type="text" name="work[relationship_string]" value="">
+    <input type="text" name="work[character_string]" value="">
+    <input type="text" name="work[freeform_string]" value="">
+    <select name="work[language_id]" id="work_language_id">
+      <option value="" selected="selected"></option>
+      <option value="1">English</option>
+      <option value="2">Español</option>
+    </select>
+    <input type="text" name="work[collections_to_add]" value="">
+    <input type="checkbox" name="work[collections_to_remove][]" value="old_bang" id="remove_old_bang">
+    <label for="remove_old_bang">Old Bang</label>
+    <p class="caution notice">If you leave a field blank it will remain unchanged. Rating and language overwrite.</p>
+    <p class="submit actions"><input type="submit" name="commit" value="Update All Works"></p>
+  </form>
+</div>
+</body>
+</html>
