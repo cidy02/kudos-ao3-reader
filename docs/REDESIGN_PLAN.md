@@ -627,6 +627,15 @@ thorough:
    that have actually reddened this branch. Ten minutes of CI is the right price
    for a type error and much too high for a stray brace.
 
+   **The trap it cannot see, and this branch keeps setting.** Every screen here
+   splits its view code across several files by convention, and `private` in
+   Swift is *file*-scoped. A block declared `private` in one extension file is
+   invisible to an assembling property in another, and the parser has no opinion
+   about it. `cc5a890` failed on exactly this, four times in one go, the first
+   time a page was assembled from blocks living in four files. If you write a
+   property that names blocks from more than one file, none of them can be
+   private — and the helpers *inside* each block still should be.
+
    No Swift toolchain can be installed here — `download.swift.org` is refused by
    the environment's proxy policy, and Ubuntu's `swift` package is OpenStack's
    object store, not the language. A parser from pypi is as close as this
