@@ -211,7 +211,9 @@ re-reviews settled work and nobody reviews their own.
 | `7481229` | Claude | Page sheet, artboard 1k, replacing the scrubber | unreviewed | **iOS build green**, and the release published from this run. |
 | `7aaa16a` | Claude | `paths-ignore` so prose commits skip the build | unreviewed | Confirmed working: a doc-only commit triggered no run. |
 | `98d6006` | Claude | Per-SHA concurrency so every commit gets an IPA | unreviewed | CI config. |
-| `d99594d` | Claude | Browse, artboard 1g: category panels + fandom clusters; remove `MasonryLayout` | unreviewed | Largest refactor on the branch. Build pending at time of writing. |
+| `d99594d` | Claude | Browse, artboard 1g: category panels + fandom clusters; remove `MasonryLayout` | unreviewed | ❌ Build failed — half the change was lost to a `git checkout` recovery. Fixed in `d4f64b8`. |
+| `cf58139` | Claude | Account, artboard 1m: username as the page title, accent wash | unreviewed | Build pending at time of writing. |
+| `d4f64b8` | Claude | Restore `CategoryStats.clusterFandoms` | unreviewed | Fixes `d99594d`. Build pending at time of writing. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -293,6 +295,32 @@ at 160/96pt, two stat blocks, narrow chips. It now sits in a full-width panel,
 so it previews the right *structure* (it follows the panel stack) but at
 column-width proportions. Not a bug, and deliberately not gold-plated: it is a
 loading placeholder, and several screens are still unbuilt.
+
+### Working from a container with no compiler: what actually catches errors
+
+Ranked by what has caught real defects on this branch, not by what feels
+thorough:
+
+1. **CI.** It has caught things nothing else could, and it is the only gate that
+   is not guesswork. Budget ~8 minutes a round trip and push early.
+2. **Re-reading your own diff before committing.** Three certain compile errors
+   in `2d3696c` were found this way. `git diff` the *whole* change, not the file
+   you just touched — see below.
+3. **Running the thing.** The release step passed `bash -n` and still failed on
+   the runner; executing it against a stub `gh` would have caught it in seconds,
+   and did once that was tried.
+4. **Brace and `#if` balance checks.** Cheap, and they catch a truncated edit —
+   but they are structural only. They cannot see a missing *member*.
+
+**The trap that cost a build:** mid-refactor, an insertion landed at the wrong
+anchor, and `git checkout -- <file>` was used to recover. That reverts the whole
+file, silently discarding every *other* edit in it — in this case the
+`CategoryStats.clusterFandoms` derivation the new view depended on. Braces still
+balanced. The nine resulting errors all cascaded from one missing member.
+
+So: **after a multi-step edit to one file, read `git diff` for that file end to
+end before committing.** A revert-and-reapply is exactly when a half-applied
+change looks finished.
 
 ### A CI trap worth not repeating
 
