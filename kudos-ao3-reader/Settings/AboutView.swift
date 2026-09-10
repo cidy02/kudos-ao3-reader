@@ -110,9 +110,29 @@ struct AboutView: View {
         .padding(.vertical, 2)
     }
 
+    /// Marketing version, build number, and — on a build made by
+    /// `Scripts/build-unsigned-ipa.sh` — the commit and branch it came from.
+    ///
+    /// The commit matters for sideloaded builds specifically. The committed
+    /// project pins `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`, so every
+    /// build called itself "1.0 (1)" and installing a newer IPA over an older
+    /// one was indistinguishable from installing nothing — which is exactly the
+    /// question someone testing a branch build needs answered. The build script
+    /// writes `KudosBuildCommit` / `KudosBuildBranch` into the bundle; a build
+    /// made any other way simply has neither, and this falls back to the pair
+    /// it always showed.
     static var versionString: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-        return "\(version) (\(build))"
+        var described = "\(version) (\(build))"
+        if let commit = Bundle.main.object(forInfoDictionaryKey: "KudosBuildCommit") as? String,
+           !commit.isEmpty {
+            described += " · \(commit)"
+        }
+        if let branch = Bundle.main.object(forInfoDictionaryKey: "KudosBuildBranch") as? String,
+           !branch.isEmpty, branch != "main" {
+            described += " · \(branch)"
+        }
+        return described
     }
 }
