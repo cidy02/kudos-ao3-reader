@@ -195,6 +195,9 @@ struct ReadiumReaderView: View {
     // successful action, which is honest and exactly what was asked for.
     @State private var kudosWorking = false
     @State private var kudosBanner: String?
+    /// Snapshot at session start so a reopen of an already-finished work does
+    /// not count as another finishing session.
+    @State private var finishedWhenSessionStarted = false
 
     private var isPhone: Bool {
         UIDevice.current.userInterfaceIdiom == .phone
@@ -451,6 +454,10 @@ struct ReadiumReaderView: View {
                 guard !book.isLocatorIngestionBlocked else { return }
                 syncSliderFromPosition(newValue)
             }
+            .onAppear {
+                finishedWhenSessionStarted = work.isFinished
+                ReadingLogService.startSession(for: work, now: Date())
+            }
             .onChange(of: scenePhase) { _, phase in
                 // Force-quit safety: flush when leaving the foreground so a
                 // debounced window can't lose the last settle.
@@ -460,8 +467,11 @@ struct ReadiumReaderView: View {
                 switch phase {
                 case .background:
                     flushProgress(shelfStamp: true)
+                    ReadingLogService.pauseSession(for: work, now: Date())
                 case .inactive:
                     flushProgress(shelfStamp: false)
+                case .active:
+                    ReadingLogService.resumeSession(for: work, now: Date())
                 default:
                     break
                 }
@@ -478,6 +488,11 @@ struct ReadiumReaderView: View {
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
+                ReadingLogService.endSession(
+                    for: work,
+                    now: Date(),
+                    didFinish: work.isFinished && !finishedWhenSessionStarted
+                )
                 WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
                 try? modelContext.save()
                 scheduleFolderSyncOnReaderClose()

@@ -82,6 +82,9 @@ extension KudosBackupService {
         readingQueues: [ReadingQueue],
         annotations: [ReadingAnnotation] = [],
         savedSearches: [SavedSearch] = [],
+        readingSessions: [ReadingSession] = [],
+        readingFavorites: [ReadingFavorite] = [],
+        fandomReadWatermarks: [FandomReadWatermark] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupExportPlan {
@@ -96,6 +99,9 @@ extension KudosBackupService {
             readingQueueMemberships: queueMemberships,
             annotations: annotations.compactMap(KudosBackupAnnotation.init),
             savedSearches: savedSearches.map(KudosBackupSavedSearch.init),
+            readingSessions: readingSessions.map(KudosBackupReadingSession.init),
+            readingFavorites: readingFavorites.map(KudosBackupReadingFavorite.init),
+            fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)

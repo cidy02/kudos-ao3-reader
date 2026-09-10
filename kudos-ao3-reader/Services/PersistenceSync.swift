@@ -408,6 +408,47 @@ enum SyncTombstones {
         )
     }
 
+    static func recordDeletion(of session: ReadingSession, in context: ModelContext) {
+        insertSigned(
+            SyncTombstone(
+                recordID: session.id,
+                recordType: .readingSession,
+                sourceURL: session.sourceURL,
+                ao3WorkID: session.ao3WorkID,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "readingSessionDeleted"
+            ),
+            in: context
+        )
+    }
+
+    static func recordDeletion(of favorite: ReadingFavorite, in context: ModelContext) {
+        insertSigned(
+            SyncTombstone(
+                recordID: favorite.id,
+                recordType: .readingFavorite,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "readingFavoriteDeleted"
+            ),
+            in: context
+        )
+    }
+
+    static func recordDeletion(of watermark: FandomReadWatermark, in context: ModelContext) {
+        insertSigned(
+            SyncTombstone(
+                recordID: watermark.id,
+                recordType: .fandomReadWatermark,
+                createdAt: TombstoneSigning.now(),
+                deletedOnDeviceID: PersistenceDevice.currentID(),
+                deletionReason: "fandomReadWatermarkDeleted"
+            ),
+            in: context
+        )
+    }
+
     /// Records that `work` was explicitly removed from `collection`, so a stale sync
     /// file (an older manifest that still lists this work in the collection) can't
     /// silently re-add it on the next merge — the same class of bug tombstones already

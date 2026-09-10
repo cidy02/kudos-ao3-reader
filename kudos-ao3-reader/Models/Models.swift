@@ -55,6 +55,15 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// A named AO3 search the user deleted. Same immediate-delete class as
     /// `.bookmark` and `.readingAnnotation` — no recovery window, no RD UI.
     case savedSearch
+    /// A reading-history row the user swiped away (1ah). Immediate hard-delete;
+    /// no Recently Deleted. History outlives the EPUB, so deleting the work
+    /// does not mint this — only deleting the session itself does.
+    case readingSession
+    /// A local star (work / author / fandom / tag) the user removed. Never an
+    /// AO3 write. Same immediate-delete class as `.savedSearch`.
+    case readingFavorite
+    /// A per-fandom last-visited watermark the user (or replace-mode) removed.
+    case fandomReadWatermark
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat
@@ -179,6 +188,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// Whether the user has finished reading. When finished and not kept
     /// (`isProtected == false`), the EPUB is freed and the work becomes history.
     var isFinished: Bool = false
+
+    /// 1ai Abandoned is derived (mid-way and untouched past a threshold).
+    /// Setting this true is the undo: the threshold must not re-abandon it.
+    var keepInProgressOverride: Bool = false
 
     /// Whether the EPUB is currently on disk. False = a history entry whose file
     /// was freed; revisiting re-downloads it.
@@ -541,7 +554,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// and progress-merge timestamp only. Deliberately does **not** rewrite
     /// `lastReadDate` (Home/Library shelf order) or `lastModifiedAt` (ContentView's
     /// folder-sync change token), so scrolled-mode settles don't thrash still-mounted
-    /// `@Query` sorts or reschedule a full library sync on every tick.
+    /// `@Query` sorts or reschedule a full library sync on every tick. Also does
+    /// **not** write a `ReadingSession` — sessions start/end on reader
+    /// appear/disappear (`ReadingLogService`), not on mid-scroll ticks.
     func applyDebouncedReadiumLocator(_ locator: String, at date: Date = Date()) {
         readiumLocator = locator
         progressModifiedAt = date
