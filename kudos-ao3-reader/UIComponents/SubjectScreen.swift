@@ -33,8 +33,6 @@ struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content:
     @ViewBuilder var trailingChrome: () -> TrailingChrome
     @ViewBuilder var content: () -> Content
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -54,21 +52,110 @@ struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content:
             // reserves 96–130pt at the bottom of every one of these screens.
             .padding(.bottom, 110)
         }
-        .safeAreaInset(edge: .top, spacing: 0) { floatingChromeRow }
-        .subjectWash(palette, height: washHeight)
-        .hidesFloatingTabBar()
-        .hidesSystemNavigationBar()
-        .reinstatesBackSwipe { dismiss() }
+        .subjectScreenChrome(
+            palette: palette,
+            washHeight: washHeight,
+            leading: leadingChrome,
+            trailing: trailingChrome
+        )
+    }
+}
+
+/// The chrome half of the scaffold, separated from its container so a screen
+/// that must stay a `List` can have it too.
+///
+/// This matters more than it looks: `List` is what gives a row its swipe
+/// actions, and the spec puts swipe actions on rows in 1ah, 1ai, 1bg, 1bj and
+/// 1u. A `ScrollView` cannot offer them, so those screens keep their `List` and
+/// reach for this modifier, while the simpler ones use `SubjectScreenScaffold`
+/// and get a `ScrollView` for free.
+private struct SubjectScreenChrome<Leading: View, Trailing: View>: ViewModifier {
+    let palette: SubjectPalette
+    let washHeight: CGFloat
+    @ViewBuilder var leading: () -> Leading
+    @ViewBuilder var trailing: () -> Trailing
+
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .top, spacing: 0) {
+                HStack(spacing: 9) {
+                    leading()
+                    Spacer(minLength: 8)
+                    trailing()
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+            }
+            .subjectWash(palette, height: washHeight)
+            .hidesFloatingTabBar()
+            .hidesSystemNavigationBar()
+            .reinstatesBackSwipe { dismiss() }
+    }
+}
+
+/// The wash and header without the chrome swap: a transparent inline navigation
+/// bar is kept, so the screen's existing toolbar items (filter, overflow, Select
+/// All) stay exactly where they are and keep working.
+///
+/// This is the *staged* form of the redesign for a pushed screen. Spec 1ad and
+/// friends replace the navigation bar outright with floating glass circles, and
+/// `subjectScreenChrome` does that — but it also takes every `.toolbar` item on
+/// the screen with it, so a screen has to move its controls into the floating row
+/// in the same change. Screens adopt this first (wash, header block, ledger
+/// rows), and the chrome swap lands separately, where it can be checked on a
+/// device.
+private struct SubjectScreenWash: ViewModifier {
+    let palette: SubjectPalette
+    let washHeight: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .subjectWash(palette, height: washHeight)
+            .hidesFloatingTabBar()
+            .hidesNavigationBarChrome()
+    }
+}
+
+extension View {
+    /// Wash plus a transparent, title-less navigation bar. Keeps the bar's own
+    /// items; see `SubjectScreenWash` for why that is worth a second modifier.
+    func subjectScreenWash(palette: SubjectPalette, washHeight: CGFloat = 380) -> some View {
+        modifier(SubjectScreenWash(palette: palette, washHeight: washHeight))
     }
 
-    private var floatingChromeRow: some View {
-        HStack(spacing: 9) {
-            leadingChrome()
-            Spacer(minLength: 8)
-            trailingChrome()
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 44)
+    /// Empties the navigation bar's title and background so the wash shows
+    /// through it, without hiding the bar (and with it, the screen's toolbar).
+    /// The page states its own name in `SubjectHeaderBlock` underneath.
+    func hidesNavigationBarChrome() -> some View {
+        #if os(iOS)
+        navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+        #else
+        self
+        #endif
+    }
+
+    /// Wash, floating glass chrome, no navigation bar, and a reinstated back
+    /// swipe — everything `SubjectScreenScaffold` does except owning the
+    /// scrolling container. Apply it to a `List` to get the redesign's chrome
+    /// without giving up swipe actions.
+    func subjectScreenChrome<Leading: View, Trailing: View>(
+        palette: SubjectPalette,
+        washHeight: CGFloat = 380,
+        @ViewBuilder leading: @escaping () -> Leading,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) -> some View {
+        modifier(
+            SubjectScreenChrome(
+                palette: palette,
+                washHeight: washHeight,
+                leading: leading,
+                trailing: trailing
+            )
+        )
     }
 }
 
@@ -185,11 +272,21 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     let title: String
     /// Pre-joined by the caller; drawn with the spec's dimmed middle dots.
     var metadataSegments: [String] = []
+    /// A glyph pinned before the metadata line — the spec's green tick marking a
+    /// work held offline (1ad, 1ah). Kept general rather than named "offline"
+    /// because 1t uses the same slot for a visit count and 1aj for a star.
+    var metadataPrefixSymbol: String?
+    var metadataPrefixTint: Color?
     /// Sits at the leading edge — a `WorkProgressRing`, a position number, or
     /// nothing at all on a row with no progress to report.
     @ViewBuilder var leading: () -> Leading
     /// The trailing edge — normally the four-signal tray.
     @ViewBuilder var trailing: () -> Trailing
+    /// False when the row sits in a `List` whose `.cardRow(tintHue:)` already
+    /// paints the same wash on the row's true outer edge. Two backgrounds would
+    /// draw the hairline twice, half a point apart. Standalone contexts — a
+    /// `ScrollView`, a queue grid — leave it on and get the whole card here.
+    var drawsBackground: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -222,17 +319,26 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
 
             trailing()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 15)
-        .background(rowBackground)
+        .padding(.horizontal, drawsBackground ? 16 : 0)
+        .padding(.vertical, drawsBackground ? 15 : 9)
+        .background {
+            if drawsBackground { rowBackground }
+        }
     }
 
     private var metadataLine: some View {
-        Text(metadataSegments.joined(separator: "  ·  "))
-            .font(.system(size: 11.5))
-            .foregroundStyle(Color.primary.opacity(0.72))
-            .lineLimit(2)
-            .combinedAccessibilityRow(metadataSegments.joined(separator: ", "))
+        HStack(spacing: 5) {
+            if let metadataPrefixSymbol {
+                Image(systemName: metadataPrefixSymbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(metadataPrefixTint ?? Color.secondary)
+            }
+            Text(metadataSegments.joined(separator: "  ·  "))
+                .font(.system(size: 11.5))
+                .foregroundStyle(Color.primary.opacity(0.72))
+                .lineLimit(2)
+        }
+        .combinedAccessibilityRow(metadataSegments.joined(separator: ", "))
     }
 
     private var rowBackground: some View {

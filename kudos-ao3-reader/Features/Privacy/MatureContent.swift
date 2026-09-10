@@ -118,6 +118,9 @@ struct SensitiveWorkRow: View {
     var isSelecting: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
+    /// Forwarded to `WorkRow` so a screen that has moved to the redesign's
+    /// compact ledger row gets it here too, blurred or not.
+    var presentation: WorkRow.Presentation = .standard
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -140,8 +143,16 @@ struct SensitiveWorkRow: View {
             // state via `externalExpanded` so it still expands the blurred content.
             // The card's selection outline comes from the enclosing `.cardRow(isSelected:)`
             // at the card's true edge, not from an overlay here (matches WorkRow).
-            let isExpandableWork = WorkRow.isExpandable(for: work)
-            let content = WorkRow(work: work, showsExpandButton: false, externalExpanded: $blurredExpanded)
+            // A ledger row has no summary and no tag groups, so there is nothing
+            // for an expand control to reveal — it stays out of the blurred
+            // overlay rather than appearing as a control that does nothing.
+            let isExpandableWork = presentation == .standard && WorkRow.isExpandable(for: work)
+            let content = WorkRow(
+                work: work,
+                showsExpandButton: false,
+                externalExpanded: $blurredExpanded,
+                presentation: presentation
+            )
                 .environment(\.ao3AuthorNavigationEnabled, false)
                 .blur(radius: 6)
                 .overlay {
@@ -202,8 +213,14 @@ struct SensitiveWorkRow: View {
 
     @ViewBuilder
     private var visibleRow: some View {
-        let row = WorkRow(work: work, expandAll: expandAll, isSelecting: isSelecting, isSelected: isSelected)
-            .localWorkContextMenu(work: work, onSelect: onSelect)
+        let row = WorkRow(
+            work: work,
+            expandAll: expandAll,
+            isSelecting: isSelecting,
+            isSelected: isSelected,
+            presentation: presentation
+        )
+        .localWorkContextMenu(work: work, onSelect: onSelect)
         if isSelecting {
             // A tap while selecting must always toggle selection, never open an
             // author profile — matches the blurred branch's own

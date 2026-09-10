@@ -36,6 +36,28 @@ extension Color {
                       Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
     }
 
+    /// The colour's hue as a 0…1 fraction, which is what every subject-derived
+    /// surface in the redesign is built from (`SubjectPalette`). Saturation and
+    /// brightness are deliberately dropped: the palette re-derives those per
+    /// theme so a wash stays legible whatever accent the user picked, and a
+    /// near-grey accent should still produce a coherent (if quiet) wash rather
+    /// than an unusable one.
+    ///
+    /// Grey has no meaningful hue; `UIColor`/`NSColor` report 0 (red) for it,
+    /// which is passed through as-is — a deliberately colourless accent gets the
+    /// red end of the wheel rather than a crash or a special case.
+    var hueComponent: Double {
+        let platform = PlatformColor(self)
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        #if canImport(UIKit)
+        platform.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        #else
+        (platform.usingColorSpace(.sRGB) ?? platform)
+            .getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        #endif
+        return Double(hue)
+    }
+
     /// WCAG relative luminance (0 = black, 1 = white). Used to pick a readable
     /// foreground for an arbitrary background color — unlike the `ReaderTheme` role
     /// colors, an app accent isn't one of a few fixed cases (the user can set it to
