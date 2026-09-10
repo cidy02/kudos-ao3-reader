@@ -293,8 +293,24 @@ and the author profile's block/mute all POST too. Artboard `1ba`'s own note —
 `postComment` exists, with a whole `CommentSubmission` de-duplication layer
 around it.
 
-**The policy's "must not implement" list is about request discipline, not about
-writes as a category.** What it forbids is: request fan-out outside
+**The constraint that does govern this work: every AO3 request goes through the
+established client.** There are exactly two `URLSession` instances in the whole
+Services layer — anonymous in `AO3Client`, authenticated in `AO3AuthService` —
+and the policy names the one sanctioned exception. A new endpoint is a new
+method *on those types*, never a new client. `getHTML` / `imageData` for
+anonymous reads, `authenticatedPageHTML` over an
+`AO3AuthService.authenticatedRequest` for authenticated ones, `submitWrite` for
+every write, `AO3RequestCoordinator.withSlot` around anything that fans out,
+`RequestCoalescer` for repeated identical in-flight GETs.
+
+Hand-rolling one does not merely break style: it silently drops the host
+allow-list, the ≥0.6s pacer, the identifiable contact User-Agent, `Retry-After`
+handling, the three-slot concurrency cap and the redirect cookie relay. Each is
+a promise to AO3, and the policy opens by calling respectful access a hard
+product requirement because community trust is the whole ballgame.
+
+**The policy's "must not implement" list is otherwise about request discipline,
+not about writes as a category.** What it forbids is: request fan-out outside
 `AO3RequestCoordinator`, raw `URLSession` calls that bypass `AO3Client`, retry
 loops or auto-retry UI around writes, background polling, bulk scraping of
 logged-in pages, weakening pacing/cooldowns/`Retry-After`/the contact UA, and
