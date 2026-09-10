@@ -54,6 +54,10 @@ Verified so far:
 | `0abc06f` | ✅ green | The build stamp (`CURRENT_PROJECT_VERSION`, `KudosBuildCommit`) and About reading it. |
 | `029eddb` | ✅ green | `SubjectStatStrip.Cell.tint`. |
 | `d74cc7e` | ✅ green | Work Detail's artboard-1a identity block, and the `cardList()` wash fix under it. 10m29s. |
+| `5a6a12e` | ✅ green | Serif summary, ON AO3 chips, `SubjectFieldLabel`, the page row helpers. |
+| `243580a` | ✅ green | **The whole form family** — `SubjectFormRow`, `subjectPanel()`, `SubjectRowSeparator`, `SubjectSegmentedControl` — plus 1a's facts card, tally strip, outline buttons and My copy row. |
+| `d61ad69` | ✅ green | Tag clusters. |
+| `cc5a890` | ❌ red | Four `'X' is inaccessible due to 'private' protection level`. `pageSections` assembles the page from blocks in four files and `private` is file-scoped. Fixed in `2e25947`. |
 | `5ea4e0e` | ✅ green | The figure strip's strings as statements. 10m05s — within seconds of the run before it, which is the measurement that settles the false claim in its own commit message. See §3. |
 
 Builds are published to **[Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
@@ -340,13 +344,15 @@ re-reviews settled work and nobody reviews their own.
 | `029eddb` | Claude | Outline tool reads unlabelled artboards; `Cell.tint` | unreviewed | **iOS build green.** |
 | `ed3eacb` | Claude | Stop `cardList()`'s backdrop hiding every wash | unreviewed | **Wants a non-Claude reviewer, and a screenshot.** Fixes a defect in five already-landed screens; see §3. Not compiled at time of writing, never seen. |
 | `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | **iOS build green** (10m29s). Not seen. |
-| `5a6a12e` | Claude | Serif summary; ON AO3 chips; `SubjectFieldLabel`; page row helpers | unreviewed | Build pending at time of writing. |
+| `5a6a12e` | Claude | Serif summary; ON AO3 chips; `SubjectFieldLabel`; page row helpers | unreviewed | **iOS build green.** |
 | `f8c2ff6` | Claude | `redesign-spec-inventory.py` — rank shapes by artboard spread | unreviewed | Tooling; ran against the committed canvas. |
 | `053bc96` | Claude | `swift-parse-check.py`; batching + parser in §3 | unreviewed | Calibrated: 403/405 files parse clean. |
-| `243580a` | Claude | `SubjectForm.swift`; 1a's facts card, tally strip, buttons, My copy row | unreviewed | **Wants a non-Claude reviewer** — it is the shared form family ~50 artboards will be built on. |
+| `243580a` | Claude | `SubjectForm.swift`; 1a's facts card, tally strip, buttons, My copy row | unreviewed | **iOS build green. Wants a non-Claude reviewer** — it is the shared form family ~50 artboards will be built on. |
 | `4d57af8` | Claude | Parts-before-screens in §2; the measured inventory in §1a | unreviewed | Doc only. |
-| `d61ad69` | Claude | Tag clusters; inventory table corrected where checking disproved it | unreviewed | Build pending at time of writing. |
-| `cc5a890` | Claude | Retire the section control; My copy sheet; Comments as form rows | unreviewed | **Wants a non-Claude reviewer** — it changes this screen's whole navigation. Build pending at time of writing. |
+| `d61ad69` | Claude | Tag clusters; inventory table corrected where checking disproved it | unreviewed | **iOS build green.** |
+| `cc5a890` | Claude | Retire the section control; My copy sheet; Comments as form rows | unreviewed | **Wants a non-Claude reviewer** — it changes this screen's whole navigation. Red on access levels; fixed in `2e25947`. |
+| `6d2b318` | Claude | §3c, next steps; 1a recorded complete | unreviewed | Doc only. |
+| `2e25947` | Claude | Page blocks internal, not private | unreviewed | Fixes `cc5a890`. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
 
