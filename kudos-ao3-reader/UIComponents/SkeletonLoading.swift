@@ -27,10 +27,11 @@ struct SkeletonBlock: View {
         //     ignored and the block collapsed to a sliver (recently-read chip
         //     placeholders, confirmed on device). `idealWidth` answers that.
         //   * A layout that proposes a *narrower* width than was asked for — a
-        //     MasonryLayout column, a narrow device. A hard `width:` is a
-        //     minimum as well as a maximum, so the block (and the whole card
-        //     around it) rendered wider than its column and overlapped the
-        //     neighbouring one. `maxWidth` with no `minWidth` lets it shrink.
+        //     narrow device, or the two-column masonry grid this used to sit in.
+        //     A hard `width:` is a minimum as well as a maximum, so the block
+        //     (and the whole card around it) rendered wider than its column and
+        //     overlapped the neighbouring one. `maxWidth` with no `minWidth`
+        //     lets it shrink.
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(.quaternary)
             .frame(height: height)
@@ -502,33 +503,32 @@ struct CategoryCardSkeletonList: View {
     // of empty space before the real content settles in.
     var count: Int = 11
 
-    /// Cycles through a fixed pattern of chip counts (none, a few, a lot) so
-    /// neighboring placeholders land at different heights — matching the real
-    /// grid's masonry shape (some categories have several "recently read"
-    /// chips, some have none) instead of a uniform block grid that doesn't
-    /// preview what's about to load.
-    private static let chipCountPattern = [0, 3, 0, 2, 5, 0, 1, 0]
+    /// Cycles through a fixed pattern of chip counts so neighbouring
+    /// placeholders land at different heights, the way the real panels do — a
+    /// category's fandom cluster wraps onto one to three rows depending on how
+    /// long its fandom names are. A uniform block stack would preview a screen
+    /// that never arrives.
+    ///
+    /// Higher counts than the masonry version this replaced: those chips were
+    /// the handful of "recently read" fandoms, where these are the panel's
+    /// cluster of up to twelve (see `MediaBrowserView.clusterFandomLimit`).
+    private static let chipCountPattern = [8, 12, 5, 10, 3, 12, 7, 9]
 
     var body: some View {
         #if os(iOS)
-        // Matches MediaBrowserView.categoryGrid's own structure (ScrollView +
-        // header + the real MasonryLayout, not a List or a uniform LazyVGrid) —
-        // varying chipCount below means these placeholders are different
-        // heights, same as the real cards will be.
+        // Matches MediaBrowserView.categoryGrid's own structure: one full-width
+        // panel per category down a ScrollView. It followed that view off the
+        // masonry grid — a placeholder in a shape the real screen no longer
+        // takes is worse than no placeholder, because the layout visibly
+        // rearranges the moment the content lands.
         ScrollView {
-            VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
-                Text("Browse by fandom")
-                    .font(.headline)
-                    .padding(.horizontal, CardListMetrics.sideMargin)
-
-                MasonryLayout(columns: 2, spacing: CardListMetrics.interCardSpacing) {
-                    ForEach(0 ..< count, id: \.self) { index in
-                        CategoryCardSkeleton(chipCount: Self.chipCountPattern[index % Self.chipCountPattern.count])
-                    }
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(0 ..< count, id: \.self) { index in
+                    CategoryCardSkeleton(chipCount: Self.chipCountPattern[index % Self.chipCountPattern.count])
+                        .padding(.horizontal, CardListMetrics.sideMargin)
                 }
-                .padding(.horizontal, CardListMetrics.sideMargin)
             }
-            .padding(.vertical, CardListMetrics.interCardSpacing)
+            .padding(.vertical, 12)
         }
         #else
         // macOS keeps categoryListMac's single-column List/DisclosureGroup shape.

@@ -12,7 +12,7 @@ import Testing
 ///     that asks for this view's *ideal* size (`FlowLayout` does, when
 ///     wrapping) got a sliver instead of the width the caller asked for.
 ///   * `.frame(width:)` is a minimum as well as a maximum — so a
-///     `CategoryCardSkeleton` placed in a 2-column `MasonryLayout` column on
+///     `CategoryCardSkeleton` placed in a narrow column on
 ///     Browse rendered ~50pt wider than its column and visibly overlapped the
 ///     card beside it.
 ///
