@@ -27,21 +27,28 @@ struct BrowseView: View {
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
 
-    /// A pushed fandom → its native work results.
-    private struct FandomRoute: Hashable { let name: String }
+    /// A pushed fandom (or sibling family) → its native work results.
+    /// `names` are the raw original tags included in the search; `title` is
+    /// display only and is never sent as a filter.
+    private struct FandomRoute: Hashable {
+        let names: [String]
+        let title: String
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
-            MediaBrowserView(onSelectFandom: { path.append(FandomRoute(name: $0)) })
+            MediaBrowserView(onSelectFandom: { path.append(FandomRoute(names: [$0], title: $0)) })
                 .navigationTitle("Browse")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
                 .navigationDestination(for: AO3MediaCategory.self) { category in
-                    FandomListView(category: category) { path.append(FandomRoute(name: $0)) }
+                    FandomListView(category: category) { names, title in
+                        path.append(FandomRoute(names: names, title: title))
+                    }
                 }
                 .navigationDestination(for: FandomRoute.self) { route in
-                    FandomWorksView(fandom: route.name)
+                    FandomWorksView(fandom: route.title, includedFandoms: route.names)
                 }
                 .navigationDestination(for: AO3TagWorksRequest.self) { request in
                     TagWorksView(request: request)
@@ -69,10 +76,15 @@ struct BrowseView: View {
     }
 }
 
-/// Native AO3 work results for a single fandom (Browse → Category → Fandom → Works).
-/// Reuses `AO3WorkRow`, `SearchPaginationBar`, and the polite `AO3Client.search`.
+/// Native AO3 work results for a fandom (Browse → Category → Fandom → Works).
+/// A sibling-family tap passes every raw original name as included fandom
+/// filters; a single tag still uses AO3's tag listing. Reuses `AO3WorkRow`,
+/// `SearchPaginationBar`, and the polite `AO3Client.search`.
 struct FandomWorksView: View {
+    /// Display title — parsed family title, or the raw tag for a single fandom.
     let fandom: String
+    /// Raw original tag names included in the search. Identity lives here.
+    let includedFandoms: [String]
 
     /// The other half of the fandom-row zoom — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -93,15 +105,17 @@ struct FandomWorksView: View {
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
-    init(fandom: String) {
+    init(fandom: String, includedFandoms: [String]? = nil) {
         self.fandom = fandom
-        _filters = State(initialValue: Self.baseline(for: fandom))
+        let names = includedFandoms ?? [fandom]
+        self.includedFandoms = names
+        _filters = State(initialValue: Self.baseline(for: names))
     }
 
-    /// Filters scoped to just this page's fandom — also the reset baseline.
-    private static func baseline(for fandom: String) -> AO3SearchFilters {
+    /// Filters scoped to this page's included fandoms — also the reset baseline.
+    private static func baseline(for fandoms: [String]) -> AO3SearchFilters {
         var filters = AO3SearchFilters()
-        filters.fandom = fandom
+        filters.fandom = fandoms.joined(separator: ", ")
         // Date Updated, not the app-wide `.relevance` default: this screen reads
         // AO3's tag listing, which has no relevance ordering and sorts by
         // `revised_at` unless told otherwise (verified live). Seeding it here means
@@ -112,9 +126,15 @@ struct FandomWorksView: View {
         return filters
     }
 
-    /// True once the reader has set any filter beyond the page's fixed fandom.
+    /// True once the reader has set any filter beyond the page's fixed fandoms.
     private var hasExtraFilters: Bool {
-        filters != Self.baseline(for: fandom)
+        filters != Self.baseline(for: includedFandoms)
+    }
+
+    private var zoomKey: String {
+        includedFandoms.count == 1
+            ? includedFandoms[0]
+            : FandomFamily.id(originalNames: includedFandoms)
     }
 
     var body: some View {
@@ -160,7 +180,7 @@ struct FandomWorksView: View {
         #endif
             .hidesFloatingTabBar()
             // Zooms out of the fandom row that pushed it.
-            .workCardZoomDestination(BrowseZoomKey.fandom(fandom), in: zoomNamespace)
+            .workCardZoomDestination(BrowseZoomKey.fandom(zoomKey), in: zoomNamespace)
             .toolbar { toolbarContent }
             .filterPanelPresentation(isPresented: $showingFilters) {
                 AO3FilterPanel(
@@ -244,18 +264,42 @@ struct FandomWorksView: View {
         // the tap did nothing.
         phase = .loading
         do {
-            // Browse reads AO3's tag listing, not /works/search: same works and
-            // same filters, but the page states its own "1 - 20 of N Works in
-            // <fandom>" heading, so the results card shows AO3's figures rather
-            // than ones derived here.
-            let result = try await AO3Client.shared.fandomWorksPage(
-                fandom: fandom, filters: filters, page: page, request: auth.authenticatedRequest()
-            )
+            // A single fandom still reads AO3's tag listing so the heading names
+            // the tag. A sibling family has no one path — that search goes to
+            // `/works/search` with every original name in `fandom_names`.
+            let result: AO3SearchPage
+            if includedFandoms.count == 1 {
+                // A single tag still uses AO3's own listing so the heading names
+                // the fandom. A family has no one tag path — `/works/search`
+                // with every sibling in `fandom_names` is the union the tilde
+                // is waiting on.
+                result = try await AO3Client.shared.fandomWorksPage(
+                    fandom: includedFandoms[0],
+                    filters: filters,
+                    page: page,
+                    request: auth.authenticatedRequest()
+                )
+            } else {
+                result = try await AO3Client.shared.search(
+                    filters: filters,
+                    page: page,
+                    request: auth.authenticatedRequest()
+                )
+            }
             results = result.works
             currentPage = result.currentPage
             totalPages = result.totalPages
             resultSummary = result.summary
             phase = .loaded
+            if includedFandoms.count > 1,
+               filters == Self.baseline(for: includedFandoms),
+               let total = result.summary?.total
+            {
+                FandomFamilyExactCountCache.shared.store(
+                    total,
+                    for: FandomFamily.id(originalNames: includedFandoms)
+                )
+            }
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
@@ -283,7 +327,7 @@ struct FandomWorksView: View {
 
     /// Reset back to the page's fandom-only filters (keeping the panel open).
     private func resetFilters() {
-        filters = Self.baseline(for: fandom)
+        filters = Self.baseline(for: includedFandoms)
         reload()
     }
 
