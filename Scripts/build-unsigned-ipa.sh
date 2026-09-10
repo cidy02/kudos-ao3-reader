@@ -46,6 +46,22 @@ fi
 rm -rf "$DERIVED"
 mkdir -p "$OUT_DIR"
 
+# Stamp the build so "which build am I running?" has an answer.
+#
+# The committed pbxproj pins CURRENT_PROJECT_VERSION = 1 and MARKETING_VERSION =
+# 1.0, so every build reported itself as "1.0 (1)" — installing a new IPA over
+# an old one looked identical from inside the app, which is exactly the question
+# a sideloader needs answered. The commit count is monotonic and numeric, which
+# is what CFBundleVersion requires; the short SHA goes in a custom key below,
+# since CFBundleVersion cannot hold hex.
+#
+# Passed on the command line rather than written into the pbxproj: AGENTS.md
+# keeps that file low-churn, and a build stamp is a property of the build, not
+# of the project.
+BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
+BUILD_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+BUILD_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+
 # Release, so what ships to a sideloader is what a release build does —
 # whole-module optimisation included. Signing is off rather than ad-hoc: an
 # ad-hoc signature would have to be stripped again before the sideloader could
@@ -61,13 +77,21 @@ xcodebuild build \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGN_ENTITLEMENTS="" \
-  DEVELOPMENT_TEAM=""
+  DEVELOPMENT_TEAM="" \
+  CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
 APP="$DERIVED/Build/Products/Release-iphoneos/$APP_NAME.app"
 if [ ! -d "$APP" ]; then
   echo "build-unsigned-ipa: expected $APP but the build produced nothing there." >&2
   exit 1
 fi
+
+# Written into the built bundle rather than passed as a build setting: these are
+# not Xcode-known keys, and adding them to the project would mean editing the
+# pbxproj for something only this script cares about. Safe to do post-build
+# because the bundle is unsigned — the sideloader signs it afterwards, over this.
+plutil -replace KudosBuildCommit -string "$BUILD_COMMIT" "$APP/Info.plist"
+plutil -replace KudosBuildBranch -string "$BUILD_BRANCH" "$APP/Info.plist"
 
 # An .ipa is a zip with the .app under Payload/ and nothing else required.
 STAGE="$(mktemp -d)"
@@ -90,5 +114,5 @@ rm -f "$IPA"
 # following them instead both bloats the archive and breaks the bundle layout.
 ( cd "$STAGE" && zip -qry "$IPA" Payload )
 
-echo "build-unsigned-ipa: wrote $IPA"
+echo "build-unsigned-ipa: wrote $IPA (build $BUILD_NUMBER, $BUILD_COMMIT on $BUILD_BRANCH)"
 echo "build-unsigned-ipa: unsigned — sign it with AltStore/Sideloadly/SideStore before installing."
