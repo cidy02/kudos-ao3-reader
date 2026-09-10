@@ -278,10 +278,47 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | ⬜ |
 | **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | ⬜ |
 
-Phases 11 and 12 are mostly **AO3 write actions the app does not implement**
-(see `docs/AO3_NETWORKING_POLICY.md`'s "must not implement" list, which is
-binding). Treat those artboards as *layout* specs to be built when and if the
-underlying capability lands — do not add network writes to satisfy a mockup.
+### Correction (2026-09-10): what the write policy actually says
+
+This section used to read: *"Phases 11 and 12 are mostly AO3 write actions the
+app does not implement (see `docs/AO3_NETWORKING_POLICY.md`'s 'must not
+implement' list, which is binding)."* **That was wrong on both halves**, and it
+had been repeated into a hand-off prompt before anyone read the policy itself.
+
+**Writes are not prohibited, and many are implemented.** `AO3WriteActions.swift`
+carries `giveKudos`, `postComment`, `toggleSubscribe`, `markForLater` and
+`saveBookmark`; `AO3CommentActions`, `AO3InboxActions`, `AO3PreferencesActions`
+and the author profile's block/mute all POST too. Artboard `1ba`'s own note —
+*"posting comments is an AO3 write the app does not implement"* — is **stale**:
+`postComment` exists, with a whole `CommentSubmission` de-duplication layer
+around it.
+
+**The policy's "must not implement" list is about request discipline, not about
+writes as a category.** What it forbids is: request fan-out outside
+`AO3RequestCoordinator`, raw `URLSession` calls that bypass `AO3Client`, retry
+loops or auto-retry UI around writes, background polling, bulk scraping of
+logged-in pages, weakening pacing/cooldowns/`Retry-After`/the contact UA, and
+touching local works in any network error path. A write itself is fine —
+`submitWrite` is single-shot, never retried, never coalesced (the double-kudos
+risk), CSRF from `authenticatedPageHTML`, and a 429 is surfaced rather than
+auto-retried.
+
+**So Phases 11 and 12 are a capability gap, not a policy wall.** The challenge
+and collection-moderation writes are simply not built. Two pieces genuinely
+cannot be built, and for a different reason again — AO3 does not expose them to
+clients at all: challenge **matching** (`1cb`, `1cf`) and tag-set
+**association** (`1ch`). Those want an Open on AO3 escape hatch, which is what
+the artboards already draw.
+
+**Before adding any write, read the policy's last section.** `AO3WriteActions`
+has never been exercised against a live AO3 session — the policy calls that "a
+release gate item, not an agent task". Adding more unexercised writes raises
+that debt rather than paying it.
+
+**The lesson is the one §3 already records twice.** A statement about what the
+app does — in a build note, or in this file — is not evidence. Grep for it. This
+paragraph asserted a policy that the policy does not contain, cited it as
+binding, and stood for three sessions.
 
 ---
 
