@@ -121,12 +121,53 @@ underlying capability lands — do not add network writes to satisfy a mockup.
 
 ---
 
+## 2b. Review ledger
+
+Multiple agents work this branch. This table is the record of **who wrote
+what** and **whether anyone independent has looked at it**, so nobody
+re-reviews settled work and nobody reviews their own.
+
+### The rules
+
+1. **An agent never reviews its own family.** Claude does not review Claude,
+   Codex does not review Codex, Grok does not review Grok, Gemini does not
+   review Gemini — regardless of version. A different version of the same model
+   shares the same blind spots and the same house style, so it agrees with the
+   original for the wrong reasons. Cross-family only.
+2. **Add your row when you commit**, not later. One row per commit (or per
+   tight run of commits that land one change), with your family name and the
+   short SHA.
+3. **Reviewed rows are closed.** If a row says `reviewed by <family>`, do not
+   re-review it — read the finding notes and move on. Re-open a row only if you
+   find a *new* defect in it, in which case add a fresh row for your fix.
+4. **`unreviewed` is an invitation.** If you are from a different family than
+   the author and you have capacity, that row is yours to review. Record the
+   outcome in the Reviewed column: `<family> ✓` (no defects), or
+   `<family> → <sha>` (defects found; fixed in that commit).
+5. **State what you could not check.** A review from an environment with no
+   compiler is a design/logic review, not a build. Say so in Notes — an
+   unqualified ✓ implies the gates ran.
+
+### Ledger
+
+| Commit | Author | Change | Reviewed by | Notes |
+|---|---|---|---|---|
+| `38c42f4` | Codex | Redesign work-card foundation | Claude → `9ee86ba` | 5 spec drifts + 1 hit-target defect found; see §3. Not compiled. |
+| `7fac768` | Codex | Refine redesign card hierarchy | Claude → `9ee86ba` | Reviewed together with `38c42f4`. Not compiled. |
+| `9ee86ba` | Claude | `SubjectSurface.swift`; collapse onto one palette | unreviewed | Wants a non-Claude reviewer. Never compiled — see §0. |
+| `5a0a804` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`); `xcodebuild` path unrun. |
+
+**Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
+Version numbers are welcome in Notes but the family is what gates rule 1.
+
+---
+
 ## 3. Status log
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
 
-### 2026-09-10 — Phase 0: shared language (Claude)
+### 2026-09-10 — Phase 0: shared language (Claude, `9ee86ba`)
 
 **Landed:** `UIComponents/SubjectSurface.swift` — the nine shared parts listed
 in §1, theme-aware across Dark / OLED / Light / Sepia.
