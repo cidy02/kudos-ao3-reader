@@ -13,14 +13,17 @@ extension WorkDetailView {
         summarySection
         ao3ActionsSection
         quickActionsSection
-        publicationCardSection
-        workInfoCardSection
-        statsCardSection
+        // Artboard 1a's own order from here: the grouped facts, the archive
+        // tallies, the page's two actions, then everything local behind one row.
+        factsCardSection
+        archiveStatsSection
+        pageActionsSection
+        seriesSection
         // Local-only: a remote work has no origin to report and nothing converted.
         if let work = localWork {
             WorkProvenanceSections(work: work)
         }
-        seriesSection
+        myCopySection
     }
 
     // MARK: Summary
@@ -205,131 +208,6 @@ extension WorkDetailView {
             detail: displayComments.map { $0.formatted() }
         ) {
             withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .discussion }
-        }
-    }
-
-    // MARK: Details cards (Publication / Work / Stats)
-
-    @ViewBuilder
-    private var publicationCardSection: some View {
-        let hasAny = !displayPublishedDate.isEmpty || !displayUpdatedDate.isEmpty
-            || !displayLanguage.isEmpty || localWork != nil
-        if hasAny {
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !displayPublishedDate.isEmpty {
-                        LabeledContent("Published", value: displayPublishedDate)
-                    }
-                    if !displayUpdatedDate.isEmpty {
-                        LabeledContent("Updated", value: displayUpdatedDate)
-                    }
-                    if !displayLanguage.isEmpty {
-                        LabeledContent("Language", value: displayLanguage)
-                    }
-                    if let work = localWork {
-                        LabeledContent(
-                            "Added",
-                            value: work.dateAdded.formatted(date: .abbreviated, time: .shortened)
-                        )
-                        // Always named here, AO3 included: the card suppresses "AO3"
-                        // as noise, but on a details screen the reader is asking where
-                        // this came from, so answering is the point.
-                        LabeledContent("Source", value: work.origin.displayName)
-
-                        if let explanation = work.preservationState.explanation(origin: work.origin) {
-                            Label {
-                                Text(explanation)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            } icon: {
-                                Image(systemName: work.preservationState.badgeSymbol)
-                                    .foregroundStyle(
-                                        work.preservationState == .goneWithNoCopy ? .orange : .secondary
-                                    )
-                            }
-                            .labelStyle(.titleAndIcon)
-                            .padding(.top, 2)
-                        }
-                    }
-                }
-                .cardRow()
-            } header: {
-                Text("Publication")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var workInfoCardSection: some View {
-        let hasAny = !displayRating.isEmpty || !displayCategories.isEmpty
-            || displayStatus != nil || displayWords != nil || !displayChapters.isEmpty
-        if hasAny {
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !displayRating.isEmpty {
-                        LabeledContent("Rating", value: displayRating)
-                    }
-                    if !displayCategories.isEmpty {
-                        LabeledContent("Category", value: displayCategories.joined(separator: ", "))
-                    }
-                    if let status = displayStatus {
-                        LabeledContent("Status", value: status)
-                    }
-                    if let words = displayWords {
-                        LabeledContent("Words", value: words.formatted())
-                    }
-                    if !displayChapters.isEmpty {
-                        LabeledContent("Chapters", value: displayChapters)
-                    }
-                }
-                .cardRow()
-            } header: {
-                Text("Work")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var statsCardSection: some View {
-        if displayKudos != nil || displayComments != nil || displayHits != nil || ao3WorkID != nil {
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    if let hits = displayHits {
-                        LabeledContent("Hits", value: hits.formatted())
-                    }
-                    if let kudos = displayKudos {
-                        LabeledContent("Kudos", value: kudos.formatted())
-                    }
-                    if ao3WorkID != nil {
-                        // Tappable: jumps to the Discussion section, which owns
-                        // the full comments entry points.
-                        Button {
-                            withAnimationUnlessReduced(reduceMotion: reduceMotion) { selectedTab = .discussion }
-                        } label: {
-                            // No trailing chevron: this switches the segmented tab
-                            // in place, it doesn't push a new screen — HIG reserves
-                            // the disclosure indicator for hierarchical navigation.
-                            HStack {
-                                Text("Comments")
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Text(displayComments.map { $0.formatted() } ?? "Open")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Comments")
-                        .accessibilityValue(displayComments.map { $0.formatted() } ?? "Open")
-                        .accessibilityHint("Opens the Discussion section")
-                    } else if let comments = displayComments {
-                        LabeledContent("Comments", value: comments.formatted())
-                    }
-                }
-                .cardRow()
-            } header: {
-                Text("Stats")
-            }
         }
     }
 

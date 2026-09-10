@@ -469,7 +469,37 @@ struct SectionRuleHeader: View {
 /// Making them one type would mean the accent either leaking onto every field
 /// heading or vanishing from the one place it means something.
 struct SubjectFieldLabel: View {
+    /// The spec draws this label at two sizes, and the difference is which side
+    /// of a panel edge it sits on. Keeping them as one type with two
+    /// calibrations rather than two near-identical types: they are the same
+    /// element doing the same job, and a third uppercase label in this file
+    /// would make choosing between them a coin toss.
+    enum Style {
+        /// Over a cluster of chips on the page — `600 10px`, `.1em` (spec 1a).
+        case field
+        /// Over a group of form rows — `600 11px`, `.07em`, and the wider
+        /// leading it needs above a panel (spec 1ao and the ~50 form artboards).
+        case formGroup
+
+        var size: CGFloat {
+            switch self {
+            case .field: 10
+            case .formGroup: 11
+            }
+        }
+
+        /// CSS tracking is a fraction of the font size, so both of these are the
+        /// spec's own em values resolved against `size`.
+        var tracking: CGFloat {
+            switch self {
+            case .field: 10 * 0.10
+            case .formGroup: 11 * 0.07
+            }
+        }
+    }
+
     let text: String
+    var style: Style = .field
     /// How many items the group holds, drawn as the spec's dimmer trailing
     /// figure. Shown only where the count is not obvious from the chips
     /// themselves — seven tags, say, rather than one relationship.
@@ -485,18 +515,18 @@ struct SubjectFieldLabel: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(text.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1)
+                .font(.system(size: style.size, weight: .semibold))
+                .tracking(style.tracking)
                 .foregroundStyle(.secondary)
             if let count {
                 Text(count.formatted())
-                    .font(.system(size: 10))
+                    .font(.system(size: style.size))
                     .monospacedDigit()
                     .foregroundStyle(Color.secondary.opacity(0.6))
             }
             if let note {
                 Text(note)
-                    .font(.system(size: 10))
+                    .font(.system(size: style.size))
                     .foregroundStyle(Color.secondary.opacity(0.6))
             }
             if hasRule {
@@ -546,19 +576,26 @@ struct SubjectStatStrip: View {
         /// to fit — "G RATING", "F/M CATEGORY" — so a cell that shortens its
         /// value states the long form here.
         var accessibilityText: String?
+        /// What the cell does when tapped, for the one cell in a strip that is
+        /// a way in rather than a figure. Spec 1a's COMMENTS cell is accented
+        /// and carries a glyph for exactly this reason; the other three in that
+        /// strip are counts and stay inert.
+        var action: (() -> Void)?
 
         init(
             value: String,
             label: String,
             isHighlighted: Bool = false,
             tint: Color? = nil,
-            accessibilityText: String? = nil
+            accessibilityText: String? = nil,
+            action: (() -> Void)? = nil
         ) {
             self.value = value
             self.label = label
             self.isHighlighted = isHighlighted
             self.tint = tint
             self.accessibilityText = accessibilityText
+            self.action = action
         }
     }
 
@@ -575,34 +612,47 @@ struct SubjectStatStrip: View {
                         .fill(themeManager.appTheme.glassStroke(0.13))
                         .frame(width: 0.5)
                 }
-                VStack(spacing: 5) {
-                    Text(cell.value)
-                        .font(.system(size: 13, weight: .semibold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .foregroundStyle(cell.tint ?? (cell.isHighlighted ? palette.accentOnFill : Color.primary))
-                    Text(cell.label.uppercased())
-                        .font(.system(size: 9))
-                        .tracking(0.63)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 6)
-                .combinedAccessibilityRow(cell.accessibilityText ?? "\(cell.value) \(cell.label)")
+                cellBody(cell)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(themeManager.appTheme.glassFill(0.09))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(themeManager.appTheme.glassStroke(0.13), lineWidth: 0.5)
-                )
-        )
+        // The same ground the form panels use — shape #13 in the inventory, 35
+        // artboards. One definition so a figure strip and a form card on the
+        // same screen cannot end up half a point apart.
+        .subjectPanel()
+    }
+
+    /// A cell with an action becomes a real button; the rest stay inert text, so
+    /// a strip of four counts does not announce four buttons to VoiceOver.
+    @ViewBuilder
+    private func cellBody(_ cell: Cell) -> some View {
+        let figure = VStack(spacing: 5) {
+            Text(cell.value)
+                .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(cell.tint ?? (cell.isHighlighted ? palette.accentOnFill : Color.primary))
+            Text(cell.label.uppercased())
+                .font(.system(size: 9))
+                .tracking(0.63)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 6)
+        .contentShape(Rectangle())
+
+        if let action = cell.action {
+            Button(action: action) { figure }
+                .buttonStyle(.plain)
+                .combinedAccessibilityRow(cell.accessibilityText ?? "\(cell.value) \(cell.label)")
+                .accessibilityAddTraits(.isButton)
+        } else {
+            figure
+                .combinedAccessibilityRow(cell.accessibilityText ?? "\(cell.value) \(cell.label)")
+        }
     }
 }
 

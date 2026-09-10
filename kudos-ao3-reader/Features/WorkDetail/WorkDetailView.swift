@@ -517,6 +517,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         return remote?.comments
     }
 
+    var displayBookmarks: Int? {
+        if let work = localWork, work.bookmarks > 0 { return work.bookmarks }
+        return remote?.bookmarks
+    }
+
     var displayHits: Int? {
         if let hits = localWork?.hits, hits > 0 { return hits }
         return remote?.hits
