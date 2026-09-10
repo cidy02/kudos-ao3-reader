@@ -49,33 +49,36 @@ xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
 
 ### Unsigned IPAs for sideloading
 
-Every commit on a feature branch is built into an **unsigned, sideloadable
-`.ipa`** by the [Unsigned IPA](../../actions/workflows/unsigned-ipa.yml)
-workflow, so you can install a build without a Mac.
+**→ [Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
 
-**Where to get one:** open the [Actions tab](../../actions/workflows/unsigned-ipa.yml),
-click the run for the commit you want, and scroll to **Artifacts** at the
-bottom of the run summary. The file is named `Kudos-unsigned-<sha>`.
+Each feature branch keeps a rolling pre-release tagged `build-<branch>`, holding
+an **unsigned, sideloadable `.ipa`** of its latest successful build. No GitHub
+account needed, no zip to unpack, no expiry — download it and sign it.
 
-Things worth knowing before you go looking:
+**It is unsigned on purpose and will not install as-is.** Sign it with AltStore,
+Sideloadly or SideStore using your own certificate. Nothing in this repository
+carries an Apple `DEVELOPMENT_TEAM` — that is a deliberate rule (see
+[`AGENTS.md`](AGENTS.md)), so there is no signed build to hand out.
 
-- **You must be signed in to GitHub.** Actions artifacts are not anonymously
-  downloadable, even on a public repository.
-- **It arrives as a `.zip`.** GitHub zips every artifact; the `.ipa` is inside.
-- **It expires after 30 days.** Re-run the workflow to rebuild an older commit.
-- **It is unsigned, deliberately.** Sign it with AltStore, Sideloadly or
-  SideStore using your own certificate — it will not install as-is. Nothing in
-  the repo carries an Apple `DEVELOPMENT_TEAM`, and that is a rule, not an
-  oversight (see `AGENTS.md`).
-- **A red run means the branch does not compile.** The workflow doubles as the
-  build gate, so a missing artifact is a real signal, not a flake.
+The tag is *rolling*: the next successful build of that branch replaces it. For
+a specific older commit, every run of the
+[Unsigned IPA workflow](../../actions/workflows/unsigned-ipa.yml) also attaches
+its own `.ipa` as an artifact, kept for 30 days — those need a signed-in GitHub
+account and arrive zipped, which is why the release is the front door.
+
+A red run means the branch does not compile: this workflow doubles as the build
+gate, so a missing IPA is a real signal rather than a flake.
 
 To build one locally instead: `Scripts/build-unsigned-ipa.sh` (needs Xcode,
 plus `Scripts/build-mupdf.sh` and `Scripts/fetch-fluidaudio.sh` once).
 
 ### Releases
 
-GitHub [Releases](https://github.com/cidy02/kudos-ao3-reader/releases) may list experimental pre-releases for other work in this repository. **Apple builds are not published as installable release assets**—clone and build from source as above, or take an unsigned IPA from Actions.
+GitHub [Releases](https://github.com/cidy02/kudos-ao3-reader/releases) carries
+the per-branch `build-*` pre-releases described above, and may list other
+experimental pre-releases for work in this repository. **No signed, App
+Store-installable build is published** — clone and build from source as above,
+or sideload an unsigned IPA.
 
 ## Testing
 

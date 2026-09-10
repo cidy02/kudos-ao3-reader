@@ -1,8 +1,15 @@
 name: Unsigned IPA
 
-# Builds a sideloadable, unsigned .ipa and attaches it to the run as an
-# artifact, so every commit on a redesign branch has a build you can install
-# with AltStore / Sideloadly / SideStore.
+# Builds a sideloadable, unsigned .ipa and publishes it to GitHub Releases, so
+# a build can be installed with AltStore / Sideloadly / SideStore without
+# needing a Mac — or a GitHub account.
+#
+# Releases rather than run artifacts, because an artifact is the wrong shape for
+# a download you hand to someone: it needs a signed-in GitHub account even on a
+# public repo, arrives wrapped in a .zip, hides at the bottom of a run summary,
+# and expires after 30 days. A release asset has none of those problems. The
+# artifact upload stays as well — it is free, and it keeps a per-commit history
+# the rolling release deliberately does not.
 #
 # It is a separate workflow from ci.yml on purpose. ci.yml deliberately omits a
 # build job because this project targets an iOS SDK that GitHub-hosted runner
@@ -16,6 +23,10 @@ name: Unsigned IPA
 # If hosted runners cannot build this SDK yet, the fix is one of:
 #   - point `runs-on` at a self-hosted macOS runner with the right Xcode, or
 #   - run `Scripts/build-unsigned-ipa.sh` locally, which is what this calls.
+
+# Publishing a release writes to the repository.
+permissions:
+  contents: write
 
 on:
   push:
@@ -103,7 +114,7 @@ jobs:
       - name: Build unsigned IPA
         run: Scripts/build-unsigned-ipa.sh
 
-      - name: Upload IPA
+      - name: Upload IPA artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -111,6 +122,52 @@ jobs:
           path: .build/ipa/*.ipa
           if-no-files-found: warn
           retention-days: 30
+
+      # One rolling pre-release per branch, replaced on every successful build,
+      # rather than a release per commit: this branch takes a dozen commits a
+      # session and a dozen release entries would bury the real releases under
+      # build noise. The artifact above keeps the per-commit history for anyone
+      # who needs an older build.
+      #
+      # Deleted and recreated rather than edited, because the tag has to move to
+      # the commit that was actually built — `gh release edit --target` does not
+      # move an existing tag — and because recreating leaves exactly one asset
+      # attached instead of accumulating one per build.
+      - name: Publish to Releases
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          IPA="$(ls .build/ipa/*.ipa | head -1)"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          # Slashes are legal in a branch name and not in a tag.
+          TAG="build-${GITHUB_REF_NAME//\//-}"
+
+          NOTES=$(cat <<EOF
+          Unsigned build of \`$GITHUB_REF_NAME\` at \`$SHORT_SHA\`.
+
+          **This IPA is not signed and will not install as-is.** Sign it with
+          AltStore, Sideloadly or SideStore using your own certificate. Nothing
+          in this repository carries an Apple \`DEVELOPMENT_TEAM\`, which is a
+          deliberate rule (see AGENTS.md), so there is no signed build to hand
+          out.
+
+          This tag is rolling: it is replaced by the next successful build of
+          this branch. For a specific older commit, take the artifact from that
+          commit's [workflow run](../../actions/workflows/unsigned-ipa.yml).
+
+          Built from $GITHUB_SHA.
+          EOF
+          )
+
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" "$IPA" \
+            --title "Unsigned build — $GITHUB_REF_NAME ($SHORT_SHA)" \
+            --notes "$NOTES" \
+            --prerelease \
+            --target "$GITHUB_SHA"
+          echo "Published $TAG -> $(basename "$IPA")"
 
       # The build log is the useful half when the IPA step fails, and a failed
       # xcodebuild on this repo is usually a missing SDK rather than bad code.
