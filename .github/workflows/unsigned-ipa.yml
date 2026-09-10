@@ -33,6 +33,15 @@ on:
     branches:
       - 'codex/kudos-redesign'
       - 'claude/**'
+    # A commit that only touches prose cannot change what the app compiles to,
+    # and every run here is several minutes of a macOS runner. The handoff doc
+    # on this branch is updated often enough for that to add up. A commit
+    # touching both docs and code still builds — paths-ignore only skips a push
+    # whose every changed file matches.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   workflow_dispatch:
     inputs:
       ref:
