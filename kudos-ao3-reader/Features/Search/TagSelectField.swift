@@ -240,14 +240,17 @@ struct TagPickerView: View {
         }
     }
 
+    @ViewBuilder
     private func tagRows(_ tags: [String]) -> some View {
         ForEach(tags, id: \.self) { tag in
             let state = state(of: tag)
-            Button {
+            let row = Button {
                 cycle(tag)
             } label: {
                 HStack {
-                    Text(tag).foregroundStyle(.primary)
+                    Text(tag)
+                        .foregroundStyle(state == .excluded ? Color.secondary : Color.primary)
+                        .strikethrough(state == .excluded, color: theme.appTheme.excludeColor.opacity(0.7))
                     Spacer()
                     selectionLabel(for: state)
                 }
@@ -258,6 +261,11 @@ struct TagPickerView: View {
                 .combinedAccessibilityRow([tag, state.accessibilityStatus].compactMap { $0 }.joined(separator: ", "))
             }
             .buttonStyle(.plain)
+            if state == .included {
+                row.listRowBackground(theme.appTheme.includeColor.opacity(0.10))
+            } else {
+                row
+            }
         }
     }
 
@@ -269,7 +277,7 @@ struct TagPickerView: View {
         case .included:
             Label("Include", systemImage: "plus.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.tint)
+                .foregroundStyle(theme.appTheme.includeColor)
         case .excluded:
             Label("Exclude", systemImage: "minus.circle.fill")
                 .font(.caption.weight(.semibold))
@@ -335,7 +343,7 @@ private struct FilterTagChip: View {
     @Environment(ThemeManager.self) private var theme
 
     private var color: Color {
-        state == .excluded ? theme.appTheme.excludeColor : .accentColor
+        state == .excluded ? theme.appTheme.excludeColor : theme.appTheme.includeColor
     }
 
     private var symbol: String {
@@ -354,7 +362,9 @@ private struct FilterTagChip: View {
         HStack(spacing: 4) {
             Image(systemName: symbol)
                 .font(.caption2)
-            Text(tag).lineLimit(1)
+            Text(tag)
+                .lineLimit(1)
+                .strikethrough(state == .excluded, color: color.opacity(0.7))
         }
         .font(.caption)
         .padding(.horizontal, 9)

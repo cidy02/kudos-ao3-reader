@@ -140,6 +140,54 @@ struct LibraryFiltersTests {
         #expect(!result.contains("Big"))
     }
 
+    @Test func droppingEachActiveFilterCountsWorksRevealedByDroppingOne() throws {
+        let context = try makeContext()
+        let completeExplicit = work(in: context, title: "CompleteExplicit")
+        completeExplicit.isComplete = true
+        completeExplicit.rating = "Explicit"
+        let wipTeen = work(in: context, title: "WIPTeen")
+        wipTeen.isComplete = false
+        wipTeen.rating = "Teen And Up Audiences"
+
+        var filters = LibraryFilters()
+        filters.completion = .complete
+        filters.rating = .teen
+
+        let works = [completeExplicit, wipTeen]
+        #expect(filters.apply(to: works).isEmpty)
+
+        let drops = filters.droppingEachActiveFilter(from: works)
+        let byLabel = Dictionary(uniqueKeysWithValues: drops.map { ($0.filterLabel, $0.remainingCount) })
+        #expect(Set(byLabel.keys) == ["Complete", "Teen And Up"])
+        #expect(byLabel["Complete"] == 1)
+        #expect(byLabel["Teen And Up"] == 1)
+        #expect(drops.first { $0.filterLabel == "Complete" }?.remainingFilters.completion == .any)
+        #expect(drops.first { $0.filterLabel == "Complete" }?.remainingFilters.rating == .teen)
+    }
+
+    @Test func droppingEachActiveFilterTreatsWordBoundsAsOneMember() throws {
+        let context = try makeContext()
+        let shortComplete = work(in: context, title: "Short")
+        shortComplete.isComplete = true
+        shortComplete.wordCount = 1_000
+        let longWIP = work(in: context, title: "Long")
+        longWIP.isComplete = false
+        longWIP.wordCount = 80_000
+
+        var filters = LibraryFilters()
+        filters.completion = .complete
+        filters.wordsFrom = "50000"
+
+        let works = [shortComplete, longWIP]
+        #expect(filters.apply(to: works).isEmpty)
+
+        let drops = filters.droppingEachActiveFilter(from: works)
+        let byLabel = Dictionary(uniqueKeysWithValues: drops.map { ($0.filterLabel, $0.remainingCount) })
+        #expect(byLabel["Complete"] == 1)
+        #expect(byLabel["Words ≥ 50000"] == 1)
+        #expect(drops.count == 2)
+    }
+
     @Test func sortOrdersBehave() throws {
         let context = try makeContext()
         let alpha = work(in: context, title: "alpha", dateAdded: Date(timeIntervalSince1970: 100))

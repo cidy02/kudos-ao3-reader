@@ -62,9 +62,24 @@ struct HomeSectionListView: View {
 
     /// The line under the hero: how many works, and what order they are in.
     private var headerTallyLine: String {
+        if filters.hasActiveFilters, visibleItems.isEmpty, !items.isEmpty {
+            let count = items.count
+            return "\(count) \(count == 1 ? "work" : "works") · none match the current filters"
+        }
         let workCount = visibleItems.count
         let noun = workCount == 1 ? "work" : "works"
         return "\(workCount) \(noun) · \(kind.orderDescription)"
+    }
+
+    private var filterCollisionCard: some View {
+        LibraryFilterCollisionCard(
+            sectionTitle: kind.title,
+            hiddenCount: items.count,
+            filters: $filters,
+            works: items,
+            palette: scopePalette,
+            onEdit: { showingFilters = true }
+        )
     }
 
     /// This section's works after the active filters. With no filter set, the section's
@@ -117,18 +132,6 @@ struct HomeSectionListView: View {
                     await task.value
                 }
                 .cancelRefreshOnTabChange($refreshTask)
-                .overlay {
-                    // Section has works, but the active filters hid them all.
-                    if visibleItems.isEmpty {
-                        ContentUnavailableView {
-                            Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
-                        } description: {
-                            Text("No works in this section match the current filters.")
-                        } actions: {
-                            Button("Clear Filters") { filters = LibraryFilters() }
-                        }
-                    }
-                }
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -167,7 +170,8 @@ struct HomeSectionListView: View {
                                 ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                         showingFilters: $showingFilters,
                                                         filterHelp: "Filter the works in this section",
-                                                        onClearFilters: { filters = LibraryFilters() }))
+                                                        onClearFilters: { filters = LibraryFilters() },
+                                                        badgeCount: filters.summaryLabels(includesSort: false).count))
                                 : nil,
                             AnyView(WorkListMoreMenu {
                                 if hasMature {
@@ -210,31 +214,40 @@ struct HomeSectionListView: View {
         List {
             subjectHeaderSection
 
-            Section {
-                ForEach(visibleItems) { work in
-                    SensitiveWorkRow(
-                        work: work,
-                        expandAll: expandAll,
-                        openMode: .reader,
-                        onSelect: isSelecting ? nil : { isSelecting = true; selection = [work.id] },
-                        isSelecting: isSelecting,
-                        isSelected: selection.contains(work.id),
-                        onToggleSelection: { toggleSelection(work) },
-                        presentation: .ledger
-                    )
-                    // The row's wash is painted here, at the card's true outer
-                    // edge, rather than inside `WorkLedgerRow` — see its
-                    // `drawsBackground` note.
-                    .cardRow(
-                        isSelected: isSelecting && selection.contains(work.id),
-                        tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-                    )
+            if !visibleItems.isEmpty {
+                Section {
+                    ForEach(visibleItems) { work in
+                        SensitiveWorkRow(
+                            work: work,
+                            expandAll: expandAll,
+                            openMode: .reader,
+                            onSelect: isSelecting ? nil : { isSelecting = true; selection = [work.id] },
+                            isSelecting: isSelecting,
+                            isSelected: selection.contains(work.id),
+                            onToggleSelection: { toggleSelection(work) },
+                            presentation: .ledger
+                        )
+                        // The row's wash is painted here, at the card's true outer
+                        // edge, rather than inside `WorkLedgerRow` — see its
+                        // `drawsBackground` note.
+                        .cardRow(
+                            isSelected: isSelecting && selection.contains(work.id),
+                            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+                        )
+                    }
+                } header: {
+                    SectionRuleHeader(title: kind.title, count: visibleItems.count)
+                        .textCase(nil)
+                        .listRowInsets(EdgeInsets())
+                        .padding(.bottom, 10)
                 }
-            } header: {
-                SectionRuleHeader(title: kind.title, count: visibleItems.count)
-                    .textCase(nil)
-                    .listRowInsets(EdgeInsets())
-                    .padding(.bottom, 10)
+            } else if filters.hasActiveFilters {
+                Section {
+                    filterCollisionCard
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 16, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
         }
         .cardList()
@@ -306,7 +319,11 @@ struct HomeSectionListView: View {
                 subjectHeader.padding(.top, 20)
                 filterChipRail
                 SectionRuleHeader(title: kind.title, count: visibleItems.count)
-                workGrid
+                if visibleItems.isEmpty, filters.hasActiveFilters {
+                    filterCollisionCard.padding(.horizontal, 16)
+                } else {
+                    workGrid
+                }
             }
         }
         .subjectScreenWash(palette: scopePalette)
