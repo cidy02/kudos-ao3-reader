@@ -53,7 +53,8 @@ Verified so far:
 | `d4f64b8` | ✅ green | Restored `CategoryStats.clusterFandoms`. Validates Browse's panels **and** Account's header in one run. |
 | `0abc06f` | ✅ green | The build stamp (`CURRENT_PROJECT_VERSION`, `KudosBuildCommit`) and About reading it. |
 | `029eddb` | ✅ green | `SubjectStatStrip.Cell.tint`. |
-| `d74cc7e` | ✅ green | Work Detail's artboard-1a identity block, and the `cardList()` wash fix under it. 10m29s — an ordinary run, whatever §3 says was read off a stale API response. |
+| `d74cc7e` | ✅ green | Work Detail's artboard-1a identity block, and the `cardList()` wash fix under it. 10m29s. |
+| `5ea4e0e` | ✅ green | The figure strip's strings as statements. 10m05s — within seconds of the run before it, which is the measurement that settles the false claim in its own commit message. See §3. |
 
 Builds are published to **[Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
 as a rolling per-branch pre-release tagged `build-<branch>`, and to each run's
@@ -225,7 +226,7 @@ re-reviews settled work and nobody reviews their own.
 | `029eddb` | Claude | Outline tool reads unlabelled artboards; `Cell.tint` | unreviewed | **iOS build green.** |
 | `ed3eacb` | Claude | Stop `cardList()`'s backdrop hiding every wash | unreviewed | **Wants a non-Claude reviewer, and a screenshot.** Fixes a defect in five already-landed screens; see §3. Not compiled at time of writing, never seen. |
 | `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | **iOS build green** (10m29s). Not seen. |
-| `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
+| `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
@@ -426,13 +427,17 @@ saying `in_progress` long after the job has finished. Four polls in a row
 returned byte-identical data — including an `updated_at` frozen at the second
 the job *started* — and that was read as "the build is still going" rather than
 as "this response has not changed". A build that had taken 10m29s and gone green
-was written up in `5ea4e0e` as having ground for half an hour.
+was written up in `5ea4e0e` as having ground for half an hour. The run after
+it took 10m05s on the same runner, so the two agree to within seconds and
+there was never an anomaly to explain.
 
 So: **judge elapsed time from timestamps, not from repeated identical
 responses.** A run's `created_at` and `updated_at` are in every reply; if
 `updated_at` is not advancing, the response is stale, not the build. Reading the
 *run* (`list_workflow_runs`) rather than its jobs gave the true state
-immediately.
+immediately, and `date -u` against a run's `created_at` gives real elapsed
+minutes in one line. Do that before concluding anything about how long a
+build has taken — counting your own polls is not a clock.
 
 **The trap that cost a build:** mid-refactor, an insertion landed at the wrong
 anchor, and `git checkout -- <file>` was used to recover. That reverts the whole
