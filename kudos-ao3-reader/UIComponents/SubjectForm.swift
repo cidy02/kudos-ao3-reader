@@ -113,6 +113,12 @@ struct SubjectFormRow<Trailing: View>: View {
     /// that cannot apply to the current scope still belongs in the list, saying
     /// so, rather than vanishing and changing the shape of the panel.
     var isDisabled: Bool = false
+    /// Colours the label with the system's destructive red — "Remove AO3
+    /// session", "Sign out", "Delete work". A flag on the row rather than a
+    /// `.foregroundStyle(.red)` at the call site, because the label sets its own
+    /// colour internally and would win: a caller tinting the row from outside
+    /// gets a red chevron and a black label, which is worse than no red at all.
+    var isDestructive: Bool = false
     var action: (() -> Void)?
     @ViewBuilder var trailing: () -> Trailing
 
@@ -140,7 +146,7 @@ struct SubjectFormRow<Trailing: View>: View {
         return HStack(spacing: arrangement.horizontalGap) {
             Text(label)
                 .font(.system(size: 15))
-                .foregroundStyle(.primary)
+                .foregroundStyle(isDestructive ? Color.red : .primary)
                 .frame(maxWidth: labelWidth, alignment: .leading)
                 .fixedSize(horizontal: labelHugs, vertical: false)
 
@@ -168,6 +174,7 @@ extension SubjectFormRow where Trailing == SubjectFormValue {
         arrangement: Arrangement = .value,
         showsDisclosure: Bool = false,
         isDisabled: Bool = false,
+        isDestructive: Bool = false,
         isMonospaced: Bool = false,
         action: (() -> Void)? = nil
     ) {
@@ -176,6 +183,7 @@ extension SubjectFormRow where Trailing == SubjectFormValue {
             arrangement: arrangement,
             showsDisclosure: showsDisclosure,
             isDisabled: isDisabled,
+            isDestructive: isDestructive,
             action: action,
             trailing: { SubjectFormValue(text: value, isMonospaced: isMonospaced) }
         )
