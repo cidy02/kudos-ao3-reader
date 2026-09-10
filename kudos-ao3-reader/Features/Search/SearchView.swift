@@ -251,10 +251,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 presentation: .subjectPage,
                                 currentPage: currentPage,
                                 totalPages: totalPages,
-                                // Sort leaves the chip rail and becomes a real
-                                // control beside the subject (spec 1k), which
-                                // needs a binding rather than a label.
-                                sortSelection: $filters.sort
+                                // This menu applies immediately; the filter panel
+                                // keeps its separate Apply action.
+                                sortSelection: Binding(
+                                    get: { filters.sort },
+                                    set: { sort in
+                                        guard filters.sort != sort else { return }
+                                        filters.sort = sort
+                                        bulkSelection.selection.removeAll()
+                                        runSearch()
+                                    }
+                                )
                             )
                             .bareListRow()
                         }

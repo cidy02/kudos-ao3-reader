@@ -3,9 +3,9 @@ import SwiftData
 import SwiftUI
 
 /// The full, vertically scrolling list behind a Library section's `>` chevron.
-/// Mirrors `HomeSectionListView`, but adds the Library's per-row swipe actions and,
-/// for Saved for Later, also surfaces the user's AO3 "Marked for Later" list in a
-/// second section. Local rows open the reader; Work Details remains in the
+/// Mirrors `HomeSectionListView`, adding the Library's per-row swipe actions.
+/// Saved for Later contains only the permanent local queue. AO3 Marked for Later
+/// lives in Account. Local rows open the reader; Work Details remains in the
 /// long-press menu.
 struct LibrarySectionListView: View {
     let kind: LibrarySectionKind
@@ -24,7 +24,6 @@ struct LibrarySectionListView: View {
     private var works: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var pendingDelete: SavedWork?
-    @State private var markedForLater: [AO3WorkSummary] = []
     @State private var expandAll = false
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
     /// (see `cancelRefreshOnTabChange`) — this section can list a large number of works.
@@ -67,31 +66,7 @@ struct LibrarySectionListView: View {
         filters.hasActiveFilters ? filters.apply(to: items) : items
     }
 
-    /// The remote Marked-for-Later list with any locally-saved work removed — a work
-    /// in both renders once, in the local section above, as its richer local row.
-    private var remoteOnlyMarkedForLater: [AO3WorkSummary] {
-        CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
-    }
-
-    /// The de-duplicated remote list, narrowed by the active fandom filter (the
-    /// other facets need local metadata these summaries don't carry).
-    private var visibleMarkedForLater: [AO3WorkSummary] {
-        guard !filters.fandoms.isEmpty else { return remoteOnlyMarkedForLater }
-        let wanted = Set(filters.fandoms.map { $0.lowercased() })
-        return remoteOnlyMarkedForLater.filter { summary in
-            summary.fandoms.contains { wanted.contains($0.lowercased()) }
-        }
-    }
-
-    /// Saved for Later is the one section that merges in a remote (AO3) list.
-    private var showsMarkedForLater: Bool {
-        kind == .savedForLater && !visibleMarkedForLater.isEmpty
-    }
-
-    /// Whether the section has any works at all (pre-filter) — drives the toolbar.
-    private var hasAnyContent: Bool {
-        !items.isEmpty || (kind == .savedForLater && !remoteOnlyMarkedForLater.isEmpty)
-    }
+    private var hasAnyContent: Bool { !items.isEmpty }
 
     private var selectedWorks: [SavedWork] {
         visibleItems.filter { selection.contains($0.id) }
@@ -200,9 +175,6 @@ struct LibrarySectionListView: View {
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
                 perform: { PreservedWorkService.softDelete($0, in: context) }
             )
-            .task(id: auth.isLoggedIn) {
-                if kind == .savedForLater { await loadMarkedForLater() }
-            }
     }
 
     @ViewBuilder
@@ -236,7 +208,7 @@ struct LibrarySectionListView: View {
             .cancelRefreshOnTabChange($refreshTask)
             .overlay {
                 // Section has works, but the active filters hid them all.
-                if visibleItems.isEmpty, !showsMarkedForLater {
+                if visibleItems.isEmpty {
                     ContentUnavailableView {
                         Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
                     } description: {
@@ -264,34 +236,42 @@ struct LibrarySectionListView: View {
     /// The kicker / rule / 32pt hero, as the list's first row rather than as a
     /// navigation title — spec 1c scrolls it away under the chrome, which a
     /// `navigationTitle` cannot do.
+    private var subjectHeader: some View {
+        SubjectHeaderBlock(
+            kicker: "Library",
+            title: kind.title,
+            subtitle: headerTallyLine,
+            palette: scopePalette
+        )
+    }
+
     private var subjectHeaderSection: some View {
         Section {
-            SubjectHeaderBlock(
-                kicker: "Library",
-                title: kind.title,
-                subtitle: headerTallyLine,
-                palette: scopePalette
-            )
+            subjectHeader
             .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
 
-            SubjectFilterRail(
-                onOpenFilters: { showingFilters = true },
-                activeFilterCount: filters.summaryLabels(includesSort: false).count
-            ) {
-                ForEach(filters.summaryLabels(), id: \.self) { label in
-                    SubjectChip(
-                        text: label.text,
-                        style: .tinted,
-                        systemImage: label.symbol,
-                        palette: scopePalette
-                    )
-                }
-            }
+            filterChipRail
             .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+        }
+    }
+
+    private var filterChipRail: some View {
+        SubjectFilterRail(
+            onOpenFilters: { showingFilters = true },
+            activeFilterCount: filters.summaryLabels(includesSort: false).count
+        ) {
+            ForEach(filters.summaryLabels(), id: \.self) { label in
+                SubjectChip(
+                    text: label.text,
+                    style: .tinted,
+                    systemImage: label.symbol,
+                    palette: scopePalette
+                )
+            }
         }
     }
 
@@ -309,21 +289,12 @@ struct LibrarySectionListView: View {
                     }
                 } header: {
                     SectionRuleHeader(
-                        title: showsMarkedForLater ? "Saved for Later in Kudos" : kind.title,
+                        title: kind.title,
                         count: visibleItems.count
                     )
                     .textCase(nil)
                     .listRowInsets(EdgeInsets())
                     .padding(.bottom, 10)
-                }
-            }
-            if showsMarkedForLater {
-                Section("Marked for Later on AO3") {
-                    ForEach(visibleMarkedForLater) { work in
-                        AO3WorkRow(work: work, expandAll: expandAll)
-                            .cardNavigation(to: work, accessibilityLabel: work.title)
-                    }
-                    .cardRow()
                 }
             }
         }
@@ -343,40 +314,41 @@ struct LibrarySectionListView: View {
     /// uses, wrapping down the page instead of scrolling horizontally.
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
-                ForEach(visibleItems) { work in
-                    if isSelecting {
-                        SensitiveWorkCoverCard(
-                            work: work,
-                            isSelecting: true,
-                            isSelected: selection.contains(work.id),
-                            onToggleSelection: { toggleSelection(work) }
-                        )
-                        .localWorkContextMenu(work: work)
-                    } else {
-                        NavigationLink(value: LocalWorkDestination.reader(work)) {
-                            SensitiveWorkCoverCard(work: work)
-                        }
-                        .buttonStyle(.plain)
-                        .localWorkContextMenu(
-                            work: work,
-                            onSelect: { isSelecting = true; selection = [work.id] }
-                        )
+            VStack(alignment: .leading, spacing: 16) {
+                subjectHeader.padding(.top, 20)
+                filterChipRail
+                SectionRuleHeader(title: kind.title, count: visibleItems.count)
+                workGrid
+            }
+        }
+        .subjectScreenWash(palette: scopePalette)
+    }
+
+    private var workGrid: some View {
+        LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
+            ForEach(visibleItems) { work in
+                if isSelecting {
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        isSelecting: true,
+                        isSelected: selection.contains(work.id),
+                        onToggleSelection: { toggleSelection(work) }
+                    )
+                    .localWorkContextMenu(work: work)
+                } else {
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
+                        SensitiveWorkCoverCard(work: work)
                     }
-                }
-                if showsMarkedForLater {
-                    ForEach(visibleMarkedForLater) { work in
-                        NavigationLink(value: WorkCardTap.destination(for: work)) {
-                            AO3WorkCoverCard(work: work)
-                        }
-                        .buttonStyle(.plain)
-                        .remoteWorkContextMenu(work: work)
-                    }
+                    .buttonStyle(.plain)
+                    .localWorkContextMenu(
+                        work: work,
+                        onSelect: { isSelecting = true; selection = [work.id] }
+                    )
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
     }
 
     /// A local work row with the Library's standard swipe actions (save / favorite /
@@ -454,22 +426,7 @@ struct LibrarySectionListView: View {
             }
     }
 
-    private func loadMarkedForLater() async {
-        do {
-            markedForLater = try await auth.accountWorks(
-                from: AO3Client.markedForLaterURL, recordAs: .markedForLater
-            )
-        } catch {
-            // A refresh failure (network, rate limit, expired session) must not wipe
-            // out a previously successful fetch — keep showing what's already there.
-            Log.network.notice(
-                "Marked for Later refresh failed: \(error.localizedDescription, privacy: .public)"
-            )
-        }
-    }
-
     private func refreshSection() async {
         _ = await WorkMetadataRefresh.refresh(visibleItems, in: context, auth: auth)
-        if kind == .savedForLater { await loadMarkedForLater() }
     }
 }

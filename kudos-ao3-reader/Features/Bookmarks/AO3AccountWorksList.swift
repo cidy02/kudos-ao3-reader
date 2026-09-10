@@ -263,6 +263,7 @@ struct AO3AccountWorksList: View {
             if displayMode == .compact {
                 ScrollView {
                     VStack(spacing: 12) {
+                        subjectHeader.padding(.top, 20)
                         if showPagination { paginationBar }
                         AccountWorksCompactGrid(entries: visibleEntries)
                         if showPagination { paginationBar }
@@ -334,15 +335,19 @@ struct AO3AccountWorksList: View {
     /// list's own 32pt name and one line of tallies — at a **16pt** gutter, ten
     /// tighter than a subject's own page. These are lists *of* things rather
     /// than pages *about* one, and the spec sets them accordingly.
+    private var subjectHeader: some View {
+        SubjectHeaderBlock(
+            kicker: "AO3 Account",
+            title: kind.title,
+            subtitle: headerTallyLine,
+            palette: accountPalette,
+            gutter: SubjectMetrics.accountGutter
+        )
+    }
+
     private var subjectHeaderSection: some View {
         Section {
-            SubjectHeaderBlock(
-                kicker: "AO3 Account",
-                title: kind.title,
-                subtitle: headerTallyLine,
-                palette: accountPalette,
-                gutter: SubjectMetrics.accountGutter
-            )
+            subjectHeader
             .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)

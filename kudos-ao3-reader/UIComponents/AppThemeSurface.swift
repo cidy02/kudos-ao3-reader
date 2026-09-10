@@ -68,10 +68,11 @@ struct CardShadow {
 extension ReaderTheme {
     /// The page behind the cards.
     var cardBackdrop: Color {
+        if self == .dark { return Color(red: 11 / 255, green: 11 / 255, blue: 13 / 255) }
         #if os(iOS)
-        appBaseBackground ?? Color(uiColor: .systemGroupedBackground)
+        return appBaseBackground ?? Color(uiColor: .systemGroupedBackground)
         #else
-        appBaseBackground ?? Color(nsColor: .underPageBackgroundColor)
+        return appBaseBackground ?? Color(nsColor: .underPageBackgroundColor)
         #endif
     }
 

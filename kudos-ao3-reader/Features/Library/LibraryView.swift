@@ -6,8 +6,8 @@ import SwiftUI
 /// The Library tab: a Books-style dashboard of the user's saved works. Every section
 /// is a collapsible horizontal card carousel with a `>` chevron that opens its full
 /// vertical list. Sections, in order: Reading Now, Saved for Later, Finished,
-/// Collections, Downloaded. Saved for Later merges in the user's AO3 "Marked for
-/// Later" list; Collections is a placeholder until shelves land.
+/// Collections, Downloaded. Saved for Later is the permanent local queue; AO3
+/// Marked for Later remains in Account and never becomes local queue membership.
 ///
 /// Filtering (the inspector panel), Reading Insights, content privacy, and
 /// multi-select bulk actions (all platforms) are kept from the previous
@@ -41,10 +41,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
     @State private var filters = LibraryFilters()
-    @State private var markedForLater: [AO3WorkSummary] = []
-    /// True only while the remote Marked-for-Later request is in flight, so the
-    /// Saved for Later carousel can show cover skeletons instead of its empty state.
-    @State private var isLoadingMarkedForLater = false
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
 
@@ -56,7 +52,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     @State private var sectionCache: [LibrarySectionKind: [SavedWork]] = [:]
     @State private var topFandomsCache: [String] = []
-    @State private var markedForLaterCache: [AO3WorkSummary] = []
     @State private var hasSectionCache = false
 
     // Multi-select / bulk actions — a plain cross-platform Bool, the same pattern
@@ -185,7 +180,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     ReadingQueueService.ensureSavedForLaterQueue(in: context)
                     await backfillFilterMetadata()
                 }
-                .task(id: auth.isLoggedIn) { await loadMarkedForLater() }
                 .task(id: sectionsRevision) {
                     // Yield so the progressive tab shell (or prior frame) can paint
                     // before we spend the main actor filtering every section.
@@ -265,8 +259,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             "\(matureMode.rawValue)",
             "\(gate.revealAll)",
             "\(gate.revealedIDs.count)",
-            "\(markedForLater.count)",
-            "\(isLoadingMarkedForLater)"
         ].joined(separator: "|")
     }
 
@@ -289,15 +281,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .prefix(10)
             .map(\.key)
 
-        let remoteOnly = CanonicalWorkMerge.remoteOnly(remote: markedForLater, localLibrary: works)
-        if filters.fandoms.isEmpty {
-            markedForLaterCache = remoteOnly
-        } else {
-            let wanted = Set(filters.fandoms.map { $0.lowercased() })
-            markedForLaterCache = remoteOnly.filter { summary in
-                summary.fandoms.contains { wanted.contains($0.lowercased()) }
-            }
-        }
         hasSectionCache = true
     }
 
@@ -328,7 +311,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             VStack(alignment: .leading, spacing: 24) {
                 fandomFilterBar
                 localCarousel(.readingNow)
-                savedForLaterCarousel
+                localCarousel(.savedForLater)
                 localCarousel(.finished)
                 collectionsCarousel
                 localCarousel(.downloaded)
@@ -378,8 +361,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
             hasItems: !sectionWorks.isEmpty,
+            itemCount: sectionWorks.count,
             layout: dashboardLayout,
-            onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
+            onSeeAll: !sectionWorks.isEmpty ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
                 localCarouselCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
@@ -389,44 +373,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Saved for Later merges the user's saved works with their AO3 "Marked for Later"
-    /// list (loaded when signed in). The `>` chevron opens the combined full list.
-    private var savedForLaterCarousel: some View {
-        let kind = LibrarySectionKind.savedForLater
-        let saved = cachedWorks(for: kind)
-        let mfl = markedForLaterCache
-        let hasItems = !saved.isEmpty || !mfl.isEmpty
-        // Skeletons only while the remote list is loading and there's nothing yet —
-        // local saved works render immediately and suppress the placeholders.
-        let showSkeleton = isLoadingMarkedForLater && !hasItems
-        return WorkCarouselSection(
-            title: kind.title,
-            collapseKey: "library.\(kind.rawValue)",
-            hasItems: hasItems || showSkeleton,
-            layout: dashboardLayout,
-            onSeeAll: hasItems ? { path.append(kind) } : nil
-        ) {
-            if showSkeleton {
-                ForEach(0 ..< 6, id: \.self) { _ in WorkCoverCardSkeleton() }
-            } else {
-                ForEach(saved.prefix(12)) { work in
-                    localCarouselCard(work: work, footer: nil, progress: nil)
-                }
-                ForEach(mfl.prefix(12)) { work in
-                    NavigationLink(value: WorkCardTap.destination(for: work)) {
-                        AO3WorkCoverCard(work: work)
-                    }
-                        .buttonStyle(.plain)
-                }
-            }
-        } emptyState: {
-            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
-        }
-    }
-
-    /// User-named Collections (shelves). A leading "New" card is always present so
-    /// creating one is one tap away; existing collections follow, capped like every
-    /// other carousel — the `>` chevron opens the full, uncapped grid.
     private var collectionsCarousel: some View {
         let kind = LibrarySectionKind.collections
         return WorkCarouselSection(
@@ -632,30 +578,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Loads the user's AO3 "Marked for Later" list for the Saved for Later section.
-    private func loadMarkedForLater() async {
-        // No request happens when signed out (accountWorks early-returns), so skip the
-        // loading flag — the local saved works (if any) and empty state show at once.
-        guard auth.isLoggedIn else {
-            markedForLater = []
-            isLoadingMarkedForLater = false
-            return
-        }
-        isLoadingMarkedForLater = true
-        do {
-            markedForLater = try await auth.accountWorks(
-                from: AO3Client.markedForLaterURL, recordAs: .markedForLater
-            )
-        } catch {
-            // A refresh failure (network, rate limit, expired session) must not wipe
-            // out a previously successful fetch — keep showing what's already there.
-            Log.network.notice(
-                "Marked for Later refresh failed: \(error.localizedDescription, privacy: .public)"
-            )
-        }
-        isLoadingMarkedForLater = false
-    }
-
     private func createCollection() {
         let trimmed = newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines)
         newCollectionName = ""
@@ -759,9 +681,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     ///
     /// The row paints its own wash here, unlike in a `List`, because a dashboard
     /// section is a `VStack` with no row background to hand the job to.
-    @ViewBuilder
     private func localLedgerRow(work: SavedWork) -> some View {
-        let row = SensitiveWorkRow(
+        SensitiveWorkRow(
             work: work,
             openMode: .reader,
             onSelect: selectAction(for: work),
@@ -769,18 +690,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             isSelected: selection.contains(work.id),
             onToggleSelection: { toggleSelection(work) },
             presentation: .ledger,
-            providesNavigation: false
+            usesInlineNavigation: true,
+            contentInsets: EdgeInsets(top: 15, leading: 16, bottom: 15, trailing: 16)
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 15)
         .background(ledgerRowBackground(for: work))
-
-        if isSelecting {
-            row
-        } else {
-            NavigationLink(value: LocalWorkDestination.reader(work)) { row }
-                .buttonStyle(.plain)
-        }
     }
 
     private func ledgerRowBackground(for work: SavedWork) -> some View {
@@ -804,7 +717,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private func refreshLibraryDashboard() async {
         _ = await WorkMetadataRefresh.refresh(visibleDashboardWorks, in: context, auth: auth)
-        await loadMarkedForLater()
     }
 
     private func refreshSelectableWorks() async {

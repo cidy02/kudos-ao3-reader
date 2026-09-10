@@ -316,8 +316,15 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
 
     @Environment(ThemeManager.self) private var themeManager
 
+    @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
+    @ScaledMetric(relativeTo: .caption) private var metadataSize: CGFloat = 11.5
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(alignment: .center, spacing: 13) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 13))
+        return layout {
             leading()
 
             VStack(alignment: .leading, spacing: 5) {
@@ -332,8 +339,8 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
                 }
 
                 Text(title)
-                    .font(.system(size: 16.5, weight: .semibold))
-                    .lineLimit(2)
+                    .font(.system(size: titleSize, weight: .semibold))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -360,9 +367,9 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
                     .foregroundStyle(metadataPrefixTint ?? Color.secondary)
             }
             Text(metadataSegments.joined(separator: "  ·  "))
-                .font(.system(size: 11.5))
+                .font(.system(size: metadataSize))
                 .foregroundStyle(Color.primary.opacity(0.72))
-                .lineLimit(2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
         }
         .combinedAccessibilityRow(metadataSegments.joined(separator: ", "))
     }

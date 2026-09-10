@@ -30,6 +30,7 @@ struct WorkCoverCard: View {
                     // than the metadata below them did.
                     .lineLimit(2)
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 0)

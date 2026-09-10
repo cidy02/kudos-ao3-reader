@@ -206,7 +206,7 @@ struct AccountView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: accountPalette)
+        .subjectWash(accountPalette)
         .refreshable { await refreshCurrentTab() }
     }
 
@@ -283,10 +283,8 @@ struct AccountView: View {
             }
             .padding(.vertical, 12)
         }
-        // `subjectScreenWash` paints the backdrop itself, so the plain
-        // `cardBackdrop` fill this used to carry would sit on top of the wash and
-        // hide it.
-        .subjectScreenWash(palette: accountPalette)
+        // This is a tab root, so keep the tab bar while painting its wash.
+        .subjectWash(accountPalette)
         .refreshable { await refreshCurrentTab() }
     }
 
