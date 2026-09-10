@@ -72,6 +72,10 @@ struct WorkDetailIdentityHeader: View {
 /// white, and that is right for more than fidelity: `WorkStat.categoryColor`
 /// paints "Other" black, which on a near-black page is an invisible cell.
 struct WorkDetailFigureStrip: View {
+    /// What a cell prints when the field is genuinely unknown, rather than
+    /// leaving a blank quarter of the strip that reads as a layout gap.
+    private let emptyFigure = "—"
+
     let rating: String
     let warnings: [String]
     let categories: [String]
@@ -87,11 +91,16 @@ struct WorkDetailFigureStrip: View {
     /// the dense four-figure row `WorkStat.ratingLetter` was written for; the
     /// full name still reaches VoiceOver below.
     private var ratingCell: SubjectStatStrip.Cell {
-        SubjectStatStrip.Cell(
-            value: WorkStat.ratingLetter(rating) ?? "—",
+        let printed: String = WorkStat.ratingLetter(rating) ?? emptyFigure
+        var spoken = "No rating given"
+        if let name = WorkStat.ratingName(rating) {
+            spoken = "Rating: " + name
+        }
+        return SubjectStatStrip.Cell(
+            value: printed,
             label: "Rating",
             tint: WorkStat.ratingColor(rating),
-            accessibilityText: WorkStat.ratingName(rating).map { "Rating: \($0)" } ?? "No rating given"
+            accessibilityText: spoken
         )
     }
 
@@ -108,16 +117,15 @@ struct WorkDetailFigureStrip: View {
     /// uses for extra fandoms, since three of them ("F/F, F/M, Gen") scale down
     /// to unreadable inside a quarter-width cell.
     private var categoryCell: SubjectStatStrip.Cell {
-        let named = categories.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        let extras = max(0, named.count - 1)
-        let printed = named.first.map { extras > 0 ? "\($0) +\(extras)" : $0 } ?? "—"
-        return SubjectStatStrip.Cell(
-            value: printed,
-            label: "Category",
-            accessibilityText: named.isEmpty
-                ? "No relationship category"
-                : named.map(WorkStat.categoryAccessibilityLabel).joined(separator: ", ")
-        )
+        let named: [String] = categories.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var printed = emptyFigure
+        var spoken = "No relationship category"
+        if let first = named.first {
+            let extras: Int = named.count - 1
+            printed = extras > 0 ? first + " +" + String(extras) : first
+            spoken = named.map(WorkStat.categoryAccessibilityLabel).joined(separator: ", ")
+        }
+        return SubjectStatStrip.Cell(value: printed, label: "Category", accessibilityText: spoken)
     }
 
     /// AO3 answers "is this finished?" with a chapter fraction — 3/3 is done,
@@ -125,14 +133,14 @@ struct WorkDetailFigureStrip: View {
     /// artboard draws it. A converted EPUB with no chapter range falls back to
     /// the status word, which is all that is actually known about it.
     private var completionCell: SubjectStatStrip.Cell {
-        let range = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
-        return SubjectStatStrip.Cell(
-            value: range.isEmpty ? completion.shortText : range,
-            label: "Complete",
-            accessibilityText: range.isEmpty
-                ? "Status: \(completion.text)"
-                : "\(range) chapters, \(completion.text)"
-        )
+        let range: String = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        var printed: String = completion.shortText
+        var spoken: String = "Status: " + completion.text
+        if !range.isEmpty {
+            printed = range
+            spoken = range + " chapters, " + completion.text
+        }
+        return SubjectStatStrip.Cell(value: printed, label: "Complete", accessibilityText: spoken)
     }
 
     var body: some View {
@@ -232,10 +240,12 @@ struct WorkDetailResumeCard: View {
 
     private var accessibilityValue: String {
         guard let clampedProgress else { return "Not started" }
-        let percent = Int((clampedProgress * 100).rounded())
-        return [primaryLine, "\(percent) percent", secondaryLine]
-            .compactMap { $0 }
-            .joined(separator: ", ")
+        let percent: Int = Int((clampedProgress * 100).rounded())
+        var spokenParts: [String] = [primaryLine, String(percent) + " percent"]
+        if let secondaryLine {
+            spokenParts.append(secondaryLine)
+        }
+        return spokenParts.joined(separator: ", ")
     }
 
     /// 42pt, filled, and the only high-contrast thing on the page — the same
