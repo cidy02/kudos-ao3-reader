@@ -387,7 +387,7 @@ re-reviews settled work and nobody reviews their own.
 
 | Commit | Author | Change | Reviewed by | Notes |
 |---|---|---|---|---|
-| `38c42f4` | Codex | Redesign work-card foundation | Claude → `9ee86ba`, re-audited → `bf7cdac` | 5 spec drifts + 1 hit-target defect found; see §3. **Findings 1–5 verified fixed; finding 6 was still open and had grown a second verbatim copy — paid in `bf7cdac`.** |
+| `38c42f4` | Codex | Redesign work-card foundation | Claude → `9ee86ba`, re-audited → `1004a81` | 5 spec drifts + 1 hit-target defect found; see §3. **Findings 1–5 verified fixed; finding 6 was still open and had grown a second verbatim copy — paid in `1004a81`.** |
 | `7fac768` | Codex | Refine redesign card hierarchy | Claude → `9ee86ba` | Reviewed together with `38c42f4`. Not compiled. |
 | `9ee86ba` | Claude | `SubjectSurface.swift`; collapse onto one palette | unreviewed | Wants a non-Claude reviewer. Compiles (via `2d3696c`). |
 | `436f7af` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`). |
@@ -424,6 +424,7 @@ re-reviews settled work and nobody reviews their own.
 | `d61ad69` | Claude | Tag clusters; inventory table corrected where checking disproved it | unreviewed | **iOS build green.** |
 | `cc5a890` | Claude | Retire the section control; My copy sheet; Comments as form rows | unreviewed | **Wants a non-Claude reviewer** — it changes this screen's whole navigation. Red on access levels; fixed in `2e25947`. |
 | `6d2b318` | Claude | §3c, next steps; 1a recorded complete | unreviewed | Doc only. |
+| `1004a81` | Claude | Audit the Codex review; unify the two identical metadata builders | unreviewed | **Wants a non-Claude reviewer** — it touches `WorkStat`, which every work surface formats through. Unverified tests (CI builds the app target only). |
 | `2e25947` | Claude | Page blocks internal, not private | unreviewed | **iOS build green.** Fixes `cc5a890`. |
 | `6d1a08d` | Claude | Tests for `myCopySummary` and the warning figure form | unreviewed | **Unverified by anything here** — CI builds the app target only, so `KudosTests` is never compiled. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
