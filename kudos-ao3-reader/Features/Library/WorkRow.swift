@@ -92,12 +92,9 @@ struct WorkRow: View {
     /// completion, so repeating them here would spend the line on what is
     /// already on screen.
     private var ledgerMetadataSegments: [String] {
-        var segments: [String] = []
-        if !work.author.isEmpty { segments.append(work.author) }
-        if work.wordCount > 0 { segments.append("\(work.wordCount.formatted()) words") }
-        let chapterRange = work.chapters.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !chapterRange.isEmpty { segments.append(chapterRange) }
-        return segments
+        WorkStat.localWorkMetadata(
+            author: work.author, wordCount: work.wordCount, chapters: work.chapters
+        )
     }
 
     /// The washed background is left to the enclosing `List` row
