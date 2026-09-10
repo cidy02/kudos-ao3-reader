@@ -405,7 +405,11 @@ struct MediaBrowserView: View {
             FlowLayout(spacing: 16, rowSpacing: 4) {
                 statItem("books.vertical", "\(count.formatted()) fandoms")
                 if let works = stats?.workCount {
-                    statItem("doc.text", "~\(compact(works)) works")
+                    let figure = compact(works)
+                    let label = (stats?.isApproximateWorkCount == true)
+                        ? "~\(figure) works"
+                        : "\(figure) works"
+                    statItem("doc.text", label)
                 }
                 if let saved = stats?.savedCount, saved > 0 {
                     statItem(WorkActionLabels.downloadedSymbol, "\(saved) downloaded")
@@ -485,6 +489,9 @@ struct MediaBrowserView: View {
         /// nil while the category's fandom list is still loading.
         var fandomCount: Int?
         var workCount: Int?
+        /// True when `workCount` is a sum of per-tag counts and therefore
+        /// double-counts a work tagged with two fandoms in the category.
+        var isApproximateWorkCount: Bool = false
         var savedCount: Int
         var recentFandoms: [String]
         /// The chips artboard 1g clusters under each category, biggest first.
@@ -618,11 +625,11 @@ struct MediaBrowserView: View {
                 )
                 : []
 
+            let summed = input.hasFullList ? CategoryWorkTotal.summedTagCounts(input.fandoms) : nil
             result[input.id] = CategoryStats(
                 fandomCount: input.hasFullList ? input.fandoms.count : nil,
-                workCount: input.hasFullList
-                    ? input.fandoms.reduce(0) { $0 + ($1.workCount ?? 0) }
-                    : nil,
+                workCount: summed?.workCount,
+                isApproximateWorkCount: summed?.isApproximate ?? false,
                 savedCount: savedCount,
                 recentFandoms: Array(recent.prefix(recentFandomsLimit)),
                 clusterFandoms: cluster

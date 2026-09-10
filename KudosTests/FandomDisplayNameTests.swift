@@ -325,6 +325,15 @@ struct FandomDisplayNameTests {
 
     // MARK: - Identity
 
+    @Test func thePrimarySegmentIsTheLastPipePiece() {
+        // Grouping and the list row both split the last `|` segment, not the
+        // whole multilingual tag — otherwise CJK aliases would become the title.
+        let name = "僕のヒーローアカデミア | Boku no Hero Academia | My Hero Academia (Anime & Manga)"
+        #expect(FandomDisplayName.primarySegment(of: name) == "My Hero Academia (Anime & Manga)")
+        #expect(FandomDisplayName.aliasSegments(of: name) == ["僕のヒーローアカデミア", "Boku no Hero Academia"])
+        #expect(FandomDisplayName.primarySegment(of: "Marvel") == "Marvel")
+    }
+
     @Test func siblingsShareADisplayTitleButNotAnIdentity() {
         // 534 stems exist both bare and parenthesized. The parsed title is a
         // display string and must never be treated as the fandom's identity —
