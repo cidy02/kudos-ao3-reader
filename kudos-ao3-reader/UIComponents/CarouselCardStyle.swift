@@ -205,88 +205,6 @@ extension ReaderTheme {
         }
     }
 
-    /// A diagonal, fandom-derived wash for redesigned work surfaces. Dark/OLED
-    /// carry the supplied reference's saturated depth; Light and Sepia keep the
-    /// same hue identity on pale, readable surfaces.
-    func workCardGradient(hue: Double) -> LinearGradient {
-        let endHue = hue < 0.92 ? hue + 0.08 : hue - 0.92
-        let colors: [Color]
-        switch self {
-        case .dark, .oled:
-            colors = [
-                Color(hue: hue, saturation: 0.56, brightness: 0.34),
-                Color(hue: endHue, saturation: 0.52, brightness: 0.22),
-                carouselCardSurface,
-            ]
-        case .light:
-            colors = [
-                Color(hue: hue, saturation: 0.24, brightness: 0.98),
-                carouselCardSurface,
-                Color(hue: endHue, saturation: 0.18, brightness: 0.92),
-            ]
-        case .sepia:
-            colors = [
-                Color(hue: hue, saturation: 0.20, brightness: 0.91),
-                carouselCardSurface,
-                Color(hue: endHue, saturation: 0.16, brightness: 0.84),
-            ]
-        }
-        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    /// The short fandom rule and selected metadata tint paired with a work wash.
-    func workCardAccent(hue: Double) -> Color {
-        switch self {
-        case .dark, .oled:
-            Color(hue: hue, saturation: 0.58, brightness: 0.96)
-        case .light:
-            Color(hue: hue, saturation: 0.66, brightness: 0.56)
-        case .sepia:
-            Color(hue: hue, saturation: 0.48, brightness: 0.55)
-        }
-    }
-
-    func workCardBorder(hue: Double) -> Color {
-        switch self {
-        case .dark, .oled: .clear
-        case .light: workCardAccent(hue: hue).opacity(0.14)
-        case .sepia: workCardAccent(hue: hue).opacity(0.18)
-        }
-    }
-
-    /// Full-width ledger rows keep the fandom identity much quieter than the
-    /// compact Home covers: a low-opacity-looking wash over a near-neutral card.
-    func workLedgerGradient(hue: Double) -> LinearGradient {
-        let endHue = hue < 0.92 ? hue + 0.08 : hue - 0.92
-        let colors: [Color]
-        switch self {
-        case .dark, .oled:
-            colors = [
-                Color(hue: hue, saturation: 0.42, brightness: 0.19),
-                Color(hue: endHue, saturation: 0.34, brightness: 0.13),
-            ]
-        case .light:
-            colors = [
-                Color(hue: hue, saturation: 0.10, brightness: 0.99),
-                Color(hue: endHue, saturation: 0.08, brightness: 0.95),
-            ]
-        case .sepia:
-            colors = [
-                Color(hue: hue, saturation: 0.12, brightness: 0.93),
-                Color(hue: endHue, saturation: 0.10, brightness: 0.86),
-            ]
-        }
-        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    func workLedgerBorder(hue: Double) -> Color {
-        switch self {
-        case .dark, .oled: workCardAccent(hue: hue).opacity(0.22)
-        case .light: workCardAccent(hue: hue).opacity(0.16)
-        case .sepia: workCardAccent(hue: hue).opacity(0.20)
-        }
-    }
-
     /// No shadow on OLED: unlike Dark's card↔backdrop pairing, OLED's backdrop is
     /// literal black, so a black shadow has nothing to darken against — the card's
     /// own tonal contrast (`carouselCardSurface` vs. the black page) already reads.
@@ -337,40 +255,5 @@ extension ReaderTheme {
         case .sepia:
             Color(hue: hue, saturation: 0.34, brightness: 0.70).opacity(0.22)
         }
-    }
-}
-
-/// Uppercase fandom label plus its short palette rule, shared by compact work
-/// covers and the Search ledger presentation.
-struct WorkFandomKicker: View {
-    let fandom: String
-    let hue: Double
-    var hiddenCount: Int = 0
-
-    @Environment(ThemeManager.self) private var themeManager
-    @ScaledMetric(relativeTo: .caption2) private var labelSize: CGFloat = 10
-
-    private var visibleText: String {
-        guard hiddenCount > 0 else { return fandom.uppercased() }
-        return "\(fandom.uppercased())  +\(hiddenCount)"
-    }
-
-    var body: some View {
-        let accent = themeManager.appTheme.workCardAccent(hue: hue)
-        VStack(alignment: .leading, spacing: 4) {
-            Text(visibleText)
-                .font(.system(size: labelSize, weight: .bold))
-                .tracking(0.8)
-                .lineLimit(1)
-                .foregroundStyle(accent)
-            Capsule()
-                .fill(accent)
-                .frame(width: 22, height: 2.5)
-        }
-        .combinedAccessibilityRow(
-            hiddenCount > 0
-                ? "Fandom: \(fandom), plus \(hiddenCount) more"
-                : "Fandom: \(fandom)"
-        )
     }
 }

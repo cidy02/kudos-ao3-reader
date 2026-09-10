@@ -22,6 +22,7 @@ struct AO3WorkRow: View {
     var presentation: Presentation = .standard
 
     @Environment(AppRouter.self) private var router
+    @Environment(ThemeManager.self) private var themeManager
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @State private var expanded = false
 
@@ -210,10 +211,10 @@ struct AO3WorkRow: View {
                         HStack(alignment: .top, spacing: 5) {
                             if let primaryFandom {
                                 Button { router.searchAO3(.fandom, primaryFandom) } label: {
-                                    WorkFandomKicker(
-                                        fandom: primaryFandom,
-                                        hue: workHue,
-                                        hiddenCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
+                                    SubjectKicker(
+                                        text: primaryFandom,
+                                        palette: palette,
+                                        trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
                                     )
                                 }
                                 .buttonStyle(.borderless)
@@ -374,6 +375,10 @@ struct AO3WorkRow: View {
         CoverArt.workHue(fandoms: work.fandoms, title: work.title)
     }
 
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: workHue)
+    }
+
     /// Expand/collapse control, bottom-right of the card. A bordered circular
     /// button (not plain text) so it reads as a tappable affordance; borderless
     /// interaction would blend into the background. Captures its own tap so it
@@ -393,13 +398,15 @@ struct AO3WorkRow: View {
                 .font(.caption.weight(.semibold))
         }
         if presentation == .searchLedger {
+            // Spec 1k draws this inline with the kicker as a bare 20pt glyph in
+            // the subject's own light tint. It gets a 30pt hit target rather
+            // than the full 44: the fandom button sits 5pt to its left, and a
+            // 44pt region here reached back over that button's own label.
             button
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .minimumHitTarget()
-                // Keep a real 44pt tap region while the inline disclosure only
-                // consumes the reference's 20pt visual slot.
-                .padding(-12)
+                .foregroundStyle(palette.accentOnFill)
+                .frame(width: 20, height: 20)
+                .minimumHitTarget(30)
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         } else {
             button

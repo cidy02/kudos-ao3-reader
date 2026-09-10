@@ -323,6 +323,8 @@ struct WorkStatusIconGrid: View {
     /// existing bare-grid callers unchanged.
     var showsTray: Bool = false
 
+    @Environment(ThemeManager.self) private var themeManager
+
     private var items: [WorkTopStatsRow.Item] {
         WorkTopStatsRow(
             rating: rating, categories: categories, warnings: warnings,
@@ -360,17 +362,20 @@ struct WorkStatusIconGrid: View {
         }
     }
 
+    /// The tray is a flat translucent fill, NOT a material: it sits on a card
+    /// that already carries the subject's wash, and blurring an
+    /// already-translucent surface reads as a smear rather than as glass. Spec:
+    /// `rgba(255,255,255,.10)` under a `rgba(255,255,255,.16)` hairline, with
+    /// padding tied to the tile size (`8×6` at 24pt, `6×5` at 22pt).
     @ViewBuilder
     private func presentedIcons(_ items: [WorkTopStatsRow.Item]) -> some View {
         if showsTray {
+            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.trayRadius, style: .continuous)
             iconLayout(items)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
-                }
+                .padding(.horizontal, tileSize / 3)
+                .padding(.vertical, tileSize / 4)
+                .background(themeManager.appTheme.glassFill(0.10), in: shape)
+                .overlay { shape.strokeBorder(themeManager.appTheme.glassStroke(), lineWidth: 0.5) }
         } else {
             iconLayout(items)
         }
