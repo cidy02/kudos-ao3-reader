@@ -46,6 +46,8 @@ Verified so far:
 | `2d3696c` | ✅ green | First verified commit. Validates `SubjectSurface`, `SubjectScreen`, the Home hero, `SectionRuleHeader`. |
 | `3f9a5ab` | ✅ green | Validates `WorkRow.ledger`, `scopeHue`, `Color.hueComponent`, `WorkLedgerRow`, `LibraryFilters.summaryLabels`, the chip rail. |
 | `388d246` | ✅ green | Validates `SubjectChip.pill`, Library's Shelves/Ledger layout, `SensitiveWorkRow.providesNavigation`, and the artboard-1k results header with its figure strip and sort menu. |
+| `d3d561b` | ✅ green | The fixed release step. |
+| `7481229` | ✅ green | Validates the artboard-1k page sheet. **Published the first release.** |
 
 Builds are published to **[Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
 as a rolling per-branch pre-release tagged `build-<branch>`, and to each run's
@@ -139,7 +141,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b`, `1ad`, `1ae`, `1af` done. `1ag` (Subscriptions) not started — it is the Account tab's list reached from Home, so it lands with Phase 6's `1p`. |
 | **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Left: Collections previewing four miniature works in ledger mode, and the Recently Deleted row. |
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 the row (Codex) and the results header, figure strip, sort control and chip rail are done. Left: the filter panel's own restyle (`1ao`–`1au`), the tag picker (`1av`/`1aw`), Save Search (`1ax`), and the paging switcher pill. |
-| **4** | Browse — `1g`, `1al`, `1am`, `1an` | ⬜ |
+| **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done (category panels, fandom chip clusters, Jump Back In). Left: `1al`/`1am` (sibling-family grouping inside a category — needs the parser work the fandom audit deferred), and `1an` (the Browse filter sheet). |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | ⬜ |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | ⬜ |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | ⬜ |
@@ -206,7 +208,10 @@ re-reviews settled work and nobody reviews their own.
 | `19a0c61` | Claude | Publish the IPA to Releases, not just artifacts | unreviewed | Release step unverified at time of writing. |
 | `388d246` | Claude | Search results header, artboard 1k | unreviewed | **iOS build green.** |
 | `d3d561b` | Claude | Fix the release step (heredoc → `printf` + `--notes-file`) | unreviewed | Step executed locally against a stub `gh`. |
-| `7481229` | Claude | Page sheet, artboard 1k, replacing the scrubber | unreviewed | Window logic verified against 6 cases; 4 new tests. Build pending. |
+| `7481229` | Claude | Page sheet, artboard 1k, replacing the scrubber | unreviewed | **iOS build green**, and the release published from this run. |
+| `7aaa16a` | Claude | `paths-ignore` so prose commits skip the build | unreviewed | Confirmed working: a doc-only commit triggered no run. |
+| `98d6006` | Claude | Per-SHA concurrency so every commit gets an IPA | unreviewed | CI config. |
+| `d99594d` | Claude | Browse, artboard 1g: category panels + fandom clusters; remove `MasonryLayout` | unreviewed | Largest refactor on the branch. Build pending at time of writing. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -262,6 +267,32 @@ exist; only the staged one is wired.
 
 **Still to do on these screens:** nothing — the filter chip rail landed in
 `3f9a5ab` with `LibraryFilters.summaryLabels`.
+
+### Browse: the spec asked for data that turned out to exist
+
+Artboard 1g's build note says *"Featured fandoms per category are not in the
+current parse — the category pages expose them, but `FandomListView` only reads
+the full list."* True as far as it goes, and it points at the wrong fix.
+
+The app already caches the **whole** per-category fandom list, each entry
+carrying a work count (`FandomCatalog`, feeding `MediaBrowserView`'s stats
+pass). So the cluster shows the category's **largest** fandoms — no new
+request, no new parse, and arguably a better list than AO3's own featured set,
+which is hand-curated and often stale. The sort happens in the existing
+off-actor `computeStats`, never in the view: a category can hold nine thousand
+fandoms.
+
+The lesson generalises to the rest of the "Needs building" notes: **check what
+the app already holds before believing a note that says data is missing.** The
+spec's author was reasoning about AO3's endpoints, not about this app's cache.
+
+### Known cosmetic debt from that change
+
+`CategoryCardSkeleton` was shaped for a two-column masonry card — title lines
+at 160/96pt, two stat blocks, narrow chips. It now sits in a full-width panel,
+so it previews the right *structure* (it follows the panel stack) but at
+column-width proportions. Not a bug, and deliberately not gold-plated: it is a
+loading placeholder, and several screens are still unbuilt.
 
 ### A CI trap worth not repeating
 
