@@ -125,10 +125,10 @@ struct AccountView: View {
                     standardListRoot
                 }
             }
-            .navigationTitle("Account")
-            #if os(iOS)
-                .toolbarTitleDisplayMode(.inlineLarge)
-            #endif
+            // The page states its own name in `subjectHeaderSection` — the
+            // username, per 1m — so the bar keeps its items and gives up its
+            // title rather than saying "Account" a second time above it.
+            .hidesNavigationBarChrome()
                 .navigationDestination(for: Route.self, destination: destination)
                 .navigationDestination(for: SettingsRoute.self) { route in
                     switch route {
@@ -197,6 +197,7 @@ struct AccountView: View {
 
     private var standardListRoot: some View {
         List {
+            subjectHeaderSection
             profileCardSection
 
             if auth.isLoggedIn {
@@ -205,13 +206,51 @@ struct AccountView: View {
             }
         }
         .cardList()
+        .subjectScreenWash(palette: accountPalette)
         .refreshable { await refreshCurrentTab() }
+    }
+
+    /// Spec 1m states the rule this whole treatment follows: *"the header wash is
+    /// the user's app accent colour — the crimson shown here is one instance of
+    /// it, not a fixed value"*. So the artboard's crimson is the default AO3 red
+    /// seen through that rule, not a literal to copy.
+    private var accountPalette: SubjectPalette {
+        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+    }
+
+    /// The username as the page's own 32pt title, per 1m, rather than as a
+    /// navigation title — the spec scrolls it away under the chrome, which a
+    /// `navigationTitle` cannot do. Signed out, there is no username to state,
+    /// so the tab names itself instead (artboard 1n).
+    private var subjectHeaderSection: some View {
+        Section {
+            SubjectHeaderBlock(
+                kicker: "AO3 Account",
+                title: auth.username ?? "Account",
+                subtitle: auth.isLoggedIn ? nil : "Not signed in",
+                palette: accountPalette
+            )
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
     }
 
     /// Matches LibrarySectionListView compact: `ScrollView` + two-up `NavigationLink` cards.
     private var libraryStyleCompactRoot: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AccountControlMetrics.compactSpacing) {
+                // Same header as the list layout: this branch is a different
+                // *arrangement* of the Account tab, not a different screen, and
+                // the tab should not rename itself at a size-class boundary.
+                SubjectHeaderBlock(
+                    kicker: "AO3 Account",
+                    title: auth.username ?? "Account",
+                    subtitle: auth.isLoggedIn ? nil : "Not signed in",
+                    palette: accountPalette
+                )
+                .padding(.top, 8)
+
                 AccountScrollChromeCard {
                     AccountProfileCard(
                         profileModel: profileModel,
@@ -244,7 +283,10 @@ struct AccountView: View {
             }
             .padding(.vertical, 12)
         }
-        .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+        // `subjectScreenWash` paints the backdrop itself, so the plain
+        // `cardBackdrop` fill this used to carry would sit on top of the wash and
+        // hide it.
+        .subjectScreenWash(palette: accountPalette)
         .refreshable { await refreshCurrentTab() }
     }
 
