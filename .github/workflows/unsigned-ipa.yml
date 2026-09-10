@@ -152,39 +152,43 @@ jobs:
           SHORT_SHA="$(git rev-parse --short HEAD)"
           # Slashes are legal in a branch name and not in a tag.
           TAG="build-${GITHUB_REF_NAME//\//-}"
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
 
-          NOTES=$(cat <<EOF
-          Unsigned build of \`$GITHUB_REF_NAME\` at \`$SHORT_SHA\`.
-
-          **This IPA is not signed and will not install as-is.** Sign it with
-          AltStore, Sideloadly or SideStore using your own certificate. Nothing
-          in this repository carries an Apple \`DEVELOPMENT_TEAM\`, which is a
-          deliberate rule (see AGENTS.md), so there is no signed build to hand
-          out.
-
-          This tag is rolling: it is replaced by the next successful build of
-          this branch. For a specific older commit, take the artifact from that
-          commit's [workflow run](../../actions/workflows/unsigned-ipa.yml).
-
-          Built from $GITHUB_SHA.
-          EOF
-          )
+          # Written with printf into a file rather than composed inline with a
+          # heredoc. A heredoc inside a YAML block scalar is a trap this step
+          # already fell into once: the terminator failed to match on the runner,
+          # bash read the note text as code, and the apostrophe in an English
+          # possessive ended the job with "unexpected EOF while looking for
+          # matching quote". printf has no terminator to lose, and single-quoted
+          # format strings leave backticks and Markdown alone.
+          {
+            printf 'Unsigned build of `%s` at `%s`.\n\n' "$GITHUB_REF_NAME" "$SHORT_SHA"
+            printf '**This IPA is not signed and will not install as-is.** Sign it with '
+            printf 'AltStore, Sideloadly or SideStore using your own certificate.\n\n'
+            printf 'Nothing in this repository carries an Apple `DEVELOPMENT_TEAM` — that is '
+            printf 'a deliberate rule (see AGENTS.md), so there is no signed build to hand out.\n\n'
+            printf 'This tag is rolling: the next successful build of this branch replaces it. '
+            printf 'For an older commit, take the .ipa artifact from that run of the workflow.\n\n'
+            printf 'Built from %s.\n' "$GITHUB_SHA"
+          } > "$NOTES_FILE"
 
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" "$IPA" \
             --title "Unsigned build — $GITHUB_REF_NAME ($SHORT_SHA)" \
-            --notes "$NOTES" \
+            --notes-file "$NOTES_FILE" \
             --prerelease \
             --target "$GITHUB_SHA"
-          echo "Published $TAG -> $(basename "$IPA")"
+          echo "Published $TAG with $(basename "$IPA")"
 
       # The build log is the useful half when the IPA step fails, and a failed
       # xcodebuild on this repo is usually a missing SDK rather than bad code.
       - name: Report
         if: failure()
         run: |
-          echo "The IPA build failed. Check, in this order:"
-          echo "  1. Does this runner's Xcode ship the iOS SDK the project targets?"
-          echo "     IPHONEOS_DEPLOYMENT_TARGET is in AO3_App_OpenSource.xcodeproj/project.pbxproj."
-          echo "  2. Did Vendor/MuPDF.xcframework and Packages/FluidAudio get built/fetched?"
-          echo "  3. Is it an actual compile error in the diff?"
+          echo "This job failed. Which step went red decides where to look:"
+          echo "  Build MuPDF        - upstream drift, or a runner without the SDK."
+          echo "                       MUPDF_REF in Scripts/build-mupdf.sh pins the tag."
+          echo "  Build unsigned IPA - a real compile error in the diff, or a missing"
+          echo "                       Vendor/MuPDF.xcframework / Packages/FluidAudio."
+          echo "  Publish to Releases- the app built fine and only publishing failed."
+          echo "                       The artifact from this run is still usable."
