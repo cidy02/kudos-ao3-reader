@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import Kudos
 
@@ -89,6 +90,72 @@ struct WorkDetailPresentationTests {
         #expect(WorkDetailPresentation.preservationStatusLabel(.failed) == "Needs restore")
         #expect(WorkDetailPresentation.preservationStatusLabel(.missingFile) == "Needs restore")
         #expect(WorkDetailPresentation.preservationStatusLabel(.notPreserved) == "Not preserved")
+    }
+
+    // MARK: My copy summary (artboard 1a's row at the foot of the page)
+
+    @Test func myCopySummaryNamesOnlyWhatIsTrue() {
+        // Spec 1a's own example line.
+        #expect(WorkDetailPresentation.myCopySummary(
+            isDownloaded: true, queueCount: 2, tagCount: 1, collectionCount: 0
+        ) == "Downloaded · 2 queues · 1 tag")
+    }
+
+    @Test func myCopySummarySkipsEmptyFactsRatherThanPrintingZero() {
+        // A work in no queues says nothing about queues. "0 queues" is a fact
+        // about nothing, and it would crowd out the ones that matter.
+        #expect(WorkDetailPresentation.myCopySummary(
+            isDownloaded: true, queueCount: 0, tagCount: 0, collectionCount: 0
+        ) == "Downloaded")
+        #expect(WorkDetailPresentation.myCopySummary(
+            isDownloaded: false, queueCount: 3, tagCount: 0, collectionCount: 0
+        ) == "3 queues")
+    }
+
+    @Test func myCopySummarySingularAndPluralAgreeWithTheCount() {
+        #expect(WorkDetailPresentation.myCopySummary(
+            isDownloaded: false, queueCount: 1, tagCount: 1, collectionCount: 1
+        ) == "1 queue · 1 collection · 1 tag")
+        #expect(WorkDetailPresentation.myCopySummary(
+            isDownloaded: false, queueCount: 2, tagCount: 2, collectionCount: 2
+        ) == "2 queues · 2 collections · 2 tags")
+    }
+
+    @Test func myCopySummarySaysSoWhenThereIsNothingLocal() {
+        // The row is only shown for a work that has a local record at all, but a
+        // record can exist with nothing attached to it — a blank line under
+        // "My copy" would read as a rendering fault rather than as a state.
+        #expect(WorkDetailPresentation.myCopySummary(
+            isDownloaded: false, queueCount: 0, tagCount: 0, collectionCount: 0
+        ) == "Nothing saved on this device yet")
+    }
+
+    // MARK: Warning figures (the strip under the title, spec 1a)
+
+    @Test func warningFigureTextDropsTheFieldNameTheLabelAlreadyGives() {
+        // `text` says "No Warnings" because it stands alone beside an icon; the
+        // strip prints it under a WARNINGS label, where that is the field twice.
+        #expect(WorkWarningStatus(rawWarnings: []).figureText == "None")
+        #expect(WorkWarningStatus(rawWarnings: ["No Archive Warnings Apply"]).figureText == "None")
+        #expect(WorkWarningStatus(rawWarnings: ["Creator Chose Not To Use Archive Warnings"])
+            .figureText == "Undisclosed")
+        #expect(WorkWarningStatus(rawWarnings: ["Graphic Depictions Of Violence"]).figureText == "1")
+        #expect(WorkWarningStatus(rawWarnings: ["Graphic Depictions Of Violence", "Major Character Death"])
+            .figureText == "2")
+    }
+
+    @Test func warningFigureColourDiffersFromTheBadgeRampOnlyForNoWarnings() {
+        // The documented disagreement, locked in: gray reads as "nothing
+        // flagged" among badge icons and as "dimmed out" as a cell's only text,
+        // so the figure form takes green. The other two states must not drift.
+        #expect(WorkWarningStatus(rawWarnings: []).color == .gray)
+        #expect(WorkWarningStatus(rawWarnings: []).figureColor == .green)
+
+        let undisclosed = WorkWarningStatus(rawWarnings: ["Creator Chose Not To Use Archive Warnings"])
+        #expect(undisclosed.color == undisclosed.figureColor)
+
+        let present = WorkWarningStatus(rawWarnings: ["Major Character Death"])
+        #expect(present.color == present.figureColor)
     }
 
     @Test func fileSizeLabelFormatsExistingFileAndNilsMissing() throws {
