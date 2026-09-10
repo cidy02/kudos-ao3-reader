@@ -317,6 +317,10 @@ struct SubjectKicker: View {
 /// directly on the wash — no card, per the spec.
 struct SubjectHeaderBlock<Trailing: View>: View {
     let kicker: String
+    /// Further subjects the kicker is not naming, drawn as `SubjectKicker`'s
+    /// dimmed `+3`. A work in six fandoms is headed by its first, and this is
+    /// what stops the other five vanishing without trace.
+    var kickerTrailingCount: Int = 0
     let title: String
     var subtitle: String?
     let palette: SubjectPalette
@@ -334,6 +338,7 @@ struct SubjectHeaderBlock<Trailing: View>: View {
             SubjectKicker(
                 text: kicker,
                 palette: palette,
+                trailingCount: kickerTrailingCount,
                 ruleWidth: SubjectMetrics.pageRuleWidth,
                 ruleSpacing: 7
             )
@@ -370,9 +375,16 @@ struct SubjectHeaderBlock<Trailing: View>: View {
 }
 
 extension SubjectHeaderBlock where Trailing == EmptyView {
-    init(kicker: String, title: String, subtitle: String? = nil, palette: SubjectPalette) {
+    init(
+        kicker: String,
+        kickerTrailingCount: Int = 0,
+        title: String,
+        subtitle: String? = nil,
+        palette: SubjectPalette
+    ) {
         self.init(
             kicker: kicker,
+            kickerTrailingCount: kickerTrailingCount,
             title: title,
             subtitle: subtitle,
             palette: palette,
@@ -460,12 +472,25 @@ struct SubjectStatStrip: View {
         /// green for General and No Warnings, red for Explicit — which is a
         /// different axis from the subject's hue and cannot come from it.
         var tint: Color?
+        /// What VoiceOver reads instead of the printed value and label. The
+        /// default reading is the two run together, which is right while both
+        /// are words ("3,216 works"). It is useless where the cell abbreviates
+        /// to fit — "G RATING", "F/M CATEGORY" — so a cell that shortens its
+        /// value states the long form here.
+        var accessibilityText: String?
 
-        init(value: String, label: String, isHighlighted: Bool = false, tint: Color? = nil) {
+        init(
+            value: String,
+            label: String,
+            isHighlighted: Bool = false,
+            tint: Color? = nil,
+            accessibilityText: String? = nil
+        ) {
             self.value = value
             self.label = label
             self.isHighlighted = isHighlighted
             self.tint = tint
+            self.accessibilityText = accessibilityText
         }
     }
 
@@ -499,7 +524,7 @@ struct SubjectStatStrip: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 6)
-                .combinedAccessibilityRow("\(cell.value) \(cell.label)")
+                .combinedAccessibilityRow(cell.accessibilityText ?? "\(cell.value) \(cell.label)")
             }
         }
         .background(

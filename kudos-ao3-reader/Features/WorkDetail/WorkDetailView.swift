@@ -50,6 +50,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(AppRouter.self) var router
+    @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Environment(DownloadQueue.self) private var downloadQueue
     @Query(sort: \Tag.name) var allTags: [Tag]
@@ -142,6 +143,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             }
         }
         .cardList()
+        // Spec 1a washes the page in the work's own hue and runs it 620pt down,
+        // well past the identity block, so the strip and resume card sit inside
+        // the colour rather than on the plain backdrop below it.
+        .subjectScreenWash(palette: workPalette, washHeight: 620)
         .refreshable { await refreshDetails() }
         // Same-touch author byline on a List card can also activate the row's work
         // NavigationLink. Dismiss async — in-transaction dismiss() is often ignored.
@@ -198,49 +203,96 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .padding()
             }
         }
-        .navigationTitle(displayTitle)
-        #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+        // The title is the page's own 32pt heading now (spec 1a), so repeating
+        // it in the bar would be the same fact twice — `subjectScreenWash` empties
+        // the bar for exactly that reason, and also hides the floating tab bar
+        // this used to ask for separately. macOS has no such header treatment in
+        // its window chrome, so it keeps the real title.
+        #if os(macOS)
+            .navigationTitle(displayTitle)
         #endif
-            .hidesFloatingTabBar()
             .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
             .toolbar { detailToolbar }
     }
 
     // MARK: - Hero + section control
 
+    /// The work's own hue, the way every other work surface in the app derives
+    /// it — primary fandom, else the title. A work page is scoped to a work, so
+    /// it takes the work's colour and not `ThemeManager.scopeHue`, which is what
+    /// the tab-scoped and account-scoped screens use.
+    var workPalette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(
+            hue: CoverArt.workHue(fandoms: displayFandoms, title: displayTitle)
+        )
+    }
+
+    /// Artboard 1a's identity block: header, figure strip, resume card. Each is
+    /// its own row on the wash rather than one card, at the spec's own gutters
+    /// (26pt for the header, 22pt for the two panels under it).
     private var heroSection: some View {
         Section {
-            WorkDetailHeroCard(
+            WorkDetailIdentityHeader(
                 title: displayTitle,
                 authors: displayAuthorList,
                 identities: displayAuthorIdentities,
                 fandoms: displayFandoms,
-                rating: displayRating,
-                categories: displayCategories,
-                warnings: displayWarnings,
-                completion: displayCompletionStatus,
-                language: displayLanguage,
-                chapters: displayChapters,
-                words: displayWords,
-                readingProgress: localWork?.readingProgress,
-                lastSpineIndex: localWork?.lastSpineIndex ?? 0
+                palette: workPalette
             )
-            // Not .cardRow() (double chrome — the hero now draws its own
-            // complete card, copied byte-for-byte from HomeResumeHero) and
-            // not .bareListRow() either (its innerHorizontal inset would
-            // stack with the hero's own internal 16pt padding, making it
-            // narrower than the same card looks in Home). Only the screen-edge
-            // margin the hero actually sits at, nothing more.
-            .listRowInsets(EdgeInsets(
-                top: CardListMetrics.interCardSpacing / 2,
-                leading: CardListMetrics.sideMargin,
-                bottom: CardListMetrics.interCardSpacing / 2,
-                trailing: CardListMetrics.sideMargin
-            ))
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 0, trailing: 0))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
+
+            WorkDetailFigureStrip(
+                rating: displayRating,
+                warnings: displayWarnings,
+                categories: displayCategories,
+                chapters: displayChapters,
+                completion: displayCompletionStatus,
+                palette: workPalette
+            )
+            .listRowInsets(EdgeInsets(top: 16, leading: 22, bottom: 0, trailing: 22))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+
+            resumeCardRow
         }
+    }
+
+    /// The resume card carries the screen's primary action, so the quick-action
+    /// grid no longer opens with a Read tile — two controls for one action, a
+    /// thumb-length apart, is a coin toss the reader should not have to make.
+    private var resumeCardRow: some View {
+        let hasReadableCopy = localWork?.hasEPUB ?? false
+        let label = WorkDetailPresentation.readAction(
+            hasEPUB: hasReadableCopy,
+            working: working,
+            continueReading: (localWork?.hasStartedReading ?? false)
+                && !(localWork?.isFinished ?? false)
+        )
+        return WorkDetailResumeCard(
+            actionTitle: label.title,
+            hasReadableCopy: hasReadableCopy,
+            isBusy: working,
+            readingProgress: resumeCardReadingProgress,
+            lastSpineIndex: localWork?.lastSpineIndex ?? 0,
+            lastReadDate: localWork?.lastReadDate,
+            palette: workPalette,
+            action: read
+        )
+        .listRowInsets(EdgeInsets(top: 14, leading: 22, bottom: 4, trailing: 22))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    /// Nil unless this work has actually been opened on this device. A ring at
+    /// 0% would claim a work nobody here has touched is being tracked, and a
+    /// remote work browsed from Search is exactly that. A work that *has* been
+    /// opened but stored no fraction — only a `lastReadDate`, which the legacy
+    /// reader path can leave behind — is honestly at 0%.
+    private var resumeCardReadingProgress: Double? {
+        guard let work = localWork, work.hasStartedReading else { return nil }
+        return work.readingProgress ?? 0
     }
 
     private var sectionPickerSection: some View {
