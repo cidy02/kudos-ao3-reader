@@ -14,9 +14,9 @@ import SwiftUI
 /// 34pt glass circles directly over the wash, with the page's own 32pt title
 /// scrolling underneath them. A `UINavigationBar` cannot be persuaded into that
 /// arrangement without fighting its own title layout. Hiding it costs the system
-/// interactive pop gesture, so the scaffold reinstates a back swipe with
-/// `edgeSwipeToGoBack` — the same helper the reader already uses for exactly
-/// this reason.
+/// interactive pop gesture, so the scaffold reinstates a back swipe through
+/// `reinstatesBackSwipe`, which wraps `edgeSwipeToGoBack` — the same helper the
+/// reader already uses for exactly this reason.
 struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content: View>: View {
     let palette: SubjectPalette
     /// The uppercase line above the title — where you came from ("HOME"), or
@@ -57,9 +57,8 @@ struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content:
         .safeAreaInset(edge: .top, spacing: 0) { floatingChromeRow }
         .subjectWash(palette, height: washHeight)
         .hidesFloatingTabBar()
-        .navigationBarBackButtonHidden(true)
         .hidesSystemNavigationBar()
-        .edgeSwipeToGoBack { dismiss() }
+        .reinstatesBackSwipe { dismiss() }
     }
 
     private var floatingChromeRow: some View {
@@ -92,10 +91,9 @@ extension SubjectScreenScaffold where LeadingChrome == GlassCircleButton<Image> 
             subtitle: subtitle,
             washHeight: washHeight,
             leadingChrome: {
-                GlassCircleButton(action: onBack) {
+                GlassCircleButton(accessibilityName: "Back", action: onBack) {
                     Image(systemName: "chevron.left")
                 }
-                .accessibilityLabel("Back")
             },
             trailingChrome: trailingChrome,
             content: content
@@ -104,12 +102,25 @@ extension SubjectScreenScaffold where LeadingChrome == GlassCircleButton<Image> 
 }
 
 extension View {
-    /// Hides the navigation bar itself, not just its back button. Split out
-    /// because `ToolbarPlacement.navigationBar` does not exist on macOS, where
-    /// the app uses a sidebar split and there is no bar to hide.
+    /// Hides the navigation bar itself, back button included. Split out because
+    /// neither `ToolbarPlacement.navigationBar` nor
+    /// `navigationBarBackButtonHidden` exists on macOS, where the app uses a
+    /// sidebar split and there is no bar to hide in the first place.
     func hidesSystemNavigationBar() -> some View {
         #if os(iOS)
-        toolbar(.hidden, for: .navigationBar)
+        navigationBarBackButtonHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
+        #else
+        self
+        #endif
+    }
+
+    /// Puts back the interactive pop gesture that hiding the navigation bar
+    /// takes away. `edgeSwipeToGoBack` is itself iOS-only — macOS has no screen
+    /// edge to swipe from, and its sidebar navigation never lost anything.
+    func reinstatesBackSwipe(_ action: @escaping () -> Void) -> some View {
+        #if os(iOS)
+        edgeSwipeToGoBack(perform: action)
         #else
         self
         #endif

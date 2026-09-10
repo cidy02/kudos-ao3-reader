@@ -2,11 +2,28 @@
 
 **Branch:** `codex/kudos-redesign` · **Task row:** `T-212` in [`TASKS.md`](../TASKS.md)
 
-Source of truth is the owner-supplied **Final Redesign Spec** design canvas
-(`Final_Redesign_Spec.dc.html`, local-only — 87 artboards / 104 screens). This
-file is the *durable* record of what it says and how far the implementation has
-got, so a session that runs out of context can be replaced by a fresh one with
-zero archaeology.
+Source of truth is the owner-supplied **Final Redesign Spec** design canvas —
+87 artboards, 104 screens — now committed at
+[`docs/design/Final_Redesign_Spec.dc.html`](design/Final_Redesign_Spec.dc.html)
+so every agent on this branch reads the same version. This file is the
+*durable* record of what it says and how far the implementation has got, so a
+session that runs out of context can be replaced by a fresh one with zero
+archaeology.
+
+**Read the canvas with the tool, not with your eyes.** It is 2 MB of
+inline-styled HTML; opening it burns context for nothing, and the numbers you
+need are in the styles rather than in the rendering:
+
+```
+Scripts/redesign-spec-outline.py --list            # every artboard id + screens
+Scripts/redesign-spec-outline.py --board 1k        # one artboard, as a tree
+Scripts/redesign-spec-outline.py --notes           # every prose + "Needs building" note
+```
+
+Its two support files (`support.js`, `ios-frame.jsx`) were not part of the
+upload, so the committed copy will not render as an interactive canvas — it is
+committed to be *read*, which is what the outline tool does. Ask the owner for
+a fresh export if you need the interactive version.
 
 ---
 
@@ -156,7 +173,9 @@ re-reviews settled work and nobody reviews their own.
 | `7fac768` | Codex | Refine redesign card hierarchy | Claude → `9ee86ba` | Reviewed together with `38c42f4`. Not compiled. |
 | `9ee86ba` | Claude | `SubjectSurface.swift`; collapse onto one palette | unreviewed | Wants a non-Claude reviewer. Never compiled — see §0. |
 | `436f7af` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`); `xcodebuild` path unrun. |
-| `<next>` | Claude | Phase 1 Home: section headers, hero, counts; IPA workflow fixes | unreviewed | Not compiled. |
+| `620c82a` | Claude | Phase 1 Home: section headers, hero, counts; IPA workflow fixes | unreviewed | Not compiled. |
+| `37bfac2` | Claude | Pin MuPDF clone; `SubjectScreen.swift` scaffold + ledger row | unreviewed | Not compiled. MuPDF pin verified against upstream tag contents, not by building. |
+| `<next>` | Claude | Commit the canvas + outline tool; fix 3 compile errors in the new components | unreviewed | Outline tool run and checked; Swift still uncompiled. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
