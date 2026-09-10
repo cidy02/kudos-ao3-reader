@@ -1409,6 +1409,18 @@ nonisolated struct AO3Collection: Identifiable, Hashable, Sendable {
     var byline: String = ""
     var maintainerNames: [String] = []
     var maintainerIdentities: [AO3AuthorIdentity] = []
+    /// Four independent preference flags. AO3 stores each separately, so a
+    /// collection can be closed, moderated, unrevealed and anonymous at once.
+    var isClosed: Bool = false
+    var isModerated: Bool = false
+    var isUnrevealed: Bool = false
+    var isAnonymous: Bool = false
+    var worksCount: Int? = nil
+    var bookmarksCount: Int? = nil
+    var iconURL: URL? = nil
+    var summary: String = ""
+    var updatedAtText: String = ""
+    var challengeKind: AO3ChallengeKind? = nil
     var id: String {
         name
     }
