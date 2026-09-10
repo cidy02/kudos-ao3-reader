@@ -112,7 +112,8 @@ struct PrivacyDataView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Moves your local reading-history records to Recently Deleted for 90 days. "
-                + "The works themselves can also be re-downloaded from AO3 anytime.")
+                + "Your saved and downloaded works are not affected, and the works "
+                + "themselves can be re-downloaded from AO3 anytime.")
         }
         .confirmationDialog(
             "Clear Downloads?",
@@ -169,11 +170,17 @@ struct PrivacyDataView: View {
 
     private var promisePanel: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("No analytics, no tracking, no accounts but yours")
+            Text("No ads, no analytics, no tracking, no accounts but yours")
                 .font(.system(size: 15, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
-            Text("The app talks to AO3 and to nothing else. Reading position, downloads and "
-                + "local collections stay on this device.")
+            // Spec 1ac's line is "The app talks to AO3 and to nothing else."
+            // Left as written it would be **false on this very screen**: the
+            // Read Aloud section below says a Voice Pack host can see your IP
+            // address. The old copy named that exception and this keeps it. A
+            // privacy page that overclaims is worse than one that says less.
+            Text("Kudos talks to AO3, and — only after you confirm a download — to a Voice "
+                + "Pack host. Nothing else. Your library, reading positions, tags, local "
+                + "collections and AO3 session stay on this device.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -255,8 +262,9 @@ struct PrivacyDataView: View {
     }
 
     private var storedFootnote: some View {
-        footnote("Sizes are measured on this device, not estimated. Caches are rebuilt on "
-            + "demand and the system may free them at any time.")
+        footnote("Sizes are measured on this device, not estimated. Caches hold scraped AO3 "
+            + "fandom and category data so Browse opens instantly; they rebuild on demand, "
+            + "and the system may free them at any time.")
     }
 
     // MARK: Clear

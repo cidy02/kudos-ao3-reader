@@ -95,6 +95,8 @@ struct ReadingInsightsView: View {
                     .pageBodyRow(top: 18, gutter: 0)
                 libraryCard.pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
+
+            Section { topFandomsSection }
         }
         .cardList()
         .subjectScreenWash(palette: palette)
@@ -274,10 +276,12 @@ struct ReadingInsightsView: View {
     private func fandomRow(
         _ entry: ReadingInsights.FandomShare,
         rank: Int,
-        peak: Double
+        peak: Double,
+        valueLabel: String? = nil
     ) -> some View {
         let width = share(entry.seconds, of: peak)
         let tint = barTint(rank: rank, isRemainder: entry.isRemainder)
+        let value = valueLabel ?? "\(ReadingInsights.hoursLabel(entry.seconds)) h"
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(entry.name)
@@ -285,7 +289,7 @@ struct ReadingInsightsView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(ReadingInsights.hoursLabel(entry.seconds)) h")
+                Text(value)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(tint)
             }
@@ -300,9 +304,7 @@ struct ReadingInsightsView: View {
                     }
                 }
         }
-        .combinedAccessibilityRow(
-            "\(entry.name): \(ReadingInsights.hoursLabel(entry.seconds)) hours"
-        )
+        .combinedAccessibilityRow("\(entry.name): \(value)")
     }
 
     /// The spec gives the three named fandoms three distinct tints and the
@@ -429,7 +431,8 @@ struct ReadingInsightsView: View {
             libraryGrid
             Divider().overlay(Color.primary.opacity(0.12))
             Text("Words read counts finished works with a known AO3 word count. "
-                + "Recent activity counts distinct works opened.")
+                + "Recent activity counts distinct works opened. Finished counts works "
+                + "marked finished, including any you read before the session log existed.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -438,6 +441,44 @@ struct ReadingInsightsView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .subjectCard(palette: palette)
+    }
+
+    /// Most-read fandoms by **number of works**, all time — the figure the
+    /// retired screen showed.
+    ///
+    /// Deliberately kept alongside the spec's hours card rather than replaced by
+    /// it, because the two answer different questions and only this one answers
+    /// anything for a reader whose session log is empty. `topFandoms` counts
+    /// works started; `byFandom` measures hours spent in a period.
+    ///
+    /// Header and card are one builder so the ranking is computed once:
+    /// `ReadingStatistics.init` walks every work, and a heading that needed its
+    /// own count would walk them twice per render.
+    @ViewBuilder
+    private var topFandomsSection: some View {
+        let ranked = Array(library.topFandoms.prefix(6))
+        if !ranked.isEmpty {
+            let peak = ranked.first?.count ?? 0
+            SectionRuleHeader(title: "Most-read fandoms", count: ranked.count)
+                .pageBodyRow(top: 18, gutter: 0)
+            VStack(alignment: .leading, spacing: 13) {
+                ForEach(Array(ranked.enumerated()), id: \.element.id) { index, fandom in
+                    fandomRow(
+                        ReadingInsights.FandomShare(
+                            name: fandom.name, seconds: Double(fandom.count)
+                        ),
+                        rank: index,
+                        peak: Double(peak),
+                        valueLabel: fandom.count.formatted()
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .subjectCard(palette: palette)
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+        }
     }
 
     private var libraryGrid: some View {
@@ -459,6 +500,10 @@ struct ReadingInsightsView: View {
                 stats.wordsRead.formatted(.number.notation(.compactName)), "words read"
             )
             paceCell(stats.inProgressWorks.formatted(), "still in progress")
+            paceCell(
+                stats.finishedWorks.formatted(),
+                "finished (\(completionPercent(stats)))"
+            )
             paceCell(stats.openedLast7Days.formatted(), "opened in 7 days")
             paceCell(stats.openedLast30Days.formatted(), "opened in 30 days")
             paceCell(lastReadLabel(stats.latestReadDate), "last read")
@@ -470,8 +515,12 @@ struct ReadingInsightsView: View {
     }
 
     private func lastReadLabel(_ date: Date?) -> String {
-        guard let date else { return "—" }
+        guard let date else { return "Not yet" }
         return date.formatted(.relative(presentation: .named))
+    }
+
+    private func completionPercent(_ stats: ReadingStatistics) -> String {
+        stats.completionRate.formatted(.percent.precision(.fractionLength(0)))
     }
 
     // MARK: Empty
