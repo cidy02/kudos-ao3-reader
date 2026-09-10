@@ -1,6 +1,6 @@
 # Kudos redesign — plan, status, and handoff
 
-**Branch:** `codex/kudos-redesign` · **Task row:** `T-212` in [`TASKS.md`](../TASKS.md)
+**Branch:** `codex/kudos-redesign` · **Task rows:** `T-212` (foundation, done), `T-213` (Codex screen polish), `T-214` (gating capabilities, Grok) in [`TASKS.md`](../TASKS.md)
 
 Source of truth is the owner-supplied **Final Redesign Spec** design canvas —
 87 artboards, 104 screens — now committed at
@@ -267,17 +267,17 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **0** | Shared language + fixes to the foundation | ✅ done |
 | **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b`, `1ad`, `1ae`, `1af` done. `1ag` (Subscriptions) not started — it is the Account tab's list reached from Home, so it lands with Phase 6's `1p`. |
 | **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Left: Collections previewing four miniature works in ledger mode, and the Recently Deleted row. |
-| **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 the row (Codex) and the results header, figure strip, sort control and chip rail are done. Left: the filter panel's own restyle (`1ao`–`1au`), the tag picker (`1av`/`1aw`), Save Search (`1ax`), and the paging switcher pill. |
-| **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done (category panels, fandom chip clusters, Jump Back In). Left: `1al`/`1am` (sibling-family grouping inside a category — needs the parser work the fandom audit deferred), and `1an` (the Browse filter sheet). |
+| **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. Left: the paging switcher pill. |
+| **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | ⬜ |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
-| **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ⬜ |
-| **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | ⬜ |
-| **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | ⬜ |
-| **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | ⬜ |
-| **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | ⬜ |
+| **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | 🟡 **data path landed** (`725695e3`): `ReadingSession` / `ReadingFavorite` / `FandomReadWatermark` + `ReadingLogService` + v8 additive backup. Screens not built. |
+| **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **networking landed** (`561f848b`): `AO3Client+Collections` / `AO3CollectionActions`. Screens not built. `1bk` is local and already existed. Close/delete stay Open on AO3. |
+| **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
+| **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
+| **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` (filter-collision empty with per-drop counts) and `1az` (series empty → Safari) landed in `5100addb`. `1bb` left. |
 
 ### Correction (2026-09-10): what the write policy actually says
 
@@ -431,6 +431,11 @@ re-reviews settled work and nobody reviews their own.
 | `6d1a08d` | Claude | Tests for `myCopySummary` and the warning figure form | unreviewed | **Unverified by anything here** — CI builds the app target only, so `KudosTests` is never compiled. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
+| `725695e` | Grok | Local reading log: sessions, favorites, fandom watermarks; v8 additive backup; reader start/end hooks | unreviewed | Wants a non-Grok reviewer. Parse-check clean. **CI has not compiled this.** Tests exist but CI builds the app target only. Manifest stays v8 (Android only accepts 1…8). Not seen on a device. |
+| `561f848` | Grok | AO3 collections + challenges networking (`AO3Client+Collections/Challenges`, matching/association are Open-on-AO3 only) | unreviewed | Wants a non-Grok reviewer. Writes unexercised against a live AO3 session. `URLSession(` in Services still exactly two constructors. |
+| `bac3397` | Grok | AO3 writing-surface networking (work/chapter/series/draft/bulk/tags) + tag autocomplete wrapper | unreviewed | Wants a non-Grok reviewer. Reuses `autocompleteTags`; no second URL builder. Writes unexercised. Series create from `/series/new` is Open on AO3. |
+| `a0913bf` | Grok | Fandom sibling-family grouping (`1al`/`1am`/`1an`); category work total marked approximate | unreviewed | Wants a non-Grok reviewer. Group id is sorted original names, never the parsed title. Not seen. |
+| `5100add` | Grok | `includeColor`; searchable language picker; five range sliders; `1ay`/`1az` empty states | unreviewed | Wants a non-Grok reviewer. `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching code. `1ba` comment-posting note is stale. `1ax` SavedSearch naming+list already exist. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -441,6 +446,58 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Grok T-214: gating capabilities + Codex "Needs building" notes
+
+Codex hit a usage limit; both briefs landed here. **Extend only — nothing was
+deleted to go green.** `project.pbxproj` was not touched (a local Xcode reorder
+of FluidAudio/sherpa pins was reverted before it could commit — T-208's shape).
+Services still has exactly two `URLSession(` constructors (`AO3Client`,
+`AO3AuthService`). No `softDelete`/`hardDelete` in the new write files. Backup
+manifest stays **v8**; new arrays are decode-if-present. Android will strip
+them until a passthrough lands (T-210 class; T-211 forbids a v9 bump).
+
+**Landed (data / networking, not screens):**
+
+- Local reading log (`725695e`): `ReadingSession`, `ReadingFavorite`,
+  `FandomReadWatermark`, `SavedWork.keepInProgressOverride`, tombstones,
+  `ReadingLogService` (drop opens < 15s), reader appear/disappear hooks on
+  iOS Readium + macOS `ReaderView`. Not `applyDebouncedReadiumLocator`.
+- AO3 collections + challenges (`561f848`): reads through
+  `getHTML`/`authenticatedPageHTML`; writes are CSRF + single `submitWrite`.
+  Matching and tag-set association are `matchingOpenOnAO3` /
+  `associationOpenOnAO3` only — no `runMatching()`.
+- AO3 writing surfaces (`bac3397`): work/chapter/series/draft/bulk/tags.
+  Tag autocomplete wraps the existing `autocompleteTags` (debounce +
+  coordinator). Non-canonical tags still post. `/series/new` has no title
+  field, so create is Open on AO3.
+- Fandom families (`a0913bf`): group on parsed title inside one category;
+  identity is sorted original names joined with U+001E. Family tap sends every
+  raw sibling as an included fandom filter. Sum carries a tilde until
+  `AO3ResultSummary.total` is cached. `MediaBrowserView`'s category work total
+  is the same lie, now marked approximate.
+- Filter UI (`5100add`): `includeColor` (not `.tint`), searchable language
+  picker, five range sliders over existing From/To strings (digits-only still
+  strips non-ASCII), Library filter-collision empty state with per-drop
+  counts, series empty → Safari.
+
+**Confirmed matching / stale, built nothing:** `1ao` `1aq` `1as` `1au` `1av`
+`1aw`. `1ba` ("posting comments is an AO3 write the app does not implement")
+is stale — `postComment` exists. `1ax` SavedSearch naming alert and idle list
+already exist.
+
+**Verified:** `Scripts/swift-parse-check.py` on the 54 Swift files in this
+merge — 0 syntax errors. Grep: two `URLSession(` in Services; no file
+deletions vs `origin/codex/kudos-redesign`.
+
+**Not verified:** no `xcodebuild`, no simulator, `KudosTests` is not compiled
+by CI, writes never hit a live AO3 session, nothing seen on a device. Tests
+were written to fail if the feature is removed (duration, UUID grouping,
+includeColor ≠ excludeColor, drop-one counts, family id ≠ title) but that
+mutation check was by reading, not by running.
+
+**Left for screens:** Phase 9–12 layouts, `1bv` editor (mockup), `1bb`, the
+Search paging pill.
 
 ### 2026-09-10 — Codex's T-213 pass (`74680bb`), and what it found in ours
 
