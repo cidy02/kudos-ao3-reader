@@ -130,8 +130,8 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | Phase | Screens (artboard ids) | Status |
 |---|---|---|
 | **0** | Shared language + fixes to the foundation | ✅ done |
-| **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b` done; `1ad`/`1ae`/`1af`/`1ag` next |
-| **2** | Library tab — `1c` (shelves), `1d` (ledger) | ⬜ |
+| **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b`, `1ad`, `1ae`, `1af` done. `1ag` (Subscriptions) not started — it is the Account tab's list reached from Home, so it lands with Phase 6's `1p`. |
+| **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Left: Collections previewing four miniature works in ledger mode, and the Recently Deleted row. |
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 row done, screen not |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | ⬜ |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | ⬜ |
@@ -184,13 +184,18 @@ re-reviews settled work and nobody reviews their own.
 |---|---|---|---|---|
 | `38c42f4` | Codex | Redesign work-card foundation | Claude → `9ee86ba` | 5 spec drifts + 1 hit-target defect found; see §3. Not compiled. |
 | `7fac768` | Codex | Refine redesign card hierarchy | Claude → `9ee86ba` | Reviewed together with `38c42f4`. Not compiled. |
-| `9ee86ba` | Claude | `SubjectSurface.swift`; collapse onto one palette | unreviewed | Wants a non-Claude reviewer. Never compiled — see §0. |
-| `436f7af` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`); `xcodebuild` path unrun. |
-| `620c82a` | Claude | Phase 1 Home: section headers, hero, counts; IPA workflow fixes | unreviewed | Not compiled. |
-| `37bfac2` | Claude | Pin MuPDF clone; `SubjectScreen.swift` scaffold + ledger row | unreviewed | Not compiled. MuPDF pin verified against upstream tag contents, not by building. |
-| `2d3696c` | Claude | Commit the canvas + outline tool; fix 3 compile errors in the new components | unreviewed | Outline tool run and checked; Swift still uncompiled. |
-| `493fca9` | Claude | Stop the IPA workflow cancelling its own runs | unreviewed | Trivial CI config. |
-| `<next>` | Claude | `WorkRow.ledger`; scope hue from the app accent; Home section pages | unreviewed | Not compiled at time of writing. |
+| `9ee86ba` | Claude | `SubjectSurface.swift`; collapse onto one palette | unreviewed | Wants a non-Claude reviewer. Compiles (via `2d3696c`). |
+| `436f7af` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`). |
+| `620c82a` | Claude | Phase 1 Home: section headers, hero, counts; IPA workflow fixes | unreviewed | Compiles (via `2d3696c`). Not seen on a device. |
+| `37bfac2` | Claude | Pin MuPDF clone; `SubjectScreen.swift` scaffold + ledger row | unreviewed | MuPDF pin verified by building it in CI. |
+| `2d3696c` | Claude | Commit the canvas + outline tool; fix 3 compile errors in the new components | unreviewed | **iOS build green, IPA produced.** First verified commit on the branch. |
+| `493fca9` | Claude | Stop the IPA workflow cancelling its own runs | unreviewed | Superseded by `98d6006`. |
+| `835440d` | Claude | `WorkRow.ledger`; `scopeHue`; Home section pages | unreviewed | Build result pending at time of writing. |
+| `3f9a5ab` | Claude | `LibraryFilters.summaryLabels` + filter chip rail | unreviewed | Build result pending at time of writing. |
+| `aa56105` | Claude | Record CI as the compile gate in §0 | unreviewed | Doc only. |
+| `3d81236` | Claude | `SubjectChip.pill`; Library quick filters at spec metrics | unreviewed | Not compiled at time of writing. |
+| `98d6006` | Claude | Per-SHA concurrency so every commit gets an IPA | unreviewed | CI config. |
+| `3a5a0d6` | Claude | Library dashboard Shelves/Ledger (1c/1d); `providesNavigation` | unreviewed | Not compiled at time of writing. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.

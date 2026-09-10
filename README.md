@@ -47,9 +47,35 @@ xcodebuild -project AO3_App_OpenSource.xcodeproj -scheme AO3_App_OpenSource \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
+### Unsigned IPAs for sideloading
+
+Every commit on a feature branch is built into an **unsigned, sideloadable
+`.ipa`** by the [Unsigned IPA](../../actions/workflows/unsigned-ipa.yml)
+workflow, so you can install a build without a Mac.
+
+**Where to get one:** open the [Actions tab](../../actions/workflows/unsigned-ipa.yml),
+click the run for the commit you want, and scroll to **Artifacts** at the
+bottom of the run summary. The file is named `Kudos-unsigned-<sha>`.
+
+Things worth knowing before you go looking:
+
+- **You must be signed in to GitHub.** Actions artifacts are not anonymously
+  downloadable, even on a public repository.
+- **It arrives as a `.zip`.** GitHub zips every artifact; the `.ipa` is inside.
+- **It expires after 30 days.** Re-run the workflow to rebuild an older commit.
+- **It is unsigned, deliberately.** Sign it with AltStore, Sideloadly or
+  SideStore using your own certificate — it will not install as-is. Nothing in
+  the repo carries an Apple `DEVELOPMENT_TEAM`, and that is a rule, not an
+  oversight (see `AGENTS.md`).
+- **A red run means the branch does not compile.** The workflow doubles as the
+  build gate, so a missing artifact is a real signal, not a flake.
+
+To build one locally instead: `Scripts/build-unsigned-ipa.sh` (needs Xcode,
+plus `Scripts/build-mupdf.sh` and `Scripts/fetch-fluidaudio.sh` once).
+
 ### Releases
 
-GitHub [Releases](https://github.com/cidy02/kudos-ao3-reader/releases) may list experimental pre-releases for other work in this repository. **Apple builds are not published as installable release assets**—clone and build from source as above.
+GitHub [Releases](https://github.com/cidy02/kudos-ao3-reader/releases) may list experimental pre-releases for other work in this repository. **Apple builds are not published as installable release assets**—clone and build from source as above, or take an unsigned IPA from Actions.
 
 ## Testing
 
