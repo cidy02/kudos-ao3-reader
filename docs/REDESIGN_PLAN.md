@@ -270,7 +270,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. Left: the paging switcher pill. |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
-| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | ⬜ |
+| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t` share `AO3AccountWorksList`'s 1o header. `1ac` Privacy is done — measured storage figures, the two bulk clears, the spec's footnotes. `1aa` is blocked on seven unverifiable archive paths (see §3). `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | 🟡 **data path landed** (`725695e3`): `ReadingSession` / `ReadingFavorite` / `FandomReadWatermark` + `ReadingLogService` + v8 additive backup. Screens not built. |
@@ -447,6 +447,72 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Phase 6 opens: Privacy takes artboard 1ac (Claude)
+
+`ca9b158` is **green** (run 39, 9m59s) — the reading-session durability fix and
+the bounded fandom count cache both compile.
+
+Phase 6 is next per §3c, and `PrivacyDataView` is its cheapest real screen: 129
+lines, one call site, no network, and the form family already draws everything
+1ac asks for. It is now the kicker / rule / 32pt title / tally header at the
+16pt account gutter, two `SectionRuleHeader` groups over `subjectPanel()` panels
+of `SubjectFormRow`, and the spec's own footnotes.
+
+**The figures are measured, not described.** The old screen said the right
+things — "everything stays on this device", "safe to clear" — and gave the
+reader no way to check any of them. 1ac prints `412 MB`, `318 works`, `6`.
+`Services/LocalDataFootprint.swift` walks Works, Originals, Fonts and the two
+cache directories off the main actor and reports allocated size where the
+filesystem gives it, so the number matches what iOS Settings would say about the
+same bytes. The counts come straight from the store. A privacy page is the one
+page where "take our word for it" is the wrong ask.
+
+**Two spec rows had no data and were answered honestly rather than faked.**
+1ac's "Search history · 84 searches" has no store behind it: the app keeps no
+search history at all, and `SavedSearch` is a search the reader *named*, which
+is their content, not a log. The row says **Not recorded** and there is no clear
+button — on this screen that is the better answer. `SavedSearch` gets its own
+row as "Saved searches", which is a true local-data figure.
+
+**Two sections the spec omits were kept**, per `AGENTS.md`'s density gate: the
+Voice Pack paragraph (the app's only statement of what a model host does and
+does not receive) and the AO3 session row (where credentials are removed).
+Dropping them to match the artboard would have dropped the two hardest privacy
+facts on the page.
+
+`Services/LocalDataClearing.swift` holds the bulk clears as `select…` + `clear…`
+pairs. The count in each confirmation dialog is produced by the same rule that
+does the work, so the number the reader agrees to cannot drift from what
+happens. `selectFreeableDownloads` reuses `SavedWork.isProtected` rather than
+restating its four conditions, so this button and the reader's own auto-free can
+never disagree about what is safe to drop; `clearReadingPositions` deliberately
+leaves `lastReadDate` alone, because that is the Library shelf's ordering rather
+than a position inside a file.
+
+`SubjectFormRow` gained `isDestructive`. A caller cannot tint the row from
+outside — the label sets `.primary` internally and wins — so tinting from the
+call site yields a red chevron over a black label. Spec 1ab's "Sign out" wants
+the same flag.
+
+Six tests in `KudosTests/LocalDataClearingTests.swift`, each written to fail if
+its rule is reverted. **Not run:** CI compiles the app target only.
+
+**Left in Phase 6:** `1aa` More on AO3 is drawn but partly blocked — the spec's
+fourth section ("The archive": support, report abuse, ToS, content policy,
+privacy policy, FAQs, donate) needs seven site-wide AO3 paths, and **they cannot
+be verified from this container.** `archiveofourown.org` is blocked by the agent
+proxy (every probe returns `000`) and `otwarchive/otwarchive` cannot be attached
+to this session to read its `routes.rb` (cross-owner adds are refused). Writing
+them from memory is exactly the failure this file already records three times —
+a claim written from reasoning rather than from a primary source. They need the
+owner, or a session with network reach, before that section ships. The first
+three sections of 1aa use user-scoped suffixes the code already proves.
+
+`1ab` Settings is `ReaderOptionsForm(includeAppSettings: true)`, shared with the
+reader — converting it touches both surfaces and is not a one-screen change.
+
+---
 
 ### 2026-09-10 — Grok T-214: gating capabilities + Codex "Needs building" notes
 
