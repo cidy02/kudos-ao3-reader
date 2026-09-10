@@ -29,9 +29,13 @@ on:
         required: false
         default: ''
 
+# Deliberately NOT cancel-in-progress. The point of this workflow is an IPA per
+# commit, and the MuPDF build alone runs for minutes — cancelling on every push
+# meant a run never finished, so no commit ever got an artifact. Runs queue
+# instead; the cache makes every run after the first a great deal shorter.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   ipa:
