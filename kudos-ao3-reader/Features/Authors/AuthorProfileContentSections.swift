@@ -349,6 +349,10 @@ struct AO3AuthorWorksSection: View {
 /// signed-in user.
 struct AO3AuthorSeriesSection: View {
     var model: AO3AuthorProfileModel
+    /// The signed-in user's own series list can offer "New series on AO3" (Safari).
+    /// Other authors get the existing empty copy. Creating a series is an AO3 write
+    /// this screen does not implement.
+    var showsNewSeriesOnAO3: Bool = false
 
     @Environment(AO3AuthService.self) private var auth
 
@@ -357,12 +361,26 @@ struct AO3AuthorSeriesSection: View {
             if model.contentPhase == .loading, model.series.isEmpty {
                 AO3AuthorLoadingRows()
             } else if model.series.isEmpty {
-                AO3AuthorContentMessage(
-                    model: model,
-                    emptyTitle: "No series",
-                    emptyMessage: "AO3 has no visible series for this author scope.",
-                    emptySymbol: "square.stack"
-                )
+                if case .failed = model.contentPhase {
+                    AO3AuthorContentMessage(
+                        model: model,
+                        emptyTitle: "No series",
+                        emptyMessage: "AO3 has no visible series for this author scope.",
+                        emptySymbol: "square.stack"
+                    )
+                } else if showsNewSeriesOnAO3 {
+                    AO3SeriesEmptyCard()
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 16, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } else {
+                    AO3AuthorContentMessage(
+                        model: model,
+                        emptyTitle: "No series",
+                        emptyMessage: "AO3 has no visible series for this author scope.",
+                        emptySymbol: "square.stack"
+                    )
+                }
             } else {
                 if case let .failed(message) = model.contentPhase {
                     AO3AuthorInlineErrorRow(message: message)
@@ -375,6 +393,64 @@ struct AO3AuthorSeriesSection: View {
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
         }
+    }
+}
+
+/// Zero-length series list for the signed-in account. The action leaves for
+/// Safari because creating a series is an AO3 write the app does not do.
+struct AO3SeriesEmptyCard: View {
+    @Environment(\.openURL) private var openURL
+    @Environment(ThemeManager.self) private var themeManager
+
+    /// AO3's New Series form. Constant, not a session — posting stays on the site.
+    static let newSeriesURL = URL(string: "https://archiveofourown.org/series/new")!
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("You have not made a series.")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(
+                    "A series groups your works so they read in order. "
+                        + "Series are created on AO3; anything you make there appears here on the next refresh."
+                )
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Rectangle()
+                .fill(themeManager.appTheme.glassStroke(0.12))
+                .frame(height: 0.5)
+                .accessibilityHidden(true)
+
+            Button {
+                openURL(Self.newSeriesURL)
+            } label: {
+                HStack(spacing: 7) {
+                    Text("New series on AO3")
+                    Image(systemName: "arrow.up.right")
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 42)
+                .foregroundStyle(buttonLabelColor)
+                .background(Capsule().fill(Color.accentColor))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens archiveofourown.org in Safari")
+
+            Text("Opens archiveofourown.org in Safari. Posting is not something the app does.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(20)
+        .subjectPanel(cornerRadius: 18)
+    }
+
+    private var buttonLabelColor: Color {
+        Color.accentColor.relativeLuminance > 0.45 ? Color.black : Color.white
     }
 }
 

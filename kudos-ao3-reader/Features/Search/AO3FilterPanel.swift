@@ -181,8 +181,10 @@ struct AO3FilterPanel: View {
                         dateBound("After", date: $filters.dateFrom)
                         dateBound("Before", date: $filters.dateTo)
                     }
-                    Picker("Language", selection: $filters.language) {
-                        ForEach(AO3SearchFilters.Language.allCases) { Text($0.title).tag($0) }
+                    NavigationLink {
+                        FilterLanguagePicker(selection: $filters.language)
+                    } label: {
+                        LabeledContent("Language", value: filters.language.title)
                     }
                 }
 
@@ -233,25 +235,63 @@ struct AO3FilterPanel: View {
             }
         }
 
-        Section("Word count") {
-            numberRange(from: $filters.wordsFrom, to: $filters.wordsTo)
+        Section {
+            FilterRangeSlider(
+                from: $filters.wordsFrom,
+                to: $filters.wordsTo,
+                defaultMaximum: FilterRangeSlider.wordCountMaximum
+            )
+        } header: {
+            Text("Word count")
+        } footer: {
+            if mode == .refine {
+                openBoundFooter
+            }
         }
 
-        // AO3 accepts the same range grammar on each of these.
+        // AO3 accepts the same range grammar on each of these. Refine hides
+        // them — they aren't on a loaded blurb — and keeps word count.
         if mode == .search {
             Section("Hits") {
-                numberRange(from: $filters.hitsFrom, to: $filters.hitsTo)
+                FilterRangeSlider(
+                    from: $filters.hitsFrom,
+                    to: $filters.hitsTo,
+                    defaultMaximum: FilterRangeSlider.hitsMaximum
+                )
             }
             Section("Kudos") {
-                numberRange(from: $filters.kudosFrom, to: $filters.kudosTo)
+                FilterRangeSlider(
+                    from: $filters.kudosFrom,
+                    to: $filters.kudosTo,
+                    defaultMaximum: FilterRangeSlider.kudosMaximum
+                )
             }
             Section("Comments") {
-                numberRange(from: $filters.commentsFrom, to: $filters.commentsTo)
+                FilterRangeSlider(
+                    from: $filters.commentsFrom,
+                    to: $filters.commentsTo,
+                    defaultMaximum: FilterRangeSlider.commentsMaximum
+                )
             }
-            Section("Bookmarks") {
-                numberRange(from: $filters.bookmarksFrom, to: $filters.bookmarksTo)
+            Section {
+                FilterRangeSlider(
+                    from: $filters.bookmarksFrom,
+                    to: $filters.bookmarksTo,
+                    defaultMaximum: FilterRangeSlider.bookmarksMaximum
+                )
+            } header: {
+                Text("Bookmarks")
+            } footer: {
+                openBoundFooter
             }
         }
+    }
+
+    private var openBoundFooter: Text {
+        Text(
+            "Leave a handle where it is for an open bound. "
+                + "AO3 reads one-sided ranges as “more than” and “fewer than”."
+        )
     }
 
     private var tagSection: some View {
@@ -292,10 +332,6 @@ struct AO3FilterPanel: View {
 
     // MARK: - Facet rows (warnings / categories)
 
-    /// A tappable multi-select facet row matching the tag pickers' three states.
-    /// A From/To pair for one of AO3's numeric range fields. Five sections need
-    /// the identical shape, so they share one builder rather than repeating the
-    /// platform-conditional keyboard type five times.
     /// One optional date bound. `DatePicker` can't bind to a `Date?`, so the
     /// toggle *is* the optionality: off means "no bound", and switching it on
     /// seeds today rather than a silent 2001 default.
@@ -316,35 +352,13 @@ struct AO3FilterPanel: View {
     }
 
     @ViewBuilder
-    private func numberRange(from: Binding<String>, to: Binding<String>) -> some View {
-        numberField("From", text: from)
-        numberField("To", text: to)
-    }
-
-    /// One end of a numeric range. Digits only, enforced on the *binding* — a
-    /// `.numberPad` picks the keyboard and nothing more: a paste, a hardware
-    /// keyboard, dictation or a Mac all put letters in the field regardless, and
-    /// macOS has no keyboard type at all. AO3 answers a malformed range by
-    /// dropping the filter silently, so "5o0" would come back as an unfiltered
-    /// search that looks like a filtered one.
-    private func numberField(_ title: String, text: Binding<String>) -> some View {
-        let digits = Binding(
-            get: { text.wrappedValue },
-            // `isASCII` as well as `isNumber`: the latter alone accepts "٣" and
-            // "½", which AO3 cannot parse either.
-            set: { text.wrappedValue = $0.filter { $0.isASCII && $0.isNumber } }
-        )
-        return TextField(title, text: digits)
-        #if !os(macOS)
-            .keyboardType(.numberPad)
-        #endif
-    }
-
     private func cyclingFacetRow(_ title: String, state: FilterSelectionState,
                                  toggle: @escaping () -> Void) -> some View {
-        Button(action: toggle) {
+        let row = Button(action: toggle) {
             HStack {
-                Text(title).foregroundStyle(.primary)
+                Text(title)
+                    .foregroundStyle(state == .excluded ? Color.secondary : Color.primary)
+                    .strikethrough(state == .excluded, color: theme.appTheme.excludeColor.opacity(0.7))
                 Spacer()
                 switch state {
                 case .clear:
@@ -352,7 +366,7 @@ struct AO3FilterPanel: View {
                 case .included:
                     Label("Include", systemImage: "plus.circle.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(theme.appTheme.includeColor)
                 case .excluded:
                     Label("Exclude", systemImage: "minus.circle.fill")
                         .font(.caption.weight(.semibold))
@@ -366,6 +380,13 @@ struct AO3FilterPanel: View {
             .combinedAccessibilityRow([title, state.accessibilityStatus].compactMap { $0 }.joined(separator: ", "))
         }
         .buttonStyle(.plain)
+        // Only override the themed cell when included — an EmptyView background
+        // would wipe `.appThemedRows()` on the other states.
+        if state == .included {
+            row.listRowBackground(theme.appTheme.includeColor.opacity(0.10))
+        } else {
+            row
+        }
     }
 
     private func warningState(_ warning: AO3SearchFilters.Warning) -> FilterSelectionState {

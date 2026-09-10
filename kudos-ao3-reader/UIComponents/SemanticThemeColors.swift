@@ -25,6 +25,12 @@ extension ReaderTheme {
     /// at every call site.
     var excludeColor: Color { errorColor }
 
+    /// The "include" state in the same cycle (`FilterSelectionState.included`).
+    /// Own role, sibling of `excludeColor`, so the two can diverge later. Resolves
+    /// through `statusSuccessColor` rather than `.tint` / `.accentColor` — a red
+    /// accent would otherwise paint include and exclude the same colour.
+    var includeColor: Color { statusSuccessColor }
+
     /// The favorite/starred-work indicator (Library star, Work Detail favorite
     /// toggle). Desaturated on Sepia so it doesn't fight the warm paper backdrop;
     /// slightly lighter on Dark/OLED for contrast.

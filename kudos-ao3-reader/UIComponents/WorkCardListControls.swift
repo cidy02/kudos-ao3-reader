@@ -20,6 +20,10 @@ struct FilterButton: View {
     @Binding var showingFilters: Bool
     var filterHelp: String = "Filter the works on this page"
     var onClearFilters: (() -> Void)?
+    /// Count of narrowing filters, drawn as a numeric badge so a zero-results
+    /// page still shows *why* the list is empty. 0 hides the number; the filled
+    /// glyph still marks an active set.
+    var badgeCount: Int = 0
 
     var body: some View {
         Button { showingFilters = true } label: {
@@ -35,9 +39,23 @@ struct FilterButton: View {
             Label("Filter", systemImage: filtersActive
                 ? "line.3.horizontal.decrease.circle.fill"
                 : "line.3.horizontal.decrease")
+                .overlay(alignment: .topTrailing) {
+                    if badgeCount > 0 {
+                        Text(badgeCount > 99 ? "99+" : "\(badgeCount)")
+                            .font(.system(size: 9, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 3)
+                            .frame(minWidth: 15, minHeight: 15)
+                            .background(Circle().fill(Color.accentColor))
+                            .offset(x: 6, y: -6)
+                            .accessibilityHidden(true)
+                    }
+                }
         }
         .tint(filtersActive ? Color.accentColor : Color.primary)
         .labelStyle(.iconOnly)
+        .accessibilityValue(badgeCount > 0 ? "\(badgeCount) active" : "")
         // The default toolbar glyph size left the filled circle visibly smaller
         // than the button's own touch-target circle around it — Messages' filled
         // filter badge fills that outer circle almost completely.

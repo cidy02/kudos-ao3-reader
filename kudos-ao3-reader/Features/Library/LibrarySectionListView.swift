@@ -131,7 +131,8 @@ struct LibrarySectionListView: View {
                                 ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                         showingFilters: $showingFilters,
                                                         filterHelp: "Filter the works in this section",
-                                                        onClearFilters: { filters = LibraryFilters() }))
+                                                        onClearFilters: { filters = LibraryFilters() },
+                                                        badgeCount: filters.summaryLabels(includesSort: false).count))
                                 : nil,
                             AnyView(WorkListMoreMenu {
                                 if hasMature {
@@ -206,18 +207,6 @@ struct LibrarySectionListView: View {
                 await task.value
             }
             .cancelRefreshOnTabChange($refreshTask)
-            .overlay {
-                // Section has works, but the active filters hid them all.
-                if visibleItems.isEmpty {
-                    ContentUnavailableView {
-                        Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
-                    } description: {
-                        Text("No works in this section match the current filters.")
-                    } actions: {
-                        Button("Clear Filters") { filters = LibraryFilters() }
-                    }
-                }
-            }
         }
     }
 
@@ -229,8 +218,23 @@ struct LibrarySectionListView: View {
     }
 
     private var headerTallyLine: String {
+        if filters.hasActiveFilters, visibleItems.isEmpty, !items.isEmpty {
+            let count = items.count
+            return "\(count) \(count == 1 ? "work" : "works") · none match the current filters"
+        }
         let workCount = visibleItems.count
         return "\(workCount) \(workCount == 1 ? "work" : "works")"
+    }
+
+    private var filterCollisionCard: some View {
+        LibraryFilterCollisionCard(
+            sectionTitle: kind.title,
+            hiddenCount: items.count,
+            filters: $filters,
+            works: items,
+            palette: scopePalette,
+            onEdit: { showingFilters = true }
+        )
     }
 
     /// The kicker / rule / 32pt hero, as the list's first row rather than as a
@@ -296,6 +300,13 @@ struct LibrarySectionListView: View {
                     .listRowInsets(EdgeInsets())
                     .padding(.bottom, 10)
                 }
+            } else if filters.hasActiveFilters {
+                Section {
+                    filterCollisionCard
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 16, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
         }
         .cardList()
@@ -318,7 +329,11 @@ struct LibrarySectionListView: View {
                 subjectHeader.padding(.top, 20)
                 filterChipRail
                 SectionRuleHeader(title: kind.title, count: visibleItems.count)
-                workGrid
+                if visibleItems.isEmpty, filters.hasActiveFilters {
+                    filterCollisionCard.padding(.horizontal, 16)
+                } else {
+                    workGrid
+                }
             }
         }
         .subjectScreenWash(palette: scopePalette)

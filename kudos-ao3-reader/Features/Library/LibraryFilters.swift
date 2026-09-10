@@ -94,6 +94,106 @@ struct LibraryFilters: Equatable {
         return labels
     }
 
+    // MARK: Collision drops
+
+    /// One active filter removed, with how many works would remain. Sort is not
+    /// a narrowing predicate, so it is never a candidate.
+    struct FilterDrop: Equatable {
+        var filterLabel: String
+        var remainingCount: Int
+        var remainingFilters: LibraryFilters
+    }
+
+    /// Evaluates the predicate set minus one member over `works`. Cheap over an
+    /// in-memory list; the empty state uses the counts so a colliding set of
+    /// filters is actionable rather than apologetic.
+    func droppingEachActiveFilter( // swiftlint:disable:this cyclomatic_complexity
+        from works: [SavedWork]
+    ) -> [FilterDrop] {
+        var drops: [FilterDrop] = []
+
+        func add(_ label: String, _ remaining: LibraryFilters) {
+            drops.append(FilterDrop(
+                filterLabel: label,
+                remainingCount: works.filter(remaining.matches).count,
+                remainingFilters: remaining
+            ))
+        }
+
+        for name in userTags.sorted() {
+            var remaining = self
+            remaining.userTags.remove(name)
+            add(name, remaining)
+        }
+        for name in fandoms.sorted() {
+            var remaining = self
+            remaining.fandoms.remove(name)
+            add(name, remaining)
+        }
+        for name in characters.sorted() {
+            var remaining = self
+            remaining.characters.remove(name)
+            add(name, remaining)
+        }
+        for name in relationships.sorted() {
+            var remaining = self
+            remaining.relationships.remove(name)
+            add(name, remaining)
+        }
+        for name in additionalTags.sorted() {
+            var remaining = self
+            remaining.additionalTags.remove(name)
+            add(name, remaining)
+        }
+        for name in excludeTags.sorted() {
+            var remaining = self
+            remaining.excludeTags.remove(name)
+            add("−\(name)", remaining)
+        }
+        if rating != .any {
+            var remaining = self
+            remaining.rating = .any
+            add(rating.title, remaining)
+        }
+        for warning in AO3SearchFilters.Warning.allCases where warnings.contains(warning) {
+            var remaining = self
+            remaining.warnings.remove(warning)
+            add(warning.title, remaining)
+        }
+        for category in AO3SearchFilters.Category.allCases where categories.contains(category) {
+            var remaining = self
+            remaining.categories.remove(category)
+            add(category.title, remaining)
+        }
+        if completion != .any {
+            var remaining = self
+            remaining.completion = .any
+            add(completion.title, remaining)
+        }
+        if !language.isEmpty {
+            var remaining = self
+            remaining.language = ""
+            add(language, remaining)
+        }
+        let lowerWordBound = wordsFrom.trimmingCharacters(in: .whitespaces)
+        let upperWordBound = wordsTo.trimmingCharacters(in: .whitespaces)
+        if !lowerWordBound.isEmpty || !upperWordBound.isEmpty {
+            var remaining = self
+            remaining.wordsFrom = ""
+            remaining.wordsTo = ""
+            let label: String
+            switch (lowerWordBound.isEmpty, upperWordBound.isEmpty) {
+            case (false, false): label = "Words \(lowerWordBound)–\(upperWordBound)"
+            case (false, true): label = "Words ≥ \(lowerWordBound)"
+            case (true, false): label = "Words ≤ \(upperWordBound)"
+            case (true, true): label = "Word count"
+            }
+            add(label, remaining)
+        }
+
+        return drops
+    }
+
     // MARK: Applying
 
     /// Filters and sorts a list of works by the current settings.
