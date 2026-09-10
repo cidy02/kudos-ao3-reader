@@ -531,7 +531,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                             }
                             if showsStatistics {
                                 NavigationLink {
-                                    ReadingStatisticsView(works: statisticsWorks)
+                                    ReadingInsightsView(works: statisticsWorks)
                                 } label: {
                                     Label("Reading Insights", systemImage: "chart.bar.xaxis")
                                 }

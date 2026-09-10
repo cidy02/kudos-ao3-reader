@@ -207,12 +207,59 @@ enum ReadingLogService {
     /// Uses each session's stored `wordCount` and `durationSeconds`. Sessions
     /// with `durationSeconds <= 0` are ignored so a zero-length row cannot
     /// divide-by-zero or dilute the rate.
+    ///
+    /// Delegates to `ReadingInsights` so the Insights screen and this helper
+    /// cannot report two different rates for the same rows.
     static func wordsPerHour(sessions: [ReadingSession]) -> Double {
-        let usable = sessions.filter { $0.durationSeconds > 0 }
-        let totalSeconds = usable.reduce(0) { $0 + $1.durationSeconds }
-        guard totalSeconds > 0 else { return 0 }
-        let totalWords = usable.reduce(0) { $0 + $1.wordCount }
-        return Double(totalWords) / (totalSeconds / 3600)
+        ReadingInsights.wordsPerHour(of: facts(from: sessions, works: []))
+    }
+
+    /// Flattens log rows into the plain values the statistics work on, resolving
+    /// each session's fandom from the live work.
+    ///
+    /// A session whose work is gone keeps an empty fandom rather than being
+    /// dropped: the log is deliberately keyed by UUID with a denormalised title
+    /// so deleting a work does not rewrite your history, and the hours are still
+    /// hours you read. They land in `Everything else`.
+    static func facts(
+        from sessions: [ReadingSession],
+        works: [SavedWork]
+    ) -> [ReadingSessionFacts] {
+        let worksByID = Dictionary(
+            works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+        )
+        return sessions.map { session in
+            ReadingSessionFacts(
+                workID: session.workID,
+                startedAt: session.startedAt,
+                durationSeconds: session.durationSeconds,
+                wordCount: session.wordCount,
+                didFinish: session.didFinish,
+                fandom: worksByID[session.workID]?
+                    .workFandoms.first(where: { !$0.isEmpty }) ?? ""
+            )
+        }
+    }
+
+    /// Everything artboard 1bi prints, for one period and the one before it.
+    ///
+    /// `period` is the window on screen; `previousPeriod` is what the delta is
+    /// measured against. Both are fetched here rather than in the view so the
+    /// screen cannot accidentally compare a month against a week.
+    static func insights(
+        for period: DateInterval,
+        previousPeriod: DateInterval?,
+        works: [SavedWork],
+        calendar: Calendar = .current,
+        context: ModelContext
+    ) -> ReadingInsights {
+        let current = facts(from: sessions(in: context, interval: period), works: works)
+        let previous = previousPeriod.map {
+            facts(from: sessions(in: context, interval: $0), works: works)
+        } ?? []
+        return ReadingInsights.make(
+            facts: current, previousPeriodFacts: previous, calendar: calendar
+        )
     }
 
     /// Tag counts on works that have at least one session. Each tag is counted
