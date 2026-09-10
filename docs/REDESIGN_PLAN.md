@@ -535,15 +535,31 @@ Ranked by what has caught real defects on this branch, not by what feels
 thorough:
 
 1. **CI.** It has caught things nothing else could, and it is the only gate that
-   is not guesswork. Budget ~8 minutes a round trip and push early.
+   is not guesswork. Budget ~10 minutes a round trip and push early.
+
+   **Batch generously.** A failed build reports every error in one log, so one
+   large batch that fails costs a single round trip to diagnose, while eight
+   small green ones cost eight. Batch size is close to free, and the round trip
+   is the scarce thing. Push, then keep writing — never idle waiting on a run.
 2. **Re-reading your own diff before committing.** Three certain compile errors
    in `2d3696c` were found this way. `git diff` the *whole* change, not the file
    you just touched — see below.
 3. **Running the thing.** The release step passed `bash -n` and still failed on
    the runner; executing it against a stub `gh` would have caught it in seconds,
    and did once that was tried.
-4. **Brace and `#if` balance checks.** Cheap, and they catch a truncated edit —
-   but they are structural only. They cannot see a missing *member*.
+4. **`Scripts/swift-parse-check.py`.** A real Swift parser (tree-sitter) run
+   over the files you changed, in about a second. It replaces the brace-counting
+   this list used to recommend at this slot — it knows the grammar rather than
+   counting characters, so it catches an edit applied at the wrong anchor, a
+   broken interpolation, a malformed declaration. It still cannot see a missing
+   *member*, a wrong argument label, or a type mismatch, which are the errors
+   that have actually reddened this branch. Ten minutes of CI is the right price
+   for a type error and much too high for a stray brace.
+
+   No Swift toolchain can be installed here — `download.swift.org` is refused by
+   the environment's proxy policy, and Ubuntu's `swift` package is OpenStack's
+   object store, not the language. A parser from pypi is as close as this
+   container gets, and 403 of 405 files parse clean, so the signal is real.
 
 **And one anti-pattern, which cost a commit message that says something false.**
 Polling a run's job list can serve a cached response: the `steps` array keeps
