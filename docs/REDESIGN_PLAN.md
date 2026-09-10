@@ -127,25 +127,38 @@ each in forty screens is the design system.
 | 13 | 35 | 135 | radius 14 panel, `.5px` border | ✅ `SubjectStatStrip` ground |
 | 14 | 33 | 146 | `22×2.5` rule | ✅ `SubjectKicker` (card) |
 | 16 | 30 | **659** | `400 15px/1.3` body text | ✅ ambient |
-| 17 | 30 | 126 | `600 11px`, `.07em`, uppercase form heading | ❌ **form section header** |
-| 21 | 28 | 97 | `700 11px`, `.13em`, uppercase scope tab | ❌ **scope tab strip** |
+| 17 | 30 | 126 | `600 11px`, `.07em`, uppercase form heading | ✅ `SubjectFieldLabel(.formGroup)` |
+| 21 | 28 | 97 | `700 11px`, `.13em`, uppercase scope tab | ✅ **already** `SectionRuleHeader` |
 | 22 · 35 | 27 · 21 | 60 | 44pt bar, 14pt gutter | ✅ `SubjectScreenScaffold` |
-| 23 | 26 | **300** | row, `gap 10`, `padding 12×14` | ❌ **form row** |
+| 23 | 26 | **300** | row, `gap 10`, `padding 12×14` | ✅ `SubjectFormRow(.value)` |
 | 24 · 39 · 61 | 26 · 20 · 14 | 71 | `700 32px`, `-.02em` | ✅ `SubjectHeaderBlock` |
-| 25 | 24 | 127 | row, `gap 12`, `padding 11×14` | ❌ **hub row** |
-| 26 · 46 | 23 · 18 | 47 | **104pt** gradient header banner | ❌ **compact page header** |
-| 32 | 21 | 62 | `500 11px` monospace figure | ❌ **monospace figure** |
+| 25 | 24 | 127 | row, `gap 12`, `padding 11×14` | ✅ `SubjectFormRow(.control)` |
+| 26 · 46 | 23 · 18 | 47 | **104pt** bottom gradient | ⚪️ **the tab bar's scrim** — not a header |
+| 32 | 21 | 62 | `500 11px` monospace figure | ✅ `SubjectFormValue(isMonospaced:)` |
 | 41 | 19 | 111 | `700 9px`, `.11em` | ✅ `SubjectKicker` (compact) |
 | 45 · 52 | 18 · 14 | 295 | signal tray + its 22pt tiles | ✅ `WorkStatusIconGrid` |
 | 55 | 14 | 56 | `700 7.5px` rounded rating letter | ✅ inside the tray |
 | 58 | 14 | 17 | 36×5 sheet grabber | ⚪️ `.presentationDragIndicator` |
 
-Two findings worth more than the table. **Shape #7 says the wash is 380pt in 62
-artboards** — the `subjectWash` default is the spec's own number, and 1a's 620
-is the exception, not a guess. And **the two most-used unbuilt shapes are rows,
-not decoration**: #23 alone is 300 elements across 26 artboards, all of them in
-the form and settings screens of Phases 5, 6, 11 and 12. Those roughly fifty
-artboards are built from about six shapes.
+Three findings worth more than the table.
+
+**The wash is 380pt in 62 artboards** — `subjectWash`'s default is the spec's own
+number, and 1a's 620 is a real exception rather than a guess.
+
+**The two most-used unbuilt shapes were rows, not decoration.** #23 alone is 300
+elements across 26 artboards, all in the form and settings screens of Phases 5,
+6, 11 and 12 — roughly fifty artboards built from about six shapes between them.
+Nothing in the reachability order would have reached them for a long time. Both
+now exist as `SubjectFormRow`.
+
+**Checking before naming knocked three rows out of this table**, and it is worth
+saying because the check takes a minute and each of these would have been a day.
+#21 and #32 were already inside `SectionRuleHeader`. #26 is not a page header at
+all — it is the scrim behind iOS 26's floating tab bar, the third thing this pass
+found that looked like major shared work and belongs to the platform (the tab
+item itself, #10/#12 in 41 artboards, and the sheet grabber, #58 in 14, are the
+other two). **Roughly a third of what the ranking called "shared components"
+turned out to be things this project must not build.**
 
 ### Measured tokens (converted from the spec's CSS)
 
@@ -216,19 +229,27 @@ So the sequence is:
    screen is being built today.
 4. **Then assemble screens**, in the reachability order below.
 
-### The parts still to build
+### The parts — all built as of `243580a`
 
-Ranked as §1a ranks them. Each unlocks far more than the screen that motivates
-it, which is the whole point of doing them first.
+Ranked as §1a ranks them. Kept as a record of what each one cost and unlocked,
+because the next inventory pass over a later spec should expect the same shape
+of answer: a few genuine components, several already built, and a third that
+belong to the platform.
 
 | Part | Boards | Uses | Notes |
 |---|---|---|---|
-| **Form row** | 26 | 300 | `gap 10`, `padding 12×14`. Every filter, form and settings screen in Phases 5, 6, 11, 12. |
-| **Hub row** | 24 | 127 | `gap 12`, `padding 11×14`. The Account hub and its subsections. Close enough to the form row to be worth one type with two densities — read both before deciding. |
-| **Form section header** | 30 | 126 | `600 11px`, `.07em`, uppercase, `padding 20 4 8`. The heading over a group of form rows. Related to `SubjectFieldLabel` but not identical; check before adding a second. |
-| **Scope tab strip** | 28 | 97 | `700 11px`, `.13em`, uppercase — "Following / Posted / Saved". The hub screens' own segmented control. |
-| **Compact page header** | 23 | 47 | A **104pt** gradient banner, `padding 14 14 0`. Every Account subsection (`1o`–`1ac`) opens with it. This is Phase 6's shared header, and building it is most of Phase 6's layout. |
-| **Monospace figure** | 21 | 62 | `500 11px` `ui-monospace` — dates and counts at the trailing edge of a row. Probably a modifier, not a view. |
+| **Form row** | 26 | 300 | Built as `SubjectFormRow.value` — label flexes, value trails. |
+| **Hub row** | 24 | 127 | Built as `SubjectFormRow.control` — label hugs, control flexes. One type with the two arrangements, since that is the only thing that differs and it is the rule for choosing. |
+| **Form section header** | 30 | 126 | Built as `SubjectFieldLabel(style: .formGroup)` rather than a third uppercase label in the same file. |
+| **Scope tab strip** | 28 | 97 | **Already existed** as `SectionRuleHeader` — same 11pt/`.13em`, same monospace count. |
+| **Compact page header** | 23 | 47 | **Not a header.** The bottom scrim behind the floating tab bar. Nothing to build. |
+| **Monospace figure** | 21 | 62 | Built as `SubjectFormValue(isMonospaced:)`, and already present inside `SectionRuleHeader`'s count. |
+
+Also built alongside them, because the rows needed them: `subjectPanel()` (the
+radius-14 glass ground, which turned out to be the one `SubjectStatStrip`
+already drew), `SubjectRowSeparator`, and `SubjectSegmentedControl` — the
+spec's own 9pt-over-7pt inline control, which is not a `Picker(.segmented)`
+because that one clips rather than reflows at accessibility text sizes.
 
 Tabs are `home, library, browse, account, search` (`AppTab` in
 `App/AppRouter.swift`).
@@ -244,7 +265,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done (category panels, fandom chip clusters, Jump Back In). Left: `1al`/`1am` (sibling-family grouping inside a category — needs the parser work the fandom audit deferred), and `1an` (the Browse filter sheet). |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | ⬜ |
-| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
+| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` screen 1 is done.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. Left: screen 2's My copy *sheet*, which is the same change as retiring the segmented control (see below), and Comments. Old status: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ⬜ |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | ⬜ |
@@ -321,6 +342,9 @@ re-reviews settled work and nobody reviews their own.
 | `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | **iOS build green** (10m29s). Not seen. |
 | `5a6a12e` | Claude | Serif summary; ON AO3 chips; `SubjectFieldLabel`; page row helpers | unreviewed | Build pending at time of writing. |
 | `f8c2ff6` | Claude | `redesign-spec-inventory.py` — rank shapes by artboard spread | unreviewed | Tooling; ran against the committed canvas. |
+| `053bc96` | Claude | `swift-parse-check.py`; batching + parser in §3 | unreviewed | Calibrated: 403/405 files parse clean. |
+| `243580a` | Claude | `SubjectForm.swift`; 1a's facts card, tally strip, buttons, My copy row | unreviewed | **Wants a non-Claude reviewer** — it is the shared form family ~50 artboards will be built on. |
+| `4d57af8` | Claude | Parts-before-screens in §2; the measured inventory in §1a | unreviewed | Doc only. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
 
@@ -333,6 +357,40 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Artboard 1a screen 1, complete
+
+Every block the artboard draws, in its order: fandom kicker · 32pt title ·
+byline, the rating·warnings·category·chapters strip, the resume card, the serif
+summary, the ON AO3 chips, the tag clusters, the grouped facts card, the
+kudos·comments·bookmarks·hits strip, the two outline buttons, and the My copy
+row. All of it on the page wash; the only cards left are the ones the spec
+actually draws as cards.
+
+**The tag clusters lost their five stacked cards.** A work's classification is
+one thing, and five cards made it read as five; the field label plus the chips'
+own shapes already separate the groups. Spec 1a tints exactly one cluster —
+relationships — and that is the accent staying scarce: the relationship is what
+a reader picks a fic for, and if every cluster took the colour none of them
+would mean anything by it. A count prints only where it says something the eye
+cannot: two relationships are two chips, nineteen freeforms are a paragraph.
+
+**Three cards went away without losing a fact.** Publication, Work and Stats are
+absorbed — Rating, Category, Status and Chapters by the figure strip; Words and
+Language by the facts card's headline row; Hits, Kudos and Comments by the tally
+strip; Source and preservation state by `WorkProvenanceSections`, which already
+states both further down. Comments keeps its behaviour by making a stat cell
+able to act, which is what spec 1a's accented, glyph-bearing COMMENTS cell is
+drawing in the first place.
+
+**Two things are deliberately still not done, and they are one change.** Screen
+2's My copy *sheet* and the retirement of the four-way segmented control are the
+same piece of work: 1a is one continuous page, and the sheet's content is
+today's Library tab. Splitting them would mean either building the sheet while
+the tab still holds the same content, or retiring the control with nowhere for
+that content to go. Until then the My copy row switches to the Library tab,
+which is the honest staged step — the destination exists and is reachable, only
+its presentation is deferred.
 
 ### 2026-09-10 — Parts before screens, and what counting the canvas showed
 

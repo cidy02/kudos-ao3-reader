@@ -13,13 +13,19 @@ extension WorkDetailView {
         let title: String
         let tags: [String]
         let field: AO3TagSearch.Field
+        /// Spec 1a tints exactly one cluster — the relationships — and leaves
+        /// characters and freeforms neutral. That is the accent staying scarce:
+        /// the relationship is what a reader picks a fic for, and if every
+        /// cluster took the colour none of them would mean anything by it.
+        var isTinted = false
     }
 
     private var tagGroups: [TagGroup] {
         let categorized: [TagGroup] = [
             TagGroup(title: "Archive Warnings", tags: displayWarnings, field: .warning),
             TagGroup(title: "Fandoms", tags: displayFandoms, field: .fandom),
-            TagGroup(title: "Relationships", tags: displayRelationships, field: .relationship),
+            TagGroup(title: "Relationships", tags: displayRelationships,
+                     field: .relationship, isTinted: true),
             TagGroup(title: "Characters", tags: displayCharacters, field: .character),
             TagGroup(title: "Additional Tags", tags: displayFreeforms, field: .freeform)
         ].filter { !$0.tags.isEmpty }
@@ -44,33 +50,59 @@ extension WorkDetailView {
                     : "This imported work isn't linked to AO3, so it has no AO3 tags.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .cardRow()
+                    .pageBodyRow(top: 20)
             }
         } else {
             ForEach(Array(groups.enumerated()), id: \.element.title) { index, group in
                 Section {
-                    FlowLayout(spacing: 8, rowSpacing: 4) {
-                        ForEach(group.tags, id: \.self) { tag in
-                            // Tap a tag → search AO3 for works carrying it. Full
-                            // canonical text wraps (no truncation).
-                            Button { router.searchAO3(group.field, tag) } label: {
-                                TagChip(text: tag, multiline: true, symbol: group.field.symbol)
-                            }
-                            .buttonStyle(.plain)
-                            .minimumHitTarget(28)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                    .cardRow()
-                } header: {
-                    Text(group.title)
-                } footer: {
+                    tagCluster(group)
+                        .pageBodyRow(top: index == 0 ? 20 : 22)
+
                     if index == groups.count - 1 {
-                        Text("Tags from AO3. Tap one to search AO3 for works with that tag.")
+                        Text("Tags come from AO3. Tap one to search the archive for works carrying it.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .pageBodyRow(top: 16)
                     }
                 }
             }
         }
+    }
+
+    /// Artboard 1a's tag cluster: the field label, then the chips, straight on
+    /// the page wash.
+    ///
+    /// The card that used to hold each group is gone. Five stacked cards made
+    /// the page read as five things when it is one — a work's classification —
+    /// and the label plus the chips' own shapes already separate the groups.
+    ///
+    /// The count is printed only where it tells the reader something they cannot
+    /// see at a glance. Two relationships are two chips; nineteen freeforms are
+    /// a paragraph, and knowing it is nineteen is worth a line.
+    private func tagCluster(_ group: TagGroup) -> some View {
+        var printedCount: Int?
+        if group.tags.count > 4 {
+            printedCount = group.tags.count
+        }
+        return VStack(alignment: .leading, spacing: 9) {
+            SubjectFieldLabel(text: group.title, count: printedCount)
+
+            FlowLayout(spacing: 7, rowSpacing: 7) {
+                ForEach(group.tags, id: \.self) { tag in
+                    // Tap a tag → search AO3 for works carrying it.
+                    Button { router.searchAO3(group.field, tag) } label: {
+                        SubjectChip(
+                            text: tag,
+                            style: group.isTinted ? .tinted : .neutral,
+                            palette: workPalette
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .minimumHitTarget(30)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Discussion section
