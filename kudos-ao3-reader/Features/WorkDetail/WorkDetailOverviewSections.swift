@@ -1,9 +1,15 @@
 import SwiftUI
 
-// The Overview section of the redesigned Work Details hub: summary, the
-// state-aware quick-action grid, the purpose-based metadata cards
-// (Publication / Work / Stats), and the series card. Pure presentation over
+// Blocks of artboard 1a's page: the serif summary, the ON AO3 chips, the
+// state-aware quick-action grid, and the series card. Pure presentation over
 // WorkDetailView's existing display values and actions — no new data flow.
+//
+// The four page blocks here are deliberately not `private`. `WorkDetailView`
+// assembles the page in `pageSections`, and 1a's eleven blocks are spread over
+// four files — `private` is file-scoped in Swift, so anything the assembly
+// names has to be at least internal. The helpers each block uses stay private,
+// which is the line worth keeping: a block is part of the page's contract, a
+// helper is not.
 
 extension WorkDetailView {
     // MARK: - Overview section
@@ -39,7 +45,7 @@ extension WorkDetailView {
     /// sentence; real ones run for paragraphs, and an uncollapsed wall of them
     /// would push every fact on the page below the fold.
     @ViewBuilder
-    private var summarySection: some View {
+    var summarySection: some View {
         // Bound once per render: a local work's summary strips HTML on read.
         let summary = displaySummary
         if !summary.isEmpty {
@@ -78,7 +84,7 @@ extension WorkDetailView {
     /// out — the toolbar still carries them, and the work's kudos and comment
     /// tallies are facts the figure strip states regardless.
     @ViewBuilder
-    private var ao3ActionsSection: some View {
+    var ao3ActionsSection: some View {
         if let id = ao3WorkID, auth.isLoggedIn {
             Section {
                 WorkAO3ActionChips(
@@ -101,7 +107,7 @@ extension WorkDetailView {
         return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
     }
 
-    private var quickActionsSection: some View {
+    var quickActionsSection: some View {
         Section {
             LazyVGrid(columns: quickActionColumns, spacing: 10) {
                 // No Read tile: artboard 1a's resume card at the top of the page
@@ -214,7 +220,7 @@ extension WorkDetailView {
     // MARK: Series
 
     @ViewBuilder
-    private var seriesSection: some View {
+    var seriesSection: some View {
         if !displaySeriesTitle.isEmpty {
             Section {
                 Group {
