@@ -10,7 +10,6 @@ struct WorkCoverCard: View {
 
     @Environment(ThemeManager.self) private var themeManager
     @ScaledMetric(relativeTo: .headline) private var ringDiameter: CGFloat = 68
-    @ScaledMetric(relativeTo: .caption2) private var ringStateSize: CGFloat = 8
     /// Set per tab stack; the pushed reader zooms out of this card. See
     /// `WorkCardZoomTransition.swift`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -19,7 +18,8 @@ struct WorkCoverCard: View {
         WorkSummaryCardSurface(hue: hue) {
             VStack(alignment: .leading, spacing: 5) {
                 if let primaryFandom {
-                    WorkFandomKicker(fandom: primaryFandom, hue: hue)
+                    SubjectKicker(text: primaryFandom, palette: palette, size: 9)
+                        .padding(.bottom, 2)
                 }
 
                 Text(work.title)
@@ -93,6 +93,10 @@ struct WorkCoverCard: View {
         CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
     }
 
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: hue)
+    }
+
     private var progressValue: Double? {
         Self.resolvedProgress(
             explicit: progress,
@@ -118,50 +122,11 @@ struct WorkCoverCard: View {
     }
 
     private func progressRing(_ value: Double) -> some View {
-        let percent = Int((value * 100).rounded())
-        let state = value >= 1 ? "Finished" : "Reading"
-        let diameter = min(ringDiameter, 82)
-        return ZStack {
-            Circle()
-                .stroke(ringTrack, lineWidth: 5)
-            Circle()
-                .trim(from: 0, to: value)
-                .stroke(ringProgress, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            VStack(spacing: 0) {
-                Text("\(percent)%")
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text(state.uppercased())
-                    .font(.system(size: ringStateSize, weight: .bold))
-                    .tracking(0.5)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-            }
-            .padding(6)
-        }
-        .frame(width: diameter, height: diameter)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Reading progress")
-        .accessibilityValue("\(percent) percent, \(state)")
-    }
-
-    private var ringTrack: Color {
-        switch themeManager.appTheme {
-        case .dark, .oled: Color.black.opacity(0.38)
-        case .light: Color.black.opacity(0.15)
-        case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18)
-        }
-    }
-
-    private var ringProgress: Color {
-        switch themeManager.appTheme {
-        case .dark, .oled: Color.white.opacity(0.94)
-        case .light, .sepia: Color.primary.opacity(0.82)
-        }
+        WorkProgressRing(
+            progress: value,
+            state: value >= 1 ? "Finished" : "Reading",
+            diameter: min(ringDiameter, 82)
+        )
     }
 
     private func updateBadge(_ text: String) -> some View {
@@ -169,10 +134,13 @@ struct WorkCoverCard: View {
             .font(.caption2.monospacedDigit().weight(.bold))
             .tracking(0.5)
             .lineLimit(1)
-            .foregroundStyle(themeManager.appTheme.workCardAccent(hue: hue))
+            // Spec 1b draws this white on a white-16% capsule, not in the
+            // subject accent: it says "this changed since you looked", which is
+            // a fact about the card, not part of the fandom's identity.
+            .foregroundStyle(Color.primary)
             .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.vertical, 4)
+            .background(themeManager.appTheme.glassFill(0.16), in: Capsule())
             .combinedAccessibilityRow(text)
     }
 }
@@ -350,7 +318,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
                             .strokeBorder(
-                                hue.map(themeManager.appTheme.workCardBorder)
+                                hue.map { themeManager.appTheme.subjectPalette(hue: $0).cardBorder }
                                     ?? themeManager.appTheme.carouselCardBorder(hue: nil),
                                 lineWidth: 0.5
                             )
@@ -369,7 +337,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     private var hueTint: some View {
         if let hue {
             RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
-                .fill(themeManager.appTheme.workCardGradient(hue: hue))
+                .fill(themeManager.appTheme.subjectPalette(hue: hue).cardWash)
         }
     }
 }

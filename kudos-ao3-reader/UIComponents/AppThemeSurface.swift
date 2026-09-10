@@ -235,7 +235,11 @@ private struct CardRow: ViewModifier {
             ))
             .listRowBackground(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(cardFill)
+                    .fill(theme.appTheme.cardSurface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(cardFill)
+                    )
                     // Hairline edge for crisp separation on flat Light/Sepia backdrops —
                     // or the accent-color selection outline, at the same true card edge.
                     .overlay(
@@ -259,15 +263,18 @@ private struct CardRow: ViewModifier {
             )
     }
 
+    /// A tinted row is the subject's wash composited over the ordinary card
+    /// surface, not instead of it: the wash carries alpha (spec 1k draws it as
+    /// `linear-gradient(…66, …4D)` over the page), so without the surface
+    /// underneath, Light and Sepia rows would go translucent.
     private var cardFill: AnyShapeStyle {
-        if let tintHue {
-            return AnyShapeStyle(theme.appTheme.workLedgerGradient(hue: tintHue))
-        }
-        return AnyShapeStyle(theme.appTheme.cardSurface)
+        guard let tintHue else { return AnyShapeStyle(theme.appTheme.cardSurface) }
+        return AnyShapeStyle(theme.appTheme.subjectPalette(hue: tintHue).rowWash)
     }
 
     private var cardBorder: Color {
-        tintHue.map(theme.appTheme.workLedgerBorder) ?? theme.appTheme.cardBorder
+        guard let tintHue else { return theme.appTheme.cardBorder }
+        return theme.appTheme.subjectPalette(hue: tintHue).rowBorder
     }
 }
 
