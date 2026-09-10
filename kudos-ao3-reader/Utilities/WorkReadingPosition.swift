@@ -12,5 +12,4 @@ enum WorkReadingPosition {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
-
 }
