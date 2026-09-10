@@ -135,7 +135,7 @@ extension AO3Client {
         else { throw AO3Error.parse }
 
         let methodOverride = inputValue(form, name: "_method")
-        let workID = workID(inPath: actionURL.path)
+        let workID = workIDFromPath(actionURL.path)
         let heading = ((try? doc.select("h2.heading, h2").first()?.text()) ?? "")
             .lowercased()
         let hasSaveDraft = submitNamed(form, AO3WorkFormField.saveButton)
@@ -263,7 +263,7 @@ extension AO3Client {
             ?? inputValue(form, name: AO3WorkFormField.authenticityToken)
         else { throw AO3Error.parse }
 
-        let workID = workID(inPath: actionURL.path) ?? 0
+        let workID = workIDFromPath(actionURL.path) ?? 0
         let chapterID = chapterID(inPath: actionURL.path)
         let positionField = firstInput(form, name: AO3WorkFormField.chapterPosition)
         let includePosition = positionField != nil
@@ -285,13 +285,13 @@ extension AO3Client {
             content: textareaValue(form, name: AO3WorkFormField.chapterOnlyContent)
                 .ifEmpty(textareaValue(form, id: "content")),
             publishedYear: inputValue(
-                form, name: AO3WorkFormField.chapterPublishedYear
+                form, name: AO3WorkFormField.chapterOnlyPublishedYear
             ) ?? "",
             publishedMonth: inputValue(
-                form, name: AO3WorkFormField.chapterPublishedMonth
+                form, name: AO3WorkFormField.chapterOnlyPublishedMonth
             ) ?? "",
             publishedDay: inputValue(
-                form, name: AO3WorkFormField.chapterPublishedDay
+                form, name: AO3WorkFormField.chapterOnlyPublishedDay
             ) ?? "",
             isDraft: submitNamed(form, AO3WorkFormField.saveButton),
             creators: parseCreators(in: form, prefix: "chapter")
@@ -786,7 +786,7 @@ extension AO3Client {
         return URL(string: "https://archiveofourown.org\(withSlash)")
     }
 
-    static func workID(inPath path: String) -> Int? {
+    static func workIDFromPath(_ path: String) -> Int? {
         let parts = path.split(separator: "/").map(String.init)
         guard let index = parts.firstIndex(of: "works"), index + 1 < parts.count else {
             return nil
@@ -814,7 +814,7 @@ extension AO3Client {
 
     private static func workID(in element: Element) -> Int? {
         if let href = try? element.select("a[href*=/works/]").first()?.attr("href") {
-            return workID(inPath: href)
+            return workIDFromPath(href)
         }
         return nil
     }

@@ -93,7 +93,7 @@ extension AO3Client {
             membershipRequests: people.filter(\.role.isMembershipRequest),
             maintainers: people.filter(\.role.isMaintainer),
             invitations: people.filter(\.role.isInvitation),
-            revealScheduleText: revealScheduleText(from: show),
+            revealScheduleText: Self.revealScheduleText(from: show),
             itemsForm: items
         )
     }
