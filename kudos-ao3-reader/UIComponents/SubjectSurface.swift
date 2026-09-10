@@ -754,6 +754,25 @@ struct GlassCircleButton<Label: View>: View {
 
 // MARK: - Wash background
 
+private struct SubjectWashedScreenKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True anywhere inside a screen whose background is a subject wash.
+    ///
+    /// `cardList()` reads it and stops painting its own flat `cardBackdrop`.
+    /// Every washed `List` on this branch applies `.cardList()` first and the
+    /// wash second, which puts that opaque fill *closer to the list* than the
+    /// wash — `.background` stacks backwards — so it covered the wash outright.
+    /// The screen then looked exactly as it had before the wash was added,
+    /// which is why five of them shipped that way without anyone noticing.
+    var isOnSubjectWash: Bool {
+        get { self[SubjectWashedScreenKey.self] }
+        set { self[SubjectWashedScreenKey.self] = newValue }
+    }
+}
+
 /// Paints the subject wash behind a screen's content, full-bleed under the
 /// status bar. `height` is how far down the saturated part reaches before it
 /// has fully resolved to the page — the spec varies it by how much chrome the
@@ -771,6 +790,11 @@ private struct SubjectWash: ViewModifier {
                     .ignoresSafeArea()
             }
             .background(palette.theme.cardBackdrop.ignoresSafeArea())
+            // Announced downwards, not just painted: the content this wraps is
+            // usually a `cardList()` List, whose own opaque backdrop would sit
+            // in front of everything here. Reaching it needs the environment —
+            // a modifier cannot look at what it has already been applied to.
+            .environment(\.isOnSubjectWash, true)
     }
 }
 

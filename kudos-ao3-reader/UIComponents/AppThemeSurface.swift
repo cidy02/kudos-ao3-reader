@@ -198,12 +198,16 @@ enum CardListMetrics {
 /// `.cardRow()` background reads as a free-standing card.
 private struct CardList: ViewModifier {
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.isOnSubjectWash) private var isOnSubjectWash
 
     func body(content: Content) -> some View {
         content
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+            // A washed screen has already declared what its backdrop is, and it
+            // is painted behind this modifier. Filling it flat here would hide
+            // the wash completely — see `EnvironmentValues.isOnSubjectWash`.
+            .background((isOnSubjectWash ? Color.clear : theme.appTheme.cardBackdrop).ignoresSafeArea())
     }
 }
 
