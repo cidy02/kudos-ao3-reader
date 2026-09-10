@@ -167,10 +167,12 @@ struct AO3AccountWorksList: View {
                 signedOutPrompt
             }
         }
-        .hidesFloatingTabBar()
-        .navigationTitle(kind.title)
-        #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
+        // The list states its own name in the header block now (spec 1o), so the
+        // bar would be saying it twice — `subjectScreenWash` empties it, and
+        // hides the floating tab bar this used to ask for separately. macOS has
+        // no such treatment in its window chrome and keeps the real title.
+        #if os(macOS)
+            .navigationTitle(kind.title)
         #endif
             .toolbar {
                 // Gated as a whole, not just its inner pieces — an empty HStack still
@@ -267,9 +269,14 @@ struct AO3AccountWorksList: View {
                     }
                     .padding(.vertical, 8)
                 }
-                .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+                // The wash, not the flat backdrop: the compact grid is a different
+                // arrangement of this list, not a different screen, and a page
+                // that changed colour at a display-mode switch would be a bug in
+                // waiting. `subjectScreenWash` paints the backdrop itself.
+                .subjectScreenWash(palette: accountPalette)
             } else {
                 List {
+                    subjectHeaderSection
                     if showPagination {
                         Section { paginationRow }
                     }
@@ -281,18 +288,29 @@ struct AO3AccountWorksList: View {
                                 // non-selecting branch — re-wrapping it stacks a second,
                                 // unhidden, real-titled NavigationLink behind the blurred
                                 // branch's reveal gate.
-                                SensitiveWorkRow(work: work, expandAll: expandAll)
+                                SensitiveWorkRow(work: work, expandAll: expandAll, presentation: .ledger)
+                                    // The row's wash is painted here, at the card's true
+                                    // outer edge, rather than inside the row — see
+                                    // `WorkLedgerRow.drawsBackground`.
+                                    .cardRow(tintHue: CoverArt.workHue(
+                                        fandoms: work.workFandoms, title: work.title
+                                    ))
                             } else if let remote = entry.remote {
-                                EnrichingAO3WorkRow(work: remote, expandAll: expandAll)
+                                EnrichingAO3WorkRow(
+                                    work: remote, expandAll: expandAll, presentation: .searchLedger
+                                )
+                                .cardRow(tintHue: CoverArt.workHue(
+                                    fandoms: remote.fandoms, title: remote.title
+                                ))
                             }
                         }
-                        .cardRow()
                     }
                     if showPagination {
                         Section { paginationRow }
                     }
                 }
                 .cardList()
+                .subjectScreenWash(palette: accountPalette)
             }
         }
         .overlay {
@@ -310,6 +328,46 @@ struct AO3AccountWorksList: View {
             }
         }
         .refreshable { await load(page: currentPage) }
+    }
+
+    /// Spec 1o: every pushed account list opens with the kicker, its rule, the
+    /// list's own 32pt name and one line of tallies — at a **16pt** gutter, ten
+    /// tighter than a subject's own page. These are lists *of* things rather
+    /// than pages *about* one, and the spec sets them accordingly.
+    private var subjectHeaderSection: some View {
+        Section {
+            SubjectHeaderBlock(
+                kicker: "AO3 Account",
+                title: kind.title,
+                subtitle: headerTallyLine,
+                palette: accountPalette,
+                gutter: SubjectMetrics.accountGutter
+            )
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    /// The app accent's hue, not a work's: this page is scoped to the account,
+    /// which is the rule spec 1m states outright and every account surface
+    /// follows.
+    private var accountPalette: SubjectPalette {
+        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+    }
+
+    /// Spec 1o prints "12 works · synced 2 min ago". The app does not record when
+    /// a list was last synced, so the second fact here is which page you are on —
+    /// true, and the thing a reader of a nine-page list actually needs. Counts
+    /// what is *visible*, since the refine facets can hide part of a page and a
+    /// tally that ignored them would contradict the rows underneath it.
+    private var headerTallyLine: String {
+        let shown = visibleEntries.count
+        var line = shown == 1 ? "1 work" : "\(shown) works"
+        if totalPages > 1 {
+            line += " · page \(currentPage) of \(totalPages)"
+        }
+        return line
     }
 
     private var paginationBar: some View {
@@ -415,13 +473,14 @@ struct AO3AccountWorksList: View {
 private struct EnrichingAO3WorkRow: View {
     let work: AO3WorkSummary
     let expandAll: Bool
+    var presentation: AO3WorkRow.Presentation = .standard
 
     @State private var enriched: AO3WorkSummary?
 
     private var displayed: AO3WorkSummary { enriched ?? work }
 
     var body: some View {
-        AO3WorkRow(work: displayed, expandAll: expandAll)
+        AO3WorkRow(work: displayed, expandAll: expandAll, presentation: presentation)
             .cardNavigation(to: displayed, accessibilityLabel: displayed.title)
             .task(id: work.id) {
                 // `.task(id:)` so recycling this row onto a different work cancels
