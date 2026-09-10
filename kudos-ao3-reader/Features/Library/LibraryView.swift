@@ -449,8 +449,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     /// A light, horizontal quick-filter chip row: tap a fandom to filter every
     /// section to it (the full faceted filters stay behind the "Filters" button).
-    /// Reuses `TagChip` so it matches the Browse/Search chips; a trailing Reset chip
-    /// appears whenever any filter (chip or inspector) is active.
+    /// A trailing Reset chip appears whenever any filter (chip or inspector) is
+    /// active.
+    ///
+    /// Pills, not the rounded rects the results rails use. Spec 1c and 1ad draw
+    /// this row round and the active-filter summary square, and the difference
+    /// carries meaning: a pill here is an offer you can tap on and off, where a
+    /// rect on a results page states a filter that is already in force.
     @ViewBuilder
     private var fandomFilterBar: some View {
         let fandoms = topFandomsCache
@@ -471,12 +476,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         Button {
                             withAnimation(.snappy) { filters = LibraryFilters() }
                         } label: {
-                            Label("Reset", systemImage: "xmark")
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .foregroundStyle(.secondary)
-                                .background(.quaternary, in: Capsule())
+                            // Quieter than the filter pills beside it — spec 1c
+                            // drops its fill to 6% and its text to 50%, because
+                            // undoing is not one of the choices on offer, it is
+                            // the way out of them.
+                            SubjectChip(text: "Reset", style: .pill(isSelected: false), systemImage: "xmark")
+                                .opacity(0.7)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reset filters")
@@ -491,11 +496,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         Button {
             withAnimation(.snappy) { action() }
         } label: {
-            TagChip(text: text, tinted: selected)
+            SubjectChip(
+                text: text,
+                style: .pill(isSelected: selected),
+                palette: themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+            )
         }
         .buttonStyle(.plain)
         .minimumHitTarget(28)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     // MARK: Card details

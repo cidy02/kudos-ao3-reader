@@ -556,16 +556,27 @@ struct WorkProgressRing: View {
 
 // MARK: - Chips
 
-/// The redesign's chip: a rounded rect, not the capsule `TagChip` draws. Used
-/// for active filters, tag groups on an expanded row, and the scope rails.
+/// The redesign's chip. There are two shapes and they mean different things —
+/// getting them the same way round is the whole point of this type:
+///
+/// - **Rounded rect** (`.neutral` / `.tinted` / `.dashed`, radius 8) *states*
+///   something: an active filter, a tag on an expanded row. Spec 1k.
+/// - **Pill** (`.pill`, fully round) *offers* something: a quick filter you can
+///   tap on and off. Spec 1c and 1ad.
+///
+/// So a Library quick-filter row is pills and a results filter summary is rects,
+/// and neither should be "fixed" to match the other.
 ///
 /// `.dashed` is the spec's "add one" affordance (`+ Tag`, `Filter`) — the only
 /// chip that is an invitation rather than a statement.
 struct SubjectChip: View {
-    enum Style {
+    enum Style: Equatable {
         case neutral
         case tinted
         case dashed
+        /// A tappable quick filter. Selected takes the subject accent as a solid
+        /// fill, per spec 1ad's "All 4" chip.
+        case pill(isSelected: Bool)
     }
 
     let text: String
@@ -595,11 +606,17 @@ struct SubjectChip: View {
                     .opacity(0.75)
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
+        .padding(.horizontal, isPill ? 14 : 11)
+        .padding(.vertical, isPill ? 7 : 6)
         .foregroundStyle(foreground)
         .background(background)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(style == .pill(isSelected: true) ? .isSelected : [])
+    }
+
+    private var isPill: Bool {
+        if case .pill = style { return true }
+        return false
     }
 
     private var foreground: Color {
@@ -607,6 +624,13 @@ struct SubjectChip: View {
         case .neutral: .primary
         case .tinted: palette?.accentOnFill ?? .primary
         case .dashed: .secondary
+        case .pill(let isSelected):
+            // A filled pill needs a foreground picked for its own fill, not for
+            // the page — `onEffectiveTint`'s problem, solved the same way: from
+            // the fill's luminance rather than from a per-theme case.
+            isSelected
+                ? ((palette?.accent ?? Color.accentColor).relativeLuminance > 0.45 ? .black : .white)
+                : .primary
         }
     }
 
@@ -628,6 +652,11 @@ struct SubjectChip: View {
                     theme.glassStroke(0.26),
                     style: StrokeStyle(lineWidth: 0.5, dash: [3, 3])
                 )
+        case .pill(let isSelected):
+            Capsule()
+                .fill(isSelected
+                    ? AnyShapeStyle(palette?.accent ?? Color.accentColor)
+                    : AnyShapeStyle(theme.glassFill()))
         }
     }
 }
