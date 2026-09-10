@@ -452,12 +452,20 @@ struct SubjectStatStrip: View {
         let id = UUID()
         let value: String
         let label: String
+        /// Takes the subject's accent — for the one cell that answers "where am
+        /// I" rather than "how big is this" (the live page, in spec 1k).
         var isHighlighted: Bool = false
+        /// A colour of the cell's own, overriding both the default and the
+        /// highlight. Spec 1a tints Rating and Warnings by what they *say* —
+        /// green for General and No Warnings, red for Explicit — which is a
+        /// different axis from the subject's hue and cannot come from it.
+        var tint: Color?
 
-        init(value: String, label: String, isHighlighted: Bool = false) {
+        init(value: String, label: String, isHighlighted: Bool = false, tint: Color? = nil) {
             self.value = value
             self.label = label
             self.isHighlighted = isHighlighted
+            self.tint = tint
         }
     }
 
@@ -480,7 +488,7 @@ struct SubjectStatStrip: View {
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        .foregroundStyle(cell.isHighlighted ? palette.accentOnFill : Color.primary)
+                        .foregroundStyle(cell.tint ?? (cell.isHighlighted ? palette.accentOnFill : Color.primary))
                     Text(cell.label.uppercased())
                         .font(.system(size: 9))
                         .tracking(0.63)

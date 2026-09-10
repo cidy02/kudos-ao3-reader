@@ -121,18 +121,33 @@ def turn_titles(source):
     }
 
 
+def _balanced_div(block, start):
+    """The substring of `block` from `start` through its matching </div>."""
+    depth = 0
+    for token in re.finditer(r"<div\b|</div>", block[start:]):
+        depth += -1 if token.group(0) == "</div>" else 1
+        if depth == 0:
+            return block[start:start + token.end()]
+    return block[start:]
+
+
 def screen_fragments(block):
-    """Yield (screen_label, fragment_html) for each device frame in an artboard."""
-    for match in re.finditer(r'<div data-screen-label="([^"]*)"', block):
-        start = match.start()
-        depth = 0
-        end = len(block)
-        for token in re.finditer(r"<div\b|</div>", block[start:]):
-            depth += -1 if token.group(0) == "</div>" else 1
-            if depth == 0:
-                end = start + token.end()
-                break
-        yield match.group(1), block[start:end]
+    """Yield (screen_label, fragment_html) for each device frame in an artboard.
+
+    Most frames carry `data-screen-label`, which names them. The canvas's oldest
+    artboards do not — they are bare divs inside an `x-import`, and 1a is one —
+    so fall back to the thing every frame has regardless: the device height the
+    `IOSDevice` component draws at. Without the fallback those artboards report
+    "no framed screen" and cannot be read at all.
+    """
+    labelled = list(re.finditer(r'<div data-screen-label="([^"]*)"', block))
+    if labelled:
+        for match in labelled:
+            yield match.group(1), _balanced_div(block, match.start())
+        return
+
+    for index, match in enumerate(re.finditer(r'<div style="[^"]*height:874px[^"]*"', block), start=1):
+        yield f"screen {index} (unlabelled)", _balanced_div(block, match.start())
 
 
 def command_list(source):
