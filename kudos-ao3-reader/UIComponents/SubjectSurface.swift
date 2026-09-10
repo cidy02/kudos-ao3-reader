@@ -244,6 +244,9 @@ enum SubjectMetrics {
     static let gutter: CGFloat = 16
     /// The wider gutter the header block itself takes (spec `22px 26px 0`).
     static let headerGutter: CGFloat = 26
+    /// Side gutter for a block that draws its own panel, four points tighter
+    /// than prose so the two edges do not line up and fight (spec 1a).
+    static let panelGutter: CGFloat = 22
     /// Floating glass chrome buttons — spec's 34px circles.
     static let chromeButton: CGFloat = 34
     /// The short rule under a kicker: 22×2.5 on a card, 26×2.5 on a page header.
@@ -451,6 +454,71 @@ struct SectionRuleHeader: View {
             }
         }
         .padding(.horizontal, SubjectMetrics.gutter)
+    }
+}
+
+// MARK: - Field label
+
+/// The quiet uppercase label over a group of chips or rows — ON AO3,
+/// RELATIONSHIP, CHARACTERS, TAGS, STATUS, QUEUES, MY TAGS. Spec 1a uses it a
+/// dozen times.
+///
+/// Deliberately not `SubjectKicker`, which it resembles: a kicker is the
+/// *subject's own name* in the subject's accent, under a rule, and there is one
+/// per surface. This names a field, takes no colour, and repeats down the page.
+/// Making them one type would mean the accent either leaking onto every field
+/// heading or vanishing from the one place it means something.
+struct SubjectFieldLabel: View {
+    let text: String
+    /// How many items the group holds, drawn as the spec's dimmer trailing
+    /// figure. Shown only where the count is not obvious from the chips
+    /// themselves — seven tags, say, rather than one relationship.
+    var count: Int?
+    /// A word qualifying the field rather than counting it ("private", on the
+    /// user's own tags).
+    var note: String?
+    /// The hairline running to the trailing edge. Spec draws it on the sheet's
+    /// stacked sections and leaves it off the chip clusters, which already read
+    /// as separate blocks because their chips do.
+    var hasRule = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(text.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1)
+                .foregroundStyle(.secondary)
+            if let count {
+                Text(count.formatted())
+                    .font(.system(size: 10))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.secondary.opacity(0.6))
+            }
+            if let note {
+                Text(note)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.secondary.opacity(0.6))
+            }
+            if hasRule {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.35))
+                    .frame(height: 0.5)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .lineLimit(1)
+        .combinedAccessibilityRow(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        var spoken = text
+        if let count {
+            spoken += ", \(count.formatted())"
+        }
+        if let note {
+            spoken += ", \(note)"
+        }
+        return spoken
     }
 }
 

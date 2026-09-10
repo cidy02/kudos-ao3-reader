@@ -214,6 +214,32 @@ extension View {
     }
 }
 
+// MARK: - Page body rows
+
+extension View {
+    /// A `List` row that sits directly on the page wash: no card, no separator,
+    /// no row background, at the spec's own side gutter.
+    ///
+    /// Artboard 1a's page is a stack of these, and it varies only two numbers
+    /// down its whole length — the space above each block, and whether the block
+    /// is a full-bleed panel (22pt) or prose and chips (26pt). Naming them here
+    /// keeps six call sites from each spelling out an `EdgeInsets` that has to
+    /// agree with the others by eye.
+    func pageBodyRow(top: CGFloat, gutter: CGFloat = SubjectMetrics.headerGutter) -> some View {
+        listRowInsets(EdgeInsets(top: top, leading: gutter, bottom: 0, trailing: gutter))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+
+    /// The gutter the spec gives a block that draws its own panel — the figure
+    /// strip, the resume card, the grouped facts card. Four points tighter than
+    /// prose, so a panel's edge and a paragraph's first letter do not line up
+    /// and fight.
+    func pagePanelRow(top: CGFloat) -> some View {
+        pageBodyRow(top: top, gutter: SubjectMetrics.panelGutter)
+    }
+}
+
 // MARK: - Filter chip rail
 
 /// The horizontal rail of active filters under a subject header, with a dashed
