@@ -62,9 +62,9 @@ enum AO3WorkFormField {
     static let chapterEndnotes = "chapter[endnotes]"
     static let chapterOnlyContent = "chapter[content]"
     static let chapterAuthorIDs = "chapter[author_attributes][ids][]"
-    static let chapterPublishedYear = "chapter[published_at(1i)]"
-    static let chapterPublishedMonth = "chapter[published_at(2i)]"
-    static let chapterPublishedDay = "chapter[published_at(3i)]"
+    static let chapterOnlyPublishedYear = "chapter[published_at(1i)]"
+    static let chapterOnlyPublishedMonth = "chapter[published_at(2i)]"
+    static let chapterOnlyPublishedDay = "chapter[published_at(3i)]"
 
     static let seriesFormTitle = "series[title]"
     static let seriesSummary = "series[summary]"
@@ -608,9 +608,9 @@ nonisolated struct AO3ChapterForm: Equatable, Sendable {
         pairs.append((AO3WorkFormField.chapterEndnotes, endnotes))
         pairs.append((AO3WorkFormField.chapterOnlyContent, content))
         if !publishedYear.isEmpty {
-            pairs.append((AO3WorkFormField.chapterPublishedYear, publishedYear))
-            pairs.append((AO3WorkFormField.chapterPublishedMonth, publishedMonth))
-            pairs.append((AO3WorkFormField.chapterPublishedDay, publishedDay))
+            pairs.append((AO3WorkFormField.chapterOnlyPublishedYear, publishedYear))
+            pairs.append((AO3WorkFormField.chapterOnlyPublishedMonth, publishedMonth))
+            pairs.append((AO3WorkFormField.chapterOnlyPublishedDay, publishedDay))
         }
         for id in creators.selectedPseudIDs {
             pairs.append((AO3WorkFormField.chapterAuthorIDs, id))
