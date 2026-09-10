@@ -15,6 +15,22 @@ import SwiftUI
 /// Tapping anywhere opens the filter panel, which is what makes the chips worth
 /// their height — they are the control, not a caption about it.
 struct SearchResultsHero: View {
+    /// Which of the two shapes this header takes.
+    ///
+    /// `.card` is the established one: a tappable card sitting in the list, with
+    /// the count, the subject and the filter chips stacked inside it.
+    ///
+    /// `.subjectPage` is artboard 1k — the same facts, but as the page's own
+    /// header on the subject's wash: kicker, rule, the total at 32pt, the
+    /// subject with a sort dropdown beside it, a four-cell figure strip, and the
+    /// filters as a chip rail with a dashed Filter pinned at its end. Not a
+    /// restyle of the card but a different arrangement of the same content, so
+    /// both live here rather than drifting apart in two files.
+    enum Presentation: Equatable {
+        case card
+        case subjectPage
+    }
+
     let summary: AO3ResultSummary
     /// From `AO3SearchFilters.summaryLabels(excluding:)` — non-default settings
     /// only, always ending with the sort.
@@ -25,12 +41,123 @@ struct SearchResultsHero: View {
     /// rather than guessing.
     var subjectField: AO3TagSearch.Field?
     var onEditFilters: (() -> Void)?
+    var presentation: Presentation = .card
+    /// Page numbers for the figure strip. `.card` ignores them — it sits above a
+    /// pagination bar that already states them.
+    var currentPage: Int = 1
+    var totalPages: Int = 1
+    /// The sort control 1k puts beside the subject. Nil draws the sort as plain
+    /// text instead, which is what a caller with no binding to offer should get
+    /// rather than a menu that cannot change anything.
+    var sortSelection: Binding<AO3SearchFilters.Sort>?
+
+    @Environment(ThemeManager.self) private var themeManager
 
     /// Beyond this the chips would crowd out the works. The overflow is *counted*
     /// rather than silently dropped, so the card never implies it listed everything.
     private static let visibleChipLimit = 6
 
+    /// The results page is scoped to whatever was searched, so it takes that
+    /// subject's hue — the same one its work cards take, which is what makes a
+    /// gold fandom's results page and its rows read as one surface. A free-text
+    /// search names no subject, so it falls back to the app accent (spec 1m's
+    /// rule for anything not scoped to a work).
+    private var palette: SubjectPalette {
+        let hue = summary.subject.map { CoverArt.hue(for: $0) } ?? themeManager.scopeHue
+        return themeManager.appTheme.subjectPalette(hue: hue)
+    }
+
+    @ViewBuilder
     var body: some View {
+        switch presentation {
+        case .card: cardBody
+        case .subjectPage: subjectPageBody
+        }
+    }
+
+    // MARK: - Artboard 1k
+
+    private var subjectPageBody: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SubjectHeaderBlock(
+                kicker: "Search results",
+                title: "\(summary.total.formatted()) \(summary.total == 1 ? "work" : "works")",
+                subtitle: summary.subject,
+                palette: palette
+            ) {
+                sortControl
+            }
+
+            SubjectStatStrip(cells: statStripCells, palette: palette)
+                .padding(.horizontal, 22)
+
+            if onEditFilters != nil {
+                SubjectFilterRail(
+                    onOpenFilters: { onEditFilters?() },
+                    activeFilterCount: nonSortFilterLabels.count
+                ) {
+                    ForEach(nonSortFilterLabels, id: \.self) { label in
+                        SubjectChip(
+                            text: label.text,
+                            style: .tinted,
+                            systemImage: label.symbol,
+                            palette: palette
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sort is pulled out of the chip rail and given its own control beside the
+    /// subject, per 1k. It is the one setting that is always in effect, so as a
+    /// chip it was permanent furniture; as a dropdown it is the thing you reach
+    /// for when the order is wrong.
+    private var nonSortFilterLabels: [AO3SearchFilters.SummaryLabel] {
+        filterLabels.filter { !$0.text.hasPrefix("Sort: ") }
+    }
+
+    private var sortLabelText: String {
+        if let sortSelection { return sortSelection.wrappedValue.title }
+        return filterLabels.first { $0.text.hasPrefix("Sort: ") }?
+            .text.replacingOccurrences(of: "Sort: ", with: "") ?? ""
+    }
+
+    @ViewBuilder
+    private var sortControl: some View {
+        if let sortSelection {
+            Menu {
+                Picker("Sort", selection: sortSelection) {
+                    ForEach(AO3SearchFilters.Sort.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+            } label: {
+                SubjectChip(text: sortLabelText, style: .neutral, trailingImage: "chevron.down")
+            }
+            .buttonStyle(.plain)
+        } else if !sortLabelText.isEmpty {
+            SubjectChip(text: sortLabelText, style: .neutral)
+        }
+    }
+
+    /// Works, active filters, pages, and which page you are on — the four figures
+    /// 1k puts under the header. The live page is the highlighted cell, because
+    /// it is the only one of the four that answers "where am I" rather than
+    /// "how big is this".
+    private var statStripCells: [SubjectStatStrip.Cell] {
+        [
+            SubjectStatStrip.Cell(value: summary.total.formatted(), label: "Works"),
+            SubjectStatStrip.Cell(value: "\(nonSortFilterLabels.count)", label: "Filters"),
+            SubjectStatStrip.Cell(value: totalPages.formatted(), label: "Pages"),
+            SubjectStatStrip.Cell(value: currentPage.formatted(), label: "Page", isHighlighted: true),
+        ]
+    }
+
+    // MARK: - Established card
+
+    @ViewBuilder
+    private var cardBody: some View {
         if let onEditFilters {
             Button(action: onEditFilters) { content }
                 .buttonStyle(.plain)

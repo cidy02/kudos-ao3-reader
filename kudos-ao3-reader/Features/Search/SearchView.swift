@@ -9,6 +9,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var themeManager
 
     // Local-first search sources (Global Search, Phase 2): matched on-device, live.
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
@@ -246,9 +247,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 // Search's panel is router-owned (it's an inspector
                                 // shared with the toolbar's Filter button), so open
                                 // it the same way that button does.
-                                onEditFilters: { router.panel = .searchFilters }
+                                onEditFilters: { router.panel = .searchFilters },
+                                presentation: .subjectPage,
+                                currentPage: currentPage,
+                                totalPages: totalPages,
+                                // Sort leaves the chip rail and becomes a real
+                                // control beside the subject (spec 1k), which
+                                // needs a binding rather than a label.
+                                sortSelection: $filters.sort
                             )
-                            .cardRow()
+                            .bareListRow()
                         }
                     }
 
@@ -278,6 +286,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // Card-based list: each result is a fully-rounded card with ~12pt
                 // spacing, over the themed backdrop (replaces the grouped style).
                 .cardList()
+                // The wash only, not `subjectScreenWash`: Search is a tab root
+                // and keeps its navigation title, where a pushed results screen
+                // (spec 1k proper) gives its bar up to floating chrome. 600pt
+                // because the header block, the figure strip and the chip rail
+                // all sit inside the saturated part.
+                .subjectWash(resultsPalette, height: 600)
                 .refreshable { await refreshCurrentResults() }
                 // The other half of the cancellation story: `TabView` keeps this
                 // tab's hierarchy — and its `.refreshable` task — alive when the
@@ -818,6 +832,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// and tags active at once, so there is no one thing these results are "in" —
     /// naming any single filter would be a lie. The range is safe though, and AO3's
     /// search heading never states it.
+    /// The results screen takes the searched subject's own hue, so a fandom's
+    /// results page and the cards on it read as one surface. A free-text search
+    /// names no subject and falls back to the app accent.
+    private var resultsPalette: SubjectPalette {
+        let hue = heroSummary?.subject.map { CoverArt.hue(for: $0) } ?? themeManager.scopeHue
+        return themeManager.appTheme.subjectPalette(hue: hue)
+    }
+
     private var heroSummary: AO3ResultSummary? {
         // `/works/search` sends no scope clause at all — the card was a bare
         // "202,439 works" with nothing saying what of. The screen knows.
