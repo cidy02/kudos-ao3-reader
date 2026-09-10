@@ -46,5 +46,5 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 
 ## Still unverified (be honest about it)
 
-- Write actions (`AO3WriteActions`) have never been exercised against a live AO3 session — a release gate item, not an agent task.
+- Write actions (`AO3WriteActions`, and as of T-214 also `AO3CollectionActions`, `AO3ChallengeActions`, `AO3WorkActions`) have never been exercised against a live AO3 session — a release gate item, not an agent task.
 - Real-device background-refresh scheduling (BGTask) — simulator-verified registration only.
