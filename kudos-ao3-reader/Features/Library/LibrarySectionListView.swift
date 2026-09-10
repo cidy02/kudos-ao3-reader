@@ -249,15 +249,72 @@ struct LibrarySectionListView: View {
         }
     }
 
+    /// Library's sections span every fandom in the library, so this page is
+    /// scoped to the tab rather than to one work: its wash comes from the app
+    /// accent (spec 1m's rule), while each row keeps its own fandom's hue.
+    private var scopePalette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+    }
+
+    private var headerTallyLine: String {
+        let workCount = visibleItems.count
+        return "\(workCount) \(workCount == 1 ? "work" : "works")"
+    }
+
+    /// The kicker / rule / 32pt hero, as the list's first row rather than as a
+    /// navigation title — spec 1c scrolls it away under the chrome, which a
+    /// `navigationTitle` cannot do.
+    private var subjectHeaderSection: some View {
+        Section {
+            SubjectHeaderBlock(
+                kicker: "Library",
+                title: kind.title,
+                subtitle: headerTallyLine,
+                palette: scopePalette
+            )
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
+            SubjectFilterRail(
+                onOpenFilters: { showingFilters = true },
+                activeFilterCount: filters.summaryLabels(includesSort: false).count
+            ) {
+                ForEach(filters.summaryLabels(), id: \.self) { label in
+                    SubjectChip(
+                        text: label.text,
+                        style: .tinted,
+                        systemImage: label.symbol,
+                        palette: scopePalette
+                    )
+                }
+            }
+            .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
     private var detailedList: some View {
         List {
+            subjectHeaderSection
+
             if !visibleItems.isEmpty {
                 Section {
                     ForEach(visibleItems) { work in
-                        row(work).cardRow(isSelected: isSelecting && selection.contains(work.id))
+                        row(work).cardRow(
+                            isSelected: isSelecting && selection.contains(work.id),
+                            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+                        )
                     }
                 } header: {
-                    if showsMarkedForLater { Text("Saved for Later in Kudos") }
+                    SectionRuleHeader(
+                        title: showsMarkedForLater ? "Saved for Later in Kudos" : kind.title,
+                        count: visibleItems.count
+                    )
+                    .textCase(nil)
+                    .listRowInsets(EdgeInsets())
+                    .padding(.bottom, 10)
                 }
             }
             if showsMarkedForLater {
@@ -271,6 +328,7 @@ struct LibrarySectionListView: View {
             }
         }
         .cardList()
+        .subjectScreenWash(palette: scopePalette)
     }
 
     /// Column count tracks the actual scaled card width at every Dynamic Type step
@@ -334,7 +392,8 @@ struct LibrarySectionListView: View {
                 openMode: .reader,
                 isSelecting: true,
                 isSelected: selection.contains(work.id),
-                onToggleSelection: { toggleSelection(work) }
+                onToggleSelection: { toggleSelection(work) },
+                presentation: .ledger
             )
         } else {
             swipeableRow(work)
@@ -346,7 +405,8 @@ struct LibrarySectionListView: View {
             work: work,
             expandAll: expandAll,
             openMode: .reader,
-            onSelect: { isSelecting = true; selection = [work.id] }
+            onSelect: { isSelecting = true; selection = [work.id] },
+            presentation: .ledger
         )
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
