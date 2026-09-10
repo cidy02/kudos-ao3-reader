@@ -337,29 +337,39 @@ the MuPDF `ios-sim` failure itself is still undiagnosed.
 
 ---
 
-## 3b. Open decisions the spec and the code disagree about
+## 3b. Where the spec and the code disagree
 
 Where an artboard contradicts a *reasoned* decision already in the codebase,
-the artboard wins — it is the owner's design call — but the reasoning should be
-answered, not silently dropped. Anything in this list needs a human or a
-simulator, not another blind edit.
+**the artboard wins** — it is the owner's design call, and that has been
+confirmed explicitly. The reasoning it overrules should still be answered in
+writing rather than silently dropped, so the next person to read that code
+knows the argument was met and not missed.
 
-### The paging control (spec 1k vs. `SearchPaginationBar`)
+### ✅ Resolved — the paging control (spec 1k vs. `SearchPaginationBar`)
 
-Spec 1k replaces the page **scrubber** with a page **sheet**: "the number as a
-field, the ten nearby pages as tiles, and First / Last for the ends".
+**Decision: the spec, implemented.** Recorded here because the reasoning it
+overruled was good, and the next person to read `SearchPaginationBar` deserves
+to know it was answered rather than ignored.
 
-`SearchPaginationBar`'s own doc comment argues the opposite case at length, and
-argues it well: a slider is how iOS moves through a long ordered set, "because a
-thumb travelling 300pt can address 5,000 pages and a row of pills cannot". Ten
-tiles cannot reach page 2,731 of 5,000 either — the field can, which is
-presumably why 1k puts one there.
+Spec 1k replaces the page **scrubber** with a page **sheet**: a number field,
+the ten nearby pages as tiles, and First / Last for the ends.
 
-The pill itself already matches 1k (prev, a tappable position label, next). Only
-the sheet differs. **Not changed blind**: swapping a control whose rationale is
-written down, without being able to use either version, is how a considered
-decision gets lost to a mockup. Whoever has a simulator should build both and
-pick.
+The scrubber's own doc comment argued that a slider is how iOS moves through a
+long ordered set, "because a thumb travelling 300pt can address 5,000 pages and
+a row of pills cannot". True, and the spec answers it: the **field** addresses
+all 5,000, and *exactly*, which a thumb never could — one thumb pixel is several
+pages on a long list, so the slider was good at "somewhere around there" and bad
+at "page 4,017". The tiles cover the other real case, stepping a few pages from
+where you are, which is where a slider is fiddliest.
+
+Both halves kept what mattered: nothing loads until you confirm, because paging
+is a network fetch behind a politeness pacer and a tile that navigated on tap
+would fire a request per tap.
+
+The only part worth a test is the window's behaviour at the ends —
+`nearbyPageWindow(around:totalPages:count:)` slides back inside the range rather
+than truncating, so page 2 of 3,216 still offers ten choices. Four tests in
+`KudosTests/SearchPaginationTests.swift`.
 
 ---
 

@@ -16,9 +16,10 @@ import SwiftUI
 ///   control. This is Books' chapter navigation and Photos' day stepper: the app
 ///   assumes you are reading forwards.
 /// - **Rare — go somewhere far away.** The centre reads `Page 3 of 5,000`, and
-///   tapping it opens a scrubber. That is Books' "Go to Page" and the Music
-///   scrubber — a slider is how iOS moves through a long ordered set, because a
-///   thumb travelling 300pt can address 5,000 pages and a row of pills cannot.
+///   tapping it opens the page sheet: a number field, the ten nearby pages as
+///   tiles, and First / Last. The field is what addresses page 4,017 exactly —
+///   the scrubber this replaced (artboard 1k) could only ever get near it,
+///   because one thumb pixel is several pages on a long list.
 ///
 /// So the bar shows your position, always, in words — which the numbered version
 /// never actually did — and holds no chrome for a jump you make once a session.
@@ -34,22 +35,26 @@ struct SearchPaginationBar: View {
     /// tap read as ignored and the app as slow. It also let a second tap queue a
     /// second fetch a slot behind the first, which genuinely made it slower.
     var isLoading: Bool = false
+    /// The subject the results belong to, so the sheet's confirm button and its
+    /// selected tile take the same hue as the page around them. Nil falls back
+    /// to the app accent.
+    var palette: SubjectPalette?
     let onSelect: (Int) -> Void
 
-    @State private var showingScrubber = false
+    @State private var showingPageSheet = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 12) {
             navButton(.backward)
 
-            Button { showingScrubber = true } label: {
+            Button { showingPageSheet = true } label: {
                 positionLabel
             }
             .buttonStyle(.plain)
             .disabled(totalPages <= 1 || isLoading)
             .accessibilityLabel("Page \(currentPage) of \(totalPages)")
-            .accessibilityHint(totalPages > 1 ? "Opens the page scrubber." : "")
+            .accessibilityHint(totalPages > 1 ? "Opens the page picker." : "")
             // An adjustable element so VoiceOver users can page with a swipe up or
             // down instead of hunting for the two chevrons — the same gesture the
             // system's own steppers answer to.
@@ -68,10 +73,11 @@ struct SearchPaginationBar: View {
         // a picker gives, and it fires on the value actually changing rather than
         // on the tap, so a tap on a disabled edge stays silent.
         .sensoryFeedback(.selection, trigger: currentPage)
-        .sheet(isPresented: $showingScrubber) {
-            PageScrubberSheet(
+        .sheet(isPresented: $showingPageSheet) {
+            PageJumpSheet(
                 currentPage: currentPage,
                 totalPages: totalPages,
+                palette: palette,
                 onSelect: onSelect
             )
         }
@@ -190,154 +196,224 @@ struct SearchPaginationBar: View {
 
 }
 
-/// The long jump. A slider, because that is how iOS addresses a long ordered set —
-/// a thumb crossing 300pt can reach any of 5,000 pages, where a rail of pills would
-/// need 5,000 taps' worth of scrolling.
+/// The long jump. A slider, because that is how iOS addresses a long ordered set —/// Artboard 1k's page sheet: a number field, the ten nearby pages as tiles, and
+/// First / Last for the ends.
 ///
-/// **The slider does not load anything while you drag.** Pagination is a network
-/// fetch, so a live-bound slider would fire a request per tick and rate-limit the
-/// user out of AO3 in one gesture. The sheet holds a draft, previews it in the
-/// readout, and commits once — which is also why it can afford to be a slider at
-/// all rather than a stepper.
-private struct PageScrubberSheet: View {
+/// **Why this replaced a scrubber.** The slider it supplanted made a real
+/// argument — a thumb travelling 300pt can address 5,000 pages, and ten tiles
+/// cannot. The spec's answer is that the *field* addresses all 5,000, and it
+/// does so exactly, which is what a thumb never could: one thumb pixel is
+/// several pages on a long list, so the slider was good at "somewhere around
+/// there" and bad at "page 4,017". The tiles cover the other real case —
+/// stepping a few pages from where you are — where a slider is fiddliest.
+///
+/// **Nothing loads until you confirm.** Paging is a network fetch behind a
+/// politeness pacer; a tile that navigated on tap would fire a request per
+/// tile-tap. Tiles and First/Last stage a draft, and the confirm button commits
+/// it once.
+extension SearchPaginationBar {
+    /// The pages the sheet offers as tiles: `count` of them, centred on `page`
+    /// and slid back inside the range at either end rather than truncated — so
+    /// page 2 of 3,216 still offers ten choices instead of two.
+    ///
+    /// Pure, and separate from the view, because the off-by-one at the ends is
+    /// the only part of this control worth a test.
+    static func nearbyPageWindow(around page: Int, totalPages: Int, count: Int = 10) -> [Int] {
+        guard totalPages > 0 else { return [] }
+        let windowSize = min(count, totalPages)
+        let centred = page - (windowSize - 1) / 2
+        let start = max(1, min(centred, totalPages - windowSize + 1))
+        return Array(start ..< (start + windowSize))
+    }
+}
+
+private struct PageJumpSheet: View {
     let currentPage: Int
     let totalPages: Int
+    var palette: SubjectPalette?
     let onSelect: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var draft: Double
+    @Environment(ThemeManager.self) private var themeManager
+    @State private var draftText: String
+    @FocusState private var fieldFocused: Bool
 
-    init(currentPage: Int, totalPages: Int, onSelect: @escaping (Int) -> Void) {
+    init(currentPage: Int, totalPages: Int, palette: SubjectPalette?, onSelect: @escaping (Int) -> Void) {
         self.currentPage = currentPage
         self.totalPages = totalPages
+        self.palette = palette
         self.onSelect = onSelect
-        _draft = State(initialValue: Double(currentPage))
+        _draftText = State(initialValue: String(currentPage))
     }
 
+    private var resolvedPalette: SubjectPalette {
+        palette ?? themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+    }
+
+    /// The typed page, clamped. An empty or unparseable field reads as the page
+    /// you are already on, so confirming a half-typed number never jumps
+    /// somewhere arbitrary — it just does nothing.
     private var draftPage: Int {
-        min(max(Int(draft.rounded()), 1), max(totalPages, 1))
+        guard let typed = Int(draftText), typed > 0 else { return currentPage }
+        return min(typed, max(totalPages, 1))
+    }
+
+    private var nearbyPages: [Int] {
+        SearchPaginationBar.nearbyPageWindow(around: draftPage, totalPages: totalPages)
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                readout
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider().overlay(themeManager.appTheme.glassStroke(0.10))
 
-                Slider(
-                    // `max(…, 2)`: a Slider traps when its bounds are equal, and a
-                    // one-page range would be 1...1. The sheet can only be opened
-                    // from a control that is disabled at one page, so this is a
-                    // guard against a future caller rather than a live path.
-                    value: $draft,
-                    in: 1 ... Double(max(totalPages, 2))
-                    // **No `step:`.** A stepped Slider draws a tick per step, and a
-                    // 5,000-page list is 5,000 ticks — they merge into a solid
-                    // accent-coloured bar under the track (which is what the red
-                    // line was), and laying them all out is what made the sheet
-                    // take a visible beat to appear. `draftPage` rounds, so the
-                    // value is whole either way; the ticks were never load-bearing.
-                    // Android's slider was made continuous for this reason already.
-                ) {
-                    Text("Page")
-                } minimumValueLabel: {
-                    Text("1").font(.caption).foregroundStyle(.secondary)
-                } maximumValueLabel: {
-                    Text(SearchPaginationBar.abbreviate(totalPages))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .disabled(totalPages <= 1)
-                // A tick per page as the thumb passes it, like a picker — the
-                // gesture's own feedback, not the page load's.
-                .sensoryFeedback(.selection, trigger: draftPage)
-
-                nearbyPages
-
+            VStack(alignment: .leading, spacing: 18) {
+                fieldSection
+                nearbySection
+                endsRow
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .navigationTitle("Go to Page")
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Go") {
-                            if draftPage != currentPage { onSelect(draftPage) }
-                            dismiss()
-                        }
-                        .fontWeight(.semibold)
-                        .disabled(draftPage == currentPage)
-                    }
-                }
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
+            .padding(.bottom, 24)
         }
         #if os(iOS)
-        .presentationDetents([.height(320)])
+        .presentationDetents([.height(430)])
         .presentationDragIndicator(.visible)
         #endif
     }
 
-    private var readout: some View {
-        VStack(spacing: 2) {
-            Text("\(draftPage)")
-                .font(.system(size: 48, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText(value: Double(draftPage)))
-                .animation(reduceMotion ? nil : .snappy, value: draftPage)
-            Text("of \(totalPages.formatted())")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+    private var header: some View {
+        HStack(spacing: 9) {
+            GlassCircleButton(accessibilityName: "Cancel", action: { dismiss() }) {
+                Image(systemName: "xmark")
+            }
+
+            Text("Go to page")
+                .font(.system(size: 16, weight: .semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            GlassCircleButton(
+                isAccented: true,
+                palette: resolvedPalette,
+                accessibilityName: "Go to page \(draftPage)",
+                action: {
+                    if draftPage != currentPage { onSelect(draftPage) }
+                    dismiss()
+                }
+            ) {
+                Image(systemName: "checkmark")
+            }
+            .disabled(draftPage == currentPage)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Page \(draftPage) of \(totalPages)")
+        .padding(.horizontal, 14)
+        .padding(.top, 4)
+        .padding(.bottom, 12)
     }
 
-    /// Fine adjustment after a coarse drag, which a slider alone is bad at on a
-    /// 5,000-page range: one thumb pixel is several pages, so the thumb cannot
-    /// land on a chosen one.
-    ///
-    /// A −/+ pair, not the three numbered circles this used to be. Those spelled
-    /// out the current page a third time — the readout above already says 4,017 in
-    /// 48pt, and the middle circle said it again. What was actually wanted from
-    /// them was ±1, so that is all that is left.
-    private var nearbyPages: some View {
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10.5, weight: .bold))
+            .tracking(1.26)
+            .foregroundStyle(.secondary)
+    }
+
+    private var fieldSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Page number")
+            HStack(spacing: 8) {
+                TextField("Page", text: $draftText)
+                    .font(.system(size: 16))
+                    .monospacedDigit()
+                    .focused($fieldFocused)
+                    .textFieldStyle(.plain)
+                    #if os(iOS)
+                    .keyboardType(.numberPad)
+                    #endif
+                    // Digits only, filtered on the way in rather than validated on
+                    // the way out: a paste of "page 12" should become 12, not an
+                    // error, and a non-ASCII digit should not survive either.
+                    .onChange(of: draftText) { _, typed in
+                        let digits = typed.filter { $0.isASCII && $0.isNumber }
+                        if digits != typed { draftText = digits }
+                    }
+
+                Text("of \(totalPages.formatted())")
+                    .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 11)
+            .background(fieldBackground)
+        }
+    }
+
+    private var fieldBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        return shape
+            .fill(themeManager.appTheme.glassFill(0.08))
+            .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.14), lineWidth: 0.5))
+    }
+
+    private var nearbySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Nearby")
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+                ForEach(nearbyPages, id: \.self) { page in
+                    Button { draftText = String(page) } label: {
+                        Text(page.formatted())
+                            .font(.system(size: 15, weight: .semibold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(tileBackground(isSelected: page == draftPage))
+                            .foregroundStyle(page == draftPage ? resolvedPalette.accentOnFill : Color.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Page \(page)")
+                    .accessibilityAddTraits(page == draftPage ? .isSelected : [])
+                }
+            }
+        }
+    }
+
+    private func tileBackground(isSelected: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        return shape
+            .fill(isSelected ? resolvedPalette.chipFill : themeManager.appTheme.glassFill(0.08))
+            .overlay(
+                shape.strokeBorder(
+                    isSelected ? resolvedPalette.chipStroke : themeManager.appTheme.glassStroke(0.13),
+                    lineWidth: 0.5
+                )
+            )
+    }
+
+    /// The two pages a long list makes unreachable by stepping. Last states its
+    /// number, because "how many pages are there" is the other thing you came to
+    /// this sheet to find out.
+    private var endsRow: some View {
         HStack(spacing: 8) {
-            Button("First") { draft = 1 }
+            endButton("First page") { draftText = "1" }
                 .disabled(draftPage <= 1)
-
-            Spacer(minLength: 8)
-
-            nudge(by: -1, symbol: "minus", label: "Previous page")
-            nudge(by: 1, symbol: "plus", label: "Next page")
-
-            Spacer(minLength: 8)
-
-            Button("Last") { draft = Double(max(totalPages, 1)) }
+            endButton("Last (\(totalPages.formatted()))") { draftText = String(max(totalPages, 1)) }
                 .disabled(draftPage >= totalPages)
         }
-        .font(.footnote)
-        .buttonStyle(.borderless)
     }
 
-    private func nudge(by delta: Int, symbol: String, label: String) -> some View {
-        let target = draftPage + delta
-        return Button {
-            draft = Double(target)
-        } label: {
-            Image(systemName: symbol)
-                .font(.footnote.weight(.semibold))
-                .frame(minWidth: 36, minHeight: 36)
-                .background(Circle().fill(.quaternary))
-                .contentShape(Circle())
+    private func endButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, minHeight: 42)
+                .background(tileBackground(isSelected: false))
+                .foregroundStyle(Color.primary)
         }
         .buttonStyle(.plain)
-        .disabled(target < 1 || target > max(totalPages, 1))
-        .accessibilityLabel(label)
     }
 }
 

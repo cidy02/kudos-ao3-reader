@@ -523,7 +523,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         SearchPaginationBar(
             currentPage: currentPage,
             totalPages: totalPages,
-            isLoading: phase == .loading
+            isLoading: phase == .loading,
+            palette: resultsPalette
         ) { page in
             loadPage(page)
         }
