@@ -265,7 +265,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done (category panels, fandom chip clusters, Jump Back In). Left: `1al`/`1am` (sibling-family grouping inside a category — needs the parser work the fandom audit deferred), and `1an` (the Browse filter sheet). |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | ⬜ |
-| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` screen 1 is done.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. Left: screen 2's My copy *sheet*, which is the same change as retiring the segmented control (see below), and Comments. Old status: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
+| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ⬜ |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | ⬜ |
@@ -345,6 +345,8 @@ re-reviews settled work and nobody reviews their own.
 | `053bc96` | Claude | `swift-parse-check.py`; batching + parser in §3 | unreviewed | Calibrated: 403/405 files parse clean. |
 | `243580a` | Claude | `SubjectForm.swift`; 1a's facts card, tally strip, buttons, My copy row | unreviewed | **Wants a non-Claude reviewer** — it is the shared form family ~50 artboards will be built on. |
 | `4d57af8` | Claude | Parts-before-screens in §2; the measured inventory in §1a | unreviewed | Doc only. |
+| `d61ad69` | Claude | Tag clusters; inventory table corrected where checking disproved it | unreviewed | Build pending at time of writing. |
+| `cc5a890` | Claude | Retire the section control; My copy sheet; Comments as form rows | unreviewed | **Wants a non-Claude reviewer** — it changes this screen's whole navigation. Build pending at time of writing. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
 
@@ -383,14 +385,25 @@ states both further down. Comments keeps its behaviour by making a stat cell
 able to act, which is what spec 1a's accented, glyph-bearing COMMENTS cell is
 drawing in the first place.
 
-**Two things are deliberately still not done, and they are one change.** Screen
-2's My copy *sheet* and the retirement of the four-way segmented control are the
-same piece of work: 1a is one continuous page, and the sheet's content is
-today's Library tab. Splitting them would mean either building the sheet while
-the tab still holds the same content, or retiring the control with nowhere for
-that content to go. Until then the My copy row switches to the Library tab,
-which is the honest staged step — the destination exists and is reachable, only
-its presentation is deferred.
+**The segmented control is gone, and screen 2 exists** (`cc5a890`). Those were
+always one change: 1a is one continuous page and the sheet's content is what the
+Library tab held. Where the four segments went — Overview to the page itself,
+Tags to the clusters in place, Discussion to a Comments group of form rows plus
+the tally strip's accented cell, Library to the My copy sheet behind the row at
+the foot.
+
+The sheet carries `librarySections` unchanged. Moving that content from behind a
+segment to behind a row is the change; rewriting it at the same time would have
+made both halves harder to review, and it is already the set of facts artboard
+1a screen 2 lists.
+
+**Comments kept all three entry points** even though the artboard draws only
+the accented cell. Chapter comments and Write a Comment are reachable from
+nowhere else on the page, and dropping them to match a mock is the scanability
+regression `AGENTS.md` forbids. This is the same call the facts card made, and
+it is worth stating as a rule: **an artboard is a layout, not an inventory.**
+Where the app knows more than the mock's example work, the extra goes in the
+artboard's own chrome rather than being cut to fit.
 
 ### 2026-09-10 — Parts before screens, and what counting the canvas showed
 
@@ -791,6 +804,28 @@ than truncating, so page 2 of 3,216 still offers ten choices. Four tests in
 `KudosTests/SearchPaginationTests.swift`.
 
 ---
+
+## 3c. What to do next
+
+Phases 5, 6, 11 and 12 are now the cheap ones. `SubjectFormRow`,
+`SubjectFieldLabel(.formGroup)`, `subjectPanel()`, `SubjectRowSeparator` and
+`SubjectSegmentedControl` are exactly what those ~50 artboards are drawn from,
+and `Scripts/redesign-spec-inventory.py --board <id>` will say which shapes any
+one of them needs, ranked by how shared they are.
+
+Two candidates, in order of value:
+
+1. **The filter panel** (`1ao`–`1au`), which is Phase 3's remaining work and the
+   form family's real proving ground. `LibraryFilterPanel` is a native `Form`
+   with `.formStyle(.grouped)`, used both as an iPhone sheet and an iPad/macOS
+   inspector, and Search has its own parallel panel. Deliberately **not** taken
+   on in this session: rewriting a working themed `Form` into hand-built rows,
+   with no local type checker and no simulator, is a large change whose failure
+   mode is invisible until someone opens the sheet. Worth doing with a device.
+2. **Account subsections** (`1o`–`1ac`), Phase 6. Every one opens with the same
+   header — kicker · rule · 32pt title · tally line — at a **16pt** gutter
+   rather than 1a's 26. `SubjectHeaderBlock` already draws it; only the gutter
+   differs, which probably wants a parameter rather than a second type.
 
 ## 4. Working notes for whoever is next
 
