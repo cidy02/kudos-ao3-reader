@@ -57,6 +57,7 @@ Verified so far:
 | `5a6a12e` | ✅ green | Serif summary, ON AO3 chips, `SubjectFieldLabel`, the page row helpers. |
 | `243580a` | ✅ green | **The whole form family** — `SubjectFormRow`, `subjectPanel()`, `SubjectRowSeparator`, `SubjectSegmentedControl` — plus 1a's facts card, tally strip, outline buttons and My copy row. |
 | `d61ad69` | ✅ green | Tag clusters. |
+| `74680bb` | ✅ green | Codex's T-213 WIP: locator chapter titles, the `@ScaledMetric` accessibility pass, `SensitiveWorkRow`'s navigation rework, the Saved-for-Later split. 11m24s. **Compiles — but the iOS suite, SwiftLint, the macOS build and screenshots that T-213 promised are all still unrun.** |
 | `2e25947` | ✅ green | The access-level fix, and with it **all of artboard 1a** — one continuous page, My copy sheet, form family underneath. Published to Releases. |
 | `cc5a890` | ❌ red | Four `'X' is inaccessible due to 'private' protection level`. `pageSections` assembles the page from blocks in four files and `private` is file-scoped. Fixed in `2e25947`. |
 | `5ea4e0e` | ✅ green | The figure strip's strings as statements. 10m05s — within seconds of the run before it, which is the measurement that settles the false claim in its own commit message. See §3. |
