@@ -127,6 +127,42 @@ enum WorkDetailPresentation {
         )
     }
 
+    /// The one line under "My copy" — spec 1a's "Downloaded · 2 queues · 1 tag".
+    /// Only states what is true: a work in no queues says nothing about queues
+    /// rather than "0 queues", and a work with nothing local at all says so in
+    /// as many words instead of showing an empty line.
+    static func myCopySummary(
+        isDownloaded: Bool,
+        queueCount: Int,
+        tagCount: Int,
+        collectionCount: Int
+    ) -> String {
+        var segments: [String] = []
+        if isDownloaded {
+            segments.append("Downloaded")
+        }
+        if queueCount > 0 {
+            segments.append(pluralised(queueCount, "queue"))
+        }
+        if collectionCount > 0 {
+            segments.append(pluralised(collectionCount, "collection"))
+        }
+        if tagCount > 0 {
+            segments.append(pluralised(tagCount, "tag"))
+        }
+        if segments.isEmpty {
+            return "Nothing saved on this device yet"
+        }
+        return segments.joined(separator: " · ")
+    }
+
+    private static func pluralised(_ count: Int, _ noun: String) -> String {
+        if count == 1 {
+            return "1 " + noun
+        }
+        return String(count) + " " + noun + "s"
+    }
+
     static func queueLabel(count: Int) -> String {
         count == 0 ? "Add to Queue" : "In \(count) Queue\(count == 1 ? "" : "s")"
     }
