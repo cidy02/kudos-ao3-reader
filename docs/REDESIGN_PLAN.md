@@ -319,17 +319,35 @@ touching local works in any network error path. A write itself is fine —
 risk), CSRF from `authenticatedPageHTML`, and a 429 is surfaced rather than
 auto-retried.
 
-**So Phases 11 and 12 are a capability gap, not a policy wall.** The challenge
-and collection-moderation writes are simply not built. Two pieces genuinely
-cannot be built, and for a different reason again — AO3 does not expose them to
-clients at all: challenge **matching** (`1cb`, `1cf`) and tag-set
-**association** (`1ch`). Those want an Open on AO3 escape hatch, which is what
-the artboards already draw.
+**So Phases 11 and 12 need endpoints built, not deferred.** The policy is a
+*centralisation and politeness* rule, not a ceiling on what the app may do.
+Where an artboard needs a call the app lacks, the answer is to add it where the
+others live — following the file pattern already established here:
 
-**Before adding any write, read the policy's last section.** `AO3WriteActions`
-has never been exercised against a live AO3 session — the policy calls that "a
-release gate item, not an agent task". Adding more unexercised writes raises
-that debt rather than paying it.
+| Kind | File | Shape |
+|---|---|---|
+| Reads | `AO3Client+<Area>.swift` | extension on `AO3Client`; `getHTML` or the authenticated equivalent, then SwiftSoup parsers |
+| Writes | `AO3<Area>Actions.swift` | extension on `AO3AuthService`; one CSRF page fetch, then a single `submitWrite` POST |
+
+`AO3Client+Comments`, `AO3Client+Inbox`, `AO3Client+Preferences`,
+`AO3CommentActions`, `AO3InboxActions`, `AO3PreferencesActions` and
+`AO3WriteActions` are worked examples; collections and challenges would be
+`AO3Client+Collections.swift` and `AO3CollectionActions.swift`. What is *not*
+acceptable is the same endpoint hand-rolled inside a view or a feature folder —
+that is the scattering the policy exists to prevent, and it is how the pacer and
+the contact UA get bypassed by accident.
+
+Two pieces genuinely cannot be built, for a reason that is AO3's rather than
+ours: challenge **matching** (`1cb`, `1cf`) and tag-set **association** (`1ch`)
+are not exposed to clients at all. Those want the Open on AO3 escape hatch the
+artboards already draw.
+
+**One caveat to state, not to stop for.** The policy's last section notes that
+`AO3WriteActions` has never been exercised against a live AO3 session — "a
+release gate item, not an agent task". That is a note for the gate rather than a
+reason to leave an endpoint unbuilt: write it, hold the
+single-shot/no-retry/no-coalesce discipline exactly, and say in the commit that
+it is unexercised, as every write already there is.
 
 **The lesson is the one §3 already records twice.** A statement about what the
 app does — in a build note, or in this file — is not evidence. Grep for it. This
