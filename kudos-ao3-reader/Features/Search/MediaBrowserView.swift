@@ -487,6 +487,15 @@ struct MediaBrowserView: View {
         var workCount: Int?
         var savedCount: Int
         var recentFandoms: [String]
+        /// The chips artboard 1g clusters under each category, biggest first.
+        ///
+        /// The spec calls these the category's *featured* fandoms, and its build
+        /// note says AO3's featured subset is not in the current parse — true,
+        /// and it turns out not to matter: the app already caches the whole
+        /// per-category list with a work count on each, so the cluster shows the
+        /// largest fandoms instead. No new request, and arguably a better list
+        /// than AO3's own featured set, which is hand-curated and often stale.
+        var clusterFandoms: [AO3Fandom] = []
     }
 
     /// A category's inputs, snapshotted as `Sendable` values so the (heavy) stats
@@ -561,6 +570,12 @@ struct MediaBrowserView: View {
     /// How many "recently read" fandom chips a category card shows at most.
     private static let recentFandomsLimit = 5
 
+    /// How many fandoms a category's chip cluster shows before the rest collapse
+    /// into the "+N more" chip. Twelve fills roughly three wrapped rows at phone
+    /// width, which is what 1g draws; the remainder is stated exactly rather than
+    /// rounded, since "+9,400 more" is the fact that makes a category feel big.
+    private static let clusterFandomLimit = 12
+
     /// Pure, off-actor derivation: builds each category's lowercased name set ONCE
     /// (the expensive part for big categories) and scans the library against it.
     private nonisolated static func computeStats(
@@ -592,13 +607,25 @@ struct MediaBrowserView: View {
                 if recent.count >= recentFandomsLimit { break }
             }
 
+            // Sorted here, in the off-actor pass, not in the view: a category can
+            // hold nine thousand fandoms, and sorting that on every render is the
+            // kind of work this whole `computeStats` split exists to avoid.
+            let cluster = input.hasFullList
+                ? Array(
+                    input.fandoms
+                        .sorted { ($0.workCount ?? 0) > ($1.workCount ?? 0) }
+                        .prefix(clusterFandomLimit)
+                )
+                : []
+
             result[input.id] = CategoryStats(
                 fandomCount: input.hasFullList ? input.fandoms.count : nil,
                 workCount: input.hasFullList
                     ? input.fandoms.reduce(0) { $0 + ($1.workCount ?? 0) }
                     : nil,
                 savedCount: savedCount,
-                recentFandoms: Array(recent.prefix(recentFandomsLimit))
+                recentFandoms: Array(recent.prefix(recentFandomsLimit)),
+                clusterFandoms: cluster
             )
         }
         return result
