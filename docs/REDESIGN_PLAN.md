@@ -45,6 +45,7 @@ Verified so far:
 |---|---|---|
 | `2d3696c` | ✅ green | First verified commit. Validates `SubjectSurface`, `SubjectScreen`, the Home hero, `SectionRuleHeader`. |
 | `3f9a5ab` | ✅ green | Validates `WorkRow.ledger`, `scopeHue`, `Color.hueComponent`, `WorkLedgerRow`, `LibraryFilters.summaryLabels`, the chip rail. |
+| `388d246` | ✅ green | Validates `SubjectChip.pill`, Library's Shelves/Ledger layout, `SensitiveWorkRow.providesNavigation`, and the artboard-1k results header with its figure strip and sort menu. |
 
 Builds are published to **[Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
 as a rolling per-branch pre-release tagged `build-<branch>`, and to each run's
@@ -198,12 +199,14 @@ re-reviews settled work and nobody reviews their own.
 | `835440d` | Claude | `WorkRow.ledger`; `scopeHue`; Home section pages | unreviewed | Compiles (via `3f9a5ab`). |
 | `3f9a5ab` | Claude | `LibraryFilters.summaryLabels` + filter chip rail | unreviewed | **iOS build green.** Validates the whole ledger-row layer. |
 | `aa56105` | Claude | Record CI as the compile gate in §0 | unreviewed | Doc only. |
-| `3d81236` | Claude | `SubjectChip.pill`; Library quick filters at spec metrics | unreviewed | Not compiled at time of writing. |
+| `3d81236` | Claude | `SubjectChip.pill`; Library quick filters at spec metrics | unreviewed | Compiles (via `388d246`). |
 | `98d6006` | Claude | Per-SHA concurrency so every commit gets an IPA | unreviewed | CI config. |
-| `3a5a0d6` | Claude | Library dashboard Shelves/Ledger (1c/1d); `providesNavigation` | unreviewed | Build pending at time of writing. |
+| `3a5a0d6` | Claude | Library dashboard Shelves/Ledger (1c/1d); `providesNavigation` | unreviewed | Compiles (via `388d246`). |
 | `bf17bcb` | Claude | README: where to find the IPAs | unreviewed | Doc only. |
 | `19a0c61` | Claude | Publish the IPA to Releases, not just artifacts | unreviewed | Release step unverified at time of writing. |
-| `388d246` | Claude | Search results header, artboard 1k | unreviewed | Build pending at time of writing. |
+| `388d246` | Claude | Search results header, artboard 1k | unreviewed | **iOS build green.** |
+| `d3d561b` | Claude | Fix the release step (heredoc → `printf` + `--notes-file`) | unreviewed | Step executed locally against a stub `gh`. |
+| `7481229` | Claude | Page sheet, artboard 1k, replacing the scrubber | unreviewed | Window logic verified against 6 cases; 4 new tests. Build pending. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -259,6 +262,20 @@ exist; only the staged one is wired.
 
 **Still to do on these screens:** nothing — the filter chip rail landed in
 `3f9a5ab` with `LibraryFilters.summaryLabels`.
+
+### A CI trap worth not repeating
+
+The release step failed in **zero seconds** with
+`line 18: unexpected EOF while looking for matching quote`, pointing at a line
+of English prose. The cause was not the quote: a **heredoc inside a YAML block
+scalar** lost its terminator on the runner, so bash read the release notes as
+code and stopped at the apostrophe in a possessive. The identical script passes
+`bash -n` locally, which is what makes it worth writing down.
+
+Two lessons, both now encoded in the workflow: **don't put a heredoc in a
+`run:` block** (`printf` into a file and pass `--notes-file`), and **run the
+step, don't just syntax-check it** — a stub `gh` on `$PATH` is enough to prove
+the whole thing end to end.
 
 ### 2026-09-10 — Phase 0: shared language (Claude, `9ee86ba`)
 
