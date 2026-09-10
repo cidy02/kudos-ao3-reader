@@ -391,11 +391,15 @@ struct WorkStatusIconGrid: View {
                 }
             }
         case .strip:
-            HStack(spacing: gap) {
+            HStack(spacing: 0) {
                 ForEach(0 ..< 4, id: \.self) { index in
                     tile(items.indices.contains(index) ? items[index] : nil)
+                    if index < 3 {
+                        Spacer(minLength: gap)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -612,9 +616,6 @@ struct WorkListStatsRow: View {
     /// (`WorkUpdatedDateBadge`), not down here with the rest of the stats.
     var datePublished: String?
     var isExpanded: Bool = false
-    /// The Search ledger already presents these four facts in its icon grid;
-    /// other list rows retain the established text chips by default.
-    var showsTopStats: Bool = true
 
     /// Settings → Library → "Show zero counts". On (the default) every stat
     /// keeps its place even at zero, so a card's stat row has the same shape
@@ -696,9 +697,7 @@ struct WorkListStatsRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if showsTopStats {
-                topStatsRow
-            }
+            topStatsRow
             if !secondaryItems.isEmpty {
                 FlowLayout(spacing: 8, rowSpacing: 5) {
                     ForEach(Array(secondaryItems.enumerated()), id: \.offset) { index, item in

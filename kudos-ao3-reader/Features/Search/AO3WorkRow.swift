@@ -22,6 +22,7 @@ struct AO3WorkRow: View {
     var presentation: Presentation = .standard
 
     @Environment(AppRouter.self) private var router
+    @AppStorage("showsZeroStats") private var showsZeroStats = true
     @State private var expanded = false
 
     /// Worth an expand toggle only when there's more to show than the clamped view:
@@ -173,7 +174,7 @@ struct AO3WorkRow: View {
 
             // Stats wrap to a second line rather than truncating when they don't fit
             // (long ratings like "Teen And Up Audiences" no longer clip the row).
-            statsRow(showsTopStats: true)
+            statsRow
 
             // Date bottom-left, expand control bottom-right — omitted
             // entirely (not just hidden) when there's nothing to show:
@@ -202,29 +203,26 @@ struct AO3WorkRow: View {
     /// Search's denser ledger composition: fandom palette first, readable title
     /// and summary, one icon signal tray, then plain bullet-delimited metadata.
     private var searchLedgerCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                if let primaryFandom {
-                    Button { router.searchAO3(.fandom, primaryFandom) } label: {
-                        WorkFandomKicker(
-                            fandom: primaryFandom,
-                            hue: workHue,
-                            hiddenCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
-                        )
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 13) {
+                VStack(alignment: .leading, spacing: 5) {
+                    if primaryFandom != nil || isExpandable {
+                        HStack(alignment: .top, spacing: 5) {
+                            if let primaryFandom {
+                                Button { router.searchAO3(.fandom, primaryFandom) } label: {
+                                    WorkFandomKicker(
+                                        fandom: primaryFandom,
+                                        hue: workHue,
+                                        hiddenCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
+                                    )
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            if isExpandable {
+                                expandButton
+                            }
+                        }
                     }
-                    .buttonStyle(.borderless)
-                }
-                Spacer(minLength: 0)
-                if isExpandable {
-                    expandButton
-                }
-                if isSelecting {
-                    WorkSelectionBubble(isSelected: isSelected)
-                }
-            }
-
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
                     Text(work.title)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -239,15 +237,20 @@ struct AO3WorkRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
-                WorkStatusIconGrid(
-                    rating: work.rating.isEmpty ? nil : work.rating,
-                    categories: work.categories,
-                    warnings: work.warnings,
-                    completion: WorkCompletionStatus(isComplete: work.isComplete),
-                    tileSize: 22,
-                    announcesToVoiceOver: true,
-                    showsTray: true
-                )
+                VStack(spacing: 8) {
+                    WorkStatusIconGrid(
+                        rating: work.rating.isEmpty ? nil : work.rating,
+                        categories: work.categories,
+                        warnings: work.warnings,
+                        completion: WorkCompletionStatus(isComplete: work.isComplete),
+                        tileSize: 22,
+                        announcesToVoiceOver: true,
+                        showsTray: true
+                    )
+                    if isSelecting {
+                        WorkSelectionBubble(isSelected: isSelected)
+                    }
+                }
             }
 
             if !work.summary.isEmpty {
@@ -267,17 +270,13 @@ struct AO3WorkRow: View {
                 chipGroup("Additional Tags", additionalTags, field: .freeform)
             }
 
-            statsRow(showsTopStats: false)
-
-            if !work.dateUpdated.isEmpty {
-                WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
-            }
+            searchLedgerMetadataRow
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func statsRow(showsTopStats: Bool) -> some View {
+    private var statsRow: some View {
         WorkListStatsRow(
             rating: work.rating.isEmpty ? nil : work.rating,
             categories: work.categories,
@@ -292,9 +291,75 @@ struct AO3WorkRow: View {
             hits: work.hits,
             // AO3WorkSummary carries only AO3's single revised date, rendered
             // separately by both presentations.
-            isExpanded: expanded,
-            showsTopStats: showsTopStats
+            isExpanded: expanded
         )
+    }
+
+    @ViewBuilder
+    private var searchLedgerMetadataRow: some View {
+        let metadata = searchLedgerMetadata
+        let updated = WorkStat.displayDate(work.dateUpdated)
+        if !metadata.isEmpty || !updated.isEmpty {
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
+                if !metadata.isEmpty {
+                    Text(metadata.joined(separator: "  ·  "))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Spacer(minLength: 0)
+                }
+                if !updated.isEmpty {
+                    Text(updated)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                (metadata + (updated.isEmpty ? [] : ["Updated \(updated)"])).joined(separator: ", ")
+            )
+        }
+    }
+
+    private var searchLedgerMetadata: [String] {
+        Self.ledgerMetadata(for: work, showsZeroStats: showsZeroStats)
+    }
+
+    /// Pure formatting seam for the ledger's visible text and regression tests.
+    static func ledgerMetadata(for work: AO3WorkSummary, showsZeroStats: Bool) -> [String] {
+        var metadata: [String] = []
+        let language = work.language.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !language.isEmpty {
+            metadata.append(language)
+        }
+        if let words = ledgerCount(work.words, singular: "word", showsZeroStats: showsZeroStats) {
+            metadata.append(words)
+        }
+        let chapters = work.chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !chapters.isEmpty {
+            metadata.append(chapters)
+        }
+        for item in [
+            ledgerCount(work.comments, singular: "comment", showsZeroStats: showsZeroStats),
+            ledgerCount(work.kudos, singular: "kudos", plural: "kudos", showsZeroStats: showsZeroStats),
+            ledgerCount(work.bookmarks, singular: "bookmark", showsZeroStats: showsZeroStats),
+            ledgerCount(work.hits, singular: "hit", showsZeroStats: showsZeroStats),
+        ].compactMap(\.self) {
+            metadata.append(item)
+        }
+        return metadata
+    }
+
+    private static func ledgerCount(
+        _ value: Int?,
+        singular: String,
+        plural: String? = nil,
+        showsZeroStats: Bool
+    ) -> String? {
+        let count = value ?? 0
+        guard count > 0 || showsZeroStats else { return nil }
+        let noun = count == 1 ? singular : (plural ?? "\(singular)s")
+        return "\(count.formatted()) \(noun)"
     }
 
     private var nonemptyFandoms: [String] {
@@ -332,6 +397,9 @@ struct AO3WorkRow: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .minimumHitTarget()
+                // Keep a real 44pt tap region while the inline disclosure only
+                // consumes the reference's 20pt visual slot.
+                .padding(-12)
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         } else {
             button

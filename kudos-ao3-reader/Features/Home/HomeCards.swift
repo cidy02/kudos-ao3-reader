@@ -9,6 +9,8 @@ struct WorkCoverCard: View {
     var progress: Double?
 
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .headline) private var ringDiameter: CGFloat = 68
+    @ScaledMetric(relativeTo: .caption2) private var ringStateSize: CGFloat = 8
     /// Set per tab stack; the pushed reader zooms out of this card. See
     /// `WorkCardZoomTransition.swift`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -21,7 +23,7 @@ struct WorkCoverCard: View {
                 }
 
                 Text(work.title)
-                    .font(.subheadline.weight(.bold))
+                    .font(.headline)
                     // Two lines, then "…". A third line costs real card height
                     // for a fraction of a title, and long fandom titles are
                     // common enough that they decided the card's size more often
@@ -45,7 +47,7 @@ struct WorkCoverCard: View {
                 if !work.author.isEmpty {
                     Text(work.author)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.primary.opacity(0.78))
                         .lineLimit(1)
                         .combinedAccessibilityRow("Author: \(work.author)")
                 }
@@ -62,6 +64,7 @@ struct WorkCoverCard: View {
 
                 cardStats
                     .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 6)
             }
         }
         // The reader pushed from this card zooms out of it, and collapses back into
@@ -117,28 +120,48 @@ struct WorkCoverCard: View {
     private func progressRing(_ value: Double) -> some View {
         let percent = Int((value * 100).rounded())
         let state = value >= 1 ? "Finished" : "Reading"
-        let accent = themeManager.appTheme.workCardAccent(hue: hue)
+        let diameter = min(ringDiameter, 82)
         return ZStack {
             Circle()
-                .stroke(Color.primary.opacity(0.14), lineWidth: 5)
+                .stroke(ringTrack, lineWidth: 5)
             Circle()
                 .trim(from: 0, to: value)
-                .stroke(accent, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .stroke(ringProgress, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 0) {
                 Text("\(percent)%")
-                    .font(.headline.monospacedDigit().weight(.bold))
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Text(state.uppercased())
-                    .font(.caption2.weight(.bold))
+                    .font(.system(size: ringStateSize, weight: .bold))
                     .tracking(0.5)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
             }
+            .padding(6)
         }
-        .frame(width: 68, height: 68)
+        .frame(width: diameter, height: diameter)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Reading progress")
         .accessibilityValue("\(percent) percent, \(state)")
+    }
+
+    private var ringTrack: Color {
+        switch themeManager.appTheme {
+        case .dark, .oled: Color.black.opacity(0.38)
+        case .light: Color.black.opacity(0.15)
+        case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.18)
+        }
+    }
+
+    private var ringProgress: Color {
+        switch themeManager.appTheme {
+        case .dark, .oled: Color.white.opacity(0.94)
+        case .light, .sepia: Color.primary.opacity(0.82)
+        }
     }
 
     private func updateBadge(_ text: String) -> some View {
