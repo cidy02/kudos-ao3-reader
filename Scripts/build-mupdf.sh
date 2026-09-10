@@ -21,13 +21,28 @@ OUT="${1:-$ROOT/build-mupdf}"
 SRC="$OUT/mupdf"
 MIN_IOS=17.0
 MIN_MACOS=14.0
+# Pinned, not `master`. An unpinned shallow clone made this script's output a
+# function of the day it ran, and upstream proved the point: current master
+# includes <sys/random.h> from source/fitz/random.c, a header the iOS SDKs do
+# not ship, so every iOS slice now dies with
+#   source/fitz/random.c:33:10: fatal error: 'sys/random.h' file not found
+# Release tags do not carry that include. Override with MUPDF_REF=<tag> to try
+# a different one; bump the default here once a newer tag is verified to build
+# all three slices AND to still return byte-identical structured text on the
+# reference PDF (docs/PDF_ENGINE_MUPDF.md).
+MUPDF_REF="${MUPDF_REF:-1.28.3}"
 
 mkdir -p "$OUT"
 
 if [ ! -d "$SRC" ]; then
-  echo "== cloning MuPDF (shallow, with submodules) =="
-  git clone --depth 1 --recurse-submodules --shallow-submodules \
+  echo "== cloning MuPDF $MUPDF_REF (shallow, with submodules) =="
+  git clone --depth 1 --branch "$MUPDF_REF" --recurse-submodules --shallow-submodules \
     https://github.com/ArtifexSoftware/mupdf.git "$SRC"
+else
+  # An existing tree is left exactly as it is: it may be a deliberate local
+  # experiment, and silently resetting someone's working checkout to a tag is
+  # not this script's business. Delete it to re-clone at the pin.
+  echo "== reusing existing MuPDF checkout at $SRC (delete it to re-clone at $MUPDF_REF) =="
 fi
 
 # Features Kudos does not use. Dropping them keeps the static library smaller and

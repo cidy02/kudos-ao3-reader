@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Vendor/MuPDF.xcframework
-          key: mupdf-${{ runner.os }}-${{ hashFiles('Scripts/build-mupdf.sh') }}
+          key: mupdf-${{ runner.os }}-${{ hashFiles('Scripts/build-mupdf.sh') }}-xcode26
 
       # build-mupdf.sh writes to build-mupdf/ and deliberately does not install
       # anywhere — it is normally run by hand. The project links the framework
