@@ -497,6 +497,15 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// archives without the key still decode as `[]`. No version bump: Android
     /// `BackupVersion.isSupported` only accepts 1…8.
     let savedSearches: [KudosBackupSavedSearch]
+    /// Local reading-history rows, local stars, and per-fandom visit watermarks.
+    /// Additive on the existing v8 manifest — **no version bump**. Android
+    /// `BackupVersion.isSupported` is integers 1…8, so a v9 archive is a hard
+    /// import failure there (T-211). Android will strip these keys until a
+    /// passthrough lands, the same class of issue as T-210 pronunciations.
+    /// iOS→iOS round-trip must work; a missing key decodes as `[]`.
+    let readingSessions: [KudosBackupReadingSession]
+    let readingFavorites: [KudosBackupReadingFavorite]
+    let fandomReadWatermarks: [KudosBackupFandomReadWatermark]
     let settings: KudosBackupSettings
     /// Read-aloud pronunciation corrections. Hand-made, unreconstructible, and
     /// small, so they travel with the reader rather than being stranded on one
@@ -524,6 +533,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingQueueMemberships: [KudosBackupReadingQueueMembership] = [],
         annotations: [KudosBackupAnnotation] = [],
         savedSearches: [KudosBackupSavedSearch] = [],
+        readingSessions: [KudosBackupReadingSession] = [],
+        readingFavorites: [KudosBackupReadingFavorite] = [],
+        fandomReadWatermarks: [KudosBackupFandomReadWatermark] = [],
         settings: KudosBackupSettings,
         pronunciations: KudosBackupPronunciations = .empty,
         tombstones: [KudosBackupTombstone] = []
@@ -538,6 +550,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.readingQueueMemberships = readingQueueMemberships
         self.annotations = annotations
         self.savedSearches = savedSearches
+        self.readingSessions = readingSessions
+        self.readingFavorites = readingFavorites
+        self.fandomReadWatermarks = fandomReadWatermarks
         self.pronunciations = pronunciations
         self.settings = settings
         self.tombstones = tombstones
@@ -554,6 +569,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case readingQueueMemberships
         case annotations
         case savedSearches
+        case readingSessions
+        case readingFavorites
+        case fandomReadWatermarks
         case settings
         case pronunciations
         case tombstones
@@ -585,6 +603,18 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         savedSearches = try container.decodeIfPresent(
             [KudosBackupSavedSearch].self,
             forKey: .savedSearches
+        ) ?? []
+        readingSessions = try container.decodeIfPresent(
+            [KudosBackupReadingSession].self,
+            forKey: .readingSessions
+        ) ?? []
+        readingFavorites = try container.decodeIfPresent(
+            [KudosBackupReadingFavorite].self,
+            forKey: .readingFavorites
+        ) ?? []
+        fandomReadWatermarks = try container.decodeIfPresent(
+            [KudosBackupFandomReadWatermark].self,
+            forKey: .fandomReadWatermarks
         ) ?? []
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
         pronunciations = try container.decodeIfPresent(
@@ -740,6 +770,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let hasGivenKudos: Bool
     let isSaved: Bool
     let isFinished: Bool
+    let keepInProgressOverride: Bool
     let hasEPUB: Bool
     let isComplete: Bool
     let rating: String
@@ -797,6 +828,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hasGivenKudos = work.hasGivenKudos
         isSaved = work.isSaved
         isFinished = work.isFinished
+        keepInProgressOverride = work.keepInProgressOverride
         hasEPUB = work.hasEPUB
         isComplete = work.isComplete
         rating = work.rating
@@ -858,6 +890,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case hasGivenKudos
         case isSaved
         case isFinished
+        case keepInProgressOverride
         case hasEPUB
         case isComplete
         case rating
@@ -919,6 +952,10 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hasGivenKudos = try container.decodeIfPresent(Bool.self, forKey: .hasGivenKudos) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isFinished = try container.decodeIfPresent(Bool.self, forKey: .isFinished) ?? false
+        keepInProgressOverride = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .keepInProgressOverride
+        ) ?? false
         hasEPUB = try container.decodeIfPresent(Bool.self, forKey: .hasEPUB) ?? false
         isComplete = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
         rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
@@ -1038,6 +1075,141 @@ nonisolated struct KudosBackupSavedSearch: Codable, Equatable {
         self.name = name
         self.dateAdded = dateAdded
         self.filters = filters
+    }
+}
+
+/// Transport form of one reading-history row. Additive on v8; missing keys
+/// decode to the empty defaults so a v7/v8 archive without this array still
+/// imports.
+nonisolated struct KudosBackupReadingSession: Codable, Equatable {
+    let id: UUID
+    let workID: UUID
+    let ao3WorkID: Int?
+    let sourceURL: String
+    let workTitle: String
+    let startedAt: Date
+    let endedAt: Date
+    let durationSeconds: Double
+    let lastSpineIndex: Int
+    let chapterTitle: String
+    let endingProgress: Double
+    let wordCount: Int
+    let chapterCountAtVisit: Int
+    let didFinish: Bool
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, workID, ao3WorkID, sourceURL, workTitle, startedAt, endedAt
+        case durationSeconds, lastSpineIndex, chapterTitle, endingProgress
+        case wordCount, chapterCountAtVisit, didFinish, lastModifiedAt
+    }
+
+    @MainActor
+    init(session: ReadingSession) {
+        id = session.id
+        workID = session.workID
+        ao3WorkID = session.ao3WorkID
+        sourceURL = session.sourceURL
+        workTitle = session.workTitle
+        startedAt = session.startedAt
+        endedAt = session.endedAt
+        durationSeconds = session.durationSeconds
+        lastSpineIndex = session.lastSpineIndex
+        chapterTitle = session.chapterTitle
+        endingProgress = session.endingProgress
+        wordCount = session.wordCount
+        chapterCountAtVisit = session.chapterCountAtVisit
+        didFinish = session.didFinish
+        lastModifiedAt = session.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        workID = try container.decodeIfPresent(UUID.self, forKey: .workID) ?? UUID()
+        ao3WorkID = try container.decodeIfPresent(Int.self, forKey: .ao3WorkID)
+        sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL) ?? ""
+        workTitle = try container.decodeIfPresent(String.self, forKey: .workTitle) ?? ""
+        startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt) ?? Date()
+        endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt) ?? startedAt
+        durationSeconds = try container.decodeIfPresent(Double.self, forKey: .durationSeconds) ?? 0
+        lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
+        chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
+        endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
+        wordCount = try container.decodeIfPresent(Int.self, forKey: .wordCount) ?? 0
+        chapterCountAtVisit = try container.decodeIfPresent(Int.self, forKey: .chapterCountAtVisit) ?? 0
+        didFinish = try container.decodeIfPresent(Bool.self, forKey: .didFinish) ?? false
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt) ?? endedAt
+    }
+}
+
+nonisolated struct KudosBackupReadingFavorite: Codable, Equatable {
+    let id: UUID
+    let kindRaw: String
+    let targetKey: String
+    let displayName: String
+    let createdAt: Date
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kindRaw, targetKey, displayName, createdAt, lastModifiedAt
+    }
+
+    @MainActor
+    init(favorite: ReadingFavorite) {
+        id = favorite.id
+        kindRaw = favorite.kindRaw
+        targetKey = favorite.targetKey
+        displayName = favorite.displayName
+        createdAt = favorite.createdAt
+        lastModifiedAt = favorite.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        kindRaw = try container.decodeIfPresent(String.self, forKey: .kindRaw)
+            ?? ReadingFavoriteKind.work.rawValue
+        targetKey = try container.decodeIfPresent(String.self, forKey: .targetKey) ?? ""
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? ""
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt) ?? createdAt
+    }
+}
+
+nonisolated struct KudosBackupFandomReadWatermark: Codable, Equatable {
+    let id: UUID
+    let fandomName: String
+    let lastVisitedAt: Date
+    let newestWorkIDSeen: Int?
+    let newestWorkTitleSeen: String
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, fandomName, lastVisitedAt, newestWorkIDSeen, newestWorkTitleSeen
+        case lastModifiedAt
+    }
+
+    @MainActor
+    init(watermark: FandomReadWatermark) {
+        id = watermark.id
+        fandomName = watermark.fandomName
+        lastVisitedAt = watermark.lastVisitedAt
+        newestWorkIDSeen = watermark.newestWorkIDSeen
+        newestWorkTitleSeen = watermark.newestWorkTitleSeen
+        lastModifiedAt = watermark.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        fandomName = try container.decodeIfPresent(String.self, forKey: .fandomName) ?? ""
+        lastVisitedAt = try container.decodeIfPresent(Date.self, forKey: .lastVisitedAt) ?? Date()
+        newestWorkIDSeen = try container.decodeIfPresent(Int.self, forKey: .newestWorkIDSeen)
+        newestWorkTitleSeen = try container.decodeIfPresent(String.self, forKey: .newestWorkTitleSeen)
+            ?? ""
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
+            ?? lastVisitedAt
     }
 }
 
@@ -1572,7 +1744,9 @@ nonisolated enum KudosBackupError: LocalizedError, Equatable {
 ///   and annotations become the snapshot. Works absent from the backup are
 ///   soft-deleted (without creating tombstones) so a later merge can still
 ///   re-add them. Omitted bookmarks and saved searches are hard-deleted
-///   and get an immediate-delete tombstone (annotation pattern).
+///   and get an immediate-delete tombstone (annotation pattern). Reading
+///   sessions, local favorites, and fandom watermarks are the same
+///   immediate-delete class as saved searches.
 nonisolated enum BackupImportMode {
     case reconcile
     case merge
@@ -1591,6 +1765,9 @@ enum KudosBackupService {
         readingQueues: [ReadingQueue],
         annotations: [ReadingAnnotation] = [],
         savedSearches: [SavedSearch] = [],
+        readingSessions: [ReadingSession] = [],
+        readingFavorites: [ReadingFavorite] = [],
+        fandomReadWatermarks: [FandomReadWatermark] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
@@ -1621,6 +1798,9 @@ enum KudosBackupService {
             readingQueueMemberships: queueMemberships,
             annotations: annotations.compactMap(KudosBackupAnnotation.init),
             savedSearches: savedSearches.map(KudosBackupSavedSearch.init),
+            readingSessions: readingSessions.map(KudosBackupReadingSession.init),
+            readingFavorites: readingFavorites.map(KudosBackupReadingFavorite.init),
+            fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
@@ -2231,6 +2411,16 @@ enum KudosBackupService {
             }
         }
 
+        restoreReadingSessions(
+            contents: contents, context: context, tombstones: tombstones, mode: mode
+        )
+        restoreReadingFavorites(
+            contents: contents, context: context, tombstones: tombstones, mode: mode
+        )
+        restoreFandomReadWatermarks(
+            contents: contents, context: context, tombstones: tombstones, mode: mode
+        )
+
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(
             existingBookmarks.map { ($0.urlString, $0) },
@@ -2518,6 +2708,210 @@ enum KudosBackupService {
         )
     }
 
+    /// Immediate-delete class (SavedSearch): LWW by `lastModifiedAt`, tombstone
+    /// suppresses resurrection, replace-mode omission mints a signed tombstone
+    /// and hard-deletes. History is not tied to a live `SavedWork` row.
+    private static func restoreReadingSessions(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) {
+        let existing = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for archived in contents.manifest.readingSessions {
+            if mode != .replaceLibrary {
+                switch tombstones.readingSessionResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
+            if let local = byID[archived.id] {
+                if mode == .merge { continue }
+                guard SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: local.lastModifiedAt,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) else { continue }
+                apply(archived, to: local)
+            } else {
+                let session = ReadingSession(
+                    id: archived.id,
+                    workID: archived.workID,
+                    ao3WorkID: archived.ao3WorkID,
+                    sourceURL: archived.sourceURL,
+                    workTitle: archived.workTitle,
+                    startedAt: archived.startedAt,
+                    endedAt: archived.endedAt,
+                    durationSeconds: archived.durationSeconds,
+                    lastSpineIndex: archived.lastSpineIndex,
+                    chapterTitle: archived.chapterTitle,
+                    endingProgress: archived.endingProgress,
+                    wordCount: archived.wordCount,
+                    chapterCountAtVisit: archived.chapterCountAtVisit,
+                    didFinish: archived.didFinish,
+                    lastModifiedAt: archived.lastModifiedAt
+                )
+                context.insert(session)
+                byID[archived.id] = session
+            }
+        }
+        if mode == .replaceLibrary {
+            let snapshotIDs = Set(contents.manifest.readingSessions.map(\.id))
+            for session in existing where !snapshotIDs.contains(session.id) {
+                SyncTombstones.recordDeletion(of: session, in: context)
+                context.delete(session)
+            }
+        }
+    }
+
+    private static func apply(_ archived: KudosBackupReadingSession, to session: ReadingSession) {
+        session.workID = archived.workID
+        session.ao3WorkID = archived.ao3WorkID
+        session.sourceURL = archived.sourceURL
+        session.workTitle = archived.workTitle
+        session.startedAt = archived.startedAt
+        session.endedAt = archived.endedAt
+        session.durationSeconds = max(0, archived.durationSeconds)
+        session.lastSpineIndex = archived.lastSpineIndex
+        session.chapterTitle = archived.chapterTitle
+        session.endingProgress = min(1, max(0, archived.endingProgress))
+        session.wordCount = archived.wordCount
+        session.chapterCountAtVisit = archived.chapterCountAtVisit
+        session.didFinish = archived.didFinish
+        session.lastModifiedAt = archived.lastModifiedAt
+    }
+
+    /// Unique on (`kind`, `targetKey`) at application level. Match by id first,
+    /// then by that pair so a restore cannot stack two stars on the same target.
+    private static func restoreReadingFavorites(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) {
+        let existing = (try? context.fetch(FetchDescriptor<ReadingFavorite>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byTarget = Dictionary(
+            existing.map { ("\($0.kindRaw)|\($0.targetKey)", $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for archived in contents.manifest.readingFavorites {
+            if mode != .replaceLibrary {
+                switch tombstones.readingFavoriteResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
+            let targetKey = "\(archived.kindRaw)|\(archived.targetKey)"
+            let local = byID[archived.id] ?? byTarget[targetKey]
+            if let local {
+                if mode == .merge, byID[archived.id] != nil { continue }
+                guard SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: local.lastModifiedAt,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) else { continue }
+                local.kindRaw = archived.kindRaw
+                local.targetKey = archived.targetKey
+                local.displayName = archived.displayName
+                local.createdAt = min(local.createdAt, archived.createdAt)
+                local.lastModifiedAt = archived.lastModifiedAt
+                byID[local.id] = local
+                byTarget[targetKey] = local
+            } else {
+                let favorite = ReadingFavorite(
+                    id: archived.id,
+                    kind: ReadingFavoriteKind(rawValue: archived.kindRaw) ?? .work,
+                    targetKey: archived.targetKey,
+                    displayName: archived.displayName,
+                    createdAt: archived.createdAt
+                )
+                favorite.lastModifiedAt = archived.lastModifiedAt
+                context.insert(favorite)
+                byID[favorite.id] = favorite
+                byTarget[targetKey] = favorite
+            }
+        }
+        if mode == .replaceLibrary {
+            let snapshotIDs = Set(contents.manifest.readingFavorites.map(\.id))
+            for favorite in existing where !snapshotIDs.contains(favorite.id) {
+                SyncTombstones.recordDeletion(of: favorite, in: context)
+                context.delete(favorite)
+            }
+        }
+    }
+
+    /// Unique on raw fandom name at application level.
+    private static func restoreFandomReadWatermarks(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) {
+        let existing = (try? context.fetch(FetchDescriptor<FandomReadWatermark>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byName = Dictionary(
+            existing.map { ($0.fandomName, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for archived in contents.manifest.fandomReadWatermarks {
+            if mode != .replaceLibrary {
+                switch tombstones.fandomReadWatermarkResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
+            let local = byID[archived.id] ?? byName[archived.fandomName]
+            if let local {
+                if mode == .merge, byID[archived.id] != nil { continue }
+                guard SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: local.lastModifiedAt,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) else { continue }
+                local.fandomName = archived.fandomName
+                local.lastVisitedAt = archived.lastVisitedAt
+                local.newestWorkIDSeen = archived.newestWorkIDSeen
+                local.newestWorkTitleSeen = archived.newestWorkTitleSeen
+                local.lastModifiedAt = archived.lastModifiedAt
+                byID[local.id] = local
+                byName[archived.fandomName] = local
+            } else {
+                let watermark = FandomReadWatermark(
+                    id: archived.id,
+                    fandomName: archived.fandomName,
+                    lastVisitedAt: archived.lastVisitedAt,
+                    newestWorkIDSeen: archived.newestWorkIDSeen,
+                    newestWorkTitleSeen: archived.newestWorkTitleSeen,
+                    lastModifiedAt: archived.lastModifiedAt
+                )
+                context.insert(watermark)
+                byID[watermark.id] = watermark
+                byName[archived.fandomName] = watermark
+            }
+        }
+        if mode == .replaceLibrary {
+            let snapshotIDs = Set(contents.manifest.fandomReadWatermarks.map(\.id))
+            for watermark in existing where !snapshotIDs.contains(watermark.id) {
+                SyncTombstones.recordDeletion(of: watermark, in: context)
+                context.delete(watermark)
+            }
+        }
+    }
+
     /// Prevents backup import from resurrecting a record the user explicitly deleted on
     /// this device. A work tombstone only suppresses recreation when it is at least as
     /// new as the archived snapshot — an archived work with a strictly newer modification
@@ -2766,6 +3160,9 @@ enum KudosBackupService {
         private var annotationTombstonesByID: [UUID: SyncTombstone] = [:]
         private var bookmarkTombstonesByID: [UUID: SyncTombstone] = [:]
         private var savedSearchTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var readingSessionTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var readingFavoriteTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var fandomReadWatermarkTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -2795,6 +3192,12 @@ enum KudosBackupService {
                     indexNewest(tombstone, byBookmarkID: tombstone.recordID)
                 case .savedSearch:
                     indexNewest(tombstone, bySavedSearchID: tombstone.recordID)
+                case .readingSession:
+                    indexNewest(tombstone, byReadingSessionID: tombstone.recordID)
+                case .readingFavorite:
+                    indexNewest(tombstone, byReadingFavoriteID: tombstone.recordID)
+                case .fandomReadWatermark:
+                    indexNewest(tombstone, byFandomReadWatermarkID: tombstone.recordID)
                 }
             }
         }
@@ -2876,6 +3279,32 @@ enum KudosBackupService {
             savedSearchTombstonesByID[id] = tombstone
         }
 
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byReadingSessionID id: UUID) {
+            if let existing = readingSessionTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            readingSessionTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(_ tombstone: SyncTombstone, byReadingFavoriteID id: UUID) {
+            if let existing = readingFavoriteTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            readingFavoriteTombstonesByID[id] = tombstone
+        }
+
+        private mutating func indexNewest(
+            _ tombstone: SyncTombstone, byFandomReadWatermarkID id: UUID
+        ) {
+            if let existing = fandomReadWatermarkTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            fandomReadWatermarkTombstonesByID[id] = tombstone
+        }
+
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
             let tombstone: SyncTombstone? = if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
@@ -2924,6 +3353,33 @@ enum KudosBackupService {
             SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
                 tombstoneDeletedAt: savedSearchTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func readingSessionResolution(
+            id: UUID, incomingModifiedAt: Date?
+        ) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: readingSessionTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func readingFavoriteResolution(
+            id: UUID, incomingModifiedAt: Date?
+        ) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: readingFavoriteTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func fandomReadWatermarkResolution(
+            id: UUID, incomingModifiedAt: Date?
+        ) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: fandomReadWatermarkTombstonesByID[id]?.lastModifiedAt
             )
         }
 
@@ -3114,6 +3570,9 @@ enum KudosBackupService {
         work.hasGivenKudos = work.hasGivenKudos || archived.hasGivenKudos
         work.isSaved = incomingWins ? archived.isSaved : work.isSaved
         work.isFinished = incomingWins ? archived.isFinished : work.isFinished
+        work.keepInProgressOverride = incomingWins
+            ? archived.keepInProgressOverride
+            : work.keepInProgressOverride
         work.isComplete = incomingWins ? archived.isComplete : work.isComplete
         work.deletedAt = newest(work.deletedAt, archived.deletedAt)
         // incomingWins-gated like the flags above — a device that already called restore()
