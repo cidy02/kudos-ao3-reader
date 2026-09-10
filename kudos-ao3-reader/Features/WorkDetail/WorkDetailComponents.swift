@@ -1,15 +1,19 @@
 import SwiftUI
 
-// Building blocks for the redesigned Work Details hub: the work identity hero
-// card, the Overview quick-action grid tile, and the pure label/state helpers
-// behind them. Visual language matches the Account tab where the two hubs are
-// playing the same role — the segmented section Picker uses Account's own
-// `accountControlCardRow()` chrome, and `WorkQuickActionTile` shares
-// `AccountShortcutGridTile`'s `CardRadius.tile` — but work-content cards
-// (the hero, tag/status/stats sections) deliberately keep the Library's
-// standard `.cardRow()` geometry instead, exactly as `AccountControlStyle.swift`
-// documents ("Work cards deliberately retain the library's standard geometry").
-// The two hubs are siblings in navigation-chrome, not in every card radius.
+// Building blocks for the Work Details hub: the Overview quick-action grid tile
+// and the pure label/state helpers behind it. Visual language matches the
+// Account tab where the two hubs are playing the same role — the segmented
+// section Picker uses Account's own `accountControlCardRow()` chrome, and
+// `WorkQuickActionTile` shares `AccountShortcutGridTile`'s `CardRadius.tile` —
+// but work-content cards (tag/status/stats sections) deliberately keep the
+// Library's standard `.cardRow()` geometry instead, exactly as
+// `AccountControlStyle.swift` documents ("Work cards deliberately retain the
+// library's standard geometry"). The two hubs are siblings in
+// navigation-chrome, not in every card radius.
+//
+// The work's own identity — header, figure strip, resume card — moved to
+// `WorkDetailIdentityBlock.swift` when it took artboard 1a's treatment: it is
+// no longer a card, so it no longer belongs in a file about card chrome.
 
 /// The four top-level Work Details sections, mirroring Account's
 /// Overview / Reading / Writing / Activity segmented control.
@@ -20,190 +24,6 @@ enum WorkDetailTab: String, CaseIterable, Identifiable {
     case library = "Library"
 
     var id: String { rawValue }
-}
-
-/// The work identity hero card shown above the section control: title, tappable
-/// author byline, fandoms, and the at-a-glance stat row. The full summary, tag
-/// chips, and personal library state live in their sections, not here.
-struct WorkDetailHeroCard: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(ThemeManager.self) private var themeManager
-    let title: String
-    let authors: [String]
-    let identities: [AO3AuthorIdentity]
-    let fandoms: [String]
-    let rating: String
-    let categories: [String]
-    let warnings: [String]
-    let completion: WorkCompletionStatus
-    let language: String
-    let chapters: String
-    let words: Int?
-    /// Progress bar shown only when set — a work with no local reading state
-    /// (remote-only, never opened) has nothing to show here, exactly like
-    /// HomeResumeHero's own clamping only ever runs for a real `SavedWork`.
-    var readingProgress: Double?
-    var lastSpineIndex: Int = 0
-
-    var body: some View {
-        // Same VStack spacing/padding and title/stat-row treatment as
-        // HomeResumeHero.swift's UnblurredHomeResumeHero, but its own plain
-        // background (see the .background block below) rather than that card's
-        // per-work hue tint — this hero is the only card on the page, so there's
-        // no sibling to distinguish it from. `.cardRow()` was removed from this
-        // card's call site in WorkDetailView.swift regardless — a self-contained
-        // card inside another card's chrome would double up the background.
-        VStack(alignment: .leading, spacing: 12) {
-            // Tag grid decoupled into a top-trailing overlay on the title, not
-            // an HStack sibling of it — an HStack top-aligns both, and since
-            // the 2x2 grid (tileSize 27, ~60pt tall) is much taller than a
-            // single line of title text, the VStack's spacing to the *next*
-            // row (author) measured from the grid's bottom, not the shorter
-            // title's — a large dead gap that had nothing to do with the
-            // 12pt spacing value itself. An overlay lets the title's own
-            // height drive the VStack's rhythm while the grid just floats in
-            // the corner. Matches HomeResumeHero's identical fix.
-            Text(title)
-                .font(.title3.weight(.bold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
-                .padding(.trailing, 60)
-                .overlay(alignment: .topTrailing) {
-                    WorkStatusIconGrid(
-                        rating: rating.isEmpty ? nil : rating,
-                        categories: categories,
-                        warnings: warnings,
-                        completion: completion,
-                        tileSize: 27,
-                        announcesToVoiceOver: true
-                    )
-                }
-
-            // `.caption`-sized, matching the "Continue Reading" hero's
-            // author/fandom (WorkStatLabel) so the metadata reads as one
-            // family instead of running a size larger here — see
-            // HomeResumeHero.swift. Still a real Label (not WorkStatLabel):
-            // author needs AO3AuthorBylineView's per-co-author tap
-            // navigation, and fandoms need multi-line wrap (WorkStatLabel
-            // forces a single fixed line).
-            if !authors.isEmpty {
-                // A real Label (not a hand-rolled HStack) so the icon lines up
-                // with the Fandoms Label right below it — a raw HStack can't
-                // reproduce Label's exact icon size/gap/baseline alignment.
-                //
-                // The `.font` has to be on the Label, not just inside the
-                // byline: a Label sizes its icon from the *ambient* font, so
-                // passing the font only to `AO3AuthorBylineView` left this
-                // icon rendering at `.body` while the Fandoms icon below used
-                // the Label's own font — two different glyph sizes on two
-                // different baselines, which is exactly the column alignment
-                // the comment above was trying to guarantee.
-                //
-                // Icon is .secondary, matching the Fandoms label right below —
-                // not themeManager.effectiveTint (the app's red accent), which
-                // made this read as an active/state icon for no reason.
-                //
-                // expandsHitTarget: false — its default (true) gives each name
-                // its own top-aligned 28pt hit box, which visibly desyncs this
-                // icon from the byline's vertical center once that box is
-                // taller than the .caption text itself.
-                Label {
-                    AO3AuthorBylineView(
-                        names: authors,
-                        identities: identities,
-                        includesBy: false,
-                        font: .caption,
-                        expandsHitTarget: false
-                    )
-                } icon: {
-                    Image(systemName: "person")
-                        .foregroundStyle(.secondary)
-                }
-                .font(.caption)
-            }
-
-            if !fandoms.isEmpty {
-                // Capped at 3 lines for density normally, but let the fandoms wrap
-                // in full at accessibility Dynamic Type sizes — the title above
-                // already wraps unlimited, and a 3-line clamp on scaled-up text
-                // truncates fandom names to uselessness (HIG review UI-4, §5).
-                Label(fandoms.joined(separator: ", "), systemImage: "books.vertical")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-            }
-
-            FlowLayout(spacing: 10, rowSpacing: 6) {
-                if !language.isEmpty {
-                    WorkStatLabel(text: language, symbol: "globe", accessibilityLabel: "Language: \(language)")
-                }
-                if let words {
-                    WorkStatLabel(
-                        text: words.formatted(),
-                        symbol: "textformat.size",
-                        accessibilityLabel: "\(words.formatted()) words"
-                    )
-                }
-                if !chapters.isEmpty {
-                    WorkStatLabel(text: chapters, symbol: "book", accessibilityLabel: "Chapters \(chapters)")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            // Only the stat pills merge into one VoiceOver element. The card
-            // itself must stay `.contain` so the byline's individually routed
-            // co-author buttons remain separately focusable/activatable.
-            .accessibilityElement(children: .combine)
-
-            if let readingProgress {
-                let progressValue = min(1, max(0, readingProgress))
-                let percent = Int((progressValue * 100).rounded())
-                let chapterLabel: String? = lastSpineIndex > 0 ? "Ch \(lastSpineIndex + 1)" : nil
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Text(chapterLabel ?? "Reading")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
-                        Text("\(percent)%")
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.quaternary)
-                            Capsule().fill(.tint)
-                                .frame(width: geo.size.width * max(0.03, progressValue))
-                        }
-                    }
-                    .frame(height: 6)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        // Plain theme card surface, not HomeResumeHero's per-work hue tint: this
-        // hero is the only card on the page, so there's no sibling to visually
-        // distinguish it from, and coloring it made the page read like a carousel
-        // item rather than the page's own content. Matches the "standard
-        // .cardRow() geometry" this file's header comment already calls for.
-        .background(
-            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                .fill(themeManager.appTheme.cardSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                        .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
-                )
-                .shadow(color: themeManager.appTheme.cardShadow.color,
-                        radius: themeManager.appTheme.cardShadow.radius,
-                        x: 0,
-                        y: themeManager.appTheme.cardShadow.y)
-        )
-    }
 }
 
 /// One state-aware shortcut tile for the Overview quick-action grid. Same card

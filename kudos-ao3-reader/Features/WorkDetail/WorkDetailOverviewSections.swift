@@ -63,7 +63,9 @@ extension WorkDetailView {
     private var quickActionsSection: some View {
         Section {
             LazyVGrid(columns: quickActionColumns, spacing: 10) {
-                readQuickAction
+                // No Read tile: artboard 1a's resume card at the top of the page
+                // owns that action now (see `WorkDetailView.resumeCardRow`), and
+                // the grid would offer a second, quieter copy of it.
                 if let ao3URL {
                     quickAction(title: "Open on AO3", systemImage: "safari") {
                         router.open(ao3URL)
@@ -104,18 +106,6 @@ extension WorkDetailView {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
-    }
-
-    private var readQuickAction: some View {
-        let label = WorkDetailPresentation.readAction(
-            hasEPUB: localWork?.hasEPUB ?? false, working: working,
-            continueReading: (localWork?.hasStartedReading ?? false)
-                && !(localWork?.isFinished ?? false)
-        )
-        return quickAction(
-            title: label.title, systemImage: label.systemImage,
-            isBusy: working, disabled: working, action: read
-        )
     }
 
     private var savedQuickAction: some View {

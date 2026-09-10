@@ -85,10 +85,11 @@ struct WorkUpdatedDateBadge: View {
 /// a blank slot reads as a layout gap rather than a real state on device.
 ///
 /// Shared by `WorkListStatsRow` (search/library list rows, paired with its
-/// own longer secondary-facts row below) and the resume hero cards
-/// (`HomeResumeHero`/`WorkDetailHeroCard`, paired with a shorter
-/// Language/Words/Chapters row instead) — both need this exact same row of
-/// chips, just different company underneath.
+/// own longer secondary-facts row below) and `HomeResumeHero` (paired with a
+/// shorter Language/Words/Chapters row instead) — both need this exact same row
+/// of chips, just different company underneath. The work-detail page states the
+/// same four fields as `WorkDetailFigureStrip` instead: it has the width to
+/// spell them out, which a row of chips is there to avoid needing.
 struct WorkTopStatsRow: View {
     var rating: String?
     var categories: [String] = []
@@ -814,6 +815,19 @@ enum WorkWarningStatus: Equatable {
         }
     }
 
+    /// The same three states as a bare figure under a WARNINGS label, for the
+    /// stat strip spec 1a puts under a work's title. Two things change at that
+    /// size: the label already names the field, so `text`'s "No Warnings" would
+    /// state it twice, and a count reads better as a figure beside its
+    /// neighbouring "3/3" and "412" than as prose.
+    var figureText: String {
+        switch self {
+        case .none: "None"
+        case .undisclosed: "Undisclosed"
+        case .present(let count): "\(count)"
+        }
+    }
+
     /// One icon for all three states — like the rating shield and category
     /// glyph, color alone carries the distinction.
     var symbol: String { "exclamationmark.circle.fill" }
@@ -821,6 +835,21 @@ enum WorkWarningStatus: Equatable {
     var color: Color {
         switch self {
         case .none: .gray
+        case .undisclosed: .orange
+        case .present: .red
+        }
+    }
+
+    /// `color` in the same figure context `figureText` serves. Its gray for
+    /// `.none` is AO3's own legend, and correct in a row of badge icons where
+    /// gray reads as "nothing flagged" against its red and orange neighbours.
+    /// As the only text in a stat cell it reads instead as dimmed-out, making
+    /// the cell look less important than the three beside it when what it says
+    /// — this work carries no warnings — is a fact the reader came for. Spec 1a
+    /// paints it green for that reason; the other two keep the ramp's colours.
+    var figureColor: Color {
+        switch self {
+        case .none: .green
         case .undisclosed: .orange
         case .present: .red
         }
