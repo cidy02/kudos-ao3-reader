@@ -51,7 +51,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(AppRouter.self) var router
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(AO3AuthService.self) private var auth
+    @Environment(AO3AuthService.self) var auth
     @Environment(DownloadQueue.self) private var downloadQueue
     @Query(sort: \Tag.name) var allTags: [Tag]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
@@ -86,7 +86,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @State private var seriesPreservationProgress: ReadingQueueService.SeriesPreservationResult?
     @State private var seriesPrompt: ReadingQueueService.SeriesPreservationPrompt?
     @State var queueNotice: String?
-    @State private var workActions = AO3WorkActionsModel()
+    // Non-private: the Overview section's ON AO3 chips drive the same model
+    // the toolbar menu does, so both surfaces share one in-flight state.
+    @State var workActions = AO3WorkActionsModel()
 
     @AppStorage("autoPreserveSmallSeriesOnSaveForLater")
     private var autoPreserveSmallSeriesOnSaveForLater = false
@@ -239,9 +241,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 fandoms: displayFandoms,
                 palette: workPalette
             )
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 0, trailing: 0))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
+            .pageBodyRow(top: 20, gutter: 0)
 
             WorkDetailFigureStrip(
                 rating: displayRating,
@@ -251,9 +251,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 completion: displayCompletionStatus,
                 palette: workPalette
             )
-            .listRowInsets(EdgeInsets(top: 16, leading: 22, bottom: 0, trailing: 22))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
+            .pagePanelRow(top: 16)
 
             resumeCardRow
         }
@@ -280,9 +278,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             palette: workPalette,
             action: read
         )
-        .listRowInsets(EdgeInsets(top: 14, leading: 22, bottom: 4, trailing: 22))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
+        .pagePanelRow(top: 14)
     }
 
     /// Nil unless this work has actually been opened on this device. A ring at

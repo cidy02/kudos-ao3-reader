@@ -11,6 +11,7 @@ extension WorkDetailView {
     @ViewBuilder
     var overviewSections: some View {
         summarySection
+        ao3ActionsSection
         quickActionsSection
         publicationCardSection
         workInfoCardSection
@@ -24,6 +25,16 @@ extension WorkDetailView {
 
     // MARK: Summary
 
+    /// Spec 1a sets the summary in a serif face at 16pt over the page wash, with
+    /// no card and no "Summary" heading — it is the first prose after the resume
+    /// card and nothing else on the page could be mistaken for it. The serif is
+    /// doing real work rather than decoration: this is the only run of the
+    /// author's own writing on the screen, and setting it apart from the app's
+    /// own labels is the point.
+    ///
+    /// Show More survives the restyle. The artboard's example summary is one
+    /// sentence; real ones run for paragraphs, and an uncollapsed wall of them
+    /// would push every fact on the page below the fold.
     @ViewBuilder
     private var summarySection: some View {
         // Bound once per render: a local work's summary strips HTML on read.
@@ -31,8 +42,14 @@ extension WorkDetailView {
         if !summary.isEmpty {
             let collapses = WorkDetailPresentation.summaryCollapses(summary)
             Section {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text(summary)
+                        .font(.system(size: 16, design: .serif))
+                        // CSS line-height 1.6 on 16px is 25.6pt of line box; a
+                        // 16pt line is about 20 of that on its own, so the rest
+                        // is added here.
+                        .lineSpacing(5.5)
+                        .foregroundStyle(Color.primary.opacity(0.82))
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(collapses && !summaryExpanded ? 8 : nil)
                     if collapses {
@@ -44,9 +61,30 @@ extension WorkDetailView {
                         .accessibilityHint("Expands or collapses the work summary")
                     }
                 }
-                .cardRow()
-            } header: {
-                Text("Summary")
+                .pageBodyRow(top: 20)
+            }
+        }
+    }
+
+    // MARK: On AO3
+
+    /// Artboard 1a's ON AO3 chips. Shown only to a signed-in reader with an AO3
+    /// work to act on: every one of these four is a write that fails with
+    /// `AO3WriteError.notSignedIn` otherwise, and four chips that cannot work is
+    /// worse than the overflow menu they also live in. Nothing is lost signed
+    /// out — the toolbar still carries them, and the work's kudos and comment
+    /// tallies are facts the figure strip states regardless.
+    @ViewBuilder
+    private var ao3ActionsSection: some View {
+        if let id = ao3WorkID, auth.isLoggedIn {
+            Section {
+                WorkAO3ActionChips(
+                    workID: id,
+                    kudosCount: displayKudos,
+                    actions: workActions,
+                    palette: workPalette
+                )
+                .pageBodyRow(top: 24)
             }
         }
     }
