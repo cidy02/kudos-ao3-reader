@@ -48,6 +48,11 @@ Verified so far:
 | `388d246` | ✅ green | Validates `SubjectChip.pill`, Library's Shelves/Ledger layout, `SensitiveWorkRow.providesNavigation`, and the artboard-1k results header with its figure strip and sort menu. |
 | `d3d561b` | ✅ green | The fixed release step. |
 | `7481229` | ✅ green | Validates the artboard-1k page sheet. **Published the first release.** |
+| `d99594d` | ❌ red | Browse (1g). Half the change was lost to a `git checkout` recovery — see §3. |
+| `cf58139` | ❌ red | Account (1m). Red for `d99594d`'s missing member, which it was stacked on, not for anything of its own. |
+| `d4f64b8` | ✅ green | Restored `CategoryStats.clusterFandoms`. Validates Browse's panels **and** Account's header in one run. |
+| `0abc06f` | ✅ green | The build stamp (`CURRENT_PROJECT_VERSION`, `KudosBuildCommit`) and About reading it. |
+| `029eddb` | ✅ green | `SubjectStatStrip.Cell.tint`. |
 
 Builds are published to **[Releases](https://github.com/cidy02/kudos-ao3-reader/releases)**
 as a rolling per-branch pre-release tagged `build-<branch>`, and to each run's
@@ -142,9 +147,9 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Left: Collections previewing four miniature works in ledger mode, and the Recently Deleted row. |
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 the row (Codex) and the results header, figure strip, sort control and chip rail are done. Left: the filter panel's own restyle (`1ao`–`1au`), the tag picker (`1av`/`1aw`), Save Search (`1ax`), and the paging switcher pill. |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done (category panels, fandom chip clusters, Jump Back In). Left: `1al`/`1am` (sibling-family grouping inside a category — needs the parser work the fandom audit deferred), and `1an` (the Browse filter sheet). |
-| **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | ⬜ |
+| **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | ⬜ |
-| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | ⬜ |
+| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ⬜ |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | ⬜ |
@@ -213,7 +218,12 @@ re-reviews settled work and nobody reviews their own.
 | `98d6006` | Claude | Per-SHA concurrency so every commit gets an IPA | unreviewed | CI config. |
 | `d99594d` | Claude | Browse, artboard 1g: category panels + fandom clusters; remove `MasonryLayout` | unreviewed | ❌ Build failed — half the change was lost to a `git checkout` recovery. Fixed in `d4f64b8`. |
 | `cf58139` | Claude | Account, artboard 1m: username as the page title, accent wash | unreviewed | Build pending at time of writing. |
-| `d4f64b8` | Claude | Restore `CategoryStats.clusterFandoms` | unreviewed | Fixes `d99594d`. Build pending at time of writing. |
+| `d4f64b8` | Claude | Restore `CategoryStats.clusterFandoms` | unreviewed | Fixes `d99594d`. **iOS build green** — carries `cf58139` too. |
+| `4dd0ef3` | Claude | Rank what catches errors without a compiler | unreviewed | Doc only. |
+| `0abc06f` | Claude | Build stamp in `CURRENT_PROJECT_VERSION` + About | unreviewed | **iOS build green.** |
+| `029eddb` | Claude | Outline tool reads unlabelled artboards; `Cell.tint` | unreviewed | **iOS build green.** |
+| `ed3eacb` | Claude | Stop `cardList()`'s backdrop hiding every wash | unreviewed | **Wants a non-Claude reviewer, and a screenshot.** Fixes a defect in five already-landed screens; see §3. Not compiled at time of writing, never seen. |
+| `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | Not compiled at time of writing. Not seen. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -224,6 +234,101 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — The wash was never drawing (Claude, `ed3eacb`)
+
+**Read this before adopting the wash on another screen.** The gradient is the
+most visible thing about the redesign and it had not painted a single pixel on
+any `List` screen — Search, Account, and the Home and Library section pages all
+shipped without it.
+
+`cardList()` ends with `.background(theme.appTheme.cardBackdrop.ignoresSafeArea())`,
+and every washed screen applies the two modifiers in this order:
+
+```swift
+List { … }
+    .cardList()
+    .subjectScreenWash(palette: …)
+```
+
+`.background` stacks *backwards*: the later modifier's layers go behind the
+earlier one's. So the opaque `cardBackdrop` sat between the list and the
+gradient and covered it completely.
+
+What makes this worth a section rather than a line: **there was no symptom.**
+No error, no warning, no layout difference — the screens looked exactly as they
+had before the wash was added, and every one of them passed CI. The only thing
+that could have caught it is a screenshot, which is the gate §0 says is
+unsatisfied for every screen on this branch. Four separate commits added a
+`.subjectScreenWash(…)` that did nothing, and each of them was written by
+reading the previous one.
+
+The fix is an environment flag (`EnvironmentValues.isOnSubjectWash`) that the
+wash sets and `cardList()` reads, rather than a `paintsBackdrop:` parameter on
+`cardList()`. A parameter has to be remembered at each call site and forgetting
+it fails exactly this silently; the flag cannot be forgotten, because the wash
+sets it itself. It only travels downwards, so the wash must stay *outside* the
+`cardList()` it is meant to show through — which is where every call site
+already puts it.
+
+**The general lesson,** for the next agent working without a device: an edit
+whose only evidence is visual has no gate at all here. CI proves it compiles,
+and a compiling no-op looks identical to a compiling change. Prefer changes
+whose correctness something can check — and where that is impossible, say so in
+the commit rather than letting a green build imply more than it proved.
+
+### 2026-09-10 — Phase 7 begins: Work Detail's identity block (Claude, `d74cc7e`)
+
+**Landed.** `WorkDetailHeroCard` is gone, replaced by artboard 1a's three
+opening statements, each sitting on the page wash rather than inside a card:
+
+- `WorkDetailIdentityHeader` — the primary fandom as an accent kicker, the title
+  at 32pt, and the author byline. The byline goes through `SubjectHeaderBlock`'s
+  *trailing* slot rather than its `String` subtitle, because it has to stay a
+  real `AO3AuthorBylineView`: every co-author is individually tappable through
+  to their AO3 profile, and a string would have quietly dropped that.
+- `WorkDetailFigureStrip` — rating · warnings · category · chapters, as the
+  four-cell divided strip.
+- `WorkDetailResumeCard` — a 48pt ring, where you stopped, and the one filled
+  control on the page.
+
+**Density: nothing on the screen was lost.** The 2×2 `WorkStatusIconGrid` in the
+old card's corner stated the same four fields as colour-coded glyphs; the strip
+states them spelled out, which is what a full-width page has the room for (the
+grid stays on rows and cover cards, where it does not). The hero's
+Language/Words/Chapters pills were already repeated verbatim by the Publication
+and Work cards below it. The progress bar became the ring.
+
+The one reduction is deliberate and worth knowing about: **the kicker names one
+fandom** where the card listed all of them across up to three lines. The rest
+become the kicker's dimmed `+5`, and the Tags section still lists every one. The
+artboard heads the page with a single subject on purpose — it is the same
+subject the whole page's hue is derived from.
+
+**Three shared parts grew** to carry it, each usable by the screens still to
+come: `SubjectHeaderBlock.kickerTrailingCount`, `SubjectStatStrip.Cell`'s own
+VoiceOver text (the default reading of an abbreviated cell is "G RATING"), and
+`WorkWarningStatus.figureText`/`.figureColor` — see §3b for why the last one
+disagrees with `WorkWarningStatus.color`.
+
+**The Read tile left the quick-action grid.** The resume card is that action
+now; two controls for one action, a thumb-length apart, is a coin toss.
+
+**Two facts 1a states that the app does not have:** the chapter's *title* and a
+pages-left estimate. `SavedWork` stores a spine index and a last-read date, so
+the card says "Chapter 3" and when — the same substitution `HomeResumeHero`
+already makes, waiting on the same local reading log. A work nobody here has
+opened gets **no ring**, rather than a 0% one that would claim a browsed remote
+work is being tracked.
+
+**Left on artboard 1a**, in the order the page runs: the summary in its serif
+face; the ON AO3 action chips (Kudos / Subscribe / Bookmark / Mark for Later);
+the tag clusters as `SubjectChip` groups under kicker labels; the grouped
+series/collection/publication card; the kudos·comments·bookmarks·hits strip; the
+two outline buttons; and the **My copy** row with the sheet it opens — which is
+screen 2 of the artboard, and is today's Library tab rearranged. The four-way
+segmented control survives underneath all of that for now; 1a is one continuous
+page, so retiring the control is the last step of the screen, not the first.
 
 ### 2026-09-10 — Phase 1 continued: the ledger row and scope hues (Claude)
 
@@ -420,6 +525,24 @@ Where an artboard contradicts a *reasoned* decision already in the codebase,
 confirmed explicitly. The reasoning it overrules should still be answered in
 writing rather than silently dropped, so the next person to read that code
 knows the argument was met and not missed.
+
+### ✅ Resolved — "no warnings" is green here and gray everywhere else
+
+**Decision: both, and they do not contradict.** Spec 1a paints the WARNINGS cell
+green when a work has none. `WorkWarningStatus.color` paints that same state
+gray, and its doc comment gives a good reason: AO3's own legend does, and in a
+row of badge icons gray reads as "nothing flagged" against its red and orange
+neighbours.
+
+That reasoning is about a severity ramp of icons, and it holds there. It does not
+transfer to a stat cell, where the state is the cell's *only* text: gray there
+reads as dimmed-out, making the cell look less important than the three beside
+it when what it says — this work carries no warnings — is a fact the reader came
+looking for. So `figureColor` is green and `color` stays gray, with the split
+named in both doc comments rather than one silently overriding the other.
+
+`figureText` splits for a plainer reason: the cell's label already says
+WARNINGS, so `text`'s "No Warnings" would state the field twice.
 
 ### ✅ Resolved — the paging control (spec 1k vs. `SearchPaginationBar`)
 
