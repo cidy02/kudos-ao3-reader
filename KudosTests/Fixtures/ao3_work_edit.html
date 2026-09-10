@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="csrf-param" content="authenticity_token">
+  <meta name="csrf-token" content="work-csrf-token==">
+  <title>Edit Work | Archive of Our Own</title>
+</head>
+<body class="logged-in">
+<div id="main" class="works-edit">
+  <h2 class="heading">Edit Work</h2>
+  <form action="/works/424242" accept-charset="UTF-8" method="post" id="work-form" class="verbose post work">
+    <input type="hidden" name="_method" value="patch">
+    <input type="hidden" name="authenticity_token" value="work-csrf-token==">
+    <p class="required notice">* Required information</p>
+
+    <fieldset class="work meta">
+      <legend>Tags</legend>
+      <dl>
+        <dt class="rating required"><label for="work_rating_string">Rating*</label></dt>
+        <dd class="rating required">
+          <select name="work[rating_string]" id="work_rating_string">
+            <option value="">Please select a rating</option>
+            <option value="Not Rated">Not Rated</option>
+            <option value="General Audiences">General Audiences</option>
+            <option value="Teen And Up Audiences">Teen And Up Audiences</option>
+            <option value="Mature">Mature</option>
+            <option selected="selected" value="Explicit">Explicit</option>
+          </select>
+        </dd>
+
+        <dt class="warning required"><label>Archive Warnings*</label></dt>
+        <dd class="warning required">
+          <fieldset class="warnings">
+            <ul>
+              <li>
+                <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_choose_not_to_use_archive_warnings" value="Choose Not To Use Archive Warnings" checked="checked">
+                <label for="work_archive_warning_strings_choose_not_to_use_archive_warnings">Choose Not To Use Archive Warnings</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_graphic_depictions_of_violence" value="Graphic Depictions Of Violence">
+                <label for="work_archive_warning_strings_graphic_depictions_of_violence">Graphic Depictions Of Violence</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_major_character_death" value="Major Character Death">
+                <label for="work_archive_warning_strings_major_character_death">Major Character Death</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_no_archive_warnings_apply" value="No Archive Warnings Apply">
+                <label for="work_archive_warning_strings_no_archive_warnings_apply">No Archive Warnings Apply</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_rape_non-con" value="Rape/Non-Con">
+                <label for="work_archive_warning_strings_rape_non-con">Rape/Non-Con</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[archive_warning_strings][]" id="work_archive_warning_strings_underage" value="Underage">
+                <label for="work_archive_warning_strings_underage">Underage</label>
+              </li>
+            </ul>
+          </fieldset>
+        </dd>
+
+        <dt class="fandom required"><label for="work_fandom">Fandoms*</label></dt>
+        <dd class="fandom required">
+          <input type="text" name="work[fandom_string]" id="work_fandom" value="Jujutsu Kaisen, Haikyuu!!">
+        </dd>
+
+        <dt class="category"><label>Categories</label></dt>
+        <dd class="category">
+          <fieldset>
+            <ul>
+              <li>
+                <input type="checkbox" name="work[category_strings][]" id="work_category_strings_ff" value="F/F">
+                <label for="work_category_strings_ff">F/F</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[category_strings][]" id="work_category_strings_fm" value="F/M" checked="checked">
+                <label for="work_category_strings_fm">F/M</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[category_strings][]" id="work_category_strings_gen" value="Gen">
+                <label for="work_category_strings_gen">Gen</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[category_strings][]" id="work_category_strings_mm" value="M/M" checked="checked">
+                <label for="work_category_strings_mm">M/M</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[category_strings][]" id="work_category_strings_multi" value="Multi">
+                <label for="work_category_strings_multi">Multi</label>
+              </li>
+              <li>
+                <input type="checkbox" name="work[category_strings][]" id="work_category_strings_other" value="Other">
+                <label for="work_category_strings_other">Other</label>
+              </li>
+            </ul>
+          </fieldset>
+        </dd>
+
+        <dt class="relationship"><label for="work_relationship">Relationships</label></dt>
+        <dd class="relationship">
+          <input type="text" name="work[relationship_string]" id="work_relationship" value="Geto/Gojo, Hinata/Kageyama">
+        </dd>
+
+        <dt class="character"><label for="work_character">Characters</label></dt>
+        <dd class="character">
+          <input type="text" name="work[character_string]" id="work_character" value="Gojo Satoru, Geto Suguru">
+        </dd>
+
+        <dt class="freeform"><label for="work_freeform">Additional Tags</label></dt>
+        <dd class="freeform">
+          <input type="text" name="work[freeform_string]" id="work_freeform" value="Hurt/Comfort, Original Tag That Is New">
+        </dd>
+      </dl>
+    </fieldset>
+
+    <fieldset class="preface" role="article">
+      <legend>Preface</legend>
+      <dl>
+        <dt class="title required"><label for="work_title">Work Title*</label></dt>
+        <dd class="title required">
+          <input type="text" name="work[title]" id="work_title" class="observe_textlength text" value="The Weight of Water">
+        </dd>
+        <dt class="byline"><label for="work_author_attributes_ids">Creator/Pseud(s)</label></dt>
+        <dd class="byline">
+          <select name="work[author_attributes][ids][]" id="work_author_attributes_ids" multiple="multiple">
+            <option selected="selected" value="101">mainpseud</option>
+            <option value="202">altpseud</option>
+          </select>
+        </dd>
+        <dt class="summary"><label for="work_summary">Summary</label></dt>
+        <dd class="summary">
+          <textarea name="work[summary]" id="work_summary">A long walk home in the rain.</textarea>
+        </dd>
+        <dt class="notes">Notes</dt>
+        <dd class="notes">
+          <ul>
+            <li class="start">
+              <input type="checkbox" name="front-notes-options-show" id="front-notes-options-show" checked="checked" class="toggle_formfield">
+              <label for="front-notes-options-show">at the beginning</label>
+              <fieldset id="front-notes-options" class="start">
+                <textarea name="work[notes]" id="work_notes">Thanks for reading.</textarea>
+              </fieldset>
+            </li>
+            <li class="end">
+              <input type="checkbox" name="end-notes-options-show" id="end-notes-options-show" checked="checked" class="toggle_formfield">
+              <label for="end-notes-options-show">at the end</label>
+              <fieldset id="end-notes-options" class="end">
+                <textarea name="work[endnotes]" id="work_endnotes">More later.</textarea>
+              </fieldset>
+            </li>
+          </ul>
+        </dd>
+      </dl>
+    </fieldset>
+
+    <fieldset id="associations" role="article">
+      <legend>Associations</legend>
+      <dl>
+        <dt class="collection"><label for="work_collection_names">Post to Collections / Challenges</label></dt>
+        <dd class="collection">
+          <input type="text" name="work[collection_names]" id="work_collection_names" value="nanami_week">
+        </dd>
+        <dt class="recipient"><label for="work_recipients">Gift this work to</label></dt>
+        <dd class="recipient">
+          <input type="text" name="work[recipients]" id="work_recipients" value="giftee">
+        </dd>
+        <dt class="serial">
+          <input type="checkbox" name="series-options-show" id="series-options-show" checked="checked" class="toggle_formfield">
+        </dt>
+        <dd class="serial">
+          <label for="series-options-show">This work is part of a series</label>
+          <fieldset id="series-options">
+            <dl>
+              <dt><label for="work_series_attributes_id">Choose one of your existing series:</label></dt>
+              <dd>
+                <select name="work[series_attributes][id]" id="work_series_attributes_id">
+                  <option value="">Please select</option>
+                  <option selected="selected" value="77">Water</option>
+                  <option value="88">Case Files</option>
+                </select>
+              </dd>
+              <dt><label for="work_series_attributes_title">Or create and use a new one:</label></dt>
+              <dd><input type="text" name="work[series_attributes][title]" id="work_series_attributes_title" value=""></dd>
+            </dl>
+          </fieldset>
+        </dd>
+        <dt class="parent">
+          <input type="checkbox" name="parent-options-show" id="parent-options-show" class="toggle_formfield">
+        </dt>
+        <dd class="parent">
+          <label for="parent-options-show">This work is inspired by</label>
+          <fieldset id="parent-options">
+            <dl>
+              <dt><label for="work_parent_work_relationships_attributes_0_url">URL</label></dt>
+              <dd><input type="text" name="work[parent_work_relationships_attributes][0][url]" id="work_parent_work_relationships_attributes_0_url" value="https://archiveofourown.org/works/1"></dd>
+              <dt><label for="work_parent_work_relationships_attributes_0_title">Title</label></dt>
+              <dd><input type="text" name="work[parent_work_relationships_attributes][0][title]" value="First Rain"></dd>
+              <dt><label for="work_parent_work_relationships_attributes_0_author">Author</label></dt>
+              <dd><input type="text" name="work[parent_work_relationships_attributes][0][author]" value="someone"></dd>
+            </dl>
+          </fieldset>
+        </dd>
+        <dt class="chaptered wip">
+          <input type="checkbox" name="chapters-options-show" id="chapters-options-show" checked="checked" class="toggle_formfield">
+        </dt>
+        <dd class="chaptered wip">
+          <label for="chapters-options-show">This work has multiple chapters</label>
+          <fieldset id="chapters-options">
+            <dl>
+              <dt><label for="work_wip_length">Chapter 1 of</label></dt>
+              <dd><input type="text" name="work[wip_length]" id="work_wip_length" class="number" value="20"></dd>
+            </dl>
+          </fieldset>
+        </dd>
+        <dt class="language required"><label for="work_language_id">Choose a language*</label></dt>
+        <dd class="language required">
+          <select id="work_language_id" name="work[language_id]">
+            <option value="">Please select a language</option>
+            <option selected="selected" value="1">English</option>
+            <option value="2">Español</option>
+          </select>
+        </dd>
+      </dl>
+    </fieldset>
+
+    <fieldset class="privacy" role="article">
+      <legend>Privacy</legend>
+      <dl>
+        <dt class="restrict">
+          <input name="work[restricted]" type="hidden" value="0">
+          <input type="checkbox" value="1" name="work[restricted]" id="work_restricted">
+        </dt>
+        <dd class="restrict"><label for="work_restricted">Only registered users can read</label></dd>
+        <dt class="moderated comments">
+          <input name="work[moderated_commenting_enabled]" type="hidden" value="0">
+          <input type="checkbox" value="1" checked="checked" name="work[moderated_commenting_enabled]" id="work_moderated_commenting_enabled">
+        </dt>
+        <dd class="moderated comments"><label for="work_moderated_commenting_enabled">Enable moderated commenting</label></dd>
+        <dt class="permissions comments">Who can comment</dt>
+        <dd class="permissions comments">
+          <fieldset>
+            <ul>
+              <li>
+                <input type="radio" name="work[comment_permissions]" id="work_comment_permissions_enable_all" value="enable_all">
+                <label for="work_comment_permissions_enable_all">Registered users and guests</label>
+              </li>
+              <li>
+                <input type="radio" name="work[comment_permissions]" id="work_comment_permissions_disable_anon" value="disable_anon" checked="checked">
+                <label for="work_comment_permissions_disable_anon">Only registered users</label>
+              </li>
+              <li>
+                <input type="radio" name="work[comment_permissions]" id="work_comment_permissions_disable_all" value="disable_all">
+                <label for="work_comment_permissions_disable_all">No one</label>
+              </li>
+            </ul>
+          </fieldset>
+        </dd>
+      </dl>
+    </fieldset>
+
+    <fieldset>
+      <legend>Post</legend>
+      <ul class="actions">
+        <li><input type="submit" name="preview_button" value="Preview"></li>
+        <li><input type="submit" name="update_button" value="Post"></li>
+      </ul>
+    </fieldset>
+  </form>
+</div>
+</body>
+</html>
