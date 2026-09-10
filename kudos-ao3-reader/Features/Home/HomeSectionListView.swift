@@ -244,14 +244,18 @@ struct HomeSectionListView: View {
     /// The kicker / rule / 32pt hero, as the list's first row rather than as a
     /// navigation title: spec 1ad scrolls it away under the floating chrome, and
     /// a `navigationTitle` cannot do that.
+    private var subjectHeader: some View {
+        SubjectHeaderBlock(
+            kicker: "Home",
+            title: kind.title,
+            subtitle: headerTallyLine,
+            palette: scopePalette
+        )
+    }
+
     private var subjectHeaderSection: some View {
         Section {
-            SubjectHeaderBlock(
-                kicker: "Home",
-                title: kind.title,
-                subtitle: headerTallyLine,
-                palette: scopePalette
-            )
+            subjectHeader
             .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
@@ -298,31 +302,46 @@ struct HomeSectionListView: View {
     /// wrapping down the page instead of scrolling horizontally.
     private var compactGrid: some View {
         ScrollView {
-            LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
-                ForEach(visibleItems) { work in
-                    if isSelecting {
-                        SensitiveWorkCoverCard(
-                            work: work,
-                            isSelecting: true,
-                            isSelected: selection.contains(work.id),
-                            onToggleSelection: { toggleSelection(work) }
-                        )
-                        .localWorkContextMenu(work: work)
-                    } else {
-                        NavigationLink(value: LocalWorkDestination.reader(work)) {
-                            SensitiveWorkCoverCard(work: work)
-                        }
-                        .buttonStyle(.plain)
-                        .localWorkContextMenu(
-                            work: work,
-                            onSelect: { isSelecting = true; selection = [work.id] }
-                        )
-                    }
-                }
+            VStack(alignment: .leading, spacing: 16) {
+                subjectHeader.padding(.top, 20)
+                filterChipRail
+                SectionRuleHeader(title: kind.title, count: visibleItems.count)
+                workGrid
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
         }
         .subjectScreenWash(palette: scopePalette)
     }
+
+    private var workGrid: some View {
+        LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
+            ForEach(visibleItems) { work in
+                if isSelecting {
+                    SensitiveWorkCoverCard(
+                        work: work,
+                        footer: updateFooter(for: work),
+                        isSelecting: true,
+                        isSelected: selection.contains(work.id),
+                        onToggleSelection: { toggleSelection(work) }
+                    )
+                    .localWorkContextMenu(work: work)
+                } else {
+                    NavigationLink(value: LocalWorkDestination.reader(work)) {
+                        SensitiveWorkCoverCard(work: work, footer: updateFooter(for: work))
+                    }
+                    .buttonStyle(.plain)
+                    .localWorkContextMenu(
+                        work: work,
+                        onSelect: { isSelecting = true; selection = [work.id] }
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+    }
+    private func updateFooter(for work: SavedWork) -> String? {
+        guard kind == .recentlyUpdated else { return nil }
+        return "+\(work.postedChapterCount - work.knownChapterCount) new"
+    }
+
 }

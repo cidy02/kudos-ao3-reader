@@ -344,6 +344,10 @@ struct SubjectHeaderBlock<Trailing: View>: View {
     /// search results, the queue's tag rail elsewhere.
     @ViewBuilder var trailing: () -> Trailing
 
+    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32
+    @ScaledMetric(relativeTo: .subheadline) private var subtitleSize: CGFloat = 15.5
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             SubjectKicker(
@@ -355,18 +359,18 @@ struct SubjectHeaderBlock<Trailing: View>: View {
             )
 
             Text(title)
-                .font(.system(size: 32, weight: .bold))
+                .font(.system(size: titleSize, weight: .bold))
                 .tracking(-0.6)
                 .monospacedDigit()
-                .lineLimit(2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .minimumScaleFactor(0.7)
                 .fixedSize(horizontal: false, vertical: true)
 
             if subtitle != nil || hasTrailing {
-                HStack(spacing: 8) {
+                FlowLayout(spacing: 8, rowSpacing: 6) {
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 15.5))
+                            .font(.system(size: subtitleSize))
                             .foregroundStyle(.secondary)
                     }
                     if subtitle != nil, hasTrailing {
@@ -422,17 +426,21 @@ struct SectionRuleHeader: View {
     var onToggleCollapse: (() -> Void)?
     var onSeeAll: (() -> Void)?
 
+    @ScaledMetric(relativeTo: .caption2) private var labelSize: CGFloat = 11
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         HStack(spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 11, weight: .bold))
-                .tracking(1.4)
+                .font(.system(size: labelSize, weight: .bold))
+                .tracking(labelSize * 0.127)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let count {
                 Text("\(count)")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.system(size: labelSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
 
@@ -443,7 +451,7 @@ struct SectionRuleHeader: View {
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
-                .minimumHitTarget(30)
+                .minimumHitTarget()
                 .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
             }
 
@@ -455,11 +463,11 @@ struct SectionRuleHeader: View {
             if let onSeeAll {
                 Button(action: onSeeAll) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: labelSize, weight: .semibold))
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
-                .minimumHitTarget(30)
+                .minimumHitTarget()
                 .accessibilityLabel("See all \(title)")
             }
         }

@@ -4,10 +4,9 @@ import Foundation
 /// dashboard's `HomeSectionKind`. Order matches the layout spec: Reading Now, Saved
 /// for Later, Finished, Collections, Downloaded, History, Favorites.
 /// `works(from:visible:)` is the single source of each section's filter + ordering,
-/// so the carousel and the full "See all" list never drift. (Saved for Later also
-/// merges in the user's AO3 "Marked for Later" list; Collections is a placeholder
-/// with no backing model yet — both are handled in the views. History and Favorites
-/// moved here from the Account tab as part of the Account redesign.)
+/// so the carousel and the full "See all" list never drift. Saved for Later is
+/// local; AO3 Marked for Later is a separate Account destination. Collections
+/// use their own destination rather than this work-list enum.
 enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     case readingNow
     case savedForLater
@@ -44,7 +43,7 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .readingNow:
             "You're not reading anything right now. Open something below or find a new work in Browse."
         case .savedForLater:
-            "Nothing saved for later yet. Save works here, or mark them for later on AO3."
+            "Nothing saved for later yet. Add works to your local Saved for Later queue."
         case .finished:
             "No finished works yet. Works you complete show up here."
         case .collections:

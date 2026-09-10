@@ -48,6 +48,20 @@ struct ReadingQueueTests {
         )
     }
 
+    @Test func freshLibraryCreatesOnlyThePermanentEmptyQueue() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        let repeated = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        try context.save()
+
+        #expect(queue.id == repeated.id)
+        #expect(queue.kind == .savedForLater)
+        #expect(try context.fetchCount(FetchDescriptor<ReadingQueue>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<SavedWork>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<ReadingQueueMembership>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<WorkCollection>()) == 0)
+    }
+
     @Test func queueOnlyWorkStaysOutOfNormalLibrarySections() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

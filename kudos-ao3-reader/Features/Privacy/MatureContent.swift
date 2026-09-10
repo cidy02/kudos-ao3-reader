@@ -121,16 +121,11 @@ struct SensitiveWorkRow: View {
     /// Forwarded to `WorkRow` so a screen that has moved to the redesign's
     /// compact ledger row gets it here too, blurred or not.
     var presentation: WorkRow.Presentation = .standard
-    /// False when the caller wraps this row in its own `NavigationLink`.
-    ///
-    /// The row normally navigates through `cardNavigation`, which puts an
-    /// invisible link in the row's *background* and relies on the enclosing
-    /// `List` to make the whole row activate it. Outside a `List` — the Library
-    /// dashboard is a `ScrollView` — nothing activates that link and the row
-    /// simply does not respond to taps (the same trap `HomeResumeHero` documents
-    /// at length). Such callers supply a real link and turn this off, rather than
-    /// nesting one link inside another.
-    var providesNavigation: Bool = true
+    /// Lists use their row-activation link; ScrollView dashboards need a real
+    /// link inside the privacy boundary. Insets belong inside that same boundary
+    /// so tapping the card's padding reveals/selects exactly like its content.
+    var usesInlineNavigation: Bool = false
+    var contentInsets = EdgeInsets()
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -153,16 +148,17 @@ struct SensitiveWorkRow: View {
             // state via `externalExpanded` so it still expands the blurred content.
             // The card's selection outline comes from the enclosing `.cardRow(isSelected:)`
             // at the card's true edge, not from an overlay here (matches WorkRow).
-            // A ledger row has no summary and no tag groups, so there is nothing
-            // for an expand control to reveal — it stays out of the blurred
-            // overlay rather than appearing as a control that does nothing.
-            let isExpandableWork = presentation == .standard && WorkRow.isExpandable(for: work)
+            // The ledger's disclosure preserves the same metadata as detailed
+            // rows; its controls remain outside the blur.
+            let isExpandableWork = presentation == .ledger || WorkRow.isExpandable(for: work)
             let content = WorkRow(
                 work: work,
+                expandAll: expandAll,
                 showsExpandButton: false,
                 externalExpanded: $blurredExpanded,
                 presentation: presentation
             )
+                .padding(contentInsets)
                 .environment(\.ao3AuthorNavigationEnabled, false)
                 .blur(radius: 6)
                 .overlay {
@@ -230,6 +226,8 @@ struct SensitiveWorkRow: View {
             isSelected: isSelected,
             presentation: presentation
         )
+        .padding(contentInsets)
+        .contentShape(Rectangle())
         .localWorkContextMenu(work: work, onSelect: onSelect)
         if isSelecting {
             // A tap while selecting must always toggle selection, never open an
@@ -245,8 +243,13 @@ struct SensitiveWorkRow: View {
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
-        } else if !providesNavigation {
-            row
+        } else if usesInlineNavigation {
+            switch openMode {
+            case .detail:
+                NavigationLink(value: work) { row }.buttonStyle(.plain)
+            case .reader:
+                NavigationLink(value: LocalWorkDestination.reader(work)) { row }.buttonStyle(.plain)
+            }
         } else {
             switch openMode {
             case .detail:

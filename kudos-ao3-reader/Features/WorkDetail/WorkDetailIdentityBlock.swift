@@ -172,7 +172,7 @@ struct WorkDetailResumeCard: View {
     /// Nil for a work with no local reading state — a remote work nobody here
     /// has opened. Drawing a 0% ring for it would claim it is being tracked.
     let readingProgress: Double?
-    let lastSpineIndex: Int
+    let savedPositionTitle: String?
     let lastReadDate: Date?
     let palette: SubjectPalette
     let action: () -> Void
@@ -183,18 +183,14 @@ struct WorkDetailResumeCard: View {
         readingProgress.map { min(1, max(0, $0)) }
     }
 
-    /// The chapter the reader stopped in, or the action's own name when they
-    /// have not started. Spec 1a puts the chapter's *title* here; `SavedWork`
-    /// stores only the spine index, so this says the number instead — the same
-    /// gap `HomeResumeHero` documents, waiting on the same reading log.
+    /// The publication's persisted label can identify front matter as well as
+    /// chapters. Legacy records keep the action label without guessing an index.
     private var primaryLine: String {
         guard clampedProgress != nil else { return actionTitle }
-        return lastSpineIndex > 0 ? "Chapter \(lastSpineIndex + 1)" : "Reading"
+        return savedPositionTitle ?? "Reading"
     }
 
-    /// Spec 1a's "Rain on the Wire · 9 pages left" is two facts the app does not
-    /// have (a chapter title and a page estimate). When the work has been opened
-    /// the honest one is when — same substitution, same reason, as the Home hero.
+    /// The last-opened date is durable; page estimates are not stored here.
     private var secondaryLine: String? {
         guard clampedProgress != nil else { return nil }
         return lastReadDate?.formatted(.relative(presentation: .named))

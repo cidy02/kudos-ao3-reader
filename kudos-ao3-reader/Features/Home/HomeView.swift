@@ -154,7 +154,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                 }
             }
-            .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
+            .background(themeManager.appTheme.cardBackdrop.ignoresSafeArea())
             .navigationTitle("Home")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)

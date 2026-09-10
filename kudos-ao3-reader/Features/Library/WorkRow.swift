@@ -66,10 +66,17 @@ struct WorkRow: View {
 
     @ViewBuilder
     var body: some View {
-        switch presentation {
-        case .standard: standardRow
-        case .ledger: ledgerRow
+        Group {
+            switch presentation {
+            case .standard: standardRow
+            case .ledger:
+                VStack(alignment: .leading, spacing: 8) {
+                    ledgerRow
+                    if expandedBinding.wrappedValue { expandedLedgerDetails }
+                }
+            }
         }
+        .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
     }
 
     // MARK: - Ledger presentation
@@ -122,7 +129,8 @@ struct WorkRow: View {
                 )
             },
             trailing: {
-                HStack(spacing: 10) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    if showsExpandButton { expandButton }
                     WorkStatusIconGrid(
                         rating: work.rating.isEmpty ? nil : work.rating,
                         categories: work.workCategories,
@@ -201,64 +209,83 @@ struct WorkRow: View {
                 .animation(nil, value: expandedBinding.wrappedValue)
             }
 
-            if !summaryText.isEmpty {
-                Text(summaryText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expandedBinding.wrappedValue ? nil : 3)
-                    .multilineTextAlignment(.leading)
-                    // Snap the reflow — see AO3WorkRow: guards against an
-                    // ancestor animation cross-fading two text layouts.
-                    .animation(nil, value: expandedBinding.wrappedValue)
-            }
-
-            // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
-            if expandedBinding.wrappedValue {
-                // The stats row's badge only says how many warnings apply, so
-                // without this the names would be unreachable on a saved work.
-                // No "Archive Warnings" group: expanding turns the stats row's
-                // count chip into the warnings themselves, so a labelled section
-                // right above was the same list twice. Matches AO3WorkRow.
-                if work.hasCategorizedWorkTags {
-                    chipGroup("Relationships", work.workRelationships, field: .relationship)
-                    chipGroup("Characters", work.workCharacters, field: .character)
-                    chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
-                } else {
-                    chipGroup("Tags", work.workTags, field: .freeform)
-                }
-            }
-
-            // Space, not a rule — matching AO3WorkRow. The stats row below is
-            // already a band of capsules with its own edges, so a hairline against
-            // it drew a second boundary in the same place.
-            Spacer(minLength: 0).frame(height: 4)
-
-            // Stats wrap rather than truncate (matches AO3WorkRow).
-            WorkListStatsRow(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.workCategories,
-                warnings: work.workWarnings,
-                completion: work.completionStatus,
-                language: work.language,
-                wordCount: work.wordCount,
-                chapters: work.chapters,
-                comments: work.comments,
-                kudos: work.kudos,
-                bookmarks: work.bookmarks,
-                hits: work.hits,
-                datePublished: work.datePublished.isEmpty ? nil : work.datePublished,
-                isExpanded: expandedBinding.wrappedValue
-            )
+            workDetails(summaryText: summaryText)
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Follow the list's expand/collapse-all toggle (also on first appearance so
-        // cards scrolled into view match the current state). The row's outline for
-        // selection is drawn by the enclosing `.cardRow(isSelected:)` at the card's
-        // true edge (its List row background), not here — this content sits inside
-        // that background's own padding, so a same-size overlay here would draw
-        // inset from the visible card border instead of flush with it.
-        .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
+
+    }
+
+    private var expandedLedgerDetails: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !work.author.isEmpty {
+                AO3AuthorBylineView(
+                    displayText: work.author,
+                    identities: work.verifiedAuthorIdentities,
+                    font: .subheadline,
+                    compact: true
+                )
+            }
+            if !work.workFandoms.isEmpty {
+                Text(work.workFandoms.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            WorkUpdatedDateBadge(dateUpdated: work.dateUpdated, datePublished: work.datePublished)
+            workDetails(summaryText: work.summary.strippingHTML())
+        }
+    }
+
+    @ViewBuilder
+    private func workDetails(summaryText: String) -> some View {
+        if !summaryText.isEmpty {
+            Text(summaryText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(expandedBinding.wrappedValue ? nil : 3)
+                .multilineTextAlignment(.leading)
+                // Snap the reflow — see AO3WorkRow: guards against an
+                // ancestor animation cross-fading two text layouts.
+                .animation(nil, value: expandedBinding.wrappedValue)
+        }
+
+        // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
+        if expandedBinding.wrappedValue {
+            // The stats row's badge only says how many warnings apply, so
+            // without this the names would be unreachable on a saved work.
+            // No "Archive Warnings" group: expanding turns the stats row's
+            // count chip into the warnings themselves, so a labelled section
+            // right above was the same list twice. Matches AO3WorkRow.
+            if work.hasCategorizedWorkTags {
+                chipGroup("Relationships", work.workRelationships, field: .relationship)
+                chipGroup("Characters", work.workCharacters, field: .character)
+                chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
+            } else {
+                chipGroup("Tags", work.workTags, field: .freeform)
+            }
+        }
+
+        // Space, not a rule — matching AO3WorkRow. The stats row below is
+        // already a band of capsules with its own edges, so a hairline against
+        // it drew a second boundary in the same place.
+        Spacer(minLength: 0).frame(height: 4)
+
+        // Stats wrap rather than truncate (matches AO3WorkRow).
+        WorkListStatsRow(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.workCategories,
+            warnings: work.workWarnings,
+            completion: work.completionStatus,
+            language: work.language,
+            wordCount: work.wordCount,
+            chapters: work.chapters,
+            comments: work.comments,
+            kudos: work.kudos,
+            bookmarks: work.bookmarks,
+            hits: work.hits,
+            datePublished: work.datePublished.isEmpty ? nil : work.datePublished,
+            isExpanded: expandedBinding.wrappedValue
+        )
     }
 
     /// Top-right expand/collapse control, matching AO3WorkRow.

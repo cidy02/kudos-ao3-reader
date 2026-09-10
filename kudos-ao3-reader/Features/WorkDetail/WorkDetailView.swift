@@ -263,7 +263,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             hasReadableCopy: hasReadableCopy,
             isBusy: working,
             readingProgress: resumeCardReadingProgress,
-            lastSpineIndex: localWork?.lastSpineIndex ?? 0,
+            savedPositionTitle: localWork.flatMap { WorkReadingPosition.title(from: $0.readiumLocator) },
             lastReadDate: localWork?.lastReadDate,
             palette: workPalette,
             action: read

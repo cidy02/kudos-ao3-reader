@@ -46,7 +46,7 @@ struct HomeResumeHero: View {
                     }
                     .onTapGesture { onToggleSelection?() }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(work.title)
+                    .accessibilityLabel("Hidden mature work")
                     .accessibilityValue(isSelected ? "Selected" : "Not selected")
                     .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
                     .localWorkContextMenu(work: work, onSelect: onSelect)
@@ -112,6 +112,12 @@ private struct UnblurredHomeResumeHero: View {
     let work: SavedWork
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 31
+    @ScaledMetric(relativeTo: .caption) private var metadataSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption2) private var dateSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .subheadline) private var buttonSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var ringSize: CGFloat = 68
 
     /// Spec 1b floats the four-signal tray in the card's top-trailing corner and
     /// reserves 94pt of the kicker's and title's trailing edge for it, so long
@@ -149,48 +155,29 @@ private struct UnblurredHomeResumeHero: View {
         min(1, max(0, work.readingProgress ?? 0))
     }
 
-    /// The chapter the reader stopped in. Deliberately NOT
-    /// `readingProgressLabel`: on the Readium path that property is itself a
-    /// percent string, which would say the same thing as the ring beside it.
-    private var lastReadChapterLabel: String {
-        work.lastSpineIndex > 0 ? "Chapter \(work.lastSpineIndex + 1)" : "Not started"
-    }
-
-    /// Spec 1b puts the chapter's own title on this line. `SavedWork` does not
-    /// store one — only the spine index — so the honest second fact is when the
-    /// work was last opened. TODO: swap to the chapter title once the reader
-    /// persists it (the same gap the spec's own "Needs building" notes call out
-    /// for the local reading log).
+    /// The last-opened date backs up the stored locator title and remains useful
+    /// for legacy or restored records with no publication label (spec 1b).
     private var lastReadRelativeDescription: String? {
         guard let lastReadDate = work.lastReadDate else { return nil }
         return lastReadDate.formatted(.relative(presentation: .named))
     }
 
-    /// Author · words · chapters, in the spec's dot-separated line. Built as
-    /// strings rather than as `WorkStatLabel` glyph chips: the hero states three
-    /// plain facts here and the glyph vocabulary is spent on the signal tray.
-    private var metadataSegments: [String] {
-        WorkStat.localWorkMetadata(
-            author: work.author, wordCount: work.wordCount, chapters: work.chapters
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if dynamicTypeSize.isAccessibilitySize { signalTray }
             if let primaryFandomName {
                 SubjectKicker(text: primaryFandomName, palette: subjectPalette, size: 9.5, ruleSpacing: 7)
-                    .padding(.trailing, signalTrayReservedWidth)
+                    .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalTrayReservedWidth)
             }
 
             Text(work.title)
-                .font(.system(size: 31, weight: .bold))
+                .font(.system(size: titleSize, weight: .bold))
                 .tracking(-0.62)
-                .lineLimit(2)
-                .minimumScaleFactor(0.75)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, signalTrayReservedWidth)
+                .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalTrayReservedWidth)
 
             metadataLine
             resumeRow
@@ -201,7 +188,14 @@ private struct UnblurredHomeResumeHero: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(heroCardBackground)
         .overlay(alignment: .topTrailing) {
-            WorkStatusIconGrid(
+            if !dynamicTypeSize.isAccessibilitySize { signalTray.padding(14) }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous))
+        .workCardZoomSource(work.zoomKey, in: zoomNamespace)
+    }
+
+    private var signalTray: some View {
+        WorkStatusIconGrid(
                 rating: work.rating.isEmpty ? nil : work.rating,
                 categories: work.workCategories,
                 warnings: work.workWarnings,
@@ -209,11 +203,7 @@ private struct UnblurredHomeResumeHero: View {
                 tileSize: 22,
                 announcesToVoiceOver: true,
                 showsTray: true
-            )
-            .padding(14)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous))
-        .workCardZoomSource(work.zoomKey, in: zoomNamespace)
+        )
     }
 
     /// The author is a real `AO3AuthorBylineView` so the name stays tappable
@@ -221,14 +211,16 @@ private struct UnblurredHomeResumeHero: View {
     /// it are plain text, joined by the spec's dimmed middle dot.
     @ViewBuilder
     private var metadataLine: some View {
-        let figureSegments = metadataSegments.filter { $0 != work.author }
-        HStack(spacing: 10) {
+        let figureSegments = WorkStat.localWorkMetadata(
+            author: "", wordCount: work.wordCount, chapters: work.chapters
+        )
+        FlowLayout(spacing: 8, rowSpacing: 6) {
             if !work.author.isEmpty {
                 AO3AuthorBylineView(
                     names: authorNames,
                     identities: work.verifiedAuthorIdentities,
                     includesBy: false,
-                    font: .system(size: 13),
+                    font: .system(size: metadataSize),
                     expandsHitTarget: false
                 )
                 if !figureSegments.isEmpty {
@@ -237,50 +229,57 @@ private struct UnblurredHomeResumeHero: View {
             }
             ForEach(Array(figureSegments.enumerated()), id: \.offset) { index, segment in
                 Text(segment)
-                    .font(.system(size: 13))
+                    .font(.system(size: metadataSize))
                 if index < figureSegments.count - 1 {
                     metadataSeparator
                 }
             }
         }
-        .lineLimit(1)
+        .fixedSize(horizontal: false, vertical: true)
         .foregroundStyle(Color.primary.opacity(0.75))
     }
 
     private var metadataSeparator: some View {
         Text("·")
-            .font(.system(size: 13))
+            .font(.system(size: metadataSize))
             .foregroundStyle(Color.primary.opacity(0.35))
             .accessibilityHidden(true)
     }
 
     /// Ring, then where you stopped, then the one filled control on the card.
     private var resumeRow: some View {
-        HStack(spacing: 16) {
-            WorkProgressRing(
-                progress: resolvedReadingProgress,
-                state: resolvedReadingProgress >= 1 ? "Finished" : "Reading"
-            )
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 16))
+        return layout {
+            HStack(spacing: 16) {
+                WorkProgressRing(
+                    progress: resolvedReadingProgress,
+                    state: resolvedReadingProgress >= 1 ? "Finished" : "Reading",
+                    diameter: ringSize
+                )
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(lastReadChapterLabel)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
-                if let lastReadRelativeDescription {
-                    Text(lastReadRelativeDescription)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.primary.opacity(0.6))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(WorkReadingPosition.title(from: work.readiumLocator)
+                         ?? (lastReadRelativeDescription == nil ? "Ready to resume" : "Last opened"))
+                        .font(.system(size: metadataSize, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    if let lastReadRelativeDescription {
+                        Text(lastReadRelativeDescription)
+                            .font(.system(size: dateSize))
+                            .foregroundStyle(Color.primary.opacity(0.6))
+                    }
                 }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Drawn, not a Button: the whole hero is already one navigation
             // link into the reader, and a second tap target inside it would
             // race the link for the same touch. VoiceOver reads the card's own
             // label and hint instead, so this stays out of the tree.
             Text("Resume")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: buttonSize, weight: .semibold))
                 .foregroundStyle(subjectPalette.solidButtonLabel)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
