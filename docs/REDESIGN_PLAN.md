@@ -100,7 +100,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | Phase | Screens (artboard ids) | Status |
 |---|---|---|
 | **0** | Shared language + fixes to the foundation | ✅ done |
-| **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | ⬜ next |
+| **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b` done; `1ad`/`1ae`/`1af`/`1ag` next |
 | **2** | Library tab — `1c` (shelves), `1d` (ledger) | ⬜ |
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 row done, screen not |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | ⬜ |
@@ -155,7 +155,8 @@ re-reviews settled work and nobody reviews their own.
 | `38c42f4` | Codex | Redesign work-card foundation | Claude → `9ee86ba` | 5 spec drifts + 1 hit-target defect found; see §3. Not compiled. |
 | `7fac768` | Codex | Refine redesign card hierarchy | Claude → `9ee86ba` | Reviewed together with `38c42f4`. Not compiled. |
 | `9ee86ba` | Claude | `SubjectSurface.swift`; collapse onto one palette | unreviewed | Wants a non-Claude reviewer. Never compiled — see §0. |
-| `5a0a804` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`); `xcodebuild` path unrun. |
+| `436f7af` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`); `xcodebuild` path unrun. |
+| `<next>` | Claude | Phase 1 Home: section headers, hero, counts; IPA workflow fixes | unreviewed | Not compiled. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -206,10 +207,54 @@ canvas's inline CSS, not eyeballed). **Not** verified by build or by eye — see
 
 **Next step:** Phase 1, Home (`1b`).
 
+### 2026-09-10 — Phase 1: Home, artboard 1b (Claude)
+
+**Landed:**
+
+- `WorkCarouselSection`'s hand-rolled header replaced by `SectionRuleHeader`.
+  This is the highest-leverage single edit in the redesign: Home *and* Library
+  both build their shelves from this one component, so both tabs take the
+  spec's kicker / count / hairline / see-all treatment at once. Its `titleFont`
+  parameter went with it — in the redesign every section header is the same
+  11 pt kicker, so the "this is a subsection" override no longer means
+  anything, and nothing passed it.
+- `WorkCarouselSection` gained `itemCount`, wired on all four Home shelves.
+  Suppressed while Subscriptions shows skeletons: a count printed beside a
+  loading shelf would be the *previous* fetch's.
+- `HomeResumeHero` rebuilt to 1b — fandom kicker, 31 pt title, the
+  author · words · chapters dot line, the 68 pt ring against the chapter
+  block, the Resume pill, and the signal tray floated in the corner over a
+  94 pt reserved gutter so long titles wrap rather than run under it.
+- Continue Reading's own header is now `SectionRuleHeader` too, with the
+  collapse caret bound to the cover strip rather than the hero.
+
+**Known gap, deliberate:** spec 1b puts the *chapter's title* under
+"Chapter 12". `SavedWork` stores only `lastSpineIndex`, never a chapter title,
+so the hero shows the last-read date instead — a real fact rather than an
+invented one. Marked `TODO` in `HomeResumeHero.swift`; it wants the same local
+reading log that artboards `1ah`/`1ai` depend on.
+
+**CI finding:** the first `Unsigned IPA` run proved the SDK question is
+settled — `macos-26` runners carry **Xcode 26.6 with iOS SDK 26.5**, which
+matches the app target's `IPHONEOS_DEPLOYMENT_TARGET`. The run failed earlier,
+in `Scripts/build-mupdf.sh`, and the workflow had two bugs of its own: it
+cached `Vendor/MuPDF.xcframework` but the script writes to `build-mupdf/` and
+installs nowhere, and the script redirects each slice's compiler output to its
+own log file, so a failure surfaced as a bare `exit code 2`. Both fixed here;
+the MuPDF `ios-sim` failure itself is still undiagnosed.
+
 ---
 
 ## 4. Working notes for whoever is next
 
+- **Name things in full.** The owner's standing instruction for this branch:
+  variable, property and function names should be verbose enough that a
+  reviewer understands the code without tracing it. `signalTrayReservedWidth`,
+  not `w`; `primaryFandomName`, not `fandom`; `resolvedReadingProgress`, not
+  `p`. The same goes for the *why* — a comment that says what a number is for
+  is worth more than the number's name. Several of these screens are read by
+  another agent before a human ever sees them, and an abbreviation costs that
+  reviewer a lookup every time.
 - **Reuse before adding.** `docs/ARCHITECTURE_MAP.md` names the existing
   component for most of what the spec draws. The redesign is a restyle of
   those, not a parallel set. Before writing a new card/row/chip, check

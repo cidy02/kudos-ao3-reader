@@ -8,14 +8,17 @@ import SwiftUI
 /// Per the layout spec: horizontal cards by default, collapsible, and a `>` chevron
 /// (not a "See all" button) that opens the full list. Follows the Kudos design
 /// philosophy — simple and scannable by default, with depth one tap away.
+///
+/// The header itself is `SectionRuleHeader` (see `SubjectSurface.swift`) — the
+/// redesign's kicker / count / hairline / chevron treatment, shared with every
+/// other shelf in the app so Home and Library read as one surface.
 struct WorkCarouselSection<Cards: View, Empty: View>: View {
     private let title: String
-    /// Defaults to every section's standard header weight. Overridable so a
-    /// carousel that reads as a *subsection* of something above it (e.g. Home's
-    /// "More In Progress" strip under its own "Continue Reading" title) doesn't
-    /// compete with real top-level section headers at the same visual weight.
-    private let titleFont: Font
     private let hasItems: Bool
+    /// Shown beside the label, in the spec's monospaced dim figure. Nil hides
+    /// it — a section whose count is not a fact worth stating (an AO3-paged
+    /// list showing one page of many) should not print a misleading one.
+    private let itemCount: Int?
     private let onSeeAll: (() -> Void)?
     private let cards: () -> Cards
     private let emptyState: () -> Empty
@@ -25,16 +28,16 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
 
     init(
         title: String,
-        titleFont: Font = .title2.bold(),
         collapseKey: String,
         hasItems: Bool,
+        itemCount: Int? = nil,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder cards: @escaping () -> Cards,
         @ViewBuilder emptyState: @escaping () -> Empty
     ) {
         self.title = title
-        self.titleFont = titleFont
         self.hasItems = hasItems
+        self.itemCount = itemCount
         self.onSeeAll = onSeeAll
         self.cards = cards
         self.emptyState = emptyState
@@ -42,12 +45,12 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 11) {
             header
             if !collapsed {
                 if hasItems {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 14) { cards() }
+                        HStack(alignment: .top, spacing: 12) { cards() }
                             .uniformWorkCardHeights()
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
@@ -62,41 +65,19 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            // Tap the title (or its disclosure chevron) to collapse/expand.
-            Button {
+        SectionRuleHeader(
+            title: title,
+            count: itemCount,
+            isCollapsed: collapsed,
+            onToggleCollapse: {
                 withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
                     collapsed.toggle()
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(title).font(titleFont).foregroundStyle(.primary)
-                    Image(systemName: "chevron.down")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(collapsed ? -90 : 0))
-                }
-            }
-            .buttonStyle(.plain)
-            .minimumHitTarget()
-            .accessibilityLabel(collapsed ? "Expand \(title)" : "Collapse \(title)")
-
-            Spacer(minLength: 8)
-
-            // The `>` chevron opens the full vertical list (only when there's content).
-            if let onSeeAll, hasItems {
-                Button(action: onSeeAll) {
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .minimumHitTarget()
-                .accessibilityLabel("See all \(title)")
-            }
-        }
-        .padding(.horizontal, 16)
+            },
+            // Only when there is content: a chevron into an empty list is a
+            // promise the destination cannot keep.
+            onSeeAll: hasItems ? onSeeAll : nil
+        )
     }
 }
 
