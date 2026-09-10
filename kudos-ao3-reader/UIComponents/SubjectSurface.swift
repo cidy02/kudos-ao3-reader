@@ -269,6 +269,50 @@ enum SubjectMetrics {
     static let trayRadius: CGFloat = 10
 }
 
+// MARK: - Washed card
+
+/// The tinted card the spec draws wherever a block of content carries a
+/// subject's hue: a ledger row (1k, 1c), a Library ledger row, and each of
+/// artboard 1bi's three statistics cards. Radius 16, the opaque card surface, a
+/// `rowWash` over it, and the accent hairline.
+///
+/// Made shared at the third inline copy rather than the second. Two were a
+/// coincidence; three is a shape, and three copies of a four-line background is
+/// exactly how a radius or an alpha ends up different on one screen and nobody
+/// notices for a release.
+struct SubjectCardBackground: ViewModifier {
+    let palette: SubjectPalette
+    var cornerRadius: CGFloat = SubjectMetrics.rowRadius
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        // One `.background` holding a surface with the wash overlaid on it, not
+        // two chained `.background`s: chaining stacks *backwards*, so the second
+        // would land behind the opaque surface and the wash would never draw.
+        // That is precisely the bug `ed3eacb` fixed on five screens, where it
+        // was invisible because the result still looked like a card.
+        return content
+            .background(
+                shape
+                    .fill(themeManager.appTheme.cardSurface)
+                    .overlay(shape.fill(palette.rowWash))
+            )
+            .overlay(shape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
+    }
+}
+
+extension View {
+    /// A block of content on the subject's own tinted card.
+    func subjectCard(
+        palette: SubjectPalette,
+        cornerRadius: CGFloat = SubjectMetrics.rowRadius
+    ) -> some View {
+        modifier(SubjectCardBackground(palette: palette, cornerRadius: cornerRadius))
+    }
+}
+
 // MARK: - Kicker
 
 /// The uppercase subject label and its short rule — the redesign's single most

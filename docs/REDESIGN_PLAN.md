@@ -273,7 +273,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t` share `AO3AccountWorksList`'s 1o header. `1ac` Privacy is done — measured storage figures, the two bulk clears, the spec's footnotes. `1aa` is blocked on seven unverifiable archive paths (see §3). `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
-| **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | 🟡 **data path landed** (`725695e3`): `ReadingSession` / `ReadingFavorite` / `FandomReadWatermark` + `ReadingLogService` + v8 additive backup. Screens not built. |
+| **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | 🟡 **data path landed** (`725695e3`). **`1bi` Reading Insights is built** — it replaced `ReadingStatisticsView`, whose figures it keeps in a fourth card. Rules live in `ReadingInsights`, tested without a container. `1ah`/`1ai`/`1aj`/`1ak`/`1bc`/`1bd`/`1bj` not built. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **networking landed** (`561f848b`): `AO3Client+Collections` / `AO3CollectionActions`. Screens not built. `1bk` is local and already existed. Close/delete stay Open on AO3. |
 | **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
 | **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
@@ -437,6 +437,8 @@ re-reviews settled work and nobody reviews their own.
 | `bac3397` | Grok | AO3 writing-surface networking (work/chapter/series/draft/bulk/tags) + tag autocomplete wrapper | Claude ✓ (design/logic only) | Verified by reading, not by building or running. Reuses `autocompleteTags`; no second URL builder. Writes unexercised. Series create from `/series/new` is Open on AO3. |
 | `a0913bf` | Grok | Fandom sibling-family grouping (`1al`/`1am`/`1an`); category work total marked approximate | Claude ✓ (design/logic only) | Verified by reading, not by building or running. Group id is sorted original names, never the parsed title. Not seen. |
 | `5100add` | Grok | `includeColor`; searchable language picker; five range sliders; `1ay`/`1az` empty states | Claude ✓ (design/logic only) | Verified by reading, not by building or running. `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching code. `1ba` comment-posting note is stale. `1ax` SavedSearch naming+list already exist. |
+| `671b7c1` | Claude | Privacy screen on artboard 1ac; measured storage footprint; two bulk clears; `SubjectFormRow.isDestructive` | unreviewed | **Wants a non-Claude reviewer.** Two bulk destructive actions that have never run on a device — the selection rules are tested, the *effect* is not. CI builds the app target only, so the six tests are uncompiled. |
+| _pending_ | Claude | Reading Insights on artboard 1bi; `ReadingInsights` rules; `subjectCard`; retires `ReadingStatisticsView` | unreviewed | **Wants a non-Claude reviewer.** A screen was **deleted** (its model and tests survive, its figures moved into a fourth card) — worth a second pair of eyes on whether anything was lost. Thirteen tests, uncompiled. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -447,6 +449,90 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Reading Insights takes artboard 1bi, and stops being two screens (Claude)
+
+Phase 9's data path landed with Grok (`725695e3`) and nothing surfaced it. 1bi
+is the screen that does, and it turned out the app already had one.
+
+**`ReadingStatisticsView` existed, titled "Reading Insights", reached from
+Library's "…" menu.** I wrote a second screen before checking — §2 step 2 says
+to check what exists before naming anything new, and I skipped it. The two are
+now one. What made the old screen worth replacing rather than extending is in
+its own doc comment: *"The app does not track sessions or per-word progress, so
+'words read' counts only finished works whose AO3 word count is known."* That
+was true when it was written and stopped being true when `ReadingSession`
+landed. It was a screen built around a constraint that no longer holds.
+
+`ReadingInsightsView` is 1bi: the month's hours with a delta pill and a
+seven-week bar chart, where the hours went by fandom, and four figures of pace
+and follow-through — all on `SubjectCardBackground` in the Library scope's hue.
+**Its fourth card is not in the artboard.** The old screen's figures (works
+opened, words read, still in progress, opened in 7/30 days, last read) survive
+there, because the density gate counts dropping them as a regression, and
+because they answer a different question: the three spec cards measure
+*reading*, that one describes *the shelf*. A reader with an empty log still has
+a library, and that is what they see.
+
+`ReadingStatistics` (the model) and its five tests are untouched — only the view
+was replaced.
+
+**The mature gate turned out to matter.** The screen takes `works` as a
+parameter rather than running its own `@Query`, because Library passes
+`statisticsWorks`, which already excludes queue-only works and adult works the
+gate is hiding. A bare `@Query` would have named a hidden work's fandom on this
+page. The hours still count either way: sessions are read from the store
+unfiltered, and a session with no matching work has no fandom to attribute, so
+it lands in `Everything else`. Right answer, and it falls out rather than being
+arranged.
+
+`ReadingInsights` holds every rule, over `ReadingSessionFacts` — a plain value
+extracted from each row. Two reasons: `ReadingSession` is a `@Model` and so main
+actor-bound, which would drag the arithmetic onto the main actor with it; and a
+rule taking plain values can be tested by writing four of them in a line instead
+of standing up an in-memory container to assert that a median is a median.
+Thirteen tests, no `ModelContainer`. The arguable choices are each pinned by a
+test that would fail on the other answer:
+
+- **median, not mean** session length — one four-hour binge must not move the
+  number answering "how long do I usually read for";
+- **finish rate per work, not per session** — a much-reread favourite would
+  otherwise carry the whole figure;
+- **streaks count days, not sessions** — two sessions in one evening are one
+  day, and the calendar is a parameter because "which day is this" is a
+  timezone question;
+- **fandom shares partition the hours** — each session's time goes to one
+  fandom, the work's first, so the shares sum to the total printed above them.
+  Counting a crossover once per fandom would print shares adding to more than
+  the whole.
+
+`ReadingLogService.wordsPerHour` now delegates to `ReadingInsights` so the
+screen and the helper cannot report two different rates for the same rows.
+
+**A spec-vs-code disagreement, resolved toward the code.** 1bi's footnote says
+"Sessions shorter than a minute are not counted". The log's actual floor is
+`ReadingLogService.minimumPersistableDuration`, which is 15 seconds. The screen
+builds the sentence from the constant, so the two cannot drift the next time
+anyone tunes it.
+
+`SubjectCardBackground` / `.subjectCard(palette:)` is new, made shared at the
+**third** inline copy of the same four lines (`WorkLedgerRow`,
+`LibraryView.ledgerRowBackground`, and 1bi's three cards). Written as one
+`.background` holding a surface with the wash overlaid, not two chained
+`.background`s — chaining stacks backwards and the wash would land behind the
+opaque surface, which is exactly the bug `ed3eacb` fixed on five screens and
+which I re-created here on the first attempt.
+
+Three more defects caught by re-reading the diff rather than by a compiler: a
+`@ViewBuilder` property typed `(some View)?`, which is not a thing; a
+`fandomRow` parameter named `share` shadowing the `share(_:of:)` method it
+called; and `ReadingStatistics.init` — a full walk of the library — being read
+through a computed property seven times per render.
+
+**Left in Phase 9:** `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bj`. The
+Abandoned and favourites rules already exist in `ReadingLogService`.
+
+---
 
 ### 2026-09-10 — Phase 6 opens: Privacy takes artboard 1ac (Claude)
 
