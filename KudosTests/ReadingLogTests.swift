@@ -62,6 +62,79 @@ struct ReadingLogTests {
         #expect(!session.didFinish)
     }
 
+    // MARK: Surviving a backgrounded app that iOS never lets back in
+
+    @Test func pauseWritesTheRowSoAReclaimedAppKeepsTheSession() throws {
+        // The reader's onDisappear never fires when iOS jettisons a backgrounded
+        // app, so a session held only in memory was lost entirely. Pause has to
+        // leave a row behind. Revert the persist call in `pauseSession` and this
+        // fails: the fetch finds nothing.
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = SavedWork(title: "Backgrounded", author: "A")
+        work.readiumLocator = locator(progress: 0.3)
+        context.insert(work)
+        try context.save()
+
+        let t0 = Date(timeIntervalSince1970: 2_000)
+        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(600))
+
+        // No endSession — this is the process dying.
+        let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
+        #expect(sessions.count == 1)
+        #expect(try #require(sessions.first).durationSeconds == 600)
+    }
+
+    @Test func aResumedVisitStaysOneRowRatherThanOnePerStretch() throws {
+        // Three stretches of one visit must not become three rows, or a single
+        // finish would be counted three times by `finishCount`.
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = SavedWork(title: "Resumed", author: "A")
+        work.readiumLocator = locator(progress: 0.5)
+        context.insert(work)
+        try context.save()
+
+        let t0 = Date(timeIntervalSince1970: 3_000)
+        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(60))
+        ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(300))
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(360))
+        ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(600))
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(660), didFinish: true)
+
+        let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
+        #expect(sessions.count == 1)
+        let session = try #require(sessions.first)
+        // 60 + 60 + 60 read; the two 240s gaps were backgrounded and excluded.
+        #expect(session.durationSeconds == 180)
+        #expect(session.didFinish)
+        #expect(ReadingLogService.finishCount(of: work.id, in: context) == 1)
+    }
+
+    @Test func aFinishAlreadyRecordedIsNotClearedByALaterPause() throws {
+        // The reader passes didFinish: false on every background flush. A visit
+        // that marked the work finished must not be un-marked by the next pause.
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = SavedWork(title: "Finished then backgrounded", author: "A")
+        work.readiumLocator = locator(progress: 1)
+        context.insert(work)
+        try context.save()
+
+        let t0 = Date(timeIntervalSince1970: 4_000)
+        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(30))
+        ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(40))
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(70), didFinish: true)
+        ReadingLogService.startSession(for: work, now: t0.addingTimeInterval(80))
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(200))
+
+        let finished = try context.fetch(FetchDescriptor<ReadingSession>()).filter(\.didFinish)
+        #expect(finished.count == 1)
+    }
+
     @Test func aSecondStartForTheSameWorkDoesNotOpenAnotherSession() throws {
         ReadingLogService.resetOpenSessionsForTests()
         let context = try context()

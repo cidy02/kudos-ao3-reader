@@ -15,6 +15,10 @@ enum ReadingLogService {
     static let defaultAbandonedThreshold: TimeInterval = 21 * 24 * 3600
 
     private struct OpenSession {
+        /// The `ReadingSession.id` this visit writes to. Fixed when the session
+        /// opens so a background flush and the final write land on **one** row
+        /// rather than two — see `persist`.
+        var recordID: UUID
         var workID: UUID
         var ao3WorkID: Int?
         var sourceURL: String
@@ -34,6 +38,7 @@ enum ReadingLogService {
         let workID = work.id
         guard openSessions[workID] == nil else { return }
         openSessions[workID] = OpenSession(
+            recordID: UUID(),
             workID: workID,
             ao3WorkID: work.ao3WorkID,
             sourceURL: work.sourceURL,
@@ -46,12 +51,25 @@ enum ReadingLogService {
     }
 
     /// Stops accumulating wall time (app backgrounded). No-op if none is open.
+    ///
+    /// **Writes the row as well as banking the time.** Open sessions live in
+    /// memory, and `endSession` runs from the reader's `onDisappear` — which
+    /// never fires when iOS reclaims a backgrounded app, so everything read
+    /// before backgrounding was being lost with the process. The bias ran the
+    /// wrong way, too: the longer someone reads, the likelier the app is
+    /// reclaimed before they return, so the sessions most worth counting were
+    /// the ones most likely to vanish. Progress already flushes here for the
+    /// same reason ("force-quit safety" in `ReadiumReaderView`); the log now
+    /// does too.
     static func pauseSession(for work: SavedWork, now: Date = Date()) {
         guard var session = openSessions[work.id], !session.isPaused else { return }
         session.accumulatedSeconds += max(0, now.timeIntervalSince(session.lastResumedAt))
         session.lastResumedAt = now
         session.isPaused = true
         openSessions[work.id] = session
+        // Not final: `didFinish` is only known when the reader closes, and a
+        // resumed session keeps accumulating into this same row.
+        persist(session, for: work, now: now, didFinish: false)
     }
 
     /// Resumes after `pauseSession`. No-op if none is open or it is not paused.
@@ -70,29 +88,68 @@ enum ReadingLogService {
         if !session.isPaused {
             session.accumulatedSeconds += max(0, now.timeIntervalSince(session.lastResumedAt))
         }
+        persist(session, for: work, now: now, didFinish: didFinish)
+    }
+
+    /// Writes this visit's row, creating it on the first call and updating it on
+    /// every later one. Keyed by `OpenSession.recordID`, so a visit that is
+    /// backgrounded and resumed several times is one row with a growing
+    /// duration rather than one row per stretch — which matters because
+    /// `didFinish` drives the reread count, and three rows for one finish would
+    /// count it three times.
+    ///
+    /// Still refuses anything under `minimumPersistableDuration`: a tap-and-back
+    /// is not history, and a session that never reaches 15 seconds never gets a
+    /// row to update.
+    private static func persist(
+        _ session: OpenSession,
+        for work: SavedWork,
+        now: Date,
+        didFinish: Bool
+    ) {
         let durationSeconds = max(0, session.accumulatedSeconds)
         guard durationSeconds >= minimumPersistableDuration else { return }
         guard let context = work.modelContext else { return }
 
         let chapterTitle = WorkReadingPosition.title(from: work.readiumLocator) ?? ""
         let endingProgress = min(1, max(0, work.readingProgress ?? 0))
-        let record = ReadingSession(
-            workID: session.workID,
-            ao3WorkID: work.ao3WorkID ?? session.ao3WorkID,
-            sourceURL: work.sourceURL.isEmpty ? session.sourceURL : work.sourceURL,
-            workTitle: work.title.isEmpty ? session.workTitle : work.title,
-            startedAt: session.startedAt,
-            endedAt: now,
-            durationSeconds: durationSeconds,
-            lastSpineIndex: work.lastSpineIndex,
-            chapterTitle: chapterTitle,
-            endingProgress: endingProgress,
-            wordCount: work.wordCount,
-            chapterCountAtVisit: work.postedChapterCount,
-            didFinish: didFinish,
-            lastModifiedAt: now
-        )
-        context.insert(record)
+        let recordID = session.recordID
+        let existing = try? context.fetch(
+            FetchDescriptor<ReadingSession>(predicate: #Predicate { $0.id == recordID })
+        ).first
+
+        if let existing {
+            existing.endedAt = now
+            existing.durationSeconds = durationSeconds
+            existing.lastSpineIndex = work.lastSpineIndex
+            existing.chapterTitle = chapterTitle
+            existing.endingProgress = endingProgress
+            existing.wordCount = work.wordCount
+            existing.chapterCountAtVisit = work.postedChapterCount
+            // Never clears a finish already recorded: the reader passes false on
+            // a background flush, and the visit that marked the work finished
+            // must not be un-marked by the next pause.
+            existing.didFinish = existing.didFinish || didFinish
+            existing.lastModifiedAt = now
+        } else {
+            context.insert(ReadingSession(
+                id: recordID,
+                workID: session.workID,
+                ao3WorkID: work.ao3WorkID ?? session.ao3WorkID,
+                sourceURL: work.sourceURL.isEmpty ? session.sourceURL : work.sourceURL,
+                workTitle: work.title.isEmpty ? session.workTitle : work.title,
+                startedAt: session.startedAt,
+                endedAt: now,
+                durationSeconds: durationSeconds,
+                lastSpineIndex: work.lastSpineIndex,
+                chapterTitle: chapterTitle,
+                endingProgress: endingProgress,
+                wordCount: work.wordCount,
+                chapterCountAtVisit: work.postedChapterCount,
+                didFinish: didFinish,
+                lastModifiedAt: now
+            ))
+        }
         FolderSyncService.markDirty()
         context.saveBestEffort(reason: "Saving reading session failed")
     }

@@ -447,12 +447,33 @@ nonisolated struct FandomFamilyFilterTallies: Equatable, Sendable {
 final class FandomFamilyExactCountCache {
     static let shared = FandomFamilyExactCountCache()
 
+    /// Matches the 128-entry ceiling `AO3AuthorPageCache` and the Inbox cache
+    /// use — the networking policy names that number for both. A category can
+    /// hold thousands of families and this lives for the whole process, so
+    /// without a bound a long browse grows a dictionary keyed by joined fandom
+    /// names and never gives it back.
+    static let entryLimit = 128
+
     private(set) var totals: [String: Int] = [:]
+    /// Insertion order, oldest first, so eviction drops the least recently
+    /// stored. Deliberately **no TTL**, unlike the caches this borrows its
+    /// ceiling from: those hold page HTML that goes stale or is private to a
+    /// session, while this holds a work count that is neither. Expiring it
+    /// mid-browse would put the tilde back on a figure the reader just resolved,
+    /// which is the opposite of what the cache is for.
+    private var insertionOrder: [String] = []
 
     func exactCount(for familyID: String) -> Int? { totals[familyID] }
 
     func store(_ total: Int, for familyID: String) {
+        if totals[familyID] == nil {
+            insertionOrder.append(familyID)
+        }
         totals[familyID] = total
+        while insertionOrder.count > Self.entryLimit {
+            let evicted = insertionOrder.removeFirst()
+            totals[evicted] = nil
+        }
     }
 }
 

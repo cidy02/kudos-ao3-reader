@@ -288,4 +288,30 @@ struct FandomFamilyTests {
         #expect(total.workCount == 0)
         #expect(total.isApproximate)
     }
+
+    // MARK: The exact-count cache is bounded
+
+    @Test @MainActor func exactCountCacheEvictsOldestPastItsLimit() {
+        let cache = FandomFamilyExactCountCache()
+        let limit = FandomFamilyExactCountCache.entryLimit
+        for index in 0..<(limit + 10) {
+            cache.store(index, for: "family-\(index)")
+        }
+        // The ten oldest are gone; the newest survive. Remove the eviction loop
+        // in `store` and this fails on the first expectation.
+        #expect(cache.exactCount(for: "family-0") == nil)
+        #expect(cache.exactCount(for: "family-9") == nil)
+        #expect(cache.exactCount(for: "family-10") == 10)
+        #expect(cache.exactCount(for: "family-\(limit + 9)") == limit + 9)
+        #expect(cache.totals.count == limit)
+    }
+
+    @Test @MainActor func restoringAKeyDoesNotDoubleCountItsPlaceInLine() {
+        let cache = FandomFamilyExactCountCache()
+        cache.store(1, for: "a")
+        cache.store(2, for: "a")
+        cache.store(3, for: "b")
+        #expect(cache.totals.count == 2)
+        #expect(cache.exactCount(for: "a") == 2)
+    }
 }
