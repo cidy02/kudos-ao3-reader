@@ -409,6 +409,9 @@ enum FolderSyncService {
             readingQueues: context.fetch(FetchDescriptor<ReadingQueue>()),
             annotations: context.fetch(FetchDescriptor<ReadingAnnotation>()),
             savedSearches: context.fetch(FetchDescriptor<SavedSearch>()),
+            readingSessions: (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? [],
+            readingFavorites: (try? context.fetch(FetchDescriptor<ReadingFavorite>())) ?? [],
+            fandomReadWatermarks: (try? context.fetch(FetchDescriptor<FandomReadWatermark>())) ?? [],
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
             defaults: defaults
         )
