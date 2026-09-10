@@ -57,6 +57,7 @@ Verified so far:
 | `5a6a12e` | ✅ green | Serif summary, ON AO3 chips, `SubjectFieldLabel`, the page row helpers. |
 | `243580a` | ✅ green | **The whole form family** — `SubjectFormRow`, `subjectPanel()`, `SubjectRowSeparator`, `SubjectSegmentedControl` — plus 1a's facts card, tally strip, outline buttons and My copy row. |
 | `d61ad69` | ✅ green | Tag clusters. |
+| `2e25947` | ✅ green | The access-level fix, and with it **all of artboard 1a** — one continuous page, My copy sheet, form family underneath. Published to Releases. |
 | `cc5a890` | ❌ red | Four `'X' is inaccessible due to 'private' protection level`. `pageSections` assembles the page from blocks in four files and `private` is file-scoped. Fixed in `2e25947`. |
 | `5ea4e0e` | ✅ green | The figure strip's strings as statements. 10m05s — within seconds of the run before it, which is the measurement that settles the false claim in its own commit message. See §3. |
 
@@ -352,7 +353,8 @@ re-reviews settled work and nobody reviews their own.
 | `d61ad69` | Claude | Tag clusters; inventory table corrected where checking disproved it | unreviewed | **iOS build green.** |
 | `cc5a890` | Claude | Retire the section control; My copy sheet; Comments as form rows | unreviewed | **Wants a non-Claude reviewer** — it changes this screen's whole navigation. Red on access levels; fixed in `2e25947`. |
 | `6d2b318` | Claude | §3c, next steps; 1a recorded complete | unreviewed | Doc only. |
-| `2e25947` | Claude | Page blocks internal, not private | unreviewed | Fixes `cc5a890`. |
+| `2e25947` | Claude | Page blocks internal, not private | unreviewed | **iOS build green.** Fixes `cc5a890`. |
+| `6d1a08d` | Claude | Tests for `myCopySummary` and the warning figure form | unreviewed | **Unverified by anything here** — CI builds the app target only, so `KudosTests` is never compiled. |
 | `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | **iOS build green** (10m05s). Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
 | `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
 

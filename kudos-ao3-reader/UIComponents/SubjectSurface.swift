@@ -247,6 +247,9 @@ enum SubjectMetrics {
     /// Side gutter for a block that draws its own panel, four points tighter
     /// than prose so the two edges do not line up and fight (spec 1a).
     static let panelGutter: CGFloat = 22
+    /// The account's pushed lists sit ten points tighter than a subject's own
+    /// page — they are lists of other things, not a page about one (spec 1o).
+    static let accountGutter: CGFloat = 16
     /// Floating glass chrome buttons — spec's 34px circles.
     static let chromeButton: CGFloat = 34
     /// The short rule under a kicker: 22×2.5 on a card, 26×2.5 on a page header.
@@ -327,6 +330,11 @@ struct SubjectHeaderBlock<Trailing: View>: View {
     let title: String
     var subtitle: String?
     let palette: SubjectPalette
+    /// The spec runs two page gutters and they split by screen family, which is
+    /// measurable rather than a matter of taste: 26pt on a subject's own page
+    /// (1a, 1ad, 1k) and 16pt on the account's pushed lists (1o and its
+    /// siblings). Measured with `Scripts/redesign-spec-inventory.py`, not eyed.
+    var gutter: CGFloat = SubjectMetrics.headerGutter
     /// Set by the initializers rather than inferred from `Trailing.self`:
     /// comparing metatypes to spot `EmptyView` works but reads as a trick, and
     /// this also lets a caller pass a conditional trailing view that is empty
@@ -373,7 +381,7 @@ struct SubjectHeaderBlock<Trailing: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, SubjectMetrics.headerGutter)
+        .padding(.horizontal, gutter)
     }
 }
 
@@ -383,7 +391,8 @@ extension SubjectHeaderBlock where Trailing == EmptyView {
         kickerTrailingCount: Int = 0,
         title: String,
         subtitle: String? = nil,
-        palette: SubjectPalette
+        palette: SubjectPalette,
+        gutter: CGFloat = SubjectMetrics.headerGutter
     ) {
         self.init(
             kicker: kicker,
@@ -391,6 +400,7 @@ extension SubjectHeaderBlock where Trailing == EmptyView {
             title: title,
             subtitle: subtitle,
             palette: palette,
+            gutter: gutter,
             hasTrailing: false,
             trailing: { EmptyView() }
         )
