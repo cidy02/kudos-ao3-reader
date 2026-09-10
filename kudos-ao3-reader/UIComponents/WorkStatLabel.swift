@@ -886,6 +886,32 @@ enum WorkStat {
         }
     }
 
+    /// Author · words · chapters, the dot-separated line the redesign puts under
+    /// a local work's title — the Home resume hero and the Library ledger row.
+    ///
+    /// One implementation because there were two, byte for byte, in
+    /// `HomeResumeHero` and `WorkRow`. That is the duplication the review of
+    /// Codex's `38c42f4` recorded as finding 6 and left unpaid; a second verbatim
+    /// copy appeared afterwards, which is what an unpaid formatting debt does.
+    ///
+    /// Takes values rather than a `SavedWork` so it is a pure function with a
+    /// test that needs no model context.
+    static func localWorkMetadata(author: String, wordCount: Int, chapters: String) -> [String] {
+        var segments: [String] = []
+        let name = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            segments.append(name)
+        }
+        if wordCount > 0 {
+            segments.append(wordCount.formatted() + " words")
+        }
+        let chapterRange = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !chapterRange.isEmpty {
+            segments.append(chapterRange)
+        }
+        return segments
+    }
+
     /// AO3 rating → a short, glanceable name. Originally scoped to compact cover
     /// cards only (no width for "Teen And Up Audiences" there); list rows and
     /// search-result cards now use the same short form for a consistent stat row.

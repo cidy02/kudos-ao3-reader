@@ -170,12 +170,9 @@ private struct UnblurredHomeResumeHero: View {
     /// strings rather than as `WorkStatLabel` glyph chips: the hero states three
     /// plain facts here and the glyph vocabulary is spent on the signal tray.
     private var metadataSegments: [String] {
-        var segments: [String] = []
-        if !work.author.isEmpty { segments.append(work.author) }
-        if work.wordCount > 0 { segments.append("\(work.wordCount.formatted()) words") }
-        let chapterRange = work.chapters.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !chapterRange.isEmpty { segments.append(chapterRange) }
-        return segments
+        WorkStat.localWorkMetadata(
+            author: work.author, wordCount: work.wordCount, chapters: work.chapters
+        )
     }
 
     var body: some View {

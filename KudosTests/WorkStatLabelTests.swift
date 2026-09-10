@@ -166,4 +166,28 @@ struct WorkStatLabelTests {
         #expect(WorkWarningStatus.none.text == "No Warnings")
         #expect(WorkWarningStatus.none.color == .gray)
     }
+
+    // MARK: The one local metadata line (was two, byte for byte)
+
+    @Test func localWorkMetadataNamesAuthorWordsAndChapters() {
+        #expect(WorkStat.localWorkMetadata(author: "Rosalita", wordCount: 1_773, chapters: "3/3")
+            == ["Rosalita", "1,773 words", "3/3"])
+    }
+
+    @Test func localWorkMetadataSkipsWhatIsNotKnown() {
+        // A plain EPUB import can have none of the three. Each is dropped
+        // independently rather than printing "0 words" or an empty segment,
+        // because the line is joined with dots and an empty one shows.
+        #expect(WorkStat.localWorkMetadata(author: "", wordCount: 0, chapters: "") == [])
+        #expect(WorkStat.localWorkMetadata(author: "Rosalita", wordCount: 0, chapters: "")
+            == ["Rosalita"])
+        #expect(WorkStat.localWorkMetadata(author: "", wordCount: 1_773, chapters: "")
+            == ["1,773 words"])
+    }
+
+    @Test func localWorkMetadataTreatsWhitespaceOnlyValuesAsAbsent() {
+        // AO3 blurbs and EPUB metadata both yield padded strings; an author of
+        // " " would otherwise print as a segment made of one space.
+        #expect(WorkStat.localWorkMetadata(author: "   ", wordCount: 0, chapters: "  ") == [])
+    }
 }

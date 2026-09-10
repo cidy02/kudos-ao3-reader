@@ -387,7 +387,7 @@ re-reviews settled work and nobody reviews their own.
 
 | Commit | Author | Change | Reviewed by | Notes |
 |---|---|---|---|---|
-| `38c42f4` | Codex | Redesign work-card foundation | Claude → `9ee86ba` | 5 spec drifts + 1 hit-target defect found; see §3. Not compiled. |
+| `38c42f4` | Codex | Redesign work-card foundation | Claude → `9ee86ba`, re-audited → `bf7cdac` | 5 spec drifts + 1 hit-target defect found; see §3. **Findings 1–5 verified fixed; finding 6 was still open and had grown a second verbatim copy — paid in `bf7cdac`.** |
 | `7fac768` | Codex | Refine redesign card hierarchy | Claude → `9ee86ba` | Reviewed together with `38c42f4`. Not compiled. |
 | `9ee86ba` | Claude | `SubjectSurface.swift`; collapse onto one palette | unreviewed | Wants a non-Claude reviewer. Compiles (via `2d3696c`). |
 | `436f7af` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`). |
@@ -438,6 +438,45 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Audit of the Codex review, and finding 6 paid
+
+Both Codex commits (`38c42f4`, `7fac768`) were reviewed in `9ee86ba`; rule 3
+closes them. What was *not* done was checking whether that review's findings
+still hold, which is worth doing before a branch merges — a recorded fix can
+regress, and a recorded debt can grow.
+
+Verified against today's code:
+
+| # | Finding | State |
+|---|---|---|
+| 1 | Card wash shifted hue between stops | ✅ every `Color(hue:)` in `SubjectSurface` takes the same `hue`; no `+0.08` anywhere |
+| 2 | Signal tray on `.ultraThinMaterial` | ✅ gone; the only remaining mention is an unrelated comment |
+| 3 | `updateBadge` accent-on-material | ✅ white on `glassFill(0.16)`, with the reason in the code |
+| 4 | `.padding(-12)` after `.minimumHitTarget()` | ✅ no negative padding survives anywhere in the app |
+| 5 | Kicker `+N` took the accent | ✅ `.secondary` |
+| 6 | Duplicated metadata-line logic | ❌ **still open, and it had grown** |
+
+Finding 6 was recorded as "a reuse debt, not a bug. Noted, not yet paid." In the
+meantime a **second, byte-identical** copy appeared: `HomeResumeHero`'s
+`metadataSegments` and `WorkRow`'s `ledgerMetadataSegments` were the same eight
+lines under two names. Both now call `WorkStat.localWorkMetadata`, which takes
+values rather than a `SavedWork` so it is a pure function with tests that need
+no model context.
+
+**The lesson is about the ledger, not the code.** A finding recorded as "noted,
+not yet paid" reads as closed at a glance — the row says *reviewed*. This one sat
+for a dozen commits and quietly acquired a second instance, which is what an
+unpaid formatting debt does when nothing is tracking it. A finding that is
+deliberately not fixed needs to be visible as *open work*, not as a footnote on a
+row marked reviewed.
+
+Finding 6's original target is still open too: `AO3WorkRow.ledgerMetadata` and
+`WorkListStatsRow` implement the same zero-suppression rule over the same
+`@AppStorage("showsZeroStats")`. They are not byte-identical — one takes an
+`AO3WorkSummary` and one takes optionals — so unifying them is a real
+refactor rather than a deletion, and it is left as named open work rather than
+attempted alongside a review.
 
 ### 2026-09-10 — Artboard 1a screen 1, complete
 
