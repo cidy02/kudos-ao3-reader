@@ -36,6 +36,64 @@ struct LibraryFilters: Equatable {
             || sort != .dateAdded
     }
 
+    // MARK: Summary
+
+    /// The active filters as chips, for the rail the redesign puts under a page
+    /// header (spec 1k, 1ad, 1c/1d, 1ah, 1aj).
+    ///
+    /// Deliberately mirrors `AO3SearchFilters.summaryLabels(excluding:includesSort:)`
+    /// — same `SummaryLabel` type, same "only non-default settings appear" rule,
+    /// same tag glyphs, sort last — so a Library rail and a Search rail read as
+    /// the same control rather than as two lists that happen to look alike.
+    ///
+    /// Sort is last and unconditional where it applies, for the reason the AO3
+    /// version gives: there is always an order in effect, so it is the one label
+    /// that is never noise, and it is the setting people most often forget they
+    /// set.
+    func summaryLabels(includesSort: Bool = true) -> [AO3SearchFilters.SummaryLabel] {
+        var labels: [AO3SearchFilters.SummaryLabel] = []
+
+        func add(_ text: String, _ symbol: String? = nil) {
+            labels.append(AO3SearchFilters.SummaryLabel(text: text, symbol: symbol))
+        }
+        func addTags(_ names: Set<String>, _ field: AO3TagSearch.Field) {
+            for name in names.sorted() { add(name, field.symbol) }
+        }
+
+        // The user's own tags are not an AO3 tag category, so they take a
+        // bookmark glyph of their own rather than borrowing `.freeform`'s —
+        // spec 1q is explicit that local User Tags stay "visually distinct" from
+        // AO3's.
+        for name in userTags.sorted() { add(name, "bookmark") }
+        addTags(fandoms, .fandom)
+        addTags(relationships, .relationship)
+        addTags(characters, .character)
+        addTags(additionalTags, .freeform)
+        for name in excludeTags.sorted() { add("−\(name)", AO3TagSearch.Field.freeform.symbol) }
+
+        if rating != .any { add(rating.title) }
+        for warning in AO3SearchFilters.Warning.allCases.filter(warnings.contains) {
+            add(warning.title, AO3TagSearch.Field.warning.symbol)
+        }
+        for category in AO3SearchFilters.Category.allCases.filter(categories.contains) {
+            add(category.title)
+        }
+        if completion != .any { add(completion.title) }
+        if !language.isEmpty { add(language) }
+
+        let lowerWordBound = wordsFrom.trimmingCharacters(in: .whitespaces)
+        let upperWordBound = wordsTo.trimmingCharacters(in: .whitespaces)
+        switch (lowerWordBound.isEmpty, upperWordBound.isEmpty) {
+        case (false, false): add("Words \(lowerWordBound)–\(upperWordBound)")
+        case (false, true): add("Words ≥ \(lowerWordBound)")
+        case (true, false): add("Words ≤ \(upperWordBound)")
+        case (true, true): break
+        }
+
+        if includesSort { add("Sort: \(sort.title)") }
+        return labels
+    }
+
     // MARK: Applying
 
     /// Filters and sorts a list of works by the current settings.
