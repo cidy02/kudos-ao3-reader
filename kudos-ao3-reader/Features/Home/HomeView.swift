@@ -300,10 +300,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     // "Continue Reading" — matches the title used above the hero
                     // in the non-empty branch below, so the section doesn't
                     // appear to rename itself depending on whether it has content.
-                    Text("Continue Reading")
-                        .font(.title2.bold())
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 16)
+                    SectionRuleHeader(title: "Continue Reading")
 
                     SectionEmptyState(
                         message: HomeSectionKind.readingNow.emptyMessage,
@@ -331,55 +328,27 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 let heroWork = readingNow[0]
                 let stripWorks = Array(readingNow.dropFirst().prefix(4))
 
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 8) {
-                        // The "More In Progress" strip's own collapse toggle moved
-                        // here — it's this row's chevron now, not a separate
-                        // header sitting between the hero and the strip.
-                        Group {
-                            if stripWorks.isEmpty {
-                                Text("Continue Reading")
-                            } else {
-                                Button {
-                                    withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
-                                        stripCollapsed.toggle()
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Text("Continue Reading")
-                                        Image(systemName: "chevron.down")
-                                            .font(.footnote.weight(.semibold))
-                                            .foregroundStyle(.tertiary)
-                                            .rotationEffect(.degrees(stripCollapsed ? -90 : 0))
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .minimumHitTarget()
-                                .accessibilityLabel(
-                                    stripCollapsed ? "Expand More In Progress" : "Collapse More In Progress"
-                                )
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionRuleHeader(
+                        title: "Continue Reading",
+                        count: readingNow.count,
+                        isCollapsed: stripCollapsed,
+                        // The caret collapses the strip of next-up covers, not
+                        // the hero: the hero is the point of the section, and a
+                        // section that can hide its own subject is a section
+                        // with nothing left to show.
+                        onToggleCollapse: stripWorks.isEmpty ? nil : {
+                            withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
+                                stripCollapsed.toggle()
                             }
-                        }
-                        .font(.title2.bold())
-                        .foregroundStyle(.primary)
-
-                        Spacer(minLength: 8)
-
-                        if readingNow.count > 5 {
-                            Button {
-                                router.showLibrarySection(.readingNow)
-                            } label: {
-                                Image(systemName: "chevron.right")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .contentShape(.rect)
-                            }
-                            .buttonStyle(.plain)
-                            .minimumHitTarget()
-                            .accessibilityLabel("See all in progress")
-                        }
-                    }
-                    .padding(.horizontal, 16)
+                        },
+                        // Only once a sixth work exists beyond the five on
+                        // screen — otherwise "see all" leads to what you are
+                        // already looking at.
+                        onSeeAll: readingNow.count > 5
+                            ? { router.showLibrarySection(.readingNow) }
+                            : nil
+                    )
 
                     HomeResumeHero(
                         work: heroWork,
@@ -391,13 +360,16 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     .padding(.horizontal, 16)
 
                     if !stripWorks.isEmpty, !stripCollapsed {
+                        // Negative top inset: the strip belongs to the hero
+                        // above it, and a full 14pt section gap read as two
+                        // separate shelves (spec 1b uses margin-top: -8px).
                         // Same compact portrait card every other Home carousel uses
                         // (see localSection below), not the wide book-row strip this
                         // used to be. SensitiveWorkCoverCard doesn't wrap its own
                         // NavigationLink/selection handling, so both branches are
                         // spelled out here, matching localSection's pattern exactly.
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 14) {
+                            HStack(alignment: .top, spacing: 12) {
                                 ForEach(stripWorks) { work in
                                     if isSelecting {
                                         SensitiveWorkCoverCard(
@@ -426,6 +398,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
                         }
+                        .padding(.top, -8)
                     }
                 }
             }
@@ -444,6 +417,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             title: "Reading Queues",
             collapseKey: "home.readingQueues",
             hasItems: true,
+            itemCount: customQueues.count,
             onSeeAll: !customQueues.isEmpty
                 ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
                 : nil
@@ -472,6 +446,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             title: kind.title,
             collapseKey: "home.\(kind.rawValue)",
             hasItems: !sectionWorks.isEmpty,
+            itemCount: sectionWorks.isEmpty ? nil : sectionWorks.count,
             onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
@@ -518,6 +493,9 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             title: "Subscriptions",
             collapseKey: "home.subscriptions",
             hasItems: !merged.isEmpty || showSkeleton,
+            // Suppressed while the skeletons are up: a count printed beside a
+            // loading shelf would be the previous fetch's, not this one's.
+            itemCount: showSkeleton ? nil : merged.count,
             onSeeAll: merged.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
         ) {
             if showSkeleton {

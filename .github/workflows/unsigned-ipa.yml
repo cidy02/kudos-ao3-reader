@@ -60,9 +60,28 @@ jobs:
           path: Vendor/MuPDF.xcframework
           key: mupdf-${{ runner.os }}-${{ hashFiles('Scripts/build-mupdf.sh') }}
 
+      # build-mupdf.sh writes to build-mupdf/ and deliberately does not install
+      # anywhere — it is normally run by hand. The project links the framework
+      # from Vendor/, so the copy is this workflow's job.
       - name: Build MuPDF
         if: steps.mupdf-cache.outputs.cache-hit != 'true'
-        run: Scripts/build-mupdf.sh
+        run: |
+          Scripts/build-mupdf.sh
+          mkdir -p Vendor
+          rm -rf Vendor/MuPDF.xcframework
+          cp -R build-mupdf/MuPDF.xcframework Vendor/
+
+      # Each slice's compiler output is redirected to its own log file, so a
+      # failure above prints nothing but an exit code. Surface the tail of every
+      # log — without this the only signal is "exit code 2".
+      - name: MuPDF build logs
+        if: failure()
+        run: |
+          for log in build-mupdf/*.log; do
+            [ -f "$log" ] || continue
+            echo "===== $log (last 80 lines) ====="
+            tail -80 "$log"
+          done
 
       - name: Fetch FluidAudio
         run: Scripts/fetch-fluidaudio.sh

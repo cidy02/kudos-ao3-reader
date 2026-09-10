@@ -167,6 +167,18 @@ struct SubjectPalette {
     /// `cardBorder` this one is drawn on every theme.
     var rowBorder: Color { accent.opacity(theme.isDarkFamily ? 0.22 : 0.18) }
 
+    /// The single filled, high-contrast control on a washed card — spec 1b's
+    /// Resume pill. White on the dark themes, with the card wash's own deep end
+    /// as the label so the button reads as cut out of the card rather than
+    /// dropped on top of it.
+    var solidButtonFill: Color {
+        theme.isDarkFamily ? .white : accent
+    }
+
+    var solidButtonLabel: Color {
+        theme.isDarkFamily ? Color(hue: hue, saturation: 0.52, brightness: 0.155) : .white
+    }
+
     /// Fill and stroke for a chip carrying the subject's own tint (an active
     /// filter, a selected tag). Spec: `#D9B26A3D` over `#D9B26A80`.
     var chipFill: Color { accent.opacity(theme.isDarkFamily ? 0.24 : 0.16) }
