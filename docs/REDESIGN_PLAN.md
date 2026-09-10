@@ -225,7 +225,8 @@ re-reviews settled work and nobody reviews their own.
 | `029eddb` | Claude | Outline tool reads unlabelled artboards; `Cell.tint` | unreviewed | **iOS build green.** |
 | `ed3eacb` | Claude | Stop `cardList()`'s backdrop hiding every wash | unreviewed | **Wants a non-Claude reviewer, and a screenshot.** Fixes a defect in five already-landed screens; see §3. Not compiled at time of writing, never seen. |
 | `d74cc7e` | Claude | Work Detail, artboard 1a: the identity block | unreviewed | **iOS build green** (10m29s). Not seen. |
-| `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | Behaviour-neutral. **Its commit message states a false reason** — see `2f39a0d` and §3. |
+| `5ea4e0e` | Claude | Figure-strip strings as statements | unreviewed | Behaviour-neutral. **Its commit message states a false reason** — see `40178c3` and §3. |
+| `40178c3` | Claude | Correct that message; record the stale-poll trap | unreviewed | Doc only. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
