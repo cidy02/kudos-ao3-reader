@@ -154,6 +154,27 @@ struct SubjectPalette {
         return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
+    /// The quietest of the three washes: a panel grouping other content, rather
+    /// than a card that *is* the content. Spec 1g tints a whole category block
+    /// `linear-gradient(140deg, hue26, hue0F)` — roughly a third of `rowWash` —
+    /// because chips sit inside it and have to stay readable against it.
+    var panelWash: LinearGradient {
+        let colors: [Color]
+        switch theme {
+        case .dark, .oled:
+            colors = [
+                Color(hue: hue, saturation: 0.50, brightness: 0.60).opacity(0.15),
+                Color(hue: hue, saturation: 0.50, brightness: 0.60).opacity(0.06),
+            ]
+        case .light, .sepia:
+            colors = [
+                Color(hue: hue, saturation: 0.55, brightness: 0.70).opacity(0.14),
+                Color(hue: hue, saturation: 0.55, brightness: 0.70).opacity(0.05),
+            ]
+        }
+        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
     /// A compact cover card takes no hairline on the dark themes — spec 1b gives
     /// it a drop shadow and nothing else, and the wash is opaque enough to hold
     /// its own edge. Light and Sepia still need one to separate the card from a

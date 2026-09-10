@@ -87,62 +87,36 @@ struct MediaBrowserView: View {
     }
 
     #if os(iOS)
-    /// A custom `Layout` (`MasonryLayout`, in this file), not two hand-split
-    /// columns — two rounds of "guess which column is shorter" both broke on
-    /// real content: index alternation stacked several tall cards in one
-    /// column, and a follow-up content-based height *estimate* still guessed
-    /// wrong for at least one card, leaving the columns visibly uneven again.
-    /// `Layout` asks each subview for its real `sizeThatFits` during actual
-    /// layout — no estimation, no double-render measurement hack — and places
-    /// it into whichever column is shortest *so far*, which is the correct
-    /// algorithm this was always trying to approximate.
+    /// Artboard 1g: one full-width panel per category rather than a masonry grid
+    /// of cards.
+    ///
+    /// The masonry layout went with the grid. It existed to keep two columns of
+    /// variable-height cards level — a real problem, solved properly — but a
+    /// single column of full-width panels has no columns to balance, so keeping
+    /// it would have meant paying for a custom `Layout` pass to do nothing.
+    ///
+    /// The panels are wide because the chip cluster needs the width: 1g drops the
+    /// horizontal carousel specifically so no fandom hides off the right edge,
+    /// and a two-column card cannot hold a dozen wrapped chips.
     private var categoryGrid: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
-                Text("Browse by fandom")
-                    .font(.headline)
-                    .padding(.horizontal, CardListMetrics.sideMargin)
+            LazyVStack(alignment: .leading, spacing: 18) {
+                jumpBackInSection
 
-                MasonryLayout(columns: 2, spacing: CardListMetrics.interCardSpacing) {
-                    ForEach(categories) { category in
-                        NavigationLink(value: category) {
-                            categoryCard(category)
-                                .padding(CardListMetrics.innerHorizontal)
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                                // Defensive: clips content to the card's own bounds
-                                // before the background/shadow below, so an
-                                // oversized child can't spill into the neighboring
-                                // masonry column. Matches CategoryCardSkeleton's own
-                                // fix for the same failure mode (SkeletonLoading.swift).
-                                .clipShape(
-                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                                )
-                                .background(
-                                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
-                                        .fill(themeManager.appTheme.cardSurface)
-                                        .overlay(
-                                            RoundedRectangle(
-                                                cornerRadius: CardListMetrics.cornerRadius, style: .continuous
-                                            )
-                                            .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
-                                        )
-                                        .shadow(color: themeManager.appTheme.cardShadow.color,
-                                                radius: themeManager.appTheme.cardShadow.radius,
-                                                x: 0, y: themeManager.appTheme.cardShadow.y)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        // On the NavigationLink itself, not on the card inside its
-                        // label: the system pairs the transition with the link that
-                        // performs the push, and marking a nested subview instead
-                        // leaves the pair unmatched — which degrades silently to an
-                        // ordinary push (verified on device before this moved).
-                        .workCardZoomSource(BrowseZoomKey.category(category.id), in: zoomNamespace)
-                        .onAppear { visibleCategoryIDs.insert(category.id) }
-                        .onDisappear { visibleCategoryIDs.remove(category.id) }
+                ForEach(categories) { category in
+                    NavigationLink(value: category) {
+                        categoryPanel(category)
                     }
+                    .buttonStyle(.plain)
+                    // On the NavigationLink itself, not on the panel inside its
+                    // label: the system pairs the transition with the link that
+                    // performs the push, and marking a nested subview instead
+                    // leaves the pair unmatched — which degrades silently to an
+                    // ordinary push (verified on device before this moved).
+                    .workCardZoomSource(BrowseZoomKey.category(category.id), in: zoomNamespace)
+                    .onAppear { visibleCategoryIDs.insert(category.id) }
+                    .onDisappear { visibleCategoryIDs.remove(category.id) }
                 }
-                .padding(.horizontal, CardListMetrics.sideMargin)
 
                 instructions
                     .font(.footnote)
@@ -150,7 +124,7 @@ struct MediaBrowserView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, CardListMetrics.sideMargin)
             }
-            .padding(.vertical, CardListMetrics.interCardSpacing)
+            .padding(.vertical, 12)
         }
         // `/media` is `max-age=600, public`, so without the invalidation the
         // gesture re-renders the same bytes for ten minutes.
@@ -158,6 +132,153 @@ struct MediaBrowserView: View {
             await AO3Client.shared.invalidateCachedResponses()
             await refresh()
         }
+    }
+
+    private func categoryPalette(_ category: AO3MediaCategory) -> SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: category.name))
+    }
+
+    private func categoryPanel(_ category: AO3MediaCategory) -> some View {
+        let stats = statsByCategory[category.id]
+        let palette = categoryPalette(category)
+        // Lowercased once per panel rather than once per chip: the cluster is up
+        // to twelve chips and it is re-read on every render.
+        let familiarNames = Set((stats?.recentFandoms ?? []).map { $0.lowercased() })
+
+        return SubjectPanel(palette: palette, leadingSymbol: category.symbol) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(wrapSafeName(category.name))
+                    .font(.system(size: 15))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                statsLine(stats)
+            }
+        } content: {
+            if let stats, !stats.clusterFandoms.isEmpty {
+                fandomCluster(stats, palette: palette, familiarNames: familiarNames)
+            }
+        }
+        .padding(.horizontal, CardListMetrics.sideMargin)
+    }
+
+    /// The chips, wrapping rather than scrolling, with the real remainder pinned
+    /// at the end. Spec 1g is explicit that nothing here scrolls sideways — a
+    /// carousel hides fandoms off the right edge, which is the reason this
+    /// replaced one.
+    private func fandomCluster(
+        _ stats: CategoryStats,
+        palette: SubjectPalette,
+        familiarNames: Set<String>
+    ) -> some View {
+        let remainder = max(0, (stats.fandomCount ?? 0) - stats.clusterFandoms.count)
+        return FlowLayout(spacing: 7, rowSpacing: 7) {
+            ForEach(stats.clusterFandoms) { fandom in
+                // Borderless so a chip tap opens that fandom instead of following
+                // the panel's own navigation link.
+                Button { onSelectFandom(fandom.name) } label: {
+                    FandomClusterChip(
+                        name: fandom.name,
+                        workCount: fandom.workCount,
+                        isFamiliar: familiarNames.contains(fandom.name.lowercased()),
+                        palette: palette
+                    )
+                }
+                .buttonStyle(.borderless)
+            }
+
+            if remainder > 0 {
+                // Not a button: the panel it sits in already pushes the full
+                // list, and a second target for the same destination inside that
+                // link would race it for the touch.
+                SubjectChip(text: "+\(remainder.formatted()) more", style: .dashed)
+                    .accessibilityLabel("\(remainder.formatted()) more fandoms")
+            }
+        }
+    }
+
+    /// Spec 1g's "Jump Back In": the fandoms you were most recently reading, as
+    /// compact cards carrying their category, name and size.
+    ///
+    /// Built from `recentFandoms`, which the stats pass already derives per
+    /// category — so this needs no new request and no new state, only a flatten
+    /// across categories.
+    @ViewBuilder
+    private var jumpBackInSection: some View {
+        let recent = jumpBackInEntries
+        if !recent.isEmpty {
+            VStack(alignment: .leading, spacing: 11) {
+                SectionRuleHeader(title: "Jump Back In", count: recent.count)
+
+                HStack(alignment: .top, spacing: 11) {
+                    ForEach(recent, id: \.fandom) { entry in
+                        Button { onSelectFandom(entry.fandom) } label: {
+                            jumpBackInCard(entry)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, CardListMetrics.sideMargin)
+            }
+        }
+    }
+
+    private struct JumpBackInEntry {
+        let fandom: String
+        let category: AO3MediaCategory
+        let workCount: Int?
+    }
+
+    /// At most three, one per fandom, in category order. Three because 1g draws
+    /// three and they share the width equally — a fourth would squeeze every card
+    /// below the width its fandom name needs.
+    private var jumpBackInEntries: [JumpBackInEntry] {
+        var entries: [JumpBackInEntry] = []
+        var seen = Set<String>()
+        for category in categories {
+            guard let stats = statsByCategory[category.id] else { continue }
+            for name in stats.recentFandoms where seen.insert(name.lowercased()).inserted {
+                let count = stats.clusterFandoms.first { $0.name == name }?.workCount
+                entries.append(JumpBackInEntry(fandom: name, category: category, workCount: count))
+                if entries.count == 3 { return entries }
+            }
+        }
+        return entries
+    }
+
+    private func jumpBackInCard(_ entry: JumpBackInEntry) -> some View {
+        let palette = categoryPalette(entry.category)
+        return VStack(alignment: .leading, spacing: 8) {
+            SubjectKicker(
+                text: entry.category.name,
+                palette: palette,
+                size: 8.5,
+                ruleWidth: 18,
+                ruleSpacing: 6
+            )
+
+            Text(entry.fandom)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let workCount = entry.workCount {
+                Text("\(workCount.formatted()) works")
+                    .font(.system(size: 10.5))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(themeManager.appTheme.carouselCardSurface)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.cardWash))
+                .shadow(color: themeManager.appTheme.carouselCardShadow.color,
+                        radius: themeManager.appTheme.carouselCardShadow.radius,
+                        x: 0, y: themeManager.appTheme.carouselCardShadow.y)
+        )
     }
     #else
     private var categoryListMac: some View {
@@ -230,7 +351,12 @@ struct MediaBrowserView: View {
     }
 
     /// The enriched category card: an emphasized icon + regular-weight name, a stats
-    /// line, and (when present) recently-read chips. Reads precomputed
+    /// line, and (when present) recently-read chips.
+    ///
+    /// **macOS only now.** iOS draws `categoryPanel` instead (artboard 1g), where
+    /// the same facts sit on a tinted full-width panel with a fandom chip
+    /// cluster. The two platforms genuinely diverge here: macOS keeps a
+    /// `DisclosureGroup` list, which wants a compact row label, not a panel. Reads precomputed
     /// stats (`statsByCategory`) instead of computing them inline — the derivation
     /// scans the category's full fandom list (tens of thousands for the big media
     /// categories) plus the whole library, which must never run per-card during a
@@ -564,80 +690,3 @@ private extension SavedWork {
         isFinished || hasStartedReading
     }
 }
-
-#if os(iOS)
-/// Masonry: N equal-width columns, each subview placed into whichever column is
-/// shortest *so far* — using each subview's own real `sizeThatFits`, not a guess.
-/// Two earlier attempts at this same layout (index alternation, then a
-/// content-based height estimate) both produced visibly uneven columns on real
-/// data; `Layout` gets the actual size during layout itself, so there's nothing
-/// left to estimate.
-///
-/// Internal, not private: `CategoryCardSkeletonList` (SkeletonLoading.swift)
-/// reuses this to show its own placeholder cards in variable heights, matching
-/// the shape of what's about to load instead of a uniform grid.
-struct MasonryLayout: Layout {
-    var columns: Int = 2
-    var spacing: CGFloat = 12
-
-    /// Guards against a `columns <= 0` caller: unguarded, `columnWidth` divides
-    /// by zero (silently producing `.infinity`, not a crash) but the
-    /// `count: columns` array allocations below it would crash outright.
-    private var safeColumns: Int { max(1, columns) }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
-        guard !subviews.isEmpty else { return .zero }
-        // `?? .replacingUnspecifiedDimensions()`, not a bare `.zero` fallback:
-        // a nil proposal.width (e.g. a parent asking for this layout's ideal
-        // size rather than fitting it to a known width) would otherwise
-        // collapse the whole layout to zero size instead of reporting one.
-        let width = proposal.width ?? proposal.replacingUnspecifiedDimensions().width
-        let columnWidth = columnWidth(for: width)
-        let columnHeights = placedColumnHeights(columnWidth: columnWidth, subviews: subviews)
-        // Each column's running height carries one trailing `spacing` past its
-        // last item (added unconditionally every iteration, including the
-        // last), which isn't real content — trimmed here so the reported
-        // height matches what's actually drawn, not one gap taller.
-        let contentHeight = (columnHeights.max() ?? 0) - spacing
-        return CGSize(width: width, height: max(0, contentHeight))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
-        guard !subviews.isEmpty else { return }
-        let columnWidth = columnWidth(for: bounds.width)
-        var columnHeights = Array(repeating: CGFloat(0), count: safeColumns)
-        for subview in subviews {
-            let height = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height
-            let column = shortestColumn(columnHeights)
-            let origin = CGPoint(
-                x: bounds.minX + CGFloat(column) * (columnWidth + spacing),
-                y: bounds.minY + columnHeights[column]
-            )
-            subview.place(at: origin, proposal: ProposedViewSize(width: columnWidth, height: height))
-            columnHeights[column] += height + spacing
-        }
-    }
-
-    private func columnWidth(for totalWidth: CGFloat) -> CGFloat {
-        max(0, (totalWidth - spacing * CGFloat(safeColumns - 1)) / CGFloat(safeColumns))
-    }
-
-    private func shortestColumn(_ heights: [CGFloat]) -> Int {
-        heights.indices.min { heights[$0] < heights[$1] } ?? 0
-    }
-
-    /// Dry-runs the same placement loop `placeSubviews` uses, just to total each
-    /// column's final height for `sizeThatFits` — kept as a separate pass (not
-    /// shared state) since `sizeThatFits` and `placeSubviews` aren't guaranteed
-    /// to run back-to-back for the same proposal.
-    private func placedColumnHeights(columnWidth: CGFloat, subviews: Subviews) -> [CGFloat] {
-        var columnHeights = Array(repeating: CGFloat(0), count: safeColumns)
-        for subview in subviews {
-            let height = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height
-            let column = shortestColumn(columnHeights)
-            columnHeights[column] += height + spacing
-        }
-        return columnHeights
-    }
-}
-#endif

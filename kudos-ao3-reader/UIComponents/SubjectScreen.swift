@@ -349,3 +349,133 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
             .overlay(rowShape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
     }
 }
+
+// MARK: - Subject panel
+
+/// A tinted block that groups other content under a heading — spec 1g's
+/// per-category panel, where a name, its tallies and a cluster of fandom chips
+/// share one surface in that category's hue.
+///
+/// Distinct from `WorkLedgerRow`, which *is* its content. A panel is a
+/// container, so it takes the much quieter `panelWash`: chips sit inside it and
+/// have to stay legible against it.
+struct SubjectPanel<Heading: View, Content: View>: View {
+    let palette: SubjectPalette
+    /// A 32pt tinted tile at the leading edge — the category's glyph in 1g. Nil
+    /// drops it and the heading starts at the panel's own inset.
+    var leadingSymbol: String?
+    /// Drawn at the trailing edge of the heading row when the panel is tappable.
+    var showsDisclosure: Bool = true
+    @ViewBuilder var heading: () -> Heading
+    @ViewBuilder var content: () -> Content
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                if let leadingSymbol {
+                    Image(systemName: leadingSymbol)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(palette.accent)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(palette.cardWash)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .strokeBorder(themeManager.appTheme.glassStroke(0.14), lineWidth: 0.5)
+                                )
+                        )
+                        .accessibilityHidden(true)
+                }
+
+                heading()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if showsDisclosure {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.horizontal, 16)
+
+            content()
+                .padding(.horizontal, 16)
+        }
+        .padding(.top, 14)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(panelBackground)
+    }
+
+    private var panelBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+        return shape
+            .fill(themeManager.appTheme.cardBackdrop)
+            .overlay(shape.fill(palette.panelWash))
+            .overlay(shape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
+    }
+}
+
+// MARK: - Fandom chip
+
+/// A fandom in a cluster: its name, its work count, and — when you have read
+/// something from it — a short bar in the subject's accent. Spec 1g.
+///
+/// Not a `SubjectChip` case. That type distinguishes chips by *grammar* (a rect
+/// states, a pill offers) and draws one run of text; this one has three parts
+/// whose relative weight is the whole point — the name reads first, the count
+/// second, and the bar is a mark rather than content. Folding it in would have
+/// meant three more optional parameters that no other chip uses.
+struct FandomClusterChip: View {
+    let name: String
+    var workCount: Int?
+    /// Marks a fandom the reader has actually read from, so a cluster of twenty
+    /// names is not uniform. Drawn as a bar rather than a colour change: the
+    /// name has to stay equally readable either way.
+    var isFamiliar: Bool = false
+    let palette: SubjectPalette
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if isFamiliar {
+                Capsule()
+                    .fill(palette.accent)
+                    .frame(width: 2.5, height: 14)
+            }
+            Text(name)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            if let workCount {
+                Text(workCount.formatted())
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(chipBackground)
+        .combinedAccessibilityRow(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        var spoken = name
+        if let workCount { spoken += ", \(workCount.formatted()) works" }
+        if isFamiliar { spoken += ", read before" }
+        return spoken
+    }
+
+    private var chipBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return shape
+            .fill(themeManager.appTheme.glassFill(0.07))
+            .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.10), lineWidth: 0.5))
+    }
+}
