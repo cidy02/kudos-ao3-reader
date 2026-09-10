@@ -255,7 +255,7 @@ private extension AuthorProfileView {
                 onToggleSelection: bulkSelection.toggle
             )
         case .series:
-            AO3AuthorSeriesSection(model: model)
+            AO3AuthorSeriesSection(model: model, showsNewSeriesOnAO3: isOwnProfile)
         case .bookmarks:
             AO3AuthorBookmarksSection(model: model, expandAll: expandAll)
         case .about:
