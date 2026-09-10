@@ -175,7 +175,9 @@ re-reviews settled work and nobody reviews their own.
 | `436f7af` | Claude | Unsigned-IPA script + CI workflow; review ledger | unreviewed | Shell syntax checked (`sh -n`); `xcodebuild` path unrun. |
 | `620c82a` | Claude | Phase 1 Home: section headers, hero, counts; IPA workflow fixes | unreviewed | Not compiled. |
 | `37bfac2` | Claude | Pin MuPDF clone; `SubjectScreen.swift` scaffold + ledger row | unreviewed | Not compiled. MuPDF pin verified against upstream tag contents, not by building. |
-| `<next>` | Claude | Commit the canvas + outline tool; fix 3 compile errors in the new components | unreviewed | Outline tool run and checked; Swift still uncompiled. |
+| `2d3696c` | Claude | Commit the canvas + outline tool; fix 3 compile errors in the new components | unreviewed | Outline tool run and checked; Swift still uncompiled. |
+| `493fca9` | Claude | Stop the IPA workflow cancelling its own runs | unreviewed | Trivial CI config. |
+| `<next>` | Claude | `WorkRow.ledger`; scope hue from the app accent; Home section pages | unreviewed | Not compiled at time of writing. |
 
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
@@ -186,6 +188,52 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-10 — Phase 1 continued: the ledger row and scope hues (Claude)
+
+**The rule that was missing.** Spec 1m states it outright: *"the header wash is
+the user's app accent colour — the crimson shown here is one instance of it,
+not a fixed value"*. So the reds and crimsons in artboards 1ad / 1af / 1m are
+**not literals to copy**; they are the default AO3 red seen through that rule.
+That splits every surface in the redesign in two:
+
+- Scoped to a **work, fandom or queue** -> that subject's own hue
+  (`CoverArt.workHue(fandoms:title:)`, or a queue's stored colour).
+- Scoped to a **tab or account section** -> `ThemeManager.scopeHue`, which is
+  the app accent's hue, taken from `effectiveTint` so Sepia washes in its own
+  warm brown rather than an accent it ignores everywhere else.
+
+`Color.hueComponent` extracts it, alongside the existing `relativeLuminance`
+and using the same `PlatformColor` pattern.
+
+**Landed:**
+
+- `WorkRow.Presentation.ledger` — the compact washed row from 1c/1d, 1ad, 1o,
+  1t, 1u, 1x and 1ah: 44 pt ring, fandom kicker over its rule, title, one
+  dot-separated metadata line, four-signal tray. Two presentations rather than
+  a replacement, matching what `AO3WorkRow` already does for remote works, so
+  unconverted screens keep exactly the row they had. Forwarded through
+  `SensitiveWorkRow` so the privacy branches get it too.
+- The 44 pt ring prints a bare figure ("42", not "42%") per 1d and 1ad —
+  `WorkProgressRing.showsPercentSuffix`. VoiceOver still says "42 percent".
+- `WorkLedgerRow.drawsBackground` — off inside a `List`, where
+  `.cardRow(tintHue:)` paints the same wash at the row's true outer edge. Two
+  backgrounds drew the hairline twice, half a point apart.
+- `HomeSectionListView` (1ad / 1ae / 1af) now carries the wash, the
+  kicker/rule/32 pt header as its first row, a `SectionRuleHeader` over the
+  rows, and ledger rows.
+
+**Staged deliberately.** Spec 1ad replaces the navigation bar with floating
+glass circles. `subjectScreenChrome` does exactly that — but it takes every
+`.toolbar` item with it, and this screen's filter button, overflow menu and
+Select All all live there. So screens adopt `subjectScreenWash` first (wash,
+header, ledger rows, transparent title-less bar) and the chrome swap lands
+separately, **where someone with a simulator can check it**. Both modifiers
+exist; only the staged one is wired.
+
+**Still to do on these screens:** the filter chip rail. It needs
+`LibraryFilters.summaryLabels`, which does not exist yet —
+`AO3SearchFilters.summaryLabels()` is the precedent to mirror.
 
 ### 2026-09-10 — Phase 0: shared language (Claude, `9ee86ba`)
 

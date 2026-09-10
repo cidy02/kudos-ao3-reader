@@ -6,6 +6,21 @@ import SwiftUI
 /// favorite marker. The richer fields (fandoms, word count, chapters, kudos) fill
 /// in once the work has been refreshed from AO3 in the background.
 struct WorkRow: View {
+    /// Which of the two shapes the redesign gives a saved work this row should
+    /// take. `.standard` is the established card — title, author, fandoms,
+    /// summary, expandable tags and the full stats row. `.ledger` is the
+    /// redesign's compact washed row (spec 1c/1d, 1ad, 1o, 1t, 1u, 1x, 1ah): a
+    /// leading progress ring, the fandom kicker over its rule, the title, one
+    /// dot-separated metadata line, and the four-signal tray.
+    ///
+    /// Two presentations rather than a replacement, matching what `AO3WorkRow`
+    /// already does for remote works: the screens convert one at a time, and a
+    /// screen that has not converted keeps exactly the row it had.
+    enum Presentation: Equatable {
+        case standard
+        case ledger
+    }
+
     let work: SavedWork
     /// Driven by a list's "expand/collapse all" toggle; each card follows it and can
     /// still be toggled individually afterwards. Mirrors `AO3WorkRow`.
@@ -24,6 +39,7 @@ struct WorkRow: View {
     /// expand button but still needs it to expand the blurred content underneath.
     /// Falls back to purely-internal state when nil.
     var externalExpanded: Binding<Bool>?
+    var presentation: Presentation = .standard
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
@@ -48,7 +64,93 @@ struct WorkRow: View {
             || (!work.hasCategorizedWorkTags && !work.workTags.isEmpty)
     }
 
+    @ViewBuilder
     var body: some View {
+        switch presentation {
+        case .standard: standardRow
+        case .ledger: ledgerRow
+        }
+    }
+
+    // MARK: - Ledger presentation
+
+    private var subjectHue: Double {
+        CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+    }
+
+    private var subjectPalette: SubjectPalette {
+        theme.appTheme.subjectPalette(hue: subjectHue)
+    }
+
+    private var nonemptyFandomNames: [String] {
+        work.workFandoms.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    /// Author · words · chapters — the three facts the spec's ledger row prints.
+    /// Deliberately shorter than `WorkListStatsRow`: the row is one line tall and
+    /// the four signals to its right already carry rating, category, warnings and
+    /// completion, so repeating them here would spend the line on what is
+    /// already on screen.
+    private var ledgerMetadataSegments: [String] {
+        var segments: [String] = []
+        if !work.author.isEmpty { segments.append(work.author) }
+        if work.wordCount > 0 { segments.append("\(work.wordCount.formatted()) words") }
+        let chapterRange = work.chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !chapterRange.isEmpty { segments.append(chapterRange) }
+        return segments
+    }
+
+    /// The washed background is left to the enclosing `List` row
+    /// (`.cardRow(tintHue:)`), which paints it at the card's true outer edge —
+    /// the same place the selection outline is drawn. A row that painted its own
+    /// would sit half a point inside that, drawing the hairline twice.
+    private var ledgerRow: some View {
+        WorkLedgerRow(
+            palette: subjectPalette,
+            kicker: nonemptyFandomNames.first,
+            additionalKickerCount: max(0, nonemptyFandomNames.count - 1),
+            title: work.title,
+            metadataSegments: ledgerMetadataSegments,
+            // The spec's green tick: this copy is on the device and will open
+            // with no network. It leads the line because it is the one fact
+            // there that changes what happens when you tap the row.
+            metadataPrefixSymbol: work.hasEPUB ? "checkmark.circle.fill" : nil,
+            metadataPrefixTint: work.hasEPUB ? theme.appTheme.statusSuccessColor : nil,
+            leading: {
+                WorkProgressRing(
+                    progress: work.readingProgress ?? 0,
+                    state: nil,
+                    diameter: 44,
+                    showsPercentSuffix: false
+                )
+            },
+            trailing: {
+                HStack(spacing: 10) {
+                    WorkStatusIconGrid(
+                        rating: work.rating.isEmpty ? nil : work.rating,
+                        categories: work.workCategories,
+                        warnings: work.workWarnings,
+                        completion: work.completionStatus,
+                        tileSize: 22,
+                        announcesToVoiceOver: true,
+                        showsTray: true
+                    )
+                    if isSelecting {
+                        WorkSelectionBubble(isSelected: isSelected)
+                    }
+                }
+            },
+            drawsBackground: false
+        )
+    }
+
+    // MARK: - Standard presentation
+
+    /// `@ViewBuilder` because the body opens with two `let` bindings before its
+    /// view expression. `View.body` is a builder implicitly; a plain computed
+    /// property is not, and would need an explicit `return` instead.
+    @ViewBuilder
+    private var standardRow: some View {
         let summaryText = work.summary.strippingHTML()
         let isExpandable = Self.isExpandable(strippedSummary: summaryText, for: work)
         VStack(alignment: .leading, spacing: 6) {

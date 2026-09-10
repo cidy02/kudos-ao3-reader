@@ -20,6 +20,18 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
         }
     }
 
+    /// How the section is ordered, in the reader's own words — printed under the
+    /// hero on the pushed page (spec 1ad: "4 works · most recently read first").
+    /// It sits beside `works(from:visible:)` deliberately: the sentence and the
+    /// `sorted` call it describes are two halves of one fact, and separating them
+    /// is how a page ends up claiming an order it does not have.
+    var orderDescription: String {
+        switch self {
+        case .readingNow: "most recently read first"
+        case .recentlyUpdated: "newest check first"
+        }
+    }
+
     /// Per-section empty-state copy (from the layout spec).
     var emptyMessage: String {
         switch self {

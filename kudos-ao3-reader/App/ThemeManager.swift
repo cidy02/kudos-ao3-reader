@@ -60,6 +60,25 @@ final class ThemeManager {
         appTheme.appTint ?? accentColor
     }
 
+    /// The hue every *scope*-level surface in the redesign derives from — the
+    /// Account hub, the pushed Home and Library sections, the inbox.
+    ///
+    /// Spec 1m states the rule: "the header wash is the user's app accent
+    /// colour — the crimson shown here is one instance of it, not a fixed
+    /// value". The artboards' reds and crimsons are the default AO3 red seen
+    /// through that rule, not literals to hard-code.
+    ///
+    /// Taken from `effectiveTint` rather than `accentColor` so Sepia — which
+    /// ignores the accent and keeps its own warm brown — washes in brown too,
+    /// instead of in an accent it refuses to use anywhere else.
+    ///
+    /// Screens scoped to a *work* rather than to a tab (search results, a
+    /// fandom, a queue) use that subject's own hue instead; see
+    /// `CoverArt.workHue(fandoms:title:)` and a queue's stored colour.
+    var scopeHue: Double {
+        effectiveTint.hueComponent
+    }
+
     /// A foreground guaranteed to stay readable on top of `effectiveTint` — the
     /// color controls actually render with (Sepia's fixed warm brown, not the
     /// user's `accentColor`, since Sepia ignores the accent entirely). Unlike the

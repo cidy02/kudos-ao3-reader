@@ -52,6 +52,21 @@ struct HomeSectionListView: View {
         kind.works(from: works, visible: passesPrivacy)
     }
 
+    /// This page is scoped to a Home section, not to one work, so its wash comes
+    /// from the app accent rather than from any fandom — spec 1m: "the header
+    /// wash is the user's app accent colour ... not a fixed value". The red in
+    /// artboards 1ad/1af is the default AO3 red seen through that rule.
+    private var scopePalette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+    }
+
+    /// The line under the hero: how many works, and what order they are in.
+    private var headerTallyLine: String {
+        let workCount = visibleItems.count
+        let noun = workCount == 1 ? "work" : "works"
+        return "\(workCount) \(noun) · \(kind.orderDescription)"
+    }
+
     /// This section's works after the active filters. With no filter set, the section's
     /// own ordering is kept rather than re-sorted by the filter's default sort.
     private var visibleItems: [SavedWork] {
@@ -193,20 +208,54 @@ struct HomeSectionListView: View {
 
     private var detailedList: some View {
         List {
-            ForEach(visibleItems) { work in
-                SensitiveWorkRow(
-                    work: work,
-                    expandAll: expandAll,
-                    openMode: .reader,
-                    onSelect: isSelecting ? nil : { isSelecting = true; selection = [work.id] },
-                    isSelecting: isSelecting,
-                    isSelected: selection.contains(work.id),
-                    onToggleSelection: { toggleSelection(work) }
-                )
-                .cardRow(isSelected: isSelecting && selection.contains(work.id))
+            subjectHeaderSection
+
+            Section {
+                ForEach(visibleItems) { work in
+                    SensitiveWorkRow(
+                        work: work,
+                        expandAll: expandAll,
+                        openMode: .reader,
+                        onSelect: isSelecting ? nil : { isSelecting = true; selection = [work.id] },
+                        isSelecting: isSelecting,
+                        isSelected: selection.contains(work.id),
+                        onToggleSelection: { toggleSelection(work) },
+                        presentation: .ledger
+                    )
+                    // The row's wash is painted here, at the card's true outer
+                    // edge, rather than inside `WorkLedgerRow` — see its
+                    // `drawsBackground` note.
+                    .cardRow(
+                        isSelected: isSelecting && selection.contains(work.id),
+                        tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+                    )
+                }
+            } header: {
+                SectionRuleHeader(title: kind.title, count: visibleItems.count)
+                    .textCase(nil)
+                    .listRowInsets(EdgeInsets())
+                    .padding(.bottom, 10)
             }
         }
         .cardList()
+        .subjectScreenWash(palette: scopePalette)
+    }
+
+    /// The kicker / rule / 32pt hero, as the list's first row rather than as a
+    /// navigation title: spec 1ad scrolls it away under the floating chrome, and
+    /// a `navigationTitle` cannot do that.
+    private var subjectHeaderSection: some View {
+        Section {
+            SubjectHeaderBlock(
+                kicker: "Home",
+                title: kind.title,
+                subtitle: headerTallyLine,
+                palette: scopePalette
+            )
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
     }
 
     /// Column count tracks the actual scaled card width at every Dynamic Type step
@@ -247,5 +296,6 @@ struct HomeSectionListView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
+        .subjectScreenWash(palette: scopePalette)
     }
 }
