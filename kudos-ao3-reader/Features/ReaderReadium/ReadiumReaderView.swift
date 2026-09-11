@@ -195,94 +195,6 @@ struct ReadiumReaderView: View {
     // successful action, which is honest and exactly what was asked for.
     @State private var kudosWorking = false
     @State private var kudosBanner: String?
-    /// Snapshot at session start so a reopen of an already-finished work does
-    /// not count as another finishing session.
-
-    private var isPhone: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
-    }
-
-    /// The effective typography (layout options collapse to defaults when Customize
-    /// is off; font weight + size always apply) — same rule as the legacy reader.
-    private var textStyle: ReaderTextStyle {
-        ReaderTextStyle(
-            customize: customizeEnabled, bold: boldText, fontSizePt: fontSizePt,
-            lineHeight: lineHeight, letterSpacing: letterSpacing, wordSpacing: wordSpacing,
-            margin: pageMargin, justify: justifyText
-        ).resolved
-    }
-
-    /// Reader chrome (bars) visibility — driven by tapping the page.
-    /// Hidden until the first spread has painted so open is skeleton-only
-    /// (no spinner, no half-ready position card over empty WebView).
-    private var chromeVisible: Bool {
-        !book.chromeHidden && book.hasPresentedFirstPage
-    }
-
-    /// Collapses colour-bar dismiss triggers into one `onChange` dependency so
-    /// `body` stays type-checkable. Any change clears the bar (chrome-hide is
-    /// handled separately so it can also close the fan).
-    private var colorBarDismissToken: String {
-        let position = book.currentLocator?.locations.position.map(String.init) ?? "-"
-        return "\(fanMenuOpen)|\(router.panel)|\(showingComments)|\(showingWorkDetail)|\(position)"
-    }
-
-    /// The reader's effective theme (app theme while linked).
-    private var readerTheme: ReaderTheme {
-        themeManager.readerTheme
-    }
-
-    private var preferences: EPUBPreferences {
-        ReadiumReaderStyleMapper.preferences(
-            style: textStyle,
-            theme: readerTheme,
-            fontFamily: readiumFontFamily,
-            readingMode: readingMode,
-            // .auto lets Readium show a two-page spread on wide screens (iPad)
-            // and one column when narrow; iPhone stays single-column.
-            columnCount: (twoPageEnabled && !isPhone) ? .auto : .one
-        )
-    }
-
-    /// The selected font as a Readium `FontFamily`: a quote-safe custom family
-    /// declared via `fontFamilyDeclarations`, or a built-in's primary name.
-    /// System is explicit because Readium's default family is serif, while the
-    /// legacy System choice is Apple's sans-serif UI stack.
-    private var readiumFontFamily: FontFamily? {
-        let option = ReaderFontOption.current(id: fontID, customFonts: customFonts)
-        return ReadiumReaderStyleMapper.fontFamily(for: option)
-    }
-
-    /// `@font-face` declarations for the user's imported fonts, so the navigator can
-    /// load and apply them, plus fallback stacks for the built-in choices.
-    private var fontFamilyDeclarations: [AnyHTMLFontFamilyDeclaration] {
-        ReadiumReaderStyleMapper.fontFamilyDeclarations(
-            options: ReaderFontOption.options(customFonts: customFonts)
-        )
-    }
-
-    /// Re-submit preferences whenever any mapped setting changes (instant updates).
-    private var preferencesToken: String {
-        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(fontID)|\(twoPageEnabled)|\(textStyle.token)"
-    }
-
-    /// Font declarations are fixed when Readium builds its navigator. Recreate it
-    /// after an import or deletion so a newly selected font works immediately.
-    private var bookLoadToken: String {
-        let fontFiles = customFonts.map(\.fileName).joined(separator: "|")
-        return "\(work.id.uuidString)|\(fontFiles)"
-    }
-
-    /// Chapters / Display share the app-wide panel slot so only one opens at once.
-    private var readerPanelBinding: Binding<Bool> {
-        Binding(
-            get: {
-                router.panel == .readerChapters || router.panel == .readerDisplay
-                    || router.panel == .readerFind
-            },
-            set: { if !$0 { router.panel = .none } }
-        )
-    }
 
     var body: some View {
         // Dim + card peel are driven in UIKit during the gesture (see
@@ -1491,6 +1403,92 @@ struct ReadiumReaderView: View {
 /// same file, so the `private` members above stay reachable and nothing
 /// about access levels or behaviour changes.
 extension ReadiumReaderView {
+    private var isPhone: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+    }
+
+    /// The effective typography (layout options collapse to defaults when Customize
+    /// is off; font weight + size always apply) — same rule as the legacy reader.
+    private var textStyle: ReaderTextStyle {
+        ReaderTextStyle(
+            customize: customizeEnabled, bold: boldText, fontSizePt: fontSizePt,
+            lineHeight: lineHeight, letterSpacing: letterSpacing, wordSpacing: wordSpacing,
+            margin: pageMargin, justify: justifyText
+        ).resolved
+    }
+
+    /// Reader chrome (bars) visibility — driven by tapping the page.
+    /// Hidden until the first spread has painted so open is skeleton-only
+    /// (no spinner, no half-ready position card over empty WebView).
+    private var chromeVisible: Bool {
+        !book.chromeHidden && book.hasPresentedFirstPage
+    }
+
+    /// Collapses colour-bar dismiss triggers into one `onChange` dependency so
+    /// `body` stays type-checkable. Any change clears the bar (chrome-hide is
+    /// handled separately so it can also close the fan).
+    private var colorBarDismissToken: String {
+        let position = book.currentLocator?.locations.position.map(String.init) ?? "-"
+        return "\(fanMenuOpen)|\(router.panel)|\(showingComments)|\(showingWorkDetail)|\(position)"
+    }
+
+    /// The reader's effective theme (app theme while linked).
+    private var readerTheme: ReaderTheme {
+        themeManager.readerTheme
+    }
+
+    private var preferences: EPUBPreferences {
+        ReadiumReaderStyleMapper.preferences(
+            style: textStyle,
+            theme: readerTheme,
+            fontFamily: readiumFontFamily,
+            readingMode: readingMode,
+            // .auto lets Readium show a two-page spread on wide screens (iPad)
+            // and one column when narrow; iPhone stays single-column.
+            columnCount: (twoPageEnabled && !isPhone) ? .auto : .one
+        )
+    }
+
+    /// The selected font as a Readium `FontFamily`: a quote-safe custom family
+    /// declared via `fontFamilyDeclarations`, or a built-in's primary name.
+    /// System is explicit because Readium's default family is serif, while the
+    /// legacy System choice is Apple's sans-serif UI stack.
+    private var readiumFontFamily: FontFamily? {
+        let option = ReaderFontOption.current(id: fontID, customFonts: customFonts)
+        return ReadiumReaderStyleMapper.fontFamily(for: option)
+    }
+
+    /// `@font-face` declarations for the user's imported fonts, so the navigator can
+    /// load and apply them, plus fallback stacks for the built-in choices.
+    private var fontFamilyDeclarations: [AnyHTMLFontFamilyDeclaration] {
+        ReadiumReaderStyleMapper.fontFamilyDeclarations(
+            options: ReaderFontOption.options(customFonts: customFonts)
+        )
+    }
+
+    /// Re-submit preferences whenever any mapped setting changes (instant updates).
+    private var preferencesToken: String {
+        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(fontID)|\(twoPageEnabled)|\(textStyle.token)"
+    }
+
+    /// Font declarations are fixed when Readium builds its navigator. Recreate it
+    /// after an import or deletion so a newly selected font works immediately.
+    private var bookLoadToken: String {
+        let fontFiles = customFonts.map(\.fileName).joined(separator: "|")
+        return "\(work.id.uuidString)|\(fontFiles)"
+    }
+
+    /// Chapters / Display share the app-wide panel slot so only one opens at once.
+    private var readerPanelBinding: Binding<Bool> {
+        Binding(
+            get: {
+                router.panel == .readerChapters || router.panel == .readerDisplay
+                    || router.panel == .readerFind
+            },
+            set: { if !$0 { router.panel = .none } }
+        )
+    }
+
 
     // MARK: Contents sheet helpers
 
