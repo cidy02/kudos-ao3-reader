@@ -198,7 +198,13 @@ struct FilterRangeSlider: View {
     }
 
     static func niceCeiling(_ value: Int) -> Int {
-        let target = Int((Double(value) * 1.25).rounded(.up))
+        // Bounded *before* the conversion back. `8000000000000000000` survives
+        // digitsOnly and Int parsing, and ×1.25 then exceeds Int.max — so the
+        // Int(_:) trapped while the slider was rendering, crashing the app on a
+        // paste into a filter field.
+        let expanded = (Double(value) * 1.25).rounded(.up)
+        let ceiling = Double(Int.max)
+        let target = expanded >= ceiling ? Int.max : Int(expanded)
         let steps = [
             1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000,
             200_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000,

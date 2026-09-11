@@ -195,17 +195,27 @@ extension FandomFamily {
     }
 
     /// `families` must already be in A–Z order.
+    ///
+    /// **Bucketed by key, not by consecutive run.** Localized sorting intersperses
+    /// accented and non-Latin titles — Águila Roja, Avatar, Bleach, Élite, Naruto,
+    /// 進撃の巨人 — while `letterGroup` maps all three of the first, fourth and sixth
+    /// to `#`. Grouping consecutive runs therefore produced the section ids
+    /// `#, A, B, #, N, #`, three of them identical. `LetterSection.id` is the
+    /// letter, so duplicate ids reached `ForEach`, which split the `#` heading and
+    /// its count across three places.
+    ///
+    /// Each letter appears once now, and its families keep the incoming A–Z order
+    /// within it. Section order follows first appearance, so the run the caller
+    /// sorted still reads in the order it sorted them.
     static func letterSections(_ families: [FandomFamily]) -> [LetterSection] {
-        var sections: [LetterSection] = []
+        var order: [String] = []
+        var buckets: [String: [FandomFamily]] = [:]
         for family in families {
             let letter = letterGroup(for: family.parsedTitle)
-            if sections.last?.letter == letter {
-                sections[sections.count - 1].families.append(family)
-            } else {
-                sections.append(LetterSection(letter: letter, families: [family]))
-            }
+            if buckets[letter] == nil { order.append(letter) }
+            buckets[letter, default: []].append(family)
         }
-        return sections
+        return order.map { LetterSection(letter: $0, families: buckets[$0] ?? []) }
     }
 }
 

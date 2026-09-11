@@ -113,9 +113,20 @@ struct FandomWorksView: View {
     }
 
     /// Filters scoped to this page's included fandoms — also the reset baseline.
+    ///
+    /// **A family is a union, and `fandom_names` is an AND.** Joining the siblings
+    /// into `filters.fandom` asked AO3 for works tagged with *every* era of Doctor
+    /// Who at once, which excludes almost everything — and the page then cached
+    /// that intersection as the family's exact total, so the tilde was replaced by
+    /// a number that was wrong in the same direction every time. Multiple names go
+    /// through `fandomUnion`, which becomes `fandom: ("A" OR "B")` in the query.
     private static func baseline(for fandoms: [String]) -> AO3SearchFilters {
         var filters = AO3SearchFilters()
-        filters.fandom = fandoms.joined(separator: ", ")
+        if fandoms.count > 1 {
+            filters.fandomUnion = fandoms
+        } else {
+            filters.fandom = fandoms.joined(separator: ", ")
+        }
         // Date Updated, not the app-wide `.relevance` default: this screen reads
         // AO3's tag listing, which has no relevance ordering and sorts by
         // `revised_at` unless told otherwise (verified live). Seeding it here means
@@ -270,9 +281,9 @@ struct FandomWorksView: View {
             let result: AO3SearchPage
             if includedFandoms.count == 1 {
                 // A single tag still uses AO3's own listing so the heading names
-                // the fandom. A family has no one tag path — `/works/search`
-                // with every sibling in `fandom_names` is the union the tilde
-                // is waiting on.
+                // the fandom. A family has no one tag path, so it goes to
+                // `/works/search` — with the siblings as a `fandom: (A OR B)`
+                // union in the query, not as `fandom_names`, which ANDs.
                 result = try await AO3Client.shared.fandomWorksPage(
                     fandom: includedFandoms[0],
                     filters: filters,
