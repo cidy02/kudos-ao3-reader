@@ -478,11 +478,17 @@ extension AO3Client {
         )
     }
 
-    static func parseWorkStatCounts(from html: String) -> (
-        chapters: Int?, kudos: Int?, comments: Int?, bookmarks: Int?, words: Int?
-    ) {
+    nonisolated struct WorkStatCounts: Sendable {
+        let chapters: Int?
+        let kudos: Int?
+        let comments: Int?
+        let bookmarks: Int?
+        let words: Int?
+    }
+
+    static func parseWorkStatCounts(from html: String) -> WorkStatCounts {
         guard let doc = try? SwiftSoup.parse(html) else {
-            return (nil, nil, nil, nil, nil)
+            return WorkStatCounts(chapters: nil, kudos: nil, comments: nil, bookmarks: nil, words: nil)
         }
         func stat(_ name: String) -> Int? {
             let text = (try? doc.select("dl.stats dd.\(name), dd.\(name)").first()?.text()) ?? ""
@@ -493,7 +499,7 @@ extension AO3Client {
             ?? ""
         let posted = chaptersText.split(separator: "/").first
             .flatMap { Int($0.filter(\.isNumber)) }
-        return (
+        return WorkStatCounts(
             chapters: posted ?? stat("chapters"),
             kudos: stat("kudos"),
             comments: stat("comments"),
@@ -693,7 +699,7 @@ extension AO3Client {
 
     private static func parseImplicationCounts(
         in doc: Document, caution: String
-    ) -> (chapters: Int?, kudos: Int?, comments: Int?, bookmarks: Int?, words: Int?) {
+    ) -> WorkStatCounts {
         let fromStats = parseWorkStatCounts(from: (try? doc.html()) ?? "")
         func named(_ label: String) -> Int? {
             let pattern = "(\\d[\\d,]*)\\s+\(label)"
@@ -702,7 +708,7 @@ extension AO3Client {
             let digits = caution[range].filter(\.isNumber)
             return digits.isEmpty ? nil : Int(digits)
         }
-        return (
+        return WorkStatCounts(
             chapters: fromStats.chapters ?? named("chapter"),
             kudos: fromStats.kudos ?? named("kudo"),
             comments: fromStats.comments ?? named("comment"),

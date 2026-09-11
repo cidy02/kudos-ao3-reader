@@ -264,11 +264,17 @@ extension AO3Client {
         )
     }
 
+    nonisolated struct CollectionFlags: Sendable {
+        let closed: Bool
+        let moderated: Bool
+        let unrevealed: Bool
+        let anonymous: Bool
+        let kind: AO3ChallengeKind?
+    }
+
     /// Parses AO3's `(Open, Moderated, Unrevealed, Anonymous, Gift Exchange Challenge)`
     /// type line into four independent flags plus optional challenge kind.
-    static func parseCollectionFlags(fromTypeText text: String) -> (
-        closed: Bool, moderated: Bool, unrevealed: Bool, anonymous: Bool, kind: AO3ChallengeKind?
-    ) {
+    static func parseCollectionFlags(fromTypeText text: String) -> CollectionFlags {
         let lower = text.lowercased()
         let closed = lower.contains("closed")
         let moderated = lower.contains("moderated") && !lower.contains("unmoderated")
@@ -282,7 +288,7 @@ extension AO3Client {
         } else {
             kind = nil
         }
-        return (
+        return CollectionFlags(
             closed: closed,
             moderated: moderated,
             unrevealed: unrevealed,
