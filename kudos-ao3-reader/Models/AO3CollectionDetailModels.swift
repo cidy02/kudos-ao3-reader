@@ -212,6 +212,55 @@ nonisolated struct AO3CollectionForm: Hashable, Sendable {
     var generalErrors: [String]
     var hiddenFields: [(name: String, value: String)]
 
+    /// An empty New Collection form, for a screen that needs something to bind to
+    /// before AO3's own form arrives. Every field on this type is non-defaulted on
+    /// purpose — a form is normally *parsed*, never invented — so this is the one
+    /// sanctioned way to make one from nothing, and it is `isNew`.
+    static var blank: AO3CollectionForm {
+        AO3CollectionForm(
+            actionURL: AO3CollectionURL.create(),
+            httpMethodOverride: nil,
+            csrfToken: "",
+            isNew: true,
+            collectionSlug: "",
+            name: "",
+            nameIsLocked: false,
+            title: "",
+            parentName: "",
+            email: "",
+            headerImageURL: "",
+            headerImageAlt: "",
+            iconURL: nil,
+            iconAlt: "",
+            iconComment: "",
+            deleteIcon: false,
+            description: "",
+            tagString: "",
+            isMultifandom: false,
+            ownerPseudIDs: [],
+            isClosed: false,
+            isModerated: false,
+            isUnrevealed: false,
+            isAnonymous: false,
+            showRandom: false,
+            emailNotify: false,
+            challengeType: "",
+            preferenceID: "",
+            introduction: "",
+            faq: "",
+            rules: "",
+            giftNotification: "",
+            assignmentNotification: "",
+            profileID: "",
+            maintainers: [],
+            invitationField: "",
+            revealScheduleText: "",
+            fieldErrors: [:],
+            generalErrors: [],
+            hiddenFields: []
+        )
+    }
+
     var deleteOpenOnAO3: URL? {
         isNew ? nil : AO3CollectionURL.confirmDelete(slug: collectionSlug)
     }
