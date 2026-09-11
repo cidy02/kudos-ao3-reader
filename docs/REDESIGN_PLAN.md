@@ -274,7 +274,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
-| **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **networking landed** (`561f848b`): `AO3Client+Collections` / `AO3CollectionActions`. Screens not built. `1bk` is local and already existed. Close/delete stay Open on AO3. |
+| **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
 | **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
 | **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
 | **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` (filter-collision empty with per-drop counts) and `1az` (series empty → Safari) landed in `5100addb`. `1bb` left. |
@@ -449,6 +449,64 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — Phase 10: the collections UI Grok's networking had none of (Claude)
+
+`561f848b` landed `AO3Client+Collections` and `AO3CollectionActions` — a
+comprehensive layer with **no UI at all**. `1r`, `1bm`, `1ci` and `1bl` are that
+UI. `1s` (the staged manage-items screen) is what is left.
+
+**Unknown is not zero**, and it is the rule the 1bm sort turns on. A collection
+whose works count failed to parse is not a collection with no works; one whose
+date will not parse is not the oldest. Ranked rows sort first, unrankable ones
+hold AO3's own position after them. Treating a missing count as 0 would put a
+collection nobody can see the size of at the bottom of a size-sorted list, where
+it reads as a fact.
+
+Recently updated parses AO3's printed date, and that is a **format assumption,
+not a guarantee** — scraped text the app has never parsed anywhere else. Four
+shapes under a fixed `en_US_POSIX`/UTC formatter so a device in another locale
+cannot reinterpret AO3's output; anything else returns nil and holds position.
+*If Recently updated ever looks unsorted, `AO3CollectionsFilter.updatedDate` is
+the first place to look.*
+
+**Two spec controls are absent, each with its reason on screen:**
+
+- 1bm's **My role** (Maintainer / Member / Invited). `AO3Collection` carries no
+  role and the collections page gives none; finding out is a participants
+  request per collection — a page load per row, for a filter. The panel says so.
+- 1ci's **Gift** badge. `AO3WorkSummary` has no recipient and the collection's
+  works page prints none. The recipient *does* reach the app as
+  `AO3CollectionItem.recipient` on the maintainer's items page, which is 1s —
+  a different request, a different screen, and where it can be drawn honestly.
+
+**Anonymous is the collection's state, not the work's**, so the badge sits on
+the card rather than replacing the byline. Matched against the whole byline
+case-insensitively, so a creator called `anonymously_yours` is not badged.
+
+1ci's three segments are three AO3 pages and load independently — the spec's own
+note — which also means opening the screen costs one request rather than three
+when a reader only looks at Works.
+
+**The 1bl form is fetched, never invented.** `collectionNewForm()` and
+`collectionEditForm(slug:)` both live in `AO3CollectionActions`, per the
+networking policy: the form carries hidden fields and a CSRF token that have to
+come from the page AO3 served. `collectionEditForm` was `private` and is
+internal now. `AO3CollectionForm.blank` is new — every field on that type is
+non-defaulted because a form is normally *parsed*, so a screen needing something
+to bind to before its fetch lands had no way to make one.
+
+An invalid save **does not discard the edit**: AO3 returns the whole form with
+errors attached, which `.invalid` carries, so the reply replaces the form and
+the errors render against their own rows. Name availability is one request per
+settled name on a 600ms debounce, creating only, with the format checked locally
+first so an obviously invalid name never becomes a request.
+
+Closing and deleting stay Open-on-AO3. Neither is reversible from the app.
+
+Services still has exactly **two** `URLSession` constructors.
+
+---
 
 ### 2026-09-11 — Subscriptions' badge, and the store it needed (Claude)
 
