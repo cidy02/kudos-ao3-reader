@@ -12,7 +12,7 @@ struct AO3TagAutocompleteTests {
         """.utf8)
         let tags = try AO3TagAutocomplete.parseEditorAutocomplete(body)
         #expect(tags.map(\.name) == ["Hurt/Comfort", "Time Travel"])
-        #expect(tags.allSatisfy(\.isCanonical))
+        #expect(tags.allSatisfy { $0.isCanonical })
         #expect(tags.allSatisfy { $0.workCount == nil })
     }
 

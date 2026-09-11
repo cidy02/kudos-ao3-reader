@@ -150,8 +150,10 @@ nonisolated enum LibraryHistoryGrouping: String, CaseIterable, Hashable, Sendabl
         /// happened.
         static func bucket(for date: Date?, now: Date, calendar: Calendar) -> TimeBucket {
             guard let date else { return .never }
-            if calendar.isDateInToday(date) { return .today }
-            if calendar.isDateInYesterday(date) { return .yesterday }
+            // Against `now`, not the wall clock: `isDateInToday` ignores the
+            // parameter every other bucket here honours.
+            if calendar.isDate(date, inSameDayAs: now) { return .today }
+            if calendar.isDate(date, inSameDayAs: calendar.startOfDay(for: now) - 60) { return .yesterday }
             if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) { return .thisWeek }
             if calendar.isDate(date, equalTo: now, toGranularity: .month) { return .thisMonth }
             return .earlier

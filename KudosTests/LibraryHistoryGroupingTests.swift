@@ -67,6 +67,11 @@ struct LibraryHistoryGroupingTests {
         #expect(buckets == ["Earlier", "Never opened"])
     }
 
+    @Test func yesterdayIsMeasuredFromNowRatherThanTheWallClock() {
+        let yesterday = work("Yesterday", lastRead: now.addingTimeInterval(-86_400))
+        #expect(titles(.time, [yesterday]) == ["Yesterday"])
+    }
+
     @Test func emptyBucketsAreDroppedRatherThanDrawnEmpty() {
         #expect(titles(.time, [work("Today", lastRead: now)]) == ["Today"])
     }
