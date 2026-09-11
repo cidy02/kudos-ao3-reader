@@ -131,6 +131,10 @@ struct AO3AccountWorksList: View {
     @State private var totalPages = 1
     @State private var phase: Phase = .idle
     @State private var showLogin = false
+    /// Spec 1p's "X New" badge. Loaded once per appearance rather than read from
+    /// `UserDefaults` per row — a decode per row of a two-hundred row list is the
+    /// kind of thing that only shows up on someone else's device.
+    @State private var subscriptionWatermarks: [Int: SubscriptionWatermark] = [:]
     @State private var expandAll = false
     /// Matches Account tab's layout preference so Refine screens stay consistent.
     @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
@@ -201,6 +205,11 @@ struct AO3AccountWorksList: View {
                                 if displayMode == .detailed {
                                     ExpandAllMenuItem(expandAll: $expandAll)
                                 }
+                                if tracksNewChapters, worksWithNewChapters > 0 {
+                                    Button(action: markAllSeen) {
+                                        Label("Mark All as Seen", systemImage: "bell.badge.slash")
+                                    }
+                                }
                             }
                         })
                     ].compactMap { $0 })
@@ -219,6 +228,9 @@ struct AO3AccountWorksList: View {
             .task(id: auth.isLoggedIn) {
                 // Load on first appearance and again right after a sign-in; skip the
                 // signed-out state so we don't fire an unauthenticated request.
+                if tracksNewChapters, subscriptionWatermarks.isEmpty {
+                    subscriptionWatermarks = SubscriptionWatermarks.load()
+                }
                 if auth.isLoggedIn, phase == .idle { await load(page: 1) }
             }
             .sheet(isPresented: $showLogin) { AO3LoginView() }
@@ -290,6 +302,13 @@ struct AO3AccountWorksList: View {
                                 // unhidden, real-titled NavigationLink behind the blurred
                                 // branch's reveal gate.
                                 SensitiveWorkRow(work: work, expandAll: expandAll, presentation: .ledger)
+                                    // The badge belongs on this branch too: a
+                                    // subscribed work already in the library renders
+                                    // here, and it is the one most worth telling
+                                    // someone about — they can open it right now.
+                                    .overlay(alignment: .topTrailing) {
+                                        newChapterBadge(newChapterCount(for: entry)).padding(10)
+                                    }
                                     // The row's wash is painted here, at the card's true
                                     // outer edge, rather than inside the row — see
                                     // `WorkLedgerRow.drawsBackground`.
@@ -297,9 +316,13 @@ struct AO3AccountWorksList: View {
                                         fandoms: work.workFandoms, title: work.title
                                     ))
                             } else if let remote = entry.remote {
+                                let newChapters = newChapterCount(for: entry)
                                 EnrichingAO3WorkRow(
                                     work: remote, expandAll: expandAll, presentation: .searchLedger
                                 )
+                                .overlay(alignment: .topTrailing) {
+                                    newChapterBadge(newChapters).padding(10)
+                                }
                                 .cardRow(tintHue: CoverArt.workHue(
                                     fandoms: remote.fandoms, title: remote.title
                                 ))
@@ -329,6 +352,70 @@ struct AO3AccountWorksList: View {
             }
         }
         .refreshable { await load(page: currentPage) }
+    }
+
+    // MARK: Subscriptions — what is new since you last looked (spec 1p)
+
+    /// Only Subscriptions carries the badge. On Bookmarks or History "new chapters"
+    /// would be a fact about a list that is not about following anything.
+    private var tracksNewChapters: Bool { kind == .subscriptions }
+
+    /// New chapters on this row since it was last seen, or 0 when there is nothing
+    /// to say.
+    private func newChapterCount(for entry: CanonicalWork) -> Int {
+        guard tracksNewChapters, let remote = entry.remote else { return 0 }
+        return SubscriptionWatermarks.newChapterCount(
+            for: remote, watermarks: subscriptionWatermarks
+        )
+    }
+
+    @ViewBuilder
+    private func newChapterBadge(_ count: Int) -> some View {
+        if count > 0 {
+            Text(count == 1 ? "1 NEW" : "\(count) NEW")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(accountPalette.accentOnFill)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(accountPalette.chipFill)
+                        .overlay(Capsule().strokeBorder(accountPalette.chipStroke, lineWidth: 0.5))
+                )
+                .accessibilityLabel(
+                    count == 1 ? "1 new chapter" : "\(count) new chapters"
+                )
+        }
+    }
+
+    /// Works on the page that have something new.
+    private var worksWithNewChapters: Int {
+        guard tracksNewChapters else { return 0 }
+        return visibleEntries.filter { newChapterCount(for: $0) > 0 }.count
+    }
+
+    /// Records a first sight for anything not yet watermarked, so a reader opening
+    /// this screen for the first time does not meet three hundred badges — every one
+    /// technically true and collectively meaningless.
+    private func baselineWatermarks() {
+        guard tracksNewChapters else { return }
+        let remotes = visibleEntries.compactMap(\.remote)
+        guard !remotes.isEmpty else { return }
+        if let updated = SubscriptionWatermarks.baseline(remotes, into: subscriptionWatermarks) {
+            subscriptionWatermarks = updated
+            SubscriptionWatermarks.save(updated)
+        }
+    }
+
+    /// Clears every badge on the page. An explicit action rather than something the
+    /// page load does: a list that marked itself read on sight would clear the badge
+    /// before the reader had a chance to use it.
+    private func markAllSeen() {
+        let remotes = visibleEntries.compactMap(\.remote)
+        guard !remotes.isEmpty else { return }
+        let updated = SubscriptionWatermarks.markSeen(remotes, in: subscriptionWatermarks)
+        subscriptionWatermarks = updated
+        SubscriptionWatermarks.save(updated)
     }
 
     /// Spec 1o: every pushed account list opens with the kicker, its rule, the
@@ -369,6 +456,10 @@ struct AO3AccountWorksList: View {
     private var headerTallyLine: String {
         let shown = visibleEntries.count
         var line = shown == 1 ? "1 work" : "\(shown) works"
+        let newCount = worksWithNewChapters
+        if newCount > 0 {
+            line += " · \(newCount) with new chapters"
+        }
         if totalPages > 1 {
             line += " · page \(currentPage) of \(totalPages)"
         }
@@ -432,6 +523,11 @@ struct AO3AccountWorksList: View {
             currentPage = result.currentPage
             totalPages = result.totalPages
             phase = .loaded
+            // First sight baselines rather than badges. Runs after `works` is
+            // replaced so it sees the page that just arrived, and only ever adds
+            // entries — a work already watermarked keeps its badge through the load
+            // that displayed it.
+            baselineWatermarks()
             if let countsKind = kind.countsKind {
                 AO3AccountListCountsCache.shared.record(
                     page: result,
