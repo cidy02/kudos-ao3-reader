@@ -29,6 +29,16 @@ a fresh export if you need the interactive version.
 
 ## 0. Environment constraint — read this first
 
+> **Update 2026-09-11 — a Mac ran the gates for the first time** (Claude, Xcode
+> 26.6, iOS 26.5 simulator, on `39e7eefa`; evidence in the Mac worktree's
+> gitignored `build/mac-verify-2026-09-11/`). `verify.sh` stopped at 1/5; run
+> gate by gate, 1–4 all failed and 5 checked nothing (clean tree). KudosTests
+> did not compile. Once it did: 1,745 tests, 10 failures — five of them one
+> SavedSearch crash. Fixed in `e7612188`…`a0143951` (see §3's top entry).
+> **Still red:** SwiftLint's `ReadiumReaderView` type_body_length (inherited),
+> and `build-macos.sh`'s product check, which needs a signing team the repo
+> deliberately does not carry. The Linux-container text below is history.
+
 **This branch is being worked on from a Linux container with no Swift
 toolchain.** `xcodebuild`, `swift`, `swiftlint` and `swiftformat` are all
 absent locally, so `Scripts/verify.sh` and every gate inside it **have not been
@@ -268,9 +278,9 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b`, `1ad`, `1ae`, `1af` done. `1ag` (Subscriptions) not started — it is the Account tab's list reached from Home, so it lands with Phase 6's `1p`. |
 | **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Left: Collections previewing four miniature works in ledger mode, and the Recently Deleted row. |
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. Left: the paging switcher pill. |
-| **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). |
+| **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). **The family page is still an intersection** (`fandom_names` ANDs); the live-verified union is `filter_ids:(A OR B)` over ids read from tag pages — not wired. |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
-| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w`/`1x` (writing lists), `1l` Inbox and `1z` Preferences (both exist, both want the restyle), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` blocked on seven unverifiable archive paths; `1ab` is `ReaderOptionsForm`, shared with the reader. |
+| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w`/`1x` (writing lists), `1l` Inbox and `1z` Preferences (both exist, both want the restyle), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa`'s seven archive paths verified 2026-09-11 (§3) — the screen's fourth section is unblocked, not built; `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
@@ -439,7 +449,10 @@ re-reviews settled work and nobody reviews their own.
 | `5100add` | Grok | `includeColor`; searchable language picker; five range sliders; `1ay`/`1az` empty states | Claude ✓ (design/logic only) | Verified by reading, not by building or running. `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching code. `1ba` comment-posting note is stale. `1ax` SavedSearch naming+list already exist. |
 | `671b7c1` | Claude | Privacy screen on artboard 1ac; measured storage footprint; two bulk clears; `SubjectFormRow.isDestructive` | unreviewed | **Wants a non-Claude reviewer.** Two bulk destructive actions that have never run on a device — the selection rules are tested, the *effect* is not. CI builds the app target only, so the six tests are uncompiled. |
 | `cffc1fc` | Claude | Reading Insights on artboard 1bi; `ReadingInsights` rules; `subjectCard`; retires `ReadingStatisticsView` | unreviewed | **Wants a non-Claude reviewer.** A screen was **deleted** (its model and tests survive, its figures moved into a fourth card) — worth a second pair of eyes on whether anything was lost. Thirteen tests, uncompiled. |
-
+| `e7612188` | Claude | Drop the unencoded `fandomUnion`; the CodingKeys rule | unreviewed | **Wants a non-Claude reviewer.** Fixes `5132f943` (not in this ledger). Run on a Mac: the five SavedSearch tests go green. Not run: opening a store written by `39e7eefa` in the app. |
+| `769406d7` | Claude | KudosTests compiles; five failures fixed | unreviewed | **Wants a non-Claude reviewer.** New defects in rows marked reviewed: `561f848` (isMatched), `bac3397` (tests never compiled; bulk test pinned the destructive POST). 133/133 in the affected suites. |
+| `4ec714ce` | Claude | Codex's named structs for three lint tuples | unreviewed | Codex's own code, ported unchanged. |
+| `a0143951` | Claude | macOS target builds; scripts; notices | unreviewed | **Wants a non-Claude reviewer** — touches `project.pbxproj` (one `platformFilter`) and the entitlements check. Debug + Release built on a Mac. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -449,6 +462,59 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — First run on a Mac: what failed, and what was fixed (Claude)
+
+Every gate ran for the first time. What they found, by origin:
+
+| Found | Origin | Fixed in |
+|---|---|---|
+| Every saved search fails to load; faulting one crashes (`fandomUnion` stored on `AO3SearchFilters` but missing from its `CodingKeys`) | `5132f943` | `e7612188` |
+| KudosTests does not compile (6 errors, two test files) | `bac33974` | `769406d7` |
+| History buckets ignore the injected `now` | `eadb05b2` | `769406d7` |
+| Challenge `isMatched` false on every path | `561f848b` | `769406d7` (rule only) |
+| Insights test compares `Double?` to an Int; bulk-edit test pins the destructive POST `a2c4f5e3` removed | `cffc1fca`, `bac33974` | `769406d7` |
+| Three `large_tuple` lint errors | `561f848b`, `bac33974` | `4ec714ce` (Codex's fix, ported) |
+| macOS: 9 unguarded TTS files, `.bottomBar`, sherpa-onnx without `platformFilter`, a stale entitlements grep, Release DerivedData under iCloud | before the base | `a0143951` |
+| Missing sherpa-onnx / onnxruntime notices | before the base | `a0143951` |
+
+**After the fixes** (`a0143951`): full iOS suite 1,745 tests — 1,743 passed,
+**0 failed**, 2 skipped (opt-in Kokoro corpus); `check-invariants` OK;
+SwiftLint 1 error (`ReadiumReaderView`, inherited); `build-macos.sh` Debug and
+Release build, product check fails on the ad-hoc signature only.
+
+**The SavedSearch crash shipped** in the public rolling IPA (`Kudos-39e7eef.ipa`);
+the next build from this branch replaces it. The mechanism is now a rule in
+`docs/DATA_AND_PERSISTENCE_INVARIANTS.md`: SwiftData gives every stored
+property of a composite a column but fills the columns through `Codable`, so
+a property left out of `CodingKeys` gets a column nothing writes. Both halves
+were checked by running (remove the field → green; key it → green).
+
+**Answered against live AO3** (transcripts in `build/mac-verify-2026-09-11/ao3-live/`):
+
+- The family union. An autocomplete `id` is the tag *name*, so it is not the
+  filter id; numeric ids are on each tag's works page (feed link, sidebar).
+  `work_search[query]=filter_ids:(A OR B)` is an exact union — Doctor Who
+  (2005) ∪ (1963) = 68,057 = 61,248 + 9,958 − 3,149 — and composes with the
+  other space-joined clauses. `fandom_names` gives the 3,149 intersection,
+  which is what family pages show today. **Not wired yet.**
+- `1aa`'s seven archive paths are all otwarchive routes (`routes.rb`) and
+  AO3's own nav/footer links; five returned 200, `/content` and `/donate` hit
+  Cloudflare 525 three times that day. **The screen is not built yet.**
+
+**Confirmed, left for the owner:** `setFavorite` has no caller, and the
+Abandoned bucket cannot populate (it needs `hasEPUB`, History selects
+`!hasEPUB`).
+
+**Open, found in passing:** `FilterRangeSlider.swift:106` and `:120-121` still
+trap on bounds near `Int.max` (Codex's checkpoint has the fix);
+`parseChallengeAssignmentsPage` matches no real otwarchive markup and its test
+fixture is invented, so 1bz's matched state is wrong on real AO3 regardless of
+the rule fix. Codex's uncommitted checkpoint is otherwise superseded — do not
+port its `KudosBackup` or `ReadingLogService` hunks; they would undo
+`8b892f1e`, `39e7eefa` and `a2c4f5e3`.
+
+---
 
 ### 2026-09-11 — Phase 10: the collections UI Grok's networking had none of (Claude)
 
