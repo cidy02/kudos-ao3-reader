@@ -571,7 +571,10 @@ struct AO3AccountWorksList: View {
 ///
 /// A row that is already complete — every other list in the app — does no work at
 /// all; `enrich` returns nil immediately and this stays exactly `AO3WorkRow`.
-private struct EnrichingAO3WorkRow: View {
+/// Internal rather than file-private: `AO3CollectionDetailView` renders the same
+/// remote row, and a second copy of the enrich-on-appear logic is exactly the kind
+/// of duplication that drifts.
+struct EnrichingAO3WorkRow: View {
     let work: AO3WorkSummary
     let expandAll: Bool
     var presentation: AO3WorkRow.Presentation = .standard
