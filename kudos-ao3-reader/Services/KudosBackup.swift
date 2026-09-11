@@ -2412,10 +2412,12 @@ enum KudosBackupService {
         }
 
         restoreReadingSessions(
-            contents: contents, context: context, tombstones: tombstones, mode: mode
+            contents: contents, context: context, tombstones: tombstones, mode: mode,
+            restoredWorksByArchivedID: restoredWorksByArchivedID
         )
         restoreReadingFavorites(
-            contents: contents, context: context, tombstones: tombstones, mode: mode
+            contents: contents, context: context, tombstones: tombstones, mode: mode,
+            restoredWorksByArchivedID: restoredWorksByArchivedID
         )
         restoreFandomReadWatermarks(
             contents: contents, context: context, tombstones: tombstones, mode: mode
@@ -2715,10 +2717,16 @@ enum KudosBackupService {
         contents: KudosBackupContents,
         context: ModelContext,
         tombstones: TombstoneIndex,
-        mode: BackupImportMode
+        mode: BackupImportMode,
+        restoredWorksByArchivedID: [UUID: SavedWork]
     ) {
         let existing = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
         var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        /// Local rows the archive actually accounted for — matched or created.
+        /// Replace-mode cleanup deletes what is *not* here, which is not the same
+        /// as "not in the archive's id list" once matching by anything but id is
+        /// possible.
+        var resolvedLocalIDs: Set<UUID> = []
         for archived in contents.manifest.readingSessions {
             if mode != .replaceLibrary {
                 switch tombstones.readingSessionResolution(
@@ -2731,17 +2739,24 @@ enum KudosBackupService {
                     break
                 }
             }
+            // A work merged into an existing local copy keeps the *local* UUID, so
+            // the archived workID is stale. History pointing at the archived id
+            // would vanish from every query for the surviving work. A session whose
+            // work is genuinely absent keeps its archived id and stays detached
+            // history — the log is deliberately not tied to a live row.
+            let resolvedWorkID = restoredWorksByArchivedID[archived.workID]?.id ?? archived.workID
             if let local = byID[archived.id] {
+                resolvedLocalIDs.insert(local.id)
                 if mode == .merge { continue }
                 guard SyncMerge.shouldApplyIncoming(
                     localModifiedAt: local.lastModifiedAt,
                     incomingModifiedAt: archived.lastModifiedAt
                 ) else { continue }
-                apply(archived, to: local)
+                apply(archived, to: local, resolvedWorkID: resolvedWorkID)
             } else {
                 let session = ReadingSession(
                     id: archived.id,
-                    workID: archived.workID,
+                    workID: resolvedWorkID,
                     ao3WorkID: archived.ao3WorkID,
                     sourceURL: archived.sourceURL,
                     workTitle: archived.workTitle,
@@ -2758,19 +2773,48 @@ enum KudosBackupService {
                 )
                 context.insert(session)
                 byID[archived.id] = session
+                resolvedLocalIDs.insert(session.id)
             }
         }
+
+        // A record deleted on another device arrives as a tombstone with no record
+        // behind it, so the loop above never sees it and the local copy survives.
+        // Deletions have to be applied against what is already here.
+        applyTombstonesToExisting(existing, in: context) {
+            tombstones.readingSessionResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
+        }
+
         if mode == .replaceLibrary {
-            let snapshotIDs = Set(contents.manifest.readingSessions.map(\.id))
-            for session in existing where !snapshotIDs.contains(session.id) {
+            for session in existing where !resolvedLocalIDs.contains(session.id) {
                 SyncTombstones.recordDeletion(of: session, in: context)
                 context.delete(session)
             }
         }
     }
 
-    private static func apply(_ archived: KudosBackupReadingSession, to session: ReadingSession) {
-        session.workID = archived.workID
+    /// Deletes local records an accepted, newer tombstone covers.
+    ///
+    /// `resolution` is the same check the incoming loop runs, asked the other way
+    /// round: not "should this arriving record be suppressed" but "has this record
+    /// already here been deleted elsewhere".
+    private static func applyTombstonesToExisting<Record: PersistentModel>(
+        _ records: [Record],
+        in context: ModelContext,
+        resolution: (Record) -> SyncMerge.TombstoneResolution
+    ) {
+        for record in records {
+            if case .suppressStaleData = resolution(record) {
+                context.delete(record)
+            }
+        }
+    }
+
+    private static func apply(
+        _ archived: KudosBackupReadingSession,
+        to session: ReadingSession,
+        resolvedWorkID: UUID
+    ) {
+        session.workID = resolvedWorkID
         session.ao3WorkID = archived.ao3WorkID
         session.sourceURL = archived.sourceURL
         session.workTitle = archived.workTitle
@@ -2792,9 +2836,11 @@ enum KudosBackupService {
         contents: KudosBackupContents,
         context: ModelContext,
         tombstones: TombstoneIndex,
-        mode: BackupImportMode
+        mode: BackupImportMode,
+        restoredWorksByArchivedID: [UUID: SavedWork]
     ) {
         let existing = (try? context.fetch(FetchDescriptor<ReadingFavorite>())) ?? []
+        var resolvedLocalIDs: Set<UUID> = []
         var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var byTarget = Dictionary(
             existing.map { ("\($0.kindRaw)|\($0.targetKey)", $0) },
@@ -2812,16 +2858,23 @@ enum KudosBackupService {
                     break
                 }
             }
-            let targetKey = "\(archived.kindRaw)|\(archived.targetKey)"
+            // A `.work` star targets a work UUID, and a merged work kept the local
+            // one — so the archived target is stale exactly as a session's workID
+            // is. Other kinds target a name and need no remapping.
+            let resolvedTarget = resolvedFavoriteTarget(
+                archived, restoredWorksByArchivedID: restoredWorksByArchivedID
+            )
+            let targetKey = "\(archived.kindRaw)|\(resolvedTarget)"
             let local = byID[archived.id] ?? byTarget[targetKey]
             if let local {
+                resolvedLocalIDs.insert(local.id)
                 if mode == .merge, byID[archived.id] != nil { continue }
                 guard SyncMerge.shouldApplyIncoming(
                     localModifiedAt: local.lastModifiedAt,
                     incomingModifiedAt: archived.lastModifiedAt
                 ) else { continue }
                 local.kindRaw = archived.kindRaw
-                local.targetKey = archived.targetKey
+                local.targetKey = resolvedTarget
                 local.displayName = archived.displayName
                 local.createdAt = min(local.createdAt, archived.createdAt)
                 local.lastModifiedAt = archived.lastModifiedAt
@@ -2831,7 +2884,7 @@ enum KudosBackupService {
                 let favorite = ReadingFavorite(
                     id: archived.id,
                     kind: ReadingFavoriteKind(rawValue: archived.kindRaw) ?? .work,
-                    targetKey: archived.targetKey,
+                    targetKey: resolvedTarget,
                     displayName: archived.displayName,
                     createdAt: archived.createdAt
                 )
@@ -2839,15 +2892,37 @@ enum KudosBackupService {
                 context.insert(favorite)
                 byID[favorite.id] = favorite
                 byTarget[targetKey] = favorite
+                resolvedLocalIDs.insert(favorite.id)
             }
         }
+
+        applyTombstonesToExisting(existing, in: context) {
+            tombstones.readingFavoriteResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
+        }
+
         if mode == .replaceLibrary {
-            let snapshotIDs = Set(contents.manifest.readingFavorites.map(\.id))
-            for favorite in existing where !snapshotIDs.contains(favorite.id) {
+            // Not `snapshotIDs`: a favourite matched by *target* keeps its own
+            // local UUID, which the archive has never heard of. Deleting on
+            // id-absence therefore deleted the record that had just been matched
+            // and updated — one of each went in, zero of each came out.
+            for favorite in existing where !resolvedLocalIDs.contains(favorite.id) {
                 SyncTombstones.recordDeletion(of: favorite, in: context)
                 context.delete(favorite)
             }
         }
+    }
+
+    /// A favourite's target after work merging. Only `.work` stars carry a UUID;
+    /// everything else targets a name that restore does not rewrite.
+    private static func resolvedFavoriteTarget(
+        _ archived: KudosBackupReadingFavorite,
+        restoredWorksByArchivedID: [UUID: SavedWork]
+    ) -> String {
+        guard ReadingFavoriteKind(rawValue: archived.kindRaw) == .work,
+              let archivedWorkID = UUID(uuidString: archived.targetKey),
+              let resolved = restoredWorksByArchivedID[archivedWorkID]
+        else { return archived.targetKey }
+        return resolved.id.uuidString
     }
 
     /// Unique on raw fandom name at application level.
@@ -2863,6 +2938,7 @@ enum KudosBackupService {
             existing.map { ($0.fandomName, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        var resolvedLocalIDs: Set<UUID> = []
         for archived in contents.manifest.fandomReadWatermarks {
             if mode != .replaceLibrary {
                 switch tombstones.fandomReadWatermarkResolution(
@@ -2877,6 +2953,7 @@ enum KudosBackupService {
             }
             let local = byID[archived.id] ?? byName[archived.fandomName]
             if let local {
+                resolvedLocalIDs.insert(local.id)
                 if mode == .merge, byID[archived.id] != nil { continue }
                 guard SyncMerge.shouldApplyIncoming(
                     localModifiedAt: local.lastModifiedAt,
@@ -2901,11 +2978,20 @@ enum KudosBackupService {
                 context.insert(watermark)
                 byID[watermark.id] = watermark
                 byName[archived.fandomName] = watermark
+                resolvedLocalIDs.insert(watermark.id)
             }
         }
+
+        applyTombstonesToExisting(existing, in: context) {
+            tombstones.fandomReadWatermarkResolution(
+                id: $0.id, incomingModifiedAt: $0.lastModifiedAt
+            )
+        }
+
         if mode == .replaceLibrary {
-            let snapshotIDs = Set(contents.manifest.fandomReadWatermarks.map(\.id))
-            for watermark in existing where !snapshotIDs.contains(watermark.id) {
+            // Matched-by-name watermarks keep their local UUID, which the archive
+            // does not contain — the same defect the favourites cleanup had.
+            for watermark in existing where !resolvedLocalIDs.contains(watermark.id) {
                 SyncTombstones.recordDeletion(of: watermark, in: context)
                 context.delete(watermark)
             }
