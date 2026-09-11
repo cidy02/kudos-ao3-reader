@@ -286,9 +286,6 @@ extension AO3AuthService {
 
     // MARK: Bulk edit
 
-    /// POST selected work ids + add/remove changes. Fields left blank stay
-    /// untouched. Rating and language overwrite when set.
-    @discardableResult
     /// Bulk edit, in two halves — because AO3's bulk form cannot express one of them.
     ///
     /// **Tags are merged per work and sent per work.** Every tag field on
