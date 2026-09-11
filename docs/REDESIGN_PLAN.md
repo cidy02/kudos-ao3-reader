@@ -453,7 +453,8 @@ re-reviews settled work and nobody reviews their own.
 | `769406d7` | Claude | KudosTests compiles; five failures fixed | unreviewed | **Wants a non-Claude reviewer.** New defects in rows marked reviewed: `561f848` (isMatched), `bac3397` (tests never compiled; bulk test pinned the destructive POST). 133/133 in the affected suites. |
 | `4ec714ce` | Claude | Codex's named structs for three lint tuples | unreviewed | Codex's own code, ported unchanged. |
 | `a0143951` | Claude | macOS target builds; scripts; notices | unreviewed | **Wants a non-Claude reviewer** — touches `project.pbxproj` (one `platformFilter`) and the entitlements check. Debug + Release built on a Mac. |
-| T-215.1 (this commit) | Codex | Confirm replacement rolling IPA; preserve checkpoint and claim handoff | unreviewed | Release asset `Kudos-b0aeeb4.ipa`, target `b0aeeb4111e5b18e3c5cf166a27f5f7c1865ad19`, workflow 34640150956 succeeded. Simulator upgrade verification running; not yet passed. |
+| 18c95b77 | Codex | Confirm replacement rolling IPA; preserve checkpoint and claim handoff | unreviewed | Release asset `Kudos-b0aeeb4.ipa`, target `b0aeeb4111e5b18e3c5cf166a27f5f7c1865ad19`, workflow 34640150956 succeeded. Simulator upgrade verification running; not yet passed. |
+| T-215.2 (this commit) | Codex | Clamp huge range movements and reset cancelled drags; port approved documentation | unreviewed | Extracted production arithmetic probe passed at 8×10¹⁸, repeated increments, off-track drags and rounding; Swift parser passed. Full target/UI check pending. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -463,6 +464,21 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — T-215.2: extreme range bounds (Codex)
+
+Ported only the requested slider, test and architecture hunks, plus the
+ReadingLogService comment. Kept HEAD's `niceCeiling` and all persistence fixes.
+Movement clamps before converting to Int; the scale stays pinned during a drag.
+`@GestureState` resets the pinned maximum on cancellation as well as completion.
+The text fields now expose distinct From/To accessibility labels.
+
+Ran a Swift probe extracted from the production arithmetic with To =
+8,000,000,000,000,000,000, twenty increments and off-track movements: passed.
+Swift parsing passed. Added the regression to SearchFiltersTests; the full iOS
+suite and actual VoiceOver/drag interaction remain pending the simulator build.
+
+---
 
 ### 2026-09-11 — T-215 owner handoff, release and upgrade verification (Codex)
 

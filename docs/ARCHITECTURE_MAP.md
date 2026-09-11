@@ -28,6 +28,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Reader position labels (pure, testable) | `Features/ReaderReadium/ReaderTimeEstimate.swift` — `ReaderTimeEstimate` (one documented constant: 1 Readium position ≈ 1 KB ≈ 55 s) + `ReaderPositionSummary`, which owns the card's three label strings. Its `Place` enum names AO3 front/back matter (Preface/Summary/Afterword) rather than numbering it as a chapter — mirrors `ReaderSection.pillLabel`'s contract; do **not** use `ao3StoryChapter(forSpineIndex:)` for a displayed chapter label (it maps front matter to chapter 1 by design, correct for the chapter-aware Comments entry, false as a label). Tests: `KudosTests/ReaderTimeEstimateTests.swift` |
 | Reader page metrics (pure, testable) | `Features/ReaderReadium/ReaderPageMetrics.swift` — scales visual swipe pages onto Readium ~1 KB positions for chapter remaining, position-list index, resource progression, and work remaining. Use these instead of `visualPage - 1` against a shorter position list. Slider scrub mapping stays in `ReaderChapterScrub`. Tests: `KudosTests/ReaderPageMetricsTests.swift` |
 | Reader — macOS (legacy) | `Features/Reader/ReaderView.swift` + `ReaderController.swift` (`#if os(macOS)`); progress = `lastSpineIndex`/`lastScrollFraction` via debounced `ReaderProgressBridge` |
+| Resume labels (Home and Work Detail) | `Utilities/WorkReadingPosition.swift` reads the persisted locator title; never infer chapter number from a spine index. |
 | Reader routing | `BookReaderView` (grep) routes per-platform |
 | Privacy (M/E) | `Features/Privacy/MatureContent.swift` — see below |
 
@@ -49,7 +50,8 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Concern | Where |
 |---|---|
 | Models + identity + `markModified` | `Models/Models.swift` |
-| `.kudosbackup` archive (single ZIP: manifest v7 + EPUB/font blobs; legacy package read-only), restore merge rules, tombstone index, `WorkRestoreIndex` | `Services/KudosBackup.swift`; streaming export (plan + ZIP64 file writer, constant memory) `Services/KudosBackupExport.swift` |
+| `.kudosbackup` archive (single ZIP: manifest v8 + EPUB/font blobs; legacy package read-only), restore merge rules, tombstone index, `WorkRestoreIndex` | `Services/KudosBackup.swift`; streaming export (plan + ZIP64 file writer, constant memory) `Services/KudosBackupExport.swift` |
+| Local reading log, favorites, fandom visit watermarks | `Models/ReadingSession.swift`, `ReadingFavorite.swift`, `FandomReadWatermark.swift`; lifecycle and queries in `Services/ReadingLogService.swift`. Backup restore re-homes live work references using `restoredWorksByArchivedID`; orphan session snapshots remain meaningful history. |
 | Folder sync (iCloud Drive via user-picked folder; NSFileCoordinator; safe replace; skip-unchanged stamp; conflict folding) | `Services/FolderSyncService.swift`; background refresh `FolderSyncBackgroundTask.swift` (BGTask id `com.cidy02.Kudos.folderSyncRefresh`, iOS-only) |
 | Migration + asset reconciliation + gate | `Services/PersistenceSync.swift` (`PersistenceMigrationService`, `PersistenceOperationGate`, `SyncTombstones`, `SyncMerge`) |
 | Soft delete / 90-day recovery / hard delete / sweep | `Services/PreservedWorkService.swift`; permanent path `WorkLifecycle.hardDelete` in `WorkLifecycle.swift` |
@@ -64,7 +66,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Local/remote card dedup (`remoteLed` / `remoteOnly`) | `Services/CanonicalWorkMerge.swift` + `Models/CanonicalWork.swift` |
 | Derived search index (normalize/reindex/match/rebuild) | `Services/WorkSearchIndex.swift`; fields `SavedWork.searchText` + `searchIndexVersion`. The fandom-catalog search index (normalized, deduped, count-ranked; lazy rebuild + `revision` stamp) lives in `Features/Search/FandomCatalog.swift` (`searchIndex`/`rankedMatches`) |
 | Verified AO3 account/pseud identity | `Models/AO3AuthorModels.swift`; parsed beside legacy author strings and persisted as `SavedWork.authorIdentitiesJSON` only after AO3 enrichment; never infer routes from display text |
-| Queue service (membership, preservation, `resolveLocalWork`, `addToSavedForLater`, series preservation) | `Services/ReadingQueueService.swift` |
+| Queue service (membership, preservation, `resolveLocalWork`, `addToSavedForLater`, series preservation) | `Services/ReadingQueueService.swift`. Saved for Later is a permanent **local** queue in Library; AO3 Marked for Later remains a separate Account destination. |
 
 ## Privacy / M-E blur
 
