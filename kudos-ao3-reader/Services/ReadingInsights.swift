@@ -22,6 +22,24 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var fandom: String = ""
 }
 
+/// What the log knows about one work, for a history or favourites row.
+///
+/// Spec 1ah puts three of these on every row — total time read, the visit count as
+/// "Read ×2", and whether anything is new since the last visit — and a list can be
+/// hundreds of rows long. Asking `ReadingLogService` per work would fetch every
+/// session row once per work; `summaries(in:)` builds the whole map in one fetch.
+nonisolated struct WorkReadingSummary: Equatable, Sendable {
+    var totalSeconds: Double = 0
+    /// Sessions recorded for this work. The spec's "Read ×2" is `finishCount`, not
+    /// this — two sittings of one read-through are one read.
+    var visitCount: Int = 0
+    /// Sessions that ended with the work finished. This is the reread count.
+    var finishCount: Int = 0
+    var lastEndedAt: Date?
+    /// Posted chapter count as of the most recent visit, for 1ah's "2 new chapters".
+    var chapterCountAtLastVisit: Int = 0
+}
+
 /// Every figure artboard **1bi** prints, derived from the reading log.
 ///
 /// A plain value over plain arrays rather than a set of `ModelContext` queries:
