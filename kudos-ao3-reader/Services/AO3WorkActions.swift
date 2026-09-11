@@ -289,6 +289,24 @@ extension AO3AuthService {
     /// POST selected work ids + add/remove changes. Fields left blank stay
     /// untouched. Rating and language overwrite when set.
     @discardableResult
+    /// Bulk edit, in two halves — because AO3's bulk form cannot express one of them.
+    ///
+    /// **Tags are merged per work and sent per work.** Every tag field on
+    /// `update_multiple` replaces rather than appends (the `*_string` setters in
+    /// `taggable.rb` assign the whole list), so "add Fluff to these twelve works"
+    /// has twelve different correct results and one POST cannot carry them. Sending
+    /// the additions raw — which is what this used to do — replaced each work's
+    /// tags with just the additions, destroying tags on somebody's published works
+    /// with no undo. `applying(to:)` existed for this and was never called.
+    ///
+    /// The uniform scalars — rating, language, collections, the permission fields —
+    /// still go in one POST, because setting those to a single value across a
+    /// selection is exactly what they mean and none is a list.
+    ///
+    /// Fan-out is paced through `AO3RequestCoordinator.withSlot`, and a work whose
+    /// tag write fails stops the run rather than leaving half a selection edited
+    /// with no report of which half.
+    @discardableResult
     func bulkEditWorks(_ changes: AO3BulkEditChanges) async throws -> String {
         try requireWorkSession()
         guard let username,
@@ -297,6 +315,21 @@ extension AO3AuthService {
         guard let first = changes.workIDs.first else {
             throw AO3WorkWriteError.rejected("Select at least one work.")
         }
+
+        var lastResponse = ""
+        if changes.hasTagChanges {
+            for workID in changes.workIDs {
+                lastResponse = try await AO3RequestCoordinator.shared.withSlot {
+                    let form = try await loadEditTagsForm(workID: workID)
+                    let merged = changes.applying(to: form.tags)
+                    return try await editTags(
+                        workID: workID, current: form.tags, desired: merged
+                    )
+                }
+            }
+        }
+
+        guard changes.hasUniformChanges else { return lastResponse }
         let csrf = try await csrfPage(at: AO3Client.workEditURL(workID: first)).token
         return try await submitWorkForm(
             url,

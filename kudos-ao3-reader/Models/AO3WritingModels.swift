@@ -127,6 +127,15 @@ nonisolated struct AO3WorkTagSet: Equatable, Sendable {
     var additionalTags: [String] = []
 
     /// Removing a chip is a diff against this set, not a delete-tag API.
+    /// Whether any tag **list** carries anything. Excludes `rating`, which is a
+    /// single value rather than a list: `AO3BulkEditChanges` tracks the bulk rating
+    /// separately and can set it in one POST safely, because there is nothing to
+    /// merge against.
+    var hasTagLists: Bool {
+        !(warnings.isEmpty && categories.isEmpty && fandoms.isEmpty
+            && relationships.isEmpty && characters.isEmpty && additionalTags.isEmpty)
+    }
+
     func diff(toward desired: AO3WorkTagSet) -> AO3WorkTagDiff {
         AO3WorkTagDiff(
             rating: rating == desired.rating ? nil : desired.rating,
@@ -757,11 +766,43 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
         Self.overwriteFieldKeys.contains(name)
     }
 
-    /// Encode for `update_multiple`. Blank groups are omitted so AO3 leaves
-    /// those fields untouched. Tag add/remove is resolved against one work's
-    /// current lists via `applying(to:)`; the bulk POST itself only sends
-    /// *add* strings (AO3's tag fields replace when filled) plus the
-    /// overwrite scalars.
+    /// Whether anything here can only be applied per work.
+    ///
+    /// Every tag field AO3 exposes on `update_multiple` **replaces** rather than
+    /// appends — the `*_string` setters in `taggable.rb` assign the whole list. A
+    /// bulk POST therefore cannot express "add Fluff to each of these twelve
+    /// works", because the merged result differs per work. `bulkEditWorks` fans
+    /// those out through `editTags`; this is how it knows to.
+    var hasTagChanges: Bool {
+        tagsToAdd.hasTagLists || tagsToRemove.hasTagLists
+    }
+
+    /// Whether anything here can be applied to the whole selection in one POST.
+    /// A tags-only edit has none, and must not fire a request that would carry
+    /// nothing but a CSRF token.
+    var hasUniformChanges: Bool {
+        let scalars = [rating, languageID, restricted, moderatedCommenting,
+                       commentPermissions, workSkinID]
+        if scalars.contains(where: { ($0?.isEmpty == false) }) { return true }
+        if !collectionsToAdd.isEmpty || !collectionsToRemove.isEmpty { return true }
+        return !pseudsToAdd.isEmpty
+    }
+
+    /// Encode for `update_multiple`. Blank groups are omitted so AO3 leaves those
+    /// fields untouched.
+    ///
+    /// **No tag field is ever sent from here.** An earlier version sent
+    /// `tagsToAdd` straight into AO3's tag fields, and since those fields replace,
+    /// adding one tag to a selection wiped every other tag off every work in it —
+    /// an unrecoverable write against somebody's own published works. `tagsToRemove`
+    /// never reached the request at all. The merge belongs per work, against that
+    /// work's current list, which is what `applying(to:)` has always been for and
+    /// what `bulkEditWorks` now actually calls.
+    ///
+    /// What stays here is what genuinely *is* uniform across a selection: the
+    /// rating, the language, collection membership and the three permission
+    /// scalars. Setting those to one value for twelve works is the whole point of
+    /// the screen, and none of them is a list that could be appended to.
     func parameters(csrfToken: String, methodOverride: String = "patch") -> [(String, String)] {
         var pairs: [(String, String)] = [
             (AO3WorkFormField.authenticityToken, csrfToken),
@@ -775,16 +816,7 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
             guard !joined.isEmpty else { return }
             pairs.append((field, joined))
         }
-        sendJoined(field: AO3WorkFormField.fandoms, names: tagsToAdd.fandoms)
-        sendJoined(field: AO3WorkFormField.relationships, names: tagsToAdd.relationships)
-        sendJoined(field: AO3WorkFormField.characters, names: tagsToAdd.characters)
-        sendJoined(field: AO3WorkFormField.additionalTags, names: tagsToAdd.additionalTags)
-        for warning in tagsToAdd.warnings {
-            pairs.append((AO3WorkFormField.warnings, warning))
-        }
-        for category in tagsToAdd.categories {
-            pairs.append((AO3WorkFormField.categories, category))
-        }
+        // Tag fields deliberately absent — see the note above.
         if let rating, !rating.isEmpty {
             pairs.append((AO3WorkFormField.rating, rating))
         }

@@ -27,6 +27,14 @@ enum ReadingLogService {
         var lastResumedAt: Date
         var accumulatedSeconds: Double
         var isPaused: Bool
+        /// Whether the work was already finished when this visit opened.
+        ///
+        /// Held here so the service can work out for itself whether *this* visit
+        /// was the one that finished the work. It used to be the view's job — all
+        /// three call sites wrote `work.isFinished && !finishedWhenSessionStarted`
+        /// — which meant `pauseSession`, having no such flag, hard-coded `false`
+        /// and silently dropped the finish on every backgrounded session.
+        var wasFinishedAtStart: Bool
     }
 
     private static var openSessions: [UUID: OpenSession] = [:]
@@ -46,8 +54,19 @@ enum ReadingLogService {
             startedAt: now,
             lastResumedAt: now,
             accumulatedSeconds: 0,
-            isPaused: false
+            isPaused: false,
+            wasFinishedAtStart: work.isFinished
         )
+    }
+
+    /// Whether this visit is the one that finished the work — the reread signal.
+    ///
+    /// Derived from the session's own opening state rather than passed in, so
+    /// every writer agrees. A visit that opens on an already-finished work never
+    /// counts as a finish however it ends, which is what stops a reread being
+    /// counted twice for one read-through.
+    private static func didFinish(_ session: OpenSession, for work: SavedWork) -> Bool {
+        work.isFinished && !session.wasFinishedAtStart
     }
 
     /// Stops accumulating wall time (app backgrounded). No-op if none is open.
@@ -67,9 +86,13 @@ enum ReadingLogService {
         session.lastResumedAt = now
         session.isPaused = true
         openSessions[work.id] = session
-        // Not final: `didFinish` is only known when the reader closes, and a
-        // resumed session keeps accumulating into this same row.
-        persist(session, for: work, now: now, didFinish: false)
+        // The finish is carried, not deferred. Writing `false` here loses the
+        // event outright: finish a work, background the app, let iOS reclaim it,
+        // and the row says the visit did not finish — while reopening cannot
+        // recover it, because by then the work is *already* finished and the new
+        // session's transition is false too. `persist` only ever raises
+        // `didFinish`, so a later pause cannot unset what this one recorded.
+        persist(session, for: work, now: now, didFinish: didFinish(session, for: work))
     }
 
     /// Resumes after `pauseSession`. No-op if none is open or it is not paused.
@@ -81,14 +104,16 @@ enum ReadingLogService {
     }
 
     /// Persists the open session, or drops it when shorter than 15 seconds.
-    /// `didFinish` is stored as given — the reader passes true only when this
-    /// visit marked the work finished (reread count = finishing sessions).
-    static func endSession(for work: SavedWork, now: Date = Date(), didFinish: Bool) {
+    ///
+    /// The reread signal is computed here rather than supplied: see
+    /// `didFinish(_:for:)`. Callers used to pass it and all three wrote the same
+    /// expression, which is how `pauseSession` came to write a fourth, wrong one.
+    static func endSession(for work: SavedWork, now: Date = Date()) {
         guard var session = openSessions.removeValue(forKey: work.id) else { return }
         if !session.isPaused {
             session.accumulatedSeconds += max(0, now.timeIntervalSince(session.lastResumedAt))
         }
-        persist(session, for: work, now: now, didFinish: didFinish)
+        persist(session, for: work, now: now, didFinish: didFinish(session, for: work))
     }
 
     /// Writes this visit's row, creating it on the first call and updating it on

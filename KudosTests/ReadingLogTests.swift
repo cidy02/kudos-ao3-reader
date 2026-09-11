@@ -43,11 +43,11 @@ struct ReadingLogTests {
 
         let t0 = Date(timeIntervalSince1970: 1_000)
         ReadingLogService.startSession(for: work, now: t0)
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(10), didFinish: false)
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(10))
         #expect(try context.fetch(FetchDescriptor<ReadingSession>()).isEmpty)
 
         ReadingLogService.startSession(for: work, now: t0)
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(20), didFinish: false)
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(20))
         let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
         #expect(sessions.count == 1)
         let session = try #require(sessions.first)
@@ -102,7 +102,8 @@ struct ReadingLogTests {
         ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(300))
         ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(360))
         ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(600))
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(660), didFinish: true)
+        work.isFinished = true
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(660))
 
         let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
         #expect(sessions.count == 1)
@@ -114,8 +115,9 @@ struct ReadingLogTests {
     }
 
     @Test func aFinishAlreadyRecordedIsNotClearedByALaterPause() throws {
-        // The reader passes didFinish: false on every background flush. A visit
-        // that marked the work finished must not be un-marked by the next pause.
+        // A visit that finished the work must not be un-marked by a later pause,
+        // and the *next* visit — which opens on an already-finished work — must
+        // not count as a second finish.
         ReadingLogService.resetOpenSessionsForTests()
         let context = try context()
         let work = SavedWork(title: "Finished then backgrounded", author: "A")
@@ -127,12 +129,37 @@ struct ReadingLogTests {
         ReadingLogService.startSession(for: work, now: t0)
         ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(30))
         ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(40))
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(70), didFinish: true)
+        work.isFinished = true
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(70))
         ReadingLogService.startSession(for: work, now: t0.addingTimeInterval(80))
         ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(200))
 
         let finished = try context.fetch(FetchDescriptor<ReadingSession>()).filter(\.didFinish)
         #expect(finished.count == 1)
+    }
+
+    @Test func aFinishSurvivesTheAppBeingReclaimedWhileBackgrounded() throws {
+        // The bug this covers: finish an initially-unfinished work, background the
+        // app, and let iOS jettison it. `endSession` never runs. If the background
+        // flush wrote didFinish: false — which it did — the finish was lost for
+        // good, because reopening starts a session on an already-finished work and
+        // its own transition is false too.
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = SavedWork(title: "Finished, then reclaimed", author: "A")
+        work.readiumLocator = locator(progress: 1)
+        context.insert(work)
+        try context.save()
+
+        let t0 = Date(timeIntervalSince1970: 7_000)
+        ReadingLogService.startSession(for: work, now: t0)
+        work.isFinished = true
+        // Backgrounded. No endSession — the process is gone after this.
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(120))
+
+        let rows = try context.fetch(FetchDescriptor<ReadingSession>())
+        #expect(rows.count == 1)
+        #expect(rows.first?.didFinish == true)
     }
 
     @Test func aSecondStartForTheSameWorkDoesNotOpenAnotherSession() throws {
@@ -145,7 +172,7 @@ struct ReadingLogTests {
         ReadingLogService.startSession(for: work, now: t0)
         ReadingLogService.startSession(for: work, now: t0.addingTimeInterval(5))
         #expect(ReadingLogService.hasOpenSession(for: work.id))
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(25), didFinish: false)
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(25))
         let sessions = try context.fetch(FetchDescriptor<ReadingSession>())
         #expect(sessions.count == 1)
         #expect(sessions.first?.startedAt == t0)
@@ -159,12 +186,19 @@ struct ReadingLogTests {
         context.insert(work)
         try context.save()
         let t0 = Date(timeIntervalSince1970: 3_000)
+        // A reread is two *transitions* into finished, which means the work has to
+        // be un-finished in between — exactly what WorkLifecycle.markStillReading
+        // does. Ending twice while it stays finished is one read-through someone
+        // reopened, and counting that twice is the bug this rule prevents.
         ReadingLogService.startSession(for: work, now: t0)
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(30), didFinish: false)
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(30))
         ReadingLogService.startSession(for: work, now: t0.addingTimeInterval(40))
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(80), didFinish: true)
+        work.isFinished = true
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(80))
+        work.isFinished = false
         ReadingLogService.startSession(for: work, now: t0.addingTimeInterval(90))
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(130), didFinish: true)
+        work.isFinished = true
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(130))
         #expect(ReadingLogService.finishCount(of: work.id, in: context) == 2)
         #expect(ReadingLogService.totalDuration(of: work.id, in: context) == 110)
         #expect(ReadingLogService.lastSession(of: work.id, in: context)?.didFinish == true)
@@ -180,9 +214,10 @@ struct ReadingLogTests {
         try context.save()
         let t0 = Date(timeIntervalSince1970: 4_000)
         ReadingLogService.startSession(for: first, now: t0)
-        ReadingLogService.endSession(for: first, now: t0.addingTimeInterval(30), didFinish: true)
+        first.isFinished = true
+        ReadingLogService.endSession(for: first, now: t0.addingTimeInterval(30))
         ReadingLogService.startSession(for: second, now: t0)
-        ReadingLogService.endSession(for: second, now: t0.addingTimeInterval(30), didFinish: false)
+        ReadingLogService.endSession(for: second, now: t0.addingTimeInterval(30))
         #expect(ReadingLogService.finishCount(of: first.id, in: context) == 1)
         #expect(ReadingLogService.finishCount(of: second.id, in: context) == 0)
         #expect(ReadingLogService.totalDuration(of: first.id, in: context) == 30)
@@ -309,7 +344,7 @@ struct ReadingLogTests {
         ReadingLogService.startSession(for: work, now: t0)
         ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(10))
         ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(1_000))
-        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(1_020), didFinish: false)
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(1_020))
         let session = try #require(try context.fetch(FetchDescriptor<ReadingSession>()).first)
         #expect(session.durationSeconds == 30)
     }
