@@ -453,9 +453,10 @@ re-reviews settled work and nobody reviews their own.
 | `769406d7` | Claude | KudosTests compiles; five failures fixed | unreviewed | **Wants a non-Claude reviewer.** New defects in rows marked reviewed: `561f848` (isMatched), `bac3397` (tests never compiled; bulk test pinned the destructive POST). 133/133 in the affected suites. |
 | `4ec714ce` | Claude | Codex's named structs for three lint tuples | unreviewed | Codex's own code, ported unchanged. |
 | `a0143951` | Claude | macOS target builds; scripts; notices | unreviewed | **Wants a non-Claude reviewer** — touches `project.pbxproj` (one `platformFilter`) and the entitlements check. Debug + Release built on a Mac. |
-| 18c95b77 | Codex | Confirm replacement rolling IPA; preserve checkpoint and claim handoff | unreviewed | Release asset `Kudos-b0aeeb4.ipa`, target `b0aeeb4111e5b18e3c5cf166a27f5f7c1865ad19`, workflow 34640150956 succeeded. Simulator upgrade verification running; not yet passed. |
-| 4465fe02 | Codex | Clamp huge range movements and reset cancelled drags; port approved documentation | unreviewed | Extracted production arithmetic probe passed at 8×10¹⁸, repeated increments, off-track drags and rounding; Swift parser passed. Full target/UI check pending. |
-| T-215.3 (this commit) | Codex | Move reader computed helpers into its iOS extension | unreviewed | `Scripts/lint.sh` exit 0; struct is now 899 non-comment lines. No stored properties moved. Simulator behavior still pending. |
+| `18c95b77` | Codex | Confirm replacement rolling IPA; preserve checkpoint and claim handoff | Claude ✓ | Release asset `Kudos-b0aeeb4.ipa`, target `b0aeeb4111e5b18e3c5cf166a27f5f7c1865ad19`, workflow 34640150956 succeeded. Simulator upgrade verification running; not yet passed. |
+| `4465fe02` | Codex | Clamp huge range movements and reset cancelled drags; port approved documentation | Claude → `da8b04d9` | Extracted production arithmetic probe passed at 8×10¹⁸, repeated increments, off-track drags and rounding; Swift parser passed. Full target/UI check pending. |
+| `ee82191e` | Codex | Move reader computed helpers into its iOS extension | Claude ✓ | `Scripts/lint.sh` exit 0; struct is now 899 non-comment lines. No stored properties moved. Simulator behavior still pending. |
+| `da8b04d9` | Claude | Finish T-215.1 (upgrade check); review Codex's T-215 commits; NaN guard in `offsetValue` | unreviewed | **Wants Codex's review** — as do `e7612188`, `769406d7`, `4ec714ce`, `a0143951` above. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -465,6 +466,49 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — T-215.1 finished, and Codex's T-215 commits reviewed (Claude)
+
+**Started by Codex, finished by Claude.** Codex hit its usage limit partway
+through T-215. Its three commits (`18c95b77`, `4465fe02`, `ee82191e`) were
+pushed; both worktrees were clean and its old checkpoint is stashed. What it
+had not finished was the upgrade check in `18c95b77`. On its simulator
+(`KudosCodexHandoff20260911`) it had installed a `39e7eefa` build and saved a
+"Doctor Who" search at 16:39, then stopped while trying to open Search.
+
+Claude finished it on the same data container. The `39e7eefa` build did **not**
+crash; its Search tab showed the empty state although the store held the row,
+which fits a fetch that fails quietly. (The column held NULL, not the empty
+blob the tests hit, so the tests' crash is one path, not the only symptom.)
+A fixed build (`a0143951`, no `fandomUnion`) was installed over the same
+container. It launched without crashing, and SwiftData migrated the store: the
+`ZFANDOMUNION` column is gone and the saved search's row is intact.
+**Not seen on screen:** synthetic taps did not reach the floating tab bar on
+that simulator (Codex hit the same), so the list was not visually confirmed.
+The old store snapshot and screenshot are in the Mac worktree's gitignored
+`build/mac-verify-2026-09-11/upgrade-check/`.
+
+**Review of Codex's code** (cross-family, rule 1). Codex built none of it
+locally ("the simulator build is still running"). Checked here by running:
+CI's app build and lint are green on `ee82191e`, and the full iOS suite runs
+on it: 1,746 tests, 1,744 passed, **0 failed**, 2 skipped, Codex's new slider test
+included.
+
+- `ee82191e` ✓ — a pure move: counted as multisets, 75 lines relocate with no
+  added-only line, and the only removal is the two-line orphan comment the
+  handoff asked for. SwiftLint passes.
+- `4465fe02` → fixed in `da8b04d9` — the clamp-before-convert helper, the
+  pinned drag scale and the `@GestureState` reset are right. One edge came with
+  the old code: on a zero-width track the first drag sample is `0/0`, and
+  `Int(NaN)` traps because NaN fails both clamps. Now a no-op, and pinned in
+  Codex's test.
+- `18c95b77` ✓ — its release claim checks out (b0aeeb41's IPA run succeeded
+  and published).
+
+**Left open for Codex:** Claude's commits on this branch are unreviewed by any
+other family: `e7612188`, `769406d7`, `4ec714ce`, `a0143951`, and this one.
+
+---
 
 ### 2026-09-11 — T-215.3: reader lint gate (Codex)
 
