@@ -13,6 +13,15 @@ nonisolated enum AO3ChallengeKind: String, Hashable, Sendable, Codable {
         }
     }
 
+    /// What a reader sees. Separate from `otwarchiveType`, which is AO3's wire
+    /// value and would read as a class name on a chip.
+    var displayName: String {
+        switch self {
+        case .giftExchange: "Gift Exchange"
+        case .promptMeme: "Prompt Meme"
+        }
+    }
+
     init?(otwarchiveType: String) {
         switch otwarchiveType.trimmingCharacters(in: .whitespacesAndNewlines) {
         case "GiftExchange", "gift_exchange", "gift exchange":
