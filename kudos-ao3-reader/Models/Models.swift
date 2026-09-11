@@ -426,6 +426,17 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         queueMemberships.contains { $0.queue?.kind == .savedForLater }
     }
 
+    /// What the Saved for Later shelf actually contains: native queue members plus
+    /// legacy `isSaved` works that predate queues.
+    ///
+    /// One property rather than the same expression written at each site, because
+    /// the two halves are not obviously equivalent and a screen counting "3 in Saved
+    /// for Later" that disagreed with the shelf showing two would be a bug nobody
+    /// could explain from either side.
+    var isOnSavedForLaterShelf: Bool {
+        isInSavedForLaterQueue || (isSaved && !isQueuedForLater)
+    }
+
     /// The posted-chapter count parsed from the `chapters` stats string ("5/10" → 5).
     var postedChapterCount: Int {
         Self.postedChapterCount(from: chapters)
