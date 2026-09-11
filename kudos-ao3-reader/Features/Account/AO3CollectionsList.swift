@@ -117,6 +117,13 @@ struct AO3CollectionsList: View {
                                 ) {
                                     Label("Edit Collection", systemImage: "pencil")
                                 }
+                                NavigationLink(
+                                    value: AO3CollectionItemsDestination(
+                                        slug: collection.name, title: collection.title
+                                    )
+                                ) {
+                                    Label("Manage Items", systemImage: "tray.full")
+                                }
                             }
                             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
                     }
