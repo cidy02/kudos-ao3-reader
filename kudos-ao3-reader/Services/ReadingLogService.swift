@@ -151,9 +151,8 @@ enum ReadingLogService {
             existing.endingProgress = endingProgress
             existing.wordCount = work.wordCount
             existing.chapterCountAtVisit = work.postedChapterCount
-            // Never clears a finish already recorded: the reader passes false on
-            // a background flush, and the visit that marked the work finished
-            // must not be un-marked by the next pause.
+            // Never clears a finish already recorded if a later checkpoint or
+            // close reports false for the same visit.
             existing.didFinish = existing.didFinish || didFinish
             existing.lastModifiedAt = now
         } else {

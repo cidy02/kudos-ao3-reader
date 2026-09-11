@@ -220,6 +220,20 @@ struct SearchFiltersTests {
         #expect(FilterRangeSlider.expandedMaximum(defaultMaximum: 200_000, values: []) == 200_000)
     }
 
+    @Test func rangeSliderClampsExtremeInputAndOffTrackMovement() {
+        let bound = 8_000_000_000_000_000_000
+        let maximum = FilterRangeSlider.expandedMaximum(defaultMaximum: 200_000, values: [bound])
+        let incremented = FilterRangeSlider.offsetValue(bound, by: Double(maximum / 20), maximum: maximum)
+        #expect(incremented > bound)
+        #expect(FilterRangeSlider.offsetValue(incremented, by: Double(maximum), maximum: maximum) == maximum)
+        #expect(FilterRangeSlider.offsetValue(bound, by: -Double(maximum) / 2, maximum: maximum) < bound)
+        #expect(FilterRangeSlider.expandedMaximum(defaultMaximum: 200_000, values: [Int.max]) == Int.max)
+        #expect(FilterRangeSlider.offsetValue(Int.max, by: Double(Int.max / 20), maximum: Int.max) == Int.max)
+        #expect(FilterRangeSlider.offsetValue(500, by: -1_000, maximum: 1_000) == 0)
+        #expect(FilterRangeSlider.offsetValue(500, by: 1_000, maximum: 1_000) == 1_000)
+        #expect(FilterRangeSlider.offsetValue(500, by: -10.5, maximum: 1_000) == 490)
+    }
+
     @Test func sortColumnsCarryTheDirectionAReaderExpects() {
         // Names read forwards; counts and dates read biggest/newest first.
         #expect(AO3SearchFilters.Sort.workTitle.naturalDirection == .ascending)

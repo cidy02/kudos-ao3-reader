@@ -13,7 +13,8 @@ struct FilterRangeSlider: View {
 
     @Environment(ThemeManager.self) private var theme
 
-    @State private var activeHandle: Handle?
+    @GestureState private var isDragging = false
+    @State private var dragMaximum: Int?
     @State private var dragStartValue = 0
 
     private enum Handle {
@@ -29,6 +30,10 @@ struct FilterRangeSlider: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Range")
         .accessibilityValue(accessibilityValue)
+        .onChange(of: isDragging) { _, dragging in
+            // GestureState also resets on cancellation, which skips onEnded.
+            if !dragging { dragMaximum = nil }
+        }
     }
 
     private var track: some View {
@@ -70,6 +75,7 @@ struct FilterRangeSlider: View {
                 .foregroundStyle(.secondary)
                 .fixedSize()
             TextField("Any", text: Self.digitsOnly(text))
+                .accessibilityLabel(title)
                 .font(.system(size: 14, design: .monospaced))
                 .monospacedDigit()
             #if !os(macOS)
@@ -103,8 +109,10 @@ struct FilterRangeSlider: View {
                 let step = max(maximum / 20, 1)
                 let current = handle == .lower ? lowerValue : upperValue
                 switch direction {
-                case .increment: apply(handle, current + step, maximum: maximum)
-                case .decrement: apply(handle, current - step, maximum: maximum)
+                case .increment:
+                    apply(handle, Self.offsetValue(current, by: Double(step), maximum: maximum), maximum: maximum)
+                case .decrement:
+                    apply(handle, Self.offsetValue(current, by: -Double(step), maximum: maximum), maximum: maximum)
                 @unknown default: break
                 }
             }
@@ -112,21 +120,25 @@ struct FilterRangeSlider: View {
 
     private func drag(_ handle: Handle, width: CGFloat, maximum: Int) -> some Gesture {
         DragGesture(minimumDistance: 0)
+            .updating($isDragging) { _, dragging, _ in dragging = true }
             .onChanged { value in
-                if activeHandle == nil {
-                    activeHandle = handle
+                if dragMaximum == nil {
+                    dragMaximum = maximum
                     dragStartValue = handle == .lower ? lowerValue : upperValue
                 }
-                let delta = Int((value.translation.width / width * CGFloat(maximum)).rounded())
-                apply(handle, dragStartValue + delta, maximum: maximum)
+                let scale = dragMaximum ?? maximum
+                let delta = Double(value.translation.width / width) * Double(scale)
+                apply(handle, Self.offsetValue(dragStartValue, by: delta, maximum: scale), maximum: scale)
             }
             .onEnded { _ in
-                activeHandle = nil
+                dragMaximum = nil
             }
     }
 
     private var currentMaximum: Int {
-        Self.expandedMaximum(
+        // The scale must stay fixed during a drag: changing a bound otherwise
+        // changes the domain beneath the finger and reverses the thumb's motion.
+        dragMaximum ?? Self.expandedMaximum(
             defaultMaximum: defaultMaximum,
             values: [Self.integer(from: from), Self.integer(from: to)].compactMap { $0 }
         )
@@ -211,6 +223,15 @@ struct FilterRangeSlider: View {
             20_000_000, 50_000_000
         ]
         return steps.first { $0 >= target } ?? target
+    }
+
+    /// Clamp before converting: pasted Int.max bounds, accessibility increments,
+    /// and drags past the track must not overflow either Int or its conversion.
+    static func offsetValue(_ value: Int, by delta: Double, maximum: Int) -> Int {
+        let shifted = (Double(value) + delta).rounded()
+        if shifted <= 0 { return 0 }
+        if shifted >= Double(maximum) { return maximum }
+        return Int(shifted)
     }
 
     static let wordCountMaximum = 200_000
