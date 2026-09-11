@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 import ReadiumShared
 
@@ -262,3 +263,4 @@ nonisolated enum KokoroSemanticDocument {
         }
     }
 }
+#endif

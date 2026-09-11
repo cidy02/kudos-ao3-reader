@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 import ReadiumNavigator
 import ReadiumShared
@@ -544,3 +545,4 @@ public protocol TTSService: AnyObject {
     func setRate(_ rate: Float)
     func setPitch(_ pitch: Float)
 }
+#endif

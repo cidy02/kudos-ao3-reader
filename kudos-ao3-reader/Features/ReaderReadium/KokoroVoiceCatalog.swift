@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 import ReadiumNavigator
 import ReadiumShared
@@ -60,3 +61,4 @@ nonisolated enum KokoroVoiceCatalog: Sendable {
             : voices.first?.identifier ?? "af_heart"
     }
 }
+#endif

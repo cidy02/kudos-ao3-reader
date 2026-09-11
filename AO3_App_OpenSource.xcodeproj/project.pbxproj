@@ -14,7 +14,7 @@
 		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000330000000 /* ReadiumNavigator */; };
 		000000000000000410000000 /* MuPDF.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000400000000 /* MuPDF.xcframework */; };
 		000000000000000820000000 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000810000000 /* FluidAudio */; };
-		000000000000000720000000 /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000710000000 /* sherpa-onnx */; };
+		000000000000000720000000 /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000710000000 /* sherpa-onnx */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */

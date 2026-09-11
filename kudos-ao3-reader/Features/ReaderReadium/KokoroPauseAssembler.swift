@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 
 /// Strips Kokoro's incidental edge silence and inserts a pause chosen from
@@ -100,3 +101,4 @@ nonisolated enum KokoroPauseAssembler: Sendable {
         return best
     }
 }
+#endif

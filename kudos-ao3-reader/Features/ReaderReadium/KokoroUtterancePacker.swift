@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 import NaturalLanguage
 import ReadiumShared
@@ -278,3 +279,4 @@ nonisolated enum KokoroUtterancePacker {
             .map { $0.joined(separator: " ") }
     }
 }
+#endif

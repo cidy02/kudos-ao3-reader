@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 
 nonisolated enum KokoroFP32InstallError: Error, Equatable, LocalizedError {
@@ -250,3 +251,4 @@ nonisolated enum KokoroFP32Installer {
         if isCancelled() { throw KokoroFP32InstallError.cancelled }
     }
 }
+#endif

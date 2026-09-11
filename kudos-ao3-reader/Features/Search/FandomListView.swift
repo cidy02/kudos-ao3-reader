@@ -177,7 +177,9 @@ struct FandomListView: View { // swiftlint:disable:this type_body_length
             await refresh()
         }
         .searchable(text: $query, prompt: "Search \(category.name)")
+        #if os(iOS)
         .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
+        #endif
         .task(id: listingToken) { await applyFilter() }
     }
 
