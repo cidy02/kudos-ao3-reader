@@ -87,91 +87,138 @@ struct AO3PreferencesView: View {
 
     @ViewBuilder
     private func formContent(_ snapshot: AO3PreferencesSnapshot) -> some View {
-        Form {
-            if let banner {
-                Section {
-                    switch banner {
-                    case let .success(message):
-                        Label(message, systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    case let .error(message):
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                    }
+        ScrollView {
+            VStack(spacing: 24) {
+                if let banner {
+                    bannerView(banner)
                 }
-            }
 
-            ForEach(Array(snapshot.sections.enumerated()), id: \.element.id) { sectionIndex, section in
-                Section {
-                    ForEach(Array(section.toggles.enumerated()), id: \.element.id) { toggleIndex, toggle in
-                        preferenceToggleRow(
-                            label: toggle.label,
-                            isOn: bindingToggle(section: sectionIndex, toggle: toggleIndex),
-                            help: toggle.help
-                        )
-                    }
-                } header: {
-                    sectionHeader(title: section.title, help: section.help)
-                }
-            }
-
-            if !snapshot.selects.isEmpty || !snapshot.textFields.isEmpty {
-                Section {
-                    ForEach(Array(snapshot.selects.enumerated()), id: \.element.id) { index, select in
-                        HStack(alignment: .center, spacing: 8) {
-                            Picker(select.label, selection: bindingSelect(index)) {
-                                ForEach(select.options) { option in
-                                    Text(option.title).tag(option.value)
+                ForEach(Array(snapshot.sections.enumerated()), id: \.element.id) { sectionIndex, section in
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionHeader(title: section.title, help: section.help)
+                        
+                        VStack(spacing: 0) {
+                            ForEach(Array(section.toggles.enumerated()), id: \.element.id) { toggleIndex, toggle in
+                                if toggleIndex > 0 {
+                                    SubjectRowSeparator()
                                 }
-                            }
-                            #if os(iOS)
-                            .pickerStyle(.navigationLink)
-                            #endif
-                            if let help = select.help {
-                                helpButton(help)
+                                preferenceToggleRow(
+                                    label: toggle.label,
+                                    isOn: bindingToggle(section: sectionIndex, toggle: toggleIndex),
+                                    help: toggle.help
+                                )
                             }
                         }
+                        .subjectPanel()
                     }
-                    ForEach(Array(snapshot.textFields.enumerated()), id: \.element.id) { index, field in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(field.label)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Spacer(minLength: 4)
-                                if let help = field.help {
-                                    helpButton(help)
+                }
+
+                if !snapshot.selects.isEmpty || !snapshot.textFields.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SubjectFieldLabel(text: "Display options", style: .formGroup)
+                        
+                        VStack(spacing: 0) {
+                            ForEach(Array(snapshot.selects.enumerated()), id: \.element.id) { index, select in
+                                if index > 0 {
+                                    SubjectRowSeparator()
+                                }
+                                SubjectFormRow(label: select.label, arrangement: .value) {
+                                    HStack(alignment: .center, spacing: 8) {
+                                        Picker(select.label, selection: bindingSelect(index)) {
+                                            ForEach(select.options) { option in
+                                                Text(option.title).tag(option.value)
+                                            }
+                                        }
+                                        .labelsHidden()
+                                        #if os(iOS)
+                                        .pickerStyle(.navigationLink)
+                                        #endif
+                                        if let help = select.help {
+                                            helpButton(help)
+                                        }
+                                    }
                                 }
                             }
-                            TextField(field.label, text: bindingText(index))
-                            #if os(iOS)
-                                .textInputAutocapitalization(.never)
-                            #endif
-                                .autocorrectionDisabled()
+                            
+                            ForEach(Array(snapshot.textFields.enumerated()), id: \.element.id) { index, field in
+                                if !snapshot.selects.isEmpty || index > 0 {
+                                    SubjectRowSeparator()
+                                }
+                                SubjectFormRow(label: field.label, arrangement: .value) {
+                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                        TextField(field.label, text: bindingText(index))
+                                            .multilineTextAlignment(.trailing)
+                                        #if os(iOS)
+                                            .textInputAutocapitalization(.never)
+                                        #endif
+                                            .autocorrectionDisabled()
+                                        if let help = field.help {
+                                            helpButton(help)
+                                        }
+                                    }
+                                }
+                            }
                         }
+                        .subjectPanel()
                     }
-                } header: {
-                    Text("Display options")
                 }
+                
+                footnote
             }
-
+            .padding(.top, 20)
+            .padding(.bottom, 40)
+            .padding(.horizontal, SubjectMetrics.accountGutter)
         }
-        .formStyle(.grouped)
-        .appThemedScroll()
-        .appThemedRows()
+        .subjectScreenWash(palette: themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue))
+    }
+
+    @ViewBuilder
+    private func bannerView(_ banner: Banner) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: bannerIsSuccess(banner) ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(bannerIsSuccess(banner) ? Color.green : Color.red)
+            Text(bannerText(banner))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 44)
+        .background(
+            Capsule()
+                .fill(themeManager.appTheme.glassFill(0.86))
+                .overlay(Capsule().strokeBorder(themeManager.appTheme.glassStroke(0.14), lineWidth: 0.5))
+                .shadow(color: Color.black.opacity(0.5), radius: 14, y: 5)
+        )
+    }
+    
+    private func bannerIsSuccess(_ banner: Banner) -> Bool {
+        if case .success = banner { return true }
+        return false
+    }
+    
+    private func bannerText(_ banner: Banner) -> String {
+        switch banner {
+        case .success(let msg): return msg
+        case .error(let msg): return msg
+        }
+    }
+    
+    private var footnote: some View {
+        Text("Every switch here is a field on AO3’s preferences form, in AO3’s own groups: Privacy, Display, Comments, Collections, Miscellaneous. The account rows at the top are the links the site keeps above that form. App-only settings live in Settings.")
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary)
+            .lineSpacing(1.5)
     }
 
     @ViewBuilder
     private func sectionHeader(title: String, help: AO3PreferenceHelpRef?) -> some View {
         HStack(spacing: 8) {
-            Text(title)
+            SubjectFieldLabel(text: title, style: .formGroup)
             Spacer(minLength: 8)
             if let help {
                 helpButton(help)
             }
         }
-        // Keep header controls tappable inside List/Form.
-        .textCase(nil)
     }
 
     @ViewBuilder
@@ -180,12 +227,13 @@ struct AO3PreferencesView: View {
         isOn: Binding<Bool>,
         help: AO3PreferenceHelpRef?
     ) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Toggle(isOn: isOn) {
-                Text(label)
-            }
-            if let help {
-                helpButton(help)
+        SubjectFormRow(label: label, arrangement: .value) {
+            HStack(alignment: .center, spacing: 8) {
+                Toggle(label, isOn: isOn)
+                    .labelsHidden()
+                if let help {
+                    helpButton(help)
+                }
             }
         }
     }

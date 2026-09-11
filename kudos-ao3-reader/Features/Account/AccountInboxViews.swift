@@ -561,39 +561,83 @@ struct AccountInboxRows: View {
         }
     }
 
+    @Environment(ThemeManager.self) private var theme
+    
+    private var subjectHeader: some View {
+        SubjectHeaderBlock(
+            kicker: "AO3 Account",
+            title: "Inbox",
+            subtitle: headerTallyLine,
+            palette: theme.appTheme.subjectPalette(hue: theme.scopeHue),
+            gutter: SubjectMetrics.accountGutter
+        )
+    }
+    
+    private var headerTallyLine: String {
+        let shown = limit != nil ? visibleItems.count : (model.totalComments ?? model.items.count)
+        var line = shown == 1 ? "1 message" : "\(shown) messages"
+        if let unread = model.unreadCount, unread > 0 {
+            line += " · \(unread) unread"
+        }
+        if limit == nil, model.totalPages > 1 {
+            line += " · page \(model.currentPage) of \(model.totalPages)"
+        }
+        return line
+    }
+
     @ViewBuilder
     private var itemRows: some View {
-        if model.isShowingStaleCache {
-            Label("Showing cached AO3 data", systemImage: "wifi.slash")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accountControlCardRow()
+        if limit == nil {
+            subjectHeader
+                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
         }
-        ForEach(visibleItems) { item in
-            let context = workContext(item)
-            AccountInboxItemRow(
-                item: item,
-                workAuthors: context.authors,
-                workAuthorIdentities: context.authorIdentities,
-                isSelecting: limit == nil && model.isSelecting,
-                isSelected: model.selectedItemIDs.contains(item.id),
-                isSelectable: model.selectableItemIDs.contains(item.id),
-                onOpen: { onOpen(item) },
-                onOpenChapter: { onOpenChapter(item) },
-                onToggleSelection: { model.toggleSelection(for: item) },
-                canToggleReadState: model.canPerformItemAction(
-                    item.isUnread ? .markRead : .markUnread, item: item
-                ),
-                canDeleteFromInbox: model.canPerformItemAction(.delete, item: item),
-                isPerformingAction: model.isPerformingBulkAction,
-                onReply: { onReply(item) },
-                onToggleReadState: {
-                    perform(item.isUnread ? .markRead : .markUnread, for: item)
-                },
-                onDeleteFromInbox: { perform(.delete, for: item) }
-            )
-                .accountControlCardRow()
+        
+        VStack(spacing: 0) {
+            if model.isShowingStaleCache {
+                Label("Showing cached AO3 data", systemImage: "wifi.slash")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                SubjectRowSeparator(inset: 14)
+            }
+            ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
+                if index > 0 || model.isShowingStaleCache {
+                    SubjectRowSeparator(inset: 0)
+                }
+                let context = workContext(item)
+                AccountInboxItemRow(
+                    item: item,
+                    workAuthors: context.authors,
+                    workAuthorIdentities: context.authorIdentities,
+                    isSelecting: limit == nil && model.isSelecting,
+                    isSelected: model.selectedItemIDs.contains(item.id),
+                    isSelectable: model.selectableItemIDs.contains(item.id),
+                    onOpen: { onOpen(item) },
+                    onOpenChapter: { onOpenChapter(item) },
+                    onToggleSelection: { model.toggleSelection(for: item) },
+                    canToggleReadState: model.canPerformItemAction(
+                        item.isUnread ? .markRead : .markUnread, item: item
+                    ),
+                    canDeleteFromInbox: model.canPerformItemAction(.delete, item: item),
+                    isPerformingAction: model.isPerformingBulkAction,
+                    onReply: { onReply(item) },
+                    onToggleReadState: {
+                        perform(item.isUnread ? .markRead : .markUnread, for: item)
+                    },
+                    onDeleteFromInbox: { perform(.delete, for: item) }
+                )
+                .padding(.horizontal, 14)
+            }
         }
+        .subjectPanel()
+        .listRowInsets(EdgeInsets(top: 12, leading: SubjectMetrics.accountGutter, bottom: 12, trailing: SubjectMetrics.accountGutter))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+
         if let onSeeAll, !model.items.isEmpty {
             Button(action: onSeeAll) {
                 HStack {
@@ -644,42 +688,57 @@ struct AccountInboxFilterSheet: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
+    @Environment(ThemeManager.self) private var themeManager
+
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(model.filterForm?.fields ?? []) { field in
-                    Section(field.title) {
-                        ForEach(field.options) { option in
-                            let isSelected = selectedValue(for: field) == option.value
-                            Button {
-                                model.applyFilter(
-                                    fieldName: field.name,
-                                    value: option.value,
-                                    auth: auth
-                                )
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Text(option.label)
-                                    Spacer()
-                                    if isSelected {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(.tint)
-                                            .accessibilityHidden(true)
+            ScrollView {
+                VStack(spacing: 24) {
+                    ForEach(model.filterForm?.fields ?? []) { field in
+                        VStack(alignment: .leading, spacing: 8) {
+                            SubjectFieldLabel(text: field.title, style: .formGroup)
+                            
+                            VStack(spacing: 0) {
+                                ForEach(Array(field.options.enumerated()), id: \.element.id) { index, option in
+                                    let isSelected = selectedValue(for: field) == option.value
+                                    if index > 0 {
+                                        SubjectRowSeparator()
                                     }
+                                    SubjectFormRow(
+                                        label: option.label,
+                                        arrangement: .value,
+                                        action: {
+                                            model.applyFilter(
+                                                fieldName: field.name,
+                                                value: option.value,
+                                                auth: auth
+                                            )
+                                            dismiss()
+                                        }
+                                    ) {
+                                        HStack {
+                                            if isSelected {
+                                                Image(systemName: "checkmark")
+                                                    .foregroundStyle(.tint)
+                                                    .accessibilityHidden(true)
+                                            }
+                                        }
+                                    }
+                                    // Matches LibraryFilterPanel's `selectableRow` (X5) — without
+                                    // this, VoiceOver announces the row but never says whether it's
+                                    // currently selected (UI-2/T91-RF10).
+                                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                                 }
-                                .frame(minHeight: 44)
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            // Matches LibraryFilterPanel's `selectableRow` (X5) — without
-                            // this, VoiceOver announces the row but never says whether it's
-                            // currently selected (UI-2/T91-RF10).
-                            .accessibilityAddTraits(isSelected ? .isSelected : [])
+                            .subjectPanel()
                         }
                     }
                 }
+                .padding(.top, 20)
+                .padding(.bottom, 40)
+                .padding(.horizontal, SubjectMetrics.accountGutter)
             }
+            .subjectScreenWash(palette: themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue))
             .navigationTitle("Inbox Filters")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
