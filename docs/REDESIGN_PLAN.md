@@ -453,6 +453,7 @@ re-reviews settled work and nobody reviews their own.
 | `769406d7` | Claude | KudosTests compiles; five failures fixed | unreviewed | **Wants a non-Claude reviewer.** New defects in rows marked reviewed: `561f848` (isMatched), `bac3397` (tests never compiled; bulk test pinned the destructive POST). 133/133 in the affected suites. |
 | `4ec714ce` | Claude | Codex's named structs for three lint tuples | unreviewed | Codex's own code, ported unchanged. |
 | `a0143951` | Claude | macOS target builds; scripts; notices | unreviewed | **Wants a non-Claude reviewer** — touches `project.pbxproj` (one `platformFilter`) and the entitlements check. Debug + Release built on a Mac. |
+| T-215.1 (this commit) | Codex | Confirm replacement rolling IPA; preserve checkpoint and claim handoff | unreviewed | Release asset `Kudos-b0aeeb4.ipa`, target `b0aeeb4111e5b18e3c5cf166a27f5f7c1865ad19`, workflow 34640150956 succeeded. Simulator upgrade verification running; not yet passed. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -462,6 +463,28 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — T-215 owner handoff, release and upgrade verification (Codex)
+
+Saved the old tracked checkpoint to `~/codex-checkpoint-2026-09-10.patch`,
+copied its untracked review alongside it, and preserved the complete state in
+a named git stash before fast-forwarding the `191e` worktree to `b0aeeb41`.
+The original checkpoint remains recoverable; only the owner-listed hunks will be ported.
+
+Confirmed the rolling release now targets `b0aeeb4111e5b18e3c5cf166a27f5f7c1865ad19`
+and carries `Kudos-b0aeeb4.ipa` (SHA-256
+`0b55587f856c659f47fd101b9e2bae7a1952eaf24bebb3a2197acbed7f14ef57`).
+[Unsigned IPA run 34640150956](https://github.com/cidy02/kudos-ao3-reader/actions/runs/34640150956)
+completed successfully, including publishing the replacement release.
+
+Created an isolated iPhone 17 Pro Max / iOS 26.5 simulator,
+`KudosCodexHandoff20260911` (`730F4C6C-6DC0-498D-A2B8-843841E94CF2`).
+The `39e7eefa` build is compiling in the clean detached `e63d` worktree, with
+DerivedData under `/tmp/kudos-codex-handoff-derived`. The app upgrade check is
+**pending**, not inferred from the successful fresh-store tests or IPA build.
+Signing settings are unchanged. Remaining tasks proceed while that build runs.
+
+---
 
 ### 2026-09-11 — First run on a Mac: what failed, and what was fixed (Claude)
 
