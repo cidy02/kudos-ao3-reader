@@ -270,7 +270,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. Left: the paging switcher pill. |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
-| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t` share `AO3AccountWorksList`'s 1o header. `1ac` Privacy is done — measured storage figures, the two bulk clears, the spec's footnotes. `1aa` is blocked on seven unverifiable archive paths (see §3). `1ab` is `ReaderOptionsForm`, shared with the reader. |
+| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w`/`1x` (writing lists), `1l` Inbox and `1z` Preferences (both exist, both want the restyle), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` blocked on seven unverifiable archive paths; `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
@@ -449,6 +449,54 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — Subscriptions' badge, and the store it needed (Claude)
+
+`1p` was the one Phase 6 screen with a real capability gap rather than a
+restyle. The list already went through `AO3AccountWorksList`'s 1o header; the
+"X New" badge needed a per-subscription last-seen mark, and no such store
+existed.
+
+**Two decisions worth disagreeing with, so both are written down.**
+
+*Chapter counts, not dates.* `AO3WorkSummary.dateUpdated` is prose ("Updated 3
+Sep 2026") and would have to be parsed back into a date in AO3's locale before
+it could be compared. The posted chapter count arrives already parsed, is what
+the reader cares about, and is the signal `SavedWork.knownChapterCount` already
+uses for update detection.
+
+*`UserDefaults`, not a new `@Model`.* A model means a schema change, a
+`PersistenceSync` entry, a preview-container entry and three `KudosBackup`
+sites — none exercisable from this container, and **T-211 forbids the manifest
+bump** that would normally carry it. What is stored is a per-device convenience:
+losing it re-baselines the badges and loses nothing anyone authored. If it
+should survive a restore it moves to a model later, and
+`SubscriptionWatermarks` becomes the migration source. Bounded at 512.
+
+Three badge rules, each pinned by a test because each would annoy a reader if it
+went the other way:
+
+1. **A work never seen before does not badge.** Otherwise opening this screen for
+   the first time meets three hundred badges, every one technically true and
+   collectively meaningless. First sight baselines instead.
+2. **`baseline` only ever adds**, so a badge survives the page load that draws
+   it rather than being cleared by it.
+3. **Counts only go up**, since AO3 chapter counts fall when a chapter is
+   deleted.
+
+Clearing is an explicit **Mark All as Seen** in the overflow rather than
+something the page load does — a list that marked itself read on sight would
+clear the badge before the reader could use it. Per-row clearing on open wants
+the row's own tap handler threaded through `EnrichingAO3WorkRow`; that is left
+as separate work rather than bodged in.
+
+The badge draws on **both** row branches. A subscribed work already in the
+library renders through the local branch and is the one most worth telling
+someone about — they can open it now. Found by reading
+`CanonicalWorkMerge.remoteLed`, which keeps `.remote` on paired entries, so the
+count is available either way.
+
+---
 
 ### 2026-09-11 — Phase 9 finished except the blocked one (Claude)
 
