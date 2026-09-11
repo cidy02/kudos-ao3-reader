@@ -232,6 +232,7 @@ struct SearchFiltersTests {
         #expect(FilterRangeSlider.offsetValue(500, by: -1_000, maximum: 1_000) == 0)
         #expect(FilterRangeSlider.offsetValue(500, by: 1_000, maximum: 1_000) == 1_000)
         #expect(FilterRangeSlider.offsetValue(500, by: -10.5, maximum: 1_000) == 490)
+        #expect(FilterRangeSlider.offsetValue(500, by: .nan, maximum: 1_000) == 500)
     }
 
     @Test func sortColumnsCarryTheDirectionAReaderExpects() {
