@@ -122,6 +122,12 @@ struct FandomWorksView: View {
     /// with `fandom: (A OR B)` was worse — AO3 has no indexed `fandom` field, so
     /// that matches nothing at all. The union AO3 does support goes through
     /// resolved tag ids in `filter_ids`, and the app holds no tag ids.
+    /// Verified live 2026-09-11: `work_search[query]=filter_ids:(27785 OR 99117)`
+    /// returns exactly the union (68,057 = 61,248 + 9,958 − 3,149, where
+    /// `fandom_names` gave the 3,149 intersection). Autocomplete is *not* the id
+    /// source — its `id` is the tag name. Numeric ids are on each tag's works page
+    /// (`/tags/<name>/works` → `/tags/27785/feed.atom`), so wiring the union costs
+    /// one cached tag-page request per sibling.
     ///
     /// Until it does, the join stays (it at least returns *some* real works, which
     /// the OR clause did not) and `exactCountIsTrustworthy` is false, so the
@@ -286,10 +292,6 @@ struct FandomWorksView: View {
             // `/works/search` with every original name in `fandom_names`.
             let result: AO3SearchPage
             if includedFandoms.count == 1 {
-                // A single tag still uses AO3's own listing so the heading names
-                // the fandom. A family has no one tag path, so it goes to
-                // `/works/search` — with the siblings as a `fandom: (A OR B)`
-                // union in the query, not as `fandom_names`, which ANDs.
                 result = try await AO3Client.shared.fandomWorksPage(
                     fandom: includedFandoms[0],
                     filters: filters,

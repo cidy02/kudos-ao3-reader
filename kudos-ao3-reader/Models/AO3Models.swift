@@ -530,46 +530,6 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
 
     /// The free-text query AO3 receives, augmented with exclusions and any
     /// multi-rating expression that the single-value rating field can't express.
-    /// Sibling fandoms to match as a **union**, for a family page.
-    ///
-    /// Kept apart from `fandom` because the two mean opposite things.
-    /// `work_search[fandom_names]` is an AND: sending "Doctor Who (1963)" and
-    /// "Doctor Who (2005)" together asks for works tagged with *both*, which is
-    /// almost nothing, and a family page that did that showed the intersection
-    /// while calling it the family's total. A union has to go through the query
-    /// field, which is what `fandomUnionClause` builds.
-    nonisolated var fandomUnion: [String] = []
-
-    /// **Unused, and deliberately not wired to anything.**
-    ///
-    /// This was an attempt to express a fandom union as `fandom: ("A" OR "B")`,
-    /// and it is wrong: AO3 has no indexed `fandom` field or alias, so
-    /// `work_query.rb` forwards the expression unchanged and the search matches
-    /// **nothing** — worse than the AND it was replacing, because a family page
-    /// then cached zero as its exact count.
-    ///
-    /// The correct mechanism is resolved tag ids through `filter_ids`, which AO3
-    /// does support for a union. The app cannot do that yet: it holds no tag ids
-    /// anywhere. `AO3Client.parseAutocomplete` decodes `{id, name}` and discards
-    /// the id, so the id *source* exists — but whether an autocomplete id is the
-    /// canonical filter id `filter_ids` wants has to be checked against a live
-    /// AO3, and this branch is built in a container that cannot reach one.
-    ///
-    /// Kept rather than deleted so the next attempt starts from what was already
-    /// established rather than from the same wrong guess.
-    nonisolated var unsupportedFandomUnionClause: String? {
-        let names = fandomUnion
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !names.isEmpty else { return nil }
-        // A quote inside a tag name would end the phrase early; AO3 tags cannot
-        // contain one, but dropping it costs nothing and cannot produce a query
-        // that means something else.
-        let quoted = names.map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"" }
-        guard quoted.count > 1 else { return "fandom: \(quoted[0])" }
-        return "fandom: (\(quoted.joined(separator: " OR ")))"
-    }
-
     nonisolated var searchQuery: String {
         var clauses: [String] = []
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
