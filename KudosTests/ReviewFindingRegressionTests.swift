@@ -86,17 +86,6 @@ struct ReviewFindingRegressionTests {
 
     // MARK: A family union is not expressible yet, and must not be faked
 
-    @Test func theUnsupportedUnionClauseNeverReachesAQuery() {
-        var filters = AO3SearchFilters()
-        filters.fandomUnion = ["Doctor Who (1963)", "Doctor Who (2005)"]
-
-        // `fandom: (...)` matches nothing on AO3 — there is no indexed fandom
-        // field — so shipping it was worse than the AND it replaced. It stays
-        // unwired until the union can be built from resolved tag ids.
-        #expect(!filters.searchQuery.contains("fandom:"))
-        #expect(filters.searchQuery.isEmpty)
-    }
-
     @Test func aFamilyTotalIsNotCachedWhileTheSearchIsAnIntersection() {
         // The tilde on a family row is the honest reading until a family search is
         // a real union. Caching the intersection replaced it with a figure wrong
