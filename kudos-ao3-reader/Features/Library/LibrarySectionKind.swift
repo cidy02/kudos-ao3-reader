@@ -85,7 +85,7 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
             // predate queues. Queue-only works intentionally live here, not in the
             // normal downloaded/finished shelves.
             works
-                .filter { ($0.isInSavedForLaterQueue || ($0.isSaved && !$0.isQueuedForLater)) && visible($0) }
+                .filter { $0.isOnSavedForLaterShelf && visible($0) }
                 .sorted { recency($0) > recency($1) }
         case .finished:
             works

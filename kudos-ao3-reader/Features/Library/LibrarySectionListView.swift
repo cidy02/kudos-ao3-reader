@@ -37,6 +37,10 @@ struct LibrarySectionListView: View {
     /// Spec 1ah/1ai's Time / State / Fandom / Flat strip. Persisted like
     /// `displayMode`, and only ever shown for History — see `showsGroupingStrip`.
     @AppStorage("library.history.grouping") private var historyGrouping: LibraryHistoryGrouping = .time
+    /// Spec 1aj/1ak/1bc/1bd's Works / Authors / Fandoms / Tags strip, and the order
+    /// its three aggregate scopes are ranked by. Favorites only.
+    @AppStorage("library.favorites.scope") private var favoriteScope: FavoriteScope = .works
+    @AppStorage("library.favorites.order") private var favoriteOrder: ReadingAffinities.Order = .recent
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
     /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
     /// tracks a card that's grown wider with Dynamic Type instead of assuming the
@@ -183,7 +187,12 @@ struct LibrarySectionListView: View {
 
     @ViewBuilder
     private var content: some View {
-        if kind.isPlaceholder {
+        if showsAffinityList {
+            // Ahead of the empty-shelf branch on purpose: a reader with no starred
+            // works still has authors and tags behind what they have read, and
+            // `hasAnyContent` only knows about starred works.
+            affinityList
+        } else if kind.isPlaceholder {
             ContentUnavailableView {
                 Label(kind.title, systemImage: kind.emptyIcon)
             } description: {
@@ -282,6 +291,153 @@ struct LibrarySectionListView: View {
         }
     }
 
+    /// Favorites' four scopes. Works keeps the existing work list — with its swipe
+    /// actions, select mode and filters — and the other three are aggregates over the
+    /// reading log (see `ReadingAffinities`).
+    nonisolated enum FavoriteScope: String, CaseIterable, Hashable, Sendable {
+        case works
+        case authors
+        case fandoms
+        case tags
+
+        var title: String {
+            switch self {
+            case .works: "Works"
+            case .authors: "Authors"
+            case .fandoms: "Fandoms"
+            case .tags: "Tags"
+            }
+        }
+    }
+
+    private var showsFavoriteScopes: Bool { kind == .favorites }
+
+    /// True when an aggregate scope is showing, so the work list, its filters and
+    /// its select mode all stand down — none of them mean anything over a list of
+    /// tag names.
+    private var showsAffinityList: Bool {
+        showsFavoriteScopes && favoriteScope != .works
+    }
+
+    private var favoriteScopeStrip: some View {
+        VStack(spacing: 8) {
+            SubjectSegmentedControl(
+                options: FavoriteScope.allCases,
+                title: \.title,
+                selection: $favoriteScope
+            )
+            if showsAffinityList {
+                SubjectSegmentedControl(
+                    options: ReadingAffinities.Order.allCases,
+                    title: \.title,
+                    selection: $favoriteOrder
+                )
+            }
+        }
+        .padding(.horizontal, SubjectMetrics.gutter)
+    }
+
+    /// Every work the reader may see, not just the starred ones: the spec's rows say
+    /// "6 works read", which is a fact about everything read, and an Authors list
+    /// restricted to starred works would mostly be empty.
+    ///
+    /// **Filtered through `passesPrivacy`.** A work the mature gate is hiding must
+    /// not have its author, fandom or tags named on this page — the row would put
+    /// back exactly what the gate took away, one screen over.
+    private var affinitySourceWorks: [SavedWork] {
+        works.filter { !$0.isQueueOnlyWork && passesPrivacy($0) }
+    }
+
+    private var affinityRows: [ReadingAffinities.Row] {
+        let source = affinitySourceWorks
+        let summaries = ReadingLogService.summaries(in: context)
+        switch favoriteScope {
+        case .works: return []
+        case .authors:
+            return ReadingAffinities.authors(works: source, summaries: summaries, order: favoriteOrder)
+        case .fandoms:
+            return ReadingAffinities.fandoms(works: source, summaries: summaries, order: favoriteOrder)
+        case .tags:
+            return ReadingAffinities.tags(works: source, summaries: summaries, order: favoriteOrder)
+        }
+    }
+
+    /// The aggregate scopes as their own list. Deliberately not folded into
+    /// `detailedList`: that one is built around works — swipes, selection, the
+    /// filter rail — and none of it applies to a row that is a tag name.
+    private var affinityList: some View {
+        let rows = affinityRows
+        return List {
+            Section {
+                affinityHeader(count: rows.count)
+                    .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                favoriteScopeStrip
+                    .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+
+            if rows.isEmpty {
+                Section {
+                    affinityEmptyCard.pageBodyRow(top: 14, gutter: SubjectMetrics.gutter)
+                }
+            } else {
+                Section {
+                    SectionRuleHeader(title: favoriteScope.title, count: rows.count)
+                        .pageBodyRow(top: 18, gutter: 0)
+                    ForEach(rows) { row in
+                        FavoriteAffinityRow(
+                            row: row,
+                            palette: scopePalette,
+                            usesHashTile: favoriteScope == .tags
+                        )
+                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                    }
+                }
+            }
+        }
+        .cardList()
+        .subjectScreenWash(palette: scopePalette)
+    }
+
+    /// The same header block, tallying rows rather than works — on the Tags scope
+    /// "34 works" would be a count of something not on screen.
+    private func affinityHeader(count: Int) -> some View {
+        SubjectHeaderBlock(
+            kicker: "Library",
+            title: kind.title,
+            subtitle: "\(count) \(count == 1 ? singularScopeNoun : favoriteScope.title.lowercased())",
+            palette: scopePalette
+        )
+    }
+
+    private var singularScopeNoun: String {
+        switch favoriteScope {
+        case .works: "work"
+        case .authors: "author"
+        case .fandoms: "fandom"
+        case .tags: "tag"
+        }
+    }
+
+    private var affinityEmptyCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Nothing read yet")
+                .font(.system(size: 15, weight: .semibold))
+            Text("These are the \(favoriteScope.title.lowercased()) behind the works you have "
+                + "actually read, ranked. They fill in as you read — there is nothing to star.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .subjectPanel()
+    }
+
     /// Only History gets the grouping strip. The other six sections are already one
     /// thing by definition — a Downloaded list grouped by state would be one bucket —
     /// and spec 1ah/1ai draw the control on History alone.
@@ -326,6 +482,15 @@ struct LibrarySectionListView: View {
         let byID = Dictionary(visibleItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return List {
             subjectHeaderSection
+
+            if showsFavoriteScopes {
+                Section {
+                    favoriteScopeStrip
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+            }
 
             if showsGroupingStrip {
                 Section {
