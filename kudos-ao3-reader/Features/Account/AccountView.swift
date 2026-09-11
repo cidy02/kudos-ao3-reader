@@ -144,6 +144,9 @@ struct AccountView: View {
                 .navigationDestination(for: AO3CollectionFormDestination.self) {
                     AO3CollectionFormView(slug: $0.slug)
                 }
+                .navigationDestination(for: AO3CollectionItemsDestination.self) {
+                    AO3CollectionItemsView(slug: $0.slug, title: $0.title)
+                }
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 // The work cards on this tab carry an ⓘ that pushes
                 // `LocalWorkDestination.detail`; without this handler it would be
