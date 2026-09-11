@@ -98,7 +98,7 @@ struct AO3WorkFormParsingTests {
         #expect(!params.keys.contains(where: { $0.contains("delete") }))
     }
 
-    @Test func bulkAddRemoveLeavesBlankFieldsUntouchedAndMarksOverwrites() throws {
+    @Test func bulkPostCarriesOnlyUniformFieldsAndTagsMergePerWork() throws {
         let form = try AO3Client.parseBulkEditForm(from: try fixture("ao3_edit_multiple"))
         #expect(form.workIDs == [11, 22, 33])
         #expect(form.csrfToken == "bulk-csrf==")
@@ -113,11 +113,12 @@ struct AO3WorkFormParsingTests {
 
         #expect(changes.isOverwriteField(AO3WorkFormField.rating))
         #expect(changes.isOverwriteField(AO3WorkFormField.languageID))
-        #expect(!changes.isOverwriteField(AO3WorkFormField.fandoms))
 
         let params = changes.parameters(csrfToken: form.csrfToken)
         let dict = Dictionary(uniqueKeysWithValues: params.filter { $0.0 != AO3WorkFormField.workIDs })
-        #expect(dict[AO3WorkFormField.fandoms] == "Doctor Who")
+        // No tag field in the bulk POST (a2c4f5e3): update_multiple replaces a
+        // work's whole list per tag type, so tags fan out per work via `applying`.
+        #expect(dict[AO3WorkFormField.fandoms] == nil)
         #expect(dict[AO3WorkFormField.rating] == "Explicit")
         #expect(dict[AO3WorkFormField.languageID] == nil)
         #expect(params.filter { $0.0 == AO3WorkFormField.workIDs }.map(\.1) == ["11", "22", "33"])
@@ -145,7 +146,7 @@ struct AO3WorkFormParsingTests {
         #expect(body.filter { $0.0 == AO3WorkFormField.serialOrder }.map(\.1) == ["22", "11", "33"])
     }
 
-    @Test func parsesChapterFormAndOmitsPositionWhenAbsent() {
+    @Test func parsesChapterFormAndOmitsPositionWhenAbsent() throws {
         let html = """
         <html><head><meta name="csrf-token" content="ch=="></head>
         <body><div id="chapter-form" class="verbose post work chapter">
@@ -173,7 +174,7 @@ struct AO3WorkFormParsingTests {
         #expect(params[AO3WorkFormField.chapterWipLength] == "13")
     }
 
-    @Test func parsesSeriesManageOrder() {
+    @Test func parsesSeriesManageOrder() throws {
         let html = """
         <html><head><meta name="csrf-token" content="s=="></head>
         <body>
@@ -203,7 +204,7 @@ struct AO3WorkFormParsingTests {
         #expect(rows.map(\.position) == [1, 2, 3])
     }
 
-    @Test func parsesCollectionRowStateOnTheBlurb() {
+    @Test func parsesCollectionRowStateOnTheBlurb() throws {
         let html = """
         <ul>
           <li class="collection picture blurb group">
@@ -229,7 +230,7 @@ struct AO3WorkFormParsingTests {
         #expect(offers[2].access.rowState == .open)
     }
 
-    @Test func parsesDeleteConfirmCountsWhenPresent() {
+    @Test func parsesDeleteConfirmCountsWhenPresent() throws {
         let html = """
         <html><head><meta name="csrf-token" content="del=="></head>
         <body>
@@ -278,7 +279,7 @@ struct AO3WorkFormParsingTests {
         )
     }
 
-    @Test func previewExtractsThePreviewPane() {
+    @Test func previewExtractsThePreviewPane() throws {
         let html = """
         <html><body>
           <div id="previewpane"><div class="draft work"><div id="workskin"><p>Hello.</p></div></div></div>

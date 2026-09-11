@@ -354,7 +354,10 @@ nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
     var sentAt: Date? = nil
 
     var isMatched: Bool {
-        requestSignupID != nil && (offerSignupID != nil || !offerPseud.isEmpty)
+        // No parser sets `requestSignupID`, and AO3's Complete tab never links the
+        // request sign-up at all — the join proves the request side, so a giver is
+        // what makes it matched.
+        offerSignupID != nil || !offerPseud.isEmpty
     }
 }
 

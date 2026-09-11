@@ -118,7 +118,7 @@ struct ReadingInsightsTests {
         // The fourth fandom and the unattributable session fold together, and
         // the shares still sum to the total — the whole reason attribution is a
         // partition rather than one row per fandom of a crossover.
-        #expect(shares.last?.seconds == 15 * 60)
+        #expect(shares.last?.seconds == Double(15 * 60))
         #expect(shares.last?.isRemainder == true)
         #expect(shares.reduce(0) { $0 + $1.seconds } == 125 * 60)
     }
