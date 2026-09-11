@@ -540,13 +540,24 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
     /// field, which is what `fandomUnionClause` builds.
     nonisolated var fandomUnion: [String] = []
 
-    /// `fandom: ("A" OR "B")` — AO3's documented search-field syntax.
+    /// **Unused, and deliberately not wired to anything.**
     ///
-    /// One name needs no parentheses and no OR. Quotes are the reason this is
-    /// built rather than interpolated at a call site: fandom tags contain spaces,
-    /// slashes, pipes and brackets ("傾のヒーローアカデミア | Boku no Hero Academia"),
-    /// and an unquoted one would parse as several terms.
-    nonisolated var fandomUnionClause: String? {
+    /// This was an attempt to express a fandom union as `fandom: ("A" OR "B")`,
+    /// and it is wrong: AO3 has no indexed `fandom` field or alias, so
+    /// `work_query.rb` forwards the expression unchanged and the search matches
+    /// **nothing** — worse than the AND it was replacing, because a family page
+    /// then cached zero as its exact count.
+    ///
+    /// The correct mechanism is resolved tag ids through `filter_ids`, which AO3
+    /// does support for a union. The app cannot do that yet: it holds no tag ids
+    /// anywhere. `AO3Client.parseAutocomplete` decodes `{id, name}` and discards
+    /// the id, so the id *source* exists — but whether an autocomplete id is the
+    /// canonical filter id `filter_ids` wants has to be checked against a live
+    /// AO3, and this branch is built in a container that cannot reach one.
+    ///
+    /// Kept rather than deleted so the next attempt starts from what was already
+    /// established rather than from the same wrong guess.
+    nonisolated var unsupportedFandomUnionClause: String? {
         let names = fandomUnion
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -563,7 +574,6 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         var clauses: [String] = []
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedQuery.isEmpty { clauses.append(trimmedQuery) }
-        if let fandomUnionClause { clauses.append(fandomUnionClause) }
         // Excluded *tags* are no longer folded in here — they go to AO3's own
         // `work_search[excluded_tag_names]` (see `excludedTagNames`). Warnings and
         // categories stay, because AO3 has no structured exclusion for those.

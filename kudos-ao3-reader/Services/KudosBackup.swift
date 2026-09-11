@@ -2780,7 +2780,7 @@ enum KudosBackupService {
         // A record deleted on another device arrives as a tombstone with no record
         // behind it, so the loop above never sees it and the local copy survives.
         // Deletions have to be applied against what is already here.
-        applyTombstonesToExisting(existing, in: context) {
+        applyTombstonesToExisting(existing, in: context, mode: mode) {
             tombstones.readingSessionResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
 
@@ -2797,11 +2797,22 @@ enum KudosBackupService {
     /// `resolution` is the same check the incoming loop runs, asked the other way
     /// round: not "should this arriving record be suppressed" but "has this record
     /// already here been deleted elsewhere".
+    ///
+    /// **Never in `replaceLibrary`.** That mode deliberately bypasses tombstones —
+    /// it is "make this device look like the archive", and the archive wins even
+    /// over a local delete. Running this pass there made a repeated identical
+    /// replacement destructive: the first replace restores a record the archive
+    /// contains, the tombstone from the earlier local delete is still on file, and
+    /// the second replace deletes what it had just restored. [1,1,1] became
+    /// [0,0,0] on the second run. The same `mode` guard the incoming loop already
+    /// has belongs here.
     private static func applyTombstonesToExisting<Record: PersistentModel>(
         _ records: [Record],
         in context: ModelContext,
+        mode: BackupImportMode,
         resolution: (Record) -> SyncMerge.TombstoneResolution
     ) {
+        guard mode != .replaceLibrary else { return }
         for record in records {
             if case .suppressStaleData = resolution(record) {
                 context.delete(record)
@@ -2896,7 +2907,7 @@ enum KudosBackupService {
             }
         }
 
-        applyTombstonesToExisting(existing, in: context) {
+        applyTombstonesToExisting(existing, in: context, mode: mode) {
             tombstones.readingFavoriteResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
         }
 
@@ -2982,7 +2993,7 @@ enum KudosBackupService {
             }
         }
 
-        applyTombstonesToExisting(existing, in: context) {
+        applyTombstonesToExisting(existing, in: context, mode: mode) {
             tombstones.fandomReadWatermarkResolution(
                 id: $0.id, incomingModifiedAt: $0.lastModifiedAt
             )

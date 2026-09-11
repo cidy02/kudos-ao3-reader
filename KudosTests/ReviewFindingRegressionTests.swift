@@ -84,39 +84,24 @@ struct ReviewFindingRegressionTests {
         #expect(values == ["23", "22"])
     }
 
-    // MARK: A family is a union
+    // MARK: A family union is not expressible yet, and must not be faked
 
-    @Test func siblingFandomsBecomeAnOrClauseRatherThanAnAnd() {
+    @Test func theUnsupportedUnionClauseNeverReachesAQuery() {
         var filters = AO3SearchFilters()
         filters.fandomUnion = ["Doctor Who (1963)", "Doctor Who (2005)"]
 
-        let clause = filters.fandomUnionClause
-        #expect(clause == "fandom: (\"Doctor Who (1963)\" OR \"Doctor Who (2005)\")")
-        // And it reaches the query AO3 actually reads.
-        #expect(filters.searchQuery.contains("OR"))
-        // `fandom_names` stays empty: that field ANDs, which is the bug.
-        #expect(filters.fandom.isEmpty)
+        // `fandom: (...)` matches nothing on AO3 — there is no indexed fandom
+        // field — so shipping it was worse than the AND it replaced. It stays
+        // unwired until the union can be built from resolved tag ids.
+        #expect(!filters.searchQuery.contains("fandom:"))
+        #expect(filters.searchQuery.isEmpty)
     }
 
-    @Test func oneFandomNeedsNoParenthesesAndNoOr() {
-        var filters = AO3SearchFilters()
-        filters.fandomUnion = ["Naruto"]
-        #expect(filters.fandomUnionClause == "fandom: \"Naruto\"")
-    }
-
-    @Test func namesAreQuotedSoPunctuationDoesNotSplitIntoTerms() {
-        var filters = AO3SearchFilters()
-        // Real AO3 tags carry spaces, pipes and brackets.
-        filters.fandomUnion = ["僕のヒーローアカデミア | Boku no Hero Academia"]
-        let clause = try? #require(filters.fandomUnionClause)
-        #expect(clause?.hasPrefix("fandom: \"") == true)
-        #expect(clause?.hasSuffix("\"") == true)
-    }
-
-    @Test func anEmptyUnionProducesNoClause() {
-        var filters = AO3SearchFilters()
-        filters.fandomUnion = ["   ", ""]
-        #expect(filters.fandomUnionClause == nil)
+    @Test func aFamilyTotalIsNotCachedWhileTheSearchIsAnIntersection() {
+        // The tilde on a family row is the honest reading until a family search is
+        // a real union. Caching the intersection replaced it with a figure wrong
+        // in the same direction every time.
+        #expect(FandomWorksView.exactCountIsTrustworthy == false)
     }
 
     // MARK: A huge pasted number must not crash the slider

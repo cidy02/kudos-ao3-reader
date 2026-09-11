@@ -114,19 +114,25 @@ struct FandomWorksView: View {
 
     /// Filters scoped to this page's included fandoms — also the reset baseline.
     ///
-    /// **A family is a union, and `fandom_names` is an AND.** Joining the siblings
-    /// into `filters.fandom` asked AO3 for works tagged with *every* era of Doctor
-    /// Who at once, which excludes almost everything — and the page then cached
-    /// that intersection as the family's exact total, so the tilde was replaced by
-    /// a number that was wrong in the same direction every time. Multiple names go
-    /// through `fandomUnion`, which becomes `fandom: ("A" OR "B")` in the query.
+    /// **A family page cannot currently express its own union, and says so by not
+    /// claiming a total.**
+    ///
+    /// `work_search[fandom_names]` ANDs, so joining the siblings asks for works
+    /// tagged with *every* era of Doctor Who at once. An attempt to replace it
+    /// with `fandom: (A OR B)` was worse — AO3 has no indexed `fandom` field, so
+    /// that matches nothing at all. The union AO3 does support goes through
+    /// resolved tag ids in `filter_ids`, and the app holds no tag ids.
+    ///
+    /// Until it does, the join stays (it at least returns *some* real works, which
+    /// the OR clause did not) and `exactCountIsTrustworthy` is false, so the
+    /// family's tilde is never replaced by a figure derived from it.
+    /// Flip to true only once a family search is a real union — see `baseline`.
+    /// The tilde on a family row is the honest reading until then.
+    static let exactCountIsTrustworthy = false
+
     private static func baseline(for fandoms: [String]) -> AO3SearchFilters {
         var filters = AO3SearchFilters()
-        if fandoms.count > 1 {
-            filters.fandomUnion = fandoms
-        } else {
-            filters.fandom = fandoms.joined(separator: ", ")
-        }
+        filters.fandom = fandoms.joined(separator: ", ")
         // Date Updated, not the app-wide `.relevance` default: this screen reads
         // AO3's tag listing, which has no relevance ordering and sorts by
         // `revised_at` unless told otherwise (verified live). Seeding it here means
@@ -302,7 +308,11 @@ struct FandomWorksView: View {
             totalPages = result.totalPages
             resultSummary = result.summary
             phase = .loaded
-            if includedFandoms.count > 1,
+            // Deliberately unreachable while a family search is an intersection:
+            // caching that figure as the family's exact total replaced an honest
+            // tilde with a number wrong in the same direction every time.
+            if Self.exactCountIsTrustworthy,
+               includedFandoms.count > 1,
                filters == Self.baseline(for: includedFandoms),
                let total = result.summary?.total
             {
