@@ -273,7 +273,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t` share `AO3AccountWorksList`'s 1o header. `1ac` Privacy is done — measured storage figures, the two bulk clears, the spec's footnotes. `1aa` is blocked on seven unverifiable archive paths (see §3). `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
-| **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | 🟡 **data path landed** (`725695e3`). **`1bi` Reading Insights is built** — it replaced `ReadingStatisticsView`, whose figures it keeps in a fourth card. Rules live in `ReadingInsights`, tested without a container. `1ah`/`1ai`/`1aj`/`1ak`/`1bc`/`1bd`/`1bj` not built. |
+| **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **networking landed** (`561f848b`): `AO3Client+Collections` / `AO3CollectionActions`. Screens not built. `1bk` is local and already existed. Close/delete stay Open on AO3. |
 | **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
 | **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
@@ -449,6 +449,73 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — Phase 9 finished except the blocked one (Claude)
+
+`1bj`, `1ah`, `1ai`, `1aj`, `1ak`, `1bd` all landed. `1bc` (Favorites — fandoms)
+is the one left, and only its "with new work" half: that needs a fandom-page
+newest-works parse that does not exist. The **fandoms scope itself is built** —
+it is the same derived list as authors and tags.
+
+**Recently Deleted (`1bj`) groups by how long is left, not by type.** Nothing is
+lost by regrouping because each row names its kind in its kicker, and a queue
+expiring in three days belongs next to a work expiring in three days. The spec
+says the window is 30 days; the app's is 90, and the header reads
+`PreservedWorkService.recoveryWindow` so the screen cannot promise a window the
+code will not honour. String sweep: every affordance intact (swipeActions 2→2,
+contextMenu 1→1, confirmationDialog 3→3), and the only strings dropped are the
+three type section headers the kickers replaced.
+
+**`1ah`/`1ai` are one screen with a Time / State / Fandom / Flat strip.** Rules
+in `LibraryHistoryGrouping`, pure over works, nine tests.
+
+> **A section that can never populate, left in deliberately.** The Abandoned
+> bucket cannot fill on today's Reading History shelf.
+> `ReadingLogService.isAbandoned` requires `isInProgress`, which requires the
+> EPUB on disk; `LibrarySectionKind.history` selects `!hasEPUB`. They never
+> overlap. Widening the shelf here to light it up would change what Reading
+> History *contains*, which is not a screen's call to make — so the bucket stays,
+> "Read, not finished" is the one that fills, and this is the note for whoever
+> decides whether the shelf should widen.
+
+**Favorites (`1aj`/`1ak`/`1bd`) scopes are derived, not starred**, which is the
+spec's own reading: its rows say "6 works read · 31h 12m", which the app
+computes. A star list would be empty for every reader who has not curated one.
+
+> **Finding: the explicit star is built and unreachable.** `ReadingFavorite`
+> carries `.author` / `.fandom` / `.tag` kinds and
+> `ReadingLogService.setFavorite` writes them — and **`setFavorite` has no
+> callers anywhere in the app**. Works meanwhile use `SavedWork.isFavorite`, a
+> separate boolean, which is what the Favorites shelf and every star button read.
+> Two stores for one idea, one of them dead. Nothing here writes either. Someone
+> has to decide whether `ReadingFavorite.work` replaces the boolean or the
+> author/fandom/tag kinds get dropped; doing it silently while building a screen
+> would be the wrong way to settle it.
+
+**The mature gate applies to derived rows**, which is not obvious and is worth
+stating: affinity rows come from works filtered through `passesPrivacy`, because
+a row naming the author or tags of a hidden work puts back exactly what the gate
+took away, one screen over. Same class of leak as the one Insights had.
+
+Two new shared pieces, both made to stop a drift rather than to be tidy:
+
+- `ReadingLogService.summaries(in:)` — the whole log in **one** fetch. The
+  per-work helpers each fetch the entire session table, which is fine for a
+  detail screen asking about one work and quadratic for a history list asking
+  about three hundred. Gated on History so the other six sections do not pay for
+  it.
+- `SavedWork.isOnSavedForLaterShelf` — a test caught `ReadingAffinities` checking
+  queue membership while the shelf's actual rule is membership *or* the legacy
+  `isSaved` flag. A row reading "3 in Saved for Later" that disagreed with a
+  shelf showing two is a bug nobody could explain from either side.
+
+Counts in `ReadingAffinities` deliberately **over-count** against a grand total,
+unlike `ReadingInsights`' fandom shares which **partition**. Worth writing down
+because the two sit one tap apart and look like the same arithmetic: a share of a
+fixed pie has to sum to the pie, while "N works read carry this tag" is a count
+about that tag alone, and a work with two tags is honestly counted by both.
+
+---
 
 ### 2026-09-10 — Reading Insights takes artboard 1bi, and stops being two screens (Claude)
 
