@@ -229,6 +229,9 @@ struct FilterRangeSlider: View {
     /// and drags past the track must not overflow either Int or its conversion.
     static func offsetValue(_ value: Int, by delta: Double, maximum: Int) -> Int {
         let shifted = (Double(value) + delta).rounded()
+        // A zero-width track makes the first drag sample 0/0. NaN fails both
+        // clamps below and `Int(NaN)` traps, so it means no movement.
+        guard !shifted.isNaN else { return min(max(value, 0), maximum) }
         if shifted <= 0 { return 0 }
         if shifted >= Double(maximum) { return maximum }
         return Int(shifted)
