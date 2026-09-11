@@ -119,6 +119,55 @@ struct ReadingLogRestoreDefectTests {
         #expect(try target.fetch(FetchDescriptor<FandomReadWatermark>()).isEmpty)
     }
 
+    @Test func repeatingAnIdenticalReplaceLibraryIsNotDestructive() throws {
+        let schema = schema()
+
+        // The archive holds the records *and* the tombstones from when they were
+        // deleted on the source device — which is the ordinary shape of a backup
+        // taken after a delete-and-recreate.
+        let source = try context(schema)
+        let favorite = ReadingFavorite(
+            kind: .tag, targetKey: "Fix-It", displayName: "Fix-It",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let watermark = FandomReadWatermark(
+            fandomName: "Naruto", lastModifiedAt: Date(timeIntervalSince1970: 100)
+        )
+        source.insert(favorite)
+        source.insert(watermark)
+        try source.save()
+        SyncTombstones.recordDeletion(of: favorite, in: source)
+        SyncTombstones.recordDeletion(of: watermark, in: source)
+        try source.save()
+        let tombstones = try source.fetch(FetchDescriptor<SyncTombstone>())
+
+        let contents = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            readingSessions: [],
+            readingFavorites: [favorite],
+            fandomReadWatermarks: [watermark],
+            tombstones: tombstones,
+            defaults: try testDefaults()
+        )
+
+        let target = try context(schema)
+        _ = try KudosBackupService.restore(
+            contents, into: target, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        #expect(try target.fetch(FetchDescriptor<ReadingFavorite>()).count == 1)
+        #expect(try target.fetch(FetchDescriptor<FandomReadWatermark>()).count == 1)
+
+        // Replace Library is "make this device look like the archive", and the
+        // archive wins even over a local delete — so running it twice must be
+        // idempotent. A tombstone pass that ignored the mode turned the second
+        // run into a deletion of what the first had just restored.
+        _ = try KudosBackupService.restore(
+            contents, into: target, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        #expect(try target.fetch(FetchDescriptor<ReadingFavorite>()).count == 1)
+        #expect(try target.fetch(FetchDescriptor<FandomReadWatermark>()).count == 1)
+    }
+
     // MARK: History must follow the work it belongs to
 
     @Test func historyAndStarsFollowAWorkMergedIntoAnExistingCopy() throws {
