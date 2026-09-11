@@ -98,8 +98,8 @@ struct AO3CollectionsList: View {
                     ForEach(visibleCollections) { collection in
                         AO3CollectionCard(collection: collection, palette: palette)
                             .cardNavigation(
-                                to: AO3AccountWorksList.Kind.collection(
-                                    name: collection.name,
+                                to: AO3CollectionDestination(
+                                    slug: collection.name,
                                     title: collection.title
                                 ),
                                 accessibilityLabel: collection.title
