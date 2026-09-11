@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 
 /// Durable state for a single user-initiated Kokoro download or its local
@@ -82,3 +83,4 @@ nonisolated enum KokoroInstallOperationStore {
         try? fileManager.removeItem(at: url(in: modelsRoot))
     }
 }
+#endif

@@ -34,7 +34,10 @@ xcodebuild build \
 # WPD-2: nothing in the repo previously built Release, so the product half
 # of the entitlement guard (get-task-allow / sandbox / hardened runtime)
 # never ran. Build Release and hand the .app to the same script.
-RELEASE_DD="$ROOT/.build/release-macos"
+# Outside the checkout: a repo under an iCloud-synced ~/Documents gets
+# FinderInfo/fileprovider xattrs stamped into the bundle and codesign refuses
+# it ("resource fork, Finder information, or similar detritus not allowed").
+RELEASE_DD="${TMPDIR:-/tmp}/kudos-release-macos"
 xcodebuild build \
   -project "$ROOT/AO3_App_OpenSource.xcodeproj" \
   -scheme AO3_App_OpenSource \

@@ -82,7 +82,11 @@ fi
 
 # WPD-3: the entitlements file is macOS-shaped (app-sandbox, user-selected
 # files). Applying it to iOS replaces Keychain entitlements.
-if grep 'CODE_SIGN_ENTITLEMENTS' "$RELEASE_BLOCK" | grep -vq 'sdk=macosx'; then
+# The only non-macOS pins allowed are iPhone-SDK pins to the iOS file, which
+# carries the ubiquity-kvstore entitlement. Excluding any `sdk=` qualifier would
+# also pass `[sdk=*]` or an iOS pin to Kudos.entitlements — the WPD-3 hazard.
+if grep 'CODE_SIGN_ENTITLEMENTS' "$RELEASE_BLOCK" | grep -v 'sdk=macosx' \
+    | grep -vq 'sdk=iphone[a-z]*\*\]" = "kudos-ao3-reader/Kudos-iOS.entitlements";'; then
     fail "Release CODE_SIGN_ENTITLEMENTS is not confined to [sdk=macosx*] (unqualified pin applies to iOS and drops Keychain)."
 fi
 if ! grep -q 'CODE_SIGN_ENTITLEMENTS\[sdk=macosx\*\]' "$RELEASE_BLOCK"; then

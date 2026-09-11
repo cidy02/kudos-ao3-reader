@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 
 /// The two Kokoro v0.19 model variants that use Sherpa's compatible voice,
@@ -191,3 +192,4 @@ nonisolated struct KokoroRuntimeConfiguration: Equatable, Sendable {
         currentKind != requestedKind || currentConfiguration != requestedConfiguration
     }
 }
+#endif

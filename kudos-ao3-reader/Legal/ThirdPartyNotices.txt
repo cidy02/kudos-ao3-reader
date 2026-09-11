@@ -583,6 +583,48 @@ MuPDF (vendored binary, not a Swift package)
 
 ------------------------------------------------------------------------------
 
+------------------------------------------------------------------------------
+
+13. sherpa-onnx
+   Package identity: sherpa-onnx
+   https://github.com/k2-fsa/sherpa-onnx
+   Pinned revision: 1cb484af5e69d3c7803c1eb0b3b5ab8041e0e911 (version 1.13.6)
+   License: Apache License 2.0
+
+   Copyright the sherpa-onnx contributors (k2-fsa).
+   Licensed under the Apache License, Version 2.0. The full Apache 2.0 text
+   is reproduced under DifferenceKit in this file. Used on iOS only, as the
+   Kokoro text-to-speech fallback on iOS 26.
+
+------------------------------------------------------------------------------
+
+14. ONNX Runtime (transitive, sherpa-onnx)
+   Package identity: onnxruntime-libs
+   https://github.com/csukuangfj/onnxruntime-libs (prebuilt static libraries of
+   https://github.com/microsoft/onnxruntime)
+   Pinned revision: 1fbef5f2a1b5c2691fe9411243f3a8afe9a0b169 (version 1.27.1)
+   License: MIT
+
+   Copyright (c) Microsoft Corporation
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
 Kudos itself is copyright its contributors and licensed under the GNU
 General Public License v3.0 (see LICENSE.txt). Kudos is an unofficial,
 personal project. It is not affiliated with or endorsed by the

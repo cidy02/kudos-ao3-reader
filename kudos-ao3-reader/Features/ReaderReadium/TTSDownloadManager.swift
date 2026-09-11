@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 import OSLog
 import SWCompression
@@ -930,3 +931,4 @@ nonisolated final class CancellationFlag: @unchecked Sendable {
         lock.unlock()
     }
 }
+#endif
