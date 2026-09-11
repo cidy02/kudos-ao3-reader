@@ -171,6 +171,34 @@ enum ReadingLogService {
             .sorted { $0.startedAt > $1.startedAt }
     }
 
+    /// Every work's log summary, in **one** fetch.
+    ///
+    /// The per-work helpers below each fetch the whole session table, which is fine
+    /// for a detail screen asking about one work and quadratic for a history list
+    /// asking about three hundred. Any screen rendering a list of works wants this
+    /// one instead.
+    static func summaries(in context: ModelContext) -> [UUID: WorkReadingSummary] {
+        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        var summaries: [UUID: WorkReadingSummary] = [:]
+        for session in all {
+            var summary = summaries[session.workID] ?? WorkReadingSummary()
+            summary.totalSeconds += session.durationSeconds
+            summary.visitCount += 1
+            if session.didFinish { summary.finishCount += 1 }
+            if let last = summary.lastEndedAt {
+                if session.endedAt > last {
+                    summary.lastEndedAt = session.endedAt
+                    summary.chapterCountAtLastVisit = session.chapterCountAtVisit
+                }
+            } else {
+                summary.lastEndedAt = session.endedAt
+                summary.chapterCountAtLastVisit = session.chapterCountAtVisit
+            }
+            summaries[session.workID] = summary
+        }
+        return summaries
+    }
+
     static func totalDuration(of workID: UUID, in context: ModelContext) -> Double {
         let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
         return all.filter { $0.workID == workID }.reduce(0) { $0 + $1.durationSeconds }

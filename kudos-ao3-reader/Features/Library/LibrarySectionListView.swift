@@ -34,6 +34,9 @@ struct LibrarySectionListView: View {
     @State private var showingFilters = false
     @State private var isSelecting: Bool
     @State private var selection: Set<UUID>
+    /// Spec 1ah/1ai's Time / State / Fandom / Flat strip. Persisted like
+    /// `displayMode`, and only ever shown for History — see `showsGroupingStrip`.
+    @AppStorage("library.history.grouping") private var historyGrouping: LibraryHistoryGrouping = .time
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
     /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
     /// tracks a card that's grown wider with Dynamic Type instead of assuming the
@@ -279,26 +282,79 @@ struct LibrarySectionListView: View {
         }
     }
 
+    /// Only History gets the grouping strip. The other six sections are already one
+    /// thing by definition — a Downloaded list grouped by state would be one bucket —
+    /// and spec 1ah/1ai draw the control on History alone.
+    private var showsGroupingStrip: Bool { kind == .history }
+
+    private var groupingStrip: some View {
+        SubjectSegmentedControl(
+            options: LibraryHistoryGrouping.allCases,
+            title: \.title,
+            selection: $historyGrouping
+        )
+        .padding(.horizontal, SubjectMetrics.gutter)
+    }
+
+    /// The visible works bucketed by the current grouping, or one unnamed group for
+    /// every other section.
+    private var groupedItems: [LibraryHistoryGrouping.Bucket] {
+        guard showsGroupingStrip else {
+            return visibleItems.isEmpty
+                ? []
+                : [LibraryHistoryGrouping.Bucket(title: kind.title, workIDs: visibleItems.map(\.id))]
+        }
+        return LibraryHistoryGrouping.groups(
+            historyGrouping,
+            works: visibleItems,
+            isAbandoned: { ReadingLogService.isAbandoned(work: $0) }
+        )
+    }
+
     private var detailedList: some View {
-        List {
+        // Both bound once: `groupedItems` buckets the whole list and `summaries`
+        // fetches the session table. Reading either through its property inside the
+        // builder would repeat that work per section.
+        //
+        // The session fetch is gated on History. Six of the seven sections never draw
+        // the facts strip, and fetching the whole log on every render of Downloaded
+        // to throw it away would be the most expensive thing this screen does.
+        let groups = groupedItems
+        let summaries = showsGroupingStrip
+            ? ReadingLogService.summaries(in: context)
+            : [:]
+        let byID = Dictionary(visibleItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return List {
             subjectHeaderSection
 
-            if !visibleItems.isEmpty {
+            if showsGroupingStrip {
                 Section {
-                    ForEach(visibleItems) { work in
-                        row(work).cardRow(
-                            isSelected: isSelecting && selection.contains(work.id),
-                            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-                        )
+                    groupingStrip
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+            }
+
+            if !visibleItems.isEmpty {
+                ForEach(groups) { group in
+                    Section {
+                        ForEach(group.workIDs, id: \.self) { id in
+                            if let work = byID[id] {
+                                row(work, summary: summaries[id]).cardRow(
+                                    isSelected: isSelecting && selection.contains(work.id),
+                                    tintHue: CoverArt.workHue(
+                                        fandoms: work.workFandoms, title: work.title
+                                    )
+                                )
+                            }
+                        }
+                    } header: {
+                        SectionRuleHeader(title: group.title, count: group.workIDs.count)
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets())
+                            .padding(.bottom, 10)
                     }
-                } header: {
-                    SectionRuleHeader(
-                        title: kind.title,
-                        count: visibleItems.count
-                    )
-                    .textCase(nil)
-                    .listRowInsets(EdgeInsets())
-                    .padding(.bottom, 10)
                 }
             } else if filters.hasActiveFilters {
                 Section {
@@ -371,30 +427,51 @@ struct LibrarySectionListView: View {
     /// selection mode, swipe actions give way to a plain selectable row, matching
     /// LibraryView's own selectList (swipe and selection don't mix well in one row).
     @ViewBuilder
-    private func row(_ work: SavedWork) -> some View {
+    private func row(_ work: SavedWork, summary: WorkReadingSummary?) -> some View {
         if isSelecting {
+            VStack(alignment: .leading, spacing: 8) {
+                SensitiveWorkRow(
+                    work: work,
+                    expandAll: expandAll,
+                    openMode: .reader,
+                    isSelecting: true,
+                    isSelected: selection.contains(work.id),
+                    onToggleSelection: { toggleSelection(work) },
+                    presentation: .ledger
+                )
+                factsStrip(work, summary: summary)
+            }
+        } else {
+            swipeableRow(work, summary: summary)
+        }
+    }
+
+    /// Spec 1ah's per-row log facts — time read, the reread count, what is new since
+    /// the last visit. Only on History, and only when the log has something to say:
+    /// a row that read "0m · Read ×0" would be three pieces of furniture saying
+    /// nothing.
+    @ViewBuilder
+    private func factsStrip(_ work: SavedWork, summary: WorkReadingSummary?) -> some View {
+        if showsGroupingStrip, let summary, summary.visitCount > 0 {
+            ReadingHistoryFactsStrip(
+                summary: summary,
+                postedChapterCount: work.postedChapterCount,
+                palette: scopePalette
+            )
+        }
+    }
+
+    private func swipeableRow(_ work: SavedWork, summary: WorkReadingSummary?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             SensitiveWorkRow(
                 work: work,
                 expandAll: expandAll,
                 openMode: .reader,
-                isSelecting: true,
-                isSelected: selection.contains(work.id),
-                onToggleSelection: { toggleSelection(work) },
+                onSelect: { isSelecting = true; selection = [work.id] },
                 presentation: .ledger
             )
-        } else {
-            swipeableRow(work)
+            factsStrip(work, summary: summary)
         }
-    }
-
-    private func swipeableRow(_ work: SavedWork) -> some View {
-        SensitiveWorkRow(
-            work: work,
-            expandAll: expandAll,
-            openMode: .reader,
-            onSelect: { isSelecting = true; selection = [work.id] },
-            presentation: .ledger
-        )
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
                     WorkLifecycle.setSaved(work, !work.isSaved, in: context)
