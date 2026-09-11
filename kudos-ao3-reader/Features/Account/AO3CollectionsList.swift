@@ -32,6 +32,13 @@ struct AO3CollectionsList: View {
         }
         .hidesFloatingTabBar()
         .toolbar {
+            if auth.isLoggedIn {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink(value: AO3CollectionFormDestination(slug: nil)) {
+                        Label("New Collection", systemImage: "plus")
+                    }
+                }
+            }
             if phase == .loaded, !collections.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     FilterButton(
@@ -104,6 +111,13 @@ struct AO3CollectionsList: View {
                                 ),
                                 accessibilityLabel: collection.title
                             )
+                            .contextMenu {
+                                NavigationLink(
+                                    value: AO3CollectionFormDestination(slug: collection.name)
+                                ) {
+                                    Label("Edit Collection", systemImage: "pencil")
+                                }
+                            }
                             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
                     }
                 }

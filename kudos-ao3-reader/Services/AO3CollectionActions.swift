@@ -38,6 +38,15 @@ extension AO3AuthService {
 
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt. Single-shot `submitWrite`; never retried or coalesced.
+    /// AO3's New Collection form — the hidden fields, the CSRF token and whatever
+    /// defaults the account carries. Fetched rather than assumed, so a form the app
+    /// posts is the form AO3 served.
+    func collectionNewForm() async throws -> AO3CollectionForm {
+        guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
+        let request = try authenticatedRequest(for: AO3CollectionURL.new())
+        return try await AO3Client.shared.collectionNewForm(request: request)
+    }
+
     func createCollection(_ form: AO3CollectionForm) async throws -> AO3CollectionSaveOutcome {
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         guard AO3Client.collectionNameFormatIsValid(form.name) else {
@@ -263,7 +272,11 @@ extension AO3AuthService {
 
     // MARK: - Internals
 
-    private func collectionEditForm(slug: String) async throws -> AO3CollectionForm {
+    /// AO3's Edit Collection form, prefilled. Internal rather than private since
+    /// `AO3CollectionFormView` binds to it — and it stays here, in the collections
+    /// networking file, rather than the view building its own request:
+    /// `AO3_NETWORKING_POLICY` puts every AO3 request through this layer.
+    func collectionEditForm(slug: String) async throws -> AO3CollectionForm {
         let request = try authenticatedRequest(for: AO3CollectionURL.edit(slug: slug))
         return try await AO3Client.shared.collectionEditForm(slug: slug, request: request)
     }
