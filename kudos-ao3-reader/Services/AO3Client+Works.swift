@@ -284,13 +284,13 @@ extension AO3Client {
             endnotes: textareaValue(form, name: AO3WorkFormField.chapterEndnotes),
             content: textareaValue(form, name: AO3WorkFormField.chapterOnlyContent)
                 .ifEmpty(textareaValue(form, id: "content")),
-            publishedYear: inputValue(
+            publishedYear: controlValue(
                 form, name: AO3WorkFormField.chapterOnlyPublishedYear
             ) ?? "",
-            publishedMonth: inputValue(
+            publishedMonth: controlValue(
                 form, name: AO3WorkFormField.chapterOnlyPublishedMonth
             ) ?? "",
-            publishedDay: inputValue(
+            publishedDay: controlValue(
                 form, name: AO3WorkFormField.chapterOnlyPublishedDay
             ) ?? "",
             isDraft: submitNamed(form, AO3WorkFormField.saveButton),
@@ -626,14 +626,21 @@ extension AO3Client {
             .ifEmpty(textareaValue(form, id: "content"))
         let title = inputValue(form, name: AO3WorkFormField.chapterTitle) ?? ""
         let summary = textareaValue(form, name: AO3WorkFormField.chapterSummary)
-        if content.isEmpty && title.isEmpty && summary.isEmpty { return nil }
+        // Presence, not content. A New Work form has a chapter field that is
+        // *empty* — that is the whole point of it — and returning nil for that made
+        // `missingRequiredFields` skip Work Text entirely, so the one field AO3
+        // certainly requires was never reported as missing.
+        let hasChapterField =
+            firstElement(form, tag: "textarea", name: AO3WorkFormField.chapterContent) != nil
+                || ((try? form.select("textarea#content").first()) ?? nil) != nil
+        if !hasChapterField, content.isEmpty, title.isEmpty, summary.isEmpty { return nil }
         return AO3WorkChapterDraft(
             title: title,
             summary: summary,
             content: content,
-            publishedYear: inputValue(form, name: AO3WorkFormField.chapterPublishedYear) ?? "",
-            publishedMonth: inputValue(form, name: AO3WorkFormField.chapterPublishedMonth) ?? "",
-            publishedDay: inputValue(form, name: AO3WorkFormField.chapterPublishedDay) ?? ""
+            publishedYear: controlValue(form, name: AO3WorkFormField.chapterPublishedYear) ?? "",
+            publishedMonth: controlValue(form, name: AO3WorkFormField.chapterPublishedMonth) ?? "",
+            publishedDay: controlValue(form, name: AO3WorkFormField.chapterPublishedDay) ?? ""
         )
     }
 
@@ -737,6 +744,29 @@ extension AO3Client {
             return type != "hidden" && type != "submit"
         }
         return try? (visible ?? matches.first)?.attr("value")
+    }
+
+    /// A form control's current value whether AO3 rendered it as an `input` or a
+    /// `select`.
+    ///
+    /// Publication dates are three `select`s with a `selected` option, and reading
+    /// them with `inputValue` returned three empty strings — an existing date of
+    /// 2020-05-04 arrived in the editor blank, and saving would have republished
+    /// the work at today's date.
+    private static func controlValue(_ root: Element, name: String) -> String? {
+        if let value = inputValue(root, name: name), !value.isEmpty { return value }
+        return selectedOptionValue(root, name: name)
+    }
+
+    /// The `selected` option's value, falling back to the first option — which is
+    /// what a browser submits for a `select` with nothing explicitly selected.
+    private static func selectedOptionValue(_ root: Element, name: String) -> String? {
+        guard let select = firstElement(root, tag: "select", name: name) else { return nil }
+        let options = (try? select.select("option").array()) ?? []
+        let chosen = options.first { $0.hasAttr("selected") } ?? options.first
+        guard let chosen else { return nil }
+        let value = (try? chosen.attr("value")) ?? ""
+        return value.isEmpty ? (try? chosen.text()) : value
     }
 
     private static func inputValue(_ root: Element, nameContains: String) -> String? {

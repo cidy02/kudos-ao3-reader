@@ -166,8 +166,16 @@ nonisolated struct AO3WorkTagSet: Equatable, Sendable {
                 pairs.append((AO3WorkFormField.warnings, warning))
             }
         }
-        for category in categories {
-            pairs.append((AO3WorkFormField.categories, category))
+        // Same shape as the warnings branch above, and for the same reason: an
+        // empty array that emits nothing leaves AO3's existing categories in
+        // place, so clearing every category silently did nothing. AO3's own form
+        // posts an empty value for exactly this.
+        if categories.isEmpty {
+            pairs.append((AO3WorkFormField.categories, ""))
+        } else {
+            for category in categories {
+                pairs.append((AO3WorkFormField.categories, category))
+            }
         }
         pairs.append((AO3WorkFormField.fandoms, AO3TagListDiff.joined(fandoms)))
         pairs.append((AO3WorkFormField.relationships, AO3TagListDiff.joined(relationships)))
