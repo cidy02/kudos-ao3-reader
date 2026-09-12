@@ -2,12 +2,10 @@ import Testing
 @testable import Kudos
 
 struct SearchPaginationTests {
-    @Test func pageAnchorsUseCompactLabels() {
-        #expect(SearchPaginationBar.abbreviate(999) == "999")
-        #expect(SearchPaginationBar.abbreviate(1_000) == "1k")
-        #expect(SearchPaginationBar.abbreviate(1_250) == "1.3k")
-        #expect(SearchPaginationBar.abbreviate(1_500_000) == "1.5m")
-    }
+    // `abbreviate` and its test went with the old bar's compact total. Artboard
+    // 1k's switcher pill prints the whole number ("Page 2 / 3,216") because the
+    // pill is thumb-width and has the room the inline row did not — so there is
+    // no longer a caller, and a helper kept alive only by its own test is debt.
 
     // `compactPageWindow` and its two tests went with the scrubber's three
     // numbered circles: the readout above them already stated the page, so the

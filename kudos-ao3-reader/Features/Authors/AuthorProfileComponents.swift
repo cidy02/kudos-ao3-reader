@@ -166,7 +166,7 @@ struct AO3SeriesRow: View {
 
     var body: some View {
         Group {
-            if presentation == .searchLedger {
+            if presentation == .ledger {
                 ledgerBody
             } else {
                 standardBody
@@ -264,8 +264,8 @@ struct AO3SeriesRow: View {
     }
 
     private var fandomColor: Color {
-        CoverArt.workHue(fandoms: series.fandoms, title: series.title)
-            .map { Color(hue: $0, saturation: 0.4, brightness: 0.9) } ?? .blue
+        let hue = CoverArt.workHue(fandoms: series.fandoms, title: series.title)
+        return Color(hue: hue, saturation: 0.4, brightness: 0.9)
     }
 
     private var standardBody: some View {
