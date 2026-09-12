@@ -161,6 +161,7 @@ struct AO3AuthorAvatar: View {
 }
 
 struct AO3SeriesRow: View {
+    @Environment(ThemeManager.self) private var themeManager
     let series: AO3SeriesSummary
     var presentation: WorkRow.Presentation = .standard
 
@@ -179,17 +180,14 @@ struct AO3SeriesRow: View {
             HStack(alignment: .top, spacing: 12) {
                 // The square Series icon (38x38)
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(white: 0.15), Color(white: 0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    // The series' own hue through the palette, not a fixed dark
+                    // gradient: Light and Sepia ship too, and a hard-coded
+                    // white-0.15 tile reads as a black square in both.
+                    .fill(seriesPalette.cardWash)
                     .frame(width: 38, height: 38)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                            .strokeBorder(seriesPalette.chipStroke, lineWidth: 0.5)
                     )
                     .overlay(
                         Image(systemName: "books.vertical")
@@ -261,6 +259,12 @@ struct AO3SeriesRow: View {
 
     private var primaryFandom: String {
         series.fandoms.first ?? "Series"
+    }
+
+    private var seriesPalette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(
+            hue: CoverArt.workHue(fandoms: series.fandoms, title: series.title)
+        )
     }
 
     private var fandomColor: Color {

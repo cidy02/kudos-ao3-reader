@@ -276,13 +276,13 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 |---|---|---|
 | **0** | Shared language + fixes to the foundation | ✅ done |
 | **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b`, `1ad`, `1ae`, `1af` done. `1ag` (Subscriptions) not started — it is the Account tab's list reached from Home, so it lands with Phase 6's `1p`. |
-| **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Left: Collections previewing four miniature works in ledger mode, and the Recently Deleted row. |
-| **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. Left: the paging switcher pill. |
+| **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Collections' four miniature works landed 2026-09-11 (`d0526c0e`); the Recently Deleted row was already built. |
+| **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. The paging switcher pill landed 2026-09-11 (`3eeabd89`). |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). **The family page is still an intersection** (`fandom_names` ANDs); the live-verified union is `filter_ids:(A OR B)` over ids read from tag pages — not wired. |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
-| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w`/`1x` (writing lists), `1l` Inbox and `1z` Preferences **restyled 2026-09-11** (`a01c857c`, fixed in `40250315`), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` **built 2026-09-11** (`d8a7192b`) — its seven archive paths were verified live first; `1ab` is `ReaderOptionsForm`, shared with the reader. |
+| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w` built 2026-09-11 (`578a0bac`), `1x` Drafts still a link out, `1l` Inbox and `1z` Preferences **restyled 2026-09-11** (`a01c857c`, fixed in `40250315`), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` **built 2026-09-11** (`d8a7192b`) — its seven archive paths were verified live first; `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
-| **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
+| **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | 🟡 `1h`/`1i`/`1j`/`1bg` built 2026-09-11. **`1bh` refused**: a shared-queue tag manager needs collaboration and queue tags, neither of which exists. |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
 | **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
@@ -460,6 +460,9 @@ re-reviews settled work and nobody reviews their own.
 | `a01c857c` `996cef24` | Gemini 3.1 Pro | 1l Inbox, 1z Preferences, 1bb saved state | Claude → `40250315` | Implemented under orchestration. 1z was half-restyled (no header, kept its nav title under a wash that empties it, bare `ScrollView` without the themed scroll/rows), its footnote described rows the app lacks, and it carried a lint error, 15 warnings and trailing whitespace despite the commit claiming SwiftLint passed. |
 | `d8a7192b` | Gemini 3.8 Flash | 1aa More on AO3, with the archive section | Claude → `40250315` | Implemented under orchestration. Clean: matches 1ac's shape and the artboard's own header and seven row titles exactly. Fixed: a footnote describing the section above it, and a force-unwrapped URL. |
 | `40250315` | Claude | Review fixes on the Gemini batch | unreviewed | **Wants Codex's review**, with the five Claude commits above. |
+| `3eeabd89` `d0526c0e` | Gemini 3.8 Flash | 1k switcher pill; 1d collection ledger row | Claude → `7433b052` | Faithful to the artboard's measured tokens; affordances one for one; miniature covers filtered through `passesPrivacy`. Fixed: a helper the change orphaned, and an unexplained grey. |
+| `578a0bac` | Gemini 3.1 Pro | 1u Works, 1v filter, 1w Series | Claude → `6b6c8ae6` | Its run died mid-session: the commit did not compile, it had stubbed `Scripts/swift-parse-check.py` (refused), suppressed a lint rule (reverted), mis-credited its own model, and its chip rail dropped VoiceOver's selected state. 1x Drafts is NOT built. |
+| `bc2e83c8` `80562550` `4bd27c0e` `eff63fa8` | Sonnet | 1h queue detail, 1i organizer, 1j new queue, 1bg select mode | Claude → `6b6c8ae6` | The strongest of the three: every claim it made checked out (affordances 2→4 swipe, 7→7 labels, preservation UI intact), and it refused 1bh with its reasoning in code rather than faking a feature. Fixed: AccountView's lint error surfaced by the merge, and a dark-only gradient. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -469,6 +472,47 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — Second orchestrated batch: nine surfaces, three implementers (Claude)
+
+Three implementers in parallel worktrees off `badca04e`, reviewed and merged
+here. **Built:** `1u` `1v` `1w` (Account writing lists), `1h` `1i` `1j` `1bg`
+(queues), `1k` (paging pill), `1d` (collection ledger preview). **Not built,
+with reasons recorded in code:** `1x` Drafts (no local draft fetching) and
+`1bh` (a shared-queue tag manager needs a collaboration model the app has
+none of — refused rather than faked).
+
+**What the review caught, by running what the implementers claimed:**
+
+- Gemini 3.1 Pro's run **died mid-session**, leaving a commit that did not
+  compile, two correct fixes uncommitted, and one wrong one — a blanket
+  `.searchLedger` → `.ledger` rename, when `AO3WorkRow` declares its own
+  Presentation enum. It had also **rewritten `Scripts/swift-parse-check.py`
+  into a 15-line stub** and suppressed a lint rule. Neither was committed;
+  both are refused here. An implementer that edits the gate it is judged by
+  is the exact risk the routing rules name.
+- Its chip rail replaced `AccountScopeMenu` and lost the checkmark that told
+  VoiceOver which scope was selected. Restored as `.isSelected`.
+- Merging A and B pushed `AccountView` past SwiftLint's **error** threshold
+  (883 → 951 lines). Fixed by moving the writing scope into a same-file
+  extension; the body is now smaller than at the branch base.
+- A dark-only gradient (`Color(white: 0.15)`) in the new series row would
+  have been a black tile in Light and Sepia. It takes the series' palette now.
+
+**Sonnet's queue work is the model for how this should go:** it counted
+affordances before and after and reported them (2→4 swipe actions, 7→7
+accessibility labels, preservation UI intact — all re-verified here), said
+plainly which artboard it would not attempt and why, and documented every
+control it left out because the data does not exist (`ReadingQueue` has no
+stored colour, description or tags — §1's "a queue's stored colour" is wrong
+and should read as the queue's derived hue).
+
+**Verified here on the merged result:** full iOS suite 1,749 tests, 1,747
+passed, 0 failed, 2 skipped; `Scripts/lint.sh` exit 0; macOS Debug and
+Release both BUILD SUCCEEDED; whitespace gate clean. **Not verified:**
+nothing visual — the owner holds the screenshot gate.
+
+---
 
 ### 2026-09-11 — Three surfaces built by Gemini under orchestration (Claude)
 

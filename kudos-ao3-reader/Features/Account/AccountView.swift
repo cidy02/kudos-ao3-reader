@@ -786,99 +786,6 @@ struct AccountView: View {
         }
     }
 
-    // MARK: Writing — Works | Series | Drafts
-
-    @ViewBuilder
-    private var writingSections: some View {
-        Section {
-            SubjectHeaderBlock(
-                kicker: "AO3 Account",
-                title: writingTab.rawValue,
-                subtitle: writingTabSubtitle,
-                palette: accountPalette,
-                gutter: SubjectMetrics.accountGutter
-            )
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(AccountWritingTab.allCases) { tab in
-                        Button {
-                            writingTab = tab
-                        } label: {
-                            SubjectChip(text: tab.rawValue, style: .pill(isSelected: writingTab == tab))
-                        }
-                        // The menu this replaced announced the chosen scope with a
-                        // checkmark; a chip rail has to say so itself.
-                        .accessibilityAddTraits(writingTab == tab ? [.isSelected] : [])
-                    }
-                }
-                .padding(.horizontal, SubjectMetrics.accountGutter)
-            }
-            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-        }
-
-        switch writingTab {
-        case .works:
-            if let model = profileModel {
-                if model.contentPhase == .loading && model.works.isEmpty {
-                    AO3AuthorLoadingRows()
-                } else if model.works.isEmpty {
-                    AO3AuthorContentMessage(
-                        model: model,
-                        emptyTitle: "No works",
-                        emptyMessage: "AO3 has no works visible to this session.",
-                        emptySymbol: "book"
-                    )
-                } else {
-                    let filteredWorks = filters.apply(to: model.works)
-                    if filteredWorks.isEmpty {
-                        AO3AuthorContentMessage(
-                            model: model,
-                            emptyTitle: "No matching works",
-                            emptyMessage: "No works match the active filters.",
-                            emptySymbol: "line.3.horizontal.decrease.circle"
-                        )
-                    } else {
-                        ForEach(filteredWorks) { work in
-                            EnrichingAO3WorkRow(work: work, expandAll: false, presentation: .searchLedger)
-                                .cardNavigation(to: work, accessibilityLabel: work.title)
-                                .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
-                        }
-                    }
-                }
-            }
-        case .series:
-            profileSeriesSections
-        case .drafts:
-            Section {
-                AccountExternalNavCard(
-                    title: "Open Drafts on AO3",
-                    systemImage: "doc.badge.clock",
-                    pathSuffix: "works/drafts"
-                )
-            } footer: {
-                Text("Drafts still open on the Archive until a native editor ships.")
-            }
-        }
-    }
-
-    private var writingTabSubtitle: String? {
-        guard let model = profileModel else { return nil }
-        switch writingTab {
-        case .works:
-            return model.works.count == 1 ? "1 work" : "\(model.works.count) works"
-        case .series:
-            return model.series.count == 1 ? "1 series" : "\(model.series.count) series"
-        case .drafts:
-            return nil
-        }
-    }
-
     // MARK: Activity — History | Inbox
 
     @ViewBuilder
@@ -1176,5 +1083,102 @@ private extension AccountView {
             return AO3CommentsWorkContext(remote: work)
         }
         return AO3CommentsWorkContext(title: item.workTitle, authors: [])
+    }
+}
+
+// MARK: - Writing scope (artboards 1u, 1v, 1w)
+
+extension AccountView {
+    // MARK: Writing — Works | Series | Drafts
+
+    @ViewBuilder
+    private var writingSections: some View {
+        Section {
+            SubjectHeaderBlock(
+                kicker: "AO3 Account",
+                title: writingTab.rawValue,
+                subtitle: writingTabSubtitle,
+                palette: accountPalette,
+                gutter: SubjectMetrics.accountGutter
+            )
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(AccountWritingTab.allCases) { tab in
+                        Button {
+                            writingTab = tab
+                        } label: {
+                            SubjectChip(text: tab.rawValue, style: .pill(isSelected: writingTab == tab))
+                        }
+                        // The menu this replaced announced the chosen scope with a
+                        // checkmark; a chip rail has to say so itself.
+                        .accessibilityAddTraits(writingTab == tab ? [.isSelected] : [])
+                    }
+                }
+                .padding(.horizontal, SubjectMetrics.accountGutter)
+            }
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+
+        switch writingTab {
+        case .works:
+            if let model = profileModel {
+                if model.contentPhase == .loading && model.works.isEmpty {
+                    AO3AuthorLoadingRows()
+                } else if model.works.isEmpty {
+                    AO3AuthorContentMessage(
+                        model: model,
+                        emptyTitle: "No works",
+                        emptyMessage: "AO3 has no works visible to this session.",
+                        emptySymbol: "book"
+                    )
+                } else {
+                    let filteredWorks = filters.apply(to: model.works)
+                    if filteredWorks.isEmpty {
+                        AO3AuthorContentMessage(
+                            model: model,
+                            emptyTitle: "No matching works",
+                            emptyMessage: "No works match the active filters.",
+                            emptySymbol: "line.3.horizontal.decrease.circle"
+                        )
+                    } else {
+                        ForEach(filteredWorks) { work in
+                            EnrichingAO3WorkRow(work: work, expandAll: false, presentation: .searchLedger)
+                                .cardNavigation(to: work, accessibilityLabel: work.title)
+                                .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+                        }
+                    }
+                }
+            }
+        case .series:
+            profileSeriesSections
+        case .drafts:
+            Section {
+                AccountExternalNavCard(
+                    title: "Open Drafts on AO3",
+                    systemImage: "doc.badge.clock",
+                    pathSuffix: "works/drafts"
+                )
+            } footer: {
+                Text("Drafts still open on the Archive until a native editor ships.")
+            }
+        }
+    }
+
+    private var writingTabSubtitle: String? {
+        guard let model = profileModel else { return nil }
+        switch writingTab {
+        case .works:
+            return model.works.count == 1 ? "1 work" : "\(model.works.count) works"
+        case .series:
+            return model.series.count == 1 ? "1 series" : "\(model.series.count) series"
+        case .drafts:
+            return nil
+        }
     }
 }
