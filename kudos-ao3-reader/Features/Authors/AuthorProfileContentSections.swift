@@ -290,10 +290,18 @@ struct AO3AuthorWorksSection: View {
                             // second, unhidden, real-titled NavigationLink behind the
                             // blurred branch's reveal gate — a privacy bypass, not just a
                             // duplicate VoiceOver stop.
-                            SensitiveWorkRow(work: work, expandAll: expandAll)
+                            SensitiveWorkRow(
+                                work: work,
+                                expandAll: expandAll,
+                                presentation: layout == .scroll ? .standard : .searchLedger
+                            )
                                 .cardRow()
                         } else if let remote = entry.remote {
-                            AO3WorkRow(work: remote, expandAll: expandAll)
+                            AO3WorkRow(
+                                work: remote,
+                                expandAll: expandAll,
+                                presentation: layout == .scroll ? .standard : .searchLedger
+                            )
                                 .cardNavigation(to: remote, accessibilityLabel: remote.title)
                                 .cardRow()
                         }
@@ -353,6 +361,7 @@ struct AO3AuthorSeriesSection: View {
     /// Other authors get the existing empty copy. Creating a series is an AO3 write
     /// this screen does not implement.
     var showsNewSeriesOnAO3: Bool = false
+    var layout: AccountWorksLayout = .list
 
     @Environment(AO3AuthService.self) private var auth
 
@@ -369,10 +378,11 @@ struct AO3AuthorSeriesSection: View {
                         emptySymbol: "square.stack"
                     )
                 } else if showsNewSeriesOnAO3 {
-                    AO3SeriesEmptyCard()
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 16, trailing: 16))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    AccountExternalNavCard(
+                        title: "New series on AO3",
+                        systemImage: "square.stack.badge.plus",
+                        pathSuffix: "series/new"
+                    )
                 } else {
                     AO3AuthorContentMessage(
                         model: model,
@@ -386,7 +396,7 @@ struct AO3AuthorSeriesSection: View {
                     AO3AuthorInlineErrorRow(message: message)
                 }
                 ForEach(model.series) { series in
-                    AO3SeriesRow(series: series)
+                    AO3SeriesRow(series: series, presentation: layout == .scroll ? .standard : .searchLedger)
                         .cardNavigation(to: series, accessibilityLabel: series.title)
                         .cardRow()
                 }
