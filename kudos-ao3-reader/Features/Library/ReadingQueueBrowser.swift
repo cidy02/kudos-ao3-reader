@@ -466,15 +466,45 @@ extension ReadingQueueBrowserView {
         Section {
             subjectHeader
                 .pageBodyRow(top: 20, gutter: 0)
-            if let queueMetaLine {
-                Text(queueMetaLine)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .pageBodyRow(top: 2, gutter: SubjectMetrics.gutter)
+            if isSelecting {
+                // Artboard 1bg's select-mode status line replaces the meta line
+                // and filter rail — narrowing to one work at a time isn't what
+                // selection mode is for, and "N selected" already lives on the
+                // toolbar's own "N selected" / Select All pair.
+                selectionStatusRow
+                    .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
+            } else {
+                if let queueMetaLine {
+                    Text(queueMetaLine)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .pageBodyRow(top: 2, gutter: SubjectMetrics.gutter)
+                }
+                filterChipRail
+                    .pageBodyRow(top: 8, gutter: 0)
             }
-            filterChipRail
-                .pageBodyRow(top: 8, gutter: 0)
         }
+    }
+
+    /// Spec 1bg: the queue's own name, a hairline, then "N / total" in the
+    /// same tabular-monospace figure the rest of this file's counts use.
+    private var selectionStatusRow: some View {
+        HStack(spacing: 8) {
+            Text((selectedQueue?.displayName ?? "").uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(11 * 0.13)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Rectangle()
+                .fill(Color.primary.opacity(0.14))
+                .frame(height: 0.5)
+            Text("\(selection.count) / \(works.count)")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+        .combinedAccessibilityRow(
+            "\(selectedQueue?.displayName ?? "Queue"), \(selection.count) of \(works.count) selected"
+        )
     }
 
     // Kept as ONE grid rather than splitting an "Up next" row out above it the
@@ -491,13 +521,18 @@ extension ReadingQueueBrowserView {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 subjectHeader.padding(.top, 20)
-                if let queueMetaLine {
-                    Text(queueMetaLine)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, SubjectMetrics.headerGutter)
+                if isSelecting {
+                    selectionStatusRow
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                } else {
+                    if let queueMetaLine {
+                        Text(queueMetaLine)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, SubjectMetrics.headerGutter)
+                    }
+                    filterChipRail
                 }
-                filterChipRail
                 SectionRuleHeader(title: "Works", count: visibleWorks.count)
                 LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
                     ForEach(compactDisplayedWorks) { work in
