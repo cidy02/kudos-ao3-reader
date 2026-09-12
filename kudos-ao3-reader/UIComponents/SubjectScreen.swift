@@ -321,43 +321,43 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        // `.top`, where spec 1ad centres the row (`align-items:center; gap:13px`).
-        // Owner's call, 2026-09-12: the ring and the signal tray are pinned to the
-        // row's top corners, so they stay put as a title wraps to a second line
-        // instead of drifting down with it. At accessibility sizes the row is a
-        // VStack and there is no cross-axis to pin.
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 13))
-        return VStack(alignment: .leading, spacing: 8) {
-            layout {
-                leading()
-
-                VStack(alignment: .leading, spacing: 5) {
-                    // A work with no fandom keeps the kicker's space rather than
-                    // collapsing: one short row in a list of tall ones is the same
-                    // unevenness a wrapped title used to cause.
-                    SubjectKicker(
-                        text: kicker ?? " ",
-                        palette: palette,
-                        trailingCount: kicker == nil ? 0 : additionalKickerCount,
-                        size: 9,
-                        ruleSpacing: 5
-                    )
-                    .opacity(kicker == nil ? 0 : 1)
-                    .accessibilityHidden(kicker == nil)
-
+        // Everything pins to the top, where spec 1ad centres the row
+        // (`align-items:center; gap:13px`) — owner's call, 2026-09-12. The fandom
+        // holds the top-left corner, the signal tray the top-right, and they stay
+        // put as a title takes its second line instead of drifting with it.
+        VStack(alignment: .leading, spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize {
+                // One column at accessibility sizes: there is no room to put
+                // anything beside anything else.
+                VStack(alignment: .leading, spacing: 12) {
+                    kickerView
+                    leading()
                     titleText
+                    trailing()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .top, spacing: 13) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        // The fandom leads the card from its top-left corner, with
+                        // the progress ring under it rather than beside it — the
+                        // subject names the row before its progress does.
+                        kickerView
 
-                trailing()
+                        HStack(alignment: .top, spacing: 13) {
+                            leading()
+                            titleText
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    trailing()
+                }
             }
 
-            // Below the ring and the tray rather than between them, so the line
-            // gets the card's whole width — squeezed into the middle column it
-            // wrapped after three or four facts and made every row a different
-            // height.
+            // Below everything, so the line gets the card's whole width — squeezed
+            // beside the ring and the tray it wrapped after three or four facts and
+            // made every row a different height.
             if !metadataSegments.isEmpty {
                 metadataLine
             }
@@ -375,6 +375,21 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
         .background {
             if drawsBackground { rowBackground }
         }
+    }
+
+    /// A work with no fandom keeps the kicker's space rather than collapsing:
+    /// one short row in a list of tall ones is the same unevenness a wrapped
+    /// title used to cause.
+    private var kickerView: some View {
+        SubjectKicker(
+            text: kicker ?? " ",
+            palette: palette,
+            trailingCount: kicker == nil ? 0 : additionalKickerCount,
+            size: 9,
+            ruleSpacing: 5
+        )
+        .opacity(kicker == nil ? 0 : 1)
+        .accessibilityHidden(kicker == nil)
     }
 
     @ViewBuilder
