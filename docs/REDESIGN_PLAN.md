@@ -280,12 +280,12 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. The paging switcher pill landed 2026-09-11 (`3eeabd89`). |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). The family page runs a real `filter_ids:(A OR B)` union as of 2026-09-12 (`aab42504`), falling back to the join — and its tilde — when an id will not resolve. |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
-| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w` built 2026-09-11 (`578a0bac`), `1x` Drafts still a link out, `1l` Inbox and `1z` Preferences **restyled 2026-09-11** (`a01c857c`, fixed in `40250315`), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` **built 2026-09-11** (`d8a7192b`) — its seven archive paths were verified live first; `1ab` is `ReaderOptionsForm`, shared with the reader. |
+| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w` built 2026-09-11 (`578a0bac`), `1x` Drafts now opens native drafts/forms through T-215, `1l` Inbox and `1z` Preferences **restyled 2026-09-11** (`a01c857c`, fixed in `40250315`), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` **built 2026-09-11** (`d8a7192b`) — its seven archive paths were verified live first; `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | 🟡 `1h`/`1i`/`1j`/`1bg` built 2026-09-11. **`1bh` refused**: a shared-queue tag manager needs collaboration and queue tags, neither of which exists. |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
-| **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 `1bn`/`1bo`/`1bp`/`1bq` built 2026-09-12 (`2d5245a3`), not yet reachable. **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
+| **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 `1bn`/`1bo`/`1bp`/`1bq` built 2026-09-12 (`2d5245a3`); T-215 connects work/chapter forms, while bulk/tag-only routes remain unwired. **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). `1bv` editor + native draft entry and required/tag inputs are implemented in T-215; remaining association/series/preview controls still need wiring. Series create from `/series/new` is Open on AO3. |
 | **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 `1bx`/`1by`/`1bz`/`1ca`/`1ce` built 2026-09-12, not yet reachable. **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
 | **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` and `1az` landed in `5100addb`; `1bb` (Preferences saved) landed with 1z in `a01c857c`. |
 
@@ -466,7 +466,8 @@ re-reviews settled work and nobody reviews their own.
 | `3eeabd89` `d0526c0e` | Gemini 3.8 Flash | 1k switcher pill; 1d collection ledger row | Claude → `7433b052` | Faithful to the artboard's measured tokens; affordances one for one; miniature covers filtered through `passesPrivacy`. Fixed: a helper the change orphaned, and an unexplained grey. |
 | `578a0bac` | Gemini 3.1 Pro | 1u Works, 1v filter, 1w Series | Claude → `6b6c8ae6` | Its run died mid-session: the commit did not compile, it had stubbed `Scripts/swift-parse-check.py` (refused), suppressed a lint rule (reverted), mis-credited its own model, and its chip rail dropped VoiceOver's selected state. 1x Drafts is NOT built. |
 | `bc2e83c8` `80562550` `4bd27c0e` `eff63fa8` | Sonnet | 1h queue detail, 1i organizer, 1j new queue, 1bg select mode | Claude → `6b6c8ae6` | The strongest of the three: every claim it made checked out (affordances 2→4 swipe, 7→7 labels, preservation UI intact), and it refused 1bh with its reasoning in code rather than faking a feature. Fixed: AccountView's lint error surfaced by the merge, and a dark-only gradient. |
-| T-215.4 (this commit) | Codex | Parse actual assignment templates and join every page, including open assignments | unreviewed | 8/8 AO3ChallengeParsingTests pass on iOS 26.5; lint exit 0. Maintainer-only parser remains unexercised against production. |
+| `1b37613c` | Codex | Parse actual assignment templates and join every page, including open assignments | unreviewed | 8/8 AO3ChallengeParsingTests pass on iOS 26.5; lint exit 0. Maintainer-only parser remains unexercised against production. |
+| T-215 writing capability (this commit) | Codex | Shared formatted/source editor, separate local recovery copies, native draft/forms and real required/tag inputs | unreviewed | Internal Codex adversarial pass only; cross-model review pending. iOS suite and macOS builds pass; Release signing product gate remains. Editor snapshots inspected in all four themes, including accessibility size. Live writes unexercised. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -476,6 +477,51 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-12 — Build the writing editor and native draft entry (Codex)
+
+T-215 now includes the missing writing capability, as requested by the owner.
+`WritingTextEditor` supplies formatted and HTML modes, tag insertion, undo/redo,
+word count, and account/work/chapter/field-scoped local text recovery. Each editor
+session gets its own recovery file so separate compose windows cannot overwrite
+one another. Recovery shows the saved text and warns if the form changed since
+that copy was started; the user chooses a copy or keeps the form text.
+Unsupported markup stays in source mode rather than being silently stripped.
+Formatted HTML runs offline in an isolated WebKit world with a restrictive CSP,
+no page navigation, and plain-text paste. Untouched HTML remains byte-for-byte
+unchanged when switching modes.
+
+Work/chapter text, summary and notes rows now open that editor. Required work
+fields and tag selection accept real input through parsed AO3 options and the
+existing autocomplete service. Account → Writing → Drafts opens the authenticated
+paged drafts endpoint and native work forms; New work uses the same form.
+Detailed Writing → Works has an Edit swipe; posted work forms lead to Add chapter.
+Form errors are visible and duplicate save taps are suppressed. A failed total
+update after a successful chapter save exposes a total-only retry. Returning to
+the parent refreshes publication fields before another work save can overwrite
+those totals.
+
+**Verification:** focused iOS tests passed (16 tests), including an actual
+WebKit selection-edit/unchanged-HTML check and isolated recovery copies. The first
+full iOS run passed (1760 passed, 2 skipped); the final run after review/visual
+fixes also passed (`/tmp/kudos-writing-final.xcresult`). macOS Debug and Release compiled; `verify.sh` stopped only at the existing
+Release product gate: `FAIL: Release product is still ad-hoc signed.` Signing was
+not changed. Internal Codex adversarial review found and rechecked multi-window
+recovery, stale retry totals, parent totals and queued-write session guards;
+independent cross-model review remains open in §2b.
+
+A temporary XCTest host rendered the real SwiftUI/WebKit editor in Light, Dark,
+Sepia and OLED (OLED at accessibility size). Inspected screenshots, corrected
+button contrast and passed scaled body size into WebKit, then rendered again.
+No overlap or clipping in the inspected updated editor; the tag bar scrolls.
+Artifacts: `/tmp/kudos-writing-screenshots2` and
+`/tmp/kudos-writing-visual2.xcresult`; temporary probe source retained at
+`/tmp/WritingEditorVisualProbe.swift`, excluded from the app/test commit. **Still manual:** live AO3 writes, authenticated navigation and
+owner approval of screens. No AO3 write was made for verification. Other association
+controls in the landed work screen, AO3 preview, and full tag-only/series editing
+remain separate work; this entry does not claim those screens are complete.
+
+---
 
 ### 2026-09-12 — Build the remaining screen capabilities: assignments (Codex)
 

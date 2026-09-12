@@ -7,12 +7,15 @@ struct WorkEditView: View {
     @Environment(AO3AuthService.self) private var auth
 
     @State private var form: AO3WorkForm
+    @State private var editingGeneration: Int?
     @State private var isSaving = false
     @State private var isPosting = false
     @State private var errorMessage: String?
     @State private var showDeleteConfirmation = false
     @State private var deleteImplications: AO3DeleteImplications?
     @State private var isCheckingDelete = false
+    @State private var needsPublicationRefresh = false
+    @State private var publicationRetry = 0
 
     init(form: AO3WorkForm) {
         self._form = State(initialValue: form)
@@ -48,7 +51,7 @@ struct WorkEditView: View {
                 SectionRuleHeader(title: "Tags")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 tagsPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("Editing only the tags is its own AO3 page, kept at...")
+                Text("Tags can also be edited separately from the work text.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
@@ -72,7 +75,11 @@ struct WorkEditView: View {
             Section {
                 SectionRuleHeader(title: "Publication")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                publicationPanel.pageBodyRow(top: 8, gutter: gutter)
+                publicationPanel.disabled(needsPublicationRefresh).pageBodyRow(top: 8, gutter: gutter)
+                if needsPublicationRefresh {
+                    Button("Reload chapter totals") { publicationRetry += 1 }
+                        .pageBodyRow(top: 8, gutter: gutter)
+                }
                 Text("Chapters posted of total is AO3’s own field — setting a total above what is"
                     + "posted is what marks a work in progress, and Complete writes the same value.")
 
@@ -93,18 +100,35 @@ struct WorkEditView: View {
             }
         }
         .cardList()
+        .disabled(isSaving || isPosting)
+        .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         #if os(macOS)
         .navigationTitle(form.kind == .new ? "New work" : "Edit work")
         #endif
         .subjectScreenWash(palette: accountPalette)
+        .task(id: "\(needsPublicationRefresh):\(publicationRetry)") {
+            guard needsPublicationRefresh, let workID = form.workID else { return }
+            let generation = auth.sessionGeneration
+            do {
+                let fresh = try await auth.loadWorkForm(workID: workID)
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                form.chapterTotal = fresh.chapterTotal
+                form.chaptersPosted = fresh.chaptersPosted
+                form.isChaptered = fresh.isChaptered
+                needsPublicationRefresh = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = "Reload chapter totals before saving this work. " + error.localizedDescription
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     save(submit: form.isPosted ? .update : .saveDraft)
                 }
-                .disabled(isSaving || isPosting)
+                .disabled(isSaving || isPosting || needsPublicationRefresh)
             }
-            if !form.isPosted && form.kind != .new {
+            if !form.isPosted {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Post") {
                         save(submit: .postWithoutPreview)
@@ -113,6 +137,11 @@ struct WorkEditView: View {
                 }
             }
         }
+        .alert("AO3 could not save the change", isPresented: Binding(
+            get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(errorMessage ?? "") }
         .confirmationDialog(
             "Delete Work?",
             isPresented: $showDeleteConfirmation,
@@ -131,42 +160,30 @@ struct WorkEditView: View {
 
     private var requiredPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Title", value: form.title.isEmpty ? "None" : form.title, showsDisclosure: true)
+            SubjectFormRow(label: "Title", arrangement: .control) {
+                TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
+            }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Rating", value: form.rating.isEmpty ? "None" : form.rating, showsDisclosure: true)
+            WritingChoiceRow(title: "Rating", value: $form.rating, options: form.ratingOptions)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Archive warnings",
-    value: form.warnings.isEmpty ? "None" : "\(form.warnings.count)",
-    showsDisclosure: true)
+            WritingTagsRow(title: "Archive warnings", values: $form.warnings, options: form.warningOptions)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Fandoms",
-    value: form.fandoms.isEmpty ? "None" : "\(form.fandoms.count)",
-    showsDisclosure: true)
+            WritingTagsRow(title: "Fandoms", values: $form.fandoms, kind: .fandom)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Language",
-    value: form.languageID.isEmpty ? "None" : form.languageID,
-    showsDisclosure: true)
+            WritingChoiceRow(title: "Language", value: $form.languageID, options: form.languageOptions)
         }
         .subjectPanel()
     }
 
     private var tagsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Categories",
-    value: form.categories.isEmpty ? "None" : "\(form.categories.count)",
-    showsDisclosure: true)
+            WritingTagsRow(title: "Categories", values: $form.categories, options: form.categoryOptions)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Relationships",
-    value: form.relationships.isEmpty ? "None" : "\(form.relationships.count)",
-    showsDisclosure: true)
+            WritingTagsRow(title: "Relationships", values: $form.relationships, kind: .relationship)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Characters",
-    value: form.characters.isEmpty ? "None" : "\(form.characters.count)",
-    showsDisclosure: true)
+            WritingTagsRow(title: "Characters", values: $form.characters, kind: .character)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Additional tags",
-    value: form.additionalTags.isEmpty ? "None" : "\(form.additionalTags.count)",
-    showsDisclosure: true)
+            WritingTagsRow(title: "Additional tags", values: $form.additionalTags, kind: .freeform)
         }
         .subjectPanel()
     }
@@ -196,20 +213,34 @@ struct WorkEditView: View {
         .subjectPanel()
     }
 
+    private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }
+
     private var textPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Summary", value: form.summary.isEmpty ? "Empty" : "Set", showsDisclosure: true)
+            WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
             SubjectRowSeparator()
-            SubjectFormRow(label: "Beginning notes",
-    value: form.notes.isEmpty ? "Empty" : "Set",
-    showsDisclosure: true)
+            WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
             SubjectRowSeparator()
-            SubjectFormRow(label: "End notes", value: form.endnotes.isEmpty ? "Empty" : "Set", showsDisclosure: true)
+            WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
             if form.kind == .new || form.isDraft {
                 SubjectRowSeparator()
-                SubjectFormRow(label: "Work text",
-    value: (form.chapter?.content.isEmpty ?? true) ? "Empty" : "Set",
-    showsDisclosure: true)
+                WritingTextEditorRow(title: "Work text", text: Binding(
+                    get: { form.chapter?.content ?? "" },
+                    set: { value in
+                        if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
+                        form.chapter?.content = value
+                    }
+                ), target: recoveryTarget, field: "content")
+            }
+            if let workID = form.workID, form.isPosted {
+                SubjectRowSeparator()
+                NavigationLink {
+                    WritingChapterDestination(workID: workID, workTitle: form.title) {
+                        needsPublicationRefresh = true
+                    }
+                } label: {
+                    SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
+                }.buttonStyle(.plain)
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Work skin",
@@ -275,11 +306,17 @@ struct WorkEditView: View {
     }
 
     private func save(submit: AO3WorkSubmitAction) {
+        guard !isSaving && !isPosting && !needsPublicationRefresh else { return }
+        guard editingGeneration == auth.sessionGeneration else {
+            errorMessage = "Your AO3 session changed. Reopen this form before saving."
+            return
+        }
         let isPost = submit == .post || submit == .postWithoutPreview
         if isPost { isPosting = true } else { isSaving = true }
 
         Task {
             do {
+                guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
                 try await auth.saveWork(form, submit: submit)
                 dismiss()
             } catch {
@@ -293,6 +330,7 @@ struct WorkEditView: View {
         guard let workID = form.workID else { return }
         Task {
             do {
+                guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
                 if form.isDraft {
                     try await auth.deleteDraft(workID: workID)
                 } else {
