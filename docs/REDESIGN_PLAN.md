@@ -1789,6 +1789,23 @@ confirmed explicitly. The reasoning it overrules should still be answered in
 writing rather than silently dropped, so the next person to read that code
 knows the argument was met and not missed.
 
+### ✅ Resolved — the ledger row pins its ring and tray to the top corners
+
+**Decision: the owner's, 2026-09-12**, and a deliberate deviation from the
+artboard. Spec 1ad draws the ledger row's ring-and-text group as
+`align-items:center; gap:13px`, so the 44pt ring sits vertically centred. The
+row now aligns `.top` instead, which pins the progress ring to the top-left and
+the four-signal tray to the top-right.
+
+What it buys: on a row whose title wraps to a second line, a centred ring and
+tray drift downward with the text, so in a scanned list the rings sit at
+different heights from row to row. Pinned, they form two straight columns down
+the list and only the text block grows.
+
+Unchanged at accessibility sizes: that branch is a `VStack` (Codex's
+`@ScaledMetric` pass, `74680bb`), where there is no cross-axis to pin and the
+ring leads the stack anyway.
+
 ### ✅ Resolved — a ledger row is not a search result, and does not expand
 
 **Decision: the owner's, 2026-09-12.** Ledger cards are a different kind of card

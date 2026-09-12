@@ -321,9 +321,14 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        // `.top`, where spec 1ad centres the row (`align-items:center; gap:13px`).
+        // Owner's call, 2026-09-12: the ring and the signal tray are pinned to the
+        // row's top corners, so they stay put as a title wraps to a second line
+        // instead of drifting down with it. At accessibility sizes the row is a
+        // VStack and there is no cross-axis to pin.
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 13))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 13))
         return layout {
             leading()
 
