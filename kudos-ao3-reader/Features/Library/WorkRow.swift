@@ -52,6 +52,10 @@ struct WorkRow: View {
     /// Worth an expand toggle only when there's more to reveal than the clamped view:
     /// a long summary or any categorized tags. Exposed statically so SensitiveWorkRow
     /// can decide whether to render an external expand button without building a row.
+    /// Spec 1ad's 22pt signal tiles. Named because the ring opposite is sized
+    /// from it.
+    static let ledgerTileSize: CGFloat = 22
+
     static func isExpandable(for work: SavedWork) -> Bool {
         isExpandable(strippedSummary: work.summary.strippingHTML(), for: work)
     }
@@ -126,7 +130,12 @@ struct WorkRow: View {
                 WorkProgressRing(
                     progress: work.readingProgress ?? 0,
                     state: nil,
-                    diameter: 44,
+                    // Sized to the signal tray facing it across the card. Spec 1ad
+                    // draws this ring at 44 and the tray's tiles at 22, which makes
+                    // the tray ~59 tall — a third bigger than the ring, and it reads
+                    // that way. Both now come from the tray's own constants, so a
+                    // change to tile size keeps them the same size.
+                    diameter: WorkStatusIconGrid.trayHeight(tileSize: Self.ledgerTileSize),
                     showsPercentSuffix: false
                 )
             },
@@ -137,7 +146,7 @@ struct WorkRow: View {
                         categories: work.workCategories,
                         warnings: work.workWarnings,
                         completion: work.completionStatus,
-                        tileSize: 22,
+                        tileSize: Self.ledgerTileSize,
                         announcesToVoiceOver: true,
                         showsTray: true
                     )
