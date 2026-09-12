@@ -293,7 +293,7 @@ struct AO3AuthorWorksSection: View {
                             SensitiveWorkRow(
                                 work: work,
                                 expandAll: expandAll,
-                                presentation: layout == .scroll ? .standard : .searchLedger
+                                presentation: layout == .scroll ? .standard : .ledger
                             )
                                 .cardRow()
                         } else if let remote = entry.remote {
@@ -396,7 +396,7 @@ struct AO3AuthorSeriesSection: View {
                     AO3AuthorInlineErrorRow(message: message)
                 }
                 ForEach(model.series) { series in
-                    AO3SeriesRow(series: series, presentation: layout == .scroll ? .standard : .searchLedger)
+                    AO3SeriesRow(series: series, presentation: layout == .scroll ? .standard : .ledger)
                         .cardNavigation(to: series, accessibilityLabel: series.title)
                         .cardRow()
                 }

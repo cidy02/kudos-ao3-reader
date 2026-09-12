@@ -10,7 +10,6 @@ import SwiftUI
 /// - **Activity** — History / Inbox
 ///
 /// App settings stay behind the toolbar gear.
-// swiftlint:disable:next type_body_length
 struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -811,6 +810,9 @@ struct AccountView: View {
                         } label: {
                             SubjectChip(text: tab.rawValue, style: .pill(isSelected: writingTab == tab))
                         }
+                        // The menu this replaced announced the chosen scope with a
+                        // checkmark; a chip rail has to say so itself.
+                        .accessibilityAddTraits(writingTab == tab ? [.isSelected] : [])
                     }
                 }
                 .padding(.horizontal, SubjectMetrics.accountGutter)
