@@ -84,13 +84,26 @@ struct ReviewFindingRegressionTests {
         #expect(values == ["23", "22"])
     }
 
-    // MARK: A family union is not expressible yet, and must not be faked
+    // MARK: A family union is real now, and a fallback must still not be faked
 
-    @Test func aFamilyTotalIsNotCachedWhileTheSearchIsAnIntersection() {
-        // The tilde on a family row is the honest reading until a family search is
-        // a real union. Caching the intersection replaced it with a figure wrong
-        // in the same direction every time.
-        #expect(FandomWorksView.exactCountIsTrustworthy == false)
+    @Test func aFamilyTotalIsCachedOnlyBecauseTheSearchIsARealUnion() {
+        // This pinned `false` while a family search sent `fandom_names`, which ANDs:
+        // caching that intersection replaced an honest tilde with a figure wrong in
+        // the same direction every time. The search is a real union now
+        // (`filter_ids:(A OR B)`, measured against live AO3 — see AO3FandomUnion), so
+        // the flag is true and the rule it guards moved into the load path: a page
+        // that could not resolve every sibling's id falls back to the join and does
+        // not cache its total at all.
+        #expect(FandomWorksView.exactCountIsTrustworthy == true)
+    }
+
+    @Test func aUnionMissingOneSiblingIsNotAUnion() {
+        // The fallback's trigger: one unresolvable id means no clause, which is what
+        // makes the page keep the tilde rather than show a smaller answer as the
+        // family's total.
+        #expect(AO3FandomUnion.queryClause(filterIDs: []) == nil)
+        #expect(AO3FandomUnion.filterID(fromTagWorksPage: "<html><body>no feed link</body></html>",
+                                        tagName: "Anything") == nil)
     }
 
     // MARK: A huge pasted number must not crash the slider

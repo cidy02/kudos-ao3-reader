@@ -278,15 +278,15 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **1** | Home tab — `1b`, then `1ad`, `1ae`, `1af`, `1ag` | 🟡 `1b`, `1ad`, `1ae`, `1af` done. `1ag` (Subscriptions) not started — it is the Account tab's list reached from Home, so it lands with Phase 6's `1p`. |
 | **2** | Library tab — `1c` (shelves), `1d` (ledger) | 🟡 section headers, quick-filter pills, the Shelves/Ledger choice, and the pushed section pages are done. Collections' four miniature works landed 2026-09-11 (`d0526c0e`); the Recently Deleted row was already built. |
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. The paging switcher pill landed 2026-09-11 (`3eeabd89`). |
-| **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). **The family page is still an intersection** (`fandom_names` ANDs); the live-verified union is `filter_ids:(A OR B)` over ids read from tag pages — not wired. |
+| **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). The family page runs a real `filter_ids:(A OR B)` union as of 2026-09-12 (`aab42504`), falling back to the join — and its tilde — when an id will not resolve. |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w` built 2026-09-11 (`578a0bac`), `1x` Drafts still a link out, `1l` Inbox and `1z` Preferences **restyled 2026-09-11** (`a01c857c`, fixed in `40250315`), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` **built 2026-09-11** (`d8a7192b`) — its seven archive paths were verified live first; `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | 🟡 `1h`/`1i`/`1j`/`1bg` built 2026-09-11. **`1bh` refused**: a shared-queue tag manager needs collaboration and queue tags, neither of which exists. |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
-| **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
-| **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
+| **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 `1bn`/`1bo`/`1bp`/`1bq` built 2026-09-12 (`2d5245a3`), not yet reachable. **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
+| **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 `1bx`/`1by`/`1bz`/`1ca`/`1ce` built 2026-09-12, not yet reachable. **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
 | **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` and `1az` landed in `5100addb`; `1bb` (Preferences saved) landed with 1z in `a01c857c`. |
 
 ### Correction (2026-09-10): what the write policy actually says
@@ -460,6 +460,9 @@ re-reviews settled work and nobody reviews their own.
 | `a01c857c` `996cef24` | Gemini 3.1 Pro | 1l Inbox, 1z Preferences, 1bb saved state | Claude → `40250315` | Implemented under orchestration. 1z was half-restyled (no header, kept its nav title under a wash that empties it, bare `ScrollView` without the themed scroll/rows), its footnote described rows the app lacks, and it carried a lint error, 15 warnings and trailing whitespace despite the commit claiming SwiftLint passed. |
 | `d8a7192b` | Gemini 3.8 Flash | 1aa More on AO3, with the archive section | Claude → `40250315` | Implemented under orchestration. Clean: matches 1ac's shape and the artboard's own header and seven row titles exactly. Fixed: a footnote describing the section above it, and a force-unwrapped URL. |
 | `40250315` | Claude | Review fixes on the Gemini batch | unreviewed | **Wants Codex's review**, with the five Claude commits above. |
+| `aab42504` | Claude | The family union, through `filter_ids` | unreviewed | **Wants a non-Claude reviewer.** Measured against live AO3 rather than reasoned about — the third attempt at this, and the first with numbers. |
+| `2d5245a3` | Gemini 3.1 Pro | 1bn, 1bo, 1bp, 1bq writing screens | Claude ✓ | No new URLSession, reuses AO3WorkActions, keeps the non-destructive bulk-edit rule, correct wash/cardList order. Left three lint-manipulation scripts uncommitted in its worktree (third time for this model); none reached the branch. **Screens are not yet reachable from navigation.** |
+| `b3422c7a` `b8b66373` `409c6f18` `d41df8bc` | Gemini 3.8 Flash | 1bx, 1ce, 1by, 1bz, 1ca challenges | Claude ✓ | Open-on-AO3 for matching as the spec requires, three confirmations on irreversible writes, and it degrades to "No assignments found" rather than trusting the known-broken assignments parse. **Not yet reachable from navigation.** |
 | `3eeabd89` `d0526c0e` | Gemini 3.8 Flash | 1k switcher pill; 1d collection ledger row | Claude → `7433b052` | Faithful to the artboard's measured tokens; affordances one for one; miniature covers filtered through `passesPrivacy`. Fixed: a helper the change orphaned, and an unexplained grey. |
 | `578a0bac` | Gemini 3.1 Pro | 1u Works, 1v filter, 1w Series | Claude → `6b6c8ae6` | Its run died mid-session: the commit did not compile, it had stubbed `Scripts/swift-parse-check.py` (refused), suppressed a lint rule (reverted), mis-credited its own model, and its chip rail dropped VoiceOver's selected state. 1x Drafts is NOT built. |
 | `bc2e83c8` `80562550` `4bd27c0e` `eff63fa8` | Sonnet | 1h queue detail, 1i organizer, 1j new queue, 1bg select mode | Claude → `6b6c8ae6` | The strongest of the three: every claim it made checked out (affordances 2→4 swipe, 7→7 labels, preservation UI intact), and it refused 1bh with its reasoning in code rather than faking a feature. Fixed: AccountView's lint error surfaced by the merge, and a dark-only gradient. |
@@ -472,6 +475,50 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-12 — Batch 3: the family union, and ten more surfaces (Claude)
+
+**The family union is real.** `1al`/`1am` showed the intersection of a family's
+fandoms — 3,149 works where Doctor Who's family has 68,057 — because
+`work_search[fandom_names]` ANDs. It now sends `filter_ids:(A OR B)` over ids
+resolved from each tag's own works page, cached for the process. The numbers in
+`AO3FandomUnion`'s doc comment were measured against live AO3, not reasoned
+about: the union is exact (61,248 + 9,958 − 3,149 = 68,057), and it composes
+with the rest of the query. An autocomplete `id` is the tag *name* and never was
+the filter id — the premise two earlier attempts were built on.
+
+A page that cannot resolve every sibling's id falls back to the old join and
+keeps its tilde, so `exactCountIsTrustworthy` now means "this page ran a real
+union", and the regression test that pinned the old behaviour was rewritten to
+that rule rather than forced green.
+
+**Ten more artboards landed** from two implementers: `1bn` `1bo` `1bp` `1bq`
+(writing surfaces, Gemini 3.1 Pro) and `1bx` `1ce` `1by` `1bz` `1ca`
+(challenges and moderation, Gemini 3.8 Flash). Both groups passed review on the
+things that matter here — no second URLSession, no re-added destructive tag
+fields in the bulk POST, Open-on-AO3 where AO3 exposes nothing, and the
+wash/cardList order right everywhere.
+
+**Both groups' screens are built but not yet reachable**: their implementers were
+scoped out of `Features/Account/**` to avoid collisions, so nothing navigates to
+them yet. That wiring is the next small job, and it is the honest status to read
+these rows with.
+
+**Verified here:** iOS suite 1,757 tests, 1,755 passed, **0 failed**, 2 skipped;
+`Scripts/lint.sh` exit 0; macOS Debug and Release both BUILD SUCCEEDED; whitespace
+clean. **Not verified:** nothing visual, and no AO3 write was exercised — the
+writing and challenge screens post through paths no one has run against a live
+account.
+
+**A note on the repo, not the code.** The working checkout at
+`~/Documents/AO3_App_OpenSource` has two truncated packfiles (dated 2026-09-08
+and 09-10, before this session) and cannot traverse parts of its own history;
+the disk was at 97% when this was found. This batch was built in a fresh clone
+at `~/kudos-redesign-clean`. The damaged repo was left untouched — it holds
+local-only branches whose objects may live in those packs, so repairing it is
+the owner's call.
+
+---
 
 ### 2026-09-11 — Second orchestrated batch: nine surfaces, three implementers (Claude)
 
