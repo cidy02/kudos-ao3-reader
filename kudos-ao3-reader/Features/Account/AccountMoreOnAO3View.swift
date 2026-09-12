@@ -38,8 +38,13 @@ enum AO3ArchivePage: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// Non-optional because every `path` here is a literal verified against
+    /// otwarchive's routes.rb; the builder only fails on a malformed string.
     var url: URL {
-        AccountExternalNavCard.siteWideURL(path: path)!
+        guard let url = AccountExternalNavCard.siteWideURL(path: path) else {
+            preconditionFailure("AO3ArchivePage.\(rawValue) is not a valid URL path")
+        }
+        return url
     }
 }
 
@@ -214,9 +219,8 @@ struct AccountMoreOnAO3View: View {
 
     private var archiveFootnote: some View {
         footnote(
-            "What the app does not do natively, listed so it is findable rather than missing. "
-            + "Sign-ups, assignments and claims are the challenge surfaces AO3 keeps under "
-            + "your dashboard; each opens the page in the browser, signed in."
+            "The archive's own pages, not your account's. These open in Browse and need no "
+            + "sign-in — they are listed here so they are findable rather than missing."
         )
     }
 
