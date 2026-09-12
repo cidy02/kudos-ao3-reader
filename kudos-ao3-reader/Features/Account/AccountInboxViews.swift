@@ -41,6 +41,8 @@ struct AccountToolbarContent: ToolbarContent {
     let isInboxVisible: Bool
     var model: AO3InboxModel
     @Binding var showingInboxFilters: Bool
+    let isWorksVisible: Bool
+    @Binding var showingWorksFilter: Bool
     let showsMatureRevealControl: Bool
     let showsWorkListControls: Bool
     @Binding var displayMode: WorkListDisplayMode
@@ -88,6 +90,14 @@ struct AccountToolbarContent: ToolbarContent {
                         systemImage: "line.3.horizontal.decrease"
                     ) {
                         showingInboxFilters = true
+                    })
+                    : nil,
+                isWorksVisible
+                    ? AnyView(ToolbarIconButton(
+                        title: "Works Filters",
+                        systemImage: "line.3.horizontal.decrease"
+                    ) {
+                        showingWorksFilter = true
                     })
                     : nil,
                 (isInboxVisible && model.canSelectItems)
