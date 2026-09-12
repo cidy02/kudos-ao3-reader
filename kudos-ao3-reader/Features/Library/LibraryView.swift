@@ -379,25 +379,57 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
             hasItems: true,
+            itemCount: collections.count,
+            layout: dashboardLayout,
             onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
-            Button {
-                newCollectionName = ""
-                showingNewCollection = true
-            } label: {
-                NewCollectionCard()
-            }
-            .buttonStyle(.plain)
-
-            ForEach(collections.prefix(12)) { collection in
-                NavigationLink(value: collection) {
-                    CollectionCard(collection: collection)
+            switch dashboardLayout {
+            case .shelves:
+                Button {
+                    newCollectionName = ""
+                    showingNewCollection = true
+                } label: {
+                    NewCollectionCard()
                 }
                 .buttonStyle(.plain)
+
+                ForEach(collections.prefix(12)) { collection in
+                    NavigationLink(value: collection) {
+                        CollectionCard(collection: collection)
+                    }
+                    .buttonStyle(.plain)
+                }
+            case .ledger:
+                Button {
+                    newCollectionName = ""
+                    showingNewCollection = true
+                } label: {
+                    NewCollectionLedgerRow()
+                }
+                .buttonStyle(.plain)
+
+                ForEach(collections.prefix(12)) { collection in
+                    NavigationLink(value: collection) {
+                        CollectionLedgerRow(
+                            collection: collection,
+                            previewWorks: collectionPreviewWorks(for: collection)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         } emptyState: {
             EmptyView()
         }
+    }
+
+    /// Works previewed on artboard 1d's collection ledger row. Respects the
+    /// mature-content gate: adult works in hide mode are excluded so their covers
+    /// are never shown here.
+    private func collectionPreviewWorks(for collection: WorkCollection) -> [SavedWork] {
+        collection.works
+            .filter { !$0.isPendingDeletion && passesPrivacy($0) }
+            .sorted { $0.dateAdded > $1.dateAdded }
     }
 
     /// A light, horizontal quick-filter chip row: tap a fandom to filter every
@@ -507,7 +539,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
             #endif
         } else {
-            let showsMature = PrivacyGate.hasVisibleMatureWorks(in: visibleDashboardWorksUnbounded, hideMature: hideMature)
+            let showsMature = PrivacyGate.hasVisibleMatureWorks(
+                in: visibleDashboardWorksUnbounded, hideMature: hideMature
+            )
             let showsStatistics = !statisticsWorks.isEmpty
             let showsSelect = !works.isEmpty
             let showsMoreMenu = showsStatistics || showsSelect || showsMature
