@@ -23,9 +23,15 @@ nonisolated struct LocalStorageFootprint: Sendable, Equatable {
     /// Grouped because the OS may purge either at any time, so the distinction
     /// between them is not one the reader can act on.
     var cacheBytes: Int64 = 0
+    /// `WritingTextRecovery` — crash copies of chapters, summaries and notes the
+    /// reader has written but not posted. Counted on its own because it is the
+    /// one figure here that is the reader's *own* work rather than AO3's, and
+    /// because a privacy screen that omitted unpublished writing would be
+    /// answering a different question than the one it asks.
+    var draftRecoveryBytes: Int64 = 0
 
     var totalBytes: Int64 {
-        downloadedWorkBytes + preservedOriginalBytes + importedFontBytes + cacheBytes
+        downloadedWorkBytes + preservedOriginalBytes + importedFontBytes + cacheBytes + draftRecoveryBytes
     }
 
     /// The spec's `412 MB`. `.file` rather than `.memory` so the units match
@@ -50,7 +56,11 @@ nonisolated enum LocalDataFootprintScanner {
                 preservedOriginalBytes: directorySize(of: Storage.originalsDirectory),
                 importedFontBytes: directorySize(of: Storage.fontsDirectory),
                 cacheBytes: directorySize(of: Storage.metadataCacheDirectory)
-                    + directorySize(of: readerScratchDirectory)
+                    + directorySize(of: readerScratchDirectory),
+                // Draft recovery copies are the user's own unpublished writing. A
+                // screen that promises to show what is on the device cannot leave
+                // them out of the figure.
+                draftRecoveryBytes: directorySize(of: WritingTextRecovery().directory)
             )
         }.value
     }
