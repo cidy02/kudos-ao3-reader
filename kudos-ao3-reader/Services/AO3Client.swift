@@ -368,8 +368,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// confirmed empirically (64 sampled work IDs across several unauthenticated
     /// `/works/search` queries, zero restricted). Signed in, results should match
     /// what the user sees browsing AO3 themselves.
-    func search(filters: AO3SearchFilters, page: Int = 1, request: URLRequest? = nil) async throws -> AO3SearchPage {
-        guard let url = Self.searchURL(filters: filters, page: page) else {
+    /// `additionalQueryClause` is ANDed into `work_search[query]` alongside the
+    /// filters' own clauses. Browse's family pages use it to send the
+    /// `filter_ids:(A OR B)` union, which no structured field can express.
+    func search(
+        filters: AO3SearchFilters,
+        page: Int = 1,
+        request: URLRequest? = nil,
+        additionalQueryClause: String? = nil
+    ) async throws -> AO3SearchPage {
+        guard let url = Self.searchURL(
+            filters: filters,
+            page: page,
+            additionalQueryClause: additionalQueryClause
+        ) else {
             throw AO3Error.network("Bad search URL.")
         }
         let html: String
@@ -416,7 +428,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// verified live 2026-08-06 for title, creators, rating_ids, word_count,
     /// single_chapter, revised_at, hits, character_names, sort_column and
     /// excluded_tag_names, each of which measurably changed the result count.
-    static func workSearchQueryItems(filters: AO3SearchFilters, page: Int) -> [URLQueryItem] {
+    static func workSearchQueryItems(
+        filters: AO3SearchFilters,
+        page: Int,
+        additionalQueryClause: String? = nil
+    ) -> [URLQueryItem] {
         var items: [URLQueryItem] = []
 
         func add(_ name: String, _ value: String?) {
@@ -427,7 +443,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // AO3's structured search has no multi-rating field, and no exclusion for
         // warnings or categories. `searchQuery` folds those into AO3's documented
         // text-search syntax. Excluded *tags* have their own field, below.
-        add("work_search[query]", filters.searchQuery)
+        // The union clause and the filters' own clauses are both AND-ed by AO3's
+        // query field, which is what makes "any of these fandoms, rated Teen"
+        // expressible at all.
+        add("work_search[query]", [additionalQueryClause, filters.searchQuery]
+            .compactMap { $0?.isEmpty == false ? $0 : nil }
+            .joined(separator: " "))
         add("work_search[excluded_tag_names]", filters.excludedTagNames)
 
         add("work_search[title]", filters.title)
@@ -501,12 +522,42 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// The `/works/search` URL for a filter set — the **Search tab's** endpoint.
     /// Pure and static so every parameter name, id, and multi-value convention is
     /// unit-testable without a network call.
-    static func searchURL(filters: AO3SearchFilters, page: Int) -> URL? {
+    static func searchURL(
+        filters: AO3SearchFilters,
+        page: Int,
+        additionalQueryClause: String? = nil
+    ) -> URL? {
         guard var components = URLComponents(string: "https://archiveofourown.org/works/search") else {
             return nil
         }
-        components.queryItems = workSearchQueryItems(filters: filters, page: page)
+        components.queryItems = workSearchQueryItems(
+            filters: filters,
+            page: page,
+            additionalQueryClause: additionalQueryClause
+        )
         return components.url
+    }
+
+    /// The numeric filter id for a fandom tag, read from its own works page and
+    /// cached for the process: AO3 tag ids are stable, so a second family page in
+    /// the same browse never re-fetches one it has seen.
+    ///
+    /// One request per sibling, through the shared coordinator like every other
+    /// fan-out here. `nil` when the page has no feed link (a tag with no works),
+    /// which the caller treats as "no union available" rather than as an error.
+    func fandomFilterID(for fandomName: String) async throws -> Int? {
+        let key = fandomName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return nil }
+        if let cached = await FandomFilterIDCache.shared.id(for: key) { return cached }
+        guard let url = Self.fandomWorksURL(fandom: key, filters: AO3SearchFilters(), page: 1) else {
+            return nil
+        }
+        let html = try await AO3RequestCoordinator.shared.withSlot {
+            try await getHTML(url)
+        }
+        guard let id = AO3FandomUnion.filterID(fromTagWorksPage: html, tagName: key) else { return nil }
+        await FandomFilterIDCache.shared.store(id, for: key)
+        return id
     }
 
     /// The `/tags/<fandom>/works` URL for a filter set — **Browse's** endpoint.
