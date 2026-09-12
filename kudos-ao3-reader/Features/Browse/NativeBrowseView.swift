@@ -121,20 +121,14 @@ struct FandomWorksView: View {
     /// tagged with *every* era of Doctor Who at once. An attempt to replace it
     /// with `fandom: (A OR B)` was worse — AO3 has no indexed `fandom` field, so
     /// that matches nothing at all. The union AO3 does support goes through
-    /// resolved tag ids in `filter_ids`, and the app holds no tag ids.
-    /// Verified live 2026-09-11: `work_search[query]=filter_ids:(27785 OR 99117)`
-    /// returns exactly the union (68,057 = 61,248 + 9,958 − 3,149, where
-    /// `fandom_names` gave the 3,149 intersection). Autocomplete is *not* the id
-    /// source — its `id` is the tag name. Numeric ids are on each tag's works page
-    /// (`/tags/<name>/works` → `/tags/27785/feed.atom`), so wiring the union costs
-    /// one cached tag-page request per sibling.
+    /// resolved tag ids in `filter_ids`, and the app now resolves them — see
+    /// `AO3FandomUnion` for the live measurements that settled it.
     ///
-    /// Until it does, the join stays (it at least returns *some* real works, which
-    /// the OR clause did not) and `exactCountIsTrustworthy` is false, so the
-    /// family's tilde is never replaced by a figure derived from it.
-    /// Flip to true only once a family search is a real union — see `baseline`.
-    /// The tilde on a family row is the honest reading until then.
-    static let exactCountIsTrustworthy = false
+    /// A page that resolved every sibling's id ran a real union and may cache its
+    /// total. One that could not falls back to the `fandom_names` join, which
+    /// returns the intersection — some real works, but a fraction of the family —
+    /// and keeps the row's tilde rather than caching a figure derived from it.
+    static let exactCountIsTrustworthy = true
 
     private static func baseline(for fandoms: [String]) -> AO3SearchFilters {
         var filters = AO3SearchFilters()
@@ -279,6 +273,22 @@ struct FandomWorksView: View {
         resultSummary?.completing(subject: fandom, page: currentPage, onPageCount: results.count)
     }
 
+    /// Every sibling's numeric filter id, or nil if any one of them cannot be
+    /// resolved. All-or-nothing on purpose: a union missing one era of Doctor Who
+    /// is a different, smaller answer presented as the family's.
+    ///
+    /// One cached request per sibling through the shared coordinator. A family is
+    /// two to a handful of tags and ids never change, so this costs nothing after
+    /// the first visit.
+    private func unionQueryClause() async throws -> String? {
+        var ids: [Int] = []
+        for name in includedFandoms {
+            guard let id = try await AO3Client.shared.fandomFilterID(for: name) else { return nil }
+            ids.append(id)
+        }
+        return AO3FandomUnion.queryClause(filterIDs: ids)
+    }
+
     private func load(page: Int) async {
         // Always, not only on a first load: with results already on screen this
         // is what tells the pagination bar a fetch is running. The list itself
@@ -288,15 +298,30 @@ struct FandomWorksView: View {
         phase = .loading
         do {
             // A single fandom still reads AO3's tag listing so the heading names
-            // the tag. A sibling family has no one path — that search goes to
-            // `/works/search` with every original name in `fandom_names`.
+            // the tag. A sibling family has no one path, so it goes to
+            // `/works/search` — as a real union when every sibling's filter id
+            // resolves, and as the old intersection when one does not.
             let result: AO3SearchPage
+            var unionApplied = false
             if includedFandoms.count == 1 {
                 result = try await AO3Client.shared.fandomWorksPage(
                     fandom: includedFandoms[0],
                     filters: filters,
                     page: page,
                     request: auth.authenticatedRequest()
+                )
+            } else if let clause = try await unionQueryClause() {
+                // `fandom` is cleared for this request: left in, AO3 would AND
+                // `fandom_names` against the union and hand back the
+                // intersection again, which is the bug this replaces.
+                var unionFilters = filters
+                unionFilters.fandom = ""
+                unionApplied = true
+                result = try await AO3Client.shared.search(
+                    filters: unionFilters,
+                    page: page,
+                    request: auth.authenticatedRequest(),
+                    additionalQueryClause: clause
                 )
             } else {
                 result = try await AO3Client.shared.search(
@@ -310,10 +335,11 @@ struct FandomWorksView: View {
             totalPages = result.totalPages
             resultSummary = result.summary
             phase = .loaded
-            // Deliberately unreachable while a family search is an intersection:
-            // caching that figure as the family's exact total replaced an honest
-            // tilde with a number wrong in the same direction every time.
-            if Self.exactCountIsTrustworthy,
+            // Only a real union may be cached as the family's exact total. The
+            // intersection is wrong in the same direction every time, so a
+            // fallback page leaves the tilde alone.
+            if unionApplied,
+               Self.exactCountIsTrustworthy,
                includedFandoms.count > 1,
                filters == Self.baseline(for: includedFandoms),
                let total = result.summary?.total
