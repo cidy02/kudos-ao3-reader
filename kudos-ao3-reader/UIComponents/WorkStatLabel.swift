@@ -333,6 +333,17 @@ struct WorkStatusIconGrid: View {
         ).topItems
     }
 
+    /// The drawn height of the 2x2 tray, from the same constants it lays itself
+    /// out with — two tiles, the gap between them, and the tray's own vertical
+    /// padding. Exposed so a neighbour (the ledger row's progress ring) can match
+    /// its size instead of hard-coding a number that drifts the next time a tile
+    /// changes.
+    static func trayHeight(tileSize: CGFloat) -> CGFloat {
+        let gap = tileSize * 3 / 18
+        let verticalPadding = tileSize / 4
+        return tileSize * 2 + gap + verticalPadding * 2
+    }
+
     private var gap: CGFloat { tileSize * 3 / 18 }
     private var cornerRadius: CGFloat { tileSize * 4 / 18 }
     private var iconSize: CGFloat { tileSize * 10 / 18 }
