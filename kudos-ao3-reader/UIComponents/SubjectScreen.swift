@@ -358,13 +358,15 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
             trailing()
         }
         // Standalone, the card is this view's own: spec 1ad's `padding:15px 16px`.
-        // Inside a `List`, `.cardRow()` already contributes 10pt vertical and 16pt
-        // horizontal of inner padding, so the row tops the vertical up to the same
-        // 16 the sides get — the 6 `WorkRow`'s standard card adds for exactly this
-        // reason. It used to add 9, which is why a ledger card read as 19 × 16 and
-        // its top and bottom did not match its sides.
+        //
+        // Inside a `List` the card is `.cardRow()`'s, and its inner padding is
+        // already 16pt: `CardListMetrics.innerVertical` (10) plus half the
+        // inter-card gap (6), which lands *inside* the card rather than between
+        // cards. Measured on device at 3x: 16pt to the sides, 22pt above the ring —
+        // this row was adding a third helping on top of those two. It adds none
+        // now, so a ledger card is 16 × 16.
         .padding(.horizontal, drawsBackground ? 16 : 0)
-        .padding(.vertical, drawsBackground ? 15 : 6)
+        .padding(.vertical, drawsBackground ? 15 : 0)
         .background {
             if drawsBackground { rowBackground }
         }
