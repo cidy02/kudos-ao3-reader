@@ -12,16 +12,16 @@ import SwiftUI
 /// What replaced it is the split every first-party app makes between the *common*
 /// move and the *rare* one:
 ///
-/// - **Common — one page at a time.** Two chevrons, and that is the whole visible
-///   control. This is Books' chapter navigation and Photos' day stepper: the app
-///   assumes you are reading forwards.
-/// - **Rare — go somewhere far away.** The centre reads `Page 3 of 5,000`, and
+/// - **Common — one page at a time.** Artboard 1k's switcher pill: a unified
+///   thumb-height capsule with prev, the page as a label you tap, and next in
+///   accent. The app assumes you are reading forwards.
+/// - **Rare — go somewhere far away.** The centre reads `Page 2 / 3,216`, and
 ///   tapping it opens the page sheet: a number field, the ten nearby pages as
 ///   tiles, and First / Last. The field is what addresses page 4,017 exactly —
 ///   the scrubber this replaced (artboard 1k) could only ever get near it,
 ///   because one thumb pixel is several pages on a long list.
 ///
-/// So the bar shows your position, always, in words — which the numbered version
+/// So the pill shows your position, always, in words and numbers — which the numbered version
 /// never actually did — and holds no chrome for a jump you make once a session.
 ///
 /// The pagination *logic* is untouched: `navigationPage` and `abbreviate` are the
@@ -43,9 +43,14 @@ struct SearchPaginationBar: View {
 
     @State private var showingPageSheet = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(ThemeManager.self) private var themeManager
+
+    private var resolvedPalette: SubjectPalette {
+        palette ?? themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 3) {
             navButton(.backward)
 
             Button { showingPageSheet = true } label: {
@@ -68,6 +73,24 @@ struct SearchPaginationBar: View {
 
             navButton(.forward)
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background {
+            let shape = Capsule()
+            shape
+                .fill(switcherPillFill)
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(
+                    shape.strokeBorder(switcherPillStroke, lineWidth: 0.5)
+                )
+                .shadow(
+                    color: Color.black.opacity(themeManager.appTheme.isDarkFamily ? 0.45 : 0.12),
+                    radius: 9,
+                    x: 0,
+                    y: 6
+                )
+        }
+        .contentShape(Capsule())
         .frame(maxWidth: .infinity)
         // Paging is a discrete move through a list; the tick is the same feedback
         // a picker gives, and it fires on the value actually changing rather than
@@ -83,40 +106,58 @@ struct SearchPaginationBar: View {
         }
     }
 
-    /// The position, in words. Abbreviated only past 999 so the row can't be
-    /// widened off the card by a five-digit total.
+    private var switcherPillFill: Color {
+        if themeManager.appTheme.isDarkFamily {
+            Color(red: 120 / 255, green: 120 / 255, blue: 128 / 255).opacity(0.34)
+        } else {
+            themeManager.appTheme.glassFill(0.24)
+        }
+    }
+
+    private var switcherPillStroke: Color {
+        if themeManager.appTheme.isDarkFamily {
+            Color.white.opacity(0.14)
+        } else {
+            themeManager.appTheme.glassStroke(0.14)
+        }
+    }
+
+    /// The position, in words. Spec 1k displays `Page 2 / 3,216` with a chevron up
+    /// that indicates the tappable page sheet trigger.
     private var positionLabel: some View {
-        HStack(spacing: 4) {
-            Text("Page ")
-                .foregroundStyle(.secondary)
-                + Text("\(currentPage)")
-                .foregroundStyle(.primary)
-                .fontWeight(.semibold)
-                + Text(" of \(Self.abbreviate(totalPages))")
-                .foregroundStyle(.secondary)
+        HStack(spacing: 7) {
+            Text("Page \(currentPage)")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.primary)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(reduceMotion ? nil : .snappy, value: currentPage)
+
+            Text("/ \(totalPages.formatted())")
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(
+                    themeManager.appTheme.isDarkFamily
+                        ? Color.white.opacity(0.60)
+                        : Color.secondary
+                )
 
             if isLoading {
-                // Same slot as the disclosure arrows, so the pill doesn't resize
-                // and the row doesn't shift under the thumb that just tapped it.
                 ProgressView()
                     .controlSize(.mini)
             } else if totalPages > 1 {
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(
+                        themeManager.appTheme.isDarkFamily
+                            ? Color.white.opacity(0.60)
+                            : Color.secondary
+                    )
             }
         }
-        .font(.subheadline)
-        .monospacedDigit()
-        // Rolls the digits rather than cutting to the new number — the motion is
-        // what says "you moved", which a numbered bar needed a filled pill to say.
-        .contentTransition(.numericText())
-        .animation(reduceMotion ? nil : .snappy, value: currentPage)
         .lineLimit(1)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: Capsule())
-        .contentShape(Capsule())
+        .padding(.horizontal, 12)
+        .frame(minHeight: 32)
+        .contentShape(Rectangle())
     }
 
     private func navButton(_ direction: Direction) -> some View {
@@ -132,14 +173,26 @@ struct SearchPaginationBar: View {
             direction, longPress: true, currentPage: currentPage, totalPages: totalPages
         )
         let endLabel = isBackward ? "First page" : "Last page"
+        let isAccentedForward = !isBackward && enabled
 
         return Button {
             onSelect(page)
         } label: {
             Image(systemName: isBackward ? "chevron.backward" : "chevron.forward")
-                .font(.subheadline.weight(.semibold))
-                .frame(minWidth: 34, minHeight: 34)
-                .background(.regularMaterial, in: Circle())
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(
+                    isAccentedForward ? resolvedPalette.accentOnFill : Color.primary
+                )
+                .frame(width: 32, height: 32)
+                .background {
+                    if isAccentedForward {
+                        Circle()
+                            .fill(resolvedPalette.chipFill)
+                            .overlay(
+                                Circle().strokeBorder(resolvedPalette.chipStroke, lineWidth: 0.5)
+                            )
+                    }
+                }
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -147,7 +200,6 @@ struct SearchPaginationBar: View {
         // `.disabled` rather than the old hand-rolled colours: it dims the label,
         // blocks the tap and tells VoiceOver, all with the system's own treatment.
         .opacity(enabled ? 1 : 0.35)
-        .minimumHitTarget()
         .contextMenu {
             // Long-press to reach an end, unchanged in behaviour. Gated on the
             // arrow being live so a disabled edge's long-press stays inert rather
