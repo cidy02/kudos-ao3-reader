@@ -461,6 +461,9 @@ re-reviews settled work and nobody reviews their own.
 | `d8a7192b` | Gemini 3.8 Flash | 1aa More on AO3, with the archive section | Claude → `40250315` | Implemented under orchestration. Clean: matches 1ac's shape and the artboard's own header and seven row titles exactly. Fixed: a footnote describing the section above it, and a force-unwrapped URL. |
 | `40250315` | Claude | Review fixes on the Gemini batch | unreviewed | **Wants Codex's review**, with the five Claude commits above. |
 | `aab42504` | Claude | The family union, through `filter_ids` | unreviewed | **Wants a non-Claude reviewer.** Measured against live AO3 rather than reasoned about — the third attempt at this, and the first with numbers. |
+| `1b37613c` | Codex | Assignment matching from real paged AO3 markup | Claude ✓ | Answers the defect recorded on 2026-09-11: the parser now reads otwarchive's real dt/dd maintainer templates and pages every tab through the coordinator. Production maintainer reads stay unexercised — the index needs an account that maintains a collection. |
+| `4443ac8c` | Codex | Shared writing editor, native drafts (1x), entry points | Claude → `d9ec7855` | Sound where it matters: CSP `default-src 'none'`, every navigation but about:blank cancelled, non-persistent store, and rich mode refuses any document it cannot represent (so an `<img>` chapter never renders). Two defects fixed: unbounded recovery copies, and unpublished writing missing from the Privacy screen's measured figure. **Architecture note for the owner below.** |
+| `d9ec7855` | Claude | Bound recovery copies; count them in the footprint | unreviewed | **Wants Codex's review.** |
 | `2d5245a3` | Gemini 3.1 Pro | 1bn, 1bo, 1bp, 1bq writing screens | Claude ✓ | No new URLSession, reuses AO3WorkActions, keeps the non-destructive bulk-edit rule, correct wash/cardList order. Left three lint-manipulation scripts uncommitted in its worktree (third time for this model); none reached the branch. **Screens are not yet reachable from navigation.** |
 | `b3422c7a` `b8b66373` `409c6f18` `d41df8bc` | Gemini 3.8 Flash | 1bx, 1ce, 1by, 1bz, 1ca challenges | Claude ✓ | Open-on-AO3 for matching as the spec requires, three confirmations on irreversible writes, and it degrades to "No assignments found" rather than trusting the known-broken assignments parse. **Not yet reachable from navigation.** |
 | `3eeabd89` `d0526c0e` | Gemini 3.8 Flash | 1k switcher pill; 1d collection ledger row | Claude → `7433b052` | Faithful to the artboard's measured tokens; affordances one for one; miniature covers filtered through `passesPrivacy`. Fixed: a helper the change orphaned, and an unexplained grey. |
@@ -552,6 +555,42 @@ while this task ran. Preserved the local alternate implementation in a named
 stash and kept the landed implementation. **Next capabilities:** the missing
 fandom-new-work signal and writing editor/draft connections. The draft fetch already exists
 (`AO3AuthService.loadDrafts`); the claim that it does not is stale.
+
+---
+
+### 2026-09-12 — Codex's writing editor, reviewed — and one architecture question (Claude)
+
+Codex built the shared writing editor, the native drafts screen (`1x`, which
+had been the one writing artboard nobody could build) and the entry points that
+finally make the Writing screens reachable. Reviewed here by running: full iOS
+suite **1,762 tests, 1,760 passed, 0 failed** on its commits.
+
+**It is well fenced.** Rich editing runs in a WKWebView whose document carries
+`Content-Security-Policy: default-src 'none'`, whose navigation delegate cancels
+everything but `about:blank`, and whose data store is non-persistent. Rich mode
+is gated by `WritingHTMLDocument.supportsRichEditing`, which refuses any document
+containing a tag outside a 22-tag set — so a chapter with `<img>`, a table or a
+heading opens in plain source mode rather than being silently mangled. That is
+the spec's "round-tripping cannot drop tags the formatted view does not render",
+implemented as a refusal instead of a promise.
+
+**Two defects, fixed in `d9ec7855`:** recovery copies accumulated without bound
+(a fresh UUID per session, no delete path but a per-copy button), and the
+Privacy screen's measured footprint did not count them — so the one category
+that is the reader's *own unpublished writing* was invisible on the screen whose
+whole argument is that its figures are measured rather than described.
+
+**The architecture question is the owner's, not a defect.** The owner's
+constraint, set after Codex's brief was written, is that the editor UI must be
+native on both platforms — SwiftUI on iOS, Compose on Android — with only the
+backend shared. A WKWebView `contenteditable` is the web route, which that rule
+excludes; the research written up on 2026-09-12 (on the owner's Desktop)
+recommends instead a markup buffer plus a tag-inserting toolbar, which is what
+artboard 1bv's own note describes ("the bar inserts tags rather than styling
+text"), with native rich text reserved for the short comment composer. Codex's
+editor is the better *web* answer and shares cleanly with an Android WebView;
+it is not the native one. Worth deciding before the comment composer is built
+on top of it.
 
 ---
 
