@@ -354,9 +354,8 @@ nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
     var sentAt: Date? = nil
 
     var isMatched: Bool {
-        // No parser sets `requestSignupID`, and AO3's Complete tab never links the
-        // request sign-up at all — the join proves the request side, so a giver is
-        // what makes it matched.
+        // Complete rows omit signup IDs; the join can prove the recipient by
+        // byline instead. A giver is what makes the joined request matched.
         offerSignupID != nil || !offerPseud.isEmpty
     }
 }
@@ -463,6 +462,7 @@ nonisolated enum AO3ChallengeAssignmentList: String, Hashable, Sendable {
     /// Defaulted and uncovered — the unmatched/default queue a moderator acts on (1cb).
     case defaults
     case pinchHits
+    case unfulfilled
     case assignments
 }
 
@@ -605,6 +605,7 @@ nonisolated enum AO3ChallengeURL {
         switch list {
         case .defaults: break
         case .pinchHits: items.append(URLQueryItem(name: "pinch_hit", value: "true"))
+        case .unfulfilled: items.append(URLQueryItem(name: "unfulfilled", value: "true"))
         case .assignments: items.append(URLQueryItem(name: "fulfilled", value: "true"))
         }
         if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
