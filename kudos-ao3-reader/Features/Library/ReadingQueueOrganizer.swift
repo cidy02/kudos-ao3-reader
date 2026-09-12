@@ -141,39 +141,15 @@ struct AllReadingQueuesGridView: View {
                 }
             }
         }
-        // Unrestyled for now (plain `Form`, unchanged from before this file
-        // existed) — artboard 1j gives this its own redesign pass and, at the
-        // same time, folds this sheet and `ReadingQueueBrowserView`'s
-        // near-identical copy into one shared component.
         .sheet(isPresented: $showingNewQueue) {
-            NavigationStack {
-                Form {
-                    TextField("Name", text: $newQueueName)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.words)
-                        #endif
+            NewReadingQueueSheet(
+                name: $newQueueName,
+                onCreate: createQueue,
+                onCancel: {
+                    newQueueName = ""
+                    showingNewQueue = false
                 }
-                .navigationTitle("New Queue")
-                #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
-                            newQueueName = ""
-                            showingNewQueue = false
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Create", action: createQueue)
-                            .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-            }
-            #if os(iOS)
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
-            #endif
+            )
         }
         .alert(
             "Rename Queue",

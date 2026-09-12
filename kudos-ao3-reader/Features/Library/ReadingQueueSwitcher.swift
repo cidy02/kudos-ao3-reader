@@ -67,34 +67,14 @@ extension ReadingQueueBrowserView {
     }
 
     var newQueueSheet: some View {
-        NavigationStack {
-            Form {
-                TextField("Name", text: $newQueueName)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.words)
-                    #endif
+        NewReadingQueueSheet(
+            name: $newQueueName,
+            onCreate: createQueue,
+            onCancel: {
+                newQueueName = ""
+                showingNewQueue = false
             }
-            .navigationTitle("New Queue")
-            #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        newQueueName = ""
-                        showingNewQueue = false
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { createQueue() }
-                        .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-        #if os(iOS)
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-        #endif
+        )
     }
 
     // MARK: - Switcher list
