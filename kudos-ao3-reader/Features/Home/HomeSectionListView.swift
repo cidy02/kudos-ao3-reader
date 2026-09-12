@@ -228,6 +228,31 @@ struct HomeSectionListView: View {
                             isSelected: isSelecting && selection.contains(work.id),
                             tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
                         )
+                        // The same two local actions Library's ledger rows carry, so a
+                        // row means the same thing wherever it is drawn. Deliberately
+                        // NOT the trailing delete: Library pairs that with a
+                        // `confirmBeforeDelete` alert this screen does not have, and a
+                        // full swipe that destroys a download with no confirmation is
+                        // not an affordance worth matching.
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            Button {
+                                WorkLifecycle.setSaved(work, !work.isSaved, in: context)
+                            } label: {
+                                let labels = WorkActionLabels.saved(isSaved: work.isSaved)
+                                Label(labels.title, systemImage: labels.systemImage)
+                            }
+                            .tint(.blue)
+
+                            Button {
+                                work.isFavorite.toggle()
+                                work.markModified()
+                                try? context.save()
+                            } label: {
+                                let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
+                                Label(labels.title, systemImage: labels.systemImage)
+                            }
+                            .tint(.yellow)
+                        }
                     }
                 } header: {
                     SectionRuleHeader(title: kind.title, count: visibleItems.count)
