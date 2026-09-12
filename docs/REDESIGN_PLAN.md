@@ -1789,6 +1789,34 @@ confirmed explicitly. The reasoning it overrules should still be answered in
 writing rather than silently dropped, so the next person to read that code
 knows the argument was met and not missed.
 
+### ✅ Resolved — a ledger row is not a search result, and does not expand
+
+**Decision: the owner's, 2026-09-12.** Ledger cards are a different kind of card
+from search results — one line that says which work this is and how far in you
+are, in a list you scan — so they carry no disclosure at all.
+
+This reverses `74680bb`, which widened `isExpandableWork` to
+`presentation == .ledger || …`, and the reasoning recorded for it on 2026-09-10:
+that the ledger row's shorter metadata line left six facts reachable only
+through the disclosure, so removing it would be a density regression. That
+reasoning was about *reachability*, and the answer it missed is that the facts
+are one tap away on Work Detail, which is where a reader goes for them. The
+density gate's own wording allows this: a reduction that is **explicitly
+approved** is not a regression.
+
+What went with it: `expandedLedgerDetails` (byline, fandoms, dates, summary,
+tag groups — all of them Work Detail's content), the ledger row's expand
+button, and the blurred branch's ledger clause in `MatureContent`, which would
+otherwise have given a gated row a control the unblurred row no longer has.
+
+**Three screens lost their "Expand All" menu item** — Home's section list,
+Library's section list and the queue browser. Each showed it only in detailed
+mode, and detailed mode is exactly where ledger rows are drawn, so after this
+change the control could not have done anything. Screens that still draw
+standard or remote rows keep theirs: Search, Collections, the author profile,
+series detail, and the account works lists, which mix local ledger rows with
+remote AO3 rows.
+
 ### ✅ Resolved — "no warnings" is green here and gray everywhere else
 
 **Decision: both, and they do not contradict.** Spec 1a paints the WARNINGS cell

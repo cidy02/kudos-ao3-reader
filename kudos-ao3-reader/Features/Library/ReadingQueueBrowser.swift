@@ -38,7 +38,6 @@ struct ReadingQueueBrowserView: View {
     /// screen's own overflow menu already does (rename, delete, see what's
     /// preserved), not a new destination's worth of new data.
     @State private var showingQueueDetails = false
-    @State private var expandAll = false
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
     /// Cover grid matches the prior browser default; switch to detailed via the menu.
@@ -210,7 +209,6 @@ struct ReadingQueueBrowserView: View {
     private func ledgerRow(_ work: SavedWork) -> some View {
         SensitiveWorkRow(
             work: work,
-            expandAll: expandAll,
             openMode: .reader,
             isSelecting: isSelecting,
             isSelected: selection.contains(work.id),
@@ -412,7 +410,6 @@ extension ReadingQueueBrowserView {
                 ForEach(displayedWorks) { work in
                     SensitiveWorkRow(
                         work: work,
-                        expandAll: expandAll,
                         openMode: .reader,
                         presentation: .ledger
                     )
@@ -655,9 +652,6 @@ extension ReadingQueueBrowserView {
                             Label("Select", systemImage: "checklist")
                         }
                         DisplayModeMenuPicker(mode: $displayMode)
-                        if displayMode == .detailed {
-                            ExpandAllMenuItem(expandAll: $expandAll)
-                        }
                         Divider()
                         Button {
                             showingQueueDetails = true
