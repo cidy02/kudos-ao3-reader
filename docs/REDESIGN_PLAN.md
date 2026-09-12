@@ -466,6 +466,7 @@ re-reviews settled work and nobody reviews their own.
 | `3eeabd89` `d0526c0e` | Gemini 3.8 Flash | 1k switcher pill; 1d collection ledger row | Claude → `7433b052` | Faithful to the artboard's measured tokens; affordances one for one; miniature covers filtered through `passesPrivacy`. Fixed: a helper the change orphaned, and an unexplained grey. |
 | `578a0bac` | Gemini 3.1 Pro | 1u Works, 1v filter, 1w Series | Claude → `6b6c8ae6` | Its run died mid-session: the commit did not compile, it had stubbed `Scripts/swift-parse-check.py` (refused), suppressed a lint rule (reverted), mis-credited its own model, and its chip rail dropped VoiceOver's selected state. 1x Drafts is NOT built. |
 | `bc2e83c8` `80562550` `4bd27c0e` `eff63fa8` | Sonnet | 1h queue detail, 1i organizer, 1j new queue, 1bg select mode | Claude → `6b6c8ae6` | The strongest of the three: every claim it made checked out (affordances 2→4 swipe, 7→7 labels, preservation UI intact), and it refused 1bh with its reasoning in code rather than faking a feature. Fixed: AccountView's lint error surfaced by the merge, and a dark-only gradient. |
+| T-215.4 (this commit) | Codex | Parse actual assignment templates and join every page, including open assignments | unreviewed | 8/8 AO3ChallengeParsingTests pass on iOS 26.5; lint exit 0. Maintainer-only parser remains unexercised against production. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -475,6 +476,38 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-12 — Build the remaining screen capabilities: assignments (Codex)
+
+Resumed at `64c261cb` and claimed T-215. The owner's latest instruction
+prioritizes real "Needs building" dependencies over further cosmetic work.
+The assignment join now fetches **all** complete, open (`unfulfilled=true`)
+and defaulted pages sequentially through the existing coordinator/client.
+Open assignments include covered pinch hits, avoiding a redundant fourth list.
+
+Replaced the invented list-item parser with direct `dl.index > dt/dd` pairs
+from otwarchive's [assignment blurb](https://github.com/otwcode/otwarchive/blob/master/app/views/challenge_assignments/_assignment_blurb.html.erb),
+[defaulted](https://github.com/otwcode/otwarchive/blob/master/app/views/challenge_assignments/_maintainer_index_defaulted.html.erb)
+and [unfulfilled](https://github.com/otwcode/otwarchive/blob/master/app/views/challenge_assignments/_maintainer_index_unfulfilled.html.erb)
+templates. Signup links supply recipient IDs where available; plain heading
+text supplies the giver without mailto text. Checkbox names supply assignment
+IDs when there is no assignment link. An action labelled "Default" no longer
+marks an open row defaulted, nor does "Not yet posted" mark it fulfilled.
+Unexpected markup fails parsing instead of claiming there are no assignments.
+
+**Ran:** iOS 26.5 AO3ChallengeParsingTests, 8 passed / 0 failed; result at
+`/tmp/kudos-challenge-20260912.xcresult`; `Scripts/lint.sh` exit 0;
+`git diff --check` clean. Fixtures are reconstructed from templates, not live
+captures. The index requires a maintainer session and remains **unexercised
+against production**. No AO3 writes were sent.
+
+**Remote reconciliation:** `aab42504` independently landed the family union
+while this task ran. Preserved the local alternate implementation in a named
+stash and kept the landed implementation. **Next capabilities:** the missing
+fandom-new-work signal and writing editor/draft connections. The draft fetch already exists
+(`AO3AuthService.loadDrafts`); the claim that it does not is stale.
+
+---
 
 ### 2026-09-12 — Batch 3: the family union, and ten more surfaces (Claude)
 
@@ -517,6 +550,7 @@ the disk was at 97% when this was found. This batch was built in a fresh clone
 at `~/kudos-redesign-clean`. The damaged repo was left untouched — it holds
 local-only branches whose objects may live in those packs, so repairing it is
 the owner's call.
+
 
 ---
 

@@ -48,17 +48,17 @@ struct AO3ChallengeParsingTests {
         </ul>
         </body></html>
         """
+        // Rendered shape of maintainer_index_unfulfilled.html.erb, not a
+        // production capture: assignment indexes require collection-maintainer access.
         let assignmentHTML = """
-        <html><body>
-        <h2 class="heading">Assignments for Winter Fest</h2>
-        <ul>
-          <li class="assignment" id="assignment_80">
-            <a href="/collections/fest/assignments/80">Alice</a>
-            <span class="request">Alice</span>
-            <span class="offer">Carol</span>
-          </li>
-        </ul>
-        </body></html>
+        <html><body><h2 class="heading">Assignments for Winter Fest</h2>
+        <dl class="index group">
+          <dt class="creator">Carol <a href="mailto:carol@example.test">Email</a>
+            <span class="recipient">for <a href="/collections/fest/signups/11">Alice</a></span>
+          </dt>
+          <dd>Not yet posted<ul class="actions"><li><label for="default_80">Default
+            <input name="default_80" type="checkbox" value="1"></label></li></ul></dd>
+        </dl></body></html>
         """
         let signUps = try AO3Client.parseChallengeSignUpsPage(signUpHTML, slug: "fest", page: 1)
         let assignments = try AO3Client.parseChallengeAssignmentsPage(
@@ -72,8 +72,71 @@ struct AO3ChallengeParsingTests {
         #expect(alice.isMatched)
         #expect(alice.assignment?.id == 80)
         #expect(alice.assignment?.offerPseud == "Carol")
+        #expect(alice.assignment?.requestSignupID == 11)
+        #expect(alice.assignment?.isFulfilled == false)
+        #expect(alice.assignment?.isDefaulted == false)
         #expect(!bob.isMatched)
         #expect(bob.assignment == nil)
+    }
+
+    @Test func assignmentTemplatesPreserveDefaultAndDeliveryStates() throws {
+        // From _assignment_blurb, _maintainer_index_defaulted and
+        // _maintainer_index_unfulfilled in otwcode/otwarchive (2026-09-12).
+        let html = """
+        <h2 class="heading">Assignments for Fest</h2>
+        <dl class="index group">
+          <dt>Giver <a href="mailto:giver@example.test">Email</a></dt>
+          <dd><a class="work" href="/works/501">Gift</a> for
+            <a href="/collections/fest/assignments/81">Recipient</a>
+            <dl class="stats"><dt>Status:</dt><dd>Complete</dd></dl></dd>
+          <dt class="assignment"><a href="/collections/fest/signups/12">Bob</a>
+            <span class="defaulter">(Also defaulted)</span></dt>
+          <dd><label for="undefault_82">Undefault FormerGiver
+              <input name="undefault_82" type="checkbox"></label>
+            <label class="autocomplete substitute">Pinch Hitter:
+              <input name="cover_82"></label></dd>
+          <dt class="creator">Replacement* (pinch hitter)
+            <a href="mailto:replacement@example.test">Email</a>
+            <span class="recipient">for <a href="/collections/fest/signups/13">Casey</a></span></dt>
+          <dd>Not yet posted<ul class="actions"><li><label for="default_83">Default
+            <input name="default_83" type="checkbox"></label></li></ul></dd>
+          <dt class="creator"><span class="recipient">for <strong>No Recipient!</strong></span></dt>
+          <dd><label for="default_84">Default<input name="default_84" type="checkbox"></label></dd>
+        </dl>
+        """
+        let rows = try AO3Client.parseChallengeAssignmentsPage(html, slug: "fest", page: 1).assignments
+        #expect(rows.map(\.id) == [81, 82, 83, 84])
+        #expect(rows[0].requestSignupID == nil)
+        #expect(rows[0].requestPseud == "Recipient")
+        #expect(rows[0].offerPseud == "Giver")
+        #expect(rows[0].isFulfilled)
+        #expect(rows[1].requestSignupID == 12)
+        #expect(rows[1].offerPseud == "FormerGiver")
+        #expect(rows[1].isDefaulted && !rows[1].isCovered && !rows[1].isFulfilled)
+        #expect(rows[2].pinchHitterPseud == "Replacement")
+        #expect(rows[2].isCovered && !rows[2].isDefaulted && !rows[2].isFulfilled)
+        #expect(!rows[3].isMatched)
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseChallengeAssignmentsPage("<h2 class='heading'>Assignments</h2>", slug: "fest", page: 1)
+        }
+    }
+
+    @Test func assignmentJoinFetchesEveryPageIncludingOpenAssignments() async throws {
+        var fetched: [String] = []
+        let assignments = try await AO3Client.allChallengeAssignments { list, page in
+            fetched.append("\(list.rawValue):\(page)")
+            return AO3ChallengeAssignmentPage(
+                assignments: [AO3ChallengeAssignment(id: page, collectionSlug: "fest")],
+                currentPage: page, totalPages: list == .unfulfilled ? 3 : 2
+            )
+        }
+        #expect(fetched == ["assignments:1", "assignments:2", "unfulfilled:1", "unfulfilled:2",
+                            "unfulfilled:3", "defaults:1", "defaults:2"])
+        #expect(assignments.count == 7)
+        let url = AO3ChallengeURL.assignments(slug: "fest", list: .unfulfilled, page: 3)
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.contains(URLQueryItem(name: "unfulfilled", value: "true")))
+        #expect(items.contains(URLQueryItem(name: "page", value: "3")))
     }
 
     @Test func challengeSettingsParseFiveUTCDatesAndMatchingURL() throws {

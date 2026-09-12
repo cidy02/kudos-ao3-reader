@@ -34,28 +34,43 @@ extension AO3Client {
         )
     }
 
-    /// Sign-ups with matched-state joined from the assignments object (1bz).
-    /// Sign-ups, fulfilled assignments, and defaults are independent GETs;
-    /// each runs inside a coordinator slot.
+    /// Maintainer-only join: complete, open, and defaulted assignments each
+    /// paginate independently. Fetch sequentially and stop on cancellation.
     func challengeSignUpsJoinedToAssignments(
         slug: String, page: Int = 1, request: URLRequest
     ) async throws -> AO3ChallengeSignUpPage {
         let signUps = try await AO3RequestCoordinator.shared.withSlot {
             try await challengeSignUps(slug: slug, page: page, request: request)
         }
-        let assignments = try await AO3RequestCoordinator.shared.withSlot {
-            try await challengeAssignments(slug: slug, list: .assignments, page: 1, request: request)
+        let assignments = try await Self.allChallengeAssignments { list, assignmentPage in
+            try await AO3RequestCoordinator.shared.withSlot {
+                try await self.challengeAssignments(
+                    slug: slug, list: list, page: assignmentPage, request: request
+                )
+            }
         }
-        let defaults = try await AO3RequestCoordinator.shared.withSlot {
-            try await challengeAssignments(slug: slug, list: .defaults, page: 1, request: request)
-        }
-        let joined = AO3ChallengeSignUpMatching.joining(
-            signUps.signUps,
-            assignments: assignments.assignments + defaults.assignments
-        )
         return AO3ChallengeSignUpPage(
-            signUps: joined, currentPage: signUps.currentPage, totalPages: signUps.totalPages
+            signUps: AO3ChallengeSignUpMatching.joining(signUps.signUps, assignments: assignments),
+            currentPage: signUps.currentPage, totalPages: signUps.totalPages
         )
+    }
+
+    static func allChallengeAssignments(
+        fetchPage: (AO3ChallengeAssignmentList, Int) async throws -> AO3ChallengeAssignmentPage
+    ) async throws -> [AO3ChallengeAssignment] {
+        var assignments: [AO3ChallengeAssignment] = []
+        // Open includes covered pinch hits; no fourth crawl is needed.
+        for list in [AO3ChallengeAssignmentList.assignments, .unfulfilled, .defaults] {
+            var page = 1
+            while true {
+                try Task.checkCancellation()
+                let result = try await fetchPage(list, page)
+                assignments.append(contentsOf: result.assignments)
+                guard page < result.totalPages else { break }
+                page += 1
+            }
+        }
+        return assignments
     }
 
     func ownChallengeSignUp(slug: String, request: URLRequest) async throws -> AO3ChallengeSignUpForm {
@@ -82,7 +97,7 @@ extension AO3Client {
         var request = request
         request.url = AO3ChallengeURL.assignments(slug: slug, list: list, page: page)
         return try Self.parseChallengeAssignmentsPage(
-            await authenticatedPageHTML(for: request), slug: slug, page: page
+            await authenticatedPageHTML(for: request), slug: slug, page: page, list: list
         )
     }
 
@@ -361,45 +376,25 @@ extension AO3Client {
     // MARK: - Assignments
 
     static func parseChallengeAssignmentsPage(
-        _ html: String, slug: String, page: Int
+        _ html: String, slug: String, page: Int, list: AO3ChallengeAssignmentList? = nil
     ) throws -> AO3ChallengeAssignmentPage {
-        let doc = try SwiftSoup.parse(html)
+        let document = try SwiftSoup.parse(html)
         var assignments: [AO3ChallengeAssignment] = []
-        var seen = Set<Int>()
-        for link in try doc.select("a[href*='/assignments/']").array() {
-            let href = (try? link.attr("href")) ?? ""
-            guard let id = resourceID(href, after: "assignments"), !seen.contains(id) else { continue }
-            seen.insert(id)
-            let row = link.parent()
-            let text = ((try? row?.text()) ?? "").lowercased()
-            assignments.append(AO3ChallengeAssignment(
-                id: id,
-                collectionSlug: slug,
-                requestPseud: ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-                isDefaulted: text.contains("default"),
-                isFulfilled: text.contains("fulfill") || text.contains("posted"),
-                isCovered: text.contains("pinch") || text.contains("cover")
-            ))
-        }
-        for row in try doc.select("tr[id^=assignment], li.assignment, dd.assignment").array() {
-            guard let parsed = try? parseAssignmentRow(row, slug: slug) else { continue }
-            if let index = assignments.firstIndex(where: { $0.id == parsed.id }) {
-                assignments[index] = parsed
-            } else {
-                assignments.append(parsed)
+        for heading in try document.select("dl.index > dt").array() {
+            guard let details = try heading.nextElementSibling(), details.tagName() == "dd" else {
+                throw AO3Error.parse
             }
+            assignments.append(try parseAssignmentRow(heading, details: details, slug: slug, list: list))
         }
         if assignments.isEmpty {
-            let heading = ((try? doc.select("h2.heading").first()?.text()) ?? "").lowercased()
-            let recognized = heading.contains("assign") || heading.contains("pinch")
-                || heading.contains("default") || heading.contains("challenge")
-                || (try? doc.select("p.note, p.message").first()) != nil
-            guard recognized else { throw AO3Error.parse }
+            let heading = try document.select("h2.heading").text()
+            let emptyMessage = try document.select("p.note").text()
+            guard heading.localizedCaseInsensitiveContains("assignments"),
+                  emptyMessage.localizedCaseInsensitiveContains("No assignments") else { throw AO3Error.parse }
         }
         return AO3ChallengeAssignmentPage(
-            assignments: assignments,
-            currentPage: page,
-            totalPages: try paginationTotal(in: doc, currentPage: page)
+            assignments: assignments, currentPage: page,
+            totalPages: try paginationTotal(in: document, currentPage: page)
         )
     }
 
@@ -693,27 +688,43 @@ extension AO3Client {
         )
     }
 
-    private static func parseAssignmentRow(_ row: Element, slug: String) throws -> AO3ChallengeAssignment {
-        let href = (try? row.select("a[href*='/assignments/']").first()?.attr("href")) ?? row.id()
-        guard let id = resourceID(href, after: "assignments")
-                ?? Int(row.id().replacingOccurrences(of: "assignment_", with: ""))
-        else { throw AO3Error.parse }
-        let request = ((try? row.select(".request, td.request, .recipient").first()?.text()) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let offer = ((try? row.select(".offer, td.offer, .giver").first()?.text()) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let pinch = ((try? row.select(".pinch, td.pinch").first()?.text()) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let text = ((try? row.text()) ?? "").lowercased()
+    /// Mirrors otwarchive's assignment_blurb and maintainer_index_* dt/dd pairs.
+    /// Giver bylines are plain dt text; mailto links and the recipient are children.
+    private static func parseAssignmentRow(
+        _ heading: Element, details: Element, slug: String, list: AO3ChallengeAssignmentList?
+    ) throws -> AO3ChallengeAssignment {
+        let assignmentLink = try details.select("a[href*='/assignments/']").first()
+        let assignmentID = try assignmentLink.flatMap { resourceID(try $0.attr("href"), after: "assignments") }
+        let controls = try details.select("input[name]").array()
+        let controlID = try controls.compactMap { input -> Int? in
+            let name = try input.attr("name")
+            for prefix in ["default_", "undefault_", "approve_", "cover_"] where name.hasPrefix(prefix) {
+                return Int(name.dropFirst(prefix.count))
+            }
+            return nil
+        }.first
+        guard let identifier = assignmentID ?? controlID else { throw AO3Error.parse }
+        let signupLink = try heading.select("a[href*='/signups/']").first()
+            ?? details.select("a[href*='/signups/']").first()
+        let requestID = try signupLink.flatMap { resourceID(try $0.attr("href"), after: "signups") }
+        let isDefaulted = try details.select("input[name^=undefault_]").first() != nil
+        let recipient = try (signupLink ?? assignmentLink)?.text() ?? ""
+        var giver = try heading.ownText().trimmingCharacters(in: .whitespacesAndNewlines)
+        if isDefaulted {
+            giver = try details.select("label[for^=undefault_]").first()?.ownText() ?? ""
+            if giver.hasPrefix("Undefault ") { giver.removeFirst("Undefault ".count) }
+        }
+        let isPinchHitter = giver.hasSuffix("* (pinch hitter)")
+        if isPinchHitter { giver.removeLast("* (pinch hitter)".count) }
+        giver = giver.trimmingCharacters(in: .whitespacesAndNewlines)
+        let status = try details.select("dl.stats > dd").first()?.text().lowercased() ?? ""
         return AO3ChallengeAssignment(
-            id: id,
-            collectionSlug: slug,
-            requestPseud: request,
-            offerPseud: offer,
-            pinchHitterPseud: pinch,
-            isDefaulted: text.contains("default"),
-            isFulfilled: text.contains("fulfill") || text.contains("posted"),
-            isCovered: !pinch.isEmpty || text.contains("cover")
+            id: identifier, collectionSlug: slug, requestSignupID: requestID,
+            requestPseud: recipient, offerPseud: giver,
+            pinchHitterPseud: isPinchHitter ? giver : "",
+            isDefaulted: isDefaulted,
+            isFulfilled: list == .assignments || status == "complete" || status == "fulfilled",
+            isCovered: isPinchHitter
         )
     }
 
