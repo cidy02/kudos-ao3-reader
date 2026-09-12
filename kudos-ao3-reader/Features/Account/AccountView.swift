@@ -10,6 +10,7 @@ import SwiftUI
 /// - **Activity** — History / Inbox
 ///
 /// App settings stay behind the toolbar gear.
+// swiftlint:disable:next type_body_length
 struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -29,6 +30,8 @@ struct AccountView: View {
     /// Activity › Inbox feed state.
     @State private var inboxModel = AO3InboxModel()
     @State private var showingInboxFilters = false
+    @State private var filters = AO3SearchFilters()
+    @State private var showingFilters = false
     @State private var expandAll = false
     /// Detailed list rows vs compact two-up cover cards — shared across Account
     /// work lists (Reading / Writing / Activity) and persisted like Home/Library.
@@ -174,6 +177,8 @@ struct AccountView: View {
                         isInboxVisible: isInboxVisible,
                         model: inboxModel,
                         showingInboxFilters: $showingInboxFilters,
+                        isWorksVisible: selectedTab == .writing && writingTab == .works,
+                        showingWorksFilter: $showingFilters,
                         showsMatureRevealControl: showsMatureRevealControl,
                         showsWorkListControls: showsWorkListControls,
                         displayMode: $displayMode,
@@ -181,6 +186,18 @@ struct AccountView: View {
                     )
                 }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
+                .sheet(isPresented: $showingFilters) {
+                    AO3FilterPanel(
+                        filters: $filters,
+                        mode: .refine,
+                        canReset: filters != AO3SearchFilters(),
+                        onApply: { showingFilters = false },
+                        onReset: {
+                            filters = AO3SearchFilters()
+                            showingFilters = false
+                        }
+                    )
+                }
                 .sheet(isPresented: $showingInboxFilters) {
                     AccountInboxFilterSheet(model: inboxModel)
                 }
@@ -775,23 +792,64 @@ struct AccountView: View {
     @ViewBuilder
     private var writingSections: some View {
         Section {
-            AccountScopeMenu(
-                prompt: "Show",
-                systemImage: \.systemImage,
-                selection: $writingTab
+            SubjectHeaderBlock(
+                kicker: "AO3 Account",
+                title: writingTab.rawValue,
+                subtitle: writingTabSubtitle,
+                palette: accountPalette,
+                gutter: SubjectMetrics.accountGutter
             )
-            .accountControlCardRow()
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(AccountWritingTab.allCases) { tab in
+                        Button {
+                            writingTab = tab
+                        } label: {
+                            SubjectChip(text: tab.rawValue, style: .pill(isSelected: writingTab == tab))
+                        }
+                    }
+                }
+                .padding(.horizontal, SubjectMetrics.accountGutter)
+            }
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
 
         switch writingTab {
         case .works:
-            profileContentSections(
-                profileTab: .works,
-                sectionTitle: "Works",
-                onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                    for: matureContentScope
-                )
-            )
+            if let model = profileModel {
+                if model.contentPhase == .loading && model.works.isEmpty {
+                    AO3AuthorLoadingRows()
+                } else if model.works.isEmpty {
+                    AO3AuthorContentMessage(
+                        model: model,
+                        emptyTitle: "No works",
+                        emptyMessage: "AO3 has no works visible to this session.",
+                        emptySymbol: "book"
+                    )
+                } else {
+                    let filteredWorks = filters.apply(to: model.works)
+                    if filteredWorks.isEmpty {
+                        AO3AuthorContentMessage(
+                            model: model,
+                            emptyTitle: "No matching works",
+                            emptyMessage: "No works match the active filters.",
+                            emptySymbol: "line.3.horizontal.decrease.circle"
+                        )
+                    } else {
+                        ForEach(filteredWorks) { work in
+                            EnrichingAO3WorkRow(work: work, expandAll: false, presentation: .searchLedger)
+                                .cardNavigation(to: work, accessibilityLabel: work.title)
+                                .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+                        }
+                    }
+                }
+            }
         case .series:
             profileSeriesSections
         case .drafts:
@@ -804,6 +862,18 @@ struct AccountView: View {
             } footer: {
                 Text("Drafts still open on the Archive until a native editor ships.")
             }
+        }
+    }
+
+    private var writingTabSubtitle: String? {
+        guard let model = profileModel else { return nil }
+        switch writingTab {
+        case .works:
+            return model.works.count == 1 ? "1 work" : "\(model.works.count) works"
+        case .series:
+            return model.series.count == 1 ? "1 series" : "\(model.series.count) series"
+        case .drafts:
+            return nil
         }
     }
 

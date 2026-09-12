@@ -162,8 +162,113 @@ struct AO3AuthorAvatar: View {
 
 struct AO3SeriesRow: View {
     let series: AO3SeriesSummary
+    var presentation: WorkRow.Presentation = .standard
 
     var body: some View {
+        Group {
+            if presentation == .searchLedger {
+                ledgerBody
+            } else {
+                standardBody
+            }
+        }
+    }
+
+    private var ledgerBody: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .top, spacing: 12) {
+                // The square Series icon (38x38)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(white: 0.15), Color(white: 0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 38, height: 38)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                    )
+                    .overlay(
+                        Image(systemName: "books.vertical")
+                            .foregroundStyle(fandomColor)
+                    )
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text(primaryFandom.uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .lineSpacing(1.2)
+                            .tracking(1.1)
+                            .foregroundStyle(fandomColor)
+                            .lineLimit(1)
+                        if series.isComplete == true {
+                            Text("COMPLETE")
+                                .font(.system(size: 9.5, weight: .semibold, design: .default))
+                                .tracking(0.5)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.green.opacity(0.15))
+                                .foregroundStyle(Color.green)
+                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .strokeBorder(Color.green.opacity(0.35), lineWidth: 0.5)
+                                )
+                        }
+                    }
+
+                    Capsule()
+                        .fill(fandomColor)
+                        .frame(width: 22, height: 2.5)
+
+                    Text(series.title)
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.top, 1)
+                        .lineLimit(2)
+                }
+            }
+
+            if !series.summary.isEmpty {
+                Text(series.summary)
+                    .font(.system(size: 13.5))
+                    .lineSpacing(1.5)
+                    .foregroundStyle(.white.opacity(0.74))
+                    .lineLimit(3)
+            }
+
+            HStack(spacing: 8) {
+                if let workCount = series.workCount {
+                    Text("\(workCount) works")
+                }
+                if series.words != nil {
+                    Text("·")
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                if let words = series.words {
+                    Text("\(words.formatted()) words")
+                }
+            }
+            .font(.system(size: 11.5))
+            .foregroundStyle(.white.opacity(0.62))
+        }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
+    }
+
+    private var primaryFandom: String {
+        series.fandoms.first ?? "Series"
+    }
+
+    private var fandomColor: Color {
+        CoverArt.workHue(fandoms: series.fandoms, title: series.title)
+            .map { Color(hue: $0, saturation: 0.4, brightness: 0.9) } ?? .blue
+    }
+
+    private var standardBody: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(series.title)
                 .font(.headline)
