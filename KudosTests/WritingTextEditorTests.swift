@@ -69,3 +69,46 @@ struct WritingTextEditorTests {
         #expect(emitted == nil)
     }
 }
+
+/// Recovery copies are full chapters. Two rules keep them from becoming an
+/// invisible, unbounded pile of the reader's unpublished writing.
+struct WritingTextRecoveryBoundsTests {
+    private func makeStore() -> (WritingTextRecovery, URL) {
+        var store = WritingTextRecovery()
+        store.directory = URL.temporaryDirectory
+            .appendingPathComponent("recovery-bounds-\(UUID().uuidString)", isDirectory: true)
+        return (store, store.fileURL(account: "writer", target: "work/42", field: "content"))
+    }
+
+    @Test func savingKeepsOnlyTheNewestFewCopiesOfAField() throws {
+        let (store, key) = makeStore()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+
+        // Each editor session writes under its own UUID, so without pruning this
+        // is one full copy of the chapter per session, forever.
+        for index in 0..<(WritingTextRecovery.copyLimit + 4) {
+            let sessionURL = key.deletingPathExtension()
+                .appendingPathExtension(UUID().uuidString)
+                .appendingPathExtension("json")
+            try store.save(text: "draft \(index)", original: "original", to: sessionURL)
+        }
+
+        #expect(try store.copies(for: key).count <= WritingTextRecovery.copyLimit)
+    }
+
+    @Test func theNewestCopySurvivesPruning() throws {
+        let (store, key) = makeStore()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+
+        var last = ""
+        for index in 0..<(WritingTextRecovery.copyLimit + 2) {
+            last = "draft \(index)"
+            let sessionURL = key.deletingPathExtension()
+                .appendingPathExtension(UUID().uuidString)
+                .appendingPathExtension("json")
+            try store.save(text: last, original: "original", to: sessionURL)
+        }
+
+        #expect(try store.copies(for: key).first?.entry.text == last)
+    }
+}
