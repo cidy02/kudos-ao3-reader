@@ -24,7 +24,7 @@ import SwiftUI
 /// So the pill shows your position, always, in words and numbers — which the numbered version
 /// never actually did — and holds no chrome for a jump you make once a session.
 ///
-/// The pagination *logic* is untouched: `navigationPage` and `abbreviate` are the
+/// The pagination *logic* is untouched: `navigationPage` is the
 /// same functions, still unit-tested, now feeding a different presentation.
 struct SearchPaginationBar: View {
     let currentPage: Int
@@ -108,6 +108,9 @@ struct SearchPaginationBar: View {
 
     private var switcherPillFill: Color {
         if themeManager.appTheme.isDarkFamily {
+            // Artboard 1k's own token for this pill: rgba(120,120,128,.34) over a
+            // 28px backdrop blur — the one place the redesign uses a grey fill
+            // rather than white, so the pill reads as chrome over the results.
             Color(red: 120 / 255, green: 120 / 255, blue: 128 / 255).opacity(0.34)
         } else {
             themeManager.appTheme.glassFill(0.24)
@@ -227,14 +230,6 @@ struct SearchPaginationBar: View {
             totalPages
         case (.forward, false):
             min(totalPages, currentPage + 1)
-        }
-    }
-
-    static func abbreviate(_ page: Int) -> String {
-        switch page {
-        case ..<1000: "\(page)"
-        case ..<1_000_000: trimmed(Double(page) / 1000) + "k"
-        default: trimmed(Double(page) / 1_000_000) + "m"
         }
     }
 
