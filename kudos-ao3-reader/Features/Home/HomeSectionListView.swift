@@ -19,7 +19,6 @@ struct HomeSectionListView: View {
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
-    @State private var expandAll = false
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
     /// (see `cancelRefreshOnTabChange`) — this section can list a large number of works.
     @State private var refreshTask: Task<Void, Never>?
@@ -184,10 +183,6 @@ struct HomeSectionListView: View {
                                         Label("Select", systemImage: "checklist")
                                     }
                                     DisplayModeMenuPicker(mode: $displayMode)
-                                    // Compact cards don't expand/collapse — only detailed rows do.
-                                    if displayMode == .detailed {
-                                        ExpandAllMenuItem(expandAll: $expandAll)
-                                    }
                                 }
                             })
                         ].compactMap { $0 })
@@ -219,7 +214,6 @@ struct HomeSectionListView: View {
                     ForEach(visibleItems) { work in
                         SensitiveWorkRow(
                             work: work,
-                            expandAll: expandAll,
                             openMode: .reader,
                             onSelect: isSelecting ? nil : { isSelecting = true; selection = [work.id] },
                             isSelecting: isSelecting,

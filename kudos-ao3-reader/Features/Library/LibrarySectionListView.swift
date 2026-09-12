@@ -24,7 +24,6 @@ struct LibrarySectionListView: View {
     private var works: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var pendingDelete: SavedWork?
-    @State private var expandAll = false
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
     /// (see `cancelRefreshOnTabChange`) — this section can list a large number of works.
     @State private var refreshTask: Task<Void, Never>?
@@ -153,10 +152,6 @@ struct LibrarySectionListView: View {
                                     }
                                 }
                                 DisplayModeMenuPicker(mode: $displayMode)
-                                // Compact cards don't expand/collapse — only detailed rows do.
-                                if displayMode == .detailed {
-                                    ExpandAllMenuItem(expandAll: $expandAll)
-                                }
                             })
                         ].compactMap { $0 })
                     }
@@ -597,7 +592,6 @@ struct LibrarySectionListView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SensitiveWorkRow(
                     work: work,
-                    expandAll: expandAll,
                     openMode: .reader,
                     isSelecting: true,
                     isSelected: selection.contains(work.id),
@@ -630,7 +624,6 @@ struct LibrarySectionListView: View {
         VStack(alignment: .leading, spacing: 8) {
             SensitiveWorkRow(
                 work: work,
-                expandAll: expandAll,
                 openMode: .reader,
                 onSelect: { isSelecting = true; selection = [work.id] },
                 presentation: .ledger

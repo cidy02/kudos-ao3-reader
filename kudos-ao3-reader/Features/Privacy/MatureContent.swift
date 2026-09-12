@@ -148,9 +148,9 @@ struct SensitiveWorkRow: View {
             // state via `externalExpanded` so it still expands the blurred content.
             // The card's selection outline comes from the enclosing `.cardRow(isSelected:)`
             // at the card's true edge, not from an overlay here (matches WorkRow).
-            // The ledger's disclosure preserves the same metadata as detailed
-            // rows; its controls remain outside the blur.
-            let isExpandableWork = presentation == .ledger || WorkRow.isExpandable(for: work)
+            // Ledger rows do not expand at all (see WorkRow), so a blurred one
+            // must not sprout the control the unblurred row no longer has.
+            let isExpandableWork = presentation == .standard && WorkRow.isExpandable(for: work)
             let content = WorkRow(
                 work: work,
                 expandAll: expandAll,

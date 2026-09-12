@@ -69,11 +69,13 @@ struct WorkRow: View {
         Group {
             switch presentation {
             case .standard: standardRow
-            case .ledger:
-                VStack(alignment: .leading, spacing: 8) {
-                    ledgerRow
-                    if expandedBinding.wrappedValue { expandedLedgerDetails }
-                }
+            // A ledger row does not expand. It is a different kind of card from a
+            // search result: one line that says which work this is and how far in
+            // you are, in a list you scan. The facts a disclosure used to reveal —
+            // byline, fandoms, dates, summary, tag groups — are what Work Detail is
+            // for, one tap away. Owner's call, 2026-09-12, reversing the widening
+            // in 74680bb.
+            case .ledger: ledgerRow
             }
         }
         .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
@@ -130,7 +132,6 @@ struct WorkRow: View {
             },
             trailing: {
                 VStack(alignment: .trailing, spacing: 4) {
-                    if showsExpandButton { expandButton }
                     WorkStatusIconGrid(
                         rating: work.rating.isEmpty ? nil : work.rating,
                         categories: work.workCategories,
@@ -214,26 +215,6 @@ struct WorkRow: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-    }
-
-    private var expandedLedgerDetails: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !work.author.isEmpty {
-                AO3AuthorBylineView(
-                    displayText: work.author,
-                    identities: work.verifiedAuthorIdentities,
-                    font: .subheadline,
-                    compact: true
-                )
-            }
-            if !work.workFandoms.isEmpty {
-                Text(work.workFandoms.joined(separator: ", "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            WorkUpdatedDateBadge(dateUpdated: work.dateUpdated, datePublished: work.datePublished)
-            workDetails(summaryText: work.summary.strippingHTML())
-        }
     }
 
     @ViewBuilder
