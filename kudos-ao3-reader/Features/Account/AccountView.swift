@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// - **Overview** — AO3 dashboard shortcuts, Preferences, More on AO3
 /// - **Reading** — Later / Subscriptions / Bookmarks / Collections
-/// - **Writing** — Works / Series / Drafts (drafts open AO3 for now)
+/// - **Writing** — Works / Series / Drafts (native draft forms)
 /// - **Activity** — History / Inbox
 ///
 /// App settings stay behind the toolbar gear.
@@ -22,6 +22,7 @@ struct AccountView: View {
     @State private var showingLogin = false
     @State private var selectedTab: AccountTab = .overview
     @State private var readingTab: AccountReadingTab = .later
+    @State private var editingWorkID: Int?
     @State private var writingTab: AccountWritingTab = .works
     @State private var activityTab: AccountActivityTab = .history
     /// The signed-in user's own profile content (Works / Series / Bookmarks).
@@ -132,6 +133,7 @@ struct AccountView: View {
             // title rather than saying "Account" a second time above it.
             .hidesNavigationBarChrome()
                 .navigationDestination(for: Route.self, destination: destination)
+                .navigationDestination(item: $editingWorkID) { WritingWorkDestination(workID: $0) }
                 .navigationDestination(for: SettingsRoute.self) { route in
                     switch route {
                     case .privacy: PrivacyDataView()
@@ -1094,6 +1096,7 @@ extension AccountView {
     @ViewBuilder
     private var writingSections: some View {
         Section {
+
             SubjectHeaderBlock(
                 kicker: "AO3 Account",
                 title: writingTab.rawValue,
@@ -1151,6 +1154,9 @@ extension AccountView {
                             EnrichingAO3WorkRow(work: work, expandAll: false, presentation: .searchLedger)
                                 .cardNavigation(to: work, accessibilityLabel: work.title)
                                 .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button("Edit", systemImage: "pencil") { editingWorkID = work.id }
+                                }
                         }
                     }
                 }
@@ -1159,13 +1165,11 @@ extension AccountView {
             profileSeriesSections
         case .drafts:
             Section {
-                AccountExternalNavCard(
-                    title: "Open Drafts on AO3",
-                    systemImage: "doc.badge.clock",
-                    pathSuffix: "works/drafts"
-                )
+                NavigationLink { WritingDraftsView() } label: {
+                    Label("Drafts", systemImage: "doc.badge.clock")
+                }
             } footer: {
-                Text("Drafts still open on the Archive until a native editor ships.")
+                Text("Open an unpublished work to continue writing, or start a new draft.")
             }
         }
     }

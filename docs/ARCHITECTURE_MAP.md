@@ -84,3 +84,10 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 - Legacy macOS reader internals (`ReaderController.swift`) — least-touched area this cycle.
 - `AO3WebLoginCoordinator.inspectPage()` JS selectors — duplicated with `LiveAO3SessionValidator.isLoggedIn` (keep-in-sync comment in `AO3AuthService.swift:101`).
 - Live behavior of write actions (`AO3WriteActions`) — logic-tested only.
+
+### Native writing text and draft entry
+
+- `Features/Writing/WritingDraftsView.swift` loads authenticated draft/work/chapter forms through `AO3WorkActions`; it fences results by session generation.
+- `WritingTextEditor.swift`, `WritingHTMLWebView.swift`, and `WritingHTMLDocument.swift` share one formatted/source editor across work and chapter fields. The WebKit client world owns formatting; source HTML is preserved unless the user edits it. Unsupported markup remains editable in source mode.
+- `Services/WritingTextRecovery.swift` stores text-only, atomic local recovery copies in Application Support, keyed by account/target/field plus editor-session UUID. These are separate from AO3 drafts and the library backup/sync schema. The editor offers explicit restoration and deletion; no cookie or CSRF token is persisted.
+- `WritingFormFields.swift` reuses parsed form options and `AO3TagAutocomplete` for native required/tag controls.

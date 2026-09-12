@@ -1,0 +1,143 @@
+import SwiftUI
+
+/// The existing authenticated drafts endpoint, with native form destinations.
+struct WritingDraftsView: View {
+    @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var theme
+    @State private var result: AO3SearchPage?
+    @State private var page = 1
+    @State private var reload = 0
+    @State private var isLoading = false
+    @State private var loadedGeneration: Int?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        List {
+            NavigationLink("New work") { WritingWorkDestination(workID: nil) }
+            Text("AO3 drafts are unpublished. Local editor recovery copies stay on this device.")
+                .font(.caption).foregroundStyle(.secondary)
+            if isLoading { ProgressView("Loading drafts…") }
+            if let errorMessage {
+                Text(errorMessage).foregroundStyle(.secondary)
+                Button("Retry") { reload += 1 }
+            }
+            if let result, loadedGeneration == auth.sessionGeneration {
+                if result.works.isEmpty {
+                    ContentUnavailableView("No drafts", systemImage: "doc.badge.clock")
+                }
+                ForEach(result.works) { work in
+                    NavigationLink { WritingWorkDestination(workID: work.id) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(work.title).font(.headline)
+                            Text(work.fandoms.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                HStack {
+                    Button("Previous") { page -= 1 }.disabled(page <= 1 || isLoading)
+                    Spacer()
+                    Text("Page \(result.currentPage) of \(result.totalPages)").font(.caption)
+                    Spacer()
+                    Button("Next") { page += 1 }.disabled(page >= result.totalPages || isLoading)
+                }
+            }
+        }
+        .cardList()
+        .navigationTitle("Drafts")
+        .subjectScreenWash(palette: theme.appTheme.subjectPalette(hue: theme.scopeHue))
+        .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
+        .refreshable { reload += 1 }
+    }
+
+    private func load() async {
+        let generation = auth.sessionGeneration
+        let requestedPage = page
+        result = nil
+        errorMessage = nil
+        isLoading = true
+        do {
+            let loaded = try await auth.loadDrafts(page: requestedPage)
+            guard !Task.isCancelled, generation == auth.sessionGeneration, requestedPage == page else { return }
+            loadedGeneration = generation
+            result = loaded
+        } catch {
+            guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
+struct WritingWorkDestination: View {
+    @Environment(AO3AuthService.self) private var auth
+    let workID: Int?
+    @State private var form: AO3WorkForm?
+    @State private var loadedGeneration: Int?
+    @State private var errorMessage: String?
+    @State private var retry = 0
+
+    var body: some View {
+        Group {
+            if let form, loadedGeneration == auth.sessionGeneration { WorkEditView(form: form).id(auth.sessionGeneration) }
+            else if let errorMessage {
+                VStack {
+                    Text(errorMessage)
+                    Button("Retry") { retry += 1 }
+                }.padding()
+            } else { ProgressView("Loading work form…") }
+        }
+        .task(id: "\(auth.sessionGeneration):\(retry)") {
+            form = nil
+            errorMessage = nil
+            let generation = auth.sessionGeneration
+            do {
+                let loaded: AO3WorkForm
+                if let workID { loaded = try await auth.loadWorkForm(workID: workID) }
+                else { loaded = try await auth.loadNewWorkForm() }
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                loadedGeneration = generation
+                form = loaded
+            } catch {
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+struct WritingChapterDestination: View {
+    @Environment(AO3AuthService.self) private var auth
+    let workID: Int
+    let workTitle: String
+    var onSaved: () -> Void = {}
+    @State private var form: AO3ChapterForm?
+    @State private var loadedGeneration: Int?
+    @State private var errorMessage: String?
+    @State private var retry = 0
+
+    var body: some View {
+        Group {
+            if let form, loadedGeneration == auth.sessionGeneration { AddChapterView(form: form, workTitle: workTitle, onSaved: onSaved).id(auth.sessionGeneration) }
+            else if let errorMessage {
+                VStack {
+                    Text(errorMessage)
+                    Button("Retry") { retry += 1 }
+                }.padding()
+            } else { ProgressView("Loading chapter form…") }
+        }
+        .task(id: "\(auth.sessionGeneration):\(retry)") {
+            form = nil
+            errorMessage = nil
+            let generation = auth.sessionGeneration
+            do {
+                let loaded = try await auth.loadChapterForm(workID: workID, chapterID: nil)
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                loadedGeneration = generation
+                form = loaded
+            } catch {
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
