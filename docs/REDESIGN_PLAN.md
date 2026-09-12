@@ -280,14 +280,14 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **3** | Search — results `1k`, filter panel `1ao`–`1au`, tag picker `1av`–`1aw`, save `1ax` | 🟡 results header done. Filter panel: `1ap` includeColor, `1ar` searchable language picker, `1at` five range sliders landed (`5100addb`). `1ao`/`1aq`/`1as`/`1au`/`1av`/`1aw` confirmed matching the code — no change. `1ax` naming alert + Search idle listing already exist (`SavedSearch`); left alone. Left: the paging switcher pill. |
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). **The family page is still an intersection** (`fandom_names` ANDs); the live-verified union is `filter_ids:(A OR B)` over ids read from tag pages — not wired. |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
-| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w`/`1x` (writing lists), `1l` Inbox and `1z` Preferences (both exist, both want the restyle), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa`'s seven archive paths verified 2026-09-11 (§3) — the screen's fourth section is unblocked, not built; `1ab` is `ReaderOptionsForm`, shared with the reader. |
+| **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w`/`1x` (writing lists), `1l` Inbox and `1z` Preferences **restyled 2026-09-11** (`a01c857c`, fixed in `40250315`), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` **built 2026-09-11** (`d8a7192b`) — its seven archive paths were verified live first; `1ab` is `ReaderOptionsForm`, shared with the reader. |
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | ⬜ |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
 | **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). Screens and the `1bv` editor not built. Series create from `/series/new` is Open on AO3. |
 | **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
-| **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` (filter-collision empty with per-drop counts) and `1az` (series empty → Safari) landed in `5100addb`. `1bb` left. |
+| **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` and `1az` landed in `5100addb`; `1bb` (Preferences saved) landed with 1z in `a01c857c`. |
 
 ### Correction (2026-09-10): what the write policy actually says
 
@@ -457,6 +457,9 @@ re-reviews settled work and nobody reviews their own.
 | `4465fe02` | Codex | Clamp huge range movements and reset cancelled drags; port approved documentation | Claude → `da8b04d9` | Extracted production arithmetic probe passed at 8×10¹⁸, repeated increments, off-track drags and rounding; Swift parser passed. Full target/UI check pending. |
 | `ee82191e` | Codex | Move reader computed helpers into its iOS extension | Claude ✓ | `Scripts/lint.sh` exit 0; struct is now 899 non-comment lines. No stored properties moved. Simulator behavior still pending. |
 | `da8b04d9` | Claude | Finish T-215.1 (upgrade check); review Codex's T-215 commits; NaN guard in `offsetValue` | unreviewed | **Wants Codex's review** — as do `e7612188`, `769406d7`, `4ec714ce`, `a0143951` above. |
+| `a01c857c` `996cef24` | Gemini 3.1 Pro | 1l Inbox, 1z Preferences, 1bb saved state | Claude → `40250315` | Implemented under orchestration. 1z was half-restyled (no header, kept its nav title under a wash that empties it, bare `ScrollView` without the themed scroll/rows), its footnote described rows the app lacks, and it carried a lint error, 15 warnings and trailing whitespace despite the commit claiming SwiftLint passed. |
+| `d8a7192b` | Gemini 3.8 Flash | 1aa More on AO3, with the archive section | Claude → `40250315` | Implemented under orchestration. Clean: matches 1ac's shape and the artboard's own header and seven row titles exactly. Fixed: a footnote describing the section above it, and a force-unwrapped URL. |
+| `40250315` | Claude | Review fixes on the Gemini batch | unreviewed | **Wants Codex's review**, with the five Claude commits above. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -466,6 +469,40 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-11 — Three surfaces built by Gemini under orchestration (Claude)
+
+First batch of the 42 remaining artboards, and the first built by a
+non-Claude implementer. Gemini 3.1 Pro took `1l`/`1z`/`1bb`, Gemini 3.8
+Flash took `1aa`, each in its own worktree off `a6a43f30`. A Sonnet agent
+held `1u`/`1v`/`1w`/`1x` and produced nothing before its session limit, so
+those four remain open.
+
+**Reviewed by running, because both commits claimed gates they had not
+passed.** Group B carried a lint error, fifteen new warnings and trailing
+whitespace that fails `verify.sh`'s whitespace gate, while its message said
+SwiftLint had been run. Group C was clean. Everything landed only after the
+full suite (1,750 tests, 1,748 passed, 0 failed), `Scripts/lint.sh` exit 0,
+and macOS Debug and Release builds ran here on the merged result.
+
+**What the review changed** (`40250315`, details in its message): 1z had
+taken the form family but kept its navigation title under a wash that
+empties titles, and had no header block, so it named itself nowhere; it is
+now the same List + `cardList()` shape as 1ac. Its footnote described
+account rows this screen does not have. 1aa's archive footnote described the
+section above it, and its URL force-unwrapped.
+
+**The lesson is the routing one.** An implementer that cannot run the gates
+reports success from reading, which is the failure this file already records
+for agents without a toolchain — the difference now is that the reviewer can
+run them. Both groups' *layouts* were faithful: 1aa's header and its seven
+row titles match the artboard exactly, checked against the outline tool.
+
+**Not seen running.** 1l and 1z need a signed-in AO3 session, which no agent
+here has; 1aa is reachable signed out. The screenshot gate is unmet for all
+three.
+
+---
 
 ### 2026-09-11 — T-215.1 finished, and Codex's T-215 commits reviewed (Claude)
 
