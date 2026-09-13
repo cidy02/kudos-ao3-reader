@@ -86,10 +86,13 @@ final class WritingTextController: NSObject {
         let range = textView.selectedRange()
         #endif
         guard let selection = Range(range, in: text),
-              let insertion = WritingMarkup.insertion(tag: tag, selected: String(text[selection]), link: link)
+              let insertion = WritingMarkup.insertion(tag: tag, in: text, over: selection, link: link)
         else { return }
         replace(range, with: insertion.text)
-        let next = NSRange(location: range.location + insertion.contentOffset, length: range.length)
+        // The insertion's own length, never `range.length`: a tag that places a
+        // caret rather than wrapping returns an empty body, and re-selecting the
+        // old length there covers markup the next keystroke would overwrite.
+        let next = NSRange(location: range.location + insertion.contentOffset, length: insertion.contentLength)
         #if os(iOS)
         textView.selectedRange = next
         textView.scrollRangeToVisible(next)
@@ -174,30 +177,50 @@ nonisolated enum WritingMarkup {
     struct Insertion {
         let text: String
         let contentOffset: Int
+        /// UTF-16 length of what should end up selected.
+        ///
+        /// Not the caller's original selection length. `<hr>`, `<details>` and
+        /// the lists all return a body that is a different length from what was
+        /// selected — a caret, or the `<li>` items rather than the raw lines —
+        /// and re-selecting the old length there lands the selection on the
+        /// markup instead of the words. For `<details>` that was destructive:
+        /// select `secret`, tap the tag, and the six characters now covered are
+        /// `</summ`, so typing the summary the tag just invited overwrites its
+        /// own closing tag and posts malformed markup.
+        let contentLength: Int
     }
 
+    /// Context-free entry point, kept because the toolbar and
+    /// `WritingTextEditorTests` both drive it with a bare selection string.
+    /// `<hr>` is the only tag that reads beyond the selection, and with nothing
+    /// around it to read it assumes it needs its own newlines on both sides.
     static func insertion(tag: String, selected: String, link: String = "") -> Insertion? {
+        insertion(tag: tag, in: selected, over: selected.startIndex..<selected.endIndex, link: link)
+    }
+
+    /// What `command` calls: the whole buffer, so `<hr>` can see whether the
+    /// lines around it already exist instead of writing breaks it may not need.
+    static func insertion(
+        tag: String, in text: String, over range: Range<String.Index>, link: String = ""
+    ) -> Insertion? {
         guard let tag = AO3MarkupTag.writing.first(where: { $0.element == tag }) else { return nil }
+        let selected = String(text[range])
         // A link with no usable URL writes nothing at all here, unlike the
         // comment tray, which has nowhere to ask for one and so writes an empty
         // href for the user to fill in. This surface *does* ask, in an alert,
         // before it calls: reaching here without a URL is a refusal, not a
         // half-written tag.
         if tag == .link, !safeLink(link) { return nil }
-        // The host has no surrounding text to give: `selected` stands in as the
-        // whole buffer, which only `<hr>` reads (for the newlines it needs
-        // around itself), and only to decide whether to write one it may not
-        // need.
-        let splice = AO3Markup.splice(tag, in: selected, over: selected.startIndex..<selected.endIndex, link: link)
-        let text = splice.text
-        // `command` re-selects the *original* selection length at this offset,
-        // so an offset deep enough to push that length past the replacement
-        // would hand `UITextView` a range outside its own text. Clamped rather
-        // than trusted: the tags that place a caret instead of wrapping (`<hr>`,
-        // and with a selection `<details>` or a list) are exactly the ones that
-        // can overshoot.
-        let offset = min(splice.prefix.utf16.count, max(0, text.utf16.count - selected.utf16.count))
-        return Insertion(text: text, contentOffset: offset)
+        let splice = AO3Markup.splice(tag, in: text, over: range, link: link)
+        // Offset and length both come from the splice, so the selection lands on
+        // the body the shared core chose — the same place the comment surface
+        // puts it. No clamp: a length taken from the body it describes cannot
+        // reach past the text that body is part of.
+        return Insertion(
+            text: splice.text,
+            contentOffset: splice.prefix.utf16.count,
+            contentLength: splice.body.utf16.count
+        )
     }
 
     static func safeLink(_ value: String) -> Bool { AO3Markup.safeLink(value) }

@@ -74,24 +74,78 @@ struct AO3MarkupTests {
         #expect(WritingMarkup.insertion(tag: "a", selected: "site") == nil)
     }
 
-    /// `WritingTextController.command` re-selects the *original* selection
-    /// length at the offset this returns, so an offset that pushes that length
-    /// past the replacement would hand a `UITextView` a range outside its own
-    /// text. The caret-placing tags (`<hr>`, `<details>`, the lists) are the
-    /// ones that can overshoot, so every tag is checked at every selection.
-    @Test func aWritingInsertionNeverSelectsPastItsOwnText() {
-        for tag in AO3MarkupTag.writing {
-            for selected in ["", "keep", "one\ntwo"] {
-                let insertion = WritingMarkup.insertion(
-                    tag: tag.element, selected: selected, link: "https://example.com"
-                )
-                guard let insertion else {
-                    Issue.record("<\(tag.element)> wrote nothing for \(selected.debugDescription)")
-                    continue
+    /// The invariant a shared core is supposed to buy: for the same input, both
+    /// surfaces select the same span. Not "the offset is in bounds" — that was
+    /// satisfied by the bug it replaced, where `<details>` selected `</summ` and
+    /// the next keystroke ate its own closing tag.
+    ///
+    /// The comment side returns a `Range<String.Index>` over the whole buffer;
+    /// the writing side returns a UTF-16 offset and length relative to the
+    /// replacement. Compared in the frame they share.
+    @Test func bothSurfacesSelectTheSameSpanForTheSameInput() {
+        let link = "https://example.com"
+        for tag in AO3MarkupTag.comments where AO3MarkupTag.writing.contains(tag) {
+            for text in ["", "keep", "one\ntwo", "the coat", "done\n\nmore"] {
+                for (lower, upper) in [(0, 0), (0, text.count), (text.count, text.count)] {
+                    // Bound separately: a line starting with `..<` parses as the
+                    // prefix PartialRangeUpTo operator and silently yields an index.
+                    let lowerIndex = text.index(text.startIndex, offsetBy: lower)
+                    let upperIndex = text.index(text.startIndex, offsetBy: upper)
+                    let range = lowerIndex..<upperIndex
+                    // The same link on both sides: `<a>` writes an escaped href
+                    // when given a usable URL and an empty one otherwise, so
+                    // feeding the two sides different links compares two
+                    // different insertions and proves nothing.
+                    let splice = AO3Markup.splice(tag, in: text, over: range, link: link)
+                    guard let writing = WritingMarkup.insertion(
+                        tag: tag.element, in: text, over: range, link: link
+                    ) else { continue }
+
+                    let label = "<\(tag.element)> in \(text.debugDescription) over \(lower)..<\(upper)"
+                    #expect(writing.text == splice.text, "\(label): replacement differs")
+                    #expect(writing.contentOffset == splice.prefix.utf16.count, "\(label): offset differs")
+                    #expect(writing.contentLength == splice.body.utf16.count, "\(label): length differs")
+                    #expect(
+                        writing.contentOffset + writing.contentLength <= writing.text.utf16.count,
+                        "\(label): selection runs past the replacement"
+                    )
                 }
-                #expect(insertion.contentOffset >= 0)
-                #expect(insertion.contentOffset + selected.utf16.count <= insertion.text.utf16.count)
             }
+        }
+    }
+
+    /// The corruption the shared core introduced on the writing side, pinned per
+    /// tag rather than as one blanket rule — because the rule is not blanket.
+    ///
+    /// `<hr>` and `<details>` place a caret whatever is selected. The lists only
+    /// caret when there is nothing to wrap; given lines they come back over the
+    /// `<li>` items on purpose, so a second tag nests inside the list instead of
+    /// wrapping `<ul>` in `<em>`. Asserting a caret there would contradict the
+    /// behaviour the core exists to provide.
+    @Test func caretPlacingTagsSelectNothingOnTheWritingSurface() {
+        for element in ["hr", "details"] {
+            let insertion = WritingMarkup.insertion(tag: element, selected: "secret")
+            guard let insertion else {
+                Issue.record("<\(element)> wrote nothing")
+                continue
+            }
+            #expect(insertion.contentLength == 0, "<\(element)> re-selected markup instead of placing a caret")
+        }
+
+        for element in ["ul", "ol"] {
+            let empty = WritingMarkup.insertion(tag: element, selected: "")
+            #expect(empty?.contentLength == 0, "<\(element)> with nothing selected should place a caret")
+
+            guard let filled = WritingMarkup.insertion(tag: element, selected: "one\ntwo") else {
+                Issue.record("<\(element)> wrote nothing")
+                continue
+            }
+            // Over the items, not over the whole block and not over the old
+            // selection's length: that span is what lets a second tag nest.
+            let selectedSpan = (filled.text as NSString).substring(
+                with: NSRange(location: filled.contentOffset, length: filled.contentLength)
+            )
+            #expect(selectedSpan == "<li>one</li>\n<li>two</li>", "<\(element)> selected \(selectedSpan.debugDescription)")
         }
     }
 }
