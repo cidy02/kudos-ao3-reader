@@ -298,12 +298,6 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     let title: String
     /// Pre-joined by the caller; drawn with the spec's dimmed middle dots.
     var metadataSegments: [String] = []
-    /// A glyph pinned to the metadata line's trailing edge — the spec's green
-    /// tick marking a work held offline (1ad, 1ah). Kept general rather than
-    /// named "offline" because 1t uses the same slot for a visit count and 1aj
-    /// for a star.
-    var metadataSymbol: String?
-    var metadataSymbolTint: Color?
     /// Sits at the leading edge — a `WorkProgressRing`, a position number, or
     /// nothing at all on a row with no progress to report.
     @ViewBuilder var leading: () -> Leading
@@ -325,8 +319,12 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
         // Everything pins to the top, where spec 1ad centres the row
         // (`align-items:center; gap:13px`) — owner's call, 2026-09-12. The fandom
         // holds the top-left corner, the signal tray the top-right, and they stay
-        // put as a title takes its second line instead of drifting with it.
-        VStack(alignment: .leading, spacing: 8) {
+        // put rather than drifting with the text beside them.
+        //
+        // Kicker, title and metadata are three single lines in one column, which
+        // comes to about the ring's own height — so the row is as tall as the
+        // ring and the tray flanking it, and not a line taller.
+        Group {
             if dynamicTypeSize.isAccessibilitySize {
                 // One column at accessibility sizes: there is no room to put
                 // anything beside anything else.
@@ -334,6 +332,7 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
                     kickerView
                     leading()
                     titleText
+                    if !metadataSegments.isEmpty { metadataLine }
                     trailing()
                 }
             } else {
@@ -343,28 +342,23 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
                     VStack(alignment: .leading, spacing: 5) {
                         kickerView
                         titleText
+                        if !metadataSegments.isEmpty { metadataLine }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     trailing()
                 }
             }
-
-            // Below everything, so the line gets the card's whole width — squeezed
-            // beside the ring and the tray it wrapped after three or four facts and
-            // made every row a different height.
-            if !metadataSegments.isEmpty {
-                metadataLine
-            }
         }
         // Standalone, the card is this view's own: spec 1ad's `padding:15px 16px`.
         //
-        // Inside a `List` the card is `.cardRow()`'s, and its inner padding is
-        // already 16pt: `CardListMetrics.innerVertical` (10) plus half the
-        // inter-card gap (6), which lands *inside* the card rather than between
-        // cards. Measured on device at 3x: 16pt to the sides, 22pt above the ring —
-        // this row was adding a third helping on top of those two. It adds none
-        // now, so a ledger card is 16 × 16.
+        // Inside a `List` the card is `.cardRow()`'s and supplies its own padding,
+        // so this row adds none — a second helping is what made the gap above the
+        // ring measure 22pt on device. An earlier version of this note claimed
+        // `.cardRow()` gave 16 × 16 by counting half the inter-card gap as part of
+        // it; that 6pt falls *outside* the card, between cards, so what it really
+        // gave was 16 to the sides and 10 above and below. `CardListMetrics`
+        // carries the corrected derivation, and `innerVertical` is 16 now.
         .padding(.horizontal, drawsBackground ? 16 : 0)
         .padding(.vertical, drawsBackground ? 15 : 0)
         .background {
@@ -398,29 +392,19 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
             // is not worth that trade.
             text.lineLimit(nil)
         } else {
-            // Two lines, reserved whether or not the title needs them, so a short
-            // title and a long one produce the same card. Longer titles truncate.
-            text.lineLimit(2, reservesSpace: true)
+            // One line, truncated — owner's call, 2026-09-12. The second line a
+            // title used to reserve is the metadata's now, which buys the byline
+            // and the figures a line without making the card any taller.
+            text.lineLimit(1)
         }
     }
 
     private var metadataLine: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Text(metadataSegments.joined(separator: "  ·  "))
-                .font(.system(size: metadataSize))
-                .foregroundStyle(Color.primary.opacity(0.72))
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-            if let metadataSymbol {
-                // Held to the card's trailing edge rather than the text's, so the
-                // tick sits under the signal tray and lands in the same place on
-                // every row instead of wherever that row's metadata happens to end.
-                Spacer(minLength: 5)
-                Image(systemName: metadataSymbol)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(metadataSymbolTint ?? Color.secondary)
-            }
-        }
-        .combinedAccessibilityRow(metadataSegments.joined(separator: ", "))
+        Text(metadataSegments.joined(separator: "  ·  "))
+            .font(.system(size: metadataSize))
+            .foregroundStyle(Color.primary.opacity(0.72))
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .combinedAccessibilityRow(metadataSegments.joined(separator: ", "))
     }
 
     private var rowBackground: some View {

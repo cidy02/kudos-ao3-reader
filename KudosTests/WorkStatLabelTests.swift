@@ -171,7 +171,23 @@ struct WorkStatLabelTests {
 
     @Test func localWorkMetadataNamesAuthorWordsAndChapters() {
         #expect(WorkStat.localWorkMetadata(author: "Rosalita", wordCount: 1_773, chapters: "3/3")
-            == ["Rosalita", "1,773 words", "3/3"])
+            == ["Rosalita", "1.77K words", "3/3"])
+    }
+
+    /// The ledger row's metadata sits in a column narrower than the card, so the
+    /// figure is compacted past 999 rather than printed in full.
+    @Test func localWorkMetadataCompactsWordCountsPastNineHundredNinetyNine() {
+        func words(_ count: Int) -> String? {
+            WorkStat.localWorkMetadata(author: "", wordCount: count, chapters: "").first
+        }
+        // Under the threshold the notation prints the plain figure.
+        #expect(words(999) == "999 words")
+        #expect(words(1_000) == "1K words")
+        // Two fraction digits, not `.compactName`'s default one — "1.2K" would
+        // lose the 50 that distinguishes 1,250 from 1,200.
+        #expect(words(1_250) == "1.25K words")
+        #expect(words(33_700) == "33.7K words")
+        #expect(words(1_200_000) == "1.2M words")
     }
 
     @Test func localWorkMetadataSkipsWhatIsNotKnown() {
@@ -182,7 +198,7 @@ struct WorkStatLabelTests {
         #expect(WorkStat.localWorkMetadata(author: "Rosalita", wordCount: 0, chapters: "")
             == ["Rosalita"])
         #expect(WorkStat.localWorkMetadata(author: "", wordCount: 1_773, chapters: "")
-            == ["1,773 words"])
+            == ["1.77K words"])
     }
 
     @Test func localWorkMetadataTreatsWhitespaceOnlyValuesAsAbsent() {

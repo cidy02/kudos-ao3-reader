@@ -100,10 +100,10 @@ struct WorkRow: View {
     }
 
     /// Author · words · chapters — the three facts the spec's ledger row prints.
-    /// Deliberately shorter than `WorkListStatsRow`: the row is one line tall and
-    /// the four signals to its right already carry rating, category, warnings and
-    /// completion, so repeating them here would spend the line on what is
-    /// already on screen.
+    /// Deliberately shorter than `WorkListStatsRow`: the line is one line tall,
+    /// sits in a column narrower than the card, and the four signals to its right
+    /// already carry rating, category, warnings and completion, so repeating them
+    /// here would spend the line on what is already on screen.
     private var ledgerMetadataSegments: [String] {
         WorkStat.localWorkMetadata(
             author: work.author, wordCount: work.wordCount, chapters: work.chapters
@@ -132,10 +132,6 @@ struct WorkRow: View {
             additionalKickerCount: max(0, nonemptyFandomNames.count - 1),
             title: work.title,
             metadataSegments: ledgerMetadataSegments,
-            // The spec's green tick: this copy is on the device and will open
-            // with no network.
-            metadataSymbol: work.hasEPUB ? "checkmark.circle.fill" : nil,
-            metadataSymbolTint: work.hasEPUB ? theme.appTheme.statusSuccessColor : nil,
             leading: {
                 WorkProgressRing(
                     progress: work.readingProgress ?? 0,
