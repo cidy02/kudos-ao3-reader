@@ -543,8 +543,8 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// the same browse never re-fetches one it has seen.
     ///
     /// One request per sibling, through the shared coordinator like every other
-    /// fan-out here. `nil` when the page has no feed link (a tag with no works),
-    /// which the caller treats as "no union available" rather than as an error.
+    /// fan-out here. `nil` when neither the feed nor the named fandom checkbox
+    /// supplies an ID; the caller keeps its all-or-nothing union fallback.
     func fandomFilterID(for fandomName: String) async throws -> Int? {
         let key = fandomName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return nil }

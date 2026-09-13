@@ -1,4 +1,5 @@
 import Foundation
+import SwiftSoup
 
 /// A family page asks for works in **any** of its sibling fandoms. AO3 has no
 /// "or" over `work_search[fandom_names]` — that field ANDs, so joining the
@@ -37,13 +38,46 @@ nonisolated enum AO3FandomUnion {
     /// The numeric filter id from a tag's works page. AO3 prints it in the Atom
     /// feed link; the filter sidebar's `include_work_search[fandom_ids][]`
     /// checkboxes carry the same number for the page's own tag, and are the
-    /// fallback when the feed link is absent (a tag with no works has none).
+    /// fallback when the feed control is absent.
     static func filterID(fromTagWorksPage html: String, tagName: String) -> Int? {
-        if let match = html.range(of: #"/tags/(\d+)/feed\.atom"#, options: .regularExpression) {
-            let digits = html[match].drop(while: { !$0.isNumber }).prefix(while: \.isNumber)
-            return Int(digits)
+        guard let document = try? SwiftSoup.parse(html) else { return nil }
+        // Only AO3's feed controls identify this page. A URL quoted inside a
+        // work summary must not resolve a different fandom for the whole family.
+        let feeds = (try? document.select(
+            "head link[rel=alternate][type='application/atom+xml'], "
+                + "#main > div.navigation.actions > ul.user.navigation.actions a[href]"
+        ).array()) ?? []
+        for feed in feeds {
+            guard let href = try? feed.attr("href"),
+                  let url = URLComponents(string: href),
+                  (url.host == nil && url.scheme == nil && !href.hasPrefix("//"))
+                    || AO3RequestDefaults.isTrustedURL(url.url),
+                  url.path.range(of: #"^/tags/[0-9]+/feed\.atom$"#, options: .regularExpression) != nil,
+                  let id = positiveID(url.path.split(separator: "/")[1].description)
+            else { continue }
+            return id
+        }
+
+        // works/_filters.html.erb nests the input in its label. tags_helper's
+        // label_for_filter appends a work count; remove only that final suffix,
+        // keeping parentheses that belong to a name such as Doctor Who (2005).
+        let labels = (try? document.select("#work-filters label").array()) ?? []
+        for label in labels {
+            guard let input = try? label.select("input").first(),
+                  (try? input.attr("name")) == "include_work_search[fandom_ids][]",
+                  let value = try? input.attr("value"), let id = positiveID(value),
+                  let text = try? label.text()
+            else { continue }
+            let name = text.replacingOccurrences(of: #"\s+\([0-9,]+\)$"#, with: "", options: .regularExpression)
+            if name == tagName.trimmingCharacters(in: .whitespacesAndNewlines) { return id }
         }
         return nil
+    }
+
+    private static func positiveID(_ value: String) -> Int? {
+        guard !value.isEmpty, value.utf8.allSatisfy({ (48...57).contains($0) }),
+              let id = Int(value), id > 0 else { return nil }
+        return id
     }
 }
 

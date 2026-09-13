@@ -470,7 +470,7 @@ re-reviews settled work and nobody reviews their own.
 | `578a0bac` | Gemini 3.1 Pro | 1u Works, 1v filter, 1w Series | Claude → `6b6c8ae6` | Its run died mid-session: the commit did not compile, it had stubbed `Scripts/swift-parse-check.py` (refused), suppressed a lint rule (reverted), mis-credited its own model, and its chip rail dropped VoiceOver's selected state. 1x Drafts is NOT built. |
 | `bc2e83c8` `80562550` `4bd27c0e` `eff63fa8` | Sonnet | 1h queue detail, 1i organizer, 1j new queue, 1bg select mode | Claude → `6b6c8ae6` | The strongest of the three: every claim it made checked out (affordances 2→4 swipe, 7→7 labels, preservation UI intact), and it refused 1bh with its reasoning in code rather than faking a feature. Fixed: AccountView's lint error surfaced by the merge, and a dark-only gradient. |
 | `1b37613c` | Codex | Parse actual assignment templates and join every page, including open assignments | unreviewed | 8/8 AO3ChallengeParsingTests pass on iOS 26.5; lint exit 0. Maintainer-only parser remains unexercised against production. |
-| T-215 writing capability (this commit) | Codex | Shared formatted/source editor, separate local recovery copies, native draft/forms and real required/tag inputs | unreviewed | Internal Codex adversarial pass only; cross-model review pending. iOS suite and macOS builds pass; Release signing product gate remains. Editor snapshots inspected in all four themes, including accessibility size. Live writes unexercised. |
+| T-215 fandom/recovery follow-up (this commit) | Codex | Resolve fandom IDs from authoritative feed controls or exact sidebar labels; display draft recovery bytes | unreviewed | 1,777 iOS tests passed; macOS Debug/Release built. Expected ad-hoc product-signing gate remains. Internal source review only; Privacy screenshot remains manual. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -480,6 +480,42 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-13 — Resume at the new remote tip; finish fandom ID fallback (Codex)
+
+Fast-forwarded `4443ac8c` to `9a0d455e`, retaining Claude's editor review,
+recovery bounds, and all intervening card/wash changes. T-215's remaining family
+union work was a real gap: `AO3FandomUnion.filterID` documented a sidebar fallback
+but never used `tagName` and only scanned the whole HTML for a feed URL.
+
+The parser now reads feed controls, then the exact fandom's include-checkbox
+inside `#work-filters`. It removes only the final work-count suffix from the
+label, preserving years/parentheses in the fandom name and decoded entities.
+Quoted feed URLs in work prose and feed links on other hosts do not resolve the
+family. The existing all-or-nothing union, coordinator, bounded ID cache and
+filter serialization are unchanged. Four regression cases cover these paths, including AO3’s nested RSS navigation control.
+The fixture structure was checked against otwarchive's
+[works filter template](https://github.com/otwcode/otwarchive/blob/master/app/views/works/_filters.html.erb)
+and `tags_helper.rb#label_for_filter`; no production writes were sent.
+
+Review of `d9ec7855` found its new recovery byte counter was never displayed:
+`PrivacyDataView.storedSizeRows` still ended at Caches. Added the missing Draft
+recovery row using the same measured byte formatter and form row. Pruning stays
+unchanged; the existing per-copy delete remains in the recovery chooser.
+
+Verification: final full iOS harness `/tmp/kudos-fandom-final-20260913.xcresult`
+passed **1,777 tests, zero failed, two skipped**. Invariants and lint passed;
+macOS Debug and Release both built. `verify.sh` stopped only at the expected
+Release product check, “Release product is still ad-hoc signed”; no signing
+settings were changed. Whitespace passed separately. Internal adversarial
+source review found no further defects; cross-family review and visual checking
+of the new Privacy row remain manual. No AO3 writes were sent.
+
+Next: follow the native-UI requirement recorded in Claude's handoff below by
+replacing the writing editor's web surface with native text controls and a
+markup-inserting toolbar. Remaining handoff work stays tracked under T-215.
+
+---
 
 ### 2026-09-12 — Build the writing editor and native draft entry (Codex)
 
