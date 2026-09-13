@@ -28,7 +28,13 @@ struct WorkCoverCard: View {
                     // for a fraction of a title, and long fandom titles are
                     // common enough that they decided the card's size more often
                     // than the metadata below them did.
-                    .lineLimit(2)
+                    //
+                    // Reserved whether or not the title needs the second line:
+                    // the cards are already a uniform height, but a one-line
+                    // title used to pull the ring up while its two-line
+                    // neighbour pushed it down, so a scanned row of cards had
+                    // its rings at two different heights.
+                    .lineLimit(2, reservesSpace: true)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,44 +157,55 @@ struct WorkCoverCard: View {
 struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
 
+    @Environment(ThemeManager.self) private var themeManager
     /// See `WorkCoverCard.zoomNamespace`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
+    /// Deliberately the same stack as `WorkCoverCard`, slot for slot: kicker,
+    /// title, centre badge, author, signal strip. A Subscriptions carousel draws
+    /// remote and local cards side by side — a remote work the reader has saved
+    /// is local, the rest are not — so any difference in shape reads as two
+    /// designs in one row rather than as "this one isn't downloaded".
+    ///
+    /// Two slots differ, and only because the data does: a remote work has no
+    /// reading progress, so the centre slot takes its update date (the local
+    /// card's "+N new" slot), and there is no preservation state to report.
     var body: some View {
         WorkSummaryCardSurface(hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)) {
-            VStack(alignment: .leading, spacing: 7) {
-                // Matches the local card — see `WorkCoverCard`.
+            VStack(alignment: .leading, spacing: 5) {
+                if let primaryFandom {
+                    SubjectKicker(text: primaryFandom, palette: palette, size: 9)
+                        .padding(.bottom, 2)
+                }
+
                 Text(work.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
+                    .font(.headline)
+                    .lineLimit(2, reservesSpace: true)
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Matches the local card's grouping — see `WorkCoverCard`.
-                Spacer(minLength: 4)
-
-                cardStats
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                Spacer(minLength: 4)
-
-                if let author = work.authors.first, !author.isEmpty {
-                    CardMetaLabel(text: author, symbol: "person", accessibilityLabel: "Author: \(author)")
-                        .font(.caption)
-                }
-
-                if let fandom = work.fandoms.first, !fandom.isEmpty {
-                    CardMetaLabel(
-                        text: fandom, symbol: "books.vertical", lineLimit: 2,
-                        accessibilityLabel: "Fandom: \(fandom)"
-                    )
-                    .font(.caption2)
-                }
+                Spacer(minLength: 0)
 
                 if !work.dateUpdated.isEmpty {
                     WorkStateBadge(text: work.dateUpdated, symbol: "calendar")
                         .font(.caption2)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
+
+                Spacer(minLength: 0)
+
+                if let author = work.authors.first, !author.isEmpty {
+                    Text(author)
+                        .font(.caption)
+                        .foregroundStyle(Color.primary.opacity(0.78))
+                        .lineLimit(1)
+                        .combinedAccessibilityRow("Author: \(author)")
+                }
+
+                cardStats
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 6)
             }
         }
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
@@ -201,8 +218,22 @@ struct AO3WorkCoverCard: View {
             categories: work.categories,
             warnings: work.warnings,
             completion: WorkCompletionStatus(isComplete: work.isComplete),
-            tileSize: 27,
-            announcesToVoiceOver: true
+            tileSize: 24,
+            announcesToVoiceOver: true,
+            arrangement: .strip,
+            showsTray: true
+        )
+    }
+
+    /// The fandom the kicker prints — it replaces the `books.vertical` metadata
+    /// row this card used to carry, so no fact left the card with it.
+    private var primaryFandom: String? {
+        work.fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(
+            hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
         )
     }
 }
@@ -359,28 +390,6 @@ struct WorkStateBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
-    }
-}
-
-/// Author/fandom meta row for work cards: a theme-tinted icon paired with
-/// secondary text, matching the tinted-icon style of `WorkStatLabel`.
-struct CardMetaLabel: View {
-    let text: String
-    let symbol: String
-    var lineLimit: Int = 1
-    /// What VoiceOver announces instead of the bare `text` — a name or fandom on
-    /// its own doesn't say what role it plays on the card ("Author: " / "Fandom: ").
-    var accessibilityLabel: String?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Image(systemName: symbol)
-                .foregroundStyle(.secondary)
-            Text(text)
-                .foregroundStyle(.secondary)
-        }
-        .lineLimit(lineLimit)
-        .combinedAccessibilityRow(accessibilityLabel ?? text)
     }
 }
 
