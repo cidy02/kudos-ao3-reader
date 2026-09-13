@@ -914,7 +914,19 @@ enum WorkStat {
             segments.append(name)
         }
         if wordCount > 0 {
-            segments.append(wordCount.formatted() + " words")
+            // Compact past 999 — "1K", "1.25K", "33.7K", "1.2M" — owner's call,
+            // 2026-09-12, to buy the ledger row's narrow metadata column back
+            // the width "33,700 words" was spending on digits. Below 1000 the
+            // notation prints the plain figure, so short works read unchanged.
+            //
+            // `.compactName` is what the app already uses for a big figure in a
+            // small space (`SearchView`, `ReadingInsightsView`, `MediaBrowserView`);
+            // the two fraction digits are what keep 1,250 as "1.25K" rather than
+            // rounding it to the default one digit's "1.2K".
+            let figure = wordCount.formatted(
+                .number.notation(.compactName).precision(.fractionLength(0...2))
+            )
+            segments.append(figure + " words")
         }
         let chapterRange = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
         if !chapterRange.isEmpty {

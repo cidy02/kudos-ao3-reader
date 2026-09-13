@@ -191,7 +191,18 @@ enum CardListMetrics {
     static let cornerRadius: CGFloat = CardRadius.listRow
     static let interCardSpacing: CGFloat = 12 // vertical gap between cards
     static let sideMargin: CGFloat = 16 // card inset from the screen edges
-    static let innerVertical: CGFloat = 10 // padding inside the card (on top of row content)
+    /// Padding inside the card, and equal to `innerHorizontal` on purpose — a
+    /// card's content sits the same distance from all four of its edges.
+    ///
+    /// Worth reading with `CardRow` open, because the arithmetic is not the
+    /// obvious one. The row's `listRowInsets` are `half + innerVertical`
+    /// vertically and `sideMargin + innerHorizontal` horizontally, but the card
+    /// itself is the row's *background*, inset by `half` vertically and
+    /// `sideMargin` horizontally. Each pair cancels, so what is left inside the
+    /// card is `innerVertical` and `innerHorizontal` — these two numbers alone.
+    /// This was 10 against 16 until 2026-09-12, which drew every card in the app
+    /// tighter top-to-bottom than side-to-side.
+    static let innerVertical: CGFloat = 16
     static let innerHorizontal: CGFloat = 16
 }
 

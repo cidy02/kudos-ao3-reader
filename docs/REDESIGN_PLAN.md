@@ -1830,20 +1830,38 @@ ledger row draws the ring for **every** work, including ones never opened, so
 `WorkRow.ledgerProgressState` returns nil at zero. "0% READING" would claim a
 reading session that never happened.
 
-### ✅ Resolved — the offline tick sits at the card's trailing edge
+### ✅ Resolved — the ledger row has no offline tick, and one line per fact
 
-**Decision: the owner's, 2026-09-12.** The green "held offline" tick used to
-lead the metadata line (`metadataPrefixSymbol`, now `metadataSymbol`), on the
-reasoning that it is the one fact on that line which changes what happens when
-you tap the row, and so should be read first.
+**Decision: the owner's, 2026-09-12**, in three steps on the same day: the green
+"held offline" tick moved from the head of the metadata line to its trailing
+edge, and then off the card entirely — *"that checkmark is not in the spec, get
+rid of it."*
 
-It now sits at the far right of the line instead, under the signal tray. The
-reasoning it overrules was about reading *order*; the answer is that the tick is
-scanned down a column, not read in a sentence. Leading the line, it landed
-immediately before text of a different length on every row, so it appeared to
-jitter left as the metadata grew. At the trailing edge it holds one vertical
-line down the list, and a list with three offline works shows three ticks in a
-column rather than three ticks at three indents.
+It is a density reduction and the gate's own wording allows it: a reduction that
+is **explicitly approved** is not a regression. What goes with it is the only
+at-a-glance mark that a work would open with no network. It remains visible on
+Work Detail and in Library's own download state; the row's job is which work
+this is and how far in you are.
+
+`WorkLedgerRow.metadataSymbol`/`metadataSymbolTint` are gone with it rather than
+left unfilled. Spec 1t (visit count) and 1aj (star) want a glyph in that slot and
+can re-add the pair when one of those is built — an empty slot kept for a screen
+that does not exist yet is a knob nobody turns.
+
+**The title is one line now, not two reserved**, and the metadata line moved out
+from under the card into the title's own column. Kicker, title and metadata are
+three single lines there, which comes to about the ring's height — so the card is
+as tall as the ring and the tray flanking it rather than a line taller, and the
+uniform-height property the reserved second line was bought for is now a
+property of the row having a fixed number of lines at all.
+
+That column is narrower than the card, which is what **compacted the word count**
+(`WorkStat.localWorkMetadata`): past 999 the figure prints as "1K", "1.25K",
+"33.7K", "1.2M". `.compactName` is the app's existing convention for a big figure
+in a small space; the two fraction digits are what keep 1,250 from rounding to
+the default one digit's "1.2K". Both callers take it — the ledger row and the
+Home resume hero — because the same work reading "33.7K words" on one and
+"33,700 words" on the other is the kind of difference a reader notices.
 
 ### ✅ Resolved — a ledger row is not a search result, and does not expand
 
