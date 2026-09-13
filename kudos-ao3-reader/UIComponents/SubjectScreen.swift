@@ -337,17 +337,11 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
                 }
             } else {
                 HStack(alignment: .top, spacing: 13) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        // The fandom leads the card from its top-left corner, with
-                        // the progress ring under it rather than beside it — the
-                        // subject names the row before its progress does.
-                        kickerView
+                    leading()
 
-                        HStack(alignment: .top, spacing: 13) {
-                            leading()
-                            titleText
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 5) {
+                        kickerView
+                        titleText
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
