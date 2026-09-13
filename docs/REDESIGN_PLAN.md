@@ -471,7 +471,8 @@ re-reviews settled work and nobody reviews their own.
 | `bc2e83c8` `80562550` `4bd27c0e` `eff63fa8` | Sonnet | 1h queue detail, 1i organizer, 1j new queue, 1bg select mode | Claude → `6b6c8ae6` | The strongest of the three: every claim it made checked out (affordances 2→4 swipe, 7→7 labels, preservation UI intact), and it refused 1bh with its reasoning in code rather than faking a feature. Fixed: AccountView's lint error surfaced by the merge, and a dark-only gradient. |
 | `1b37613c` | Codex | Parse actual assignment templates and join every page, including open assignments | unreviewed | 8/8 AO3ChallengeParsingTests pass on iOS 26.5; lint exit 0. Maintainer-only parser remains unexercised against production. |
 | `bb6e6d0f` | Codex | Resolve fandom IDs from authoritative feed controls or exact sidebar labels; display draft recovery bytes | unreviewed | 1,777 iOS tests passed; macOS Debug/Release built. Expected ad-hoc product-signing gate remains. Internal source review only; Privacy screenshot remains manual. |
-| T-215 native writing buffer (this commit) | Codex | Replace the web editor with native HTML text controls and undoable tag/recovery insertion | unreviewed | Internal review only. 1,777 iOS tests passed; macOS Debug/Release built; expected ad-hoc product gate. Four themes inspected, including Accessibility Large. |
+| `30b268bb` | Codex | Replace the web editor with native HTML text controls and undoable tag/recovery insertion | unreviewed | Internal review only. 1,777 iOS tests passed; macOS Debug/Release built; expected ad-hoc product gate. Four themes inspected, including Accessibility Large. |
+| T-215 writing-model cleanup (this commit) | Codex | Correct bulk tag semantics in documentation; remove unused overwrite helpers | unreviewed | Focused parser/payload tests, macOS Debug build, lint and whitespace pass. No payload behavior changed. |
 **Family names to use:** `Claude`, `Codex`, `Grok`, `Gemini`, `Human`.
 Version numbers are welcome in Notes but the family is what gates rule 1.
 
@@ -481,6 +482,18 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-13 — Correct bulk-edit model documentation (Codex)
+
+Handoff item 7: documented that native tag additions/removals require per-work
+merge-and-replace, while uniform scalar changes use the bulk endpoint. Removed
+the orphaned chip comment and unused `overwriteFieldKeys`/`isOverwriteField`
+helpers (no production callers), along with their two tautological assertions.
+Existing tests still check the actual uniform POST and per-work merged lists.
+Focused AO3WorkFormParsingTests pass; macOS Debug builds; lint and whitespace
+pass. No network writes or payload behavior changed.
+
+---
 
 ### 2026-09-13 — Native writing buffer and tag toolbar (Codex)
 
