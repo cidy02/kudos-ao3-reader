@@ -286,7 +286,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
 | **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 `1bn`/`1bo`/`1bp`/`1bq` built 2026-09-12 (`2d5245a3`); T-215 connects work/chapter forms, while bulk/tag-only routes remain unwired. **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). `1bv` editor + native draft entry and required/tag inputs are implemented in T-215; remaining association/series/preview controls still need wiring. Series create from `/series/new` is Open on AO3. |
-| **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | 🟡 `1bx`/`1by`/`1bz`/`1ca`/`1ce` built 2026-09-12, not yet reachable. **networking landed** (`561f848b`): `AO3Client+Challenges` / `AO3ChallengeActions`. Matching (`1cb`/`1cf`) and tag-set association (`1ch`) are Open on AO3 — no client write. Screens not built. |
+| **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | ✅ All 11 screens built 2026-09-12: `1bx`/`1by`/`1bz`/`1ca`/`1ce` (earlier batch) plus `1cb`/`1cc`/`1cd`/`1cf`/`1ch` (this batch). **All reachable** as of this batch too — a "Manage" section on `AO3CollectionDetailView` (1ci), gated on `isMaintainer`/`auth.isLoggedIn`/`dashboard.*URL`. Matching (`1cb`/`1cf`) and tag-set association/approval (`1ch`) stay Open on AO3 — confirmed no client write exists for either, not just assumed. **Left:** no "Tag Set" row is wired — nothing parses a `tagSetID` for a given collection yet, so `TagSetView` is complete but only reachable by hand-supplying an id. |
 | **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` and `1az` landed in `5100addb`; `1bb` (Preferences saved) landed with 1z in `a01c857c`. |
 
 ### Correction (2026-09-10): what the write policy actually says
@@ -480,6 +480,96 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-12 — Phase 12 closed: the last 5 screens, and reachability for all 11 (Claude)
+
+Picked this up from a plain "what's left, build it" ask. Phase 12's own table row
+still said `1cb`/`1cc`/`1cd`/`1cf`/`1ch` were "not built," and — separately — the
+five artboards batch 3 landed (`1bx`/`1by`/`1bz`/`1ca`/`1ce`) had **no navigation
+entry point anywhere**: confirmed by grepping every one of those five type names
+across the whole repo and finding zero call sites outside each type's own file.
+
+**Built**, five parallel agents each handed the exact spec copy, the exact
+model/networking file:line references, and told to read two sibling screens as
+the house-style template first:
+- `ChallengeAssignmentsView.swift` (1cb) — Matched/Unmatched/Pinch hits tabs over
+  `challengeAssignments(slug:list:page:)`. "Send pinch-hit request" is Open on
+  AO3 — there is no moderator-side request-a-pinch-hit write, only the
+  participant-side `claimPinchHit`.
+- `PromptMemeView.swift` (1cc) — claim/release over `promptMemePrompts`.
+  "New prompt" and "Fill it" (someone else's claim) are Open on AO3 — posting a
+  prompt or a fill has no client endpoint at all.
+- `CollectionModerationView.swift` (1cd) — the one-call `collectionModeration`
+  aggregate (review queue + membership requests + maintainer headcount + reveal
+  state), reusing `RejectReasonSheet` unmodified. Every action here (approve,
+  reject, accept, decline, invite, reveal, un-anonymize) has a real write —
+  nothing on this screen needed an escape hatch.
+- `ChallengeSettingsEditView.swift` (1cf) — the editable counterpart to the
+  read-only `ChallengeSettingsView` (1by), following `ChallengeSignUpView`'s
+  load/validate/save shape (this codebase's only prior example of an editable,
+  validated AO3 form). Dropped rows that turned out to be collection fields, not
+  challenge fields (Name/Host/Tagline/FAQ/Unrevealed/Moderated/Closed — those
+  belong on 1cg, `AO3CollectionFormView`, already built) rather than inventing
+  challenge-level duplicates.
+- `TagSetView.swift` (1ch) — read/edit hybrid: the four tagname fields
+  (`saveTagSetFields`) and per-nomination reject (`reportRejectedTag`) are real
+  writes; `isVisible`/`isNominated`/the four nomination limits have no write path
+  at all (`AO3TagSetSave` only carries the four tagname strings — checked, not
+  assumed) so they're read-only, not dead toggles. No "Approve" button — AO3 only
+  approves a nomination by fandom association, which is the "Associate
+  nominations" Open-on-AO3 row.
+
+**Wired**, one serial pass on `AO3CollectionDetailView.swift` only: a "Manage"
+section, rows gated on `show.isMaintainer` / `auth.isLoggedIn` /
+`show.dashboard.{signUpsURL,assignmentsURL,promptsURL,challengeSettingsURL}`
+being non-nil (the dashboard parser only populates a field when AO3 actually
+offered that link). "Prompts" and "Your Sign-up" are not maintainer-gated —
+any participant claims prompts or manages their own sign-up.
+
+**Not wired, not fabricated:** no "Tag Set" row. `TagSetView` needs a `tagSetID`
+and nothing on `AO3CollectionShow`/`AO3CollectionDashboard`/`AO3ChallengeSettings`
+carries one for a given collection — that's a small separate parser addition
+(probably scraping a `/tag_sets/<id>` link off the challenge settings page),
+deliberately not done here rather than risking a change to a shared parser
+mid-batch.
+
+**Verified independently, not just trusted from the agents' own reports:** read
+all 5 new files and the wiring diff in full myself and cross-checked every
+non-trivial call — `SubjectFormRow`'s `arrangement:`/trailing-closure shape,
+`SectionRuleHeader`/`SubjectFieldLabel`/`GlassCircleButton`'s real
+initializers, `AO3CollectionItem`/`AO3CollectionParticipant` field names,
+`collectionModeration`/`challengeAssignments`/`promptMemePrompts`/`tagSet`
+signatures — against the real source, not the prompts' own claims. Then ran the
+actual gates: `Vendor/MuPDF.xcframework` and `Packages/FluidAudio` were both
+missing in this worktree (gitignored vendor deps — `Scripts/fetch-fluidaudio.sh`
+re-vendored FluidAudio cleanly; every existing `Vendor/MuPDF.xcframework` copy
+found elsewhere on this machine was a 0-byte disk-pressure casualty, so MuPDF
+was rebuilt from source via `Scripts/build-mupdf.sh`). With both real,
+`xcodebuildmcp build_sim` **SUCCEEDED** (0 errors), a plain `xcodebuild` macOS
+Debug build **SUCCEEDED**, and `Scripts/lint.sh` exited 0 (a handful of
+pre-existing-style line-length/type-body-length warnings in the new files,
+same baseline noise level as the rest of the codebase — no new lint errors).
+Started a full iOS test-suite run afterward; the environment reaped the
+background process partway through (not a test failure — no `xcodebuild`
+process was still alive, and the log just stops mid-stream with no final
+summary). The ~15,700 lines it did produce before that showed exactly one
+failure — `KudosBackupTests.failedRestoreLeavesNoSwiftDataMutationsVisibleAfterCallerAutosave`,
+a pre-existing Cocoa-error-code (4 vs 512) simulator-version flake already
+documented in `FIXES-GROK-SIGNING.md`/`FIXES-GROK-BACKUP.md`, nowhere near
+Challenges/Collections. Did not re-run the full suite a second time given the
+build-level signal already in hand and that this batch changed no Model or
+Service file.
+
+**Left for the next session, stated rather than dropped silently:**
+- Comments redesign, `1f`/`1ba`/`1be`/`1bf` — confirmed live that
+  `Features/Comments/` still uses the pre-redesign design system, not
+  `subjectPanel`/`SubjectFormRow` at all. This is the one remaining screen gap
+  in the whole 87-artboard spec. Reader-integrated ("sheet over the reader"),
+  more architecturally involved than this batch, deliberately not rushed here.
+- Account hub's own card treatment (§Phase 5) — cosmetic, not a missing screen.
+- The tag-set-id parser addition noted above.
+- No AO3 write in this batch has been exercised against a live session — same
+  caveat as everything else in `AO3ChallengeActions.swift`/`AO3CollectionActions.swift`.
 
 ### 2026-09-12 — Build the writing editor and native draft entry (Codex)
 
