@@ -66,6 +66,15 @@ struct AO3CollectionDetailView: View {
                 segmentStrip.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
             }
 
+            if !manageRows.isEmpty {
+                Section {
+                    SectionRuleHeader(title: "Manage")
+                        .pageBodyRow(top: 18, gutter: 0)
+                    manageRowsPanel
+                        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                }
+            }
+
             switch phase {
             case .loading:
                 Section { loadingRow.pageBodyRow(top: 20, gutter: SubjectMetrics.accountGutter) }
@@ -223,6 +232,98 @@ struct AO3CollectionDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: Manage
+
+    /// Every native screen this collection currently offers, gated exactly on
+    /// what `show` says AO3 offered — never rendered as a disabled row. Built as
+    /// an array (rather than an `@ViewBuilder` `Group`) because the panel needs
+    /// to know how many rows survived gating to place separators only between
+    /// rows that actually show.
+    ///
+    /// No "Tag Set" row: `TagSetView` takes a `tagSetID`, and nothing on
+    /// `AO3CollectionShow`/`AO3CollectionDashboard`/`AO3ChallengeSettings`
+    /// carries one for this collection to hand it. That wiring waits until
+    /// something in the model surfaces an id.
+    private var manageRows: [AnyView] {
+        guard let show else { return [] }
+        var rows: [AnyView] = []
+
+        if show.isMaintainer {
+            rows.append(AnyView(manageRow("Maintainers") {
+                CollectionMaintainersView(collectionSlug: slug, collectionTitle: title)
+            }))
+            rows.append(AnyView(manageRow("Moderation") {
+                CollectionModerationView(collectionSlug: slug, collectionTitle: title)
+            }))
+            rows.append(AnyView(manageRow("Collection Settings") {
+                AO3CollectionFormView(slug: slug)
+            }))
+        }
+        // 1bz is explicitly the moderator's read, so gate it on maintainer too,
+        // not just signUpsURL's presence.
+        if show.dashboard.signUpsURL != nil, show.isMaintainer {
+            rows.append(AnyView(manageRow("Sign-ups") {
+                ChallengeSignUpsView(collectionSlug: slug, collectionTitle: title)
+            }))
+        }
+        if show.dashboard.assignmentsURL != nil, show.isMaintainer {
+            rows.append(AnyView(manageRow("Assignments") {
+                ChallengeAssignmentsView(collectionSlug: slug, collectionTitle: title)
+            }))
+        }
+        // Not maintainer-gated: any participant claims/fills prompts.
+        if show.dashboard.promptsURL != nil {
+            rows.append(AnyView(manageRow("Prompts") {
+                PromptMemeView(collectionSlug: slug, collectionTitle: title)
+            }))
+        }
+        // A maintainer can also be a participant, so this is independent of
+        // `isMaintainer` above.
+        if show.dashboard.signUpsURL != nil, auth.isLoggedIn {
+            rows.append(AnyView(manageRow("Your Sign-up") {
+                ChallengeSignUpView(collectionSlug: slug, collectionTitle: title)
+            }))
+        }
+        if show.dashboard.challengeSettingsURL != nil {
+            if show.isMaintainer {
+                rows.append(AnyView(manageRow("Challenge Settings") {
+                    ChallengeSettingsEditView(collectionSlug: slug, collectionTitle: title)
+                }))
+            } else {
+                rows.append(AnyView(manageRow("Challenge Settings") {
+                    ChallengeSettingsView(collectionSlug: slug, collectionTitle: title)
+                }))
+            }
+        }
+
+        return rows
+    }
+
+    private var manageRowsPanel: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(manageRows.enumerated()), id: \.offset) { index, row in
+                if index > 0 { SubjectRowSeparator() }
+                row
+            }
+        }
+        .subjectPanel()
+    }
+
+    /// One pushable row: the same `NavigationLink` + `SubjectFormRow(showsDisclosure:)`
+    /// shape `ChallengeSettingsView.assignmentsPanel` already uses for its own
+    /// "Sign-ups" row — reused here rather than a second row style.
+    private func manageRow<Destination: View>(
+        _ label: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            SubjectFormRow(label: label, showsDisclosure: true) { EmptyView() }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Chrome
