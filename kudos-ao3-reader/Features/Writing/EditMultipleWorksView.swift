@@ -19,7 +19,7 @@ struct EditMultipleWorksView: View {
     }
 
     private var accountPalette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }

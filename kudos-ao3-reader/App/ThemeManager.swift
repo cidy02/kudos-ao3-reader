@@ -60,23 +60,30 @@ final class ThemeManager {
         appTheme.appTint ?? accentColor
     }
 
-    /// The hue every *scope*-level surface in the redesign derives from — the
-    /// Account hub, the pushed Home and Library sections, the inbox.
+    /// The palette every *scope*-level surface in the redesign draws from — the
+    /// Account hub, the pushed Home and Library sections, the inbox, Writing.
     ///
     /// Spec 1m states the rule: "the header wash is the user's app accent
     /// colour — the crimson shown here is one instance of it, not a fixed
     /// value". The artboards' reds and crimsons are the default AO3 red seen
     /// through that rule, not literals to hard-code.
     ///
-    /// Taken from `effectiveTint` rather than `accentColor` so Sepia — which
+    /// Built from `effectiveTint` rather than `accentColor` so Sepia — which
     /// ignores the accent and keeps its own warm brown — washes in brown too,
     /// instead of in an accent it refuses to use anywhere else.
     ///
-    /// Screens scoped to a *work* rather than to a tab (search results, a
-    /// fandom, a queue) use that subject's own hue instead; see
-    /// `CoverArt.workHue(fandoms:title:)` and a queue's stored colour.
-    var scopeHue: Double {
-        effectiveTint.hueComponent
+    /// Built from the **colour**, not from its hue. Every one of these screens
+    /// used to pass `effectiveTint.hueComponent` and nothing else, so two thirds
+    /// of the chosen colour was dropped at the door and `SubjectPalette` rebuilt
+    /// saturation and brightness from its own table: a muted accent came back
+    /// vivid, a pale one came back deep. Spec 1m's rule is that the wash *is* the
+    /// accent, so the colour has to survive the trip.
+    ///
+    /// Screens scoped to a *work* rather than to a tab (a work page, a fandom's
+    /// search results, a queue) take that subject's own hue instead — there is no
+    /// chosen colour there to be faithful to. See `CoverArt.workHue(fandoms:title:)`.
+    var scopePalette: SubjectPalette {
+        SubjectPalette(color: effectiveTint, theme: appTheme)
     }
 
     /// A foreground guaranteed to stay readable on top of `effectiveTint` — the

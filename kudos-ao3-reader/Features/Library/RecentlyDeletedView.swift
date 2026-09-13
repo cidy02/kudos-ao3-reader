@@ -169,7 +169,7 @@ struct RecentlyDeletedView: View {
     }
 
     private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     /// The window stated in days, read from `PreservedWorkService` rather than

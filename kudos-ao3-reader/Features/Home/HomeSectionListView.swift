@@ -56,7 +56,7 @@ struct HomeSectionListView: View {
     /// wash is the user's app accent colour ... not a fixed value". The red in
     /// artboards 1ad/1af is the default AO3 red seen through that rule.
     private var scopePalette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+        themeManager.scopePalette
     }
 
     /// The line under the hero: how many works, and what order they are in.

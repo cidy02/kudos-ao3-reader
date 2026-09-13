@@ -44,7 +44,7 @@ struct WritingDraftsView: View {
         }
         .cardList()
         .navigationTitle("Drafts")
-        .subjectScreenWash(palette: theme.appTheme.subjectPalette(hue: theme.scopeHue))
+        .subjectScreenWash(palette: theme.scopePalette)
         .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
         .refreshable { reload += 1 }
     }

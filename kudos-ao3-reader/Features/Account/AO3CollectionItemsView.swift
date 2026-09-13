@@ -127,7 +127,7 @@ struct AO3CollectionItemsView: View {
     }
 
     private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     // MARK: Items

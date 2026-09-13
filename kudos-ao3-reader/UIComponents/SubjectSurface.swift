@@ -35,10 +35,37 @@ import SwiftUI
 struct SubjectPalette {
     let hue: Double
     let theme: ReaderTheme
+    /// The colour this subject actually *is*, when someone chose it — the app
+    /// accent behind every tab-scoped screen (`ThemeManager.scopePalette`).
+    ///
+    /// Nil for a subject whose colour is derived rather than chosen: a fandom's
+    /// hue comes from its name, a queue's from its title. Those have no "actual
+    /// colour" to be faithful to, and the saturation/brightness pairs below are
+    /// exactly what keeps a gold fandom and a violet queue reading at the same
+    /// weight — so they keep taking them.
+    ///
+    /// Where it is set, the *backgrounds* are drawn as this colour at reduced
+    /// alpha instead. Alpha takes away how much of a colour is present without
+    /// changing which colour it is; substituting a saturation/brightness pair
+    /// changes the colour itself, which is how a chosen dusty rose used to come
+    /// back as a vivid one. Text and stroke roles (`accent`, `chipStroke`,
+    /// borders) deliberately keep the derived values: those need guaranteed
+    /// contrast against the page, and a chosen colour carries no such promise —
+    /// a very dark accent as label text on a dark wash is unreadable.
+    private let picked: Color?
 
     init(hue: Double, theme: ReaderTheme) {
         self.hue = hue
         self.theme = theme
+        self.picked = nil
+    }
+
+    /// For a subject that is a colour someone picked, rather than a hue derived
+    /// from a name.
+    init(color: Color, theme: ReaderTheme) {
+        self.hue = color.hueComponent
+        self.theme = theme
+        self.picked = color
     }
 
     /// The subject's identity colour: kicker text, the short rule under it, the
@@ -74,7 +101,29 @@ struct SubjectPalette {
         )
     }
 
-    private var washStops: [Gradient.Stop] {
+    /// Internal, not private: `SubjectPaletteTests` reads these to check that a
+    /// picked colour reaches the wash as itself. A `LinearGradient` cannot be
+    /// introspected, so the stops are the only testable seam.
+    var washStops: [Gradient.Stop] {
+        if let picked {
+            // The same five stop positions, with the chosen colour fading out
+            // instead of five different colours sharing its hue. The alphas are
+            // fitted to the weight the derived stops already had for the default
+            // AO3 red, so the stock look barely moves and a chosen colour finally
+            // reads as itself. Sepia and Light take a gentler ramp: the colour
+            // sits on a pale page there, where the same alpha reads far heavier.
+            let alphas: [Double] = switch theme {
+            case .dark: [0.41, 0.33, 0.21, 0.09]
+            // OLED's page is true black, so the same colour reads darker on it.
+            case .oled: [0.48, 0.40, 0.28, 0.17]
+            case .light: [0.17, 0.13, 0.07, 0.03]
+            case .sepia: [0.14, 0.10, 0.06, 0.02]
+            }
+            let locations: [Double] = [0, 0.26, 0.52, 0.74]
+            return zip(alphas, locations).map {
+                .init(color: picked.opacity($0.0), location: $0.1)
+            } + [.init(color: theme.cardBackdrop, location: 1)]
+        }
         switch theme {
         case .dark, .oled:
             return [
@@ -108,6 +157,15 @@ struct SubjectPalette {
     /// hue at two brightnesses. Deliberately NOT a hue shift: two ends of a
     /// slightly different hue made adjacent cards read as two fandoms.
     var cardWash: LinearGradient {
+        if let picked {
+            return LinearGradient(
+                colors: theme.isDarkFamily
+                    ? [picked.opacity(0.55), picked.opacity(0.25)]
+                    : [picked.opacity(0.22), picked.opacity(0.10)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
         let colors: [Color]
         switch theme {
         case .dark, .oled:
@@ -133,6 +191,15 @@ struct SubjectPalette {
     /// stays a list rather than ten posters. Spec 1k:
     /// `linear-gradient(140deg,#5B4A2A66,#2A21134D)` composited over the page.
     var rowWash: LinearGradient {
+        if let picked {
+            return LinearGradient(
+                colors: theme.isDarkFamily
+                    ? [picked.opacity(0.30), picked.opacity(0.14)]
+                    : [picked.opacity(0.18), picked.opacity(0.10)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
         let colors: [Color]
         switch theme {
         case .dark, .oled:
@@ -159,6 +226,15 @@ struct SubjectPalette {
     /// `linear-gradient(140deg, hue26, hue0F)` — roughly a third of `rowWash` —
     /// because chips sit inside it and have to stay readable against it.
     var panelWash: LinearGradient {
+        if let picked {
+            return LinearGradient(
+                colors: theme.isDarkFamily
+                    ? [picked.opacity(0.15), picked.opacity(0.06)]
+                    : [picked.opacity(0.14), picked.opacity(0.05)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
         let colors: [Color]
         switch theme {
         case .dark, .oled:

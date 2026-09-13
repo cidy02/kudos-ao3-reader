@@ -211,8 +211,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     /// The work's own hue, the way every other work surface in the app derives
     /// it — primary fandom, else the title. A work page is scoped to a work, so
-    /// it takes the work's colour and not `ThemeManager.scopeHue`, which is what
-    /// the tab-scoped and account-scoped screens use.
+    /// it takes the work's colour and not `ThemeManager.scopePalette`, which is
+    /// what the tab-scoped and account-scoped screens use.
     var workPalette: SubjectPalette {
         themeManager.appTheme.subjectPalette(
             hue: CoverArt.workHue(fandoms: displayFandoms, title: displayTitle)

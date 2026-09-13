@@ -242,7 +242,7 @@ struct AccountView: View {
     /// it, not a fixed value"*. So the artboard's crimson is the default AO3 red
     /// seen through that rule, not a literal to copy.
     private var accountPalette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     /// The username as the page's own 32pt title, per 1m, rather than as a

@@ -46,7 +46,7 @@ struct SearchPaginationBar: View {
     @Environment(ThemeManager.self) private var themeManager
 
     private var resolvedPalette: SubjectPalette {
-        palette ?? themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+        palette ?? themeManager.scopePalette
     }
 
     var body: some View {
@@ -294,7 +294,7 @@ private struct PageJumpSheet: View {
     }
 
     private var resolvedPalette: SubjectPalette {
-        palette ?? themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+        palette ?? themeManager.scopePalette
     }
 
     /// The typed page, clamped. An empty or unparseable field reads as the page

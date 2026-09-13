@@ -578,7 +578,7 @@ struct AccountInboxRows: View {
             kicker: "AO3 Account",
             title: "Inbox",
             subtitle: headerTallyLine,
-            palette: theme.appTheme.subjectPalette(hue: theme.scopeHue),
+            palette: theme.scopePalette,
             gutter: SubjectMetrics.accountGutter
         )
     }

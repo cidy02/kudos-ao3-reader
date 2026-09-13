@@ -844,8 +844,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// results page and the cards on it read as one surface. A free-text search
     /// names no subject and falls back to the app accent.
     private var resultsPalette: SubjectPalette {
-        let hue = heroSummary?.subject.map { CoverArt.hue(for: $0) } ?? themeManager.scopeHue
-        return themeManager.appTheme.subjectPalette(hue: hue)
+        guard let subject = heroSummary?.subject else { return themeManager.scopePalette }
+        return themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: subject))
     }
 
     private var heroSummary: AO3ResultSummary? {
