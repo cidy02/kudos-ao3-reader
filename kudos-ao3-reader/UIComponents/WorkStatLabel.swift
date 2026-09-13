@@ -12,7 +12,7 @@ extension View {
     /// Deliberately NOT a `Label` conversion: `Label`'s icon-tint renders
     /// inconsistently between `List` and plain `ScrollView` containers in this
     /// codebase — see the icon+title row comment near `AccountComponents.swift`'s
-    /// `chapterSection`-style row (icon and text styled separately "rather than via
+    /// chapter row (icon and text styled separately "rather than via
     /// a single Label, whose icon otherwise only picks up the accent tint inside a
     /// List... and falls back to .primary in Compact's plain ScrollView") — and
     /// these rows appear in both container types.

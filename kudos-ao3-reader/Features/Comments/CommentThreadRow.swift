@@ -181,12 +181,18 @@ enum CommentThreadGeometry {
         // single accumulator also avoids the O(depth²) copying that `[node] +
         // flatten(children)` incurs at every level.
         var stack: [FlattenedReply] = root.replies.reversed().map {
-            FlattenedReply(comment: $0, depth: 1, parentAuthor: root.author)
+            FlattenedReply(
+                comment: $0, depth: 1, parentAuthor: root.author,
+                parentIsViewer: root.editPath != nil
+            )
         }
         while let item = stack.popLast() {
             result.append(item)
             for child in item.comment.replies.reversed() {
-                stack.append(FlattenedReply(comment: child, depth: item.depth + 1, parentAuthor: item.comment.author))
+                stack.append(FlattenedReply(
+                    comment: child, depth: item.depth + 1, parentAuthor: item.comment.author,
+                    parentIsViewer: item.comment.editPath != nil
+                ))
             }
         }
         return result
@@ -204,7 +210,9 @@ enum CommentThreadGeometry {
 enum CommentConversationItem: Identifiable {
     /// `parentAuthor` is nil for the root post, set for a reply. `depth` is the
     /// AO3 nesting level (0 = root) and drives the indent and rail colour.
-    case post(comment: AO3Comment, parentAuthor: String?, depth: Int)
+    /// `parentIsViewer` marks a reply aimed at the signed-in reader's own
+    /// comment; it defaults so a caller that predates it still compiles.
+    case post(comment: AO3Comment, parentAuthor: String?, depth: Int, parentIsViewer: Bool = false)
     /// The "Show N replies" / "Show N more" control, itself a row so it sits
     /// inside the same continuous card.
     case expander(rootID: Int, hiddenCount: Int, showsVerb: Bool)
@@ -221,14 +229,14 @@ enum CommentConversationItem: Identifiable {
     /// replies it reveals, so it sits at their depth rather than the root's.
     var connectorDepth: Int {
         switch self {
-        case let .post(_, _, depth): depth
+        case let .post(_, _, depth, _): depth
         case .expander, .continueThread: 1
         }
     }
 
     var id: String {
         switch self {
-        case let .post(comment, _, _): "post-\(comment.id)"
+        case let .post(comment, _, _, _): "post-\(comment.id)"
         case let .expander(rootID, _, _): "expander-\(rootID)"
         case let .continueThread(rootID, _): "continue-\(rootID)"
         }
@@ -238,7 +246,7 @@ enum CommentConversationItem: Identifiable {
     /// which deliberately offer none.
     var actionableComment: AO3Comment? {
         switch self {
-        case let .post(comment, _, _): comment
+        case let .post(comment, _, _, _): comment
         case .expander, .continueThread: nil
         }
     }
@@ -256,6 +264,19 @@ struct FlattenedReply: Identifiable, Equatable {
     /// purely visual and `accessibilityHidden`; this is VoiceOver's only
     /// textual account of "this is a reply, and to whom" (HIG audit UI-2).
     let parentAuthor: String
+    /// The comment this reply answers is the **viewer's own**.
+    ///
+    /// Taken from AO3's own per-session signal — it renders an Edit action only
+    /// on the signed-in account's comments — rather than by matching
+    /// `parentAuthor` against `auth.username`. A byline is a *pseud*, which need
+    /// not equal the account name, so name matching would miss every reply to a
+    /// comment left under a non-default pseud and could collide with a stranger
+    /// whose pseud happens to match. `editPath` and not `deletePath`: a work's
+    /// creator gets Delete on other people's comments too.
+    ///
+    /// `var` with a default so the memberwise initialiser stays source-compatible
+    /// for any caller built before this existed.
+    var parentIsViewer = false
 }
 
 /// Shared role chip for native Comments and Inbox notification cards.
@@ -621,7 +642,8 @@ enum CommentConversationBuilder {
         let shown = replies.filter { $0.depth == 1 }.prefix(boundedDirectReplies)
         for reply in shown {
             items.append(.post(
-                comment: reply.comment, parentAuthor: reply.parentAuthor, depth: reply.depth
+                comment: reply.comment, parentAuthor: reply.parentAuthor, depth: reply.depth,
+                parentIsViewer: reply.parentIsViewer
             ))
         }
         let hidden = replies.count - shown.count
@@ -666,7 +688,8 @@ enum CommentConversationBuilder {
             items.append(.post(
                 comment: reply.comment,
                 parentAuthor: reply.parentAuthor,
-                depth: reply.depth
+                depth: reply.depth,
+                parentIsViewer: reply.parentIsViewer
             ))
         }
         if hidden > 0 {
@@ -780,7 +803,7 @@ struct CommentConversationRow: View {
     /// for, so their rail takes the accent at full strength regardless of how
     /// deep the reply sits — depth still reads from the indent.
     private var isWorkAuthorComment: Bool {
-        guard case let .post(comment, _, _) = item else { return false }
+        guard case let .post(comment, _, _, _) = item else { return false }
         let identity: AO3AuthorIdentity? = {
             guard !comment.isGuest, let path = comment.userPath else { return nil }
             return AO3AuthorIdentity(displayName: comment.author, href: path)
@@ -815,7 +838,7 @@ struct CommentConversationRow: View {
     @ViewBuilder
     private var content: some View {
         switch item {
-        case let .post(comment, parentAuthor, _):
+        case let .post(comment, parentAuthor, _, parentIsViewer):
             CommentPostRow(
                 comment: comment,
                 workAuthors: workAuthors,
@@ -824,6 +847,7 @@ struct CommentConversationRow: View {
                 depth: depth,
                 replyToAuthor: parentAuthor,
                 showsParentAttribution: showsParentAttribution,
+                parentIsViewer: parentIsViewer,
                 collapse: collapse,
                 onToggleCollapse: onToggleCollapse
             )
@@ -1059,6 +1083,9 @@ private struct CommentPostRow: View {
     /// Whether to *render* `replyToAuthor` as well as announce it. Set only where
     /// the connector can't do the job — see `CommentConversationRowItem`.
     var showsParentAttribution = false
+    /// This reply answers the viewer's own comment — see
+    /// `FlattenedReply.parentIsViewer` for how that is established.
+    var parentIsViewer = false
     /// Set on a root with replies; nil means no caret.
     var collapse: CommentCollapseState?
     var onToggleCollapse: () -> Void = {}
@@ -1197,9 +1224,31 @@ private struct CommentPostRow: View {
     /// above it — which in a thread dominated by one commenter is pure noise.
     /// `accessibilityHidden` because the row's own hint already announces it, and
     /// VoiceOver gets that hint whether or not this is on screen.
+    ///
+    /// One case outranks all of that: a reply to **your** comment (spec 1f's
+    /// "REPLYING TO YOU"). That is the one piece of parentage a reader scans a
+    /// comment section for, so it is stated on every such reply rather than only
+    /// where the connector can't reach — the connector says *that* this answers
+    /// the card above, never that the card above is yours. It replaces the name
+    /// rather than sitting beside it, because the name would be your own.
     @ViewBuilder
     private var parentAttribution: some View {
-        if showsParentAttribution, let replyToAuthor, !replyToAuthor.isEmpty {
+        if parentIsViewer, participantRole != .me {
+            // Suppressed on your own reply to your own comment: true, and useless.
+            //
+            // A kicker rather than a badge: the byline's chips say who someone *is*,
+            // and this says what this comment is *doing*, so it sits over the prose
+            // it qualifies. `.caption2` and not the spec's fixed 9pt — it sits
+            // inside a block of body text that scales, and a kicker that stayed 9pt
+            // while the prose grew would read as a rendering fault at accessibility
+            // sizes.
+            Text("Replying to you".uppercased())
+                .font(.caption2.weight(.semibold))
+                .tracking(0.7)
+                .foregroundStyle(theme.effectiveTint)
+                .lineLimit(1)
+                .accessibilityHidden(true)
+        } else if showsParentAttribution, let replyToAuthor, !replyToAuthor.isEmpty {
             Label("in reply to \(replyToAuthor)", systemImage: "arrow.turn.down.right")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1329,9 +1378,18 @@ private struct CommentPostRow: View {
         // The rail conveys "this is a reply, and to whom" only visually and is
         // `accessibilityHidden`, so it has to be said here. This used to ride on
         // the role badge, which no longer renders for a plain commenter — i.e.
-        // for most replies (HIG audit UI-2).
+        // for most replies (HIG audit UI-2). The drawn "REPLYING TO YOU" kicker is
+        // hidden for the same reason, and says its piece through this hint instead,
+        // so VoiceOver hears it once rather than twice.
         .accessibilityElement(children: .contain)
-        .accessibilityHint(replyToAuthor.map { "Reply to \($0)" } ?? "")
+        .accessibilityHint(parentAttributionHint)
+    }
+
+    /// What the byline announces about who this comment answers. "Your comment"
+    /// takes precedence over the name, matching what the kicker draws.
+    private var parentAttributionHint: String {
+        if parentIsViewer, participantRole != .me { return "Reply to your comment" }
+        return replyToAuthor.map { "Reply to \($0)" } ?? ""
     }
 
     private func timestampText(_ timestamp: String) -> some View {

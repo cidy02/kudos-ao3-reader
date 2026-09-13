@@ -225,6 +225,64 @@ struct AO3CollectionParsingTests {
         #expect(AO3CollectionURL.reservedSlugs.contains("new"))
     }
 
+    /// Singular heading, plus an href carrying a trailing path segment — the
+    /// profile page links `/tag_sets/<id>` but a nominations link must still
+    /// yield the id rather than nil.
+    @Test func collectionProfileTagSetSingular() throws {
+        let html = """
+        <html><body>
+        <dl class="meta group">
+          <dt>Challenge Type:</dt><dd>Gift Exchange</dd>
+          <dt>Tag Set:</dt>
+          <dd>
+            <ul class="commas">
+              <li><a href="/tag_sets/123/nominations">Winter Fest Tag Set</a></li>
+            </ul>
+          </dd>
+        </dl>
+        </body></html>
+        """
+        let links = try AO3Client.parseCollectionTagSets(html)
+        #expect(links.count == 1)
+        #expect(links[0].id == 123)
+        #expect(links[0].title == "Winter Fest Tag Set")
+    }
+
+    @Test func collectionProfileTagSetsPlural() throws {
+        let html = """
+        <html><body>
+        <dl class="meta group">
+          <dt>Tag Sets:</dt>
+          <dd>
+            <ul class="commas">
+              <li><a href="/tag_sets/7">Fandoms</a></li>
+              <li><a href="https://archiveofourown.org/tag_sets/8?page=2">Characters</a></li>
+              <li><a href="/tag_sets/new">Not an id</a></li>
+            </ul>
+          </dd>
+        </dl>
+        </body></html>
+        """
+        let links = try AO3Client.parseCollectionTagSets(html)
+        // "/tag_sets/new" is skipped rather than becoming a row that pushes id 0.
+        #expect(links.map(\.id) == [7, 8])
+        #expect(links.map(\.title) == ["Fandoms", "Characters"])
+    }
+
+    /// Absence is the normal case — most collections have no challenge — so the
+    /// parse returns an empty list instead of throwing.
+    @Test func collectionProfileWithoutTagSetBlockReturnsEmpty() throws {
+        let html = """
+        <html><body>
+        <dl class="meta group">
+          <dt>Challenge Type:</dt><dd>None</dd>
+          <dt>Maintainers:</dt><dd><a href="/users/alice">Alice</a></dd>
+        </dl>
+        </body></html>
+        """
+        #expect(try AO3Client.parseCollectionTagSets(html).isEmpty)
+    }
+
     @Test func collectionPeopleParse() throws {
         let html = """
         <html><body>

@@ -39,6 +39,7 @@ struct ChallengeSettingsEditView: View {
     @Environment(AppRouter.self) private var router
 
     @State private var form: AO3ChallengeSettingsForm?
+    @State private var tagSetLinks: [AO3CollectionTagSetLink] = []
     @State private var signUpCount: Int = 0
     @State private var phase: Phase = .idle
     @State private var isSaving: Bool = false
@@ -177,6 +178,14 @@ struct ChallengeSettingsEditView: View {
             SubjectFieldLabel(text: "Request restrictions", style: .formGroup)
                 .pageBodyRow(top: 12, gutter: gutter)
             requestRestrictionTogglesPanel.pageBodyRow(top: 8, gutter: gutter)
+        }
+
+        if !tagSetLinks.isEmpty {
+            Section {
+                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag set" : "Tag sets")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                tagSetsPanel.pageBodyRow(top: 8, gutter: gutter)
+            }
         }
 
         Section {
@@ -368,6 +377,40 @@ struct ChallengeSettingsEditView: View {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.optionalTagsAllowed))
                     .labelsHidden()
                     .tint(palette.accent)
+            }
+        }
+        .subjectPanel()
+    }
+
+    // MARK: - Tag sets
+
+    /// The only route to artboard 1ch: `TagSetView` is addressed by a numeric id
+    /// that AO3 publishes on the **collection profile** page, not on the
+    /// collection show page. The fetch lives on the two challenge screens rather
+    /// than on `AO3CollectionDetailView` deliberately — a tag set only means
+    /// anything in a challenge context, and hanging the request off collection
+    /// detail would spend an extra AO3 request on every collection anyone opens,
+    /// the majority of which have no challenge at all.
+    /// `docs/AO3_NETWORKING_POLICY.md` treats request politeness as a product
+    /// requirement, so the cost sits on the screens that use it.
+    ///
+    /// `isModerator: true` here: this is the maintainer's edit form, only
+    /// reachable by someone AO3 already let load `challengeSettings` for the
+    /// collection, so "moderator" is the honest kicker. 1by, the read view, is
+    /// open to any reader and passes `false`.
+    ///
+    /// Editing the tag set's own fields stays on 1ch — `AO3TagSetSave` is the
+    /// only tag-set write in the Services layer and it belongs to that screen.
+    private var tagSetsPanel: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
+                if index > 0 { SubjectRowSeparator() }
+                NavigationLink {
+                    TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
+                } label: {
+                    SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
+                }
+                .buttonStyle(.plain)
             }
         }
         .subjectPanel()
@@ -590,6 +633,15 @@ struct ChallengeSettingsEditView: View {
             ) {
                 signUpCount = signUpsPage.signUps.count
             }
+
+            // Best-effort: a challenge with no tag set is ordinary, and a failed
+            // profile fetch must not take the whole form down with it.
+            let profileRequest = try? auth.authenticatedRequest(
+                for: AO3CollectionURL.profile(slug: collectionSlug)
+            )
+            tagSetLinks = (try? await AO3Client.shared.collectionTagSets(
+                slug: collectionSlug, request: profileRequest
+            )) ?? []
 
             phase = .loaded
         } catch {

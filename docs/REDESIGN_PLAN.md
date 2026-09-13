@@ -281,7 +281,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **4** | Browse — `1g`, `1al`, `1am`, `1an` | 🟡 `1g` done. `1al`/`1am` sibling-family grouping and `1an` filter sheet landed (`a0913bf6`). Category-card work total is now marked approximate (the naive sum of tag counts). The family page runs a real `filter_ids:(A OR B)` union as of 2026-09-12 (`aab42504`), falling back to the join — and its tilde — when an id will not resolve. |
 | **5** | Account — hub `1m`, signed out `1n`, scopes `1bt` | 🟡 `1m`'s header and wash done (username as the page's own 32pt title, accent-hue wash, both layout branches); `1n`'s signed-out title with it. Left: the hub's own card treatment, and `1bt`'s scopes. |
 | **6** | Account subsections in hub order — `1o`, `1q`, `1t`, `1p`, `1r`, `1s`, `1u`, `1v`, `1w`, `1x`, `1l`, `1y`, `1z`, `1ab`, `1ac`, `1aa` | 🟡 `1o`/`1q`/`1t`/`1p` share `AO3AccountWorksList`'s 1o header; **`1p` also has its "X New" badge and the `SubscriptionWatermarks` store behind it**. `1ac` Privacy done. Left: `1r`/`1s` (collections, Phase 10), `1u`/`1v`/`1w` built 2026-09-11 (`578a0bac`), `1x` Drafts now opens native drafts/forms through T-215, `1l` Inbox and `1z` Preferences **restyled 2026-09-11** (`a01c857c`, fixed in `40250315`), `1y` Dashboard (it is `AuthorProfileView`, shared with viewing other authors). `1aa` **built 2026-09-11** (`d8a7192b`) — its seven archive paths were verified live first; `1ab` is `ReaderOptionsForm`, shared with the reader. |
-| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | 🟡 **`1a` is done, both screens.** Identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row. The segmented control is retired and the page is continuous. Left in this phase: the Comments screens themselves (`1f`, `1ba`, `1be`, `1bf`). Detail: `1a`'s identity block done — page wash, fandom kicker / 32pt title / byline header, the rating·warnings·category·chapters figure strip, and the resume card with its 48pt ring. Left on `1a`: the summary in its serif face, the ON AO3 action chips, the tag clusters as `SubjectChip` groups, the series/collection/publication grouped card, the kudos·comments·bookmarks·hits strip, and the My copy row plus the sheet it opens (screen 2, which is today's Library tab). Comments not started. |
+| **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | ✅ **`1a` done, both screens** (identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row; the segmented control is retired and the page is continuous). **Comments done 2026-09-13**: `1f` chrome (header, COMMENTS/THREADS/YOURS/LATEST signal strip, chapter + sort pills, section rule, write pill, wash), `1ba`/`1be` composer (quoted parent on the rail, identity + character budget, format bar pinned to the sheet edge, detents rather than two layouts), `1bf` formatting tray (`CommentMarkup.swift` — a tag-aware buffer writing only tags AO3's sanitizer keeps). **Two caveats:** only COMMENTS is a site total — the other three count the loaded page and say so under the strip; and 1f's *threading* model is parked as an open question in §3b, since it is the elbow style T-151 already dropped on device. Comment streaming not built: the model pages and has no append path. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | 🟡 `1h`/`1i`/`1j`/`1bg` built 2026-09-11. **`1bh` refused**: a shared-queue tag manager needs collaboration and queue tags, neither of which exists. |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
 | **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
@@ -480,6 +480,70 @@ Version numbers are welcome in Notes but the family is what gates rule 1.
 
 Newest first. Each entry: what landed, what it was verified against, what is
 left. Keep appending — this is the handoff channel.
+
+### 2026-09-13 — The tag set wired, and Comments taken to 1f/1ba/1be/1bf (Claude)
+
+The last two gaps the 2026-09-12 entry left open, both closed.
+
+**The tag set (1ch) is reachable.** The blocker was that `TagSetView` takes a
+numeric `tagSetID` and nothing discovered one. Traced to ground in otwarchive's
+own templates rather than guessed: `tag_sets_to_add` on the challenge form is a
+text field of tag set *names* (`_prompt_restriction_form.html.erb`), so it is no
+help — but `collection_profile/show.html.erb` renders real
+`<dt>Tag Set:</dt><dd><ul class="commas"><li><a href="/tag_sets/123">` links.
+That block is on the **profile** page only; `collections/show.html.erb` renders
+just header + works + bookmarks, so `collectionShow` cannot pick it up for free.
+New `collectionTagSets(slug:request:)` + `parseCollectionTagSets`, surfaced on
+the two challenge screens rather than on collection detail — putting the fetch on
+`AO3CollectionDetailView` would spend an AO3 request on every collection anyone
+opens, and most have no challenge at all. `participantID(from:)` generalised to
+`pathID(from:after:)` instead of adding a second near-identical id scraper.
+
+**Comments took 1f, 1ba, 1be and 1bf.** Chrome: `SubjectHeaderBlock` (chapter
+kicker / work title / tappable byline, author navigation preserved), the signal
+strip, chapter + sort as pills with the All/By-Chapter picker folded into the
+chapter sheet, a section rule, the write pill, and the work-detail wash.
+Composer: quoted parent carrying the rail, `as <username>` and the character
+budget under the field, format bar pinned to the sheet's bottom edge, and 1be
+expressed as detents rather than a second layout. Tray: `CommentMarkup.swift`, a
+tag-aware buffer whose pure `apply(_:to:in:)` is what the tests pin.
+
+**On the signal strip, which is the part most likely to mislead:** only COMMENTS
+is AO3's own figure (`dl.stats dd.comments`). AO3 publishes no thread count, no
+per-viewer count and no "last comment at", so THREADS / YOURS / LATEST are
+counted off the loaded page, and a note under the strip says exactly that
+whenever `totalPages > 1` (suppressed on a single page, where they genuinely are
+totals). YOURS uses `editPath != nil` — AO3's own per-session ownership marker —
+rather than matching a byline, because a byline is a pseud; it is dropped
+entirely when signed out, since it could then only report the session.
+
+**A new gate worth knowing about:** Post is now disabled past 10,000 characters.
+Verified against otwarchive rather than the artboard — `COMMENT_MAX: 10000` in
+`config/config.yml`, enforced by `validates_length_of :comment_content`. It
+cannot produce a false block: Swift counts grapheme clusters and Ruby counts
+codepoints, so Swift's count is never the larger of the two.
+
+**Verified:** iOS Simulator build SUCCEEDED (0 errors, and no new warnings in the
+changed files — `AO3Client+Collections.swift`'s main-actor-isolation warnings are
+a pre-existing class, 16 of them on HEAD); macOS Debug **BUILD SUCCEEDED**; the
+two new suites (`CommentMarkupTests`, `AO3CollectionParsingTests`) **TEST
+SUCCEEDED**. The full suite was not re-run.
+
+**One defect the app build could not catch, caught by running the tests.**
+`CommentMarkupTests.swift` had a line *starting* with `..<`, which Swift parses
+as the prefix `PartialRangeUpTo` operator — so the range collapsed to a bare
+`String.Index` and the file did not compile. A plain `build` never compiles the
+test target, and the agent's own scratchpad harness had retyped the assertions
+rather than compiling the file, so both came back green. Worth repeating: a
+harness that paraphrases a test proves the logic, not the test.
+
+**Left:** 1f's threading model is an open question in §3b (the elbow rail is the
+style T-151 dropped on device — owner's call, code unchanged meanwhile);
+continuous comment streaming needs a model append path that does not exist; and
+BUG-11 below, which came out of reading otwarchive while answering a question
+about sort order.
+
+---
 
 ### 2026-09-12 — Phase 12 closed: the last 5 screens, and reachability for all 11 (Claude)
 
@@ -1878,6 +1942,53 @@ Where an artboard contradicts a *reasoned* decision already in the codebase,
 confirmed explicitly. The reasoning it overrules should still be answered in
 writing rather than silently dropped, so the next person to read that code
 knows the argument was met and not missed.
+
+### ⚠️ Open — comment threads: 1f's elbow rail vs. a model already dropped on device
+
+**Needs the owner. The code is unchanged in the meantime, and that is a pause,
+not a verdict.** This section's rule is that the artboard wins over reasoning
+already in the code. The reason this one is parked rather than applied is that
+what 1f contradicts here is not reasoning — it is an experiment that was already
+run.
+
+Spec 1f draws threads hanging off a hairline rail whose elbows tuck behind each
+reply avatar, with the tree rendered inline. `CommentThreadRow.swift`'s own doc
+comment records four styles compared on a real device under T-151/T-183 — an
+elbow style, a straight style, a flat one-card-per-conversation variant, and the
+one that shipped — and three were dropped with evidence. Every artefact that
+screen went through (the width squeeze at depth, the fill ladder washing out, a
+six-rail gutter) traced to the single decision to render an arbitrarily deep tree
+inline, which is what 1f's rail requires. Real AO3 threads go deep — *The Queen's
+Mercy*'s epilogue carries a ~10-reply chain, and AO3 itself caps nesting at
+`COMMENT_THREAD_MAX_DEPTH: 5` — so the failure case is the common case.
+
+What shipped instead: one card per comment in the app's card language, a
+per-level indent with an accent-tinted elbow leaving the card's *bottom* edge,
+and a structural depth bound — a conversation shows its root and at most two
+direct replies, everything deeper reached through "Continue thread", which
+pushes `CommentThreadScreen`. The bound is the design, not a tuning: only one
+nesting level is ever drawn, so the hard cases stop existing rather than being
+balanced.
+
+**What 1f did win, applied 2026-09-13:** "REPLYING TO YOU", which the screen had
+no equivalent of. It is the one piece of parentage a reader scans for, and a
+drawn connector cannot say it — a line states that a reply answers the card
+above, never that the card above is *yours*. It resolves from
+`AO3Comment.editPath`, AO3's own per-session marker of the viewer's own comment,
+rather than by matching a byline against the account name: a byline is a pseud,
+so name matching misses every comment left under a non-default pseud and can
+collide with a stranger's.
+
+Two smaller pieces of 1f were not taken, both on correctness rather than taste:
+its "N deeper replies" wording (the count includes a third and later *direct*
+reply, which is not deeper — `boundedListCountsDescendantsNotDirectChildren`
+pins what the number means), and its fixed 9pt kicker, drawn at `.caption2`
+because it sits inside prose that scales.
+
+**The decision to make:** rebuild the thread presentation to 1f and re-run the
+device comparison that rejected it, or record 1f's threading as superseded by
+T-151 and keep the artboard for everything else on the screen (which is what
+2026-09-13 shipped).
 
 ### ✅ Resolved — the ledger row pins its ring and tray to the top corners
 

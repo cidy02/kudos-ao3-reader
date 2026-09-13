@@ -3,10 +3,11 @@ import SwiftUI
 /// Artboard **1ch** — Tag set.
 ///
 /// A tag set is not addressed by `collectionSlug` like the other four screens in
-/// this batch — AO3 gives it its own numeric id, and nothing in this codebase yet
-/// parses a link from a collection to the tag set id it uses (that is separate,
-/// not-yet-built plumbing). So this screen takes `tagSetID` directly, the way
-/// `AO3TagSet` and `AO3ChallengeURL.tagSet` already do.
+/// this batch — AO3 gives it its own numeric id, so this screen takes `tagSetID`
+/// directly, the way `AO3TagSet` and `AO3ChallengeURL.tagSet` already do. The id
+/// comes from `AO3Client.collectionTagSets`, which reads the `Tag Set:` links off
+/// the collection **profile** page; the two challenge screens
+/// (`ChallengeSettingsView` 1by, `ChallengeSettingsEditView` 1cf) push here.
 ///
 /// Read-only except for the two surfaces AO3 genuinely lets a caller write: the
 /// four comma-separated tagname fields (`saveTagSetFields`) and a per-nomination
@@ -22,8 +23,9 @@ import SwiftUI
 ///
 /// `AO3TagSet` carries no owner/moderator pseud fields, so "Ownership" shows only
 /// what the model actually has (`title`, `isVisible`) rather than inventing a
-/// roster. `isModerator` — which the not-yet-built navigation from a collection
-/// will pass in — only swaps the header's kicker between "owner" and "moderator";
+/// roster. `isModerator` — which the pushing challenge screen passes in, `true`
+/// from the maintainer edit form and `false` from the read view — only swaps the
+/// header's kicker between "owner" and "moderator";
 /// it does not gate which rows appear, since every write path above behaves the
 /// same regardless of which relationship brought the reader here.
 ///
@@ -35,8 +37,8 @@ struct TagSetView: View {
     let tagSetID: Int
     var tagSetTitle: String = ""
     /// Swaps the header kicker between "owner" and "moderator". `AO3TagSet` has
-    /// no field for this — the collection screen that eventually pushes this one
-    /// already knows which list (owned vs moderated) it came from.
+    /// no field for this — the challenge screen that pushes this one already
+    /// knows whether it is the maintainer's edit form or the open read view.
     var isModerator: Bool = false
 
     @Environment(AO3AuthService.self) private var auth
