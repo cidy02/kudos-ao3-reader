@@ -39,11 +39,52 @@ struct AO3FandomUnionTests {
     }
 
     @Test func aTagPageWithoutAFeedLinkYieldsNoID() {
-        // A tag with no works prints no feed link. The caller treats nil as "no
-        // union available" and keeps the intersection plus its tilde, rather
-        // than showing a union that silently dropped a sibling.
+        // If neither authoritative ID source is available, keep the existing
+        // all-or-nothing fallback rather than silently dropping a sibling.
         let page = "<html><body><h2 class=\"heading\">No works found</h2></body></html>"
         #expect(AO3FandomUnion.filterID(fromTagWorksPage: page, tagName: "Nothing Here") == nil)
+    }
+
+    @Test func officialNestedFeedControlResolvesEvenWithoutSidebarFacets() {
+        let page = """
+        <div id="main"><div class="navigation actions module">
+        <ul class="user navigation actions"><li>
+        <a href="https://archiveofourown.org/tags/27785/feed.atom">RSS Feed</a>
+        </li></ul></div><p>No works found.</p></div>
+        """
+        #expect(AO3FandomUnion.filterID(fromTagWorksPage: page, tagName: "Doctor Who (2005)") == 27_785)
+    }
+
+    @Test func sidebarFallbackMatchesTheExactFandomWithoutLosingItsYear() {
+        let page = """
+        <form id="work-filters"><label>
+        <input name="include_work_search[fandom_ids][]" value="99117">
+        <span class="indicator"></span><span>Doctor Who (1963) (9,958)</span></label>
+        <label><input name="include_work_search[fandom_ids][]" value="27785">
+        <span class="indicator"></span><span>Doctor Who (2005) (61,248)</span></label></form>
+        """
+        #expect(AO3FandomUnion.filterID(fromTagWorksPage: page, tagName: "Doctor Who (2005)") == 27_785)
+        #expect(AO3FandomUnion.filterID(fromTagWorksPage: page, tagName: "Doctor Who") == nil)
+    }
+
+    @Test func sidebarFallbackDecodesNamesAndRejectsOtherTagTypesAndInvalidIDs() {
+        let page = """
+        <form id="work-filters">
+        <label><input name="include_work_search[character_ids][]" value="12"><span>A &amp; B (6)</span></label>
+        <label><input name="exclude_work_search[fandom_ids][]" value="13"><span>A &amp; B (6)</span></label>
+        <label><input name="include_work_search[fandom_ids][]" value="-1"><span>A &amp; B (6)</span></label>
+        <label><input name="include_work_search[fandom_ids][]" value="123"><span>A &amp; B (6)</span></label>
+        </form>
+        """
+        #expect(AO3FandomUnion.filterID(fromTagWorksPage: page, tagName: "A & B") == 123)
+    }
+
+    @Test func feedURLsQuotedInProseOrOnOtherHostsDoNotIdentifyThePage() {
+        let page = """
+        <head><link rel="alternate" type="application/atom+xml" href="https://example.com/tags/17/feed.atom"></head>
+        <body><p>See /tags/27785/feed.atom</p><a href="/tags/99117/feed.atom">Another feed</a></body>
+        """
+        #expect(AO3FandomUnion.filterID(fromTagWorksPage: page, tagName: "Doctor Who (2005)") == nil)
     }
 
     @Test func theUnionClauseReachesTheSearchURL() {

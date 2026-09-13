@@ -88,6 +88,6 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 ### Native writing text and draft entry
 
 - `Features/Writing/WritingDraftsView.swift` loads authenticated draft/work/chapter forms through `AO3WorkActions`; it fences results by session generation.
-- `WritingTextEditor.swift`, `WritingHTMLWebView.swift`, and `WritingHTMLDocument.swift` share one formatted/source editor across work and chapter fields. The WebKit client world owns formatting; source HTML is preserved unless the user edits it. Unsupported markup remains editable in source mode.
+- `WritingTextEditor.swift` and `WritingNativeTextView.swift` share one native HTML buffer across work and chapter fields (`UITextView` on iOS, `NSTextView` on macOS). The tag toolbar inserts markup at the native selection, using the platform undo manager. Existing HTML is never parsed or normalized during editing.
 - `Services/WritingTextRecovery.swift` stores text-only, atomic local recovery copies in Application Support, keyed by account/target/field plus editor-session UUID. These are separate from AO3 drafts and the library backup/sync schema. The editor offers explicit restoration and deletion; no cookie or CSRF token is persisted.
 - `WritingFormFields.swift` reuses parsed form options and `AO3TagAutocomplete` for native required/tag controls.
