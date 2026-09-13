@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import WebKit
+import SwiftUI
 @testable import Kudos
 
 struct WritingTextEditorTests {
@@ -25,49 +25,81 @@ struct WritingTextEditorTests {
         #expect(Set(try store.copies(for: url).map(\.entry.text)).isSuperset(of: ["first composition", "second composition"]))
     }
 
-    @Test func unsupportedAndActiveMarkupStaysInSourceMode() {
-        #expect(WritingHTMLDocument.supportsRichEditing("<p class='keep'>Hello <em>world</em></p>"))
-        for html in ["<script>alert(1)</script>", "<img src='https://example.com/tracker'>",
-                     "<p onclick='alert(1)'>text</p>", "<a href='javascript:alert(1)'>link</a>",
-                     "<p style='color:red'>keep styling</p>", "<custom>keep this tag</custom>"] {
-            #expect(!WritingHTMLDocument.supportsRichEditing(html))
-        }
-        #expect(!WritingHTMLDocument.safeLink("javascript:alert(1)"))
-        #expect(WritingHTMLDocument.safeLink("https://archiveofourown.org/works/1"))
+    @Test func tagInsertionPreservesSelectedMarkupAndEscapesLinkAttributes() throws {
+        let selected = "<unknown data-x='1'>👩🏽‍💻 &amp; 世界</unknown>"
+        let insertion = try #require(WritingMarkup.insertion(tag: "strong", selected: selected))
+        #expect(insertion.text == "<strong>" + selected + "</strong>")
+        #expect(insertion.contentOffset == 8)
+        #expect(WritingMarkup.insertion(tag: "script", selected: selected) == nil)
+        #expect(WritingMarkup.insertion(tag: "a", selected: selected, link: "javascript:alert(1)") == nil)
+        let link = try #require(WritingMarkup.insertion(tag: "a", selected: "site",
+                                                       link: "https://example.com/?a=1&b=2"))
+        #expect(link.text == "<a href=\"https://example.com/?a=1&amp;b=2\">site</a>")
+        #expect(WritingMarkup.insertion(tag: "br", selected: "keep")?.text == "<br>keep")
     }
 
-    @Test @MainActor func webEditorPreservesUntouchedSourceAndEditsSelection() async throws {
-        let original = "<p class='keep'>Hello &amp; 世界</p>\n"
-        let controller = WritingHTMLController(text: original)
-        defer { controller.stop() }
-        for _ in 0..<100 where !controller.isReady { try await Task.sleep(for: .milliseconds(50)) }
-        #expect(controller.isReady)
+    @Test @MainActor func nativeEditorPreservesSourceSelectionUndoAndRecovery() async throws {
+        let original = "<p class='keep'>Hello 👩🏽‍💻 &amp; 世界</p>\n<custom>keep</custom>"
+        let controller = WritingTextController(text: original)
+        #if os(iOS)
+        let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIViewController()
+        window.rootViewController?.view.addSubview(controller.textView)
+        controller.textView.frame = window.bounds
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKey() }
+        controller.textView.becomeFirstResponder()
+        #else
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = controller.scrollView
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(controller.textView)
+        defer { window.orderOut(nil) }
+        #endif
         var emitted: String?
         controller.onChange = { emitted = $0 }
-        let web = controller.webView
-        _ = try await web.callAsyncJavaScript("window.writing.set(value, true)",
-                                             arguments: ["value": original], contentWorld: .defaultClient)
-        let source = try await web.callAsyncJavaScript("return document.getElementById('source').value",
-                                                      contentWorld: .defaultClient) as? String
-        #expect(source == original)
+        controller.setAppearance(.sepia, fontSize: 23)
+        controller.flush()
+        #expect(controller.text == original)
         #expect(emitted == nil)
-        _ = try await web.callAsyncJavaScript("""
-        const el = document.getElementById('source'); el.focus(); el.setSelectionRange(16, 21);
-        window.writing.command('strong', '');
-        """, contentWorld: .defaultClient)
-        let edited = try await web.callAsyncJavaScript("return document.getElementById('source').value",
-                                                      contentWorld: .defaultClient) as? String
-        #expect(edited == "<p class='keep'><strong>Hello</strong> &amp; 世界</p>\n")
-        _ = try await web.callAsyncJavaScript("window.writing.command('undo', '')", contentWorld: .defaultClient)
-        let undone = try await web.callAsyncJavaScript("return document.getElementById('source').value",
-                                                      contentWorld: .defaultClient) as? String
-        #expect(undone == original)
-        // Loading formatted mode must not emit a normalized replacement to the binding.
-        emitted = nil
-        _ = try await web.callAsyncJavaScript("window.writing.set(value, false)",
-                                             arguments: ["value": original], contentWorld: .defaultClient)
-        #expect(emitted == nil)
+        let selected = (original as NSString).range(of: "👩🏽‍💻 &amp; 世界")
+        #if os(iOS)
+        controller.textView.selectedRange = selected
+        #else
+        controller.textView.setSelectedRange(selected)
+        #endif
+        let undo = try #require(controller.textView.undoManager)
+        controller.command("strong")
+        try await Task.sleep(for: .milliseconds(50))
+        let edited = original.replacingOccurrences(of: "👩🏽‍💻 &amp; 世界",
+                                                  with: "<strong>👩🏽‍💻 &amp; 世界</strong>")
+        #expect(controller.text == edited)
+        #expect(emitted == edited)
+        #expect(undo.canUndo)
+        controller.command("undo")
+        #expect(controller.text == original)
+        #expect(emitted == original)
+        controller.command("redo")
+        #expect(controller.text == edited)
+        try await Task.sleep(for: .milliseconds(50))
+        controller.restore("<table><tr><td>Recovered</td></tr></table>")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(emitted == "<table><tr><td>Recovered</td></tr></table>")
+        controller.command("undo")
+        #expect(controller.text == edited)
+        #if os(iOS)
+        controller.textView.selectedRange = NSRange(location: (edited as NSString).length, length: 0)
+        controller.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
+        controller.textView.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
+        controller.flush()
+        #expect(controller.textView.markedTextRange == nil)
+        #expect(emitted == edited + "日本")
+        #endif
     }
+
 }
 
 /// Recovery copies are full chapters. Two rules keep them from becoming an
