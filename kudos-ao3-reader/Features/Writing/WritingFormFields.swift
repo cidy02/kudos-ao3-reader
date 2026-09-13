@@ -85,7 +85,7 @@ private struct WritingTagsEditor: View {
         }
         .cardList()
         .navigationTitle(title)
-        .subjectScreenWash(palette: theme.appTheme.subjectPalette(hue: theme.scopeHue))
+        .subjectScreenWash(palette: theme.scopePalette)
     }
 
     private func add(_ name: String) {

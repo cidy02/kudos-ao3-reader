@@ -63,8 +63,8 @@ struct SearchResultsHero: View {
     /// search names no subject, so it falls back to the app accent (spec 1m's
     /// rule for anything not scoped to a work).
     private var palette: SubjectPalette {
-        let hue = summary.subject.map { CoverArt.hue(for: $0) } ?? themeManager.scopeHue
-        return themeManager.appTheme.subjectPalette(hue: hue)
+        guard let subject = summary.subject else { return themeManager.scopePalette }
+        return themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: subject))
     }
 
     @ViewBuilder

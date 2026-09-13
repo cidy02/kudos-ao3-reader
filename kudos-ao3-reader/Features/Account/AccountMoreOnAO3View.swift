@@ -60,7 +60,7 @@ struct AccountMoreOnAO3View: View {
     private var selfGuttered: CGFloat { 0 }
 
     private var accountPalette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     private var header: some View {

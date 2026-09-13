@@ -204,6 +204,25 @@ enum CardListMetrics {
     /// tighter top-to-bottom than side-to-side.
     static let innerVertical: CGFloat = 16
     static let innerHorizontal: CGFloat = 16
+
+    /// The insets `.cardRow()` puts on the list row — content sits inside these.
+    static func rowInsets(verticalPadding: CGFloat, interCardSpacing: CGFloat) -> EdgeInsets {
+        let half = interCardSpacing / 2
+        return EdgeInsets(
+            top: half + verticalPadding,
+            leading: sideMargin + innerHorizontal,
+            bottom: half + verticalPadding,
+            trailing: sideMargin + innerHorizontal
+        )
+    }
+
+    /// The insets the *card* is drawn at, inside that same row. The vertical half
+    /// pushes neighbouring cards apart; the horizontal `sideMargin` holds them off
+    /// the screen edges.
+    static func cardInsets(interCardSpacing: CGFloat) -> EdgeInsets {
+        let half = interCardSpacing / 2
+        return EdgeInsets(top: half, leading: sideMargin, bottom: half, trailing: sideMargin)
+    }
 }
 
 /// Makes a List render as plain (ungrouped) over the themed backdrop, so each row's
@@ -240,14 +259,10 @@ private struct CardRow: ViewModifier {
     var interCardSpacing: CGFloat
 
     func body(content: Content) -> some View {
-        let half = interCardSpacing / 2
         content
             .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(
-                top: half + verticalPadding,
-                leading: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal,
-                bottom: half + verticalPadding,
-                trailing: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
+            .listRowInsets(CardListMetrics.rowInsets(
+                verticalPadding: verticalPadding, interCardSpacing: interCardSpacing
             ))
             .listRowBackground(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -272,10 +287,7 @@ private struct CardRow: ViewModifier {
                     // Inset the fill so adjacent cards leave `interCardSpacing` between
                     // them and `sideMargin` from the screen edges (and leave room for
                     // the shadow within the gap).
-                    .padding(EdgeInsets(
-                        top: half, leading: CardListMetrics.sideMargin,
-                        bottom: half, trailing: CardListMetrics.sideMargin
-                    ))
+                    .padding(CardListMetrics.cardInsets(interCardSpacing: interCardSpacing))
             )
     }
 
@@ -329,13 +341,9 @@ extension View {
         verticalPadding: CGFloat = CardListMetrics.innerVertical,
         interCardSpacing: CGFloat = CardListMetrics.interCardSpacing
     ) -> some View {
-        let half = interCardSpacing / 2
-        return listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(
-                top: half + verticalPadding,
-                leading: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal,
-                bottom: half + verticalPadding,
-                trailing: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
+        listRowSeparator(.hidden)
+            .listRowInsets(CardListMetrics.rowInsets(
+                verticalPadding: verticalPadding, interCardSpacing: interCardSpacing
             ))
             .listRowBackground(Color.clear)
     }

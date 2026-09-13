@@ -163,7 +163,7 @@ struct PrivacyDataView: View {
     /// The account's own hue, not a work's — every account surface is scoped to
     /// the app accent (spec 1m).
     private var accountPalette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     // MARK: The promise

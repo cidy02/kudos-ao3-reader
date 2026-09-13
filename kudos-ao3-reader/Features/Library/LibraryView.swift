@@ -484,7 +484,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             SubjectChip(
                 text: text,
                 style: .pill(isSelected: selected),
-                palette: themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+                palette: themeManager.scopePalette
             )
         }
         .buttonStyle(.plain)

@@ -151,7 +151,7 @@ struct AO3CollectionFormView: View {
     }
 
     private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     // MARK: Rows

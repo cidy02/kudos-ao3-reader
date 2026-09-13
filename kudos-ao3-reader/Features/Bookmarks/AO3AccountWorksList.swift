@@ -445,7 +445,7 @@ struct AO3AccountWorksList: View {
     /// which is the rule spec 1m states outright and every account surface
     /// follows.
     private var accountPalette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     /// Spec 1o prints "12 works · synced 2 min ago". The app does not record when

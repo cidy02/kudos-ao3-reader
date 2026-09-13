@@ -78,9 +78,9 @@ struct WritingTextEditor: View {
                 .buttonStyle(.bordered).padding()
             }
         }
-        .tint(theme.appTheme.subjectPalette(hue: theme.scopeHue).accent)
+        .tint(theme.scopePalette.accent)
         .navigationTitle(title)
-        .subjectScreenWash(palette: theme.appTheme.subjectPalette(hue: theme.scopeHue))
+        .subjectScreenWash(palette: theme.scopePalette)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Undo", systemImage: "arrow.uturn.backward") { controller?.command("undo") }

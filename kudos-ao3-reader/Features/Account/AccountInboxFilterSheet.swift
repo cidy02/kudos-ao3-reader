@@ -57,7 +57,7 @@ struct AccountInboxFilterSheet: View {
                 .padding(.bottom, 40)
                 .padding(.horizontal, SubjectMetrics.accountGutter)
             }
-            .subjectScreenWash(palette: themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue))
+            .subjectScreenWash(palette: themeManager.scopePalette)
             .navigationTitle("Inbox Filters")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)

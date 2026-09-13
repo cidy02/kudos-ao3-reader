@@ -221,7 +221,7 @@ struct LibrarySectionListView: View {
     /// scoped to the tab rather than to one work: its wash comes from the app
     /// accent (spec 1m's rule), while each row keeps its own fandom's hue.
     private var scopePalette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+        themeManager.scopePalette
     }
 
     private var headerTallyLine: String {

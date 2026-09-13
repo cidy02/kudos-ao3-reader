@@ -518,7 +518,7 @@ extension AO3PreferencesView {
     }
 
     private var accountPalette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+        themeManager.scopePalette
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }

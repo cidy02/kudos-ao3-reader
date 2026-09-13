@@ -147,7 +147,7 @@ struct ReadingInsightsView: View {
 
     /// The Library scope's hue, matching every other Library surface.
     private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     // MARK: The hours card

@@ -127,8 +127,8 @@ struct ReadingQueueBrowserView: View {
     /// every purpose the app has one today, and is what artboard 1h's palette
     /// comes from.
     private var subjectPalette: SubjectPalette {
-        let hue = selectedQueue.map { CoverArt.hue(for: $0.displayName) } ?? themeManager.scopeHue
-        return themeManager.appTheme.subjectPalette(hue: hue)
+        guard let selectedQueue else { return themeManager.scopePalette }
+        return themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: selectedQueue.displayName))
     }
 
     private var preservedWorks: [SavedWork] {

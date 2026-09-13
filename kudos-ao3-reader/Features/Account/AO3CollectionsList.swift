@@ -187,7 +187,7 @@ struct AO3CollectionsList: View {
     }
 
     private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: theme.scopeHue)
+        theme.scopePalette
     }
 
     private var signedOutPrompt: some View {

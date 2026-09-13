@@ -3,33 +3,65 @@ import Testing
 @testable import Kudos
 
 struct CardListMetricsTests {
-    /// A card's content must sit the same distance from all four of its edges.
-    ///
-    /// The two axes reach that distance by different arithmetic, which is how
-    /// they drifted apart in the first place. `CardRow` sets the row's
-    /// `listRowInsets` to `half + innerVertical` / `sideMargin + innerHorizontal`,
-    /// then draws the card as the row's *background* inset by `half` /
-    /// `sideMargin`. Each pair cancels — so the padding a reader actually sees
-    /// inside the card is `innerVertical` against `innerHorizontal`, and nothing
-    /// else. Counting the half-gap as part of the card (it falls between cards,
-    /// not inside one) is what made 10 look like 16 for as long as it did.
-    @Test func contentSitsTheSameDistanceFromEveryCardEdge() {
-        let half = CardListMetrics.interCardSpacing / 2
-        let rowInsetTop = half + CardListMetrics.innerVertical
-        let rowInsetLeading = CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
-
-        let insideCardVertically = rowInsetTop - half
-        let insideCardHorizontally = rowInsetLeading - CardListMetrics.sideMargin
-
-        #expect(insideCardVertically == insideCardHorizontally)
+    /// What a reader actually sees between a card's edge and its content, on each
+    /// of the four sides. Derived from the two inset sets `.cardRow()` really
+    /// applies — the row's, which content sits inside, minus the card's, which is
+    /// drawn as that row's background — rather than restated here, so the test
+    /// fails if either one moves.
+    private func paddingInsideCard(
+        verticalPadding: CGFloat = CardListMetrics.innerVertical,
+        interCardSpacing: CGFloat = CardListMetrics.interCardSpacing
+    ) -> EdgeInsets {
+        let row = CardListMetrics.rowInsets(
+            verticalPadding: verticalPadding, interCardSpacing: interCardSpacing
+        )
+        let card = CardListMetrics.cardInsets(interCardSpacing: interCardSpacing)
+        return EdgeInsets(
+            top: row.top - card.top,
+            leading: row.leading - card.leading,
+            bottom: row.bottom - card.bottom,
+            trailing: row.trailing - card.trailing
+        )
     }
 
-    /// The gap between two cards is the whole `interCardSpacing`, not half of it:
-    /// each card gives up `half` at its bottom and its neighbour gives up `half`
-    /// at its top. Pinned because it is the reason `half` is subtracted above —
-    /// if this were wrong, squaring the padding would have closed the gap instead.
+    /// Top against bottom. They come from the same two expressions, so this is
+    /// really a guard against someone giving one edge a special case later.
+    @Test func topAndBottomPaddingMatch() {
+        let padding = paddingInsideCard()
+        #expect(padding.top == padding.bottom)
+    }
+
+    /// Leading against trailing, for the same reason.
+    @Test func leadingAndTrailingPaddingMatch() {
+        let padding = paddingInsideCard()
+        #expect(padding.leading == padding.trailing)
+    }
+
+    /// And the two axes against each other — the one that was actually wrong.
+    /// `innerVertical` was 10 against `innerHorizontal`'s 16 until 2026-09-12,
+    /// because the half inter-card gap in the row's vertical insets reads like
+    /// part of the card's padding and is not: it falls between cards.
+    @Test func everyEdgeHasTheSamePadding() {
+        let padding = paddingInsideCard()
+        #expect(padding.top == padding.leading)
+        #expect(padding.bottom == padding.trailing)
+    }
+
+    /// The half-gap each card gives up at its top and bottom must add back up to
+    /// the whole `interCardSpacing` between two neighbours. This is what makes
+    /// subtracting it above correct — if the card were inset by the full spacing,
+    /// squaring the padding would have closed the gap between cards instead.
     @Test func neighbouringCardsLeaveTheFullInterCardSpacingBetweenThem() {
-        let half = CardListMetrics.interCardSpacing / 2
-        #expect(half + half == CardListMetrics.interCardSpacing)
+        let card = CardListMetrics.cardInsets(interCardSpacing: CardListMetrics.interCardSpacing)
+        #expect(card.bottom + card.top == CardListMetrics.interCardSpacing)
+    }
+
+    /// A caller that asks for its own vertical padding gets exactly that inside
+    /// the card, with the inter-card gap still outside it — `bareListRow` and
+    /// Account's compact control rows both rely on this.
+    @Test func aCustomVerticalPaddingLandsInsideTheCardUntouched() {
+        let padding = paddingInsideCard(verticalPadding: 4, interCardSpacing: 30)
+        #expect(padding.top == 4)
+        #expect(padding.bottom == 4)
     }
 }

@@ -70,7 +70,7 @@ struct AllReadingQueuesGridView: View {
     /// subject, so its wash takes the app's own accent scope — the same choice
     /// `LibrarySectionListView.scopePalette` makes for the same reason.
     private var organizerPalette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: themeManager.scopeHue)
+        themeManager.scopePalette
     }
 
     private var allWorks: [SavedWork] {
