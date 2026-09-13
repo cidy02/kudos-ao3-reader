@@ -232,6 +232,12 @@ struct PrivacyDataView: View {
         }
         SubjectRowSeparator()
         SubjectFormRow(
+            label: "Draft recovery",
+            value: byteLabel(footprint.draftRecoveryBytes),
+            isMonospaced: true
+        )
+        SubjectRowSeparator()
+        SubjectFormRow(
             label: "Caches",
             value: byteLabel(footprint.cacheBytes),
             isMonospaced: true
