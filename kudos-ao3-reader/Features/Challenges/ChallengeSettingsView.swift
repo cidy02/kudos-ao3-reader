@@ -15,6 +15,7 @@ struct ChallengeSettingsView: View {
     @Environment(ThemeManager.self) private var theme
 
     @State private var settingsForm: AO3ChallengeSettingsForm?
+    @State private var tagSetLinks: [AO3CollectionTagSetLink] = []
     @State private var signUpCount: Int = 0
     @State private var matchedCount: Int = 0
     @State private var unmatchedCount: Int = 0
@@ -120,6 +121,14 @@ struct ChallengeSettingsView: View {
             SectionRuleHeader(title: "Sign-up requirements")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             requirementsPanel.pageBodyRow(top: 8, gutter: gutter)
+        }
+
+        if !tagSetLinks.isEmpty {
+            Section {
+                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag set" : "Tag sets")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                tagSetsPanel.pageBodyRow(top: 8, gutter: gutter)
+            }
         }
 
         Section {
@@ -295,6 +304,35 @@ struct ChallengeSettingsView: View {
         .subjectPanel()
     }
 
+    /// The only route to artboard 1ch: `TagSetView` is addressed by a numeric id
+    /// that AO3 publishes on the **collection profile** page, not on the
+    /// collection show page. The fetch lives here rather than on
+    /// `AO3CollectionDetailView` deliberately — a tag set only means anything in
+    /// a challenge context, and hanging the request off collection detail would
+    /// spend an extra AO3 request on every collection anyone opens, the majority
+    /// of which have no challenge at all. `docs/AO3_NETWORKING_POLICY.md` treats
+    /// request politeness as a product requirement, so the cost sits on the two
+    /// screens that use it.
+    ///
+    /// `isModerator: false` here: 1by is the read-only view of the challenge,
+    /// reachable by anyone who can see the collection, so it cannot honestly
+    /// claim the reader moderates the tag set. The kicker says "owner", which is
+    /// what `TagSetView` shows for a plain reader. 1cf passes `true` instead.
+    private var tagSetsPanel: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
+                if index > 0 { SubjectRowSeparator() }
+                NavigationLink {
+                    TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: false)
+                } label: {
+                    SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .subjectPanel()
+    }
+
     private var assignmentsPanel: some View {
         VStack(spacing: 0) {
             NavigationLink {
@@ -452,6 +490,15 @@ struct ChallengeSettingsView: View {
             )
             let form = try await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request)
             settingsForm = form
+
+            // Best-effort: a collection with no tag set is the common case, and a
+            // failed profile fetch must not take the whole screen down with it.
+            let profileRequest = try? auth.authenticatedRequest(
+                for: AO3CollectionURL.profile(slug: collectionSlug)
+            )
+            tagSetLinks = (try? await AO3Client.shared.collectionTagSets(
+                slug: collectionSlug, request: profileRequest
+            )) ?? []
 
             // Load signups count
             if let signUpsRequest = try? auth.authenticatedRequest(

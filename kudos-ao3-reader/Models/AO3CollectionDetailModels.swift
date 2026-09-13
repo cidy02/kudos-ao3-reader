@@ -151,6 +151,17 @@ nonisolated struct AO3CollectionShow: Hashable, Sendable, Identifiable {
     var closeOpenOnAO3: URL { AO3CollectionURL.edit(slug: collection.name) }
 }
 
+/// A tag set the collection's challenge draws its nominations from, as linked
+/// from the **collection profile** page (`collection_profile#show` renders a
+/// `Tag Set:` / `Tag Sets:` definition row only when the collection has a
+/// challenge). The challenge settings form's `tag_sets_to_add` field is a text
+/// field of tag set *names*, so the profile's `<a href="/tag_sets/123">` is the
+/// only place AO3 hands out the numeric id `TagSetView` needs.
+nonisolated struct AO3CollectionTagSetLink: Hashable, Sendable, Identifiable {
+    var id: Int
+    var title: String
+}
+
 nonisolated struct AO3CollectionDashboard: Hashable, Sendable {
     var profileURL: URL? = nil
     var worksURL: URL? = nil

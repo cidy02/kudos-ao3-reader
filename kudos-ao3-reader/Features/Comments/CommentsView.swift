@@ -99,6 +99,19 @@ struct CommentsView: View {
         "\(auth.sessionGeneration)|\(auth.isLoggedIn)|\(auth.username ?? "")"
     }
 
+    private var gutter: CGFloat { SubjectMetrics.accountGutter }
+
+    /// The page hue, derived exactly the way Work Detail derives its own, so a
+    /// work and its comments wash in one colour rather than two near-misses.
+    private var palette: SubjectPalette {
+        theme.appTheme.subjectPalette(
+            hue: CoverArt.workHue(
+                fandoms: model.workContext.fandoms,
+                title: model.workContext.title
+            )
+        )
+    }
+
     var body: some View {
         if model.belongsToCurrentSession(auth: auth) {
             commentsBody
@@ -109,13 +122,28 @@ struct CommentsView: View {
     }
 
     private var commentsBody: some View {
-        ScrollViewReader { proxy in
+        // Walked once here and handed down, rather than recomputed by the strip
+        // and again by the section header: this whole body re-evaluates on every
+        // swipe, which is the cost `conversationRows` exists to keep down.
+        let figures = loadedFigures
+        return ScrollViewReader { proxy in
             List {
-                infoSection
-                scopeSection
-                chapterSection
-                sortSection
-                contentSections(scrollProxy: proxy)
+                Section {
+                    header.pageBodyRow(top: 18, gutter: 0)
+                    if model.page != nil {
+                        SubjectStatStrip(cells: signalCells(figures), palette: palette)
+                            .pageBodyRow(top: 14, gutter: gutter)
+                        if let note = signalScopeNote {
+                            Text(note)
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Color.secondary.opacity(0.7))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .pageBodyRow(top: 8, gutter: gutter + 4)
+                        }
+                    }
+                    filterRail.pageBodyRow(top: 16, gutter: gutter)
+                }
+                contentSections(scrollProxy: proxy, figures: figures)
                 if case .loaded = model.phase {
                     // The safe-area inset reserves the floating CTA's footprint; this
                     // final breathing room also lets the last long comment scroll fully
@@ -134,10 +162,13 @@ struct CommentsView: View {
             // so a row can't measure itself in time. Measure once here.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { commentsWidth = $0 }
             .environment(\.commentsContentWidth, commentsWidth)
+            // The screen states its own name in `header` now (spec 1f), so the bar
+            // is emptied rather than titled. macOS has no such bar to empty — its
+            // window still needs a title — hence the one platform fork.
+            #if os(macOS)
             .navigationTitle("Comments")
-            #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
             #endif
+            .subjectScreenWash(palette: palette, washHeight: 480)
             .navigationDestination(item: $pushedThread) { route in
                 CommentThreadScreen(
                     rootID: route.commentID,
@@ -148,7 +179,7 @@ struct CommentsView: View {
                     onFocusOutsideSubtree: { scrollToComment($0, proxy: proxy) }
                 )
             }
-            .hidesFloatingTabBar()
+            // `subjectScreenWash` already hides the floating tab bar.
             .safeAreaInset(edge: .bottom) { writeCommentBar }
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
             .task {
@@ -381,192 +412,231 @@ struct CommentsView: View {
         )
     }
 
-    // MARK: Info card
+    // MARK: Header
 
-    /// Reuses Work Detail's own overview-card pattern (title/author/fandom/stats
-    /// row via `WorkStatLabel`) rather than inventing a second one. No cover
-    /// thumbnail — most AO3 works don't have one, and Work Detail's card omits
-    /// it too. Comment count joins rating/chapters once the page has loaded.
-    private var infoSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(model.workContext.title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if !model.workAuthors.isEmpty {
-                    // A real Label (not a hand-rolled HStack) so the icon lines up
-                    // with the Fandoms Label right below it — a raw HStack can't
-                    // reproduce Label's exact icon size/gap/baseline alignment.
-                    Label {
-                        AO3AuthorBylineView(
-                            names: model.workAuthors,
-                            identities: model.workAuthorIdentities,
-                            includesBy: false,
-                            font: .subheadline,
-                            onOpenRoute: openAuthor
-                        )
-                    } icon: {
-                        Image(systemName: "person")
-                            .foregroundStyle(.secondary)
-                    }
-                    // A Label sizes its icon from the *ambient* font, so the
-                    // `.subheadline` passed to the byline alone left this glyph
-                    // at `.body` — bigger than, and off the baseline of, the
-                    // Fandoms icon below. Same fix as `WorkIdentityCard`, which
-                    // this card deliberately mirrors.
-                    .font(.subheadline)
-                }
-
-                if !model.workContext.fandoms.isEmpty {
-                    Label(
-                        model.workContext.fandoms.joined(separator: ", "),
-                        systemImage: "books.vertical"
-                    )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                }
-
-                FlowLayout(spacing: 10, rowSpacing: 6) {
-                    if !model.workContext.rating.isEmpty {
-                        WorkStatLabel(text: model.workContext.rating, symbol: "checkmark.shield")
-                    }
-                    if !model.workContext.chapters.isEmpty {
-                        WorkStatLabel(
-                            text: model.workContext.chapters,
-                            symbol: "book",
-                            accessibilityLabel: "Chapters \(model.workContext.chapters)"
-                        )
-                    }
-                    if let total = model.page?.totalComments {
-                        WorkStatLabel(
-                            text: total.formatted(),
-                            symbol: "bubble.left",
-                            accessibilityLabel: "\(total.formatted()) comments"
-                        )
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 4)
+    /// Spec 1f's page header: the chapter as kicker, the work at 32pt, the
+    /// byline underneath. It replaces the Work-Detail-style overview card that
+    /// used to open this screen — the rating/chapters figures it carried belong
+    /// to the work's own page, and the artboard spends that space on figures
+    /// about the *comments* instead (see `signalCells`).
+    ///
+    /// The byline goes through the trailing slot rather than the plain-string
+    /// `subtitle`, for the same reason `WorkDetailIdentityHeader` does: it has to
+    /// stay a real `AO3AuthorBylineView` so every co-author is still tappable
+    /// through to their profile, and — because this screen can be modal — so the
+    /// tap still routes through `openAuthor`'s dismiss-then-push queue.
+    private var header: some View {
+        SubjectHeaderBlock(
+            kicker: headerKicker,
+            title: model.workContext.title,
+            palette: palette,
+            gutter: gutter,
+            hasTrailing: hasByline
+        ) {
+            AO3AuthorBylineView(
+                names: model.workAuthors,
+                identities: model.workAuthorIdentities,
+                includesBy: false,
+                font: .system(size: 15.5),
+                expandsHitTarget: false,
+                onOpenRoute: openAuthor
+            )
         }
-        .cardRow()
     }
 
-    // MARK: Scope
-
-    /// All/By Chapter. Its own card, separate from the info card above and the
-    /// chapter selector below, matching the mockup's distinct control cards.
-    private var scopeSection: some View {
-        Section {
-            // The native segmented style — matches Reader Settings' own
-            // Scrolled/Paged control exactly, rather than a bespoke capsule.
-            Picker("Scope", selection: $model.scope) {
-                ForEach(CommentsModel.Scope.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityLabel("Comment scope")
-        }
-        .cardRow()
+    private var hasByline: Bool {
+        !model.workAuthors.isEmpty || !model.workAuthorIdentities.isEmpty
     }
 
-    // MARK: Sort
-
-    /// Local-only order menu (AO3 has no server sort). A quiet utility row, not
-    /// a card — it floats directly on the backdrop, right above the comments it
-    /// orders, rather than sharing a card with Scope (which answers a different
-    /// question: "which comments am I viewing").
-    private var sortSection: some View {
-        Section {
-            HStack(spacing: 4) {
-                Menu {
-                    Button {
-                        model.newestFirst = false
-                    } label: {
-                        if !model.newestFirst {
-                            Label("Oldest First", systemImage: "checkmark")
-                        } else {
-                            Text("Oldest First")
-                        }
-                    }
-                    Button {
-                        model.newestFirst = true
-                    } label: {
-                        if model.newestFirst {
-                            Label("Newest First", systemImage: "checkmark")
-                        } else {
-                            Text("Newest First")
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(model.newestFirst ? "Newest First" : "Oldest First")
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.semibold))
-                    }
-                }
-                .accessibilityLabel("Sort comments")
-                .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
-                // Sibling controls elsewhere in this file reserve a 44pt hit
-                // target; this Menu trigger's visible chrome was falling short
-                // of it (HIG audit UI-3).
-                .minimumHitTarget()
-                Spacer()
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .tint(.secondary)
+    /// What this screen is scoped to: the chapter when the reader has picked
+    /// one, and the screen's own name when they are looking at the whole work.
+    private var headerKicker: String {
+        if model.scope == .byChapter, let chapter = model.selectedChapter {
+            return "Chapter \(chapter.position)"
         }
-        // Aligned with card CONTENT (not card edges) — the same inset `.cardRow()`
-        // gives the text inside the cards above/below — so this reads as part of
-        // the same column rather than a stray indent.
-        .listRowInsets(EdgeInsets(
-            top: 2,
-            leading: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal,
-            bottom: 10,
-            trailing: CardListMetrics.sideMargin + CardListMetrics.innerHorizontal
+        return "Comments"
+    }
+
+    // MARK: Signal strip
+
+    /// The three figures the strip counts rather than reads off AO3.
+    private struct LoadedFigures {
+        var threads = 0
+        var comments = 0
+        var mine = 0
+        var latest: Date?
+    }
+
+    /// One walk over the loaded page for all three.
+    ///
+    /// Deliberately a single pass: this is evaluated from `commentsBody`, which
+    /// re-runs whenever the list does, and three separate `flattened` walks of
+    /// the same tree is the kind of cost `conversationRows` was introduced to
+    /// avoid. Bounded by one AO3 page of comments, not by the work.
+    private var loadedFigures: LoadedFigures {
+        var figures = LoadedFigures()
+        for root in model.displayThreads {
+            figures.threads += 1
+            for comment in root.flattened {
+                figures.comments += 1
+                // AO3 renders an Edit action only on the signed-in account's own
+                // comments, which is the same per-session signal
+                // `FlattenedReply.parentIsViewer` takes — and unlike matching
+                // the byline against `auth.username` it still holds for a comment
+                // left under a non-default pseud.
+                if comment.editPath != nil { figures.mine += 1 }
+                if let posted = comment.postedAt, posted > (figures.latest ?? .distantPast) {
+                    figures.latest = posted
+                }
+            }
+        }
+        return figures
+    }
+
+    /// Artboard 1f's COMMENTS / THREADS / YOURS / LATEST strip, minus any cell
+    /// this screen cannot source.
+    ///
+    /// Only COMMENTS is AO3's own: `AO3CommentsPage.totalComments` is the
+    /// work-level figure parsed off the page's stats line. AO3 publishes no
+    /// thread count, no per-viewer count and no "last comment at", so the other
+    /// three are counted from the page in front of the reader. `signalScopeNote`
+    /// says so out loud whenever that is less than the whole work — a figure
+    /// that looks authoritative and is not is the one failure this screen must
+    /// not ship.
+    private func signalCells(_ figures: LoadedFigures) -> [SubjectStatStrip.Cell] {
+        var cells: [SubjectStatStrip.Cell] = []
+
+        if let total = model.page?.totalComments {
+            cells.append(SubjectStatStrip.Cell(
+                value: total.formatted(),
+                label: "Comments",
+                accessibilityText: "\(total.formatted()) comments on AO3"
+            ))
+        }
+
+        cells.append(SubjectStatStrip.Cell(
+            value: figures.threads.formatted(),
+            label: "Threads",
+            accessibilityText: "\(figures.threads.formatted()) conversations loaded"
         ))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
+
+        // Dropped rather than printed as a permanent zero when signed out: AO3
+        // emits no ownership signal at all for an anonymous reader, so the cell
+        // could only ever say "none" and would be reporting the session, not the
+        // comments.
+        if auth.isLoggedIn {
+            cells.append(SubjectStatStrip.Cell(
+                value: figures.mine.formatted(),
+                label: "Yours",
+                isHighlighted: figures.mine > 0,
+                accessibilityText: "\(figures.mine.formatted()) of the loaded comments are yours"
+            ))
+        }
+
+        if let latest = figures.latest {
+            cells.append(SubjectStatStrip.Cell(
+                value: latest.formatted(.relative(presentation: .numeric, unitsStyle: .narrow)),
+                label: "Latest",
+                accessibilityText: "Newest loaded comment "
+                    + latest.formatted(.relative(presentation: .named))
+            ))
+        }
+
+        return cells
     }
 
-    // MARK: Chapter selector
+    /// Printed under the strip whenever the loaded page is not the whole work.
+    private var signalScopeNote: String? {
+        guard let page = model.page, page.totalPages > 1 else { return nil }
+        return "Threads, yours and latest count this page. AO3 pages its comments, "
+            + "and only the comment total is the whole work’s."
+    }
 
-    /// Its own card, not glued onto the info card — matches the mockup, and
-    /// reads more clearly as "which comments am I viewing" rather than as
-    /// metadata about the work.
-    @ViewBuilder
-    private var chapterSection: some View {
-        if model.scope == .byChapter {
-            Section {
-                Button {
-                    showingChapterPicker = true
-                } label: {
-                    HStack {
-                        Label(model.selectedChapter?.displayName ?? "Choose a chapter",
-                              systemImage: "book")
-                            .lineLimit(1)
-                        Spacer()
-                        Image(systemName: "chevron.down")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Browse comments by chapter")
-                .accessibilityValue(model.selectedChapter?.displayName ?? "No chapter selected")
+    // MARK: Chapter + sort
+
+    /// The artboard's two dropdown pills, under the signal strip.
+    ///
+    /// The All / By Chapter segmented picker is gone: it asked the same question
+    /// the chapter control answers, and the sheet this pill opens already lists
+    /// "All Comments" above the chapters. One control, both behaviours, and the
+    /// pill itself states which one is in force.
+    private var filterRail: some View {
+        HStack(spacing: 7) {
+            Button {
+                showingChapterPicker = true
+            } label: {
+                SubjectChip(
+                    text: chapterPillTitle,
+                    style: .pill(isSelected: model.scope == .byChapter),
+                    systemImage: "book",
+                    trailingImage: "chevron.down",
+                    palette: palette
+                )
             }
-            .cardRow()
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel("Browse comments by chapter")
+            .accessibilityValue(chapterPillTitle)
+
+            sortPill
+
+            Spacer(minLength: 0)
         }
+    }
+
+    /// Local-only order menu — AO3 has no server sort, so this reorders what the
+    /// model fetches rather than asking for a different ordering.
+    private var sortPill: some View {
+        Menu {
+            Button {
+                model.newestFirst = false
+            } label: {
+                if !model.newestFirst {
+                    Label("Oldest First", systemImage: "checkmark")
+                } else {
+                    Text("Oldest First")
+                }
+            }
+            Button {
+                model.newestFirst = true
+            } label: {
+                if model.newestFirst {
+                    Label("Newest First", systemImage: "checkmark")
+                } else {
+                    Text("Newest First")
+                }
+            }
+        } label: {
+            SubjectChip(
+                text: model.newestFirst ? "Newest" : "Oldest",
+                style: .pill(isSelected: false),
+                systemImage: "arrow.up.arrow.down",
+                trailingImage: "chevron.down",
+                palette: palette
+            )
+        }
+        .buttonStyle(.plain)
+        // Sibling controls elsewhere in this file reserve a 44pt hit target; a
+        // 30pt pill falls short of it on its own (HIG audit UI-3).
+        .minimumHitTarget()
+        .accessibilityLabel("Sort comments")
+        .accessibilityValue(model.newestFirst ? "Newest First" : "Oldest First")
+    }
+
+    /// Short by design — the spec's own "Chapter 4", not `displayName`'s
+    /// "Chapter 4 · A Very Long Chapter Title", which in a pill can only truncate.
+    private var chapterPillTitle: String {
+        guard model.scope == .byChapter else { return "All comments" }
+        guard let chapter = model.selectedChapter else { return "By chapter" }
+        return "Chapter \(chapter.position)"
     }
 
     // MARK: Content
 
     @ViewBuilder
-    private func contentSections(scrollProxy: ScrollViewProxy) -> some View {
+    private func contentSections(
+        scrollProxy: ScrollViewProxy, figures: LoadedFigures
+    ) -> some View {
         switch model.phase {
         case .idle, .loading:
             Section {
@@ -604,6 +674,14 @@ struct CommentsView: View {
                 }
                 .cardRow()
             } else {
+                Section {
+                    // The count is what is actually under the rule — every loaded
+                    // comment, replies included — not the work's total, which the
+                    // strip above already prints from AO3's own figure. Omitted
+                    // entirely when there is nothing to head.
+                    SectionRuleHeader(title: "Comments", count: figures.comments)
+                        .pageBodyRow(top: 18, gutter: 0)
+                }
                 // One flat, lazy ForEach over rows the model already resolved —
                 // no nested ForEach and no per-pass allocation, so a swipe
                 // re-evaluating this body stays cheap.
@@ -716,11 +794,15 @@ struct CommentsView: View {
     @ViewBuilder
     private var writeCommentBar: some View {
         if case .loaded = model.phase {
-            // Floats over the page backdrop — no opaque slab. The safe-area inset
-            // (plus the list's trailing spacer) keeps content from ever sitting
-            // underneath it; the soft shadow does the lifting. Shown whether or
-            // not the user is signed in: logged out, it opens the AO3 login sheet
-            // instead of composing — it must never be a dead end.
+            // Spec 1f's centred 44pt pill, in the page's own accent rather than the
+            // app tint — this is the one filled control on a washed screen, which
+            // is exactly what `solidButton*` names. Still floating over the page
+            // backdrop with no opaque slab behind it: the safe-area inset (plus the
+            // list's trailing spacer) keeps content from sitting underneath, and
+            // the artboard's scrim would put the slab back. Shown whether or not
+            // the reader is signed in — logged out it opens the AO3 login sheet
+            // instead of composing, so it is never a dead end.
+            let title = auth.isLoggedIn ? "Write a comment" : "Log in to comment"
             Button {
                 if auth.isLoggedIn {
                     model.startComposer(auth: auth)
@@ -728,24 +810,32 @@ struct CommentsView: View {
                     showingLogin = true
                 }
             } label: {
-                Label(
-                    auth.isLoggedIn ? "Write a comment" : "Log in to comment",
-                    systemImage: auth.isLoggedIn ? "pencil" : "person.crop.circle.badge.questionmark"
-                )
-                .font(.headline)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 6)
+                HStack(spacing: 9) {
+                    Image(systemName: auth.isLoggedIn
+                        ? "pencil" : "person.crop.circle.badge.questionmark")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .foregroundStyle(palette.solidButtonLabel)
+                .padding(.horizontal, 20)
+                .frame(height: 44)
+                .background(Capsule().fill(palette.accent))
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
+            .buttonStyle(.plain)
             .disabled(model.isOffline)
+            // `.plain` draws no disabled state of its own, unlike the
+            // `.borderedProminent` this replaced — so the offline dimming is drawn
+            // here rather than quietly lost with the button style.
+            .opacity(model.isOffline ? 0.45 : 1)
             // Match the theme's card-shadow language: Dark/OLED are shadow-free
-            // (the red capsule already pops there, and a shadow can't read against
-            // a near-black or true-black backdrop anyway); Light/Sepia get the
-            // soft lift.
+            // (the accent capsule already pops there, and a shadow can't read
+            // against a near-black or true-black backdrop anyway); Light/Sepia get
+            // the soft lift.
             .shadow(
-                color: theme.appTheme == .dark || theme.appTheme == .oled
-                    ? .clear : .black.opacity(0.2),
+                color: theme.appTheme.isDarkFamily ? .clear : .black.opacity(0.2),
                 radius: 10, y: 3
             )
             // The pill hugs its own label instead of stretching edge to edge —
@@ -758,7 +848,7 @@ struct CommentsView: View {
             // padding so the pill doesn't collide with the last comment.
             .padding(.top, 2)
             .padding(.bottom, 0)
-            .accessibilityLabel(auth.isLoggedIn ? "Write a comment" : "Log in to comment")
+            .accessibilityLabel(title)
         }
     }
 
@@ -809,7 +899,15 @@ struct CommentsView: View {
 
                     ForEach(model.chapters) { chapter in
                         Button {
+                            // Chapter first, scope second. Both changes fire their
+                            // own `onChange`, and each of those cancels the task the
+                            // other started — so whichever order SwiftUI delivers
+                            // them in, exactly one load survives. Setting scope
+                            // first would instead let its handler run with no
+                            // chapter chosen, which is the branch that assigns one
+                            // itself and reloads a second time.
                             model.selectedChapter = chapter
+                            model.scope = .byChapter
                             showingChapterPicker = false
                         } label: {
                             HStack {
@@ -835,6 +933,12 @@ struct CommentsView: View {
             }
             .appThemedScroll()
             .appThemedRows()
+            // The chapter index used to be fetched only as a side effect of
+            // switching scope to By Chapter. The pill that opens this sheet can
+            // now be tapped while the scope is still All, so the sheet asks for
+            // the index itself — `loadChaptersIfNeeded` is idempotent and returns
+            // immediately once it holds one.
+            .task { await model.loadChaptersIfNeeded(auth: auth) }
             .overlay {
                 if model.chapters.isEmpty {
                     if model.chaptersFailed {
@@ -1048,53 +1152,62 @@ struct CommentComposerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draftSaveTask: Task<Void, Never>?
     @FocusState private var editorFocused: Bool
+    /// The field's live selection, handed to `CommentMarkup` so a format button
+    /// wraps what the reader highlighted instead of appending at the end.
+    @State private var selection: TextSelection?
+    @State private var showingFormattingTray = false
 
     private var isReply: Bool { model.composerParent != nil }
     private var isEdit: Bool { model.composerEditTarget != nil }
 
+    /// AO3's comment field is 10,000 characters and rejects the whole POST past
+    /// it, which is why the budget is a real gate here and not just a readout —
+    /// a request that can only come back as an error is not worth spending.
+    ///
+    /// Counted in `Character`s, which is never more than the codepoints AO3
+    /// counts, so this can refuse only what AO3 would also refuse.
+    private static let characterLimit = 10_000
+
+    private var remainingCharacters: Int {
+        Self.characterLimit - model.composerText.count
+    }
+
+    /// Spec 1ba's header title. "Reply to <name>" rather than a bare "Reply":
+    /// the sheet is a medium detent over a thread, and which comment is being
+    /// answered is the thing the reader most needs restated.
     private var composerTitle: String {
-        if isEdit { return "Edit Comment" }
-        return isReply ? "Reply" : "New Comment"
+        if isEdit { return "Edit comment" }
+        guard let parent = model.composerParent else { return "New comment" }
+        return "Reply to \(parent.author)"
+    }
+
+    /// The same hue the list behind this sheet washes in — taken from the
+    /// model's own work context so the rail on the quoted parent is the colour
+    /// of the thread it came out of.
+    private var palette: SubjectPalette {
+        theme.appTheme.subjectPalette(
+            hue: CoverArt.workHue(
+                fandoms: model.workContext.fandoms,
+                title: model.workContext.title
+            )
+        )
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let parent = model.composerParent {
-                        parentQuote(parent)
-                    }
-                    // An unmistakably-editable field: card surface (not a murky
-                    // gray slab), a hairline that brightens with focus, a legible
-                    // placeholder, and the cursor ready on open.
-                    TextEditor(text: $model.composerText)
-                        .frame(minHeight: 180, maxHeight: 260)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
-                        .background(
-                            theme.appTheme.cardSurface,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(
-                                    editorFocused ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12),
-                                    lineWidth: editorFocused ? 1.5 : 1
-                                )
-                        }
-                        .overlay(alignment: .topLeading) {
-                            if model.composerText.isEmpty {
-                                Text(isReply ? "Write your reply…" : "Share your thoughts…")
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 13)
-                                    .padding(.vertical, 16)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                        .focused($editorFocused)
-                        .disabled(model.submissionGuard.phase.isBusy)
-                        .accessibilityLabel(isEdit ? "Edit comment text" : "Comment text")
+            // A plain VStack, not a ScrollView: the artboard's field takes every
+            // point the sheet has left over, and a scroll view would let it
+            // collapse to its content instead. What scrolls is the field.
+            VStack(spacing: 0) {
+                if let parent = model.composerParent {
+                    parentQuote(parent)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                }
 
+                editor
+
+                VStack(alignment: .leading, spacing: 8) {
                     if !isReply, !isEdit, model.scope == .byChapter {
                         // Honesty note: AO3's work-level comment form is the only
                         // one Kudos posts to; AO3 files it under the newest chapter.
@@ -1104,14 +1217,35 @@ struct CommentComposerSheet: View {
                     }
 
                     statusBanner
+
+                    identityRow
                 }
-                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
             }
-            .appThemedScroll()
             .navigationTitle(composerTitle)
             #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
+            // Pinned to the sheet's bottom edge and, because a bottom safe-area
+            // inset rides the keyboard, directly above the keys — which is all
+            // artboard 1be asks for beyond 1ba.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                CommentFormatBar(text: $model.composerText, selection: $selection) {
+                    showingFormattingTray = true
+                }
+            }
+            .sheet(isPresented: $showingFormattingTray, onDismiss: {
+                // Put the cursor back. Closing the tray onto a sheet with no
+                // keyboard, after picking a tag that just moved the caret, is
+                // otherwise a dead stop.
+                editorFocused = true
+            }) {
+                CommentFormattingTray(text: $model.composerText, selection: $selection)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -1159,39 +1293,109 @@ struct CommentComposerSheet: View {
                 editorFocused = true
             }
         }
+        // `subjectWash`, not `subjectScreenWash`: the latter also empties the
+        // navigation bar, which is where Cancel and Post live on this sheet.
+        // Applied under the presentation modifiers so those stay outermost.
+        .subjectWash(palette, height: 320)
+        // Two numbers, not two layouts (spec 1be): `.medium` is the artboard's
+        // 462pt of sheet, and the system re-lays it out at the shorter height on
+        // its own once the keyboard is up. A literal `.height(462)` would be one
+        // device's number pinned to every screen size.
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(model.submissionGuard.phase.isBusy)
     }
 
+    /// The field, taking every point the sheet has left between the quoted
+    /// parent and the identity line. No card and no focus hairline, unlike the
+    /// pre-redesign composer: the sheet *is* the field here, so a bordered box
+    /// inside it was a second frame around the same thing.
+    private var editor: some View {
+        TextEditor(text: $model.composerText, selection: $selection)
+            .font(.system(size: 15))
+            .lineSpacing(3)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .topLeading) {
+                if model.composerText.isEmpty {
+                    // Offset past `TextEditor`'s own internal text inset, so the
+                    // placeholder sits exactly where the first character will.
+                    Text(isReply ? "Write your reply…" : "Share your thoughts…")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 17)
+                        .padding(.top, 18)
+                        .allowsHitTesting(false)
+                }
+            }
+            .focused($editorFocused)
+            .disabled(model.submissionGuard.phase.isBusy)
+            .accessibilityLabel(isEdit ? "Edit comment text" : "Comment text")
+    }
+
+    /// Who this posts as, and how much of AO3's field is left (spec 1ba).
+    private var identityRow: some View {
+        HStack(spacing: 10) {
+            Text(auth.username.map { "as \($0)" } ?? "Not signed in")
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 0)
+
+            Text("\(remainingCharacters.formatted()) left")
+                .foregroundStyle(remainingCharacters < 0 ? Color.red : Color.secondary)
+        }
+        .font(.system(size: 11.5))
+        .monospacedDigit()
+        .foregroundStyle(Color.secondary)
+        .accessibilityElement(children: .combine)
+    }
+
     private var canPost: Bool {
         !model.submissionGuard.phase.isBusy
             && !model.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && remainingCharacters >= 0
             && auth.isLoggedIn
     }
 
+    /// The comment being answered, kept above the field — the reason 1ba is a
+    /// medium detent rather than a full sheet.
+    ///
+    /// No avatar, unlike the pre-redesign quote: the artboard gives this block
+    /// one accent line and three of body, and at the medium detent a 32pt avatar
+    /// came out of the parent's own words. The name is still a button to the same
+    /// profile route through the same `openParentAuthor`, so the destination
+    /// keeps its way in — only the second tap target for it is gone.
     private func parentQuote(_ parent: AO3Comment) -> some View {
-        HStack(alignment: .top, spacing: 9) {
-            // Same profile entry as thread avatars / bylines when resolvable.
-            CommentAuthorAvatarButton(
-                comment: parent,
-                size: 32,
-                onOpenAuthor: openParentAuthor
-            )
-            VStack(alignment: .leading, spacing: 4) {
-                replyContextLabel(for: parent)
-                Text(parent.bodyText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            replyContextLabel(for: parent)
+            Text(parent.bodyText)
+                .font(.system(size: 12.5))
+                .lineSpacing(2)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(theme.appTheme.glassFill(0.09))
+        .overlay(alignment: .leading) {
+            // The rail, in the page's own accent — the same colour the thread
+            // this reply hangs off is drawn in, so the quote reads as lifted out
+            // of it rather than pasted in.
+            Rectangle()
+                .fill(palette.accent)
+                .frame(width: 2)
+                .accessibilityHidden(true)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
-    /// "Replying to {author}" — name opens the profile when the parent has a route.
+    /// "{author} · {chapter}" in the page accent — the parent's own byline. The
+    /// "Replying to" half of it moved into the sheet title (spec 1ba), so
+    /// repeating it here would say the same thing twice in 40 points of sheet.
     @ViewBuilder
     private func replyContextLabel(for parent: AO3Comment) -> some View {
         let chapterSuffix: String = {
@@ -1202,27 +1406,24 @@ struct CommentComposerSheet: View {
         }()
         if let route = parent.profileRoute {
             HStack(spacing: 0) {
-                Text("Replying to ")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
                 Button {
                     openParentAuthor(route)
                 } label: {
                     Text(parent.author)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(palette.accent)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(parent.author)'s profile")
                 if !chapterSuffix.isEmpty {
                     Text(chapterSuffix)
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
             }
         } else {
-            Text(replyContext(for: parent))
-                .font(.caption.weight(.semibold))
+            Text(parent.author + chapterSuffix)
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
     }
@@ -1241,13 +1442,6 @@ struct CommentComposerSheet: View {
         guard router.requestAuthorProfileAfterDismiss(route) else { return }
         dismiss()
         dismissCommentsView?()
-    }
-
-    private func replyContext(for parent: AO3Comment) -> String {
-        if let chapter = parent.chapterLabel, !chapter.isEmpty {
-            return "Replying to \(parent.author) · \(chapter)"
-        }
-        return "Replying to \(parent.author)"
     }
 
     @ViewBuilder

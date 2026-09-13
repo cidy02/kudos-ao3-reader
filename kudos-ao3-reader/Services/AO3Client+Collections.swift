@@ -14,6 +14,17 @@ extension AO3Client {
         return try Self.parseCollectionShow(await html(url, request: request), slug: slug)
     }
 
+    /// Tag sets linked from the collection **profile** page. Separate from
+    /// `collectionShow` on purpose: `collections#show` renders only header +
+    /// works + bookmarks, so the `Tag Set:` row exists on the profile page
+    /// alone and cannot ride along on the show fetch.
+    func collectionTagSets(
+        slug: String, request: URLRequest? = nil
+    ) async throws -> [AO3CollectionTagSetLink] {
+        let url = AO3CollectionURL.profile(slug: slug)
+        return try Self.parseCollectionTagSets(await html(url, request: request))
+    }
+
     /// Paged works in a collection. Reuses the standard work-blurb parse.
     func collectionWorks(
         slug: String, page: Int = 1, request: URLRequest? = nil
@@ -175,7 +186,7 @@ extension AO3Client {
         let leaveLink = try? doc.select("a[href*='/participants/'][data-method=delete], a[href*='/participants/']").first()
         let leaveID = leaveLink.flatMap { link -> Int? in
             guard let href = try? link.attr("href") else { return nil }
-            return participantID(from: href)
+            return pathID(from: href, after: "participants")
         }
         let canLeave = leaveID != nil && (try? leaveLink?.text())?.localizedCaseInsensitiveContains("Leave") == true
         let isMaintainer = nav.localizedCaseInsensitiveContains("Manage Items")
@@ -208,6 +219,33 @@ extension AO3Client {
             isMaintainer: isMaintainer,
             dashboard: dashboard
         )
+    }
+
+    /// Reads the profile page's `<dt>Tag Set:</dt><dd><ul class="commas">…` row.
+    /// The heading is singular or plural depending on how many the challenge
+    /// uses, so it is matched by prefix rather than by exact string.
+    ///
+    /// Absence is the normal case, not a failure: most collections have no
+    /// challenge, and a challenge need not use a tag set. Returns `[]` rather
+    /// than throwing so a caller can treat "no rows" as "no section".
+    static func parseCollectionTagSets(_ html: String) throws -> [AO3CollectionTagSetLink] {
+        let doc = try SwiftSoup.parse(html)
+        var links: [AO3CollectionTagSetLink] = []
+        var seen: Set<Int> = []
+        for heading in try doc.select("dt").array() {
+            let label = ((try? heading.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard label.lowercased().hasPrefix("tag set") else { continue }
+            guard let details = try heading.nextElementSibling(), details.tagName() == "dd" else { continue }
+            for anchor in try details.select("a[href*=/tag_sets/]").array() {
+                let href = (try? anchor.attr("href")) ?? ""
+                // A non-numeric segment (`/tag_sets/new`) yields nil and is skipped
+                // rather than becoming a row that would push a tag set id of 0.
+                guard let id = pathID(from: href, after: "tag_sets"), seen.insert(id).inserted else { continue }
+                let title = ((try? anchor.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                links.append(AO3CollectionTagSetLink(id: id, title: title.isEmpty ? "Tag set \(id)" : title))
+            }
+        }
+        return links
     }
 
     /// Richer blurb parse than `parseCollections` (flags, counts, icon). The
@@ -729,7 +767,7 @@ extension AO3Client {
         }
         if id == 0 {
             let action = (try? li.select("form").first()?.attr("action")) ?? ""
-            id = participantID(from: action) ?? 0
+            id = pathID(from: action, after: "participants") ?? 0
         }
         guard id != 0 else { throw AO3Error.parse }
         let link = try li.select("span.byline a, a[href*='/users/']").first()
@@ -842,9 +880,12 @@ extension AO3Client {
         return Int(inner)
     }
 
-    private static func participantID(from href: String) -> Int? {
+    /// The numeric id in the path segment following `segment`. Tolerates a full
+    /// URL, a trailing path (`/tag_sets/123/nominations`) and a query string,
+    /// and returns nil — never 0 — when the segment is missing or non-numeric.
+    private static func pathID(from href: String, after segment: String) -> Int? {
         let parts = href.split(separator: "/").map(String.init)
-        guard let index = parts.firstIndex(of: "participants"), index + 1 < parts.count else {
+        guard let index = parts.firstIndex(of: segment), index + 1 < parts.count else {
             return nil
         }
         let raw = parts[index + 1].split(separator: "?").first.map(String.init) ?? ""
