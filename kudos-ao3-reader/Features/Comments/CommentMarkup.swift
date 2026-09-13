@@ -11,87 +11,74 @@ import SwiftUI
 // is also why the tray prints the tag name under every button. The habit has to
 // transfer back to the website, where there is no tray.
 //
-// Only the tags AO3's sanitizer keeps are offered. Anything else it strips
-// silently, and a button that produces nothing is a lie. Image is deliberately
-// absent for the same reason in reverse: AO3 hosts no images, so the tag could
-// only ever point off-site.
-//
-// Nesting order matters — AO3's parser rewrites mismatched closing tags and
-// auto-closes anything left open at the end of the field — which is why
-// `apply` returns a selection that still covers the *words*, not the words plus
-// the tags it just wrote. Bold then italic gives `<strong><em>x</em></strong>`,
-// properly nested, rather than a crossed pair.
+// The tags themselves, and the rules for writing them, are `AO3Markup` in
+// Models: AO3 sanitizes a comment and a chapter with one allow-list, so the
+// chapter editor's toolbar writes the same tags through the same function. What
+// is left here is this surface's own share of it — which tags the tray offers,
+// how the two views draw them, and the `TextSelection` bridge that the chapter
+// editor, on a `UITextView`, has no use for.
 
 // MARK: - Tags
 
-/// One entry in the tray: what it is called, what it writes, and which of the
-/// artboard's two groups it belongs to.
+/// The comment tray's slice of `AO3MarkupTag`, carrying no strings of its own.
 ///
-/// The enum is the whole list. Neither view carries a tag string of its own, so
-/// adding or removing a tag is one line here and both surfaces follow.
+/// A mirror of fifteen cases rather than a typealias for one reason: this type
+/// means "everything the tray offers" to `CommentsView` and to the tests, and
+/// the shared list also carries the chapter editor's `<p>` and `<br>`. The
+/// `shared` switch below maps the two, and `AO3MarkupTag.comments` is pinned to
+/// this case list by `AO3MarkupTests`, so the two can only drift with a red test.
 enum CommentMarkupTag: String, CaseIterable, Identifiable, Hashable {
     // Text
     case bold, italic, underline, strike, superscript, `subscript`, small, code
     // Blocks & links
     case quote, bullets, numbers, heading, divider, link, spoiler
 
-    /// The artboard's two sections, in its own order and with its own names.
-    enum Group: String, CaseIterable, Identifiable {
-        case text = "Text"
-        case blocksAndLinks = "Blocks & links"
-
-        var id: String { rawValue }
-        var title: String { rawValue }
-        var tags: [CommentMarkupTag] { CommentMarkupTag.allCases.filter { $0.group == self } }
-    }
+    /// Both surfaces sort their controls into the same two sections.
+    typealias Group = AO3MarkupTag.Group
 
     var id: String { rawValue }
 
-    /// Group, display name, the element actually written, and the button glyph —
-    /// one switch rather than four. Fifteen cases repeated four times is exactly
-    /// where a name and the tag underneath it drift apart, which on this screen
-    /// would be the one unforgivable bug.
-    private var spec: (group: Group, name: String, element: String, symbol: String) {
-        // swiftlint:disable:previous large_tuple
-        // (a private lookup table, not a four-field API anything else can reach)
+    /// The shared entry this row writes. A switch rather than a raw-value
+    /// lookup so the compiler, not a test and not a fallback, proves every case
+    /// maps.
+    var shared: AO3MarkupTag {
         switch self {
-        case .bold: (.text, "Bold", "strong", "bold")
-        case .italic: (.text, "Italic", "em", "italic")
-        case .underline: (.text, "Underline", "u", "underline")
-        case .strike: (.text, "Strike", "s", "strikethrough")
-        case .superscript: (.text, "Superscript", "sup", "textformat.superscript")
-        case .`subscript`: (.text, "Subscript", "sub", "textformat.subscript")
-        case .small: (.text, "Small", "small", "textformat.size.smaller")
-        case .code: (.text, "Code", "code", "chevron.left.forwardslash.chevron.right")
-        case .quote: (.blocksAndLinks, "Quote", "blockquote", "text.quote")
-        case .bullets: (.blocksAndLinks, "Bullets", "ul", "list.bullet")
-        case .numbers: (.blocksAndLinks, "Numbers", "ol", "list.number")
-        // The artboard labels this one "h1–h6", which is a range rather than
-        // something anybody can type. h3 is the default: AO3's own page already
-        // spends h1 on the site and h2 on the work's title, so a comment heading
-        // at either outranks the work it is a comment on.
-        case .heading: (.blocksAndLinks, "Heading", "h3", "textformat.size")
-        case .divider: (.blocksAndLinks, "Divider", "hr", "minus")
-        case .link: (.blocksAndLinks, "Link", "a", "link")
-        case .spoiler: (.blocksAndLinks, "Spoiler", "details", "chevron.down")
+        case .bold: .bold
+        case .italic: .italic
+        case .underline: .underline
+        case .strike: .strike
+        case .superscript: .superscript
+        case .`subscript`: .`subscript`
+        case .small: .small
+        case .code: .code
+        case .quote: .quote
+        case .bullets: .bullets
+        case .numbers: .numbers
+        case .heading: .heading
+        case .divider: .divider
+        case .link: .link
+        case .spoiler: .spoiler
         }
     }
 
-    var group: Group { spec.group }
-    var name: String { spec.name }
+    var group: Group { shared.group }
+    var name: String { shared.name }
     /// The element this button writes — `strong`, not `bold`.
-    var element: String { spec.element }
-    /// SF Symbol for the button. Every name here is checked against the system
-    /// symbol list; a typo renders as an empty box rather than failing to build.
-    var symbol: String { spec.symbol }
-
-    /// What the tray prints under the name. The same as the element everywhere
-    /// except the link, where `a` alone would not tell the reader that the href
-    /// is the part they have to fill in.
-    var tagLabel: String { self == .link ? "a href" : element }
+    var element: String { shared.element }
+    /// SF Symbol for the button.
+    var symbol: String { shared.symbol }
+    /// What the tray prints under the name.
+    var tagLabel: String { shared.tagLabel }
 
     /// The six the compact bar carries before the tray is opened (spec 1be).
     static let quickBar: [CommentMarkupTag] = [.bold, .italic, .underline, .strike, .link, .quote]
+}
+
+extension AO3MarkupTag.Group {
+    /// The tray's rows for this group. Argument-free, unlike the shared
+    /// `tags(in:)`, because the tray asks for its own type: a row hands its tag
+    /// straight to `CommentMarkup.apply`.
+    var tags: [CommentMarkupTag] { CommentMarkupTag.allCases.filter { $0.group == self } }
 }
 
 // MARK: - Pure buffer edits
@@ -102,8 +89,7 @@ struct CommentMarkupResult: Equatable {
     let selection: Range<String.Index>
 }
 
-/// The tag-aware text buffer. Pure, synchronous, and the only place markup is
-/// spelled out — both views call in here.
+/// `AO3Markup` in the coordinates a SwiftUI `TextEditor` works in.
 enum CommentMarkup {
     /// Writes `tag` into `text` around `selection`.
     ///
@@ -115,119 +101,24 @@ enum CommentMarkup {
         to text: String,
         in selection: Range<String.Index>
     ) -> CommentMarkupResult {
-        let range = validated(selection, in: text)
-        let selected = String(text[range])
+        let range = AO3Markup.validRange(selection, in: text)
+        // No `link:` — the tray has nowhere to ask for a URL, so the link tag
+        // writes an empty href and puts the caret in it. The chapter editor,
+        // which does ask, is the caller that passes one.
+        let splice = AO3Markup.splice(tag.shared, in: text, over: range)
 
-        switch tag {
-        case .divider:
-            // `<hr>` has no closing tag and wraps nothing, so the selection is
-            // left standing and the rule goes in after it, on a line of its own.
-            // Replacing the selection would silently delete the user's words,
-            // which no formatting button should ever do.
-            let caret = range.upperBound..<range.upperBound
-            let opensLine = range.upperBound == text.startIndex
-                || text[text.index(before: range.upperBound)] == "\n"
-            // End of buffer counts as *not* closing the line: without the break
-            // the next thing typed would land on the rule's own line, which is
-            // the one thing `<hr>` must not share.
-            let closesLine = range.upperBound < text.endIndex && text[range.upperBound] == "\n"
-            let rule = (opensLine ? "" : "\n") + "<\(tag.element)>" + (closesLine ? "" : "\n")
-            return splice(text, caret, prefix: rule, body: "", suffix: "")
-
-        case .bullets, .numbers:
-            let items = selected
-                .split(separator: "\n", omittingEmptySubsequences: false)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-                .map { "<li>\($0)</li>" }
-            guard !items.isEmpty else {
-                // Nothing selected, or nothing but blank lines: one empty item
-                // with the caret inside it, ready to type into.
-                return splice(
-                    text, range,
-                    prefix: "<\(tag.element)>\n<li>", body: "",
-                    suffix: "</li>\n</\(tag.element)>"
-                )
-            }
-            // The selection comes back over the items rather than over the whole
-            // block, so a second tag nests inside the list instead of wrapping
-            // `<ul>` in `<em>`, which AO3's parser would rewrite.
-            return splice(
-                text, range,
-                prefix: "<\(tag.element)>\n", body: items.joined(separator: "\n"),
-                suffix: "\n</\(tag.element)>"
-            )
-
-        case .link:
-            // The caret lands inside the empty href: the URL is the one thing
-            // the tag cannot be completed without, and the text it labels is
-            // already selected.
-            return splice(
-                text, range,
-                prefix: "<\(tag.element) href=\"", body: "",
-                suffix: "\">\(selected)</\(tag.element)>"
-            )
-
-        case .spoiler:
-            // `<summary>` is the only part a reader sees before they open the
-            // spoiler, and an empty one renders as the browser's own word
-            // ("Details"), so the caret goes there — the same reasoning as the
-            // link href. Whatever was selected becomes the hidden body.
-            return splice(
-                text, range,
-                prefix: "<\(tag.element)><summary>", body: "",
-                suffix: "</summary>\(selected)</\(tag.element)>"
-            )
-
-        default:
-            return splice(
-                text, range,
-                prefix: "<\(tag.element)>", body: selected, suffix: "</\(tag.element)>"
-            )
-        }
-    }
-
-    /// Replaces `range` with `prefix + body + suffix` and returns the buffer with
-    /// the selection covering `body` — collapsed between prefix and suffix where
-    /// `body` is empty, which is what puts the caret inside a fresh tag pair.
-    private static func splice(
-        _ text: String,
-        _ range: Range<String.Index>,
-        prefix: String,
-        body: String,
-        suffix: String
-    ) -> CommentMarkupResult {
         var out = text
-        out.replaceSubrange(range, with: prefix + body + suffix)
+        out.replaceSubrange(range, with: splice.text)
         // Offsets are counted in UTF-8, not in Characters: concatenation is
         // additive in UTF-8 but not in grapheme clusters. A selection beginning
         // with a combining mark would merge with the `>` written before it and
         // throw a Character count off by one, which is a silently misplaced
         // caret rather than a crash — the worst kind of bug to find later.
         let start = text.utf8.distance(from: text.utf8.startIndex, to: range.lowerBound)
-            + prefix.utf8.count
+            + splice.prefix.utf8.count
         let lower = out.utf8.index(out.utf8.startIndex, offsetBy: start)
-        let upper = out.utf8.index(lower, offsetBy: body.utf8.count)
+        let upper = out.utf8.index(lower, offsetBy: splice.body.utf8.count)
         return CommentMarkupResult(text: out, selection: lower..<upper)
-    }
-
-    /// A selection can outlive the string it was taken from — the field's text is
-    /// replaced, a draft is restored, an undo lands. `String.Index(_:within:)` is
-    /// the only check that answers "is this index real here" without trapping.
-    ///
-    /// The fallback is the end of the buffer rather than a clamp: a stale index
-    /// clamped into range names a span the user never selected, and wrapping that
-    /// span would move text the user did not ask to move. Appending loses
-    /// nothing.
-    private static func validated(
-        _ selection: Range<String.Index>,
-        in text: String
-    ) -> Range<String.Index> {
-        guard let lower = String.Index(selection.lowerBound, within: text),
-              let upper = String.Index(selection.upperBound, within: text) else {
-            return text.endIndex..<text.endIndex
-        }
-        return min(lower, upper)..<max(lower, upper)
     }
 }
 

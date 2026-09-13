@@ -163,6 +163,13 @@ struct WritingNativeTextView: NSViewRepresentable {
 }
 #endif
 
+/// `AO3Markup` in the coordinates an `NSRange` world works in.
+///
+/// The raw `String` tag stays: `WritingTextController.command` is driven by the
+/// toolbar with element names, and an unknown one has to be refused rather than
+/// trapped. The allow-list is no longer a literal here — it is whatever the
+/// chapter editor's vocabulary offers, so a tag reaches the buffer only if a
+/// button for it exists.
 nonisolated enum WritingMarkup {
     struct Insertion {
         let text: String
@@ -170,24 +177,28 @@ nonisolated enum WritingMarkup {
     }
 
     static func insertion(tag: String, selected: String, link: String = "") -> Insertion? {
-        guard ["em", "strong", "p", "br", "hr", "a", "blockquote"].contains(tag) else { return nil }
-        let opening: String
-        if tag == "a" {
-            guard safeLink(link) else { return nil }
-            let escaped = link.replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "\"", with: "&quot;")
-                .replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-            opening = "<a href=\"\(escaped)\">"
-        } else {
-            opening = "<\(tag)>"
-        }
-        let closing = ["br", "hr"].contains(tag) ? "" : "</\(tag)>"
-        return Insertion(text: opening + selected + closing, contentOffset: opening.utf16.count)
+        guard let tag = AO3MarkupTag.writing.first(where: { $0.element == tag }) else { return nil }
+        // A link with no usable URL writes nothing at all here, unlike the
+        // comment tray, which has nowhere to ask for one and so writes an empty
+        // href for the user to fill in. This surface *does* ask, in an alert,
+        // before it calls: reaching here without a URL is a refusal, not a
+        // half-written tag.
+        if tag == .link, !safeLink(link) { return nil }
+        // The host has no surrounding text to give: `selected` stands in as the
+        // whole buffer, which only `<hr>` reads (for the newlines it needs
+        // around itself), and only to decide whether to write one it may not
+        // need.
+        let splice = AO3Markup.splice(tag, in: selected, over: selected.startIndex..<selected.endIndex, link: link)
+        let text = splice.text
+        // `command` re-selects the *original* selection length at this offset,
+        // so an offset deep enough to push that length past the replacement
+        // would hand `UITextView` a range outside its own text. Clamped rather
+        // than trusted: the tags that place a caret instead of wrapping (`<hr>`,
+        // and with a selection `<details>` or a list) are exactly the ones that
+        // can overshoot.
+        let offset = min(splice.prefix.utf16.count, max(0, text.utf16.count - selected.utf16.count))
+        return Insertion(text: text, contentOffset: offset)
     }
 
-    static func safeLink(_ value: String) -> Bool {
-        guard let url = URL(string: value), let scheme = url.scheme?.lowercased() else { return false }
-        return ["https", "http", "mailto"].contains(scheme)
-    }
+    static func safeLink(_ value: String) -> Bool { AO3Markup.safeLink(value) }
 }

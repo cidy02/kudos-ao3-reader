@@ -54,14 +54,15 @@ struct WritingTextEditor: View {
             }
             .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
             ScrollView(.horizontal) {
-                HStack {
-                    tagButton("em", label: "Italic")
-                    tagButton("strong", label: "Bold")
-                    tagButton("p", label: "Paragraph")
-                    tagButton("br", label: "Line break")
-                    tagButton("hr", label: "Rule")
-                    Button("Link") { showLink = true }
-                    tagButton("blockquote", label: "Quote")
+                HStack(spacing: 16) {
+                    ForEach(AO3MarkupTag.Group.allCases) { group in
+                        HStack(spacing: 6) {
+                            Text(group.title).font(.caption).foregroundStyle(.secondary)
+                            ForEach(group.tags(in: AO3MarkupTag.writing)) { tag in
+                                tagButton(tag)
+                            }
+                        }
+                    }
                 }
                 .buttonStyle(.bordered).padding()
             }
@@ -109,9 +110,18 @@ struct WritingTextEditor: View {
         }
     }
 
-    private func tagButton(_ tag: String, label: String) -> some View {
-        Button("<\(tag)>") { controller?.command(tag) }
-            .accessibilityLabel(label)
+    /// Labelled with the tag it writes, as the comment tray prints the tag under
+    /// every row: the same teaching idea, on the screen where the writer is
+    /// typing real HTML anyway.
+    ///
+    /// The link is the one tag that cannot be written from a button alone, so it
+    /// opens the alert that asks for the URL and validates it. Everything else
+    /// goes straight to the buffer.
+    private func tagButton(_ tag: AO3MarkupTag) -> some View {
+        Button("<\(tag.tagLabel)>") {
+            if tag == .link { showLink = true } else { controller?.command(tag.element) }
+        }
+        .accessibilityLabel(tag.name)
     }
 
     private var recoverySheet: some View {
