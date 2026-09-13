@@ -31,8 +31,8 @@ What must keep working, where it's tested, and what is manual-only. Run everythi
 ## Native writing editor
 
 `WritingTextEditorTests` checks exact HTML/Unicode recovery, account/field/session
-separation, active/unsupported HTML remaining in source mode, and real WebKit
-selection formatting without rewriting untouched source. `AO3WorkFormParsingTests`
+separation, literal tag insertion and link escaping, and native text-system
+selection/undo/redo/recovery without rewriting untouched source. `AO3WorkFormParsingTests`
 continues to cover required fields and AO3 payload construction. Live draft/post
 writes, chapter-total partial failures and authenticated navigation remain manual.
 
