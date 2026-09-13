@@ -1806,6 +1806,45 @@ Unchanged at accessibility sizes: that branch is a `VStack` (Codex's
 `@ScaledMetric` pass, `74680bb`), where there is no cross-axis to pin and the
 ring leads the stack anyway.
 
+### ✅ Resolved — the ledger ring prints "42% / READING", not a bare "42"
+
+**Decision: the owner's, 2026-09-12**, overruling both spec 1d/1ad and the
+reasoning recorded against them. Those artboards draw the ledger ring's figure
+bare, and `WorkProgressRing.showsPercentSuffix` existed to serve that: at 44pt
+the `%` glyph cost a sixth of the ring's inner width and repeated what the
+ring's own fill already showed.
+
+Two things answer that. The ring is no longer 44pt — it is the signal tray's
+height (~59pt), so the glyph now costs about a ninth of a wider box. And the
+Home card's ring (`HomeCards.progressRing`) has always printed both the sign
+and a state word, so the ledger ring was the odd one out inside the app before
+it was faithful to the artboard.
+
+`showsPercentSuffix` is gone rather than flipped: with its one `false` caller
+removed it had no non-default caller left, and a knob no surface turns is a
+knob to delete. A future surface that wants a bare figure can re-add it.
+
+The state word follows `HomeCards`' own wording — "Reading" under a part-read
+work, "Finished" at 100% — with one difference forced by where it is drawn: a
+ledger row draws the ring for **every** work, including ones never opened, so
+`WorkRow.ledgerProgressState` returns nil at zero. "0% READING" would claim a
+reading session that never happened.
+
+### ✅ Resolved — the offline tick sits at the card's trailing edge
+
+**Decision: the owner's, 2026-09-12.** The green "held offline" tick used to
+lead the metadata line (`metadataPrefixSymbol`, now `metadataSymbol`), on the
+reasoning that it is the one fact on that line which changes what happens when
+you tap the row, and so should be read first.
+
+It now sits at the far right of the line instead, under the signal tray. The
+reasoning it overrules was about reading *order*; the answer is that the tick is
+scanned down a column, not read in a sentence. Leading the line, it landed
+immediately before text of a different length on every row, so it appeared to
+jitter left as the metadata grew. At the trailing edge it holds one vertical
+line down the list, and a list with three offline works shows three ticks in a
+column rather than three ticks at three indents.
+
 ### ✅ Resolved — a ledger row is not a search result, and does not expand
 
 **Decision: the owner's, 2026-09-12.** Ledger cards are a different kind of card

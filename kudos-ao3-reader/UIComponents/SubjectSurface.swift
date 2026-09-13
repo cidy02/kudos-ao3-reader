@@ -727,15 +727,11 @@ struct SubjectStatStrip: View {
 struct WorkProgressRing: View {
     /// 0…1. Values outside the range are clamped by the caller's own accessor.
     let progress: Double
-    /// The word under the percentage. Nil drops it, for the small sizes where
-    /// two lines of type inside 44pt is unreadable.
+    /// The word under the percentage — "Reading", "Finished". Nil drops it, for
+    /// a ring with no reading to report and for sizes too small to set two lines
+    /// of type inside.
     var state: String?
     var diameter: CGFloat = SubjectMetrics.ringDiameter
-    /// The 44pt ring in a ledger row prints a bare figure — spec 1d and 1ad both
-    /// draw "42", not "42%". At that size the glyph costs a sixth of the width
-    /// and says nothing the ring's own fill has not already said. VoiceOver still
-    /// hears the full "42 percent".
-    var showsPercentSuffix: Bool = true
     /// Drawn in the subject's accent on a neutral surface; white on a card that
     /// already carries the subject's wash (which is most of them).
     var tint: Color?
@@ -765,7 +761,7 @@ struct WorkProgressRing: View {
                 .stroke(progressColor, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 1) {
-                Text(showsPercentSuffix ? "\(percent)%" : "\(percent)")
+                Text("\(percent)%")
                     .font(.system(size: diameter * 15 / 68, weight: .semibold))
                     .monospacedDigit()
                     .lineLimit(1)

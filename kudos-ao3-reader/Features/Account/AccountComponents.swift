@@ -305,7 +305,7 @@ where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
         } label: {
             // Same structure as `CommentsView.chapterSection` — icon + title, then
             // a quiet down-chevron (not the up/down pair, not a trailing value).
-            // Icon and text are styled separately (matching `CardMetaLabel`) rather
+            // Icon and text are styled separately (matching `WorkStatLabel`) rather
             // than via a single `Label`, whose icon otherwise only picks up the
             // accent tint inside a `List` (Detailed) and falls back to `.primary`
             // in Compact's plain `ScrollView` — same trigger, two different colors.

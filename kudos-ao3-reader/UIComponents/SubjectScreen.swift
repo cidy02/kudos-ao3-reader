@@ -298,11 +298,12 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     let title: String
     /// Pre-joined by the caller; drawn with the spec's dimmed middle dots.
     var metadataSegments: [String] = []
-    /// A glyph pinned before the metadata line — the spec's green tick marking a
-    /// work held offline (1ad, 1ah). Kept general rather than named "offline"
-    /// because 1t uses the same slot for a visit count and 1aj for a star.
-    var metadataPrefixSymbol: String?
-    var metadataPrefixTint: Color?
+    /// A glyph pinned to the metadata line's trailing edge — the spec's green
+    /// tick marking a work held offline (1ad, 1ah). Kept general rather than
+    /// named "offline" because 1t uses the same slot for a visit count and 1aj
+    /// for a star.
+    var metadataSymbol: String?
+    var metadataSymbolTint: Color?
     /// Sits at the leading edge — a `WorkProgressRing`, a position number, or
     /// nothing at all on a row with no progress to report.
     @ViewBuilder var leading: () -> Leading
@@ -404,16 +405,20 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     }
 
     private var metadataLine: some View {
-        HStack(spacing: 5) {
-            if let metadataPrefixSymbol {
-                Image(systemName: metadataPrefixSymbol)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(metadataPrefixTint ?? Color.secondary)
-            }
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text(metadataSegments.joined(separator: "  ·  "))
                 .font(.system(size: metadataSize))
                 .foregroundStyle(Color.primary.opacity(0.72))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            if let metadataSymbol {
+                // Held to the card's trailing edge rather than the text's, so the
+                // tick sits under the signal tray and lands in the same place on
+                // every row instead of wherever that row's metadata happens to end.
+                Spacer(minLength: 5)
+                Image(systemName: metadataSymbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(metadataSymbolTint ?? Color.secondary)
+            }
         }
         .combinedAccessibilityRow(metadataSegments.joined(separator: ", "))
     }

@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension View {
-    /// Collapses a small icon+text metadata row (e.g. `WorkStatLabel`,
-    /// `CardMetaLabel`) into one VoiceOver stop instead of two — one for the
+    /// Collapses a small icon+text metadata row (e.g. `WorkStatLabel`, a
+    /// card's author line) into one VoiceOver stop instead of two — one for the
     /// decorative icon, one for the text. Ignores the row's own subview
     /// accessibility entirely (so a glyph's auto-derived SF Symbol name, e.g.
     /// "checkmark shield", never leaks into the announcement — no need to

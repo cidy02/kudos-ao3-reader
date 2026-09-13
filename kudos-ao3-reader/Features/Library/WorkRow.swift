@@ -110,6 +110,17 @@ struct WorkRow: View {
         )
     }
 
+    /// The word under the ring's percentage, matching the Home card's ring
+    /// (`HomeCards.progressRing`) — owner's call, 2026-09-12, along with the
+    /// percent sign the ledger ring used to drop.
+    ///
+    /// Nil at zero: a ledger row draws the ring for every work, including ones
+    /// never opened, and "0% READING" claims a session that never happened.
+    private var ledgerProgressState: String? {
+        guard let progress = work.readingProgress, progress > 0 else { return nil }
+        return progress >= 1 ? "Finished" : "Reading"
+    }
+
     /// The washed background is left to the enclosing `List` row
     /// (`.cardRow(tintHue:)`), which paints it at the card's true outer edge —
     /// the same place the selection outline is drawn. A row that painted its own
@@ -122,21 +133,19 @@ struct WorkRow: View {
             title: work.title,
             metadataSegments: ledgerMetadataSegments,
             // The spec's green tick: this copy is on the device and will open
-            // with no network. It leads the line because it is the one fact
-            // there that changes what happens when you tap the row.
-            metadataPrefixSymbol: work.hasEPUB ? "checkmark.circle.fill" : nil,
-            metadataPrefixTint: work.hasEPUB ? theme.appTheme.statusSuccessColor : nil,
+            // with no network.
+            metadataSymbol: work.hasEPUB ? "checkmark.circle.fill" : nil,
+            metadataSymbolTint: work.hasEPUB ? theme.appTheme.statusSuccessColor : nil,
             leading: {
                 WorkProgressRing(
                     progress: work.readingProgress ?? 0,
-                    state: nil,
+                    state: ledgerProgressState,
                     // Sized to the signal tray facing it across the card. Spec 1ad
                     // draws this ring at 44 and the tray's tiles at 22, which makes
                     // the tray ~59 tall — a third bigger than the ring, and it reads
                     // that way. Both now come from the tray's own constants, so a
                     // change to tile size keeps them the same size.
-                    diameter: WorkStatusIconGrid.trayHeight(tileSize: Self.ledgerTileSize),
-                    showsPercentSuffix: false
+                    diameter: WorkStatusIconGrid.trayHeight(tileSize: Self.ledgerTileSize)
                 )
             },
             trailing: {
@@ -204,7 +213,7 @@ struct WorkRow: View {
             if !work.workFandoms.isEmpty {
                 // Tight icon→text gap + bold accent glyph, matching the stats row. Only
                 // the icon is tinted — fandom text stays readable/secondary like the
-                // rest of the metadata (CardMetaLabel's convention).
+                // rest of the metadata (`WorkStatLabel`'s convention).
                 HStack(spacing: 4) {
                     Image(systemName: "books.vertical")
                         .fontWeight(.bold)
