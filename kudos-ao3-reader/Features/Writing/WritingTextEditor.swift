@@ -12,8 +12,7 @@ struct WritingTextEditor: View {
     let target: String
     let field: String
 
-    @State private var controller: WritingHTMLController?
-    @State private var sourceMode: Bool
+    @State private var controller: WritingTextController?
     @State private var original: String
     @State private var recoveries: [WritingTextRecovery.Copy] = []
     @State private var selectedRecovery: URL?
@@ -30,7 +29,6 @@ struct WritingTextEditor: View {
         self.target = target
         self.field = field
         _original = State(initialValue: text.wrappedValue)
-        _sourceMode = State(initialValue: !WritingHTMLDocument.supportsRichEditing(text.wrappedValue))
     }
 
     private var recoveryKey: URL { store.fileURL(account: account, target: target, field: field) }
@@ -40,25 +38,15 @@ struct WritingTextEditor: View {
     private var recovery: WritingTextRecovery.Copy? {
         recoveries.first { $0.id == selectedRecovery } ?? recoveries.first
     }
-    private var supportsRich: Bool { WritingHTMLDocument.supportsRichEditing(text) }
 
     private var wordCount: Int { text.strippingHTML().split(whereSeparator: \.isWhitespace).count }
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Editing mode", selection: $sourceMode) {
-                Text("Formatted").tag(false)
-                Text("HTML").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .disabled(!supportsRich)
-            if !supportsRich {
-                Text("This text contains markup that needs HTML mode. It is kept intact.")
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
-            }
-            if let controller { WebView(webView: controller.webView) }
-            else { ProgressView() }
+            if let controller {
+                WritingNativeTextView(controller: controller)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else { ProgressView() }
             HStack {
                 Text("\(wordCount) words")
                 Spacer()
@@ -88,10 +76,8 @@ struct WritingTextEditor: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") {
-                    Task {
-                        do { try await controller?.flush(); dismiss() }
-                        catch { errorMessage = error.localizedDescription }
-                    }
+                    controller?.flush()
+                    dismiss()
                 }
             }
         }
@@ -99,15 +85,10 @@ struct WritingTextEditor: View {
         .onChange(of: editorFontSize) { _, value in controller?.setAppearance(theme.appTheme, fontSize: value) }
         .onChange(of: theme.appTheme) { _, value in controller?.setAppearance(value, fontSize: editorFontSize) }
         .onDisappear {
-            guard let closing = controller else { return }
+            controller?.flush()
+            controller?.onChange = nil
             controller = nil
-            Task {
-                do { try await closing.flush() }
-                catch { errorMessage = error.localizedDescription }
-                closing.stop()
-            }
         }
-        .onChange(of: sourceMode) { _, value in controller?.set(text: text, sourceMode: value) }
         .alert("Editor error", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
@@ -116,7 +97,7 @@ struct WritingTextEditor: View {
         .alert("Insert link", isPresented: $showLink) {
             TextField("https://example.com", text: $link)
             Button("Insert") {
-                if WritingHTMLDocument.safeLink(link) { controller?.command("a", link: link) }
+                if WritingMarkup.safeLink(link) { controller?.command("a", link: link) }
                 else { errorMessage = "Enter an HTTP, HTTPS, or mailto link." }
             }
             Button("Cancel", role: .cancel) {}
@@ -153,9 +134,7 @@ struct WritingTextEditor: View {
                 }
                 ScrollView { Text(recovery.text).font(.body.monospaced()).textSelection(.enabled) }
                 Button("Restore local copy") {
-                    text = recovery.text
-                    sourceMode = !WritingHTMLDocument.supportsRichEditing(text)
-                    controller?.set(text: text, sourceMode: sourceMode)
+                    controller?.restore(recovery.text)
                     self.recoveries = []
                 }
                 Button("Keep form text", role: .cancel) { self.recoveries = [] }
@@ -172,7 +151,8 @@ struct WritingTextEditor: View {
     }
 
     private func start() {
-        let editor = WritingHTMLController(text: text)
+        guard controller == nil else { return }
+        let editor = WritingTextController(text: text)
         controller = editor
         editor.setAppearance(theme.appTheme, fontSize: editorFontSize)
         editor.onChange = { value in
@@ -180,8 +160,6 @@ struct WritingTextEditor: View {
             do { try store.save(text: value, original: original, to: recoveryURL) }
             catch { errorMessage = "Local recovery could not be saved: \(error.localizedDescription)" }
         }
-        editor.onError = { errorMessage = $0 }
-        controller?.set(text: text, sourceMode: sourceMode)
         do {
             recoveries = try store.copies(for: recoveryKey).filter { $0.entry.text != text }
         } catch { errorMessage = "The local recovery copy could not be read: \(error.localizedDescription)" }

@@ -111,8 +111,6 @@ struct AO3WorkFormParsingTests {
         changes.rating = "Explicit"
         // language left nil — not an overwrite this save
 
-        #expect(changes.isOverwriteField(AO3WorkFormField.rating))
-        #expect(changes.isOverwriteField(AO3WorkFormField.languageID))
 
         let params = changes.parameters(csrfToken: form.csrfToken)
         let dict = Dictionary(uniqueKeysWithValues: params.filter { $0.0 != AO3WorkFormField.workIDs })

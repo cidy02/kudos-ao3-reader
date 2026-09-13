@@ -126,7 +126,6 @@ nonisolated struct AO3WorkTagSet: Equatable, Sendable {
     var characters: [String] = []
     var additionalTags: [String] = []
 
-    /// Removing a chip is a diff against this set, not a delete-tag API.
     /// Whether any tag **list** carries anything. Excludes `rating`, which is a
     /// single value rather than a list: `AO3BulkEditChanges` tracks the bulk rating
     /// separately and can set it in one POST safely, because there is nothing to
@@ -746,8 +745,9 @@ enum AO3SeriesReorderPlan {
 
 // MARK: - Bulk edit (1bn)
 
-/// AO3 `/works/edit_multiple` is add-and-remove, not replace, except for the
-/// two single-value fields that overwrite: rating and language.
+/// Native bulk-edit intent. Tag additions/removals are merged against each
+/// work's current lists; AO3's bulk endpoint replaces entire tag lists.
+/// Uniform fields such as rating and language use one bulk request.
 nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
     var workIDs: [Int] = []
     var tagsToAdd: AO3WorkTagSet = AO3WorkTagSet()
@@ -763,16 +763,6 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
     var commentPermissions: String?
     var workSkinID: String?
     var pseudsToAdd: String = ""
-
-    /// Rating and language are the only single-value fields that overwrite.
-    static let overwriteFieldKeys = [
-        AO3WorkFormField.rating,
-        AO3WorkFormField.languageID
-    ]
-
-    func isOverwriteField(_ name: String) -> Bool {
-        Self.overwriteFieldKeys.contains(name)
-    }
 
     /// Whether anything here can only be applied per work.
     ///
@@ -801,7 +791,7 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
     ///
     /// **No tag field is ever sent from here.** An earlier version sent
     /// `tagsToAdd` straight into AO3's tag fields, and since those fields replace,
-    /// adding one tag to a selection wiped every other tag off every work in it —
+    /// adding one tag wiped every other same-type tag off every selected work —
     /// an unrecoverable write against somebody's own published works. `tagsToRemove`
     /// never reached the request at all. The merge belongs per work, against that
     /// work's current list, which is what `applying(to:)` has always been for and
@@ -853,8 +843,8 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
         return pairs
     }
 
-    /// Per-work replacement lists when remove is in play (bulk POST cannot
-    /// send a different replacement per work).
+    /// Per-work replacement lists for both additions and removals. A bulk POST
+    /// cannot send a different merged list for each work.
     func applying(to current: AO3WorkTagSet) -> AO3WorkTagSet {
         AO3WorkTagSet(
             rating: rating ?? current.rating,
