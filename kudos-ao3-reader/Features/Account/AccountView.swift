@@ -222,7 +222,20 @@ struct AccountView: View {
         }
     }
 
+    /// Artboard 1n: *"No session, so no accent and no wash: the tab sits on plain
+    /// #0b0b0d."* The wash is derived from the account's own accent, so with no
+    /// account there is nothing to derive it from — signed out is the one state
+    /// where this tab is deliberately colourless.
+    @ViewBuilder
     private var standardListRoot: some View {
+        if auth.isLoggedIn {
+            standardListBody.subjectWash(accountPalette)
+        } else {
+            standardListBody
+        }
+    }
+
+    private var standardListBody: some View {
         List {
             subjectHeaderSection
             profileCardSection
@@ -230,10 +243,11 @@ struct AccountView: View {
             if auth.isLoggedIn {
                 tabPickerSection
                 tabSections
+            } else {
+                signedOutPreviewSection
             }
         }
         .cardList()
-        .subjectWash(accountPalette)
         .refreshable { await refreshCurrentTab() }
     }
 
@@ -1027,6 +1041,89 @@ struct AccountView: View {
 }
 
 private extension AccountView {
+    /// Artboard 1n's "What is waiting".
+    ///
+    /// A preview of the signed-in tab rather than a description of it: the real
+    /// scope headings and the real destination rows, with every value withheld,
+    /// faded out at the bottom. Built from `scopeDestinationRow` — the same row
+    /// the hub itself draws — so it cannot drift from the thing it previews, and
+    /// inert because there is nothing behind it to open yet.
+    @ViewBuilder
+    var signedOutPreviewSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Signed in, this tab fills in with your own account:")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 14)
+
+                previewGroup("Reading", ["Marked for Later", "Bookmarks", "Collections"])
+                previewGroup("Writing", ["Works", "Series"])
+                previewGroup("Activity", ["Inbox"])
+            }
+            .allowsHitTesting(false)
+            // The spec fades the preview out rather than ending it on a hard
+            // edge — it is a glimpse of the tab, not a list to read to the end.
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 0.62),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                "What is waiting. Signing in fills this tab with your reading, writing and activity."
+            )
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+        } header: {
+            SectionRuleHeader(title: "What is waiting")
+                .pageBodyRow(top: 22, gutter: 0)
+        }
+    }
+
+    /// One previewed scope: its heading, then its rows with no counts and no
+    /// selection, because signed out there is no figure to state and nothing is
+    /// chosen.
+    func previewGroup(_ title: String, _ rows: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SubjectFieldLabel(text: title, style: .formGroup)
+                .padding(.bottom, 7)
+
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    if index > 0 { SubjectRowSeparator() }
+                    scopeDestinationRow(
+                        AccountScopeDestination(
+                            id: row,
+                            title: row,
+                            systemImage: previewSymbol(for: row),
+                            isSelected: false,
+                            select: {}
+                        )
+                    )
+                }
+            }
+            .subjectPanel()
+            .padding(.bottom, 16)
+        }
+    }
+
+    func previewSymbol(for row: String) -> String {
+        switch row {
+        case "Marked for Later": AccountReadingTab.later.systemImage
+        case "Bookmarks": AccountReadingTab.bookmarks.systemImage
+        case "Collections": AccountReadingTab.collections.systemImage
+        case "Works": AccountWritingTab.works.systemImage
+        case "Series": AccountWritingTab.series.systemImage
+        default: AccountActivityTab.inbox.systemImage
+        }
+    }
+
     private func cachedCount(_ kind: AO3AccountListKind) -> String? {
         AO3AccountListCountsCache.shared.count(
             for: kind,
