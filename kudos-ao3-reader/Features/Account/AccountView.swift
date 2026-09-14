@@ -762,10 +762,15 @@ struct AccountView: View {
     @ViewBuilder
     private var readingSections: some View {
         // 1bt groups Reading by what a shelf *means* rather than listing four
-        // peers: what you put aside, and what you follow. Subscriptions is drawn
-        // with a "N with new chapters" subtitle, which is not built here — no
-        // store exposes that figure, and inventing one is the failure this plan's
-        // §4 names first.
+        // peers: what you put aside, and what you follow.
+        //
+        // Subscriptions is drawn with a "N with new chapters" subtitle that is
+        // not built here. The figure does exist —
+        // `SubscriptionWatermarks.newChapterCount(for:watermarks:)`, which
+        // `AO3AccountWorksList` already prints on the subscriptions list itself —
+        // but it is computed per work against a loaded page, and this row is the
+        // thing you tap *instead of* loading that page. Stating it here would
+        // mean fetching subscriptions to describe the button that opens them.
         scopeGroup("Saved", [
             readingDestination(.later, count: .markedForLater),
             readingDestination(.bookmarks, count: .bookmarks),
