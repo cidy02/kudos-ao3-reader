@@ -186,44 +186,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 // it's covered by this section.
                 if includeAppSettings {
                     Section {
-                        switch auth.status {
-                        case .restoring:
-                            // Restoring the AO3 session — show the shape of the signed-in row.
-                            SkeletonListRow(width: 96, trailingWidth: 120)
-
-                        case let .signedIn(username):
-                            LabeledContent {
-                                Text(username)
-                            } label: {
-                                Label("Signed In", systemImage: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            }
-
-                            Button(role: .destructive) {
-                                Task { await auth.logout() }
-                            } label: {
-                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
-                            }
-
-                        case .signedOut, .signingIn, .usingFallback:
-                            Button {
-                                showAO3Login = true
-                            } label: {
-                                Label("Log In to AO3…", systemImage: "person.badge.key")
-                            }
-                        }
-                    } header: {
-                        Text("AO3 Account")
-                    } footer: {
-                        if let notice = auth.noticeMessage {
-                            Text(notice)
-                        } else {
-                            Text("A login enables future synced bookmarks, history, "
-                                + "subscriptions, kudos, comments, and restricted works.")
-                        }
-                    }
-
-                    Section {
                         themePicker("App Theme", selection: appThemeBinding)
                         Toggle("Match App & Reader Theme", isOn: matchThemeBinding)
                         if !themeManager.matchAppAndReader {
@@ -460,6 +422,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
                     // Moved from Account's own "Help & Project" section as part of
                     // folding Account's App/Help rows into Settings.
+                    AO3AccountSettingsSection(onLogIn: { showAO3Login = true })
+
                     AboutSettingsSection(
                         onShowAbout: { showAbout = true },
                         onReportBug: { showingBugReport = true }
@@ -1705,6 +1669,54 @@ private struct AboutSettingsSection: View {
             // neither screen says on its own.
             Text("App settings only. Anything AO3 stores on the account is in AO3 "
                 + "Preferences. The accent colour set here is what tints the whole tab.")
+        }
+    }
+}
+
+/// The AO3 session rows, extracted for the same reason as `AboutSettingsSection`
+/// and moved to sit beside it: 1ab files the account under About, and leading the
+/// page with it pushed Reading — the thing people actually come here to change —
+/// below the fold.
+private struct AO3AccountSettingsSection: View {
+    var onLogIn: () -> Void
+
+    @Environment(AO3AuthService.self) private var auth
+
+    var body: some View {
+        Section {
+            switch auth.status {
+            case .restoring:
+                // Restoring the AO3 session — show the shape of the signed-in row.
+                SkeletonListRow(width: 96, trailingWidth: 120)
+
+            case let .signedIn(username):
+                LabeledContent {
+                    Text(username)
+                } label: {
+                    Label("Signed In", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+
+                Button(role: .destructive) {
+                    Task { await auth.logout() }
+                } label: {
+                    Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+
+            case .signedOut, .signingIn, .usingFallback:
+                Button(action: onLogIn) {
+                    Label("Log In to AO3…", systemImage: "person.badge.key")
+                }
+            }
+        } header: {
+            Text("AO3 Account")
+        } footer: {
+            if let notice = auth.noticeMessage {
+                Text(notice)
+            } else {
+                Text("A login enables future synced bookmarks, history, subscriptions, "
+                    + "kudos, comments, and restricted works.")
+            }
         }
     }
 }
