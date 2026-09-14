@@ -164,6 +164,23 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             // rows — it does NOT propagate from the Form container, only from a Group/
             // Section/ForEach around the rows.
             Group {
+                // Artboard 1ab puts this under the title: everything on this
+                // screen is the app's own, and none of it is written to AO3.
+                // Worth stating rather than leaving a reader to infer it from a
+                // page that also holds their account — the one section here that
+                // *does* touch AO3 is the login directly below, and it says so.
+                if includeAppSettings {
+                    Section {
+                        Text("App only · nothing here reaches AO3")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .listRowBackground(Color.clear)
+                            .accessibilityLabel(
+                                "These settings are stored on this device only and are never sent to AO3."
+                            )
+                    }
+                }
+
                 // App-wide theme lives in the main Settings page. The reader's own theme
                 // picker (below, in Appearance) is shown only inside the reader, since here
                 // it's covered by this section.
