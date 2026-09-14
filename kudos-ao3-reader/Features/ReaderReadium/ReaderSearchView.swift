@@ -208,8 +208,7 @@ final class ReaderSearchModel {
             if let currentChapterHrefKey, !hasCoveredCurrentChapter,
                newResults.contains(where: {
                    ReaderSectionBuilder.hrefKey($0.locator.href.string) == currentChapterHrefKey
-               })
-            {
+               }) {
                 hasCoveredCurrentChapter = true
             }
             phase = .done(isEmpty: results.isEmpty)

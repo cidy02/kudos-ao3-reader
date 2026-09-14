@@ -114,8 +114,7 @@ enum ReaderSpeechPreferences {
         AVSpeechSynthesisVoice.speechVoices()
             .filter { voice in
                 if voice.voiceTraits.contains(.isNoveltyVoice)
-                    || voice.voiceTraits.contains(.isPersonalVoice)
-                {
+                    || voice.voiceTraits.contains(.isPersonalVoice) {
                     return false
                 }
                 return !voice.identifier.contains(".eloquence.")

@@ -342,8 +342,7 @@ struct FandomWorksView: View {
                Self.exactCountIsTrustworthy,
                includedFandoms.count > 1,
                filters == Self.baseline(for: includedFandoms),
-               let total = result.summary?.total
-            {
+               let total = result.summary?.total {
                 FandomFamilyExactCountCache.shared.store(
                     total,
                     for: FandomFamily.id(originalNames: includedFandoms)

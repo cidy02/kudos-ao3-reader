@@ -562,8 +562,7 @@ extension AO3Client {
             let id = (try? input.attr("id")) ?? ""
             var title = value
             if !id.isEmpty,
-               let label = try? root.select("label[for=\"\(id)\"]").first()?.text()
-            {
+               let label = try? root.select("label[for=\"\(id)\"]").first()?.text() {
                 let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { title = trimmed }
             }
@@ -584,8 +583,7 @@ extension AO3Client {
             let id = (try? input.attr("id")) ?? ""
             var title = value
             if !id.isEmpty,
-               let label = try? root.select("label[for=\"\(id)\"]").first()?.text()
-            {
+               let label = try? root.select("label[for=\"\(id)\"]").first()?.text() {
                 let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { title = trimmed }
             }
@@ -688,8 +686,7 @@ extension AO3Client {
 
     private static func parsePostedChapterCount(in doc: Document, form: Element) -> Int? {
         if let links = try? doc.select("a[href*=/chapters/][href*=/edit]").array(),
-           !links.isEmpty
-        {
+           !links.isEmpty {
             return links.count
         }
         let wip = inputValue(form, name: AO3WorkFormField.wipLength) ?? ""

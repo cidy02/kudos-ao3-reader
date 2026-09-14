@@ -48,10 +48,10 @@ struct ActionToolbar: ToolbarContent {
 struct ToolbarIconButton: View {
     var title: String
     var systemImage: String
-    var role: ButtonRole? = nil
-    var tint: Color? = nil
+    var role: ButtonRole?
+    var tint: Color?
     var isDisabled: Bool = false
-    var help: String? = nil
+    var help: String?
     var action: () -> Void
 
     var body: some View {

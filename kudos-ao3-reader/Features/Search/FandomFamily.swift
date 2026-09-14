@@ -181,8 +181,7 @@ extension FandomFamily {
         }) else { return "#" }
         let upper = String(first).uppercased()
         if let ascii = upper.unicodeScalars.first,
-           (65 ... 90).contains(Int(ascii.value))
-        {
+           (65 ... 90).contains(Int(ascii.value)) {
             return String(ascii)
         }
         return "#"
@@ -233,8 +232,7 @@ extension FandomQualifier {
             text = String(text.dropFirst(4))
         }
         if (text.hasPrefix("(") && text.hasSuffix(")"))
-            || (text.hasPrefix("（") && text.hasSuffix("）"))
-        {
+            || (text.hasPrefix("（") && text.hasSuffix("）")) {
             text = String(text.dropFirst().dropLast())
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -363,8 +361,7 @@ nonisolated enum FandomFamilyFilters {
             multiTagOnly: multiTagOnly
         )
         if multiTagOnly && !hidingRPF && !hidingAllMediaTypes && !hidingRelatedFandoms
-            && !favouritedOnly && !downloadsOnly && minimumWorks == .any
-        {
+            && !favouritedOnly && !downloadsOnly && minimumWorks == .any {
             return families.reduce(0) { $0 + ($1.memberCount < 2 ? 1 : 0) }
         }
         let before = tagCount(in: families)

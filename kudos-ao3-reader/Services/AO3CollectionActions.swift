@@ -325,8 +325,7 @@ extension AO3AuthService {
                 : nil)
             ?? (body.localizedCaseInsensitiveContains("successfully updated")
                 ? "Collection was successfully updated."
-                : nil)
-        {
+                : nil) {
             let parsed = (try? AO3Client.parseCollectionForm(body, slug: form.collectionSlug)) ?? form
             return .saved(message: notice, form: parsed)
         }

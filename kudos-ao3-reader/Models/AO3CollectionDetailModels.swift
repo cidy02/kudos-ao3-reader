@@ -41,14 +41,14 @@ nonisolated struct AO3CollectionParticipant: Hashable, Sendable, Identifiable {
     var collectionSlug: String
     var pseud: String
     var role: AO3CollectionParticipantRole
-    var identity: AO3AuthorIdentity? = nil
-    var updateURL: URL? = nil
+    var identity: AO3AuthorIdentity?
+    var updateURL: URL?
 }
 
 nonisolated struct AO3CollectionPerson: Hashable, Sendable, Identifiable {
     var id: String { identity.id }
     var identity: AO3AuthorIdentity
-    var workCount: Int? = nil
+    var workCount: Int?
 }
 
 nonisolated struct AO3CollectionPeoplePage: Hashable, Sendable {
@@ -94,8 +94,8 @@ nonisolated struct AO3CollectionItem: Hashable, Sendable, Identifiable {
     var collectionSlug: String
     var collectionTitle: String
     var workTitle: String
-    var workURL: URL? = nil
-    var workID: Int? = nil
+    var workURL: URL?
+    var workID: Int?
     var itemType: String = "Work"
     var role: String = ""
     var creatorApproval: AO3CollectionItemApproval = .unreviewed
@@ -134,13 +134,13 @@ nonisolated struct AO3CollectionItemDraft: Hashable, Sendable {
 
 nonisolated struct AO3CollectionShow: Hashable, Sendable, Identifiable {
     var collection: AO3Collection
-    var headerImageURL: URL? = nil
+    var headerImageURL: URL?
     var introduction: String = ""
     var faq: String = ""
     var rules: String = ""
     var canJoin: Bool = false
     var canLeave: Bool = false
-    var leaveParticipantID: Int? = nil
+    var leaveParticipantID: Int?
     var canPostWork: Bool = false
     var isMaintainer: Bool = false
     var dashboard: AO3CollectionDashboard = AO3CollectionDashboard()
@@ -163,17 +163,17 @@ nonisolated struct AO3CollectionTagSetLink: Hashable, Sendable, Identifiable {
 }
 
 nonisolated struct AO3CollectionDashboard: Hashable, Sendable {
-    var profileURL: URL? = nil
-    var worksURL: URL? = nil
-    var bookmarksURL: URL? = nil
-    var peopleURL: URL? = nil
-    var itemsURL: URL? = nil
-    var participantsURL: URL? = nil
-    var signUpsURL: URL? = nil
-    var assignmentsURL: URL? = nil
-    var promptsURL: URL? = nil
-    var challengeSettingsURL: URL? = nil
-    var postToCollectionURL: URL? = nil
+    var profileURL: URL?
+    var worksURL: URL?
+    var bookmarksURL: URL?
+    var peopleURL: URL?
+    var itemsURL: URL?
+    var participantsURL: URL?
+    var signUpsURL: URL?
+    var assignmentsURL: URL?
+    var promptsURL: URL?
+    var challengeSettingsURL: URL?
+    var postToCollectionURL: URL?
 }
 
 nonisolated struct AO3CollectionForm: Hashable, Sendable {

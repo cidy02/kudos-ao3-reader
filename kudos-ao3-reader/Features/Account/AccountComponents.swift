@@ -55,45 +55,36 @@ struct AccountProfileCard: View {
     /// inside this card, which is why the tab never resolved into 1m however
     /// closely the pieces below it matched.
     private func signedInCard(username: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 13) {
-                Button(action: onViewProfile) {
-                    AO3AuthorAvatar(
-                        url: profileModel?.header?.identity.avatarURL,
-                        name: username,
-                        size: 56,
-                        isCircular: true
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("View Profile")
-                .accessibilityHint("Opens your AO3 author profile")
+        HStack(alignment: .center, spacing: 13) {
+            Button(action: onViewProfile) {
+                AO3AuthorAvatar(
+                    url: profileModel?.header?.identity.avatarURL,
+                    name: username,
+                    size: 56,
+                    isCircular: true
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View Profile")
+            .accessibilityHint("Opens your AO3 author profile")
 
-                VStack(alignment: .leading, spacing: 6) {
-                    SubjectKicker(
-                        text: "AO3 Account",
-                        palette: theme.scopePalette,
-                        ruleWidth: SubjectMetrics.pageRuleWidth,
-                        ruleSpacing: 7
-                    )
+            VStack(alignment: .leading, spacing: 6) {
+                SubjectKicker(
+                    text: postingPseudName.map { "Posting as \($0)" } ?? "AO3 Account",
+                    palette: theme.scopePalette,
+                    ruleWidth: SubjectMetrics.pageRuleWidth,
+                    ruleSpacing: 7
+                )
 
-                    Text(username)
-                        .font(.system(size: nameSize, weight: .bold))
-                        .tracking(-0.5)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.7)
-                        .accessibilityAddTraits(.isHeader)
+                postingAsMenu(username: username)
 
+                HStack(alignment: .center, spacing: 8) {
                     sessionStatusLine
+
+                    accountMenu
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            HStack(alignment: .center, spacing: 8) {
-                postingAsMenu
-
-                accountMenu
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
@@ -102,7 +93,7 @@ struct AccountProfileCard: View {
     /// "Posting as <pseud>" — the identity comments are submitted under. The
     /// choices come from the loaded profile header; "Account Default" clears the
     /// preference so AO3's own default pseud applies.
-    private var postingAsMenu: some View {
+    private func postingAsMenu(username: String) -> some View {
         Menu {
             Button {
                 setPostingPseud(nil)
@@ -123,21 +114,22 @@ struct AccountProfileCard: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text("Posting as \(postingPseudName ?? "Account Default")")
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(username)
+                    .font(.system(size: nameSize, weight: .bold))
+                    .tracking(-0.5)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .foregroundStyle(.primary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: nameSize * 0.4, weight: .semibold))
+                    .foregroundStyle(.tint)
             }
-            .font(.subheadline)
-            .foregroundStyle(.tint)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .accessibilityLabel("Posting as")
         .accessibilityValue(postingPseudName ?? "Account Default")
+        .accessibilityHint("Chooses the pseud you post and comment under")
     }
 
     private var availablePseuds: [AO3AuthorPseud] {

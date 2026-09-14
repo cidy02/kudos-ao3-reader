@@ -98,8 +98,7 @@ struct WritingTextEditor: View {
         .alert("Insert link", isPresented: $showLink) {
             TextField("https://example.com", text: $link)
             Button("Insert") {
-                if WritingMarkup.safeLink(link) { controller?.command("a", link: link) }
-                else { errorMessage = "Enter an HTTP, HTTPS, or mailto link." }
+                if WritingMarkup.safeLink(link) { controller?.command("a", link: link) } else { errorMessage = "Enter an HTTP, HTTPS, or mailto link." }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -167,8 +166,7 @@ struct WritingTextEditor: View {
         editor.setAppearance(theme.appTheme, fontSize: editorFontSize)
         editor.onChange = { value in
             text = value
-            do { try store.save(text: value, original: original, to: recoveryURL) }
-            catch { errorMessage = "Local recovery could not be saved: \(error.localizedDescription)" }
+            do { try store.save(text: value, original: original, to: recoveryURL) } catch { errorMessage = "Local recovery could not be saved: \(error.localizedDescription)" }
         }
         do {
             recoveries = try store.copies(for: recoveryKey).filter { $0.entry.text != text }
