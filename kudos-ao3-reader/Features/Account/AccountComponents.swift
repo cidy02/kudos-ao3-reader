@@ -174,21 +174,20 @@ struct AccountProfileCard: View {
         .accessibilityLabel(sessionStatusLineText)
     }
 
-    /// Prefers 1m's wording once the session has been confirmed live against AO3
-    /// — `lastSessionVerification` is stamped where the validator accepts and is
-    /// cleared with the session, so this states a fact rather than a reassurance.
+    /// 1m's wording once the session has been confirmed live against AO3, taken
+    /// from `.healthy`'s own date.
     ///
-    /// Expired and unreachable deliberately ignore that stamp: a session that AO3
-    /// has since rejected, or one that could not be reached, must not keep
-    /// advertising the last time it happened to pass.
+    /// This used to read a separate `lastSessionVerification` stamp on the auth
+    /// service, which `verifySession()` never set — so on the screen the artboard
+    /// is about, the line always fell through to the health summary and 1m's
+    /// sentence never appeared. The state already carried the date; the stamp was
+    /// a second copy of it that was wired up in fewer places, so it is gone.
+    ///
+    /// Every other case defers to the summary: a session AO3 has since rejected,
+    /// or one that could not be reached, must not advertise when it last passed.
     private var sessionStatusLineText: String {
-        switch auth.sessionHealth {
-        case .expired, .unreachable:
-            return sessionStatusDetailText
-        case .unknown, .verifying, .healthy:
-            guard let verifiedAt = auth.lastSessionVerification else { return sessionStatusDetailText }
-            return "Session verified \(verifiedAt.formatted(.relative(presentation: .numeric)))"
-        }
+        guard case let .healthy(verifiedAt) = auth.sessionHealth else { return sessionStatusDetailText }
+        return "Session verified \(verifiedAt.formatted(.relative(presentation: .numeric)))"
     }
 
     @ViewBuilder
