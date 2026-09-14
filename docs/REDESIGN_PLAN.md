@@ -2300,6 +2300,32 @@ category total is a sum of per-tag counts rather than a figure AO3 printed —
 the build note's own data gap, answered honestly in a doc comment rather than
 papered over.
 
+### Two things 1a deliberately does not draw (2026-09-14)
+
+Audited the Work Detail artboard element by element against
+`Features/WorkDetail/`. Everything it draws is there — identity block, figure
+strip, serif summary, ON AO3 chips, tag clusters, the grouped facts card, the
+kudos/comments/bookmarks/hits tally, Mark finished, the My copy row, and on the
+sheet the progress/storage strip, the status toggles, the queue rows with their
+positions (`"\(queue.name) — #\(index + 1) of \(orderedWorks.count)"`), the
+collections and the conversion provenance.
+
+Two elements are drawn in the artboard and absent from the app **on purpose**.
+Both would have to be invented to appear, so anyone reading the artboard and
+reaching for the code should stop here first:
+
+- **"Part 2 of 4"** on the series row. The app renders `"Part 2"`. The total is
+  not on a work page — AO3 prints the position there and keeps the count on the
+  series page — so the "of 4" costs a request for a fact nobody asked for, and
+  guessing it is worse. `seriesFactRow` is already correct.
+- **"9 pages left"** on the resume card. `ReaderPageMetrics.workRemainingPositions`
+  does compute this, but only with a Readium publication open; nothing persists
+  it on the work. Work Detail would have to open the book to state it. Worth
+  doing only if the reader starts persisting the figure for its own reasons.
+
+The pattern is the plan's §4 rule holding: a figure that cannot be sourced is
+dropped, not approximated. Both omissions are the code being right, not behind.
+
 ### Unattended-run policy (added 2026-09-13, for the overnight loop)
 
 The owner set a loop running while asleep, with one objective: **follow the spec
