@@ -303,16 +303,13 @@ struct AccountView: View {
                         .padding(.horizontal, CardListMetrics.sideMargin)
                 }
 
-                // Same card chrome as detailed List `tabPickerSection` + `.cardRow()`.
-                AccountScrollChromeCard {
-                    Picker("Account Content", selection: $selectedTab) {
-                        ForEach(AccountTab.allCases) { tab in
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
+                SubjectSegmentedControl(
+                    options: AccountTab.allCases,
+                    title: \.rawValue,
+                    selection: $selectedTab
+                )
+                .accessibilityLabel("Account Content")
+                .padding(.horizontal, SubjectMetrics.accountGutter)
 
                 compactScopeChrome
                 compactWorksContent
@@ -326,32 +323,14 @@ struct AccountView: View {
 
     @ViewBuilder
     private var compactScopeChrome: some View {
-        // Same card chrome as detailed List `.cardRow()` so Show / Works lines up.
+        // Compact swaps the list host, not 1bt's scope membership or controls.
         switch selectedTab {
         case .reading:
-            AccountScrollChromeCard {
-                AccountScopeMenu(
-                    prompt: "Show",
-                    systemImage: \.systemImage,
-                    selection: $readingTab
-                )
-            }
+            readingScopeGroups
         case .writing:
-            AccountScrollChromeCard {
-                AccountScopeMenu(
-                    prompt: "Show",
-                    systemImage: \.systemImage,
-                    selection: $writingTab
-                )
-            }
+            writingScopeGroups
         case .activity:
-            AccountScrollChromeCard {
-                AccountScopeMenu(
-                    prompt: "Show",
-                    systemImage: \.systemImage,
-                    selection: $activityTab
-                )
-            }
+            activityScopeGroups
         case .overview:
             EmptyView()
         }
@@ -769,24 +748,7 @@ struct AccountView: View {
 
     @ViewBuilder
     private var readingSections: some View {
-        // 1bt groups Reading by what a shelf *means* rather than listing four
-        // peers: what you put aside, and what you follow.
-        //
-        // Subscriptions is drawn with a "N with new chapters" subtitle that is
-        // not built here. The figure does exist —
-        // `SubscriptionWatermarks.newChapterCount(for:watermarks:)`, which
-        // `AO3AccountWorksList` already prints on the subscriptions list itself —
-        // but it is computed per work against a loaded page, and this row is the
-        // thing you tap *instead of* loading that page. Stating it here would
-        // mean fetching subscriptions to describe the button that opens them.
-        scopeGroup("Saved", [
-            readingDestination(.later, count: .markedForLater),
-            readingDestination(.bookmarks, count: .bookmarks),
-            readingDestination(.collections, count: .collections)
-        ])
-        scopeGroup("Following", [
-            readingDestination(.subscriptions, count: .subscriptions)
-        ])
+        readingScopeGroups
 
         switch readingTab {
         case .later:
@@ -833,19 +795,7 @@ struct AccountView: View {
 
     @ViewBuilder
     private var activitySections: some View {
-        // 1bt: Activity opens with what you read on AO3, then what arrives. The
-        // artboard splits arrivals from exchanges; this tab has only the inbox
-        // for both, so it is one group rather than an empty second heading.
-        scopeGroup("Read on AO3", [
-            activityDestination(.history, count: .history)
-        ])
-        scopeGroup("Arrives", [
-            activityDestination(
-                .inbox,
-                count: nil,
-                subtitle: inboxModel.unreadCount.map { "\($0) unread" }
-            )
-        ])
+        activityScopeGroups
 
         switch activityTab {
         case .history:
@@ -1272,45 +1222,14 @@ private extension AccountView {
     }
 }
 
-// MARK: - Writing scope (artboards 1u, 1v, 1w)
+// MARK: - Writing scope (artboard 1bt)
 
-extension AccountView {
+private extension AccountView {
     // MARK: Writing — Works | Series | Drafts
 
     @ViewBuilder
     private var writingSections: some View {
-        Section {
-
-            SubjectHeaderBlock(
-                kicker: "AO3 Account",
-                title: writingTab.rawValue,
-                subtitle: writingTabSubtitle,
-                palette: accountPalette,
-                gutter: SubjectMetrics.accountGutter
-            )
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(AccountWritingTab.allCases) { tab in
-                        Button {
-                            writingTab = tab
-                        } label: {
-                            SubjectChip(text: tab.rawValue, style: .pill(isSelected: writingTab == tab))
-                        }
-                        // The menu this replaced announced the chosen scope with a
-                        // checkmark; a chip rail has to say so itself.
-                        .accessibilityAddTraits(writingTab == tab ? [.isSelected] : [])
-                    }
-                }
-                .padding(.horizontal, SubjectMetrics.accountGutter)
-            }
-            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-        }
+        writingScopeGroups
 
         switch writingTab {
         case .works:
@@ -1358,17 +1277,6 @@ extension AccountView {
         }
     }
 
-    private var writingTabSubtitle: String? {
-        guard let model = profileModel else { return nil }
-        switch writingTab {
-        case .works:
-            return model.works.count == 1 ? "1 work" : "\(model.works.count) works"
-        case .series:
-            return model.series.count == 1 ? "1 series" : "\(model.series.count) series"
-        case .drafts:
-            return nil
-        }
-    }
 }
 
 /// Artboard 1bt's grouped destination rows.
@@ -1379,6 +1287,53 @@ extension AccountView {
 /// file, because it reads the view's private scope state.
 private extension AccountView {
     // MARK: Scope groups (artboard 1bt)
+
+    @ViewBuilder
+    var readingScopeGroups: some View {
+        // 1bt groups Reading by what a shelf means: saved or followed.
+        scopeGroup("Saved", [
+            readingDestination(.later, count: .markedForLater),
+            readingDestination(.bookmarks, count: .bookmarks),
+            readingDestination(.collections, count: .collections)
+        ])
+        // `SubscriptionWatermarks.newChapterCount(for:watermarks:)` needs loaded
+        // subscription works. The hub's AO3AccountListCountsCache only holds list
+        // sizes, so it cannot supply "N with new chapters" without loading them.
+        scopeGroup("Following", [
+            readingDestination(.subscriptions, count: .subscriptions)
+        ])
+    }
+
+    @ViewBuilder
+    var writingScopeGroups: some View {
+        scopeGroup("Posted", [
+            writingDestination(.works, count: .myWorks),
+            writingDestination(.series, count: nil)
+        ])
+        scopeGroup("Unposted", [
+            // otwarchive's work_drafts.feature keeps 29-day drafts and purges
+            // 31-day drafts; WritingDraftsView records the same 30-day rule.
+            writingDestination(.drafts, count: nil, subtitle: "Deleted by AO3 after 30 days")
+        ])
+    }
+
+    @ViewBuilder
+    var activityScopeGroups: some View {
+        // 1bt splits arrivals from exchanges; this scope has only Inbox for
+        // both, so there is no empty exchanges heading.
+        scopeGroup("Read on AO3", [
+            activityDestination(
+                .history, count: .history, subtitle: "AO3’s own history, not the local reading log"
+            )
+        ])
+        scopeGroup("Arrives", [
+            activityDestination(
+                .inbox,
+                count: nil,
+                subtitle: inboxModel.unreadCount.map { "\($0) unread" }
+            )
+        ])
+    }
 
     /// One destination inside a scope.
     ///
@@ -1399,18 +1354,66 @@ private extension AccountView {
     }
 
     private func scopeGroup(_ title: String, _ destinations: [AccountScopeDestination]) -> some View {
-        Section {
+        AccountScopeGroup(
+            title: title,
+            count: destinations.count,
+            layout: usesLibraryStyleCompactLayout ? .scroll : .list
+        ) {
             VStack(spacing: 0) {
                 ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in
                     if index > 0 { SubjectRowSeparator() }
                     scopeDestinationRow(destination)
                 }
             }
-            .subjectPanel()
-            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-        } header: {
-            SectionRuleHeader(title: title)
-                .pageBodyRow(top: 18, gutter: 0)
+        }
+    }
+
+    // Each group owns its AppStorage so List/ScrollView remounts and scope
+    // switches share the same preference without growing AccountView's body.
+    struct AccountScopeGroup<Content: View>: View {
+        let title: String
+        let count: Int
+        let layout: AccountWorksLayout
+        let content: Content
+        @AppStorage private var isCollapsed: Bool
+
+        init(title: String, count: Int, layout: AccountWorksLayout, @ViewBuilder content: () -> Content) {
+            self.title = title
+            self.count = count
+            self.layout = layout
+            self.content = content()
+            _isCollapsed = AppStorage(wrappedValue: false, "account.scopeGroup.\(title).isCollapsed")
+        }
+
+        var body: some View {
+            if layout == .list {
+                Section {
+                    if !isCollapsed {
+                        content.subjectPanel()
+                            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                    }
+                } header: {
+                    header.pageBodyRow(top: 18, gutter: 0)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    header
+                    if !isCollapsed {
+                        content.subjectPanel()
+                            .padding(.horizontal, SubjectMetrics.accountGutter)
+                    }
+                }
+                .padding(.top, 18)
+            }
+        }
+
+        private var header: some View {
+            SectionRuleHeader(
+                title: title,
+                count: count,
+                isCollapsed: isCollapsed,
+                onToggleCollapse: { isCollapsed.toggle() }
+            )
         }
     }
 
@@ -1463,6 +1466,20 @@ private extension AccountView {
             count: count.flatMap { cachedCount($0) },
             isSelected: readingTab == tab,
             select: { readingTab = tab }
+        )
+    }
+
+    private func writingDestination(
+        _ tab: AccountWritingTab, count: AO3AccountListKind?, subtitle: String? = nil
+    ) -> AccountScopeDestination {
+        AccountScopeDestination(
+            id: tab.rawValue,
+            title: tab.rawValue,
+            systemImage: tab.systemImage,
+            subtitle: subtitle,
+            count: count.flatMap { cachedCount($0) },
+            isSelected: writingTab == tab,
+            select: { writingTab = tab }
         )
     }
 
