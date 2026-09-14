@@ -55,6 +55,10 @@ struct AccountView: View {
         case dashboard
         /// Artboard 1x, which `WritingDraftsView` already is.
         case drafts
+        /// Artboards 1u and 1w: the signed-in user's own works and series, on
+        /// the profile surface opened at that scope.
+        case myWorks
+        case mySeries
     }
 
     enum AccountTab: String, CaseIterable, Identifiable {
@@ -319,16 +323,7 @@ struct AccountView: View {
         case .reading:
             EmptyView()
         case .writing:
-            if writingTab == .works {
-                profileContentSections(
-                    profileTab: .works,
-                    sectionTitle: "Works",
-                    layout: .scroll,
-                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                        for: matureContentScope
-                    )
-                )
-            }
+            EmptyView()
         case .activity:
             if activityTab == .history {
                 AccountWorksInlineSection(
@@ -456,6 +451,23 @@ struct AccountView: View {
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
         case .dashboard: AO3DashboardView()
         case .drafts: WritingDraftsView()
+        case .myWorks: ownProfile(title: "Works", tab: .works)
+        case .mySeries: ownProfile(title: "Series", tab: .series)
+        }
+    }
+
+    /// 1u and 1w are the account's own works and series. `AuthorProfileView` is
+    /// already that screen — header, wash, ledger rows — so they open it at the
+    /// right scope rather than growing a third copy of the same list.
+    @ViewBuilder
+    private func ownProfile(title: String, tab: AO3AuthorProfileTab) -> some View {
+        if let username = auth.username, let route = AO3AuthorRoute(username: username) {
+            AuthorProfileView(route: route, navigationTitle: title, initialTab: tab)
+        } else {
+            ContentUnavailableView(
+                "Not signed in",
+                systemImage: "person.crop.circle.badge.questionmark"
+            )
         }
     }
 
@@ -480,7 +492,8 @@ struct AccountView: View {
         case .overview:
             return false
         case .writing:
-            return writingTab == .works
+            // Its rows open their own screens now, which carry these controls.
+            return false
         case .reading:
             // Reading draws only its groups now, so there is no inline list for
             // display-mode, expand-all or the mature reveal to act on. Those
@@ -1141,64 +1154,13 @@ private extension AccountView {
     // MARK: Writing — Works | Series | Drafts
 
     @ViewBuilder
+    /// Like Reading: 1bt draws the groups and nothing else. Works, Series and
+    /// Drafts each open their own screen now, so the inline list that used to sit
+    /// here was a second copy of what the row opens.
     private var writingSections: some View {
         writingScopeGroups
-
-        switch writingTab {
-        case .works:
-            if let model = profileModel {
-                if model.contentPhase == .loading && model.works.isEmpty {
-                    AO3AuthorLoadingRows()
-                } else if model.works.isEmpty {
-                    AO3AuthorContentMessage(
-                        model: model,
-                        emptyTitle: "No works",
-                        emptyMessage: "AO3 has no works visible to this session.",
-                        emptySymbol: "book"
-                    )
-                } else {
-                    let filteredWorks = filters.apply(to: model.works)
-                    if filteredWorks.isEmpty {
-                        AO3AuthorContentMessage(
-                            model: model,
-                            emptyTitle: "No matching works",
-                            emptyMessage: "No works match the active filters.",
-                            emptySymbol: "line.3.horizontal.decrease.circle"
-                        )
-                    } else {
-                        ForEach(filteredWorks) { work in
-                            EnrichingAO3WorkRow(work: work, expandAll: false, presentation: .searchLedger)
-                                .cardNavigation(to: work, accessibilityLabel: work.title)
-                                .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
-                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    Button("Edit", systemImage: "pencil") { editingWorkID = work.id }
-                                }
-                        }
-                    }
-                }
-            }
-        case .series:
-            profileSeriesSections
-        case .drafts:
-            Section {
-                NavigationLink { WritingDraftsView() } label: {
-                    Label("Drafts", systemImage: "doc.badge.clock")
-                }
-            } footer: {
-                Text("Open an unpublished work to continue writing, or start a new draft.")
-            }
-        }
     }
 
-}
-
-/// Artboard 1bt's grouped destination rows.
-///
-/// Lives in an extension rather than the struct body on purpose: `AccountView`
-/// is already at SwiftLint's 900-line type limit, and this vocabulary is a
-/// self-contained presentation layer over navigation that already exists. Same
-/// file, because it reads the view's private scope state.
-private extension AccountView {
     // MARK: Scope groups (artboard 1bt)
 
     @ViewBuilder
@@ -1416,8 +1378,9 @@ private extension AccountView {
     /// yet, and a row that opens nothing is worse than one that is inconsistent.
     private func openWriting(_ tab: AccountWritingTab) {
         switch tab {
+        case .works: path.append(Route.myWorks)
+        case .series: path.append(Route.mySeries)
         case .drafts: path.append(Route.drafts)
-        case .works, .series: writingTab = tab
         }
     }
 
