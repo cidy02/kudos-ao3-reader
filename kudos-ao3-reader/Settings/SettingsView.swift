@@ -201,6 +201,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         } label: {
                             Label("Customize Theme…", systemImage: "slider.horizontal.3")
                         }
+                        TextSizeSlider()
                         #endif
                     } header: {
                         Text("Theme")
@@ -231,9 +232,15 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     }
                 }
 
+                // Text size lives in the group above when these are app
+                // settings; 1ab keeps theme, accent, font and text size together
+                // under Reading. The reader keeps its own copy, where the group
+                // above is not shown.
                 #if os(iOS)
-                Section("Text Size") {
-                    TextSizeSlider()
+                if !includeAppSettings {
+                    Section("Text Size") {
+                        TextSizeSlider()
+                    }
                 }
                 #endif
 
