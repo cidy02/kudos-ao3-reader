@@ -460,23 +460,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
 
                     // Moved from Account's own "Help & Project" section as part of
                     // folding Account's App/Help rows into Settings.
-                    Section("Help & Project") {
-                        Button {
-                            showAbout = true
-                        } label: {
-                            Label("About Kudos", systemImage: "info.circle")
-                        }
-                        Button {
-                            showingBugReport = true
-                        } label: {
-                            Label("Report a Bug", systemImage: "ladybug")
-                        }
-                        if let url = URL(string: AppLinks.repository) {
-                            Link(destination: url) {
-                                Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                            }
-                        }
-                    }
+                    AboutSettingsSection(
+                        onShowAbout: { showAbout = true },
+                        onReportBug: { showingBugReport = true }
+                    )
                 }
             }
             .appThemedRows()
@@ -1672,5 +1659,52 @@ private extension Error {
         let error = self as NSError
         return error.domain == NSCocoaErrorDomain
             && error.code == CocoaError.Code.userCancelled.rawValue
+    }
+}
+
+/// Artboard 1ab's About group.
+///
+/// Its own `View` rather than another `Section` inside `ReaderOptionsForm`'s
+/// body: that body already carries around twenty sections, and adding this one
+/// inline pushed Swift's type checker into an inference that never terminated —
+/// the compile hung on this file rather than failing. A separate type gives the
+/// solver a boundary to stop at.
+private struct AboutSettingsSection: View {
+    var onShowAbout: () -> Void
+    var onReportBug: () -> Void
+
+    var body: some View {
+        Section {
+            // 1ab states the running version on the page. It was reachable only
+            // by opening the About sheet — the one place you cannot read it from
+            // while writing a bug report about it.
+            LabeledContent("Version", value: Changelog.currentVersion)
+
+            NavigationLink(value: SettingsRoute.privacy) {
+                Label("Privacy and local data", systemImage: "hand.raised")
+            }
+
+            Button(action: onShowAbout) {
+                Label("About Kudos", systemImage: "info.circle")
+            }
+
+            Button(action: onReportBug) {
+                Label("Report a Bug", systemImage: "ladybug")
+            }
+
+            if let url = URL(string: AppLinks.repository) {
+                Link(destination: url) {
+                    Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+            }
+        } header: {
+            Text("About")
+        } footer: {
+            // 1ab's closing line. The last sentence is the one worth stating:
+            // the accent chosen here is what tints the Account tab's wash, which
+            // neither screen says on its own.
+            Text("App settings only. Anything AO3 stores on the account is in AO3 "
+                + "Preferences. The accent colour set here is what tints the whole tab.")
+        }
     }
 }
