@@ -10,7 +10,7 @@ import SwiftData
     var id: UUID = UUID()
     /// `SavedWork.id`. Grouping key for history; never the title.
     var workID: UUID = UUID()
-    var ao3WorkID: Int? = nil
+    var ao3WorkID: Int?
     var sourceURL: String = ""
     /// Snapshot so a deleted work still has a history row.
     var workTitle: String = ""

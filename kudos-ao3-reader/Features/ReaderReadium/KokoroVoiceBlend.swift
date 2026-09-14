@@ -19,11 +19,6 @@ nonisolated enum KokoroVoiceBlend: Sendable {
     struct Component: Sendable, Equatable {
         var voice: String
         var weight: Double
-
-        init(voice: String, weight: Double) {
-            self.voice = voice
-            self.weight = weight
-        }
     }
 
     enum Failure: Error, Equatable {

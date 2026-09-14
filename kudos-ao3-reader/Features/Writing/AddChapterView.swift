@@ -155,8 +155,7 @@ struct AddChapterView: View {
                 Toggle("Custom publication date", isOn: Binding(
                     get: { !form.publishedYear.isEmpty },
                     set: { enabled in
-                        if enabled { publicationDate.wrappedValue = Date() }
-                        else { form.publishedYear = ""; form.publishedMonth = ""; form.publishedDay = "" }
+                        if enabled { publicationDate.wrappedValue = Date() } else { form.publishedYear = ""; form.publishedMonth = ""; form.publishedDay = "" }
                     }
                 )).labelsHidden()
             }
@@ -247,8 +246,7 @@ struct AddChapterView: View {
                     }
                     try await AO3RequestCoordinator.shared.withSlot {
                         guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
-                        if form.chapterID == nil { return try await auth.createChapter(form, submit: submit) }
-                        else { return try await auth.updateChapter(form, submit: submit) }
+                        if form.chapterID == nil { return try await auth.createChapter(form, submit: submit) } else { return try await auth.updateChapter(form, submit: submit) }
                     }
                     chapterSaved = true
                 }

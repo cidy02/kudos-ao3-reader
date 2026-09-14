@@ -7,7 +7,7 @@ import SwiftData
     var id: UUID = UUID()
     var fandomName: String = ""
     var lastVisitedAt: Date = Date()
-    var newestWorkIDSeen: Int? = nil
+    var newestWorkIDSeen: Int?
     var newestWorkTitleSeen: String = ""
     var lastModifiedAt: Date = Date()
 

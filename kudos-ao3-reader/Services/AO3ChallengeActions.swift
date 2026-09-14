@@ -257,8 +257,7 @@ extension AO3AuthService {
         }
         if let notice = AO3Client.writeSuccessMessage(in: body)
             ?? (body.localizedCaseInsensitiveContains("successfully")
-                ? "Challenge was successfully updated." : nil)
-        {
+                ? "Challenge was successfully updated." : nil) {
             let parsed = (try? AO3Client.parseChallengeSettingsForm(
                 body, slug: form.collectionSlug, kind: form.kind
             )) ?? posted

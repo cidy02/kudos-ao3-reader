@@ -492,14 +492,9 @@ extension AO3Client {
             guard !name.isEmpty else { continue }
             let text = ((try? row.text()) ?? "").lowercased()
             let field: AO3TagSetField
-            if text.contains("character") { field = .character }
-            else if text.contains("relationship") { field = .relationship }
-            else if text.contains("freeform") || text.contains("additional") { field = .freeform }
-            else { field = .fandom }
+            if text.contains("character") { field = .character } else if text.contains("relationship") { field = .relationship } else if text.contains("freeform") || text.contains("additional") { field = .freeform } else { field = .fandom }
             let state: AO3TagNominationState
-            if text.contains("reject") { state = .rejected }
-            else if text.contains("approv") { state = .approved }
-            else { state = .unreviewed }
+            if text.contains("reject") { state = .rejected } else if text.contains("approv") { state = .approved } else { state = .unreviewed }
             index += 1
             result.append(AO3TagNomination(id: index, tagName: name, field: field, state: state))
         }

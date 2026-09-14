@@ -211,7 +211,7 @@ nonisolated struct AO3ChallengeSettings: Hashable, Sendable, Identifiable {
     var offerDescriptionLabel: String = ""
     var requestRestriction: AO3PromptRestrictionSnapshot = AO3PromptRestrictionSnapshot()
     var offerRestriction: AO3PromptRestrictionSnapshot = AO3PromptRestrictionSnapshot()
-    var assignmentsSentAt: Date? = nil
+    var assignmentsSentAt: Date?
 
     var id: String { collectionSlug }
 
@@ -343,15 +343,15 @@ nonisolated struct AO3ChallengePrompt: Hashable, Sendable, Identifiable {
 nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
     var id: Int
     var collectionSlug: String
-    var requestSignupID: Int? = nil
-    var offerSignupID: Int? = nil
+    var requestSignupID: Int?
+    var offerSignupID: Int?
     var requestPseud: String = ""
     var offerPseud: String = ""
     var pinchHitterPseud: String = ""
     var isDefaulted: Bool = false
     var isFulfilled: Bool = false
     var isCovered: Bool = false
-    var sentAt: Date? = nil
+    var sentAt: Date?
 
     var isMatched: Bool {
         // Complete rows omit signup IDs; the join can prove the recipient by
@@ -365,11 +365,11 @@ nonisolated struct AO3ChallengeSignUp: Hashable, Sendable, Identifiable {
     var collectionSlug: String
     var pseud: String
     var pseudID: String = ""
-    var userURL: URL? = nil
+    var userURL: URL?
     var requests: [AO3ChallengePrompt] = []
     var offers: [AO3ChallengePrompt] = []
     /// Joined from the assignments object, never from the sign-up itself (1bz).
-    var assignment: AO3ChallengeAssignment? = nil
+    var assignment: AO3ChallengeAssignment?
 
     var isMatched: Bool { assignment?.isMatched == true }
 
@@ -475,7 +475,7 @@ nonisolated struct AO3PromptMemePrompt: Hashable, Sendable, Identifiable {
     var isAnonymous: Bool = false
     /// Hidden when `isAnonymous` even if a later cache knows the owner (1cc).
     var ownerPseud: String?
-    var claimID: Int? = nil
+    var claimID: Int?
     var claimedByCurrentUser: Bool = false
     var isClaimed: Bool { claimID != nil }
 
@@ -543,7 +543,7 @@ nonisolated struct AO3TagSet: Hashable, Sendable, Identifiable {
     var freeformTagnames: String = ""
     var reviewQueue: [AO3TagNomination] = []
     var csrfToken: String = ""
-    var actionURL: URL? = nil
+    var actionURL: URL?
     var httpMethodOverride: String? = "put"
 
     /// Finishing tag-set association is not a client write.

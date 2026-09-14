@@ -128,10 +128,18 @@ struct AccountView: View {
                     standardListRoot
                 }
             }
-            // The page states its own name in `subjectHeaderSection` — the
-            // username, per 1m — so the bar keeps its items and gives up its
-            // title rather than saying "Account" a second time above it.
-            .hidesNavigationBarChrome()
+            // 1m has no navigation bar at all. Its content column starts at the
+            // safe area and its chrome is a glass circle floating over the wash,
+            // with the page scrolling underneath — which is the whole 44pt of
+            // dead space an empty inline bar was reserving above the header.
+            //
+            // The bar comes back for the inbox's selection mode, and only that:
+            // Select All is a `.confirmationAction`, which has nowhere to live
+            // without a bar, and it is a distinct, self-contained state.
+            .toolbar(inboxModel.isSelecting ? .visible : .hidden, for: .navigationBar)
+                .overlay(alignment: .topTrailing) {
+                    if !inboxModel.isSelecting { floatingChromeRow }
+                }
                 .navigationDestination(for: Route.self, destination: destination)
                 .navigationDestination(item: $editingWorkID) { WritingWorkDestination(workID: $0) }
                 .navigationDestination(for: SettingsRoute.self) { route in
@@ -173,19 +181,7 @@ struct AccountView: View {
                     )
                 }
                 .ao3AuthorNavigation(path: $path, tab: .account)
-                .toolbar {
-                    AccountToolbarContent(
-                        isInboxVisible: isInboxVisible,
-                        model: inboxModel,
-                        showingInboxFilters: $showingInboxFilters,
-                        isWorksVisible: selectedTab == .writing && writingTab == .works,
-                        showingWorksFilter: $showingFilters,
-                        showsMatureRevealControl: showsMatureRevealControl,
-                        showsWorkListControls: showsWorkListControls,
-                        displayMode: $displayMode,
-                        expandAll: $expandAll
-                    )
-                }
+                .toolbar { accountToolbarContent }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
                 .sheet(isPresented: $showingFilters) {
                     AO3FilterPanel(
@@ -1072,6 +1068,47 @@ struct AccountView: View {
 }
 
 private extension AccountView {
+    /// `.toolbar { }` has both a `ViewBuilder` and a `ToolbarContentBuilder`
+    /// overload, and picks the former for a bare property. Naming this one
+    /// `some ToolbarContent` leaves only one overload that can accept it.
+    @ToolbarContentBuilder
+    var accountToolbarContent: some ToolbarContent { accountToolbar }
+
+    var accountToolbar: AccountToolbarContent {
+        AccountToolbarContent(
+            isInboxVisible: isInboxVisible,
+            model: inboxModel,
+            showingInboxFilters: $showingInboxFilters,
+            isWorksVisible: selectedTab == .writing && writingTab == .works,
+            showingWorksFilter: $showingFilters,
+            showsMatureRevealControl: showsMatureRevealControl,
+            showsWorkListControls: showsWorkListControls,
+            displayMode: $displayMode,
+            expandAll: $expandAll
+        )
+    }
+
+    /// 1m's chrome: glass circles over the wash, in an overlay rather than a
+    /// `safeAreaInset`, so they take no height from the page. They land on the
+    /// identity row's trailing edge, where the artboard draws its own circle.
+    ///
+    /// 44pt, not the artboard's 34. A drawn number is not a source, and this one
+    /// is below the minimum tap target — it also made the button visibly smaller
+    /// than the toolbar item it replaced, which is how the shortfall showed up.
+    var floatingChromeRow: some View {
+        HStack(spacing: 9) {
+            ForEach(Array(accountToolbar.actionItems.enumerated()), id: \.offset) { _, item in
+                item
+                    .labelStyle(.iconOnly)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+    }
+
     /// Artboard 1n's "What is waiting".
     ///
     /// A preview of the signed-in tab rather than a description of it: the real

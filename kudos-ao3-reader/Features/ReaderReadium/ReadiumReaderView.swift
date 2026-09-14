@@ -1048,8 +1048,7 @@ struct ReadiumReaderView: View {
     @ViewBuilder
     private var highlightColorBar: some View {
         if let id = colorBarAnnotationID,
-           let annotation = annotations.first(where: { $0.id == id })
-        {
+           let annotation = annotations.first(where: { $0.id == id }) {
             ReaderHighlightColorBar(
                 selected: annotation.color,
                 onSelect: { applyHighlightColor($0, to: annotation) },
@@ -1189,7 +1188,6 @@ struct ReadiumReaderView: View {
         guard isEditingSlider, pageCount > 0 else { return 0 }
         return ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)
     }
-
 
     /// The fan's round action row (after the native `ShareLink` slot): kudos is
     /// wired to the existing native write action; read aloud and in-book
@@ -1488,7 +1486,6 @@ extension ReadiumReaderView {
             set: { if !$0 { router.panel = .none } }
         )
     }
-
 
     // MARK: Contents sheet helpers
 
@@ -1858,7 +1855,6 @@ extension ReadiumReaderView {
         Binding(get: { kudosBanner != nil }, set: { if !$0 { kudosBanner = nil } })
     }
 }
-
 
 // MARK: - Fan menu items
 

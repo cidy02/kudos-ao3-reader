@@ -612,7 +612,7 @@ struct TagSetView: View {
     private func loadTagSet() async {
         phase = .loading
         do {
-            var baseRequest: URLRequest? = nil
+            var baseRequest: URLRequest?
             if auth.isLoggedIn {
                 baseRequest = try? auth.authenticatedRequest(for: AO3ChallengeURL.tagSet(tagSetID))
             }

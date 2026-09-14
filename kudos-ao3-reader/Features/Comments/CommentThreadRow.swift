@@ -126,7 +126,6 @@ enum CommentThreadGeometry {
         return Color.accentColor.opacity(opacities[max(0, depth) % opacities.count])
     }
 
-
     /// Leading indent for a reply, clamped to what the screen can spare.
     ///
     /// The *list* never renders past depth 1 — anything deeper sits behind
@@ -434,7 +433,7 @@ struct CommentThreadHandlers {
     /// The `= nil` default (not just an Optional type) is load-bearing: it's
     /// what makes the synthesized memberwise init treat this param as optional
     /// too, so `.noop` below keeps compiling unchanged.
-    var onOpenAuthor: ((AO3AuthorRoute) -> Void)? = nil
+    var onOpenAuthor: ((AO3AuthorRoute) -> Void)?
 
     static let noop = CommentThreadHandlers(
         onReply: { _ in },
@@ -1079,7 +1078,7 @@ private struct CommentPostRow: View {
     /// Set for a reply: who it answers. The connector conveys nesting visually but
     /// is `accessibilityHidden`, so this is VoiceOver's only account of it —
     /// always supplied, regardless of whether it is also shown on screen.
-    var replyToAuthor: String? = nil
+    var replyToAuthor: String?
     /// Whether to *render* `replyToAuthor` as well as announce it. Set only where
     /// the connector can't do the job — see `CommentConversationRowItem`.
     var showsParentAttribution = false

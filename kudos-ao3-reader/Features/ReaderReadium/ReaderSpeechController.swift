@@ -74,7 +74,7 @@ final class ReaderSpeechController {
     private var ttsServiceRuntimeConfiguration: KokoroRuntimeConfiguration?
     private let downloadManager = TTSDownloadManager.shared
     private var stoppedManually = false
-    
+
     /// After a re-anchor while paused, pause again once the first utterance starts.
     private var pendingPauseAfterReanchor = false
     /// Chapter finished speaking — next `reanchor` should resume even though
@@ -559,7 +559,7 @@ final class ReaderSpeechController {
     func reanchor(to locator: Locator?, resumePlaying: Bool) {
         resumeLocator = locator
         guard ttsService != nil, status != .unavailable else { return }
-        
+
         applyPreferences()
 
         let shouldPlay = resumePlaying || pendingAutoContinue
@@ -679,8 +679,7 @@ final class ReaderSpeechController {
 
         let title = nowPlayingTitle.isEmpty ? "Reading aloud" : nowPlayingTitle
         if NowPlayingInfo.shared.media?.title != title
-            || NowPlayingInfo.shared.media?.artist != nowPlayingArtist
-        {
+            || NowPlayingInfo.shared.media?.artist != nowPlayingArtist {
             NowPlayingInfo.shared.media = .init(
                 title: title,
                 artist: nowPlayingArtist

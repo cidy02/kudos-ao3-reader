@@ -151,8 +151,7 @@ nonisolated enum KokoroUtterancePacker {
                 quoteDepth = max(0, quoteDepth - 1)
             }
             if quoteDepth == 0, delimiters.contains(ch),
-               estimator.estimatePhonemeLength(current) >= KokoroPhonemeBudget.splitThreshold / 2
-            {
+               estimator.estimatePhonemeLength(current) >= KokoroPhonemeBudget.splitThreshold / 2 {
                 let trimmed = current.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty { pieces.append(trimmed) }
                 current = ""
@@ -174,8 +173,7 @@ nonisolated enum KokoroUtterancePacker {
         for word in words {
             let candidate = current.isEmpty ? word : current + " " + word
             if !current.isEmpty,
-               estimator.estimatePhonemeLength(candidate) > KokoroPhonemeBudget.splitThreshold
-            {
+               estimator.estimatePhonemeLength(candidate) > KokoroPhonemeBudget.splitThreshold {
                 pieces.append(current)
                 current = word
             } else {
@@ -248,13 +246,11 @@ nonisolated enum KokoroUtterancePacker {
         // independent synthesis with its own prosody reset.
         if groups.count >= 2,
            let last = groups.last,
-           estimator.estimatePhonemeLength(last.joined(separator: " ")) < KokoroPhonemeBudget.preferredMin
-        {
+           estimator.estimatePhonemeLength(last.joined(separator: " ")) < KokoroPhonemeBudget.preferredMin {
             let previous = groups[groups.count - 2]
             let combined = previous + last
             if estimator.estimatePhonemeLength(combined.joined(separator: " "))
-                <= KokoroPhonemeBudget.softUpper
-            {
+                <= KokoroPhonemeBudget.softUpper {
                 // Absorb the stub outright: one utterance instead of two, and
                 // unlike stealing it cannot leave a new runt behind. Bounded by
                 // `softUpper` rather than `preferredMax` because merging two

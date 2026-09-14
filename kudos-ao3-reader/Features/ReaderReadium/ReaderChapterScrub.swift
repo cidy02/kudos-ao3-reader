@@ -35,8 +35,7 @@ nonisolated enum ReaderChapterScrub {
         guard let origin, pageCount > 1 else { return value }
         let pinned = origin.clamped01
         if page(sliderValue: value, pageCount: pageCount)
-            == page(sliderValue: pinned, pageCount: pageCount)
-        {
+            == page(sliderValue: pinned, pageCount: pageCount) {
             return pinned
         }
         return value

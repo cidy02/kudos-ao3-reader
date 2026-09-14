@@ -70,8 +70,19 @@ struct AccountToolbarContent: ToolbarContent {
             // WorkListMoreMenu's own gate widened to `showsWorkListControls ||
             // showsMatureRevealControl` — Privacy now lives inside it, so it needs
             // a home even when the work-list controls themselves aren't showing.
-            ActionToolbar(items: [
-                (showsWorkListControls || showsMatureRevealControl)
+            ActionToolbar(items: actionItems)
+        }
+    }
+
+    /// The account's action buttons as plain views.
+    ///
+    /// 1m has no navigation bar: its chrome is a glass circle floating over the
+    /// wash with the page scrolling under it, so `AccountView` renders these in an
+    /// overlay instead. They stay defined once, here, so the floating row and the
+    /// bar the inbox's selection mode still needs cannot drift apart.
+    var actionItems: [AnyView] {
+        [
+            (showsWorkListControls || showsMatureRevealControl)
                     ? AnyView(WorkListMoreMenu {
                         if showsMatureRevealControl {
                             MatureRevealToggle()
@@ -107,13 +118,12 @@ struct AccountToolbarContent: ToolbarContent {
                         action: model.beginSelection
                     ))
                     : nil,
-                AnyView(
-                    NavigationLink(value: AccountView.Route.settings) {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                )
-            ].compactMap { $0 })
-        }
+            AnyView(
+                NavigationLink(value: AccountView.Route.settings) {
+                    Label("Settings", systemImage: "gearshape")
+                }
+            )
+        ].compactMap { $0 }
     }
 }
 

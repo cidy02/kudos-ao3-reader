@@ -76,8 +76,7 @@ private struct WritingTagsEditor: View {
                     Toggle(option.title, isOn: Binding(
                         get: { values.contains(option.value) },
                         set: { selected in
-                            if selected { if !values.contains(option.value) { values.append(option.value) } }
-                            else { values.removeAll { $0 == option.value } }
+                            if selected { if !values.contains(option.value) { values.append(option.value) } } else { values.removeAll { $0 == option.value } }
                         }
                     ))
                 }

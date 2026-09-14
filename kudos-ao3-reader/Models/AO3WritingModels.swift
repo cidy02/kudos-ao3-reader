@@ -438,8 +438,7 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
             missing.append("Language")
         }
         if kind == .new || isDraft, let chapter, chapter.content
-            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             missing.append("Work Text")
         }
         return missing
