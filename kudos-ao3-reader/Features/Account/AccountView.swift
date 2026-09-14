@@ -53,6 +53,8 @@ struct AccountView: View {
         case settings
         /// Native AO3 own-user dashboard (sidebar destinations).
         case dashboard
+        /// Artboard 1x, which `WritingDraftsView` already is.
+        case drafts
     }
 
     enum AccountTab: String, CaseIterable, Identifiable {
@@ -453,6 +455,7 @@ struct AccountView: View {
         case .moreOnAO3: AccountMoreOnAO3View()
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
         case .dashboard: AO3DashboardView()
+        case .drafts: WritingDraftsView()
         }
     }
 
@@ -1404,10 +1407,18 @@ private extension AccountView {
             systemImage: tab.systemImage,
             subtitle: subtitle,
             count: count.flatMap { cachedCount($0) },
-            // Still selects: Works, Series and Drafts have no pushed screen of
-            // their own yet, so pushing here would lead nowhere.
-            open: { writingTab = tab }
+            open: { openWriting(tab) }
         )
+    }
+
+    /// Drafts is 1x, and `WritingDraftsView` already is that screen. Works and
+    /// Series still select their inline section: 1u and 1w have no pushed screen
+    /// yet, and a row that opens nothing is worse than one that is inconsistent.
+    private func openWriting(_ tab: AccountWritingTab) {
+        switch tab {
+        case .drafts: path.append(Route.drafts)
+        case .works, .series: writingTab = tab
+        }
     }
 
     private func activityDestination(
@@ -1419,7 +1430,16 @@ private extension AccountView {
             systemImage: tab.systemImage,
             subtitle: subtitle,
             count: count.flatMap { cachedCount($0) },
-            open: { activityTab = tab }
+            open: { openActivity(tab) }
         )
+    }
+
+    /// History is 1t, which `AO3AccountWorksList` already draws. Inbox still
+    /// selects until 1l has a screen of its own.
+    private func openActivity(_ tab: AccountActivityTab) {
+        switch tab {
+        case .history: path.append(AO3AccountWorksList.Kind.history)
+        case .inbox: activityTab = tab
+        }
     }
 }
