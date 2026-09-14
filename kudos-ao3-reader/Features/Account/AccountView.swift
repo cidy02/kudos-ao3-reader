@@ -315,40 +315,7 @@ struct AccountView: View {
     private var compactWorksContent: some View {
         switch selectedTab {
         case .reading:
-            switch readingTab {
-            case .later:
-                AccountWorksInlineSection(
-                    kind: .markedForLater,
-                    expandAll: expandAll,
-                    displayMode: .compact,
-                    layout: .scroll,
-                    reloadToken: listReloadToken,
-                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                        for: matureContentScope
-                    ),
-                    onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
-                )
-            case .subscriptions:
-                AccountWorksInlineSection(
-                    kind: .subscriptions,
-                    expandAll: expandAll,
-                    displayMode: .compact,
-                    layout: .scroll,
-                    reloadToken: listReloadToken,
-                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                        for: matureContentScope
-                    ),
-                    onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
-                )
-            case .bookmarks:
-                profileContentSections(
-                    profileTab: .bookmarks,
-                    sectionTitle: "Bookmarks",
-                    layout: .scroll
-                )
-            case .collections:
-                EmptyView()
-            }
+            EmptyView()
         case .writing:
             if writingTab == .works {
                 profileContentSections(
@@ -512,9 +479,10 @@ struct AccountView: View {
         case .writing:
             return writingTab == .works
         case .reading:
-            return readingTab == .later
-                || readingTab == .subscriptions
-                || readingTab == .bookmarks
+            // Reading draws only its groups now, so there is no inline list for
+            // display-mode, expand-all or the mature reveal to act on. Those
+            // controls belong to the screen each row opens, which carries its own.
+            return false
         case .activity:
             return activityTab == .history
         }
@@ -724,51 +692,14 @@ struct AccountView: View {
         }
     }
 
-    // MARK: Reading — Later | Subscriptions | Bookmarks | Collections
+    // MARK: Reading — Marked for Later | Bookmarks | Collections | Subscriptions
 
-    @ViewBuilder
+    /// 1bt draws the groups and nothing else: after its last group comes the tab
+    /// bar. The inline list that used to sit here was a second copy of the screen
+    /// each row now opens — the same works, fetched again, under a heading that
+    /// repeated the row above it.
     private var readingSections: some View {
         readingScopeGroups
-
-        switch readingTab {
-        case .later:
-            AccountWorksInlineSection(
-                kind: .markedForLater,
-                expandAll: expandAll,
-                displayMode: displayMode,
-                reloadToken: listReloadToken,
-                onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                    for: matureContentScope
-                ),
-                onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
-            )
-        case .subscriptions:
-            AccountWorksInlineSection(
-                kind: .subscriptions,
-                expandAll: expandAll,
-                displayMode: displayMode,
-                reloadToken: listReloadToken,
-                onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                    for: matureContentScope
-                ),
-                onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
-            )
-        case .bookmarks:
-            profileContentSections(profileTab: .bookmarks, sectionTitle: "Bookmarks")
-        case .collections:
-            // Full collections browser (own List) is a pushed screen so we don't
-            // nest lists inside Account's card List.
-            Section {
-                navCard(
-                    title: "Browse Collections",
-                    systemImage: "square.stack",
-                    count: cachedCount(.collections),
-                    value: Route.myCollections
-                )
-            } footer: {
-                Text("Collections you create or maintain on AO3.")
-            }
-        }
     }
 
     // MARK: Activity — History | Inbox
@@ -1100,8 +1031,7 @@ private extension AccountView {
                             id: row,
                             title: row,
                             systemImage: previewSymbol(for: row),
-                            isSelected: false,
-                            select: {}
+                            open: {}
                         )
                     )
                 }
@@ -1317,20 +1247,22 @@ private extension AccountView {
 
     /// One destination inside a scope.
     ///
-    /// Selecting rather than pushing is deliberate. 1bt draws these as grouped
-    /// rows, but the code reaches each list by swapping an inline section, and
-    /// 1bt's own note says scope membership follows `AccountView.swift` — so the
-    /// drawing governs how the choice *looks*, and the existing navigation still
-    /// governs where it goes. Pushing instead would put an extra screen between
-    /// the reader and their own bookmarks.
+    /// One row in a scope group, which **opens its own screen**.
+    ///
+    /// This used to select an inline section instead, on the reasoning that
+    /// pushing "would put an extra screen between the reader and their own
+    /// bookmarks". That was wrong on the spec's own evidence: 1o and 1q open with
+    /// a 34pt glass circle at the left of their chrome row — a back button, which
+    /// a tab root does not have — and each carries its own kicker, rule and
+    /// title. They are pushed screens. 1bt confirms it from the other side: after
+    /// its last group it draws the tab bar, with no inline list anywhere on it.
     struct AccountScopeDestination: Identifiable {
         let id: String
         let title: String
         let systemImage: String
         var subtitle: String?
         var count: String?
-        let isSelected: Bool
-        let select: () -> Void
+        let open: () -> Void
     }
 
     private func scopeGroup(_ title: String, _ destinations: [AccountScopeDestination]) -> some View {
@@ -1398,16 +1330,16 @@ private extension AccountView {
     }
 
     private func scopeDestinationRow(_ destination: AccountScopeDestination) -> some View {
-        Button(action: destination.select) {
+        Button(action: destination.open) {
             HStack(spacing: 12) {
                 Image(systemName: destination.systemImage)
                     .font(.system(size: 15))
-                    .foregroundStyle(destination.isSelected ? accountPalette.accent : Color.secondary)
+                    .foregroundStyle(accountPalette.accent)
                     .frame(width: 22)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(destination.title)
-                        .font(.system(size: 15, weight: destination.isSelected ? .semibold : .regular))
+                        .font(.system(size: 15))
                         .foregroundStyle(.primary)
                     if let subtitle = destination.subtitle {
                         Text(subtitle)
@@ -1423,16 +1355,19 @@ private extension AccountView {
                     // the list rather than printing a total, which is why the
                     // artboard shows exactly that against Collections.
                     Text(count)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(destination.isSelected ? [.isSelected] : [])
     }
 
     private func readingDestination(
@@ -1444,9 +1379,20 @@ private extension AccountView {
             systemImage: tab.systemImage,
             subtitle: subtitle,
             count: count.flatMap { cachedCount($0) },
-            isSelected: readingTab == tab,
-            select: { readingTab = tab }
+            open: { openReading(tab) }
         )
+    }
+
+    /// 1o, 1q, 1r and 1p. `AO3AccountWorksList` already *was* each of these
+    /// screens — header block, wash, ledger rows — but the only way to reach it
+    /// was a "Refine" action buried under the inline list it duplicated.
+    private func openReading(_ tab: AccountReadingTab) {
+        switch tab {
+        case .later: path.append(AO3AccountWorksList.Kind.markedForLater)
+        case .bookmarks: path.append(AO3AccountWorksList.Kind.bookmarks)
+        case .subscriptions: path.append(AO3AccountWorksList.Kind.subscriptions)
+        case .collections: path.append(Route.myCollections)
+        }
     }
 
     private func writingDestination(
@@ -1458,8 +1404,9 @@ private extension AccountView {
             systemImage: tab.systemImage,
             subtitle: subtitle,
             count: count.flatMap { cachedCount($0) },
-            isSelected: writingTab == tab,
-            select: { writingTab = tab }
+            // Still selects: Works, Series and Drafts have no pushed screen of
+            // their own yet, so pushing here would lead nowhere.
+            open: { writingTab = tab }
         )
     }
 
@@ -1472,8 +1419,7 @@ private extension AccountView {
             systemImage: tab.systemImage,
             subtitle: subtitle,
             count: count.flatMap { cachedCount($0) },
-            isSelected: activityTab == tab,
-            select: { activityTab = tab }
+            open: { activityTab = tab }
         )
     }
 }
