@@ -69,6 +69,19 @@ struct AccountProfileCard: View {
                     sessionStatusButton
                 }
 
+                // Artboard 1m draws "Session verified 4 min ago" under the
+                // username. Shown only once the session has actually been
+                // confirmed live against AO3 — `lastSessionVerification` is
+                // stamped where the validator accepts and cleared with the
+                // session, so this states a fact rather than a reassurance.
+                if let verifiedAt = auth.lastSessionVerification {
+                    Text("Session verified \(verifiedAt.formatted(.relative(presentation: .numeric)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Session last verified")
+                        .accessibilityValue(verifiedAt.formatted(.relative(presentation: .named)))
+                }
+
                 HStack(alignment: .center, spacing: 8) {
                     postingAsMenu
 

@@ -297,6 +297,11 @@ final class AO3AuthService {
     /// Confidence in the currently-held session, driven by `verifySession()` and by
     /// the launch restore/login/expiry paths. Purely informational for the account UI.
     private(set) var sessionHealth: AO3SessionHealth = .unknown
+    /// When the session was last confirmed live against AO3, for artboard 1m's
+    /// "Session verified N min ago". Set only after the generation guards accept
+    /// a `.valid` result, so it can never describe a session that has since been
+    /// replaced, and cleared wherever the session is, so it cannot outlive one.
+    private(set) var lastSessionVerification: Date?
 
     /// Bumped when a login/restore/logout/expiry transition begins and when
     /// verification accepts refreshed cookies (T91-RF3). Lets a long-lived
@@ -448,6 +453,7 @@ final class AO3AuthService {
         didRestore = true
         let restorationGeneration = advanceSessionGeneration()
         currentSession = nil
+        lastSessionVerification = nil
         status = .restoring
 
         if removalTracker.isRemovalPending {
@@ -503,6 +509,7 @@ final class AO3AuthService {
         // cookies after this replacement login's queued clear.
         loginPerformer.cancel()
         currentSession = nil
+        lastSessionVerification = nil
         errorMessage = nil
         noticeMessage = nil
         fallbackMessage = nil
@@ -556,6 +563,7 @@ final class AO3AuthService {
         }
         let cancellationGeneration = advanceSessionGeneration()
         currentSession = nil
+        lastSessionVerification = nil
         loginPerformer.cancel()
         fallbackMessage = nil
         errorMessage = nil
@@ -569,6 +577,7 @@ final class AO3AuthService {
         loginPerformer.cancel()
         let loggedOutUsername = currentSession?.username
         currentSession = nil
+        lastSessionVerification = nil
         errorMessage = nil
         fallbackMessage = nil
         // Soft/live state is always cleared, regardless of whether the durable delete
@@ -643,6 +652,7 @@ final class AO3AuthService {
                 guard sessionGeneration == expectedGeneration,
                       currentSession == session
                 else { return }
+                lastSessionVerification = Date()
                 sessionGeneration += 1
                 let refreshedGeneration = sessionGeneration
                 do {
@@ -854,6 +864,7 @@ final class AO3AuthService {
             }
             guard sessionGeneration == acceptingGeneration else { return }
             currentSession = nil
+        lastSessionVerification = nil
             sessionHintStore.deleteUsername()
             let cookieClear = enqueueCookieClear(expectedGeneration: acceptingGeneration)
             await cookieClear.value
@@ -935,6 +946,7 @@ final class AO3AuthService {
                 guard sessionGeneration == restoringGeneration,
                       currentSession == saved
                 else { return }
+                lastSessionVerification = Date()
                 do {
                     try vault.save(refreshed)
                 } catch {
@@ -969,6 +981,7 @@ final class AO3AuthService {
                 )
             } else {
                 currentSession = nil
+        lastSessionVerification = nil
                 status = .signedOut
                 Log.auth.notice(
                     "Could not validate WebKit's AO3 cookies without a saved login hint"
@@ -987,6 +1000,7 @@ final class AO3AuthService {
         let clearingGeneration = advanceSessionGeneration()
         let clearedUsername = currentSession?.username
         currentSession = nil
+        lastSessionVerification = nil
         do {
             try vault.delete()
             removalTracker.clearRemovalPending()
