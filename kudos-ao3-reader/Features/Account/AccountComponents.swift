@@ -296,62 +296,6 @@ struct AccountProfileCard: View {
     }
 }
 
-/// Secondary scope control for Account (Reading / Writing / Activity lists).
-/// Visual design matches Comments' chapter dropdown: leading `Label` (icon +
-/// current value), trailing single `chevron.down`, full-width hit target in a card.
-/// The leading icon always reflects the **selected subsection**, not the parent tab.
-struct AccountScopeMenu<Tab: Hashable & RawRepresentable & CaseIterable & Identifiable>: View
-where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
-    /// Accessibility name for the control (“Show”, “List”, …).
-    var prompt: String = "Show"
-    /// SF Symbol for each subsection option (and the closed label).
-    var systemImage: (Tab) -> String
-    @Binding var selection: Tab
-
-    var body: some View {
-        Menu {
-            ForEach(Array(Tab.allCases)) { tab in
-                Button {
-                    selection = tab
-                } label: {
-                    // Icon per option so the open menu matches the closed control.
-                    if tab == selection {
-                        Label(tab.rawValue, systemImage: "checkmark")
-                    } else {
-                        Label(tab.rawValue, systemImage: systemImage(tab))
-                    }
-                }
-            }
-        } label: {
-            // Same structure Comments used for its own chapter row before the 1f
-            // restyle replaced it with a pill — icon + title, then
-            // a quiet down-chevron (not the up/down pair, not a trailing value).
-            // Icon and text are styled separately (matching `WorkStatLabel`) rather
-            // than via a single `Label`, whose icon otherwise only picks up the
-            // accent tint inside a `List` (Detailed) and falls back to `.primary`
-            // in Compact's plain `ScrollView` — same trigger, two different colors.
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: systemImage(selection))
-                        .foregroundStyle(.tint)
-                    Text(selection.rawValue)
-                }
-                .lineLimit(1)
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(prompt)
-        .accessibilityValue(selection.rawValue)
-        .accessibilityHint("Chooses which list to show")
-    }
-}
-
 /// Card chrome matching `.cardRow()` when content lives outside a `List`
 /// (Account compact ScrollView shell). Same side margin, inner padding, radius,
 /// and surface as detailed-mode list cards so scope/fandom controls align.
