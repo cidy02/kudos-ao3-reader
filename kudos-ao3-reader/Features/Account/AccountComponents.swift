@@ -92,8 +92,6 @@ struct AccountProfileCard: View {
             HStack(alignment: .center, spacing: 8) {
                 postingAsMenu
 
-                Spacer(minLength: 4)
-
                 accountMenu
             }
         }
@@ -133,9 +131,10 @@ struct AccountProfileCard: View {
             }
             .font(.subheadline)
             .foregroundStyle(.tint)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
+        .buttonBorderShape(.capsule)
         .controlSize(.small)
         .accessibilityLabel("Posting as")
         .accessibilityValue(postingPseudName ?? "Account Default")
@@ -269,7 +268,7 @@ struct AccountProfileCard: View {
             Image(systemName: "ellipsis")
         }
         .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
+        .buttonBorderShape(.capsule)
         .controlSize(.small)
         .accessibilityLabel("Account actions")
     }
@@ -422,8 +421,8 @@ struct AccountNavCardLabel: View {
 }
 
 /// One free-standing shortcut icon for Overview's 3×2 grid. Each tile owns its
-/// own card chrome so the six destinations read as separate controls, not one
-/// shared panel of symbols.
+/// own panel so the six destinations read as separate controls, not one shared
+/// panel of symbols.
 struct AccountShortcutGridTile: View {
     @Environment(ThemeManager.self) private var theme
 
@@ -432,58 +431,58 @@ struct AccountShortcutGridTile: View {
     var count: String?
     var opensExternally: Bool = false
 
-    private let cornerRadius: CGFloat = CardRadius.tile
+    /// 1m's tile: a 22pt icon square top-left, the count top-right in monospace,
+    /// and the label on the bottom line — all left-aligned. This used to centre a
+    /// stack of icon over label over count, which is the shape the old Account
+    /// used and the one thing about this grid that never matched the artboard.
+    @ScaledMetric(relativeTo: .caption) private var titleSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption2) private var countSize: CGFloat = 11
+
+    private let cornerRadius: CGFloat = 14
 
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack(alignment: .topTrailing) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
                 Image(systemName: systemImage)
-                    .font(.title2.weight(.medium))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tint)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 22, height: 22)
                     .background(
-                        Circle()
-                            .fill(Color.accentColor.opacity(0.12))
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(theme.appTheme.glassStroke(0.1), lineWidth: 0.5)
+                            )
                     )
+
+                Spacer(minLength: 4)
+
                 if opensExternally {
                     Image(systemName: "arrow.up.forward")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.secondary)
-                        .padding(3)
-                        .background(Circle().fill(theme.appTheme.cardSurface))
-                        .offset(x: 6, y: -4)
+                } else if let count {
+                    Text(count)
+                        .font(.system(size: countSize, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 1)
                 }
             }
+
+            Spacer(minLength: 0)
+
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: titleSize, weight: .medium))
                 .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
                 .lineLimit(2)
-                .minimumScaleFactor(0.85)
-            if let count {
-                Text(count)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
+                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, minHeight: 88)
-        .padding(.vertical, 12)
-        .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(theme.appTheme.cardSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-                )
-                .shadow(
-                    color: theme.appTheme.cardShadow.color,
-                    radius: theme.appTheme.cardShadow.radius,
-                    x: 0,
-                    y: theme.appTheme.cardShadow.y
-                )
-        )
+        .padding(8)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .topLeading)
+        .subjectPanel(cornerRadius: cornerRadius)
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
