@@ -166,6 +166,15 @@ struct AO3FilterPanel: View {
                     Picker("Chapters", selection: $filters.chapterCount) {
                         ForEach(AO3SearchFilters.ChapterCount.allCases) { Text($0.title).tag($0) }
                     }
+                } footer: {
+                    // Artboard 1aq says this out loud, and the reason was only a
+                    // code comment until now: these two re-run the search rather
+                    // than narrowing what is already on screen, and a filter that
+                    // costs a round trip should say so before it is tapped.
+                    if mode == .search {
+                        Text("Crossover status and completion are not carried on a search result, "
+                            + "so both need AO3 to answer the query.")
+                    }
                 }
 
                 Section {
