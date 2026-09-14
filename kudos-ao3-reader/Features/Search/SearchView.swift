@@ -196,13 +196,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     filterPanel
                         .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                 }
-                .alert("Save Search", isPresented: $showingSaveDialog) {
-                    TextField("Name", text: $saveName)
-                    Button("Save") { commitSavedSearch() }
-                        .disabled(saveName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Button("Cancel", role: .cancel) { saveName = "" }
-                } message: {
-                    Text("Save the current search and its filters to re-run later.")
+                // Artboard 1ax. The alert this replaced could take a name and
+                // nothing else, so it asked for a commitment to "the current
+                // search and its filters" while showing neither.
+                .sheet(isPresented: $showingSaveDialog, onDismiss: { saveName = "" }) {
+                    SaveSearchSheet(
+                        filters: filters,
+                        name: $saveName,
+                        onSave: commitSavedSearch
+                    )
                 }
                 .remoteWorkSelectionChrome(bulkSelection)
         }
