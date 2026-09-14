@@ -494,6 +494,17 @@ final class AO3AuthorProfileModel {
                   auth.sessionGeneration == expectedSessionGeneration
             else { return }
             header = page.value
+            // The dashboard nav just parsed carries the account's own list sizes.
+            // Only for the signed-in user's own account page: another user's
+            // numbers are not theirs, and a pseud sub-route's are the pseud's.
+            if auth.isLoggedIn, expectedRoute.pseud == nil,
+               auth.username?.localizedCaseInsensitiveCompare(expectedRoute.username) == .orderedSame {
+                AO3AccountListCountsCache.shared.record(
+                    dashboardActions: page.value.actions,
+                    username: expectedRoute.username,
+                    authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+                )
+            }
             // A fresh dashboard parse doesn't repeat pseud aliases the About tab
             // already found (e.g. ones only listed on the profile page, not the
             // dashboard) — reapply them so a reload doesn't quietly drop pseuds

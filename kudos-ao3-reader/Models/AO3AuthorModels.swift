@@ -271,6 +271,20 @@ nonisolated struct AO3AuthorWebAction: Identifiable, Hashable {
     let kind: Kind
 
     var id: String { "\(kind.rawValue)|\(url.absoluteString)" }
+
+    /// AO3 prints each list's size inside the dashboard nav link's own text —
+    /// "Works (535)", "Bookmarks (22)", "All Pseuds (3)". Verified against a live
+    /// user page, not the synthetic fixture, whose nav carries no counts.
+    var listCount: Int? {
+        guard label.hasSuffix(")"), let open = label.lastIndex(of: "(") else { return nil }
+        let inner = label[label.index(after: open) ..< label.index(before: label.endIndex)]
+        let digits = inner.filter(\.isNumber)
+        // Reject "Works (some)" and the like: only a purely numeric group, once
+        // separators are dropped, is a count.
+        guard !digits.isEmpty, inner.allSatisfy({ $0.isNumber || $0 == "," || $0 == "." || $0 == " " })
+        else { return nil }
+        return Int(digits)
+    }
 }
 
 nonisolated struct AO3FormField: Hashable {

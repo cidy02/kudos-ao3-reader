@@ -139,4 +139,60 @@ struct AO3AccountListCountsTests {
         let stored = cache.count(for: .collections, authenticationScope: "signed-in:alice")
         #expect(stored?.exact == 3)
     }
+
+    // MARK: Counts seeded from the dashboard nav
+
+    private func action(_ label: String, _ path: String) -> AO3AuthorWebAction {
+        AO3AuthorWebAction(
+            label: label,
+            url: URL(string: "https://archiveofourown.org\(path)")!,
+            kind: .other
+        )
+    }
+
+    @Test func dashboardNavLabelsCarryTheirListSize() {
+        #expect(action("Works (535)", "/users/astolat/works").listCount == 535)
+        #expect(action("Bookmarks (1,204)", "/users/astolat/bookmarks").listCount == 1204)
+        #expect(action("Profile", "/users/astolat/profile").listCount == nil)
+        // A parenthesised non-number is not a count.
+        #expect(action("Works (some)", "/users/astolat/works").listCount == nil)
+    }
+
+    @Test func dashboardNavSeedsCountsWithoutOpeningAnyList() {
+        let cache = AO3AccountListCountsCache()
+        cache.record(
+            dashboardActions: [
+                action("Works (535)", "/users/astolat/works"),
+                action("Series (40)", "/users/astolat/series"),
+                action("Bookmarks (22)", "/users/astolat/bookmarks"),
+                action("Collections (33)", "/users/astolat/collections"),
+                action("Gifts (131)", "/users/astolat/gifts")
+            ],
+            username: "astolat",
+            authenticationScope: "signed-in:astolat"
+        )
+        #expect(cache.count(for: .myWorks, authenticationScope: "signed-in:astolat")?.exact == 535)
+        #expect(cache.count(for: .bookmarks, authenticationScope: "signed-in:astolat")?.exact == 22)
+        #expect(cache.count(for: .collections, authenticationScope: "signed-in:astolat")?.exact == 33)
+        // Not in that nav, so they stay unknown until their own list loads.
+        #expect(cache.count(for: .subscriptions, authenticationScope: "signed-in:astolat") == nil)
+        #expect(cache.count(for: .history, authenticationScope: "signed-in:astolat") == nil)
+    }
+
+    @Test func aPseudSubRouteCountIsNeverTakenForTheAccounts() {
+        let cache = AO3AccountListCountsCache()
+        cache.record(
+            dashboardActions: [action("Works (7)", "/users/astolat/pseuds/shalott/works")],
+            username: "astolat",
+            authenticationScope: "signed-in:astolat"
+        )
+        #expect(cache.count(for: .myWorks, authenticationScope: "signed-in:astolat") == nil)
+    }
+
+    @Test func aNewerExactCountReplacesAnOlderOne() {
+        let cache = AO3AccountListCountsCache()
+        cache.record(AO3AccountListCount(exact: 535), kind: .myWorks, authenticationScope: "signed-in:astolat")
+        cache.record(AO3AccountListCount(exact: 536), kind: .myWorks, authenticationScope: "signed-in:astolat")
+        #expect(cache.count(for: .myWorks, authenticationScope: "signed-in:astolat")?.exact == 536)
+    }
 }
