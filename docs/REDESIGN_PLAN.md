@@ -2261,6 +2261,45 @@ Two candidates, in order of value:
 
 ## 4. Working notes for whoever is next
 
+### The fidelity sweep, and what it is blind to (2026-09-14)
+
+Run after the phase table twice claimed a screen was done when it was not
+(Comments, then the Account hub). The check that caught both, generalised:
+
+```sh
+# hub / form / panel screens
+grep -cE "SubjectHeaderBlock|subjectPanel\(|SubjectFormRow|subjectScreenWash|\
+SectionRuleHeader|SubjectStatStrip|pageBodyRow|SubjectChip|SubjectFieldLabel" <file>
+```
+
+**Result: no further hub or form screen is unredesigned.** Comments and the
+Account hub were the two, and both landed on 2026-09-13/14.
+
+Three blind spots, each of which produced a false positive before it was
+understood — anyone re-running this should know them:
+
+1. **There are two vocabularies, not one.** The `Subject*` family dresses hubs,
+   forms and panels; a separate card/ledger family (`cardRow`, `CoverArt`,
+   `WorkStatLabel`, the ring and signal tray, `CardListMetrics`) dresses work
+   rows. `Library/WorkRow.swift`, `Search/AO3WorkRow.swift` and
+   `Search/SearchPaginationBar.swift` all score zero on the grep above and are
+   fully redesigned — 21, 21 and 16 hits on their own family. Screening a row
+   component with the form grep says nothing.
+2. **A screen is often not in the folder named after it.** Artboard 1g, "Browse
+   — fandom clusters", is implemented in `Features/Search/MediaBrowserView.swift`;
+   `Features/Browse/` holds the works lists it pushes to. Map artboard → file
+   through the status log's commit (`git show --stat <sha>`), not through the
+   directory name.
+3. **Zero hits in a 1,900-line file is not proof of neglect.** `CommentThreadRow`
+   scores zero and is the most deliberately designed screen in the app; its model
+   was chosen over three others on a device (§3b).
+
+Spot-checked beyond the grep, and sound: **1g** draws the dashed `+N more` chip
+the artboard asks for and carries `isApproximateWorkCount`, which states when a
+category total is a sum of per-tag counts rather than a figure AO3 printed —
+the build note's own data gap, answered honestly in a doc comment rather than
+papered over.
+
 ### Unattended-run policy (added 2026-09-13, for the overnight loop)
 
 The owner set a loop running while asleep, with one objective: **follow the spec
