@@ -2239,6 +2239,50 @@ Two candidates, in order of value:
 
 ## 4. Working notes for whoever is next
 
+### Unattended-run policy (added 2026-09-13, for the overnight loop)
+
+The owner set a loop running while asleep, with one objective: **follow the spec
+as closely as possible and get every artboard faithfully recreated.** The loop's
+failure mode is not bad code — it is stopping to ask a question nobody is awake
+to answer. So:
+
+- **Decide, record, continue.** Any choice that a commit can reverse gets made,
+  written down in the commit message and here, and flagged for morning review.
+  Never hold work for an answer. State the alternative you did not take.
+- **Never do the irreversible.** No push, no merge to `main`, no release, no
+  `git reset --hard`, no deleting a branch or a worktree, no AO3 write against a
+  live session. Those wait for the owner, however obvious they look at 3am.
+- **The artboard is the source of truth for what a screen should look like; the
+  running code is the source of truth for what it does.** Where the spec
+  contradicts a decision that was already settled *with evidence* — a device
+  comparison, a measured figure — keep the code and file the conflict in §3b as
+  open. Where it contradicts mere reasoning, the artboard wins (§3b's own rule).
+- **Verify the claim, not the checkbox.** This table has now twice said a screen
+  was done when it was not: Comments (§Phase 7) and the Account hub (§Phase 5),
+  both caught by the owner rather than by the plan. Before building, grep the
+  screen for the design-system primitives (`SubjectHeaderBlock`, `subjectPanel`,
+  `SubjectFormRow`, `subjectScreenWash`, `SectionRuleHeader`). A screen that
+  uses none of them has not been redesigned, whatever the row says.
+- **Definition of done per screen:** iOS Simulator build, macOS Debug build,
+  `Scripts/lint.sh` exit 0, the focused tests for anything with logic in it, a
+  commit, and a row here. A screen that has not been built on both platforms is
+  not done.
+- **Figures must be sourced or dropped.** If the spec draws a number the data
+  cannot support, do not invent it and do not dress a loaded-page count as a
+  site total — drop the cell or say what it counts, as the Comments signal strip
+  does.
+
+**Decisions taken under this policy, for morning review:**
+
+- **1y Dashboard's performance strip is the signed-in user's own profile only.**
+  `AO3DashboardView` is a 30-line wrapper around `AuthorProfileView`, so
+  anything added there lands on *every* author's profile. The artboard says
+  "**your own** works with their performance", and surfacing a stranger's
+  per-work kudos/comments/hits/bookmarks is a product decision the spec does not
+  make. Gated rather than global; flip the gate if the owner wants it everywhere.
+
+## 4a. Standing notes
+
 - **Name things in full.** The owner's standing instruction for this branch:
   variable, property and function names should be verbose enough that a
   reviewer understands the code without tracing it. `signalTrayReservedWidth`,
