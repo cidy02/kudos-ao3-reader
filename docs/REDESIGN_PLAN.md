@@ -590,17 +590,51 @@ series row's "of 4" (AO3 prints the position on a work page and keeps the count
 on the series page), and the resume card's "9 pages left" (computable only with
 a publication open, and never persisted).
 
-**Regression check.** The full suite run at the end of the night fails 11 tests,
-every one of them already in the 13-test baseline from before any of this work —
-and two that were failing then now pass, consistent with the timing flakes
-identified earlier. Nothing tonight broke anything. Both platform builds and
-lint exit 0 on every commit.
+**Regression check.** Both platform builds and lint exit 0 on every commit. The
+full suite was run twice during the night. The mid-run fails 11, all of them
+already in the 13-test baseline from before any of this work. The final run
+fails 14: the same 13, plus one that needs explaining.
+
+⚠️ **`KokoroCastDiscoveryTests.recognisedNamesFindsOrdinaryPeopleNames` now
+fails deterministically, and it is not from this work.** Re-run twice in
+isolation, it failed both times, so it is not a timing flake like the two
+`RequestCoalescer` cancellation cases. It is unrelated to the redesign on three
+independent grounds: this run touched no TTS, Kokoro, cast or speech file; the
+test dates from 2026-08-26; and `KokoroCastDiscovery.recognisedNames` is a pure
+function over Apple's `NLTagger` with the `.nameType` scheme, holding no app
+state that anything here could reach.
+
+What it asserts is that the OS finds "Sarah Connor" in a sentence. `.nameType`
+tagging depends on an on-device language-model asset; when that asset is not
+available the tagger returns nothing and this assertion fails every time. That
+makes it an environment condition rather than a code defect, which is also why
+it passed earlier in the same night and fails now. **Not fixed here** — the two
+ways to fix it are to weaken the assertion or to force the asset, and both are
+the owner's call about a test that is pinning a real behaviour.
+
+**Then a third pass found the thing the first two could not.** Both earlier
+methods screen for *how* a screen is built; neither notices a screen the plan
+called done because the **capability** behind it exists. Asking that question
+directly — which boards does this plan wave through on "already exists"? — hit
+three times out of three:
+
+- **`1ax` Save search** was a bare naming alert whose own message promised to
+  save "the current search and its filters" while showing neither. Built: the
+  sheet now lists what gets saved, excluded terms dashed, before you commit.
+- **`1bk` local collections** is still a single name field where the artboard
+  draws a form. **Not built** — most of what is missing is behaviour, and "Keep
+  downloads" changes the cache sweep. §3b has the scope.
+- **`1aq` and `1ab`** were each missing a caption the app already knew
+  internally: why crossover and completion re-run the query (it was a code
+  comment two lines above the pickers), and that Settings never writes to AO3.
 
 **Waiting on the owner, not on work:** the Writing scope's chip rail versus
-1bt's groups, and comment threading versus 1f's elbow rail (both §3b). Blocked
-on capability rather than decision: comment streaming needs an append path the
-model does not have, `1bc`'s "with new work" half needs a fandom-newest-works
-parse, and `1bh` needs a collaboration model that does not exist.
+1bt's groups, comment threading versus 1f's elbow rail, and `1bk`'s form (all
+§3b). Blocked on capability rather than decision: comment streaming needs an
+append path the model does not have, `1bc`'s "with new work" half needs a
+fandom-newest-works parse, and `1bh` needs a collaboration model that does not
+exist. Deliberately left alone: `1x`'s Post and Delete draft actions — a bug in
+an unattended Delete destroys unposted writing.
 
 ---
 
@@ -2337,6 +2371,33 @@ Two candidates, in order of value:
    differs, which probably wants a parameter rather than a second type.
 
 ## 4. Working notes for whoever is next
+
+### A number on an artboard is a drawing, not a source (2026-09-14)
+
+Two of the figures drawn in the spec contradict what the app and AO3 actually
+do, and both would have misled a reader if copied:
+
+- **1bj** says Recently Deleted holds things for **30 days**. The app's window is
+  **90** (`PreservedWorkService`, carried through backup schema v7). Already
+  caught by whoever built that screen, and `RecentlyDeletedView` says so in a
+  comment — which is how this pattern got noticed at all.
+- **1x** says unposted drafts are deleted after **29 days**. otwarchive's own
+  `features/works/work_drafts.feature` purges a draft created 31 days ago and
+  keeps one created 29 days ago, under a scenario named "Old drafts created are
+  purged after 30 days". The rule is **30**. Taking the drawn number would have
+  told writers their work was safe for a day longer than it is.
+
+So: **check every figure before drawing it.** The source is otwarchive's config
+or specs for AO3's rules, and the implementing service for the app's own. Both
+were a single lookup. Neither artboard is wrong about *what to say* — both are
+wrong about the number, and the number is the part that matters to someone
+deciding whether to act.
+
+The related failure runs the other way, and is mine from this same run: I
+dropped Subscriptions' "N with new chapters" subtitle after grepping for
+`newCount`, which does not match `newChapterCount`. The figure existed the whole
+time. An empty grep is a failed search, not an answer — widen it before
+concluding a thing does not exist.
 
 ### The fidelity sweep, and what it is blind to (2026-09-14)
 
