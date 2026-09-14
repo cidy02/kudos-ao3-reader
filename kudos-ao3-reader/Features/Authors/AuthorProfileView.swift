@@ -252,7 +252,12 @@ private extension AuthorProfileView {
                 expandAll: expandAll,
                 isSelecting: bulkSelection.isSelecting,
                 selection: bulkSelection.selection,
-                onToggleSelection: bulkSelection.toggle
+                onToggleSelection: bulkSelection.toggle,
+                // Artboard 1y is the Dashboard, which is this view pointed at
+                // yourself. Gating on `isOwnProfile` rather than on a flag the
+                // Dashboard passes means no future caller can turn a stranger's
+                // per-work kudos and hits on by mistake.
+                showsPerformance: isOwnProfile
             )
         case .series:
             AO3AuthorSeriesSection(model: model, showsNewSeriesOnAO3: isOwnProfile)
