@@ -558,6 +558,52 @@ markup-inserting toolbar. Remaining handoff work stays tracked under T-215.
 
 ---
 
+### 2026-09-14 — The overnight run: Account built, everything else audited (Claude)
+
+Nine commits between `51d5f28b` and `9dfc4af8`, unattended, under the §4 policy.
+
+**Built — the Account tab, which had never been redesigned.** The subsections
+around it had been, which is how it passed for done twice. `1m` took the spec's
+scope pills (a `Picker(.segmented)` until now, which §1a already recorded as
+clipping rather than reflowing at accessibility sizes) and its rule headers.
+`1bt` grouped Reading into Saved/Following and Activity into Read on
+AO3/Arrives, replacing a menu that swapped one inline list; the rows select
+rather than push, because 1bt's own note says scope membership follows
+`AccountView.swift`. `1n` stopped washing itself in an accent it had no account
+to derive, and gained "What is waiting" — the signed-in tab drawn from the same
+row type the hub uses, so it cannot drift from what it previews. `1y` gave your
+own works a kudos/comments/hits/bookmarks strip, gated on `isOwnProfile` rather
+than a flag, so a stranger's figures are unrepresentable rather than merely
+not-passed. And `1m`'s "Session verified N min ago" turned out to be three lines
+rather than a new request: the validator already ran and nobody kept the time.
+
+**Audited — and this is the more useful half.** A sweep for the design system
+across every view in `Features/` came back clean: no further hub or form screen
+is unredesigned. `1g`, `1a` and the Library boards were then checked element by
+element against their artboards and are faithful. Both the method and its three
+blind spots are written up in §4, because each one produced a false positive
+before it was understood.
+
+**Three figures were refused rather than invented**, which is the same rule
+three times: Subscriptions' "N with new chapters" (nothing exposes it), the
+series row's "of 4" (AO3 prints the position on a work page and keeps the count
+on the series page), and the resume card's "9 pages left" (computable only with
+a publication open, and never persisted).
+
+**Regression check.** The full suite run at the end of the night fails 11 tests,
+every one of them already in the 13-test baseline from before any of this work —
+and two that were failing then now pass, consistent with the timing flakes
+identified earlier. Nothing tonight broke anything. Both platform builds and
+lint exit 0 on every commit.
+
+**Waiting on the owner, not on work:** the Writing scope's chip rail versus
+1bt's groups, and comment threading versus 1f's elbow rail (both §3b). Blocked
+on capability rather than decision: comment streaming needs an append path the
+model does not have, `1bc`'s "with new work" half needs a fandom-newest-works
+parse, and `1bh` needs a collaboration model that does not exist.
+
+---
+
 ### 2026-09-13 — The tag set wired, and Comments taken to 1f/1ba/1be/1bf (Claude)
 
 The last two gaps the 2026-09-12 entry left open, both closed.
