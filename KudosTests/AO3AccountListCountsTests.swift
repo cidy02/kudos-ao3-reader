@@ -174,6 +174,9 @@ struct AO3AccountListCountsTests {
         #expect(cache.count(for: .myWorks, authenticationScope: "signed-in:astolat")?.exact == 535)
         #expect(cache.count(for: .bookmarks, authenticationScope: "signed-in:astolat")?.exact == 22)
         #expect(cache.count(for: .collections, authenticationScope: "signed-in:astolat")?.exact == 33)
+        // Series has no list load anywhere in the app that yields a count, so the
+        // nav is the only place this figure can come from.
+        #expect(cache.count(for: .series, authenticationScope: "signed-in:astolat")?.exact == 40)
         // Not in that nav, so they stay unknown until their own list loads.
         #expect(cache.count(for: .subscriptions, authenticationScope: "signed-in:astolat") == nil)
         #expect(cache.count(for: .history, authenticationScope: "signed-in:astolat") == nil)
