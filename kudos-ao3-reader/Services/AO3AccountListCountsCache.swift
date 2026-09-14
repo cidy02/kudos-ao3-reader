@@ -45,7 +45,10 @@ nonisolated struct AO3AccountListCount: Equatable, Sendable {
     /// closer to the true size. Used to stop a later, weaker page (e.g. a short
     /// final page) from downgrading an already-cached stronger estimate.
     func isAtLeastAsStrong(as other: AO3AccountListCount) -> Bool {
-        if exact != nil { return true }
+        // Two exact counts are both totals, so the newer one wins — otherwise a
+        // count cached before the user posted a work would outlive the truth for
+        // the whole TTL. Only a lower bound loses to an exact.
+        if exact != nil { return other.exact == nil }
         if other.exact != nil { return false }
         return (lowerBound ?? 0) >= (other.lowerBound ?? 0)
     }
@@ -104,6 +107,45 @@ final class AO3AccountListCountsCache {
         let toStore = entries[key].map { $0.count.isAtLeastAsStrong(as: count) ? $0.count : count }
             ?? count
         entries[key] = Entry(count: toStore, expiresAt: now.addingTimeInterval(ttl))
+    }
+
+    /// Seeds the lists whose exact size AO3 prints in the dashboard nav of the
+    /// very page the profile header is parsed from — "Works (535)",
+    /// "Bookmarks (22)", "Collections (33)".
+    ///
+    /// This is why an Overview shortcut can show a count before its list has ever
+    /// been opened. It costs no request: the page is already fetched and these
+    /// links are already parsed; the numbers in them were simply being discarded.
+    ///
+    /// Subscriptions, History and Marked for Later are not in that nav, so they
+    /// still fill in only once their own list is loaded.
+    func record(
+        dashboardActions actions: [AO3AuthorWebAction],
+        username: String,
+        authenticationScope: String,
+        now: Date = Date()
+    ) {
+        let base = "/users/\(username.lowercased())/"
+        for action in actions {
+            let path = action.url.path.lowercased()
+            guard path.hasPrefix(base) else { continue }
+            // Exact tail only, so a pseud's own "/pseuds/<name>/works" — whose
+            // counts are the pseud's, not the account's — can never land here.
+            let kind: AO3AccountListKind
+            switch String(path.dropFirst(base.count)) {
+            case "works": kind = .myWorks
+            case "bookmarks": kind = .bookmarks
+            case "collections": kind = .collections
+            default: continue
+            }
+            guard let count = action.listCount else { continue }
+            record(
+                AO3AccountListCount(exact: count),
+                kind: kind,
+                authenticationScope: authenticationScope,
+                now: now
+            )
+        }
     }
 
     /// Records a just-fetched works-list page (the common case).
