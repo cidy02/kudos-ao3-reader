@@ -56,6 +56,7 @@ struct PrivacyDataView: View {
     @State private var confirmClearHistory = false
     @State private var confirmClearDownloads = false
     @State private var confirmClearPositions = false
+    @State private var confirmClearBrowseCache = false
     @State private var browseCacheCleared = false
 
     var body: some View {
@@ -142,6 +143,21 @@ struct PrivacyDataView: View {
         } message: {
             Text("Forgets where you had got to in every work. The works, and the order they "
                 + "appear in Continue Reading, are kept.")
+        }
+        .confirmationDialog(
+            "Clear Browse Cache?",
+            isPresented: $confirmClearBrowseCache,
+            titleVisibility: .visible
+        ) {
+            Button("Clear \(byteLabel(footprint.cacheBytes))", role: .destructive) {
+                FandomCatalog.shared.clearCache()
+                browseCacheCleared = true
+                Task { await measure() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Drops the saved fandom and category lists. Nothing you have read, saved or "
+                + "downloaded is touched, and Browse rebuilds them the next time you open it.")
         }
     }
 
@@ -282,6 +298,7 @@ struct PrivacyDataView: View {
                 value: countLabel(freeableDownloads.count, "file"),
                 showsDisclosure: true,
                 isDisabled: freeableDownloads.isEmpty,
+                isDestructive: true,
                 isMonospaced: true,
                 action: { confirmClearDownloads = true }
             )
@@ -291,6 +308,7 @@ struct PrivacyDataView: View {
                 value: countLabel(positionedWorks.count, "work"),
                 showsDisclosure: true,
                 isDisabled: positionedWorks.isEmpty,
+                isDestructive: true,
                 isMonospaced: true,
                 action: { confirmClearPositions = true }
             )
@@ -300,6 +318,7 @@ struct PrivacyDataView: View {
                 value: countLabel(freedHistory.count, "work"),
                 showsDisclosure: true,
                 isDisabled: freedHistory.isEmpty,
+                isDestructive: true,
                 isMonospaced: true,
                 action: { confirmClearHistory = true }
             )
@@ -307,13 +326,14 @@ struct PrivacyDataView: View {
             SubjectFormRow(
                 label: browseCacheCleared ? "Browse cache cleared" : "Clear browse cache",
                 value: byteLabel(footprint.cacheBytes),
+                showsDisclosure: !browseCacheCleared,
                 isDisabled: browseCacheCleared,
+                isDestructive: !browseCacheCleared,
                 isMonospaced: true,
-                action: {
-                    FandomCatalog.shared.clearCache()
-                    browseCacheCleared = true
-                    Task { await measure() }
-                }
+                // This row cleared on the tap itself, while the footnote below
+                // promises "each of these asks first and names what it will
+                // touch". Three rows kept that promise; the fourth broke it.
+                action: { confirmClearBrowseCache = true }
             )
         }
         .subjectPanel()
