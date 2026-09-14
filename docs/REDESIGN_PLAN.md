@@ -2020,6 +2020,28 @@ confirmed explicitly. The reasoning it overrules should still be answered in
 writing rather than silently dropped, so the next person to read that code
 knows the argument was met and not missed.
 
+### ⚠️ Open — the Writing scope: 1bt's groups vs. the 1u/1v/1w chip rail
+
+**Needs the owner; the code is unchanged.** 1bt draws every scope as grouped
+destination rows — for Writing that is Posted (Works, Series), Unposted (Drafts,
+subtitled that AO3 deletes them after 30 days) and Performance (Dashboard).
+Reading and Activity were built that way on 2026-09-13, because they still had
+the pre-redesign `AccountScopeMenu` and nothing was lost by replacing it.
+
+Writing is different: it was *already* redesigned, in the 1u/1v/1w batch, to a
+`SubjectHeaderBlock` plus a `SubjectChip(.pill)` rail, and reviewed. Replacing a
+reviewed pattern with a second reviewed pattern is a churn decision rather than a
+fidelity one, and the unattended run declined to make it — the §4 policy allows
+deciding anything a commit can reverse, but this one trades one shipped design
+for another with no evidence either way.
+
+Worth noting the inconsistency is real and predates this: since the 1u/1v/1w
+batch, Writing has not matched Reading or Activity. Whichever way this goes, all
+three should end up the same.
+
+**The decision:** take 1bt's groups across all three scopes and retire the chip
+rail, or keep the rail and record 1bt's Writing grouping as superseded.
+
 ### ⚠️ Open — comment threads: 1f's elbow rail vs. a model already dropped on device
 
 **Needs the owner. The code is unchanged in the meantime, and that is a pause,
