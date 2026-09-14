@@ -284,7 +284,7 @@ Tabs are `home, library, browse, account, search` (`AppTab` in
 | **7** | Work detail `1a`; Comments `1f`, `1ba`, `1be`, `1bf` | ✅ **`1a` done, both screens** (identity block, serif summary, ON AO3 chips, tag clusters, grouped facts card, tally strip, outline buttons, My copy row; the segmented control is retired and the page is continuous). **Comments done 2026-09-13**: `1f` chrome (header, COMMENTS/THREADS/YOURS/LATEST signal strip, chapter + sort pills, section rule, write pill, wash), `1ba`/`1be` composer (quoted parent on the rail, identity + character budget, format bar pinned to the sheet edge, detents rather than two layouts), `1bf` formatting tray (`CommentMarkup.swift` — a tag-aware buffer writing only tags AO3's sanitizer keeps). **Two caveats:** only COMMENTS is a site total — the other three count the loaded page and say so under the strip; and 1f's *threading* model is parked as an open question in §3b, since it is the elbow style T-151 already dropped on device. Comment streaming not built: the model pages and has no append path. |
 | **8** | Queues — `1h`, `1i`, `1j`, `1bg`, `1bh` | 🟡 `1h`/`1i`/`1j`/`1bg` built 2026-09-11. **`1bh` refused**: a shared-queue tag manager needs collaboration and queue tags, neither of which exists. |
 | **9** | Local history & favourites — `1ah`, `1ai`, `1aj`, `1ak`, `1bc`, `1bd`, `1bi`, `1bj` | ✅ **all built except `1bc`'s "with new work" half**, which needs a fandom-page newest-works parse that does not exist. `1bi` Insights, `1bj` Recently Deleted, `1ah`/`1ai` history grouping, `1aj`/`1ak`/`1bd` favourites scopes. Rules in `ReadingInsights`, `LibraryHistoryGrouping`, `ReadingAffinities` — 30 tests, none compiled by CI. |
-| **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. `1bk` is local and already existed. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
+| **10** | Collections — `1bk`, `1bl`, `1bm`, `1r`, `1s`, `1ci` | 🟡 **`1r` list, `1bm` sort/filter, `1ci` detail and `1bl` create/edit all built** on `561f848b`'s networking. **`1bk` is NOT done** — corrected 2026-09-14, see §3b. A local collection is created through a bare name field; the artboard draws a form. **Left: `1s`** — the staged manage-items screen (`updateCollectionItems` exists; the staging UI does not). Close/delete stay Open on AO3. |
 | **11** | Writing surfaces — `1bn`–`1bs`, `1bu`, `1bv`, `1bw` | 🟡 `1bn`/`1bo`/`1bp`/`1bq` built 2026-09-12 (`2d5245a3`); T-215 connects work/chapter forms, while bulk/tag-only routes remain unwired. **networking landed** (`bac33974`): `AO3Client+Works` / `AO3WorkActions` / `AO3TagAutocomplete` (reuses existing `autocompleteTags`). `1bv` editor + native draft entry and required/tag inputs are implemented in T-215; remaining association/series/preview controls still need wiring. Series create from `/series/new` is Open on AO3. |
 | **12** | Challenges & moderation — `1bx`–`1by`, `1bz`–`1ch` | ✅ All 11 screens built 2026-09-12: `1bx`/`1by`/`1bz`/`1ca`/`1ce` (earlier batch) plus `1cb`/`1cc`/`1cd`/`1cf`/`1ch` (this batch). **All reachable** as of this batch too — a "Manage" section on `AO3CollectionDetailView` (1ci), gated on `isMaintainer`/`auth.isLoggedIn`/`dashboard.*URL`. Matching (`1cb`/`1cf`) and tag-set association/approval (`1ch`) stay Open on AO3 — confirmed no client write exists for either, not just assumed. **Left:** no "Tag Set" row is wired — nothing parses a `tagSetID` for a given collection yet, so `TagSetView` is complete but only reachable by hand-supplying an id. |
 | **—** | Empty/edge states threaded into their own phase — `1ay`, `1az`, `1bb` | 🟡 `1ay` and `1az` landed in `5100addb`; `1bb` (Preferences saved) landed with 1z in `a01c857c`. |
@@ -2065,6 +2065,37 @@ Where an artboard contradicts a *reasoned* decision already in the codebase,
 confirmed explicitly. The reasoning it overrules should still be answered in
 writing rather than silently dropped, so the next person to read that code
 knows the argument was met and not missed.
+
+### ⚠️ Open — 1bk local collections: a form the app never grew
+
+**Needs the owner, because most of what is missing is behaviour, not layout.**
+Phase 10 recorded `1bk` as done on the grounds that local collections "already
+existed". The capability does exist. The screen does not: a local collection is
+created through a single `TextField("New collection")`
+(`Features/Library/Collections.swift:413`) and renamed through another, and the
+artboard draws a form with four more parts.
+
+What each missing part actually costs:
+
+- **Description** — cheap and safe. `WorkCollection.description` already exists
+  and already round-trips through backup; its doc comment says it is stored only
+  so an Android↔iOS restore does not drop it, and that iOS renders it nowhere.
+  Rendering it closes the gap and gives the stored field a reason to exist.
+- **Colour** — a new stored property. Small, but a schema change.
+- **Show on Home** — a new property *and* Home tab behaviour: the artboard says
+  it "adds a shelf above Recently Updated".
+- **Keep downloads** — a new property *and* a change to the cache sweep, which
+  the artboard describes as exempting these works from it.
+
+That last one is why this was not built unattended. Exempting works from the
+sweep changes which files get reclaimed; wrong in one direction it strands
+storage, wrong in the other it deletes a download someone meant to keep. The §4
+policy allows deciding anything a commit can reverse, and a storage-reclamation
+rule applied to a real library at 4am is not that.
+
+**The decision:** build the whole form including the two behaviours, or take the
+cheap half (description, colour) and record Keep downloads / Show on Home as
+features the spec proposes rather than parts of the redesign.
 
 ### ⚠️ Open — the Writing scope: 1bt's groups vs. the 1u/1v/1w chip rail
 
