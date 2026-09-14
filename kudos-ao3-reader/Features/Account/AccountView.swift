@@ -612,16 +612,20 @@ struct AccountView: View {
 
     // MARK: Primary segments
 
+    /// Artboard 1m's scope pills. `SubjectSegmentedControl` rather than a
+    /// `Picker(.segmented)`: §1a records that the spec's control is a 9pt-over-7pt
+    /// inline shape *and* that the native segmented picker clips rather than
+    /// reflows at accessibility text sizes, which is the whole reason this
+    /// component exists. Four scope names is exactly the width where that bites.
     private var tabPickerSection: some View {
         Section {
-            Picker("Account Content", selection: $selectedTab) {
-                ForEach(AccountTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accountControlCardRow()
+            SubjectSegmentedControl(
+                options: AccountTab.allCases,
+                title: \.rawValue,
+                selection: $selectedTab
+            )
+            .accessibilityLabel("Account Content")
+            .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
         }
     }
 
@@ -713,7 +717,11 @@ struct AccountView: View {
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
         } header: {
-            Text("Shortcuts")
+            // The redesign's own rule header, not a plain `Text`: every other
+            // restyled screen in this app heads a group this way, and 1m draws
+            // the same uppercase rule over both of the hub's groups.
+            SectionRuleHeader(title: "Shortcuts")
+                .pageBodyRow(top: 18, gutter: 0)
         }
 
         Section {
@@ -730,7 +738,8 @@ struct AccountView: View {
                 value: Route.moreOnAO3
             )
         } header: {
-            Text("Account")
+            SectionRuleHeader(title: "Account")
+                .pageBodyRow(top: 18, gutter: 0)
         }
     }
 
