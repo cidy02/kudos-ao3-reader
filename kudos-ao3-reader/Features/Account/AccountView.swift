@@ -715,7 +715,12 @@ struct AccountView: View {
             // *into a scope*, not a push onto a new screen.
             Text("Tapping a shortcut selects the scope it lives in, "
                 + "so Subscriptions lands on Reading and History on Activity.")
-                .pageBodyRow(top: 10, gutter: 0)
+                // A `List` footer does not style a `Text` that carries its own
+                // row insets, so this drew at body size in the primary colour,
+                // flush to the screen edge. 1m sets it at 11.5 and dims it.
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         }
     }
 
