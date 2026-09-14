@@ -13,6 +13,17 @@ struct WritingDraftsView: View {
 
     var body: some View {
         List {
+            SubjectHeaderBlock(
+                kicker: "AO3 Account",
+                title: "Drafts",
+                subtitle: draftsTally,
+                palette: theme.scopePalette,
+                gutter: SubjectMetrics.accountGutter
+            )
+            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
             NavigationLink("New work") { WritingWorkDestination(workID: nil) }
             Text("AO3 drafts are unpublished. Local editor recovery copies stay on this device.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -41,20 +52,39 @@ struct WritingDraftsView: View {
                         }
                     }
                 }
-                HStack {
-                    Button("Previous") { page -= 1 }.disabled(page <= 1 || isLoading)
-                    Spacer()
-                    Text("Page \(result.currentPage) of \(result.totalPages)").font(.caption)
-                    Spacer()
-                    Button("Next") { page += 1 }.disabled(page >= result.totalPages || isLoading)
+                // 1k's switcher pill, the same control every other paged screen
+                // in the redesign uses. This was a Previous / Next pair with the
+                // page as static text between them.
+                if result.totalPages > 1 {
+                    SearchPaginationBar(
+                        currentPage: result.currentPage,
+                        totalPages: result.totalPages,
+                        isLoading: isLoading,
+                        palette: theme.scopePalette
+                    ) { page = $0 }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
         }
         .cardList()
-        .navigationTitle("Drafts")
+        // The page states its own name in the header block above, per 1x.
+        .hidesNavigationBarChrome()
         .subjectScreenWash(palette: theme.scopePalette)
         .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
         .refreshable { reload += 1 }
+    }
+
+    /// 1x heads the page "N drafts · N expiring this week". The second half is
+    /// not drawn: the drafts endpoint returns work summaries with no creation
+    /// date, so there is nothing to measure "expiring" against without asking AO3
+    /// for each draft separately.
+    private var draftsTally: String? {
+        guard let result, loadedGeneration == auth.sessionGeneration else { return nil }
+        let count = result.works.count
+        if result.totalPages > 1 { return "page \(result.currentPage) of \(result.totalPages)" }
+        return count == 1 ? "1 draft" : "\(count) drafts"
     }
 
     private func load() async {
