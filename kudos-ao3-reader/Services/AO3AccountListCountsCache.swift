@@ -3,6 +3,7 @@ import Foundation
 /// Which of the signed-in user's AO3 account lists a cached size belongs to.
 nonisolated enum AO3AccountListKind: String, Hashable, Sendable {
     case myWorks
+    case series
     case bookmarks
     case subscriptions
     case markedForLater
@@ -119,6 +120,10 @@ final class AO3AccountListCountsCache {
     ///
     /// Subscriptions, History and Marked for Later are not in that nav, so they
     /// still fill in only once their own list is loaded.
+    ///
+    /// Series is here because the nav prints it — "Series (40)" — even though no
+    /// list load in the app produces a series count. It was being parsed and
+    /// dropped for want of a kind to file it under.
     func record(
         dashboardActions actions: [AO3AuthorWebAction],
         username: String,
@@ -134,6 +139,7 @@ final class AO3AccountListCountsCache {
             let kind: AO3AccountListKind
             switch String(path.dropFirst(base.count)) {
             case "works": kind = .myWorks
+            case "series": kind = .series
             case "bookmarks": kind = .bookmarks
             case "collections": kind = .collections
             default: continue

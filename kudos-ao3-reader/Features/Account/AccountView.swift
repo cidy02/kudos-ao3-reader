@@ -1288,7 +1288,7 @@ private extension AccountView {
     var writingScopeGroups: some View {
         scopeGroup("Posted", [
             writingDestination(.works, count: .myWorks),
-            writingDestination(.series, count: nil)
+            writingDestination(.series, count: .series)
         ])
         scopeGroup("Unposted", [
             // otwarchive's work_drafts.feature keeps 29-day drafts and purges
