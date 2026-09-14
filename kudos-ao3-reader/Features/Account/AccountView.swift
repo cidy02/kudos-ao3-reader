@@ -747,14 +747,19 @@ struct AccountView: View {
 
     @ViewBuilder
     private var readingSections: some View {
-        Section {
-            AccountScopeMenu(
-                prompt: "Show",
-                systemImage: \.systemImage,
-                selection: $readingTab
-            )
-            .accountControlCardRow()
-        }
+        // 1bt groups Reading by what a shelf *means* rather than listing four
+        // peers: what you put aside, and what you follow. Subscriptions is drawn
+        // with a "N with new chapters" subtitle, which is not built here — no
+        // store exposes that figure, and inventing one is the failure this plan's
+        // §4 names first.
+        scopeGroup("Saved", [
+            readingDestination(.later, count: .markedForLater),
+            readingDestination(.bookmarks, count: .bookmarks),
+            readingDestination(.collections, count: .collections)
+        ])
+        scopeGroup("Following", [
+            readingDestination(.subscriptions, count: .subscriptions)
+        ])
 
         switch readingTab {
         case .later:
@@ -801,14 +806,19 @@ struct AccountView: View {
 
     @ViewBuilder
     private var activitySections: some View {
-        Section {
-            AccountScopeMenu(
-                prompt: "Show",
-                systemImage: \.systemImage,
-                selection: $activityTab
+        // 1bt: Activity opens with what you read on AO3, then what arrives. The
+        // artboard splits arrivals from exchanges; this tab has only the inbox
+        // for both, so it is one group rather than an empty second heading.
+        scopeGroup("Read on AO3", [
+            activityDestination(.history, count: .history)
+        ])
+        scopeGroup("Arrives", [
+            activityDestination(
+                .inbox,
+                count: nil,
+                subtitle: inboxModel.unreadCount.map { "\($0) unread" }
             )
-            .accountControlCardRow()
-        }
+        ])
 
         switch activityTab {
         case .history:
@@ -1193,5 +1203,115 @@ extension AccountView {
         case .drafts:
             return nil
         }
+    }
+}
+
+/// Artboard 1bt's grouped destination rows.
+///
+/// Lives in an extension rather than the struct body on purpose: `AccountView`
+/// is already at SwiftLint's 900-line type limit, and this vocabulary is a
+/// self-contained presentation layer over navigation that already exists. Same
+/// file, because it reads the view's private scope state.
+private extension AccountView {
+    // MARK: Scope groups (artboard 1bt)
+
+    /// One destination inside a scope.
+    ///
+    /// Selecting rather than pushing is deliberate. 1bt draws these as grouped
+    /// rows, but the code reaches each list by swapping an inline section, and
+    /// 1bt's own note says scope membership follows `AccountView.swift` — so the
+    /// drawing governs how the choice *looks*, and the existing navigation still
+    /// governs where it goes. Pushing instead would put an extra screen between
+    /// the reader and their own bookmarks.
+    struct AccountScopeDestination: Identifiable {
+        let id: String
+        let title: String
+        let systemImage: String
+        var subtitle: String?
+        var count: String?
+        let isSelected: Bool
+        let select: () -> Void
+    }
+
+    private func scopeGroup(_ title: String, _ destinations: [AccountScopeDestination]) -> some View {
+        Section {
+            VStack(spacing: 0) {
+                ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in
+                    if index > 0 { SubjectRowSeparator() }
+                    scopeDestinationRow(destination)
+                }
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+        } header: {
+            SectionRuleHeader(title: title)
+                .pageBodyRow(top: 18, gutter: 0)
+        }
+    }
+
+    private func scopeDestinationRow(_ destination: AccountScopeDestination) -> some View {
+        Button(action: destination.select) {
+            HStack(spacing: 12) {
+                Image(systemName: destination.systemImage)
+                    .font(.system(size: 15))
+                    .foregroundStyle(destination.isSelected ? accountPalette.accent : Color.secondary)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(destination.title)
+                        .font(.system(size: 15, weight: destination.isSelected ? .semibold : .regular))
+                        .foregroundStyle(.primary)
+                    if let subtitle = destination.subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let count = destination.count {
+                    // The cache renders a lower bound as "100+" when AO3 paginated
+                    // the list rather than printing a total, which is why the
+                    // artboard shows exactly that against Collections.
+                    Text(count)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(destination.isSelected ? [.isSelected] : [])
+    }
+
+    private func readingDestination(
+        _ tab: AccountReadingTab, count: AO3AccountListKind?, subtitle: String? = nil
+    ) -> AccountScopeDestination {
+        AccountScopeDestination(
+            id: tab.rawValue,
+            title: tab.rawValue,
+            systemImage: tab.systemImage,
+            subtitle: subtitle,
+            count: count.flatMap { cachedCount($0) },
+            isSelected: readingTab == tab,
+            select: { readingTab = tab }
+        )
+    }
+
+    private func activityDestination(
+        _ tab: AccountActivityTab, count: AO3AccountListKind?, subtitle: String? = nil
+    ) -> AccountScopeDestination {
+        AccountScopeDestination(
+            id: tab.rawValue,
+            title: tab.rawValue,
+            systemImage: tab.systemImage,
+            subtitle: subtitle,
+            count: count.flatMap { cachedCount($0) },
+            isSelected: activityTab == tab,
+            select: { activityTab = tab }
+        )
     }
 }
