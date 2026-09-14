@@ -67,7 +67,7 @@ struct AccountMoreOnAO3View: View {
         SubjectHeaderBlock(
             kicker: "AO3 Account",
             title: "More on AO3",
-            subtitle: "Opens ao3.org in your browser",
+            subtitle: "Opens on AO3 in Browse",
             palette: accountPalette,
             gutter: SubjectMetrics.accountGutter
         )
@@ -80,16 +80,22 @@ struct AccountMoreOnAO3View: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Creator tools")
+                SectionRuleHeader(title: "Post and manage")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                creatorToolsPanel.pageBodyRow(top: 8, gutter: gutter)
+                postAndManagePanel.pageBodyRow(top: 8, gutter: gutter)
                 creatorToolsFootnote.pageBodyRow(top: 8, gutter: gutter)
             }
 
             Section {
-                SectionRuleHeader(title: "Challenges & gifts")
+                SectionRuleHeader(title: "Challenges")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 challengesPanel.pageBodyRow(top: 8, gutter: gutter)
+            }
+
+            Section {
+                SectionRuleHeader(title: "Your account")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                yourAccountPanel.pageBodyRow(top: 8, gutter: gutter)
             }
 
             Section {
@@ -108,12 +114,48 @@ struct AccountMoreOnAO3View: View {
 
     // MARK: - Panels
 
-    private var creatorToolsPanel: some View {
+    /// 1aa's first group. It also draws Import work, Edit works in bulk and
+    /// Manage collection items; those are not here because their AO3 paths could
+    /// not be confirmed — GitHub was unreachable for otwarchive's routes and AO3
+    /// answered those probes with Cloudflare 525s, which say nothing either way.
+    /// A row that sends someone to a 404 in Browse is worse than a missing row.
+    private var postAndManagePanel: some View {
         VStack(spacing: 0) {
+            AccountExternalNavCard(
+                title: "Post new work",
+                systemImage: "square.and.pencil",
+                sitePath: "/works/new",
+                isFormRow: true
+            )
+            SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Drafts",
                 systemImage: "doc.badge.clock",
                 pathSuffix: "works/drafts",
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            // 1aa files Related works under posting rather than challenges.
+            AccountExternalNavCard(
+                title: "Related works",
+                systemImage: "arrow.triangle.branch",
+                pathSuffix: "related_works",
+                isFormRow: true
+            )
+        }
+        .subjectPanel()
+    }
+
+    /// 1aa's third group. Its Invitations and Fannish next of kin rows are
+    /// absent: the first could not be confirmed, and `fannish_next_of_kin` under
+    /// a user path answered a definite 404, so whatever AO3 calls that page, it
+    /// is not that.
+    private var yourAccountPanel: some View {
+        VStack(spacing: 0) {
+            AccountExternalNavCard(
+                title: "Profile",
+                systemImage: "person.text.rectangle",
+                pathSuffix: "profile",
                 isFormRow: true
             )
             SubjectRowSeparator()
@@ -125,9 +167,16 @@ struct AccountMoreOnAO3View: View {
             )
             SubjectRowSeparator()
             AccountExternalNavCard(
-                title: "Skins",
+                title: "Skins and site styles",
                 systemImage: "paintpalette",
                 pathSuffix: "skins",
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Co-Creator Requests",
+                systemImage: "person.badge.plus",
+                pathSuffix: "creatorships",
                 isFormRow: true
             )
             SubjectRowSeparator()
@@ -151,51 +200,33 @@ struct AccountMoreOnAO3View: View {
 
     private var challengesPanel: some View {
         VStack(spacing: 0) {
-            Group {
-                AccountExternalNavCard(
-                    title: "Co-Creator Requests",
-                    systemImage: "person.badge.plus",
-                    pathSuffix: "creatorships",
-                    isFormRow: true
-                )
-                SubjectRowSeparator()
-                AccountExternalNavCard(
-                    title: "Sign-ups",
-                    systemImage: "pencil.and.list.clipboard",
-                    pathSuffix: "signups",
-                    isFormRow: true
-                )
-                SubjectRowSeparator()
-                AccountExternalNavCard(
-                    title: "Assignments",
-                    systemImage: "list.clipboard",
-                    pathSuffix: "assignments",
-                    isFormRow: true
-                )
-            }
+            AccountExternalNavCard(
+                title: "Sign-ups",
+                systemImage: "pencil.and.list.clipboard",
+                pathSuffix: "signups",
+                isFormRow: true
+            )
             SubjectRowSeparator()
-            Group {
-                AccountExternalNavCard(
-                    title: "Claims",
-                    systemImage: "flag",
-                    pathSuffix: "claims",
-                    isFormRow: true
-                )
-                SubjectRowSeparator()
-                AccountExternalNavCard(
-                    title: "Related Works",
-                    systemImage: "arrow.triangle.branch",
-                    pathSuffix: "related_works",
-                    isFormRow: true
-                )
-                SubjectRowSeparator()
-                AccountExternalNavCard(
-                    title: "Gifts",
-                    systemImage: "gift",
-                    pathSuffix: "gifts",
-                    isFormRow: true
-                )
-            }
+            AccountExternalNavCard(
+                title: "Assignments",
+                systemImage: "list.clipboard",
+                pathSuffix: "assignments",
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Claims",
+                systemImage: "flag",
+                pathSuffix: "claims",
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Gifts given and received",
+                systemImage: "gift",
+                pathSuffix: "gifts",
+                isFormRow: true
+            )
         }
         .subjectPanel()
     }
