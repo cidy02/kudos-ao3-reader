@@ -64,6 +64,7 @@ struct SearchPaginationBar: View {
             // down instead of hunting for the two chevrons — the same gesture the
             // system's own steppers answer to.
             .accessibilityAdjustableAction { direction in
+                guard !isLoading else { return }
                 switch direction {
                 case .increment where currentPage < totalPages: onSelect(currentPage + 1)
                 case .decrement where currentPage > 1: onSelect(currentPage - 1)
@@ -159,7 +160,7 @@ struct SearchPaginationBar: View {
         }
         .lineLimit(1)
         .padding(.horizontal, 12)
-        .frame(minHeight: 32)
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
 
@@ -196,7 +197,10 @@ struct SearchPaginationBar: View {
                             )
                     }
                 }
-                .contentShape(Circle())
+                // 1k draws a 32pt circle; the branch's 44pt tap minimum still
+                // applies. Keep the artwork inside a non-overlapping target.
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
@@ -233,17 +237,9 @@ struct SearchPaginationBar: View {
         }
     }
 
-    /// One decimal place, dropping a trailing ".0" (1.0 → "1", 1.2 → "1.2").
-    private static func trimmed(_ value: Double) -> String {
-        let rounded = (value * 10).rounded() / 10
-        return rounded == rounded.rounded()
-            ? String(Int(rounded))
-            : String(format: "%.1f", rounded)
-    }
-
 }
 
-/// The long jump. A slider, because that is how iOS addresses a long ordered set —/// Artboard 1k's page sheet: a number field, the ten nearby pages as tiles, and
+/// Artboard 1k's page sheet: a number field, the ten nearby pages as tiles, and
 /// First / Last for the ends.
 ///
 /// **Why this replaced a scrubber.** The slider it supplanted made a real
@@ -314,18 +310,19 @@ private struct PageJumpSheet: View {
             header
             Divider().overlay(themeManager.appTheme.glassStroke(0.10))
 
-            VStack(alignment: .leading, spacing: 18) {
-                fieldSection
-                nearbySection
-                endsRow
-                Spacer(minLength: 0)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    fieldSection
+                    nearbySection
+                    endsRow
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 16)
-            .padding(.bottom, 24)
         }
         #if os(iOS)
-        .presentationDetents([.height(430)])
+        .presentationDetents([.height(430), .large])
         .presentationDragIndicator(.visible)
         #endif
     }
@@ -456,7 +453,7 @@ private struct PageJumpSheet: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity, minHeight: 42)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(tileBackground(isSelected: false))
                 .foregroundStyle(Color.primary)
         }
