@@ -292,14 +292,13 @@ struct AccountView: View {
                 // duplicate name. The identity row inside the card below is the
                 // same one the list layout shows — this branch is a different
                 // *arrangement* of the Account tab, not a different screen.
-                AccountScrollChromeCard {
-                    AccountProfileCard(
-                        profileModel: profileModel,
-                        postingPseudName: $postingPseudName,
-                        onViewProfile: openOwnProfile,
-                        onLogin: { showingLogin = true }
-                    )
-                }
+                AccountProfileCard(
+                    profileModel: profileModel,
+                    postingPseudName: $postingPseudName,
+                    onViewProfile: openOwnProfile,
+                    onLogin: { showingLogin = true }
+                )
+                .padding(.horizontal, SubjectMetrics.accountGutter)
 
                 if let notice = auth.noticeMessage {
                     Text(notice)
@@ -610,10 +609,11 @@ struct AccountView: View {
                 onViewProfile: openOwnProfile,
                 onLogin: { showingLogin = true }
             )
-            .accountControlCardRow()
+            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         } footer: {
             if let notice = auth.noticeMessage {
                 Text(notice)
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
         }
     }
@@ -739,18 +739,21 @@ struct AccountView: View {
         }
 
         Section {
-            navCard(
-                title: "Preferences",
-                systemImage: "slider.horizontal.3",
-                count: nil,
-                value: Route.preferences
-            )
-            navCard(
-                title: "More on AO3",
-                systemImage: "ellipsis.circle",
-                count: nil,
-                value: Route.moreOnAO3
-            )
+            VStack(spacing: 0) {
+                panelNavRow(
+                    title: "Preferences",
+                    systemImage: "slider.horizontal.3",
+                    value: Route.preferences
+                )
+                SubjectRowSeparator()
+                panelNavRow(
+                    title: "More on AO3",
+                    systemImage: "ellipsis.circle",
+                    value: Route.moreOnAO3
+                )
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         } header: {
             SectionRuleHeader(title: "Account")
                 .pageBodyRow(top: 18, gutter: 0)
@@ -1038,6 +1041,20 @@ struct AccountView: View {
         }
         .buttonStyle(.plain)
         .disabled(opensExternally && auth.username == nil)
+    }
+
+    /// A row *inside* a `subjectPanel`, as 1m's Account group draws them — the
+    /// panel owns the background, so the row only owns its own padding.
+    private func panelNavRow(
+        title: String, systemImage: String, value: some Hashable
+    ) -> some View {
+        Button {
+            path.append(value)
+        } label: {
+            AccountNavCardLabel(title: title, systemImage: systemImage)
+                .padding(.horizontal, 14)
+        }
+        .buttonStyle(.plain)
     }
 
     private func navCard(
