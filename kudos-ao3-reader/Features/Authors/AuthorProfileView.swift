@@ -19,8 +19,17 @@ struct AuthorProfileView: View {
     /// signed-in user's home (`/users/:login`) under the title "Dashboard".
     private let navigationTitle: String
 
-    init(route: AO3AuthorRoute, navigationTitle: String = "Author") {
-        _model = State(initialValue: AO3AuthorProfileModel(route: route))
+    /// `initialTab` lets Account's Writing scope open this surface directly on
+    /// Works (1u) or Series (1w) rather than on whichever tab the model defaults
+    /// to. Without it a row named "Series" opened a screen showing works.
+    init(
+        route: AO3AuthorRoute,
+        navigationTitle: String = "Author",
+        initialTab: AO3AuthorProfileTab? = nil
+    ) {
+        let model = AO3AuthorProfileModel(route: route)
+        if let initialTab { model.selectedTab = initialTab }
+        _model = State(initialValue: model)
         self.navigationTitle = navigationTitle
     }
 
