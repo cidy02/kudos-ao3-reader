@@ -209,9 +209,18 @@ struct AO3AuthorWorksSection: View {
     var onToggleSelection: (AO3WorkSummary) -> Void = { _ in }
     /// Lets an embedding surface scope its Mature-reveal control to these rows.
     var onAdultContentVisibilityChange: (Bool) -> Void = { _ in }
+    /// Artboard 1y's four-cell performance strip under each work.
+    ///
+    /// Off by default, and the only caller that turns it on passes
+    /// `isOwnProfile` — so this cannot be shown against a stranger's works by
+    /// forgetting a parameter. The artboard says "**your own** works with their
+    /// performance"; surfacing someone else's per-work kudos and hits is a
+    /// different product decision, and not one the spec makes.
+    var showsPerformance: Bool = false
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var theme
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -305,11 +314,58 @@ struct AO3AuthorWorksSection: View {
                                 .cardNavigation(to: remote, accessibilityLabel: remote.title)
                                 .cardRow()
                         }
+                        // Read off the AO3 blurb the list was parsed from, which
+                        // already carries all four figures — no extra request, as
+                        // 1y's own build note says. Drawn from `entry.remote`
+                        // whichever row was rendered, since a work in the library
+                        // still came from that blurb.
+                        if showsPerformance, let blurb = entry.remote {
+                            performanceStrip(for: blurb)
+                        }
                     }
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
         }
+    }
+
+    /// 1y: kudos, comments, hits and bookmarks as one strip tinted to the card's
+    /// own accent, "so the numbers scan as a set rather than a sentence".
+    ///
+    /// A figure AO3 did not print is dropped rather than shown as zero — a work
+    /// with no kudos yet and a work whose blurb omitted the count are different
+    /// things, and a zero would state the second as the first.
+    @ViewBuilder
+    private func performanceStrip(for work: AO3WorkSummary) -> some View {
+        let cells = performanceCells(for: work)
+        if !cells.isEmpty {
+            SubjectStatStrip(
+                cells: cells,
+                palette: theme.appTheme.subjectPalette(
+                    hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+                )
+            )
+            .padding(.top, 2)
+            .listRowInsets(EdgeInsets(
+                top: 0,
+                leading: CardListMetrics.sideMargin,
+                bottom: 10,
+                trailing: CardListMetrics.sideMargin
+            ))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Performance for \(work.title)")
+        }
+    }
+
+    private func performanceCells(for work: AO3WorkSummary) -> [SubjectStatStrip.Cell] {
+        [
+            work.kudos.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Kudos") },
+            work.comments.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Comments") },
+            work.hits.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Hits") },
+            work.bookmarks.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Bookmarks") }
+        ].compactMap { $0 }
     }
 
     private var workEntries: [CanonicalWork] {
