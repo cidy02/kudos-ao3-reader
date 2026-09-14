@@ -195,6 +195,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         Button("Reset to AO3 Red") { themeManager.resetAccent() }
                             .disabled(themeManager.accentHex.caseInsensitiveCompare(ThemeManager.ao3Red)
                                 == .orderedSame)
+                        #if os(iOS)
+                        Button {
+                            showCustomize = true
+                        } label: {
+                            Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                        }
+                        #endif
                     } header: {
                         Text("Theme")
                     } footer: {
@@ -205,20 +212,23 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     }
                 }
 
-                Section("Appearance") {
-                    if !includeAppSettings {
+                // Appearance is a reader-only group now: in app settings its single
+                // row, Customize Theme…, sits in the Theme group above, where 1ab
+                // keeps everything that changes how reading looks.
+                if !includeAppSettings {
+                    Section("Appearance") {
                         // Inside the reader: this picks the reader theme (which re-themes
                         // the app too while App & Reader are matched).
                         themePicker("Theme", selection: readerThemeBinding)
-                    }
 
-                    #if os(iOS)
-                    Button {
-                        showCustomize = true
-                    } label: {
-                        Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                        #if os(iOS)
+                        Button {
+                            showCustomize = true
+                        } label: {
+                            Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                        }
+                        #endif
                     }
-                    #endif
                 }
 
                 #if os(iOS)
