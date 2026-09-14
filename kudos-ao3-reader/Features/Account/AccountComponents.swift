@@ -17,7 +17,10 @@ struct AccountProfileCard: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
-    @State private var showSessionDetail = false
+    @Environment(ThemeManager.self) private var theme
+    /// 1m sets the account name at 27px — smaller than a subject page's 32,
+    /// because here it shares the line with a 56pt avatar.
+    @ScaledMetric(relativeTo: .title2) private var nameSize: CGFloat = 27
 
     var body: some View {
         switch auth.status {
@@ -44,54 +47,55 @@ struct AccountProfileCard: View {
         .accessibilityLabel("Restoring AO3 session")
     }
 
+    /// Artboard 1m's identity block: the avatar, the account's own kicker and
+    /// name, and the session line, on one row — then the pseud pill under it.
+    ///
+    /// The name is stated **here and nowhere else** on this screen. It used to be
+    /// drawn twice, once by `AccountView`'s `SubjectHeaderBlock` at 32pt and again
+    /// inside this card, which is why the tab never resolved into 1m however
+    /// closely the pieces below it matched.
     private func signedInCard(username: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Button(action: onViewProfile) {
-                AO3AuthorAvatar(
-                    url: profileModel?.header?.identity.avatarURL,
-                    name: username
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("View Profile")
-            .accessibilityHint("Opens your AO3 author profile")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 13) {
+                Button(action: onViewProfile) {
+                    AO3AuthorAvatar(
+                        url: profileModel?.header?.identity.avatarURL,
+                        name: username,
+                        size: 56,
+                        isCircular: true
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View Profile")
+                .accessibilityHint("Opens your AO3 author profile")
 
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    SubjectKicker(
+                        text: "AO3 Account",
+                        palette: theme.scopePalette,
+                        ruleWidth: SubjectMetrics.pageRuleWidth,
+                        ruleSpacing: 7
+                    )
+
                     Text(username)
-                        .font(.title2.weight(.semibold))
+                        .font(.system(size: nameSize, weight: .bold))
+                        .tracking(-0.5)
                         .lineLimit(2)
-                        .minimumScaleFactor(0.75)
+                        .minimumScaleFactor(0.7)
                         .accessibilityAddTraits(.isHeader)
 
-                    Spacer(minLength: 4)
-
-                    sessionStatusButton
+                    sessionStatusLine
                 }
-
-                // Artboard 1m draws "Session verified 4 min ago" under the
-                // username. Shown only once the session has actually been
-                // confirmed live against AO3 — `lastSessionVerification` is
-                // stamped where the validator accepts and cleared with the
-                // session, so this states a fact rather than a reassurance.
-                if let verifiedAt = auth.lastSessionVerification {
-                    Text("Session verified \(verifiedAt.formatted(.relative(presentation: .numeric)))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Session last verified")
-                        .accessibilityValue(verifiedAt.formatted(.relative(presentation: .named)))
-                }
-
-                HStack(alignment: .center, spacing: 8) {
-                    postingAsMenu
-
-                    Spacer(minLength: 4)
-
-                    // Trailing edge matches the session checkmark above.
-                    accountMenu
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(alignment: .center, spacing: 8) {
+                postingAsMenu
+
+                Spacer(minLength: 4)
+
+                accountMenu
+            }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
@@ -159,28 +163,40 @@ struct AccountProfileCard: View {
         auth.setPreferredPostingPseudName(name)
     }
 
-    /// Compact session indicator pinned top-trailing next to the username.
-    /// Detail text lives in a popover so the card stays dense.
-    private var sessionStatusButton: some View {
-        Button {
-            showSessionDetail = true
-        } label: {
+    /// 1m draws a green check and "Session verified 4 min ago" beneath the name.
+    ///
+    /// This replaced a bare icon button whose detail text sat behind a popover.
+    /// The line now states that detail permanently, so the popover had nothing
+    /// left to reveal — and a 17pt-tall line of text could not have carried a
+    /// 44pt hit target without pushing the block out of the artboard's spacing.
+    private var sessionStatusLine: some View {
+        HStack(spacing: 5) {
             sessionStatusIcon
-                .font(.body)
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
+                .font(.caption)
+            Text(sessionStatusLineText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(sessionStatusDetailText)
-        .accessibilityHint("Shows session verification details")
-        .popover(isPresented: $showSessionDetail, arrowEdge: .bottom) {
-            Text(sessionStatusDetailText)
-                .font(.subheadline)
-                .multilineTextAlignment(.leading)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .frame(minWidth: 180, alignment: .leading)
-                .presentationCompactAdaptation(.popover)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(sessionStatusLineText)
+    }
+
+    /// Prefers 1m's wording once the session has been confirmed live against AO3
+    /// — `lastSessionVerification` is stamped where the validator accepts and is
+    /// cleared with the session, so this states a fact rather than a reassurance.
+    ///
+    /// Expired and unreachable deliberately ignore that stamp: a session that AO3
+    /// has since rejected, or one that could not be reached, must not keep
+    /// advertising the last time it happened to pass.
+    private var sessionStatusLineText: String {
+        switch auth.sessionHealth {
+        case .expired, .unreachable:
+            return sessionStatusDetailText
+        case .unknown, .verifying, .healthy:
+            guard let verifiedAt = auth.lastSessionVerification else { return sessionStatusDetailText }
+            return "Session verified \(verifiedAt.formatted(.relative(presentation: .numeric)))"
         }
     }
 

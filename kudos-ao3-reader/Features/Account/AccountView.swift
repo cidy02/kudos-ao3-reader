@@ -259,21 +259,27 @@ struct AccountView: View {
         theme.scopePalette
     }
 
-    /// The username as the page's own 32pt title, per 1m, rather than as a
-    /// navigation title — the spec scrolls it away under the chrome, which a
-    /// `navigationTitle` cannot do. Signed out, there is no username to state,
-    /// so the tab names itself instead (artboard 1n).
+    /// Signed out there is no username, so the tab names itself in the page's own
+    /// 32pt title rather than a navigation title — artboard 1n.
+    ///
+    /// Signed in, this draws **nothing**: 1m gives the account exactly one name,
+    /// on the identity row beside the avatar, and `AccountProfileCard` owns that
+    /// row. Emitting a `SubjectHeaderBlock` here as well is what stacked the
+    /// username above itself and kept the tab from ever resolving into 1m.
+    @ViewBuilder
     private var subjectHeaderSection: some View {
-        Section {
-            SubjectHeaderBlock(
-                kicker: "AO3 Account",
-                title: auth.username ?? "Account",
-                subtitle: auth.isLoggedIn ? nil : "Not signed in",
-                palette: accountPalette
-            )
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+        if !auth.isLoggedIn {
+            Section {
+                SubjectHeaderBlock(
+                    kicker: "AO3 Account",
+                    title: "Account",
+                    subtitle: "Not signed in",
+                    palette: accountPalette
+                )
+                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
         }
     }
 
@@ -281,17 +287,11 @@ struct AccountView: View {
     private var libraryStyleCompactRoot: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AccountControlMetrics.compactSpacing) {
-                // Same header as the list layout: this branch is a different
-                // *arrangement* of the Account tab, not a different screen, and
-                // the tab should not rename itself at a size-class boundary.
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: auth.username ?? "Account",
-                    subtitle: auth.isLoggedIn ? nil : "Not signed in",
-                    palette: accountPalette
-                )
-                .padding(.top, 8)
-
+                // No `SubjectHeaderBlock` here either: `usesLibraryStyleCompactLayout`
+                // is only ever true while signed in, so this one was always the
+                // duplicate name. The identity row inside the card below is the
+                // same one the list layout shows — this branch is a different
+                // *arrangement* of the Account tab, not a different screen.
                 AccountScrollChromeCard {
                     AccountProfileCard(
                         profileModel: profileModel,
@@ -677,13 +677,13 @@ struct AccountView: View {
             // 3×2 of individual icon cards (not one shared panel).
             LazyVGrid(columns: shortcutGridColumns, spacing: 10) {
                 shortcutGridButton(
-                    title: "My Dashboard",
+                    title: "Dashboard",
                     systemImage: "square.grid.2x2"
                 ) {
                     path.append(Route.dashboard)
                 }
                 shortcutGridButton(
-                    title: "My Subscriptions",
+                    title: "Subscriptions",
                     systemImage: "bell",
                     count: cachedCount(.subscriptions)
                 ) {
@@ -691,7 +691,7 @@ struct AccountView: View {
                     selectedTab = .reading
                 }
                 shortcutGridButton(
-                    title: "My Works",
+                    title: "Works",
                     systemImage: "doc.text",
                     count: cachedCount(.myWorks)
                 ) {
@@ -699,7 +699,7 @@ struct AccountView: View {
                     selectedTab = .writing
                 }
                 shortcutGridButton(
-                    title: "My Bookmarks",
+                    title: "Bookmarks",
                     systemImage: "bookmark",
                     count: cachedCount(.bookmarks)
                 ) {
@@ -707,14 +707,14 @@ struct AccountView: View {
                     selectedTab = .reading
                 }
                 shortcutGridButton(
-                    title: "My Collections",
+                    title: "Collections",
                     systemImage: "square.stack",
                     count: cachedCount(.collections)
                 ) {
                     path.append(Route.myCollections)
                 }
                 shortcutGridButton(
-                    title: "My History",
+                    title: "History",
                     systemImage: "clock",
                     count: cachedCount(.history)
                 ) {
@@ -754,6 +754,15 @@ struct AccountView: View {
         } header: {
             SectionRuleHeader(title: "Account")
                 .pageBodyRow(top: 18, gutter: 0)
+        } footer: {
+            // 1m closes Overview with a caption. Its first sentence explains the
+            // hub's information architecture to a reader of the spec, which would
+            // read oddly as on-screen copy; this is the half that tells the user
+            // something they cannot otherwise see — that a shortcut is a jump
+            // *into a scope*, not a push onto a new screen.
+            Text("Tapping a shortcut selects the scope it lives in, "
+                + "so Subscriptions lands on Reading and History on Activity.")
+                .pageBodyRow(top: 10, gutter: 0)
         }
     }
 

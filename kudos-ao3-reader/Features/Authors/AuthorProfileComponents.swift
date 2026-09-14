@@ -130,6 +130,9 @@ struct AO3AuthorHero: View {
 struct AO3AuthorAvatar: View {
     let url: URL?
     let name: String
+    /// 72pt square on an author page; 1m's account header draws a 56pt circle.
+    var size: CGFloat = 72
+    var isCircular = false
 
     var body: some View {
         Group {
@@ -146,15 +149,15 @@ struct AO3AuthorAvatar: View {
                 placeholder
             }
         }
-        .frame(width: 72, height: 72)
+        .frame(width: size, height: size)
         .background(.quaternary)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(isCircular ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 8, style: .continuous)))
         .accessibilityLabel("\(name) profile image")
     }
 
     private var placeholder: some View {
-        Image(systemName: "person.crop.square")
-            .font(.system(size: 30, weight: .regular))
+        Image(systemName: isCircular ? "person.crop.circle" : "person.crop.square")
+            .font(.system(size: size * 0.42, weight: .regular))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
