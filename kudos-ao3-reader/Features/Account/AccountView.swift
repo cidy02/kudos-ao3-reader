@@ -233,7 +233,6 @@ struct AccountView: View {
 
     private var standardListBody: some View {
         List {
-            subjectHeaderSection
             profileCardSection
 
             if auth.isLoggedIn {
@@ -253,30 +252,6 @@ struct AccountView: View {
     /// seen through that rule, not a literal to copy.
     private var accountPalette: SubjectPalette {
         theme.scopePalette
-    }
-
-    /// Signed out there is no username, so the tab names itself in the page's own
-    /// 32pt title rather than a navigation title — artboard 1n.
-    ///
-    /// Signed in, this draws **nothing**: 1m gives the account exactly one name,
-    /// on the identity row beside the avatar, and `AccountProfileCard` owns that
-    /// row. Emitting a `SubjectHeaderBlock` here as well is what stacked the
-    /// username above itself and kept the tab from ever resolving into 1m.
-    @ViewBuilder
-    private var subjectHeaderSection: some View {
-        if !auth.isLoggedIn {
-            Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: "Account",
-                    subtitle: "Not signed in",
-                    palette: accountPalette
-                )
-                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-        }
     }
 
     /// Matches LibrarySectionListView compact: `ScrollView` + two-up `NavigationLink` cards.

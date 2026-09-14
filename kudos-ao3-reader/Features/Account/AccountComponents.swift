@@ -265,33 +265,51 @@ struct AccountProfileCard: View {
         .accessibilityLabel("Account actions")
     }
 
+    /// Artboard 1n's identity block, which is 1m's with everything the account
+    /// supplied taken out: a neutral 56pt circle, the state as the 27pt name, and
+    /// no kicker or accent rule — *"no session, so no accent and no wash"*.
+    ///
+    /// The name is stated **here and nowhere else**, as on the signed-in side.
+    /// `AccountView` used to head this with a `SubjectHeaderBlock` as well, which
+    /// said "Not signed in" a second time and drew an accent rule on the one
+    /// screen the spec asks to be colourless.
+    ///
+    /// 1n also captions the title "No account, no colour". That is the artboard
+    /// explaining itself to a reader of the spec — as on-screen copy it tells a
+    /// signed-out user nothing — so, like 1m's closing caption, only the half
+    /// that informs is drawn: the paragraph below.
     private var signedOutCard: some View {
-        HStack(alignment: .top, spacing: 14) {
-            AO3AuthorAvatar(url: nil, name: "AO3 account")
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 13) {
+                AO3AuthorAvatar(url: nil, name: "AO3 account", size: 56, isCircular: true)
 
-            VStack(alignment: .leading, spacing: 5) {
                 Text("Not signed in")
-                    .font(.title2.weight(.semibold))
-                Text("Log in to use your AO3 works, bookmarks, subscriptions, "
-                    + "history, and inbox. Your session stays on this device.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: nameSize, weight: .bold))
+                    .tracking(-0.5)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .accessibilityAddTraits(.isHeader)
 
-                Button(action: onLogin) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "person.badge.key")
-                        Text(auth.status == .signingIn ? "Logging In…" : "Log In to AO3")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
-                .controlSize(.small)
-                .disabled(auth.status == .signingIn)
-                .padding(.top, 3)
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("Log in to use your AO3 works, bookmarks, subscriptions, "
+                + "history and inbox. Your session stays on this device.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: onLogin) {
+                HStack(spacing: 7) {
+                    Image(systemName: "person.badge.key")
+                    Text(auth.status == .signingIn ? "Logging In…" : "Log In to AO3")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .disabled(auth.status == .signingIn)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
     }
 }
