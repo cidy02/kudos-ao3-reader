@@ -16,6 +16,14 @@ struct WritingDraftsView: View {
             NavigationLink("New work") { WritingWorkDestination(workID: nil) }
             Text("AO3 drafts are unpublished. Local editor recovery copies stay on this device.")
                 .font(.caption).foregroundStyle(.secondary)
+            // Artboard 1x warns that drafts expire, which is the one thing about
+            // this screen that can cost someone their writing. Its own figure is
+            // 29 days; otwarchive's `work_drafts.feature` purges a draft created
+            // 31 days ago and keeps one created 29 days ago, so the number is 30
+            // and the spec is off by one. Stated as AO3's rule rather than the
+            // app's, because it is AO3 that deletes them.
+            Text("AO3 deletes an unposted draft 30 days after it is created.")
+                .font(.caption).foregroundStyle(.secondary)
             if isLoading { ProgressView("Loading drafts…") }
             if let errorMessage {
                 Text(errorMessage).foregroundStyle(.secondary)
