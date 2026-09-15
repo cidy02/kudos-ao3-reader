@@ -76,6 +76,10 @@ nonisolated struct AO3SearchPage: Sendable {
     var totalPages: Int
     /// AO3's own result-count heading, when the page carries one.
     var summary: AO3ResultSummary?
+    /// Per-row reading metadata, on the two pages that have any: History and
+    /// Marked for Later are both `/users/:id/readings`, whose blurbs carry a
+    /// `div.user.module` no other listing has. Empty everywhere else.
+    var readingEntries: [AO3ReadingEntry] = []
 }
 
 /// The count line AO3 prints above a works list — "92,495 Found",

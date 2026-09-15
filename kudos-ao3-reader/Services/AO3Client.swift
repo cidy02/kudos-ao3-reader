@@ -1005,6 +1005,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await Self.parseSearchPage(authenticatedHTML(for: request), page: page)
     }
 
+    /// `/users/:id/readings`, in both its forms — History and, with
+    /// `?show=to-read`, Marked for Later.
+    ///
+    /// The blurbs are search-shaped, so the work parse is unchanged; this fetches
+    /// the page ONCE and runs the reading parse over the same HTML rather than
+    /// asking AO3 for it twice. A failure to read the extra block leaves the
+    /// works intact — the list is worth more than the annotations on it.
+    func readingsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
+        let html = try await authenticatedHTML(for: request)
+        var parsed = try Self.parseSearchPage(html, page: page)
+        parsed.readingEntries = (try? Self.parseReadingEntries(from: html)) ?? []
+        return parsed
+    }
+
     /// Loads an arbitrary AO3 works listing URL (e.g. a tag's `/tags/<name>/works`
     /// page, tapped in a work's preface) and parses its work blurbs. Adds the page
     /// number, and keeps `view_adult=true` because the caller may hand us any AO3

@@ -93,7 +93,10 @@ struct AO3AccountWorksList: View {
             switch self {
             // Standard work-blurb pages; bookmarks and subscriptions need their own
             // outer selector / parser.
-            case .markedForLater, .history, .collection:
+            // Both readings pages carry per-row visit data; a collection does not.
+            case .markedForLater, .history:
+                try await AO3Client.shared.readingsPage(for: request, page: page)
+            case .collection:
                 try await AO3Client.shared.worksPage(for: request, page: page)
             case .bookmarks:
                 try await AO3Client.shared.bookmarksPage(for: request, page: page)
@@ -142,6 +145,10 @@ struct AO3AccountWorksList: View {
     /// `UserDefaults` per row — a decode per row of a two-hundred row list is the
     /// kind of thing that only shows up on someone else's device.
     @State private var subscriptionWatermarks: [Int: SubscriptionWatermark] = [:]
+    /// 1t's per-row visit data, keyed the way the watermarks above are. Rows for
+    /// works AO3 has deleted carry no id and so are absent here — they also have
+    /// no blurb to annotate.
+    @State private var readingEntries: [Int: AO3ReadingEntry] = [:]
     @State private var expandAll = false
     /// Matches Account tab's layout preference so Refine screens stay consistent.
     @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
@@ -277,6 +284,65 @@ struct AO3AccountWorksList: View {
         }
     }
 
+    /// 1t's reading line, under the blurb and inside the same card.
+    ///
+    /// Adds nothing at all on a list that is not History or Marked for Later —
+    /// only `/users/:id/readings` carries this data, so every other caller of
+    /// this list renders exactly as before.
+    @ViewBuilder
+    private func readingAnnotated<Content: View>(
+        _ entry: CanonicalWork,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if let reading = readingEntry(for: entry) {
+            VStack(alignment: .leading, spacing: 6) {
+                content()
+                readingFootnote(reading)
+            }
+        } else {
+            content()
+        }
+    }
+
+    private func readingEntry(for entry: CanonicalWork) -> AO3ReadingEntry? {
+        // CanonicalWork already resolves local-or-remote to one AO3 id.
+        guard let id = entry.ao3WorkID else { return nil }
+        return readingEntries[id]
+    }
+
+    /// Each fact is dropped rather than zeroed when AO3 did not state it: a row
+    /// that names no version status says nothing about versions.
+    private func readingFootnote(_ reading: AO3ReadingEntry) -> some View {
+        let facts = [
+            reading.visitCountDisplay,
+            reading.versionDisplay,
+            reading.lastVisitedDisplay
+        ].compactMap(\.self)
+        return VStack(alignment: .leading, spacing: 4) {
+            if !facts.isEmpty {
+                Text(facts.joined(separator: " · "))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            if reading.isMarkedForLater || reading.isFlaggedToSkip {
+                HStack(spacing: 6) {
+                    if reading.isMarkedForLater {
+                        Label("Marked for later", systemImage: "clock.badge")
+                    }
+                    if reading.isFlaggedToSkip {
+                        Label("Flagged to skip", systemImage: "eye.slash")
+                    }
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary.opacity(0.8))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 2)
+        .accessibilityElement(children: .combine)
+    }
+
     @ViewBuilder
     private var worksList: some View {
         // Compact: Library-style root ScrollView + NavigationLink grid.
@@ -311,11 +377,13 @@ struct AO3AccountWorksList: View {
                                 // non-selecting branch — re-wrapping it stacks a second,
                                 // unhidden, real-titled NavigationLink behind the blurred
                                 // branch's reveal gate.
-                                SensitiveWorkRow(
-                                    work: work,
-                                    expandAll: expandAll,
-                                    presentation: displayMode == .ledger ? .ledger : .standard
-                                )
+                                readingAnnotated(entry) {
+                                    SensitiveWorkRow(
+                                        work: work,
+                                        expandAll: expandAll,
+                                        presentation: displayMode == .ledger ? .ledger : .standard
+                                    )
+                                }
                                     // The badge belongs on this branch too: a
                                     // subscribed work already in the library renders
                                     // here, and it is the one most worth telling
@@ -334,11 +402,13 @@ struct AO3AccountWorksList: View {
                                 // Local and remote take the *same* presentation, so a
                                 // list holding both does not change shape work by work
                                 // depending on which ones happen to be in the library.
-                                EnrichingAO3WorkRow(
-                                    work: remote,
-                                    expandAll: expandAll,
-                                    presentation: displayMode == .ledger ? .searchLedger : .standard
-                                )
+                                readingAnnotated(entry) {
+                                    EnrichingAO3WorkRow(
+                                        work: remote,
+                                        expandAll: expandAll,
+                                        presentation: displayMode == .ledger ? .searchLedger : .standard
+                                    )
+                                }
                                 .overlay(alignment: .topTrailing) {
                                     newChapterBadge(newChapters).padding(10)
                                 }
@@ -539,6 +609,12 @@ struct AO3AccountWorksList: View {
             let result = try await kind.fetch(for: request, page: page)
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
             works = result.works
+            readingEntries = Dictionary(
+                result.readingEntries.compactMap { entry in
+                    entry.workID.map { ($0, entry) }
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
             currentPage = result.currentPage
             totalPages = result.totalPages
             phase = .loaded
@@ -557,6 +633,7 @@ struct AO3AccountWorksList: View {
         } catch AO3Error.authenticationRequired {
             guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             works = []
+            readingEntries = [:]
             phase = .idle // back to the signed-out prompt
         } catch is CancellationError {
             // This view's own `.task(id: auth.isLoggedIn)` restarts (cancelling
