@@ -1122,6 +1122,51 @@ fields "map to AO3's query parameters", and `AO3AuthorRoute.contentURL` takes
 only a page — so 1v needs the route to carry sort params first. Neither was
 attempted this tick.
 
+<a id="account-subsections-resweep-2026-09-15"></a>
+**Account subsections (1o–1t, 1w, 1ab) re-audited 2026-09-15 through this sweep's
+three checks — the prior-session audit holds, with one board carrying real gaps.**
+
+Built and verified: **1ab** Settings has **zero** `showsDisclosure: true` against
+three real navigations — no dead chevrons. **1p**'s "last-seen timestamp per
+subscription, diffed for the X New badge" is `SubscriptionWatermarks`
+(`newChapterCount`, `baseline`). **1s**'s staging model is
+`AO3CollectionItemStaging`, whose doc comment quotes the board verbatim.
+**1w**'s per-series work count *is* parsed (`AO3Client+Authors`), contrary to its
+note. **1o/1q/1r** render through `AO3AccountWorksList` / `AO3CollectionsList`,
+both already worked on by this sweep.
+
+**Verified on the simulator** (these are read screens, unlike the last several
+turns): **1p** draws "My Subscriptions · 20 works · page 1 of 6" with the page
+switcher and per-fandom hued cards carrying the four-signal 2×2 grid; **1t**
+draws "My AO3 History · 18 works · page 1 of 72" the same way. No "X New" badge
+appeared on 1p, which is correct rather than missing — the watermark baseline is
+written on first load, so nothing has changed *since* yet.
+
+**1t is the one board with real gaps, and the screenshot shows all three.** The
+board says "each row pairs the progress ring against the visit count — the two
+facts history has that a library row does not", plus "time buckets are
+source-ordered section kickers". The rendered list has **none of the three**:
+
+1. **Visit count is not parsed, and its note is wrong to say it is.**
+   `AO3WorkSummary` has no visits field and nothing reads one. It is *in* AO3's
+   readings markup, but **the repo's only history fixture
+   (`android/.../ao3/account/history.html`) is synthetic** — 923 bytes, no
+   `viewed heading` element at all — and the live page is authenticated, so the
+   selector cannot be confirmed from here. Guessing it would be exactly the
+   invented fact this sweep keeps catching. Left unbuilt deliberately.
+2. **The progress ring** needs each AO3 history row joined to local last-read
+   state. `CanonicalWorkMerge.remoteLed` already does that join elsewhere, so
+   this is reachable work — but it cannot be verified on this device, whose local
+   Library is empty, so no row would ever match.
+3. **Time buckets** — the list is flat. `LibraryHistoryGrouping` already buckets
+   by time for the *local* history at 1ah; this is AO3's remote history, a
+   different surface, and would need the same idea applied to `AO3WorkSummary`.
+
+**1v remains the last unbuilt board** and is unchanged: its sort fields "map to
+AO3's query parameters" and `AO3AuthorRoute.contentURL(_:page:)` carries only a
+page, so the route has to learn sort before a sort sheet means anything.
+
+
 <a id="states-turn-audit-2026-09-15"></a>
 **"Six states the locked screens never drew" (1ay–1bf) audited 2026-09-15 —
 seven of eight already built. One real divergence, fixed.**
