@@ -993,6 +993,58 @@ out exercising any of it against the signed-in account. The signed-in account
 also has no series to open the screen from. Compiled, linted and unit-tested
 only; the write paths need the owner.
 
+<a id="challenges-turn-audit-2026-09-15"></a>
+**Challenges and collections turn (1by–1ci) audited 2026-09-15 — built,
+reachable, and the named sub-clauses are implemented. The first turn with
+nothing to build.**
+
+All twelve screens exist (`ChallengeSettingsView`, `ChallengeSettingsEditView`,
+`ChallengeSignUpView`, `ChallengeSignUpsView`, `ChallengeAssignmentsView`,
+`PromptMemeView`, `PromptTagsEditorView`, `CollectionModerationView`,
+`CollectionMaintainersView`, `ModeratedItemsView`, `RejectReasonSheet`,
+`TagSetView`, plus `AO3CollectionFormView` for 1cg and `AO3CollectionItemsView`
+for 1ci) and every one has external references — all chaining from
+`AO3CollectionDetailView`, itself reachable from Account → Collections.
+
+Spot-checking the sub-clauses each BUILD note names, which is where the previous
+four turns hid their real gaps:
+
+- **1bz** "matched state comes from the assignments object, not the sign-up, so
+  the two have to be joined client-side" — done; the file's own doc says so and
+  the All/Matched/Unmatched filter reads `isMatched`.
+- **1cb** "matching is not exposed by AO3 at all, so the escape hatch is an Open
+  on AO3 link" — present.
+- **1ca** "limits from the challenge are checked here, so a sign-up AO3 would
+  reject never leaves the device" — local validation against
+  `AO3ChallengeSignUpLimits`, with the live "Request n of N" subtitle.
+- **1cf** "dates are UTC on AO3 and have to round-trip without drift" — handled
+  at the model layer in `AO3ChallengeModels` (`TimeZone(secondsFromGMT: 0)`).
+- **1ce** "a failed reject must leave the submission in the queue rather than
+  optimistically removing it" — stated and honoured.
+- **1cg** "availability has to be checked before the form can post" — the form
+  has an `.available` state.
+
+**Verified on the simulator: 1ci.** The collection reader view draws its kicker,
+the three independent Works / Bookmarks / People segments, and — the rule worth
+seeing — **"by Anonymous"** on the work card, which is 1ci's point that
+anonymity is collection state rather than work state.
+
+**One unresolved observation, recorded rather than guessed at.** The Manage rows
+(Maintainers, Moderation, Collection Settings) did **not** appear on a collection
+the signed-in account owns. They are gated on `AO3CollectionShow.isMaintainer`,
+which is a text heuristic: does the collection page's nav contain "Manage Items"
+or "Membership". The fetch *is* authenticated. Probing a live collection page
+shows four `ul.navigation.actions` blocks — the collection's own actions, the
+content nav, a lone Profile, and the site footer — and the parser read only
+`.first()`. That is the block maintainer links are expected in, so this is not a
+confirmed diagnosis; the parser now reads **all** blocks, which cannot false
+positive (none of the other three contains either phrase) and removes one
+dependency on which block AO3 chooses. **Whether that fixes it is unconfirmed:
+confirming needs a maintainer session, and every control behind the gate is a
+write.** If the rows still do not appear for the owner, the next suspect is the
+show fetch returning cached anonymous HTML.
+
+
 
 
 

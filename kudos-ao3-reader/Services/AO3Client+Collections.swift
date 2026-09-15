@@ -180,7 +180,21 @@ extension AO3Client {
         let rules = profileSection("rules", in: doc)
         let maintainers = parseMaintainerIdentities(in: doc)
         let dashboard = parseDashboard(in: doc, slug: slug)
-        let nav = ((try? doc.select("ul.navigation.actions").first()?.text()) ?? "")
+        // Every `ul.navigation.actions` on the page, not just the first.
+        //
+        // A collection show page carries four of them (probed against a live
+        // collection on 2026-09-15): the collection's own actions — Dashboard,
+        // Profile, Subcollections, and the maintainer links when you have them —
+        // then the content nav (Fandoms / Works / Bookmarked Items / People /
+        // Tags), a lone Profile, and the site footer. `first()` reads only the
+        // collection's own block, which is where the maintainer links are
+        // *expected*; reading all four costs nothing and cannot pick up a false
+        // positive, because none of the other three contains "Manage Items" or
+        // "Membership". `isMaintainer` gates every management screen this app
+        // has, so it is worth not depending on which block AO3 renders them in.
+        let nav = ((try? doc.select("ul.navigation.actions").array()
+            .compactMap { try? $0.text() }
+            .joined(separator: " ")) ?? "")
         let hasJoin = (try? doc.select("form[action*='/participants/join']").first()) != nil
             || nav.localizedCaseInsensitiveContains("Join")
         let leaveLink = try? doc.select("a[href*='/participants/'][data-method=delete], a[href*='/participants/']").first()
