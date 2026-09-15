@@ -177,7 +177,8 @@ struct MediaBrowserView: View {
                 // the panel's own navigation link.
                 Button { onSelectFandom(fandom.name) } label: {
                     FandomClusterChip(
-                        name: fandom.name,
+                        title: fandom.title,
+                        qualifier: fandom.qualifier,
                         workCount: fandom.workCount,
                         isFamiliar: familiarNames.contains(fandom.name.lowercased()),
                         palette: palette
@@ -496,6 +497,22 @@ struct MediaBrowserView: View {
         var isApproximateWorkCount: Bool = false
         var savedCount: Int
         var recentFandoms: [String]
+        /// One cluster chip: the raw tag for identity and the split name for
+        /// display. Split in `computeStats`, which already runs off the main actor
+        /// — `FandomDisplayName.split` walks a rule list, and doing it per render
+        /// for every chip on every category panel would be that work on every
+        /// scroll.
+        struct ClusterFandom: Identifiable, Hashable, Sendable {
+            /// AO3's own spelling. What a tap searches on; never rebuilt from the
+            /// split, which is lossy.
+            let name: String
+            let title: String
+            let qualifier: String
+            let workCount: Int?
+
+            var id: String { name }
+        }
+
         /// The chips artboard 1g clusters under each category, biggest first.
         ///
         /// The spec calls these the category's *featured* fandoms, and its build
@@ -504,7 +521,7 @@ struct MediaBrowserView: View {
         /// per-category list with a work count on each, so the cluster shows the
         /// largest fandoms instead. No new request, and arguably a better list
         /// than AO3's own featured set, which is hand-curated and often stale.
-        var clusterFandoms: [AO3Fandom] = []
+        var clusterFandoms: [ClusterFandom] = []
     }
 
     /// A category's inputs, snapshotted as `Sendable` values so the (heavy) stats
@@ -619,12 +636,32 @@ struct MediaBrowserView: View {
             // Sorted here, in the off-actor pass, not in the view: a category can
             // hold nine thousand fandoms, and sorting that on every render is the
             // kind of work this whole `computeStats` split exists to avoid.
-            let cluster = input.hasFullList
-                ? Array(
-                    input.fandoms
-                        .sorted { ($0.workCount ?? 0) > ($1.workCount ?? 0) }
-                        .prefix(clusterFandomLimit)
-                )
+            let cluster: [CategoryStats.ClusterFandom] = input.hasFullList
+                ? input.fandoms
+                    .sorted { ($0.workCount ?? 0) > ($1.workCount ?? 0) }
+                    .prefix(clusterFandomLimit)
+                    .map { fandom in
+                        // Same two steps `FandomFamily.Member` takes: pick the
+                        // display segment out of AO3's `a | b | c`, then split that
+                        // into title and qualifier.
+                        let primary = FandomDisplayName.primarySegment(of: fandom.name)
+                        let split = FandomDisplayName.split(primary)
+                        return CategoryStats.ClusterFandom(
+                            name: fandom.name,
+                            title: split.title,
+                            // Empty fallback, unlike the nested member row this
+                            // borrows from. There the family title is printed once
+                            // above and a member with no qualifier still needs
+                            // something to name it, so falling back to the title is
+                            // right. Here the title is already the chip's own first
+                            // word, and the fallback drew "Haikyuu!! Haikyuu!!".
+                            qualifier: FandomQualifier.displayText(
+                                parts: split.parts,
+                                fallback: ""
+                            ),
+                            workCount: fandom.workCount
+                        )
+                    }
                 : []
 
             let summed = input.hasFullList ? CategoryWorkTotal.summedTagCounts(input.fandoms) : nil
