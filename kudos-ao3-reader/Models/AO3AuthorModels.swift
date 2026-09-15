@@ -432,6 +432,25 @@ nonisolated struct AO3SeriesSummary: Identifiable, Hashable {
     var url: URL
 }
 
+extension AO3SeriesSummary {
+    /// Whether `username` is one of this series' creators — the gate on 1br's
+    /// Edit series.
+    ///
+    /// Matched on the registered identity's **username**, never on the displayed
+    /// byline. A byline is a pseud: comparing it to the account name would miss a
+    /// creator posting under a pseud, and would match a stranger whose pseud
+    /// happens to equal your account name. Orphaned, anonymous and deleted
+    /// identities carry no username and can never match.
+    func isCreator(username: String?) -> Bool {
+        guard let username = username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !username.isEmpty
+        else { return false }
+        return creatorIdentities.contains {
+            $0.kind == .registered && $0.username?.lowercased() == username
+        }
+    }
+}
+
 nonisolated struct AO3SeriesPage {
     var series: [AO3SeriesSummary]
     var currentPage: Int
