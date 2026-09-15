@@ -14,20 +14,27 @@ import SwiftUI
 /// functionality rather than layout, and it fixes a real defect on the way:
 /// renaming a queue used to silently repaint it.
 ///
-/// **What 1j still draws that this does not build:** a Tags field, a "Keep works
-/// offline" toggle, and a "Start from" seed picker. The first two need their own
-/// schema — queues have no tag concept and no per-queue download policy, the gap
-/// `ReadingQueueSettingsView` and `ReadingQueueOrganizer` both record in full.
-/// "Start from" is closer to real, since `ReadingQueueService.addAndPreserve`
-/// could be looped over another queue's works, but `createQueue(named:)` takes
-/// only a name today, so seeding is a new capability rather than a control.
+/// **Keep works offline and the seed step are built too.** The note that used to
+/// sit here said they needed schema that did not exist — queues now have a
+/// per-queue download policy (`ReadingQueue.keepsWorksOffline`), and
+/// `createQueue` takes a seed.
+///
+/// **What 1j still draws that this does not build:** the Tags field. Queues do
+/// have tags now, but adding them here would be a second tag-entry surface
+/// beside `QueueTagSheet`, which already edits exactly this relationship from
+/// Queue Details — so it is left to that one rather than duplicated.
 struct NewReadingQueueSheet: View {
     @Binding var name: String
     /// 1j: the colour is chosen before the name is typed, so it is committed with
     /// the queue rather than set afterwards. `nil` keeps the name-derived hue.
     @Binding var hue: Double?
-    let onCreate: () -> Void
+    /// Owned by the sheet rather than the three hosts: they each held `name` and
+    /// `hue` already, and two more bindings apiece would be three identical
+    /// copies of state that only this sheet reads.
+    let onCreate: (NewQueueOptions) -> Void
     let onCancel: () -> Void
+
+    @State private var options = NewQueueOptions()
 
     var body: some View {
         NavigationStack {
@@ -37,7 +44,7 @@ struct NewReadingQueueSheet: View {
                         #if os(iOS)
                         .textInputAutocapitalization(.words)
                         #endif
-                        .onSubmit(onCreate)
+                        .onSubmit { onCreate(options) }
                 } header: {
                     SubjectFieldLabel(text: "Name", style: .formGroup)
                 }
@@ -52,6 +59,34 @@ struct NewReadingQueueSheet: View {
                         : "Set once, so renaming the queue keeps its colour.")
                 }
                 .appThemedRows()
+
+                Section {
+                    Toggle("Keep works offline", isOn: $options.keepsWorksOffline)
+                } header: {
+                    SubjectFieldLabel(text: "Offline", style: .formGroup)
+                } footer: {
+                    Text("Works in this queue keep their download even after they "
+                        + "leave it, so they stay readable offline.")
+                }
+                .appThemedRows()
+
+                Section {
+                    Picker("Start from", selection: $options.seed) {
+                        ForEach(NewQueueSeed.allCases) { seed in
+                            Text(seed.title).tag(seed)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                } header: {
+                    SubjectFieldLabel(text: "Start from", style: .formGroup)
+                } footer: {
+                    Text(options.seed == .empty
+                        ? "An empty queue, ready to add to."
+                        : "Copies what is in Saved for Later, in the same order. "
+                            + "Those works stay in Saved for Later too.")
+                }
+                .appThemedRows()
             }
             .appThemedScroll()
             .navigationTitle("New Queue")
@@ -63,13 +98,16 @@ struct NewReadingQueueSheet: View {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create", action: onCreate)
+                    Button("Create") { onCreate(options) }
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
         #if os(iOS)
-        .presentationDetents([.medium])
+        // Taller than .medium now: 1j's sheet carries four groups, and a medium
+        // detent hid the seed step below the fold — the one decision the board
+        // says you never actually want to miss.
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         #endif
     }
@@ -80,4 +118,28 @@ struct NewReadingQueueSheet: View {
     private var previewHue: Double {
         CoverArt.hue(for: name.trimmingCharacters(in: .whitespacesAndNewlines))
     }
+}
+
+/// 1j's "Start from". Two cases, because those are the two the app can honour:
+/// the board also imagines seeding from a fandom, which needs the featured-fandom
+/// parse 1g describes and this app does not have. Offering a third option that
+/// silently produced an empty queue would be worse than not offering it.
+nonisolated enum NewQueueSeed: String, CaseIterable, Identifiable, Sendable {
+    case empty
+    case savedForLater
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .empty: "Empty"
+        case .savedForLater: "Saved for Later"
+        }
+    }
+}
+
+/// What the sheet collects beyond name and colour.
+nonisolated struct NewQueueOptions: Equatable, Sendable {
+    var keepsWorksOffline = false
+    var seed: NewQueueSeed = .empty
 }

@@ -154,9 +154,20 @@ enum ReadingQueueService {
 
     /// `hue` is 1j's colour swatch: `nil` leaves the queue taking its colour from
     /// its name, which is what every queue did before the swatches existed.
+    /// 1j's create step, including its seed: "an empty queue is the one thing you
+    /// never actually want".
+    ///
+    /// Seeding COPIES rather than moves — a work stays in Saved for Later as well
+    /// as joining the new queue. Moving would make creating a queue quietly empty
+    /// another one, which is not what "start from" says.
+    ///
+    /// `keepsWorksOffline` is written as a real choice because the sheet asked:
+    /// `nil` on the model means "never asked", and this reader was.
     static func createQueue(
         named rawName: String,
         hue: Double? = nil,
+        keepsWorksOffline: Bool? = nil,
+        seededFrom seed: NewQueueSeed = .empty,
         in context: ModelContext
     ) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -166,9 +177,26 @@ enum ReadingQueueService {
             sortOrder: nextQueueSortOrder(in: context)
         )
         queue.hue = hue
+        queue.keepsWorksOffline = keepsWorksOffline
         context.insert(queue)
+        if seed == .savedForLater {
+            seedFromSavedForLater(into: queue, in: context)
+        }
         context.saveBestEffort(reason: "Saving reading queue failed")
         return queue
+    }
+
+    /// Order is preserved: the new queue reads in the order Saved for Later did,
+    /// rather than whatever the fetch happens to return.
+    private static func seedFromSavedForLater(into queue: ReadingQueue, in context: ModelContext) {
+        let source = ensureSavedForLaterQueue(in: context)
+        let works = source.memberships
+            .filter { !$0.isPendingDeletion }
+            .sorted { $0.sortOrderInQueue < $1.sortOrderInQueue }
+            .compactMap(\.work)
+        for work in works {
+            _ = add(work, to: queue, in: context)
+        }
     }
 
     static func normalizeAllQueuedWorks(in context: ModelContext) {

@@ -749,14 +749,20 @@ extension ReadingQueueBrowserView {
         showingSwitcher = false
     }
 
-    func createQueue() {
+    func createQueue(_ options: NewQueueOptions) {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let hue = newQueueHue
         newQueueName = ""
         newQueueHue = nil
         showingNewQueue = false
-        let queue = ReadingQueueService.createQueue(named: trimmed, hue: hue, in: context)
+        let queue = ReadingQueueService.createQueue(
+            named: trimmed,
+            hue: hue,
+            keepsWorksOffline: options.keepsWorksOffline,
+            seededFrom: options.seed,
+            in: context
+        )
         select(queue)
     }
 
