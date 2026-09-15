@@ -206,7 +206,11 @@ struct AccountView: View {
                         onReset: {
                             filters = AO3SearchFilters()
                             showingFilters = false
-                        }
+                        },
+                        // The same array the works section narrows, so the
+                        // panel's "N of M match" line and the list behind it
+                        // cannot disagree — the precedent is AO3AccountWorksList.
+                        refineSource: profileModel?.works ?? []
                     )
                 }
                 .sheet(isPresented: $showingInboxFilters) {
@@ -739,7 +743,8 @@ struct AccountView: View {
                         expandAll: expandAll,
                         displayMode: displayMode,
                         layout: layout,
-                        onAdultContentVisibilityChange: onAdultContentVisibilityChange
+                        onAdultContentVisibilityChange: onAdultContentVisibilityChange,
+                        filters: filters
                     )
                 } else {
                     AO3AuthorBookmarksSection(

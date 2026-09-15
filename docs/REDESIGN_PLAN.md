@@ -3599,3 +3599,38 @@ empty and be indistinguishable from one that does not exist.
 
 **Recorded, not built** — the cost is real and different from what was
 approved, so it is the owner's call.
+
+### item-13-refine-panel-is-dead-code-2026-09-15
+
+**The owner chose "wire the Refine panel to the list" over "remove it". Wiring
+is done, but the panel and the list are BOTH unreachable — I described the
+choice wrongly.**
+
+Three facts, each checked:
+
+1. **The button never appears.** Its gate is `selectedTab == .writing &&
+   writingTab == .works`. `selectedTab` is assigned exactly once in the whole
+   file — `selectedTab = .overview` — and never set to `.writing`. The scope
+   selector that used to set it was removed when the owner flattened the hub
+   into one sectioned list.
+2. **The list it would filter is never drawn.** `profileContentSections(...)`,
+   which mounts `AO3AuthorWorksSection` on the hub, has **one mention in the
+   whole repo: its own definition.** No callers.
+3. **The real Works screen already refines.** Account → Works pushes
+   `AO3AccountWorksList`, which has its own `AO3FilterPanel` in `.refine` mode
+   with `refineSource: works` — working, and verified on screen earlier in this
+   sweep.
+
+**What was built anyway, because it is useful on its own:**
+`AO3AuthorWorksSection` gained a `filters` parameter (defaulted empty, so every
+existing caller is unchanged) applied where `model.works` enters
+`CanonicalWorkMerge` — so the rows, the adult-content check and any count line
+all narrow together and cannot disagree. `AuthorProfileView` mounts that section
+live, so this is real capability, not dead weight. AccountView's panel is wired
+to it and will work the moment that branch is reachable.
+
+**What the owner should decide:** whether to delete `AccountView.filters`, its
+`AO3FilterPanel` sheet, `selectedTab`/`writingTab`, and the whole
+`profileContentSections` block as post-flattening vestiges. That is the removal
+option they declined — but they declined it on my description of a working panel
+over a real list, which is not what is there.
