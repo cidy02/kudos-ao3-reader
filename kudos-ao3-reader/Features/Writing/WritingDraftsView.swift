@@ -189,6 +189,53 @@ struct WritingTagsDestination: View {
     }
 }
 
+/// Loads AO3's bulk-edit form for a selection and hands it to
+/// `EditMultipleWorksView` — artboard **1bn**.
+///
+/// `EditMultipleWorksView` and `AO3WorkActions.loadBulkEditForm(workIDs:)` were
+/// both written and referenced nowhere. This is the way in.
+///
+/// The form is AO3's own `/users/<name>/works/edit_multiple`, so it only means
+/// anything for works the signed-in account owns — the caller gates on that.
+/// Same `sessionGeneration` keying as the other writing loaders.
+struct WritingBulkEditDestination: View {
+    @Environment(AO3AuthService.self) private var auth
+    let workIDs: [Int]
+    @State private var form: AO3BulkEditForm?
+    @State private var loadedGeneration: Int?
+    @State private var errorMessage: String?
+    @State private var retry = 0
+
+    var body: some View {
+        Group {
+            if let form, loadedGeneration == auth.sessionGeneration {
+                EditMultipleWorksView(form: form).id(auth.sessionGeneration)
+            } else if let errorMessage {
+                VStack {
+                    Text(errorMessage)
+                    Button("Retry") { retry += 1 }
+                }.padding()
+            } else {
+                ProgressView("Loading \(workIDs.count) works…")
+            }
+        }
+        .task(id: "\(auth.sessionGeneration):\(retry)") {
+            form = nil
+            errorMessage = nil
+            let generation = auth.sessionGeneration
+            do {
+                let loaded = try await auth.loadBulkEditForm(workIDs: workIDs)
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                loadedGeneration = generation
+                form = loaded
+            } catch {
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
 struct WritingChapterDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let workID: Int

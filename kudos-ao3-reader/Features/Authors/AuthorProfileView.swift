@@ -12,6 +12,8 @@ struct AuthorProfileView: View {
     /// rows from the *layout* before, so Ledger and Detailed were unreachable.
     @AppStorage("authorProfile.displayMode") private var displayMode: WorkListDisplayMode = .detailed
     @State private var bulkSelection = RemoteWorkSelectionController()
+    /// 1bn: pushed rather than presented, so the bulk form gets a real back stack.
+    @State private var isBulkEditing = false
     @State private var confirmingUnsubscribe = false
     /// Signed-out Mute/Block/Subscribe — same prompt for all profile write actions.
     @State private var showingLoginRequired = false
@@ -64,6 +66,7 @@ struct AuthorProfileView: View {
             .navigationDestination(item: $dashboardDestination) { tab in
                 AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
             }
+            .navigationDestination(isPresented: $isBulkEditing) { bulkEditDestination }
             .remoteWorkSelectionChrome(bulkSelection)
             .sheet(isPresented: $showingLogin, onDismiss: {
                 Task { await resumePendingAuthActionIfNeeded() }
@@ -436,6 +439,29 @@ private extension AuthorProfileView {
         auth.username?.localizedCaseInsensitiveCompare(model.route.username) == .orderedSame
     }
 
+    /// 1bn is AO3's `/users/<name>/works/edit_multiple` — your own works only, and
+    /// only the Works tab. Bookmarks and Series select the same way but have no
+    /// bulk editor behind them.
+    private var showsBulkEdit: Bool {
+        isOwnProfile && auth.isLoggedIn && model.selectedTab == .works
+    }
+
+    /// Resolved when the push happens, so it acts on the live selection rather
+    /// than whatever was selected when the toolbar was built.
+    @ViewBuilder
+    private var bulkEditDestination: some View {
+        let ids = bulkSelection.selected(in: model.works).map(\.id)
+        if ids.isEmpty {
+            ContentUnavailableView(
+                "Nothing selected",
+                systemImage: "square.and.pencil",
+                description: Text("Choose the works to edit, then try again.")
+            )
+        } else {
+            WritingBulkEditDestination(workIDs: ids)
+        }
+    }
+
     private func subscriptionTapped() {
         guard auth.isLoggedIn else {
             pendingAuthAction = .subscribe
@@ -541,6 +567,19 @@ private extension AuthorProfileView {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if bulkSelection.isSelecting {
+            // 1bn's Edit Multiple Works, beside the shared local bulk bar rather
+            // than inside it: `RemoteWorkBulkActionBar` is also Search's and
+            // Browse's, where the selected works belong to other people and AO3's
+            // bulk editor would 404. This one is gated on the works being yours.
+            if showsBulkEdit {
+                ToolbarItem(placement: .principal) {
+                    Button { isBulkEditing = true } label: {
+                        Label("Edit Multiple", systemImage: "square.and.pencil")
+                    }
+                    .disabled(bulkSelection.selection.isEmpty)
+                    .accessibilityLabel("Edit selected works on AO3")
+                }
+            }
             RemoteWorkSelectionToolbar(controller: bulkSelection) {
                 bulkSelection.selected(in: model.works)
             }
