@@ -65,7 +65,7 @@ struct EditMultipleWorksView: View {
                 SectionRuleHeader(title: "Change on all")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 changeOnAllPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("Rating and language are single values, so setting one overwrites what each"
+                Text("Rating and language are single values, so setting one overwrites what each "
                     + "work had. Warnings and categories are lists and follow the add-and-remove rule.")
 
                     .font(.system(size: 11.5))
@@ -92,7 +92,7 @@ struct EditMultipleWorksView: View {
                 SectionRuleHeader(title: "Creators")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 creatorsPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("Co-creator additions send an invitation on AO3; the"
+                Text("Co-creator additions send an invitation on AO3; the "
                     + "work is not changed until the other account accepts.")
 
                     .font(.system(size: 11.5))
