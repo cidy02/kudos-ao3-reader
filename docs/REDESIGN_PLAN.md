@@ -1113,7 +1113,7 @@ settings, and remove co-creators. Warnings and categories want a three-state
 add/remove picker rather than a menu; the rest want their own. Recorded rather
 than stubbed.
 
-**1u and 1v are not built.** The own-works list is `AuthorProfileView` with tab
+**1u and 1v were not built at that point — 1u since has been; see below.** The own-works list is `AuthorProfileView` with tab
 `.works`, and it offers a "New work" chip and nothing else. 1u wants swipe
 actions — Edit, Tags, Delete — of which `WritingWorkDestination`,
 `WritingTagsDestination` and `AO3WorkActions.deleteWork(workID:)` all already
@@ -1121,6 +1121,35 @@ exist, so that is wiring plus a delete confirmation. 1v wants a sort sheet whose
 fields "map to AO3's query parameters", and `AO3AuthorRoute.contentURL` takes
 only a page — so 1v needs the route to carry sort params first. Neither was
 attempted this tick.
+
+<a id="own-works-1u-2026-09-15"></a>
+**1u built 2026-09-15 — the swipe actions.** `AO3AuthorWorksSection` gained
+`onOwnWorkAction`, and `AuthorProfileView` turns each action into navigation:
+Edit → `WritingWorkDestination`, Tags → `WritingTagsDestination`, Chapter →
+`WritingChapterDestination`, all of which already existed. Delete goes through
+`AO3WorkActions.deleteWork(workID:)` behind a confirmation that names what goes —
+chapters, kudos, comments, bookmarks — and says it cannot be undone.
+
+**Delete cannot navigate.** `ownWorkPushBinding` filters `.delete` out of the
+push binding, so a destructive swipe can only ever reach the confirmation; there
+is no code path where swiping deletes something. The callback is `nil` on anyone
+else's profile — gated on `showsBulkEdit` (own profile, signed in, Works tab) —
+so the swipe does not exist there rather than existing and failing.
+
+**A type-checker note worth keeping.** Passing
+`onOwnWorkAction: showsBulkEdit ? handleOwnWorkAction : nil` inline made the
+compiler emit "failed to produce diagnostic for expression" — a ternary producing
+an *optional closure* inside that call is enough to defeat inference in these
+views. Spelling it as a typed computed property (`ownWorkActionHandler`) fixes
+it. Same family as the LibraryView/AccountView hazard already recorded.
+
+**1v still not built,** and it is not a layout gap: 1v's own note says the sort
+fields and direction "map to AO3's query parameters", and
+`AO3AuthorRoute.contentURL(_:page:)` builds `/users/<n>/works?page=N` with no
+sort support. The route has to carry sort before a sort sheet can mean anything,
+which is a services change. 1u's hero tallies and its Works / In collections /
+Gifts segments were also not attempted.
+
 
 
 <a id="association-turn-audit-2026-09-15"></a>
