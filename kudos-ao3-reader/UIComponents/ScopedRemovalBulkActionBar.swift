@@ -25,6 +25,15 @@ struct ScopedRemovalBulkActionBar: View {
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
     @State private var showingTagSheet = false
+    /// 1bg's Move to. Same destination picker as Add to Queue — the difference is
+    /// what happens after, so it is one flag rather than a second sheet.
+    @State private var showingMoveToQueue = false
+    /// Queue-membership count across the selection, sampled when the move picker
+    /// opens. The picker is shared with Add to Queue and cannot tell this bar
+    /// whether anything was chosen, so a plain `onDismiss: onRemove` would strip
+    /// the works out of this queue even when the reader pressed Cancel.
+    @State private var membershipBeforeMove = 0
+    @State private var isDownloading = false
 
     private var allSaved: Bool {
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
@@ -84,6 +93,16 @@ struct ScopedRemovalBulkActionBar: View {
             } label: {
                 Label("Add to Collection", systemImage: "square.stack")
             }
+            // 1bg's Move to. Its own note calls this two verbs — add AND remove —
+            // which is why it reuses the destination picker and then runs the
+            // scoped removal this bar already owns, rather than being a variant
+            // of Add to Queue that quietly leaves the work in both places.
+            Button {
+                membershipBeforeMove = totalQueueMemberships
+                showingMoveToQueue = true
+            } label: {
+                Label("Move to Queue", systemImage: "arrow.right.square")
+            }
             // 1bg names Tag as one of the four things a queue can do to a
             // selection. The sheet already existed for 1af and is already wired
             // into Library's own bar; both surfaces that mount this bar — a queue
@@ -93,6 +112,15 @@ struct ScopedRemovalBulkActionBar: View {
             } label: {
                 Label("Tag", systemImage: "tag")
             }
+            // 1bg's Download. The "Download" item above it sets `isSaved`, which
+            // only stops an EPUB being freed — for a work whose copy is already
+            // gone it changes a flag and downloads nothing. This fetches.
+            Button {
+                Task { await bulkDownload() }
+            } label: {
+                Label("Download missing copies", systemImage: WorkActionLabels.downloadEmptySymbol)
+            }
+            .disabled(isDownloading || missingCopies.isEmpty)
             Button {
                 bulkToggleFinished()
             } label: {
@@ -119,6 +147,16 @@ struct ScopedRemovalBulkActionBar: View {
         .sheet(isPresented: $showingAddToQueue) {
             AddToQueueView(works: selectedWorks)
         }
+        // The removal runs on dismiss rather than inside the picker: the picker
+        // is shared with Add to Queue and must not learn about this scope. It
+        // runs ONLY if the selection actually joined something, so cancelling
+        // the picker leaves the works exactly where they were.
+        .sheet(isPresented: $showingMoveToQueue, onDismiss: {
+            guard totalQueueMemberships > membershipBeforeMove else { return }
+            onRemove()
+        }) {
+            AddToQueueView(works: selectedWorks)
+        }
         .sheet(isPresented: $showingAddToCollection) {
             AddToCollectionView(works: selectedWorks)
         }
@@ -138,6 +176,31 @@ struct ScopedRemovalBulkActionBar: View {
         } message: {
             Text("The selected works will no longer be in this \(scopeName). "
                 + "They stay in your Library either way.")
+        }
+    }
+
+    private var totalQueueMemberships: Int {
+        selectedWorks.reduce(0) { total, work in
+            total + work.queueMemberships.filter { !$0.isPendingDeletion }.count
+        }
+    }
+
+    /// Works whose EPUB is gone — the only ones a download can do anything for.
+    /// Re-fetching a work that already has one would reset its reading position
+    /// for no gain.
+    private var missingCopies: [SavedWork] {
+        selectedWorks.filter { !WorkReaderPreparation.hasReadableEPUB(for: $0) }
+    }
+
+    /// Sequential, not concurrent: this is the same AO3 endpoint per work, and a
+    /// parallel burst over a large selection is the kind of thing that gets an
+    /// app rate-limited. A failure on one work does not stop the rest — the work
+    /// simply still has no copy, which is the state it was already in.
+    private func bulkDownload() async {
+        isDownloading = true
+        defer { isDownloading = false }
+        for work in missingCopies {
+            try? await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
         }
     }
 
