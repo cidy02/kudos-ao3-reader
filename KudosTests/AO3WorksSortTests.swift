@@ -82,14 +82,39 @@ struct AO3WorksSortTests {
         #expect(query.contains("work_search%5Bsort_direction%5D=asc"))
     }
 
-    /// Bookmarks use a `bookmark_search` form and the series index has no sort
-    /// form, so a works sort must not be smuggled onto either.
-    @Test func sortAppliesToWorksOnly() throws {
+    /// Bookmarks use a `bookmark_search` form, the series index has no sort form,
+    /// and the gifts index is unverified — a works sort must not be smuggled onto
+    /// any of them. `collected` does run `clean_work_search_params`, so it takes one.
+    @Test func sortAppliesOnlyWhereAO3AcceptsWorkSearch() throws {
         var sort = AO3WorksSort.default
         sort.select(.hits)
         let route = try #require(AO3AuthorRoute(username: "tester"))
-        #expect(route.contentURL(.bookmarks, sort: sort) == route.contentURL(.bookmarks))
-        #expect(route.contentURL(.series, sort: sort) == route.contentURL(.series))
-        #expect(route.contentURL(.works, sort: sort) != route.contentURL(.works))
+        for content in [AO3AuthorRoute.Content.bookmarks, .series, .gifts] {
+            #expect(route.contentURL(content, sort: sort) == route.contentURL(content),
+                    "\(content.rawValue) must not carry a works sort")
+        }
+        for content in [AO3AuthorRoute.Content.works, .collectedWorks] {
+            #expect(route.contentURL(content, sort: sort) != route.contentURL(content),
+                    "\(content.rawValue) should carry the sort")
+        }
+    }
+
+    /// 1u's segments, as otwarchive routes them: `/users/:id/works/collected`
+    /// (a `collected` action on the nested works resource, hence two segments)
+    /// and `/users/:id/gifts`. A single percent-encoded "works%2Fcollected"
+    /// segment would 404.
+    @Test func segmentURLsMatchOtwarchivesRoutes() throws {
+        let route = try #require(AO3AuthorRoute(username: "tester"))
+        #expect(route.contentURL(.collectedWorks).absoluteString
+            == "https://archiveofourown.org/users/tester/works/collected")
+        #expect(route.contentURL(.gifts).absoluteString
+            == "https://archiveofourown.org/users/tester/gifts")
+    }
+
+    /// A pseud keeps its own segment pair ahead of the content path.
+    @Test func pseudRoutesKeepTheirSegment() throws {
+        let route = try #require(AO3AuthorRoute(username: "tester", pseud: "alt"))
+        #expect(route.contentURL(.collectedWorks).absoluteString
+            == "https://archiveofourown.org/users/tester/pseuds/alt/works/collected")
     }
 }

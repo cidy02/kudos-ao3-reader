@@ -8,6 +8,27 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
         case works
         case series
         case bookmarks
+        /// 1u's second segment. otwarchive routes this as a `collected` action
+        /// on the nested works resource — `/users/:id/works/collected` — which
+        /// is why it is two path segments rather than one.
+        case collectedWorks = "works/collected"
+        /// 1u's third segment: `resources :gifts, only: [:index]`. These are
+        /// works given TO this user, not works they wrote.
+        case gifts
+
+        var pathSegments: [String] {
+            rawValue.split(separator: "/").map(String.init)
+        }
+
+        /// Whether AO3 drives this index with `WorkSearchForm`, and so accepts
+        /// 1v's `work_search[...]` parameters. `collected` runs them through
+        /// `clean_work_search_params` exactly as `works` does. Series and
+        /// bookmarks have search forms of their own, and gifts is not verified
+        /// — sending a works sort to any of them would build a URL AO3 ignores
+        /// while the control claimed it had sorted.
+        var acceptsWorkSearch: Bool {
+            self == .works || self == .collectedWorks
+        }
     }
 
     let username: String
@@ -97,21 +118,19 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
 
     /// 1v's sort rides here rather than on the sheet, because AO3 sorts this
     /// index server-side: the control cannot mean anything until the URL it
-    /// builds carries `work_search[...]`. Applies to `.works` only — bookmarks
-    /// use a `bookmark_search` form of their own, and the series index has no
-    /// sort form at all, so passing a works sort to either would build a URL
-    /// AO3 ignores while the UI claimed it had sorted.
+    /// builds carries `work_search[...]`. Applies only where AO3 actually
+    /// drives the index with `WorkSearchForm` — see `Content.acceptsWorkSearch`.
     func contentURL(_ content: Content, page: Int = 1, sort: AO3WorksSort? = nil) -> URL {
         var segments = ["users", username]
         if let pseud {
             segments += ["pseuds", pseud]
         }
-        segments.append(content.rawValue)
+        segments += content.pathSegments
         var queryItems: [URLQueryItem] = []
         if page > 1 {
             queryItems.append(URLQueryItem(name: "page", value: String(page)))
         }
-        if content == .works, let sort {
+        if content.acceptsWorkSearch, let sort {
             queryItems += sort.queryItems
         }
         return Self.makeURL(segments: segments, queryItems: queryItems)
