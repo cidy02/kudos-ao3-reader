@@ -137,9 +137,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             #endif
                 .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
                 .navigationDestination(for: LocalWorkDestination.self) { LocalWorkDestinationView(destination: $0) }
-                .navigationDestination(for: LibrarySectionKind.self) { kind in
-                    LibrarySectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
-                }
+                .navigationDestination(for: LibrarySectionRoute.self, destination: sectionList)
                 .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
@@ -218,15 +216,37 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // switching tabs) would stack the section list under whatever was
                     // already pushed instead of landing cleanly, or double-push the
                     // same kind if it happens to already be on the stack.
-                    path = NavigationPath()
-                    path.append(kind)
-                    router.pendingLibrarySection = nil
+                    openDeepLinkedSection(kind)
                 }
         }
         // Declared on the stack itself so the cards inside it and the screens
         // pushed from it resolve the same namespace — that pairing is what the
         // zoom transition matches on.
         .environment(\.workCardTransitionNamespace, cardZoomNamespace)
+    }
+
+    /// Named rather than an inline closure, for the same reason as
+    /// `openDeepLinkedSection` below: this body sits right at the edge of what
+    /// Swift's type checker will solve, and a multi-argument closure inside the
+    /// modifier chain pushed it over — the compile did not fail, it stopped
+    /// terminating.
+    private func sectionList(_ route: LibrarySectionRoute) -> some View {
+        LibrarySectionListView(
+            kind: route.kind,
+            originKicker: route.originKicker,
+            initialSelecting: isSelecting,
+            initialSelection: selection
+        )
+    }
+
+    /// Extracted from the `onChange` closure: inline, the added branch tipped this
+    /// view's body past what the type checker would solve in reasonable time.
+    private func openDeepLinkedSection(_ kind: LibrarySectionKind) {
+        path = NavigationPath()
+        let origin = router.pendingLibrarySectionOrigin ?? "Library"
+        path.append(LibrarySectionRoute(kind: kind, originKicker: origin))
+        router.pendingLibrarySection = nil
+        router.pendingLibrarySectionOrigin = nil
     }
 
     // MARK: Dashboard
@@ -363,7 +383,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             hasItems: !sectionWorks.isEmpty,
             itemCount: sectionWorks.count,
             layout: dashboardLayout,
-            onSeeAll: !sectionWorks.isEmpty ? { path.append(kind) } : nil
+            onSeeAll: !sectionWorks.isEmpty
+                ? { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
+                : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
                 localCarouselCard(work: work, footer: footer(kind, work), progress: progress(kind, work))

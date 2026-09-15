@@ -350,7 +350,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         // screen — otherwise "see all" leads to what you are
                         // already looking at.
                         onSeeAll: readingNow.count > 5
-                            ? { router.showLibrarySection(.readingNow) }
+                            ? { router.showLibrarySection(.readingNow, from: "Home") }
                             : nil
                     )
 

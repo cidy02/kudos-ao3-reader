@@ -18,6 +18,14 @@ struct LibrarySectionListView: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
+    /// Where the reader came from, drawn as the header's kicker.
+    ///
+    /// 1c: "Reading Now in Library and on Home are two entry points to the same
+    /// destination" — one screen, reached twice — and 1ad draws that screen under
+    /// a HOME kicker. Hardcoding "Library" made a Home chevron land on a page
+    /// announcing a tab the reader had not opened.
+    let originKicker: String
+
     @AppStorage private var displayMode: WorkListDisplayMode
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
@@ -49,8 +57,14 @@ struct LibrarySectionListView: View {
     /// Seeded from the dashboard's own selection so tapping a carousel's "see all"
     /// chevron mid-selection doesn't strand the works you'd already picked — without
     /// this, the expanded list always opened with a fresh, empty selection.
-    init(kind: LibrarySectionKind, initialSelecting: Bool = false, initialSelection: Set<UUID> = []) {
+    init(
+        kind: LibrarySectionKind,
+        originKicker: String = "Library",
+        initialSelecting: Bool = false,
+        initialSelection: Set<UUID> = []
+    ) {
         self.kind = kind
+        self.originKicker = originKicker
         _displayMode = AppStorage(wrappedValue: .detailed, "library.\(kind.rawValue).displayMode")
         _isSelecting = State(initialValue: initialSelecting)
         _selection = State(initialValue: initialSelection)
@@ -249,7 +263,7 @@ struct LibrarySectionListView: View {
     /// `navigationTitle` cannot do.
     private var subjectHeader: some View {
         SubjectHeaderBlock(
-            kicker: "Library",
+            kicker: originKicker,
             title: kind.title,
             subtitle: headerTallyLine,
             palette: scopePalette
@@ -401,7 +415,7 @@ struct LibrarySectionListView: View {
     /// "34 works" would be a count of something not on screen.
     private func affinityHeader(count: Int) -> some View {
         SubjectHeaderBlock(
-            kicker: "Library",
+            kicker: originKicker,
             title: kind.title,
             subtitle: "\(count) \(count == 1 ? singularScopeNoun : favoriteScope.title.lowercased())",
             palette: scopePalette

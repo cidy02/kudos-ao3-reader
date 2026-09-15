@@ -117,3 +117,13 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         work.lastReadDate ?? work.dateAdded
     }
 }
+
+/// A Library section opened from somewhere that is not Library.
+///
+/// The plain `LibrarySectionKind` destination stays for Library's own chevrons,
+/// which are already in the right tab and need no anchor of their own; this
+/// carries the origin for deep-links, per 1c's shared-destination rule.
+nonisolated struct LibrarySectionRoute: Hashable, Sendable {
+    let kind: LibrarySectionKind
+    let originKicker: String
+}
