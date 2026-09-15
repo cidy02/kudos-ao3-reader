@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// The five colours artboard **1j** offers when a queue is created, and **1h.3**
-/// offers again in Queue Details.
+/// The five colours artboard **1j** offers when a queue is created, **1h.3** offers
+/// again in Queue Details, and **1bk** asks for on a local collection — "colour is
+/// the collection's identity everywhere else in the app, so it is picked here
+/// rather than assigned".
 ///
 /// Stored as hues rather than as the artboard's hex values so one swatch means the
 /// same thing under every theme: the app paints queues through
@@ -11,7 +13,7 @@ import SwiftUI
 ///
 /// The hues are the mock's own swatches measured — violet #B49BEA, mint #8FE0C4,
 /// rose #E39B9B, amber #E0A883, blue #7FC9E0.
-nonisolated enum QueueHueSwatches {
+nonisolated enum SubjectHueSwatches {
     struct Swatch: Identifiable, Hashable, Sendable {
         let name: String
         let hue: Double
@@ -34,9 +36,10 @@ nonisolated enum QueueHueSwatches {
     }
 }
 
-/// A row of tappable colour swatches. `selection` is `nil` while a queue still
-/// takes its colour from its name, which is the state every existing queue is in.
-struct QueueHueSwatchRow: View {
+/// A row of tappable colour swatches. `selection` is `nil` while the subject still
+/// takes its colour from its name — the state every queue and collection that
+/// predates this is in.
+struct SubjectHueSwatchRow: View {
     @Binding var selection: Double?
     /// Drawn with a ring when nothing is chosen, so "derived from the name" is a
     /// visible state rather than an absence.
@@ -46,19 +49,19 @@ struct QueueHueSwatchRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ForEach(QueueHueSwatches.all) { swatch in
+            ForEach(SubjectHueSwatches.all) { swatch in
                 Button {
-                    selection = QueueHueSwatches.matches(swatch, selection) ? nil : swatch.hue
+                    selection = SubjectHueSwatches.matches(swatch, selection) ? nil : swatch.hue
                 } label: {
                     swatchCircle(
                         hue: swatch.hue,
-                        isSelected: QueueHueSwatches.matches(swatch, selection)
+                        isSelected: SubjectHueSwatches.matches(swatch, selection)
                     )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(swatch.name)
                 .accessibilityAddTraits(
-                    QueueHueSwatches.matches(swatch, selection) ? [.isButton, .isSelected] : .isButton
+                    SubjectHueSwatches.matches(swatch, selection) ? [.isButton, .isSelected] : .isButton
                 )
             }
             Spacer(minLength: 0)

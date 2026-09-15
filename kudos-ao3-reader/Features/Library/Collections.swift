@@ -62,7 +62,7 @@ struct CollectionCard: View {
     }
 
     private var singleTile: some View {
-        let hue = CoverArt.hue(for: collection.name)
+        let hue = collection.displayHue
         let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue)
         return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
             .fill(LinearGradient(
@@ -127,6 +127,7 @@ struct CollectionDetailView: View {
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingRename = false
+    @State private var showingColour = false
     @State private var renameText = ""
     @State private var confirmDelete = false
     @State private var showingAddWorks = false
@@ -151,6 +152,48 @@ struct CollectionDetailView: View {
     /// newest-first order is kept rather than re-sorted by the filter's default sort.
     private var visibleWorks: [SavedWork] {
         filters.hasActiveFilters ? filters.apply(to: works) : works
+    }
+
+    /// Writes straight through to the model, like Rename beside it — there is no
+    /// Save on this screen and never was.
+    private var colourSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    SubjectHueSwatchRow(
+                        selection: Binding(
+                            get: { collection.hue },
+                            set: { newValue in
+                                collection.hue = newValue
+                                collection.markModified()
+                                context.saveBestEffort(reason: "Saving collection colour failed")
+                            }
+                        ),
+                        fallbackHue: collection.displayHue
+                    )
+                } header: {
+                    SubjectFieldLabel(text: "Colour", style: .formGroup)
+                } footer: {
+                    Text(collection.hue == nil
+                        ? "Taken from the collection's name, so renaming it changes the colour."
+                        : "Set on the collection, so renaming it keeps this colour.")
+                }
+                .appThemedRows()
+            }
+            .appThemedScroll()
+            .navigationTitle(collection.name)
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showingColour = false }
+                    }
+                }
+        }
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
     }
 
     var body: some View {
@@ -281,6 +324,15 @@ struct CollectionDetailView: View {
                             } label: {
                                 Label("Rename", systemImage: "pencil")
                             }
+                            // 1bk: "colour is the collection's identity everywhere
+                            // else in the app, so it is picked here rather than
+                            // assigned". Beside Rename because the two together are
+                            // what that board's edit sheet is for.
+                            Button {
+                                showingColour = true
+                            } label: {
+                                Label("Colour", systemImage: "paintpalette")
+                            }
                             Button(role: .destructive) {
                                 confirmDelete = true
                             } label: {
@@ -298,6 +350,7 @@ struct CollectionDetailView: View {
             .sheet(isPresented: $showingAddWorks) {
                 AddWorksToCollectionView(collection: collection)
             }
+            .sheet(isPresented: $showingColour) { colourSheet }
             .alert("Rename Collection", isPresented: $showingRename) {
                 TextField("Name", text: $renameText)
                 Button("Save") {

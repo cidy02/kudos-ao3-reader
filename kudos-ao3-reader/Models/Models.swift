@@ -634,6 +634,15 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 @Model final class WorkCollection {
     var id: UUID = UUID()
     var name: String = ""
+    /// The collection's own colour, 0…1 — artboard 1bk: "colour is the
+    /// collection's identity everywhere else in the app, so it is picked here
+    /// rather than assigned".
+    ///
+    /// Optional, and `nil` for every collection that predates this, so
+    /// `displayHue` keeps the name hash and nothing changes appearance until
+    /// someone chooses. Same shape and the same reason as `ReadingQueue.hue`,
+    /// including the defect it fixes: renaming a collection silently repainted it.
+    var hue: Double?
     var dateAdded: Date = Date()
     var createdAt: Date = Date()
     var lastModifiedAt: Date = Date()
@@ -670,6 +679,13 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var syncStatus: SyncRecordStatus {
         get { SyncRecordStatus(rawValue: syncStatusRaw) ?? .localOnly }
         set { syncStatusRaw = newValue.rawValue }
+    }
+
+    /// The hue every collection surface paints with: the chosen one, else the name
+    /// hash this app used before `hue` existed, so an untouched collection keeps
+    /// exactly the colour it had.
+    var displayHue: Double {
+        hue ?? CoverArt.hue(for: name)
     }
 
     func markModified(_ date: Date = Date()) {

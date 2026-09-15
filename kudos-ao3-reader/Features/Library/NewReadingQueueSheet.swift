@@ -43,7 +43,7 @@ struct NewReadingQueueSheet: View {
                 }
 
                 Section {
-                    QueueHueSwatchRow(selection: $hue, fallbackHue: previewHue)
+                    SubjectHueSwatchRow(selection: $hue, fallbackHue: previewHue)
                 } header: {
                     SubjectFieldLabel(text: "Colour", style: .formGroup)
                 } footer: {

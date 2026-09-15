@@ -1237,6 +1237,11 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
     let description: String?
     /// Android `BackupCollection.sortOrder: Int?` — wire key `sortOrder`.
     let sortOrder: Int?
+    /// 1bk's stored collection colour. Optional and added after v8, so it decodes
+    /// as `nil` from every older archive and from Android, which does not write
+    /// it — and `nil` is exactly "take the colour from the name", the state those
+    /// archives were written in. Same additive shape as `ReadingQueue.hue`.
+    let hue: Double?
 
     @MainActor
     init(collection: WorkCollection) {
@@ -1252,6 +1257,7 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
         workIDs = collection.works.map(\.id).sorted { $0.uuidString < $1.uuidString }
         description = collection.collectionDescription
         sortOrder = collection.sortOrder
+        hue = collection.hue
     }
 }
 
@@ -2118,6 +2124,12 @@ enum KudosBackupService {
             if incomingWins || collection.name.isEmpty {
                 collection.name = archived.name
                 collection.syncStatusRaw = archived.syncStatusRaw ?? collection.syncStatusRaw
+            }
+            // Only ever fills a colour in, never clears one — an archive written
+            // before `hue` existed, or by Android which does not write it, carries
+            // nil, and letting that win would strip a colour the reader chose here.
+            if let archivedHue = archived.hue, incomingWins || collection.hue == nil {
+                collection.hue = archivedHue
             }
             collection.dateAdded = min(collection.dateAdded, archived.dateAdded)
             if let archivedCreatedAt = archived.createdAt {
