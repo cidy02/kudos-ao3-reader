@@ -227,7 +227,7 @@ struct AO3SeriesRow: View {
 
                     Text(series.title)
                         .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .padding(.top, 1)
                         .lineLimit(2)
                 }
@@ -237,7 +237,7 @@ struct AO3SeriesRow: View {
                 Text(series.summary)
                     .font(.system(size: 13.5))
                     .lineSpacing(1.5)
-                    .foregroundStyle(.white.opacity(0.74))
+                    .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
 
@@ -247,14 +247,21 @@ struct AO3SeriesRow: View {
                 }
                 if series.words != nil {
                     Text("·")
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(.tertiary)
                 }
                 if let words = series.words {
                     Text("\(words.formatted()) words")
                 }
             }
             .font(.system(size: 11.5))
-            .foregroundStyle(.white.opacity(0.62))
+            .foregroundStyle(.secondary)
+
+            AO3AuthorBylineView(names: series.creatorNames, identities: series.creatorIdentities, compact: true)
+            if !series.dateUpdated.isEmpty {
+                Text(series.dateUpdated)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 18)
@@ -271,8 +278,7 @@ struct AO3SeriesRow: View {
     }
 
     private var fandomColor: Color {
-        let hue = CoverArt.workHue(fandoms: series.fandoms, title: series.title)
-        return Color(hue: hue, saturation: 0.4, brightness: 0.9)
+        seriesPalette.accent
     }
 
     private var standardBody: some View {
@@ -335,10 +341,11 @@ struct AO3SeriesRow: View {
 struct AO3AuthorBookmarkRow: View {
     let bookmark: AO3AuthorBookmark
     var expandAll = false
+    var presentation: AO3WorkRow.Presentation = .standard
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            AO3WorkRow(work: bookmark.work, expandAll: expandAll)
+            AO3WorkRow(work: bookmark.work, expandAll: expandAll, presentation: presentation)
 
             if bookmark.isRecommendation || bookmark.isPrivate || !bookmark.date.isEmpty {
                 FlowLayout(spacing: 8, rowSpacing: 5) {

@@ -74,7 +74,13 @@ extension AO3Client {
             pseuds: uniquePseuds(pseuds),
             fandoms: fandoms,
             subscriptionForm: subscription,
-            actions: actions
+            actions: actions,
+            // Scope each parser to its group: bookmark blurbs also contain work
+            // links and must never leak into the author's own recent works.
+            // Missing groups are AO3's empty state; malformed blurbs are errors.
+            recentWorks: try? doc.select("#user-works li.work.blurb").array().map(parseBlurb),
+            recentSeries: try? doc.select("#user-series li.series.blurb").array().map(parseSeriesBlurb),
+            recentBookmarks: try? doc.select("#user-bookmarks li.bookmark.blurb").array().map(parseAuthorBookmark)
         )
     }
 

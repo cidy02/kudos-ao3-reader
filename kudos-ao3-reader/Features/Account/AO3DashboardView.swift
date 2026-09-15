@@ -5,8 +5,8 @@ import SwiftUI
 ///
 /// On the website the page shows your header plus Fandoms, Recent works, Recent
 /// series, and Recent bookmarks (`users/_contents.html.erb`). In Kudos that is
-/// the same surface as your own author profile: fandoms, works, series, and
-/// bookmarks, loaded from the same dashboard/header endpoints.
+/// the dashboard composition of your own author profile: all three recent
+/// groups from the one dashboard response, with explicit links to full lists.
 ///
 /// Sidebar destinations that sit *beside* Dashboard on AO3 (Preferences, Inbox,
 /// History, Drafts, challenges, …) stay reachable from Account's Reading /
@@ -18,7 +18,7 @@ struct AO3DashboardView: View {
     var body: some View {
         if let username = auth.username,
            let route = AO3AuthorRoute(username: username) {
-            AuthorProfileView(route: route, navigationTitle: "Dashboard")
+            AuthorProfileView(route: route, navigationTitle: "Dashboard", showsDashboard: true)
         } else {
             ContentUnavailableView {
                 Label("Not signed in", systemImage: "person.crop.circle.badge.questionmark")

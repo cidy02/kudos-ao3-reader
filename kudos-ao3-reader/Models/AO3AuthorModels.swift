@@ -375,6 +375,11 @@ nonisolated struct AO3AuthorHeader: Hashable {
     var fandoms: [AO3AuthorFandom]
     var subscriptionForm: AO3AuthorSubscriptionForm?
     var actions: [AO3AuthorWebAction]
+    /// The three independent groups already present on AO3's dashboard.
+    /// nil means a group contained markup the parser could not read.
+    var recentWorks: [AO3WorkSummary]? = []
+    var recentSeries: [AO3SeriesSummary]? = []
+    var recentBookmarks: [AO3AuthorBookmark]? = []
 }
 
 nonisolated struct AO3RichText: Hashable {
