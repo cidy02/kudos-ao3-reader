@@ -121,49 +121,86 @@ struct EditMultipleWorksView: View {
         }
     }
 
+    /// `WritingTagsRow` rather than a bare `SubjectFormRow`: it draws the same row
+    /// — label, count, chevron — and attaches the editor the chevron implies.
+    /// These eight rows had a chevron and no destination until this screen became
+    /// reachable, at which point a dead row stops being invisible and starts being
+    /// a broken control.
+    /// Rating and language are the two fields 1bn's footnote calls out: they are
+    /// single values, so setting one **overwrites** whatever each work had. `nil`
+    /// is the untouched state, and the picker needs a real option to represent it
+    /// — hence the empty-valued "Leave as is" at the head of the list rather than
+    /// a separate toggle.
+    private func leaveAsIsOptions(_ options: [AO3FormOption]) -> [AO3FormOption] {
+        [AO3FormOption(value: "", title: "Leave as is")] + options
+    }
+
+    private func leaveAsIsBinding(
+        _ keyPath: WritableKeyPath<AO3BulkEditChanges, String?>
+    ) -> Binding<String> {
+        Binding(
+            get: { changes[keyPath: keyPath] ?? "" },
+            set: { changes[keyPath: keyPath] = $0.isEmpty ? nil : $0 }
+        )
+    }
+
     private var tagsToAddPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Fandoms", value: countLabel(changes.tagsToAdd.fandoms.count), showsDisclosure: true)
+            WritingTagsRow(title: "Fandoms", values: $changes.tagsToAdd.fandoms, kind: .fandom)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Relationships",
-    value: countLabel(changes.tagsToAdd.relationships.count),
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Relationships",
+                values: $changes.tagsToAdd.relationships,
+                kind: .relationship
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Characters",
-    value: countLabel(changes.tagsToAdd.characters.count),
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Characters",
+                values: $changes.tagsToAdd.characters,
+                kind: .character
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Additional tags",
-    value: countLabel(changes.tagsToAdd.additionalTags.count),
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Additional tags",
+                values: $changes.tagsToAdd.additionalTags,
+                kind: .freeform
+            )
         }
         .subjectPanel()
     }
 
     private var tagsToRemovePanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Fandoms",
-    value: countLabel(changes.tagsToRemove.fandoms.count),
-    showsDisclosure: true)
+            WritingTagsRow(title: "Fandoms", values: $changes.tagsToRemove.fandoms, kind: .fandom)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Relationships",
-    value: countLabel(changes.tagsToRemove.relationships.count),
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Relationships",
+                values: $changes.tagsToRemove.relationships,
+                kind: .relationship
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Characters",
-    value: countLabel(changes.tagsToRemove.characters.count),
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Characters",
+                values: $changes.tagsToRemove.characters,
+                kind: .character
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Additional tags",
-    value: countLabel(changes.tagsToRemove.additionalTags.count),
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Additional tags",
+                values: $changes.tagsToRemove.additionalTags,
+                kind: .freeform
+            )
         }
         .subjectPanel()
     }
 
     private var changeOnAllPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Rating", value: changes.rating ?? "Leave as is", showsDisclosure: true)
+            WritingChoiceRow(
+                title: "Rating",
+                value: leaveAsIsBinding(\.rating),
+                options: leaveAsIsOptions(form.ratingOptions)
+            )
             SubjectRowSeparator()
             SubjectFormRow(label: "Archive warnings",
     value: listLabel(added: changes.tagsToAdd.warnings.count, removed: changes.tagsToRemove.warnings.count),
@@ -173,7 +210,11 @@ struct EditMultipleWorksView: View {
     value: listLabel(added: changes.tagsToAdd.categories.count, removed: changes.tagsToRemove.categories.count),
     showsDisclosure: true)
             SubjectRowSeparator()
-            SubjectFormRow(label: "Language", value: changes.languageID ?? "Leave as is", showsDisclosure: true)
+            WritingChoiceRow(
+                title: "Language",
+                value: leaveAsIsBinding(\.languageID),
+                options: leaveAsIsOptions(form.languageOptions)
+            )
         }
         .subjectPanel()
     }

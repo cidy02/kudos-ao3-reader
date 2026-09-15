@@ -1078,6 +1078,51 @@ reasons this is the owner's call rather than a unilateral rewrite:
 
 Worth doing, but as its own change with the owner's call on (2) and (3).
 
+<a id="bulk-edit-1bn-2026-09-15"></a>
+**1bn built 2026-09-15 — and making it reachable exposed a second problem worth
+stating plainly.**
+
+`EditMultipleWorksView` and `AO3WorkActions.loadBulkEditForm(workIDs:)` were both
+written and referenced nowhere. `WritingBulkEditDestination` is the loader, and
+`AuthorProfileView`'s selecting-mode toolbar is the way in — **gated on
+`showsBulkEdit` (own profile, signed in, Works tab)**, because AO3's
+`/users/<name>/works/edit_multiple` only exists for your own works.
+
+The action sits *beside* `RemoteWorkSelectionToolbar` rather than inside
+`RemoteWorkBulkActionBar`: that bar is also Search's and Browse's, where the
+selected works belong to other people and the endpoint would 404. Select mode
+itself already existed (`RemoteWorkSelectionController`, `selectableWorkRow`),
+so only the AO3 half was missing.
+
+**Then the dead-chevron check turned on the screen I had just connected: 18
+`showsDisclosure: true`, zero destinations.** An unreachable screen with dead
+rows is invisible; a reachable one is a broken feature. So:
+
+- The **eight tag rows** (Fandoms / Relationships / Characters / Additional tags,
+  add and remove) became `WritingTagsRow` — the same row, label, count and
+  chevron, with the tag editor the chevron implies. That is 1bn's actual subject,
+  and its "Tags to add" / "Tags to remove" grouping was already right.
+- **Rating and Language** became `WritingChoiceRow` over the form's own
+  `ratingOptions` / `languageOptions`, with an empty-valued "Leave as is" at the
+  head so `nil` — the untouched state — is a real, pickable option. These are the
+  two fields 1bn's footnote singles out as *overwriting* rather than merging.
+
+**Eight rows remain chevron-without-destination** on that screen: Archive
+warnings, Categories, collections add/remove, gift recipients, the two comment
+settings, and remove co-creators. Warnings and categories want a three-state
+add/remove picker rather than a menu; the rest want their own. Recorded rather
+than stubbed.
+
+**1u and 1v are not built.** The own-works list is `AuthorProfileView` with tab
+`.works`, and it offers a "New work" chip and nothing else. 1u wants swipe
+actions — Edit, Tags, Delete — of which `WritingWorkDestination`,
+`WritingTagsDestination` and `AO3WorkActions.deleteWork(workID:)` all already
+exist, so that is wiring plus a delete confirmation. 1v wants a sort sheet whose
+fields "map to AO3's query parameters", and `AO3AuthorRoute.contentURL` takes
+only a page — so 1v needs the route to carry sort params first. Neither was
+attempted this tick.
+
+
 <a id="association-turn-audit-2026-09-15"></a>
 **1bu–1bx audited 2026-09-15. 1bw built; 1bx already correct; 1bu blocked on the
 parser; 1bv is a mockup the spec itself says not to build.**
