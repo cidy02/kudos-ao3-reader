@@ -3670,3 +3670,41 @@ Correct identifiers for the backup gate:
 DTO change made today (`ReadingQueue.isPinned` / `keepsWorksOffline`,
 `WorkCollection.keepsWorksOffline` / `showsOnHome` / `workOrderRaw`). The changes
 were correct; the verification claim was not.
+
+### item-10-tag-sets-already-wired-2026-09-15
+
+**The third ledger item whose premise did not hold.** Item 10 says "nothing
+parses a `tagSetID` for a given collection, so `TagSetView` is complete but only
+reachable by hand-supplying an id". All three parts of that are now false:
+
+1. **The parse exists.** `AO3Client.collectionTagSets(slug:request:)`
+   (`AO3Client+Collections.swift:21`) → `parseCollectionTagSets` reads the
+   `Tag Set:` links and returns `[AO3CollectionTagSetLink]`.
+2. **It is called** — `ChallengeSettingsView:482` and
+   `ChallengeSettingsEditView:638`.
+3. **It is rendered as a navigable row.** `ChallengeSettingsView.tagSetsPanel`
+   (≈319–325) draws one `SubjectFormRow` per link with
+   `subjectRowNavigation` into `TagSetView(tagSetID: link.id, …)`.
+
+So `TagSetView` is reachable by the intended route. The note was true when the
+Phase 12 table was written and was closed by later work without the table being
+updated — the same staleness this sweep keeps finding.
+
+**One detail the code gets right and a naive fix would have broken:** the links
+are on the collection's **profile** page, not its landing page.
+`collectionTagSets` fetches `AO3CollectionURL.profile(slug:)` and its doc comment
+says why — `collections#show` renders only header, works and bookmarks, so the
+`Tag Set:` row "cannot ride along on the show fetch". A live probe of
+`/collections/<slug>` confirms no `/tag_sets/N` hrefs there.
+
+**What is NOT verified:** the profile page's markup was not confirmed live —
+`/collections/yuletide2024/profile` answered **HTTP 525** (a Cloudflare
+handshake failure), so the probe is inconclusive rather than negative. The app
+side is verified by reading; AO3's side is not.
+
+**Reachability caveat:** this panel sits on `ChallengeSettingsView`, reached from
+`AO3CollectionDetailView`'s Manage section, which is gated on `isMaintainer` —
+the same unconfirmed gate as ledger item 15. So "reachable" here means the wiring
+is complete, not that it has been seen on screen.
+
+**Closed as already-built.** No code written.
