@@ -69,9 +69,11 @@ extension ReadingQueueBrowserView {
     var newQueueSheet: some View {
         NewReadingQueueSheet(
             name: $newQueueName,
+            hue: $newQueueHue,
             onCreate: createQueue,
             onCancel: {
                 newQueueName = ""
+                newQueueHue = nil
                 showingNewQueue = false
             }
         )
@@ -160,7 +162,7 @@ extension ReadingQueueBrowserView {
     private func queueGlyph(_ queue: ReadingQueue?) -> some View {
         if let queue, queue.kind != .savedForLater {
             Circle()
-                .fill(themeManager.appTheme.carouselQueueTint(hue: CoverArt.hue(for: queue.displayName)))
+                .fill(themeManager.appTheme.carouselQueueTint(hue: queue.displayHue))
                 .frame(width: 10, height: 10)
         } else {
             Image(systemName: WorkActionLabels.savedForLaterSymbol)

@@ -38,6 +38,7 @@ struct AllReadingQueuesGridView: View {
     private var readingQueues: [ReadingQueue]
 
     @State private var showingNewQueue = false
+    @State private var newQueueHue: Double?
     @State private var newQueueName = ""
     @State private var pendingRename: ReadingQueue?
     @State private var renameText = ""
@@ -144,9 +145,11 @@ struct AllReadingQueuesGridView: View {
         .sheet(isPresented: $showingNewQueue) {
             NewReadingQueueSheet(
                 name: $newQueueName,
+                hue: $newQueueHue,
                 onCreate: createQueue,
                 onCancel: {
                     newQueueName = ""
+                    newQueueHue = nil
                     showingNewQueue = false
                 }
             )
@@ -252,7 +255,7 @@ struct AllReadingQueuesGridView: View {
                         .frame(width: 12)
                 } else {
                     Circle()
-                        .fill(themeManager.appTheme.carouselQueueTint(hue: CoverArt.hue(for: queue.displayName)))
+                        .fill(themeManager.appTheme.carouselQueueTint(hue: queue.displayHue))
                         .frame(width: 12, height: 12)
                 }
 
@@ -300,9 +303,11 @@ struct AllReadingQueuesGridView: View {
     private func createQueue() {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let hue = newQueueHue
         newQueueName = ""
+        newQueueHue = nil
         showingNewQueue = false
-        _ = ReadingQueueService.createQueue(named: trimmed, in: context)
+        _ = ReadingQueueService.createQueue(named: trimmed, hue: hue, in: context)
     }
 }
 

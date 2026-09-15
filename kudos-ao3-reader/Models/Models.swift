@@ -695,6 +695,17 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
     var lastSyncAttemptAt: Date?
     var lastSyncError: String = ""
+    /// The queue's own colour, 0…1 — artboards 1h and 1j, which both say the hue
+    /// is the queue's and stored, "not hashed from the name".
+    ///
+    /// Optional, and `nil` is the normal state for every queue that existed before
+    /// this: `displayHue` falls back to the name hash, so nothing changes
+    /// appearance until someone actually picks a colour. That fallback is also
+    /// what makes this a lightweight schema addition rather than a migration.
+    ///
+    /// Deriving the colour from the name had a real cost, which is why the spec
+    /// calls it out: renaming a queue silently repainted it.
+    var hue: Double?
 
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
@@ -728,6 +739,13 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
     var displayName: String {
         kind == .savedForLater ? "Saved for Later" : name
+    }
+
+    /// The hue every queue surface should paint with: the stored one when the
+    /// reader has chosen it, and otherwise the name hash this app used before
+    /// `hue` existed, so an untouched queue keeps exactly the colour it had.
+    var displayHue: Double {
+        hue ?? CoverArt.hue(for: displayName)
     }
 
     func markModified(_ date: Date = Date()) {

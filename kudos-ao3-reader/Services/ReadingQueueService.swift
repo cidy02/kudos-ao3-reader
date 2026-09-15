@@ -152,13 +152,20 @@ enum ReadingQueueService {
             .filter { !$0.isPendingDeletion }
     }
 
-    static func createQueue(named rawName: String, in context: ModelContext) -> ReadingQueue {
+    /// `hue` is 1j's colour swatch: `nil` leaves the queue taking its colour from
+    /// its name, which is what every queue did before the swatches existed.
+    static func createQueue(
+        named rawName: String,
+        hue: Double? = nil,
+        in context: ModelContext
+    ) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         let queue = ReadingQueue(
             name: trimmed.isEmpty ? "Reading Queue" : trimmed,
             kind: .custom,
             sortOrder: nextQueueSortOrder(in: context)
         )
+        queue.hue = hue
         context.insert(queue)
         context.saveBestEffort(reason: "Saving reading queue failed")
         return queue
