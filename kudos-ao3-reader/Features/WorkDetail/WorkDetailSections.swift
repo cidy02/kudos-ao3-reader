@@ -177,6 +177,10 @@ extension WorkDetailView {
             libraryStatusSection(for: work)
             libraryStorageSection(for: work)
             libraryActivitySection(for: work)
+            // Origin, Status and Conversion are facts about the local file, and
+            // 1a puts everything local behind this sheet rather than on the page.
+            // Moved, not dropped — the page used to carry them under the summary.
+            WorkProvenanceSections(work: work)
         } else {
             Section {
                 Text("Not in your Library yet. Save it, queue it, or start reading "

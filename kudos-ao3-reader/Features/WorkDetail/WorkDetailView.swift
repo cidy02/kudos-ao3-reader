@@ -299,10 +299,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             commentsSection
             pageActionsSection
             seriesSection
-            // Local-only: a remote work has no origin to report and nothing converted.
-            if let work = localWork {
-                WorkProvenanceSections(work: work)
-            }
+            // Provenance moved into the My copy sheet: 1a keeps the page to the
+            // work itself and puts the local half behind one button.
             myCopySection
         }
     }
