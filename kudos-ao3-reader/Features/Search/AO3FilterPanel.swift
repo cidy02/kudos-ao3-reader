@@ -36,6 +36,14 @@ struct AO3FilterPanel: View {
     var onSave: (() -> Void)?
     /// Clear filters back to the host's baseline.
     var onReset: () -> Void
+    /// The works already on the page behind a `.refine` panel — 1au's
+    /// "14 of the 20 works on this page match".
+    ///
+    /// Refine narrows what is loaded rather than re-querying AO3, so the answer is
+    /// already in memory and the line can track the facets as they are set. Empty
+    /// in `.search` mode, where there is no loaded page to count and the result
+    /// depends on a request that has not been made.
+    var refineSource: [AO3WorkSummary] = []
 
     /// The panel owns its own `NavigationStack`, because a presented panel has no
     /// navigation container of its own and a bare `.toolbar` there renders nothing.
@@ -48,13 +56,40 @@ struct AO3FilterPanel: View {
     /// stops being safe.
     var body: some View {
         NavigationStack {
-            form
-                .navigationTitle(mode == .refine ? "Refine" : "Filters")
+            VStack(spacing: 0) {
+                refineMatchLine
+                form
+            }
+            .navigationTitle(mode == .refine ? "Refine" : "Filters")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
                 .toolbar { actionButtons }
         }
+    }
+
+    /// 1au's live count, above the form. Only in refine mode, and only with a page
+    /// behind it: in search mode the number depends on a request that has not been
+    /// made, and inventing one would be a count the app cannot source.
+    @ViewBuilder
+    private var refineMatchLine: some View {
+        if mode == .refine, !refineSource.isEmpty {
+            Text(refineMatchText)
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+                .accessibilityAddTraits(.updatesFrequently)
+        }
+    }
+
+    private var refineMatchText: String {
+        let total = refineSource.count
+        let matching = filters.apply(to: refineSource).count
+        let works = total == 1 ? "work" : "works"
+        return "\(matching) of the \(total) \(works) on this page match"
     }
 
     /// Reset top-left, Apply top-right — the ends of the bar, where a sheet's

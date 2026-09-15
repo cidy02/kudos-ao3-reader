@@ -228,7 +228,10 @@ struct AO3AccountWorksList: View {
                     mode: .refine,
                     canReset: filters.hasActiveFilters,
                     onApply: { showingFilters = false },
-                    onReset: { filters = AO3SearchFilters() }
+                    onReset: { filters = AO3SearchFilters() },
+                    // The same array `visibleWorks` narrows, so 1au's line and the
+                    // list behind it can never disagree.
+                    refineSource: works
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
