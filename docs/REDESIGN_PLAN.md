@@ -624,6 +624,40 @@ restyle. Codex's own commit records what it left out and why, and states
 that 1u and 1w still need their own scopes, actions and running-order
 presentation — their new headers are not parity.
 
+<a id="sweep-findings-2026-09-15"></a>
+**Sweep findings, 2026-09-15 (Claude, verified from source — not taken from an
+agent's report).** A Codex audit pass of the 69 non-Account boards stopped before
+writing its table; it surfaced two claims, both checked here against the code.
+
+**1ah / 1ai Reading History — the app's "History" is a different thing wearing
+the same name. CONFIRMED, and larger than a layout gap.** `LibrarySectionKind`
+selects `.history` as `!hasEPUB && !isQueuedForLater` — works whose EPUB was
+*freed* after finishing. A work you have read and still have downloaded never
+appears. 1ah is explicit that this is *"the local one, not AO3's"* and that it is
+**"Entirely new. Needs a local reading log"**: last-read chapter and timestamp per
+work, cumulative time spent, a reread count that increments on finishing again,
+and the chapter count at your last visit so "changed since" can be computed. 1ai
+adds an Abandoned state *derived* from that log (mid-way and untouched past a
+threshold) with a manual override so the threshold cannot re-abandon it. None of
+that data is stored today. This is a persistence model, not a screen: it needs
+its own design pass, and building the ledger rows over the existing `!hasEPUB`
+partition would put the artboard's chrome on the wrong set of works. **Not
+started deliberately.**
+
+**1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
+one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs
+to is "Home — the tab and every subsection behind its chevrons". The app instead
+deep-links Resume "See all" into Library via
+`router.showLibrarySection(.readingNow)`, so the pushed screen is Library's and
+its header says Library. `HomeView` documents this as an intentional "Phase A
+contract" — one list on one stack. Matching the artboard means Home growing its
+own Reading Now list beside Library's copy. Recorded rather than reversed:
+undoing a documented product decision to satisfy a kicker is not a call to make
+unattended.
+
+Also confirmed by that pass and by this branch's own fix: no remaining
+Ledger/Detailed mixture in the Home, Library, queue-browser or Account paths.
+
 <a id="dashboard-1y-2026-09-14"></a>
 ### 2026-09-14 — T-219 Dashboard composition (Codex)
 
