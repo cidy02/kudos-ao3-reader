@@ -3551,3 +3551,51 @@ sweep's recurring defect — right chrome over wrong data:
 
 **The generalisation worth keeping: when a scope or filter changes, ask what
 other chrome on screen was derived from the OLD scope.**
+
+### item-3-1bu-premise-wrong-2026-09-15
+
+**The ledger's item 3 says "widen `autocompleteTags`". It cannot be widened —
+the endpoint has no such data.** Probed live rather than assumed:
+
+```
+GET /autocomplete/fandom?term=supergirl
+[{"id":"Supergirl (TV 2015)","name":"Supergirl (TV 2015)"}, …]
+```
+
+`id` and `name` are the **same string** on every row. There is no work count
+and no canonical flag anywhere in the response, for any tag kind. I described
+this to the owner as a services change of the same shape as 1v's sort; that was
+wrong, and the approval rests on a premise that does not hold.
+
+**Where the data actually lives.** `/tags/search?tag_search[name]=…` carries
+both:
+
+```
+<li><span class='canonical'>Freeform:
+    <a class="tag" href="/tags/Domestic%20Fluff">Domestic Fluff</a> &lrm;(442377)</span></li>
+```
+
+— the work count in `&lrm;(N)`, the tag type as a prefix, and canonicity as
+`span.canonical`. It also accepts `tag_search[canonical]=T`.
+
+**Why it is not a drop-in replacement for autocomplete.** Two measured
+problems:
+
+1. **Ordering.** `tag_search[name]=fluff` returns punctuation-first alphabetical
+   — `!! insane amounts of fluff`, `!!!fluff bitch!!!` … — with the actual tag
+   "Fluff" buried far down. Autocomplete is relevance-ordered. A picker fed by
+   tag search would be worse at the one thing a picker does.
+2. **Weight.** One term is ~35 KB of HTML versus a few hundred bytes of JSON,
+   per keystroke.
+
+**The buildable shape**, if the owner wants 1bu's marks: keep `/autocomplete/*`
+for the suggestion list, and enrich each *visible* suggestion lazily from
+`/tags/search?tag_search[name]=<exact name>`, reading `(N)` and `span.canonical`
+from the row whose name matches exactly. That is the pattern this app already
+uses for works (`EnrichingAO3WorkRow`, "the fetch happens per row as it
+appears"), and it needs a cache so a term retyped does not refetch. Filtering
+with `canonical=T` instead would be wrong: a non-canonical tag would come back
+empty and be indistinguishable from one that does not exist.
+
+**Recorded, not built** — the cost is real and different from what was
+approved, so it is the owner's call.
