@@ -154,6 +154,16 @@ final class AO3AuthorProfileModel {
     private(set) var moderationFormForSubmit: AO3AuthorModerationForm?
     private(set) var actionMessage: String?
 
+    /// 1u's three segments. `.works` is what this screen has always shown;
+    /// `.collectedWorks` is AO3's own "Works in Collections", and `.gifts` is
+    /// works given TO this user. All three render the standard work blurb, so
+    /// `parseAuthorWorksPage` reads every one of them.
+    private(set) var worksScope: AO3AuthorRoute.Content = .works
+    /// 1v's sheet. AO3 sorts this index server-side, so a change here is a
+    /// refetch rather than a resort of what is already loaded — sorting only
+    /// the rows on screen would reorder page 1 and call it the whole list.
+    private(set) var worksSort: AO3WorksSort = .default
+
     private var worksPage = 0
     private var worksTotalPages = 1
     private var seriesPage = 0
@@ -244,6 +254,7 @@ final class AO3AuthorProfileModel {
             == .orderedSame
         self.route = route
         selectedFandom = nil
+        resetWorksScoping()
         if !keepsAccountAbout { about = nil }
         resetScopedContent(keepingAbout: keepsAccountAbout)
         launch {
@@ -253,14 +264,61 @@ final class AO3AuthorProfileModel {
         }
     }
 
-    func selectFandom(_ fandom: AO3AuthorFandom?, auth: AO3AuthService) {
-        guard selectedTab == .works, selectedFandom != fandom else { return }
-        selectedFandom = fandom
+    /// The fandom facet belongs to the plain works index — AO3 offers it there
+    /// and not on the other two — so a scope change drops it rather than
+    /// carrying a filter the new page cannot honour.
+    private var worksBaseURL: URL {
+        if worksScope == .works, let fandomURL = selectedFandom?.url {
+            return Self.appending(worksSort, to: fandomURL)
+        }
+        return route.contentURL(worksScope, sort: worksSort)
+    }
+
+    /// A fandom URL is still a works index, so it takes the same
+    /// `work_search[...]` items rather than losing the sort on every facet tap.
+    private static func appending(_ sort: AO3WorksSort, to url: URL) -> URL {
+        let items = sort.queryItems
+        guard !items.isEmpty,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+        components.queryItems = (components.queryItems ?? []) + items
+        return components.url ?? url
+    }
+
+    func selectWorksScope(_ scope: AO3AuthorRoute.Content, auth: AO3AuthService) {
+        guard selectedTab == .works, worksScope != scope else { return }
+        worksScope = scope
+        selectedFandom = nil
+        reloadWorks(auth: auth)
+    }
+
+    func applyWorksSort(_ sort: AO3WorksSort, auth: AO3AuthService) {
+        guard selectedTab == .works, worksSort != sort else { return }
+        worksSort = sort
+        reloadWorks(auth: auth)
+    }
+
+    /// A new author, or a sign-out, starts on Works with AO3's own ordering.
+    /// Carrying a scope across would show one person's Gifts under another's
+    /// name, and carrying a sort would silently reorder a list the reader never
+    /// asked to sort.
+    private func resetWorksScoping() {
+        worksScope = .works
+        worksSort = .default
+    }
+
+    private func reloadWorks(auth: AO3AuthService) {
         works = []
         worksPage = 0
         worksTotalPages = 1
         loadedTabs.remove(.works)
         launch { await self.loadWorks(auth: auth, page: 1, replace: true) }
+    }
+
+    func selectFandom(_ fandom: AO3AuthorFandom?, auth: AO3AuthService) {
+        guard selectedTab == .works, selectedFandom != fandom else { return }
+        selectedFandom = fandom
+        reloadWorks(auth: auth)
     }
 
     func loadMore(auth: AO3AuthService) {
@@ -594,8 +652,7 @@ final class AO3AuthorProfileModel {
         replace: Bool,
         bypassCache: Bool = false
     ) async throws {
-        let baseURL = selectedFandom?.url ?? route.contentURL(.works)
-        let url = Self.pageURL(baseURL, page: page)
+        let url = Self.pageURL(worksBaseURL, page: page)
         let cached = try await parsedPage(at: url, auth: auth, bypassCache: bypassCache) {
             try AO3Client.parseAuthorWorksPage($0, page: page)
         }
@@ -731,6 +788,7 @@ final class AO3AuthorProfileModel {
         header = nil
         about = nil
         selectedFandom = nil
+        resetWorksScoping()
         resetScopedContent(keepingAbout: false)
         isShowingStaleCache = false
         actionMessage = nil

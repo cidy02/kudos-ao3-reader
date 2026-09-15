@@ -129,7 +129,12 @@ struct AO3AuthorFandomFilterSection: View {
     @Environment(AO3AuthService.self) private var auth
 
     var body: some View {
+        // The facet is parsed from the plain works index and AO3 offers it only
+        // there — `collected` renders its own `_collection_filters` and gifts
+        // has no facet at all. Left up, it would offer a stranger's fandoms as
+        // filters over a list they do not describe.
         if model.selectedTab == .works,
+           model.worksScope == .works,
            let fandoms = model.header?.fandoms,
            !fandoms.isEmpty {
             if layout == .scroll {

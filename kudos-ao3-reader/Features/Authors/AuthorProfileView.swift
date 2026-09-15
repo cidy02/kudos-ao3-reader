@@ -241,6 +241,15 @@ private extension AuthorProfileView {
                     onSeeAll: { dashboardDestination = $0 }
                 )
             } else {
+                AO3AuthorWorksScopeSection(
+                    model: model,
+                    // Same gate as showsPerformance below, for the same reason:
+                    // 1u is the own-works screen, and deriving this from the
+                    // model rather than a host flag means no future caller can
+                    // switch a stranger's profile onto their Gifts by mistake.
+                    showsScopes: isOwnProfile,
+                    onWillChange: bulkSelection.exitSelectMode
+                )
                 AO3AuthorFandomFilterSection(model: model, onWillChange: bulkSelection.exitSelectMode)
                 contentRows
             }
@@ -283,7 +292,12 @@ private extension AuthorProfileView {
             // for the artboard's date, or invent pseud/invitation totals.
             return model.route.pseud.map { _ in "Pseud of \(model.route.username)" }
         }
+        // AO3AccountListCountsCache holds the count for the plain works index.
+        // Under "In collections" or "Gifts" the list on screen is a different
+        // one, so the count would caption the wrong thing — drop it rather than
+        // print a figure that does not describe what is below it.
         guard isOwnProfile, model.route.pseud == nil,
+              model.worksScope == .works,
               let kind = AO3DashboardSections.listKind(for: model.selectedTab),
               let stored = AO3AccountListCountsCache.shared.count(
                   for: kind,
