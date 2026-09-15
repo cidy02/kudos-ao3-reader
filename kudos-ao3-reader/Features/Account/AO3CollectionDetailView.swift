@@ -311,19 +311,14 @@ struct AO3CollectionDetailView: View {
         .subjectPanel()
     }
 
-    /// One pushable row: the same `NavigationLink` + `SubjectFormRow(showsDisclosure:)`
-    /// shape `ChallengeSettingsView.assignmentsPanel` already uses for its own
-    /// "Sign-ups" row — reused here rather than a second row style.
+    /// One pushable row that draws its own chevron, with the link in the
+    /// background so `List` adds no second one.
     private func manageRow<Destination: View>(
         _ label: String,
         @ViewBuilder destination: @escaping () -> Destination
     ) -> some View {
-        NavigationLink {
-            destination()
-        } label: {
-            SubjectFormRow(label: label, showsDisclosure: true) { EmptyView() }
-        }
-        .buttonStyle(.plain)
+        SubjectFormRow(label: label, showsDisclosure: true) { EmptyView() }
+            .subjectRowNavigation(accessibilityLabel: label, destination: destination)
     }
 
     // MARK: Chrome

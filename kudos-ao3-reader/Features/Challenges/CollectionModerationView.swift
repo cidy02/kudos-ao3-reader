@@ -430,16 +430,14 @@ struct CollectionModerationView: View {
     /// or the invite text field here.
     private var maintainersPanel: some View {
         VStack(spacing: 0) {
-            NavigationLink {
+            SubjectFormRow(
+                label: "Owners and moderators",
+                value: maintainers.count == 1 ? "1 person" : "\(maintainers.count) people",
+                showsDisclosure: true
+            )
+            .subjectRowNavigation(accessibilityLabel: "Owners and moderators") {
                 CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
-            } label: {
-                SubjectFormRow(
-                    label: "Owners and moderators",
-                    value: maintainers.count == 1 ? "1 person" : "\(maintainers.count) people",
-                    showsDisclosure: true
-                )
             }
-            .buttonStyle(.plain)
 
             SubjectRowSeparator()
 

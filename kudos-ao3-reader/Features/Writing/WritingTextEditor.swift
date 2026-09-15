@@ -182,11 +182,11 @@ struct WritingTextEditorRow: View {
     let field: String
 
     var body: some View {
-        NavigationLink {
-            WritingTextEditor(text: $text, title: title, account: auth.username ?? "", target: target, field: field)
-        } label: {
-            SubjectFormRow(label: title, value: text.isEmpty ? "Empty" : "Set", showsDisclosure: true)
-        }
-        .buttonStyle(.plain)
+        SubjectFormRow(label: title, value: text.isEmpty ? "Empty" : "Set", showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: title) {
+                WritingTextEditor(
+                    text: $text, title: title, account: auth.username ?? "", target: target, field: field
+                )
+            }
     }
 }
