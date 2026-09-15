@@ -3460,3 +3460,39 @@ init takes `action:` **last**, so a trailing closure binds to it; rows using
 no `.subjectRowNavigation`, and no trailing action closure.
 
 Repo-wide check is clean: every chevron now has somewhere to go.
+
+### owner-decisions-2026-09-15
+
+Four questions were put to the owner at the end of the sweep. Their answers,
+and what each closed:
+
+**Queue schema — "tags first".** The smallest delta that unblocks 1bh. Built in
+`0346e053`: `Tag` gained a `queues` inverse, `ReadingQueue` gained `tags`,
+1h's "+ Tag" sheet and 1i's tag rail both draw on the same vocabulary works
+use. Backup carries `tagNames` as an additive optional field with no version
+bump, and restore is union-only. **Still deferred by the same answer:** the pin
+flag, per-queue offline policy, 1j's seed step, and 1i's cross-queue search.
+
+**Dead chevron rows — "build the pickers".** Done; see
+`pickers-built-2026-09-15` above.
+
+**1f continuous comment streaming — "keep paging, close the item".** Closed as
+decided, not as built. `CommentsView.paginationSection` keeps Previous /
+"Page N of M" / Next, and the screen keeps its footnote explaining that AO3
+pages its comments. This is a deliberate divergence from 1f's "older comments
+stream in continuously at the bottom": it preserves jump-to-page over threads
+that run to dozens of pages, avoids a rewrite of `CommentsModel.loadPage` in
+the app's most-audited subsystem, and sidesteps the board's own ambiguity
+about what streaming means under the oldest-first sort it also asks for.
+**Not a gap to re-close in a later sweep.**
+
+**Push — "push and install on the iPhone".** Done for `61b4c321..2e7f7759`.
+Everything after that is unpushed and needs its own say-so.
+
+Open items NOT resolved by these four, carried forward: 1ak's lost library line
+and its "With new work" chip; AccountView's Refine panel that filters nothing;
+the unconfirmed collection `isMaintainer` fix; 1bu's `autocompleteTags`
+widening; 1v's sort params; 1u's hero tallies and segments; 1bg's Move to and
+Download; 1bk's create-time colour and reorder row; 1az's exact empty copy;
+1t's visit count (unbuildable — the fixture is synthetic and the live page is
+authenticated).
