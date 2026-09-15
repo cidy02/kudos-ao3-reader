@@ -42,6 +42,13 @@ struct ReadingQueueBrowserView: View {
     @State private var showingFilters = false
     /// Cover grid matches the prior browser default; switch to detailed via the menu.
     @State private var displayMode: WorkListDisplayMode = .compact
+
+    /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
+    /// separate presentations and a screen shows one of them — this used to pass
+    /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
+    private var rowPresentation: WorkRow.Presentation {
+        displayMode == .ledger ? .ledger : .standard
+    }
     #if os(iOS)
     @State private var reorderEditMode: EditMode = .inactive
     #else
@@ -213,7 +220,7 @@ struct ReadingQueueBrowserView: View {
             isSelecting: isSelecting,
             isSelected: selection.contains(work.id),
             onToggleSelection: { toggleSelection(work) },
-            presentation: .ledger
+            presentation: rowPresentation
         )
         .swipeActions(edge: .trailing) {
             if !isSelecting {
@@ -374,7 +381,7 @@ extension ReadingQueueBrowserView {
             }
         } else {
             Group {
-                if displayMode == .detailed {
+                if displayMode != .compact {
                     detailedList
                 } else {
                     compactGrid
@@ -411,7 +418,7 @@ extension ReadingQueueBrowserView {
                     SensitiveWorkRow(
                         work: work,
                         openMode: .reader,
-                        presentation: .ledger
+                        presentation: rowPresentation
                     )
                     .swipeActions(edge: .trailing) {
                         if let queue = selectedQueue {

@@ -119,7 +119,7 @@ struct HomeSectionListView: View {
                 ContentUnavailableView("Nothing here yet", systemImage: "books.vertical")
             } else {
                 Group {
-                    if displayMode == .detailed {
+                    if displayMode != .compact {
                         detailedList
                     } else {
                         compactGrid
@@ -205,6 +205,13 @@ struct HomeSectionListView: View {
             }
     }
 
+    /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
+    /// separate presentations and a screen shows one of them — this used to pass
+    /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
+    private var rowPresentation: WorkRow.Presentation {
+        displayMode == .ledger ? .ledger : .standard
+    }
+
     private var detailedList: some View {
         List {
             subjectHeaderSection
@@ -219,7 +226,7 @@ struct HomeSectionListView: View {
                             isSelecting: isSelecting,
                             isSelected: selection.contains(work.id),
                             onToggleSelection: { toggleSelection(work) },
-                            presentation: .ledger
+                            presentation: rowPresentation
                         )
                         // The row's wash is painted here, at the card's true outer
                         // edge, rather than inside `WorkLedgerRow` — see its

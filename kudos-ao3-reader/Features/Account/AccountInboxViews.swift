@@ -89,7 +89,7 @@ struct AccountToolbarContent: ToolbarContent {
                         }
                         if showsWorkListControls {
                             DisplayModeMenuPicker(mode: $displayMode)
-                            if displayMode == .detailed {
+                            if displayMode != .compact {
                                 ExpandAllMenuItem(expandAll: $expandAll)
                             }
                         }
