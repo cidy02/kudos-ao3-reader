@@ -52,6 +52,7 @@ enum AO3WorkFormField {
     static let coauthors = "work[author_attributes][coauthors][]"
     static let authorByline = "work[author_attributes][byline]"
     static let pseudsToAdd = "work[pseuds_to_add]"
+    static let removeSelfAsCreator = "remove_me"
     static let workIDs = "work_ids[]"
 
     static let chapterOnlyTitle = "chapter[title]"
@@ -762,6 +763,11 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
     var commentPermissions: String?
     var workSkinID: String?
     var pseudsToAdd: String = ""
+    /// otwarchive's `_work_form_pseuds` partial offers `remove_me` — a single
+    /// checkbox removing *the signed-in user* from the selected works. It is not
+    /// a list of co-creators to choose from, which is why the row that pointed
+    /// here could only ever read "None".
+    var removesSelfAsCreator: Bool = false
 
     /// Whether anything here can only be applied per work.
     ///
@@ -782,6 +788,7 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
                        commentPermissions, workSkinID]
         if scalars.contains(where: { ($0?.isEmpty == false) }) { return true }
         if !collectionsToAdd.isEmpty || !collectionsToRemove.isEmpty { return true }
+        if removesSelfAsCreator { return true }
         return !pseudsToAdd.isEmpty
     }
 
@@ -839,6 +846,9 @@ nonisolated struct AO3BulkEditChanges: Equatable, Sendable {
         if !pseudsToAdd.isEmpty {
             pairs.append((AO3WorkFormField.pseudsToAdd, pseudsToAdd))
         }
+        if removesSelfAsCreator {
+            pairs.append((AO3WorkFormField.removeSelfAsCreator, "1"))
+        }
         return pairs
     }
 
@@ -892,6 +902,11 @@ nonisolated struct AO3BulkEditForm: Equatable, Sendable {
     var categoryOptions: [AO3FormOption] = []
     var languageOptions: [AO3FormOption] = []
     var currentCollections: [AO3FormOption] = []
+    /// otwarchive's `edit_multiple` renders `work[comment_permissions]` as a
+    /// radio group, the same field the single-work form uses. Parsed rather
+    /// than hardcoded: the row that reads these had no option list at all, so
+    /// any value it offered would have been invented.
+    var commentPermissionOptions: [AO3FormOption] = []
 }
 
 // MARK: - Delete confirm (1bo / 1bs)

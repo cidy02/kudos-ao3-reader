@@ -128,6 +128,34 @@ struct AO3WorkFormParsingTests {
         #expect(applied.rating == "Explicit")
     }
 
+    /// The bulk editor's "Who can comment" and "Remove me as a co-creator" rows
+    /// drew a chevron into nothing because nothing parsed the fields behind
+    /// them. otwarchive's `edit_multiple` does render both — a radio group and a
+    /// `remove_me` checkbox — so they are parsed with the same helpers the
+    /// single-work form uses rather than offering invented values.
+    @Test func bulkFormParsesCommentPermissionsAndSelfRemoval() throws {
+        let form = try AO3Client.parseBulkEditForm(from: try fixture("ao3_edit_multiple"))
+        #expect(form.commentPermissionOptions.map(\.value)
+            == ["enable_all", "users_only", "disable_all"])
+
+        var changes = AO3BulkEditChanges(workIDs: form.workIDs)
+        // Untouched: neither field may appear in a POST that did not set it,
+        // because every field left alone must stay untouched on every work.
+        let untouched = changes.parameters(csrfToken: form.csrfToken)
+        #expect(!untouched.contains { $0.0 == AO3WorkFormField.commentPermissions })
+        #expect(!untouched.contains { $0.0 == AO3WorkFormField.removeSelfAsCreator })
+        #expect(changes.hasUniformChanges == false)
+
+        changes.commentPermissions = "users_only"
+        changes.removesSelfAsCreator = true
+        let dict = Dictionary(uniqueKeysWithValues:
+            changes.parameters(csrfToken: form.csrfToken)
+                .filter { $0.0 != AO3WorkFormField.workIDs })
+        #expect(dict[AO3WorkFormField.commentPermissions] == "users_only")
+        #expect(dict[AO3WorkFormField.removeSelfAsCreator] == "1")
+        #expect(changes.hasUniformChanges)
+    }
+
     @Test func seriesReorderBuildsNWritesInOrder() {
         let writes = AO3SeriesReorderPlan.writes(
             seriesID: 77,

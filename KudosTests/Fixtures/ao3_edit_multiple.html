@@ -38,6 +38,17 @@
     <input type="text" name="work[collections_to_add]" value="">
     <input type="checkbox" name="work[collections_to_remove][]" value="old_bang" id="remove_old_bang">
     <label for="remove_old_bang">Old Bang</label>
+    <fieldset><legend>Who can comment</legend>
+      <input type="radio" name="work[comment_permissions]" value="enable_all" id="cp_all" checked="checked">
+      <label for="cp_all">Everyone</label>
+      <input type="radio" name="work[comment_permissions]" value="users_only" id="cp_users">
+      <label for="cp_users">Registered users only</label>
+      <input type="radio" name="work[comment_permissions]" value="disable_all" id="cp_none">
+      <label for="cp_none">No one</label>
+    </fieldset>
+    <input type="checkbox" name="remove_me" value="1" id="remove_me">
+    <label for="remove_me">Remove me as a co-creator</label>
+    <input type="text" name="work[pseuds_to_add]" value="">
     <p class="caution notice">If you leave a field blank it will remain unchanged. Rating and language overwrite.</p>
     <p class="submit actions"><input type="submit" name="commit" value="Update All Works"></p>
   </form>

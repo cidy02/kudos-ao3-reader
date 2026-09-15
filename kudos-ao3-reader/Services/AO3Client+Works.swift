@@ -391,6 +391,7 @@ extension AO3Client {
         let categories = parseCheckboxes(form, name: AO3WorkFormField.categories)
         let language = parseSelect(form, name: AO3WorkFormField.languageID)
         let collections = parseCheckboxes(form, name: AO3WorkFormField.collectionsToRemove)
+        let commentPerms = parseRadios(form, name: AO3WorkFormField.commentPermissions)
         return AO3BulkEditForm(
             actionURL: actionURL,
             httpMethodOverride: inputValue(form, name: "_method").flatMap {
@@ -403,7 +404,8 @@ extension AO3Client {
             warningOptions: warnings.options,
             categoryOptions: categories.options,
             languageOptions: language.options,
-            currentCollections: collections.options
+            currentCollections: collections.options,
+            commentPermissionOptions: commentPerms.options
         )
     }
 
