@@ -24,6 +24,7 @@ struct ScopedRemovalBulkActionBar: View {
     @State private var confirmRemove = false
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
+    @State private var showingTagSheet = false
 
     private var allSaved: Bool {
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
@@ -83,6 +84,15 @@ struct ScopedRemovalBulkActionBar: View {
             } label: {
                 Label("Add to Collection", systemImage: "square.stack")
             }
+            // 1bg names Tag as one of the four things a queue can do to a
+            // selection. The sheet already existed for 1af and is already wired
+            // into Library's own bar; both surfaces that mount this bar — a queue
+            // and a collection — hold local works, so it applies to each.
+            Button {
+                showingTagSheet = true
+            } label: {
+                Label("Tag", systemImage: "tag")
+            }
             Button {
                 bulkToggleFinished()
             } label: {
@@ -111,6 +121,9 @@ struct ScopedRemovalBulkActionBar: View {
         }
         .sheet(isPresented: $showingAddToCollection) {
             AddToCollectionView(works: selectedWorks)
+        }
+        .sheet(isPresented: $showingTagSheet) {
+            WorkBulkTagSheet(works: selectedWorks)
         }
         .confirmationDialog(
             "Remove \(selectedWorks.count) work\(selectedWorks.count == 1 ? "" : "s")?",

@@ -73,7 +73,7 @@ struct ReadingQueueSettingsView: View {
     /// (rename, delete) commits on its own action too.
     private var colourPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            QueueHueSwatchRow(
+            SubjectHueSwatchRow(
                 selection: Binding(
                     get: { queue.hue },
                     set: { newValue in
