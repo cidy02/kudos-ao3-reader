@@ -609,6 +609,21 @@ build succeeded using the specified worktree/project/scheme/simulator/DerivedDat
 before compilation because its sandbox could not access SwiftPM cache paths
 or CoreSimulator; the purpose-built Xcode tool completed the same build.
 
+**1y visual gate, closed 2026-09-15 (Claude).** Codex could not run it —
+it reached for Computer Use and was refused Simulator access — so the
+Dashboard was inspected here instead, on the simulator signed into a live
+account, via `xcrun simctl io <udid> screenshot`. Confirmed on screen at
+`50b215de`: floating back/overflow chrome, the AO3-Account kicker and rule,
+the username as the page title, a New work action in the header, and
+**Fandoms, Recent works, Recent series and Recent bookmarks all present at
+once**, each a `SectionRuleHeader` carrying its real count and a See-all
+link. The card hero and the native segmented picker are gone, and the
+per-work performance strip renders inside the card. Recent series shows its
+empty state rather than a fabricated row; bookmark notes survive the
+restyle. Codex's own commit records what it left out and why, and states
+that 1u and 1w still need their own scopes, actions and running-order
+presentation — their new headers are not parity.
+
 <a id="dashboard-1y-2026-09-14"></a>
 ### 2026-09-14 — T-219 Dashboard composition (Codex)
 
