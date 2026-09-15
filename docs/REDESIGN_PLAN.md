@@ -609,6 +609,80 @@ build succeeded using the specified worktree/project/scheme/simulator/DerivedDat
 before compilation because its sandbox could not access SwiftPM cache paths
 or CoreSimulator; the purpose-built Xcode tool completed the same build.
 
+<a id="dashboard-1y-2026-09-14"></a>
+### 2026-09-14 — T-219 Dashboard composition (Codex)
+
+**Implementation `50b215de`, local only on `claude/redesign-screens-completion-acd422`.**
+Visual verification is **still pending**; this does not mark 1y, 1u, or 1w complete.
+
+- `AO3DashboardView` explicitly chooses the dashboard composition in
+  `AuthorProfileView`. `AuthorDashboardSections.swift` renders Fandoms, Recent
+  works, Recent series, and Recent bookmarks together, each with a ruled heading;
+  every recent group links to its full native list. Empty and unreadable groups
+  have distinct copy. Pseud switching stays in the subject header beside the
+  existing native New-work destination. No write action was exercised.
+- `AO3Client.parseAuthorDashboard` parses the three scoped groups from the HTML
+  already fetched for the header. Verified against otwarchive's
+  [users/_contents.html.erb](https://github.com/otwcode/otwarchive/blob/master/app/views/users/_contents.html.erb).
+  `AO3AuthorProfileModel(dashboardOnly: true)` does not fetch Works/Series/
+  Bookmarks/About; See-all opens the existing lazy list model. Dashboard HTML
+  caching and activation include session generation. Account list totals come
+  only from `AO3AccountListCountsCache`, with no account total on a pseud route.
+- `AO3AuthorWorkCard` shares the same work card between own Works and Dashboard,
+  including the performance strip inside the card. Printed zero survives;
+  missing figures stay absent. Local matches keep `SensitiveWorkRow` navigation;
+  its unrevealed mature work does not expose a performance strip. Remote ledger
+  metadata avoids repeating the strip's numbers. Series text now uses theme
+  foregrounds and retains its existing creator/date fields. Bookmark notes,
+  tags, recommendation/private state and collection metadata remain visible.
+- Works/Series opened via `initialTab` now have their own account subject header
+  and cache-backed tally, without the unrelated profile-content picker. **1u and
+  1w still need their own remaining screen composition/capabilities:** 1u's
+  Works/In collections/Gifts scopes, sort/filter and writing/bulk/swipe actions;
+  1w's spine-stack/running-order presentation, restricted/bookmark metadata and
+  Edit/Reorder destinations. Headers alone do not complete these boards.
+
+**Deliberate 1y omissions / departures:**
+
+- Joined date is on the separate About page, not the fetched dashboard header;
+  no new request was added for the drawing's date. Pseud switching uses actual
+  parsed names, but no numeric pseud or invitation total exists in the permitted
+  counts cache. Fandom work counts are parsed in the header but likewise are not
+  in that cache; their numerals are omitted under this task's grounding rule.
+- Example names, dates and counts are never copied from the drawing. Unknown
+  per-work performance values are absent, not zero. No additional statistic
+  glyphs were added to the existing text-based `SubjectStatStrip`.
+- Native back/overflow controls and the existing pushed-screen hidden floating
+  tab bar remain; custom 34pt chrome and the drawn bottom tab bar were not built.
+  The 34pt circles conflict with the established 44pt minimum tap target.
+- Series/bookmarks retain their full existing metadata rather than reducing them
+  to the drawing's compact title-only samples. The artboard's explanatory design
+  footer is not product copy and was not rendered.
+
+**Verification:** `Scripts/lint.sh` exit 0, no `error:` output, with SwiftLint's
+cache path redirected to `/private/tmp` via a temporary wrapper (the normal cache
+write is sandbox-denied; no lint rules or source were changed by the wrapper).
+XcodeBuildMCP iOS Debug build for the requested worktree/project/scheme/UDID/
+DerivedData **SUCCEEDED**, 8 warnings outside changed files, 0 errors. Focused
+`AO3DashboardTests`, `AO3AuthorProfileParserTests`, `AO3AuthorProfileStateTests`,
+and `AO3AuthorActionFencingTests`: **26 passed, 0 failed, 0 skipped**. Invariants
+and `git diff --check` passed. Full suite and macOS build were not run in this
+slice; no cross-platform or whole-suite completion claim.
+
+**Screenshot limit:** direct requested `xcodebuild` and `xcrun simctl io …
+screenshot --type=png` failed on sandbox/CoreSimulator/cache access. The connector
+built, installed and launched the app and captured a JPEG. Actually inspected
+`/private/tmp/kudos-1y-home-observed.jpg`: Light Home, empty reading state, and
+signed-out subscription copy; **it is not evidence of 1y/1u/1w**. Computer Use
+returned “not approved to use Simulator,” and the available Xcode connector has
+snapshot/screenshot tools but no tap/swipe tools. Simulator access was requested;
+no navigation or live AO3 write was attempted via another mechanism. The final
+small subtitle/ownership-guard cleanup also compiled successfully afterward.
+
+**Next:** enable Simulator UI access, inspect the signed-in Dashboard and its
+See-all Works/Series destinations, and check Light/Dark/Sepia + large text. Keep
+this slice pending visual review; no push, merge, main change, or Android port.
+
 ### 2026-09-14 — The overnight run: Account built, everything else audited (Claude)
 
 Nine commits between `51d5f28b` and `9dfc4af8`, unattended, under the §4 policy.
