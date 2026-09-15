@@ -1078,6 +1078,47 @@ reasons this is the owner's call rather than a unilateral rewrite:
 
 Worth doing, but as its own change with the owner's call on (2) and (3).
 
+<a id="association-turn-audit-2026-09-15"></a>
+**1bu–1bx audited 2026-09-15. 1bw built; 1bx already correct; 1bu blocked on the
+parser; 1bv is a mockup the spec itself says not to build.**
+
+**1bw built — and it was five dead controls.** `WorkEditView.associationPanel`
+drew Series, Add to collections, Gift recipients, Co-creators and Inspired by,
+each with a disclosure chevron and **no destination**. Ten rows in that file draw
+a chevron; two navigated. `WorkCollectionsGiftsView` and `WorkSeriesPickerView`
+are 1bw's two screens, and neither fetches anything: `AO3WorkForm` already parses
+the offerable collections and the user's series with their `isSelected` state, so
+the pickers edit the arrays the form posts back. `AO3CollectionAccess.rowState`
+already yielded 1bw's three row states, so "Moderated — a maintainer approves the
+work" is the model's own answer rather than a new rule. Unrevealed and anonymous
+append rather than replace, because a collection can be moderated *and*
+unrevealed and the board's footnote explains both. Six tests.
+
+Still chevron-without-destination, recorded not built: **Co-creators**,
+**Inspired by**, and **Work skin**. None is a 1bw screen — co-creators needs the
+pseud-invite flow 1bw only mentions in passing, and the other two have no board
+in this turn.
+
+**1bx already correct, and the tree is why.** Its prose says "roles are a badge
+on the row rather than a section each", which reads as a criticism of
+`CollectionMaintainersView`'s Owners / Moderators sections — but the artboard
+*draws* exactly those two sections, with a role badge on each row as well. The
+prose describes intent; the drawing is the screen. `ModeratedItemsView` likewise
+already offers Approve, Reject-with-reason (1ce) and Message the creator.
+
+**1bu blocked at the parser, not the screen.** The tag picker exists (it is 1av
+and 1aw's screen), but 1bu wants each suggestion to carry "AO3's work count and a
+canonical mark", with non-canonical marked amber.
+`AO3Client.autocompleteTags(kind:term:)` returns `[String]` — no count, no
+canonical flag — so the screen cannot show either without the autocomplete parse
+being widened first. Worth doing; it is a services change, not a layout one.
+
+**1bv is explicitly not to be built.** Its own BUILD note ends: "Mockup, not the
+editor. What is drawn here is the shape of the screen, not a working editor — the
+real one still has to be built, and it should almost certainly sit on an existing
+open-source text editor rather than a hand-rolled one." Taking that at its word.
+
+
 
 
 

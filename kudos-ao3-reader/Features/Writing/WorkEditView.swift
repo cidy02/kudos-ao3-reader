@@ -190,17 +190,29 @@ struct WorkEditView: View {
 
     private var associationPanel: some View {
         VStack(spacing: 0) {
+            // 1bw's two pushes. These three rows drew a chevron and opened nothing
+            // until now; the form already carries every option they need, so the
+            // pickers edit what it will post back rather than fetching anything.
             SubjectFormRow(label: "Series",
-    value: form.series.isEmpty ? "None" : "\(form.series.count)",
+    value: seriesValue,
     showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Series") {
+                    WorkSeriesPickerView(series: $form.series, workTitle: form.title)
+                }
             SubjectRowSeparator()
             SubjectFormRow(label: "Add to collections",
-    value: form.collections.isEmpty ? "None" : "\(form.collections.count)",
+    value: collectionsValue,
     showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Add to collections") {
+                    collectionsAndGifts
+                }
             SubjectRowSeparator()
             SubjectFormRow(label: "Gift recipients",
     value: form.gifts.isEmpty ? "None" : "\(form.gifts.count)",
     showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Gift recipients") {
+                    collectionsAndGifts
+                }
             SubjectRowSeparator()
             SubjectFormRow(label: "Co-creators",
     value: form.creators.selectedPseudIDs.isEmpty ? "None" : "\(form.creators.selectedPseudIDs.count)",
@@ -211,6 +223,31 @@ struct WorkEditView: View {
     showsDisclosure: true)
         }
         .subjectPanel()
+    }
+
+    /// One screen behind two rows — 1bw draws collections and gifts together,
+    /// because both are "who else this work belongs to" and both post on the same
+    /// save.
+    private var collectionsAndGifts: some View {
+        WorkCollectionsGiftsView(
+            collections: $form.collections,
+            gifts: $form.gifts,
+            workTitle: form.title,
+            parentWorkCount: form.parentWork.url.isEmpty ? 0 : 1
+        )
+    }
+
+    /// Selected, not offered: the form carries every collection AO3 offers this
+    /// work, so counting the array would read "None" as a number of choices
+    /// rather than of memberships.
+    private var collectionsValue: String {
+        let count = form.collections.filter(\.isSelected).count
+        return count == 0 ? "None" : "\(count)"
+    }
+
+    private var seriesValue: String {
+        let count = form.series.filter(\.isSelected).count
+        return count == 0 ? "None" : "\(count)"
     }
 
     private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }
