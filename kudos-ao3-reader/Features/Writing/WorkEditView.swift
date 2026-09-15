@@ -215,12 +215,21 @@ struct WorkEditView: View {
                 }
             SubjectRowSeparator()
             SubjectFormRow(label: "Co-creators",
-    value: form.creators.selectedPseudIDs.isEmpty ? "None" : "\(form.creators.selectedPseudIDs.count)",
+    value: creatorsValue,
     showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Co-creators") {
+                    WorkCreatorsPickerView(creators: $form.creators, workTitle: form.title)
+                }
             SubjectRowSeparator()
             SubjectFormRow(label: "Inspired by",
     value: form.parentWork.url.isEmpty ? "None" : "1",
     showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Inspired by") {
+                    WorkParentWorkPickerView(
+                        parentWork: $form.parentWork,
+                        languageOptions: form.languageOptions
+                    )
+                }
         }
         .subjectPanel()
     }
@@ -243,6 +252,23 @@ struct WorkEditView: View {
     private var collectionsValue: String {
         let count = form.collections.filter(\.isSelected).count
         return count == 0 ? "None" : "\(count)"
+    }
+
+    private var creatorsValue: String {
+        let pseuds = form.creators.selectedPseudIDs.count
+        let invited = form.creators.coauthorByline.isEmpty ? 0 : 1
+        if pseuds == 0 && invited == 0 { return "None" }
+        if invited == 0 { return "\(pseuds)" }
+        return "\(pseuds) + 1 invited"
+    }
+
+    /// AO3's work-skin select has no blank entry, but "no skin" is a real
+    /// choice — so one is prepended rather than leaving the row stuck on
+    /// whatever happened to be first.
+    private func defaultFirst(_ options: [AO3FormOption], label: String) -> [AO3FormOption] {
+        options.contains { $0.value.isEmpty }
+            ? options
+            : [AO3FormOption(value: "", title: label)] + options
     }
 
     private var seriesValue: String {
@@ -288,18 +314,32 @@ struct WorkEditView: View {
                     }
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Work skin",
-    value: form.workSkinID.isEmpty ? "Default" : form.workSkinID,
-    showsDisclosure: true)
+            WritingChoiceRow(
+                title: "Work skin",
+                value: $form.workSkinID,
+                options: defaultFirst(form.workSkinOptions, label: "Default")
+            )
         }
         .subjectPanel()
     }
 
     private var publicationPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Chapters posted",
-    value: "\(form.chaptersPosted ?? 1) of \(form.chapterTotal.isEmpty ? "?" : form.chapterTotal)",
-    showsDisclosure: true)
+            // 1bo: "setting a total above what is posted is what marks a work in
+            // progress". The posted count is AO3's to report, the total is the
+            // writer's to set — so only one half of this row is editable.
+            SubjectFormRow(label: "Chapters posted", arrangement: .control) {
+                HStack(spacing: 6) {
+                    Text("\(form.chaptersPosted ?? 1) of")
+                        .foregroundStyle(.secondary)
+                    TextField("?", text: $form.chapterTotal)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 64)
+                        #if os(iOS)
+                            .keyboardType(.numberPad)
+                        #endif
+                }
+            }
             SubjectRowSeparator()
             SubjectFormRow(label: "Work is complete", arrangement: .control) {
                 Toggle("", isOn: Binding(
@@ -324,9 +364,11 @@ struct WorkEditView: View {
                     .labelsHidden()
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Who can comment",
-    value: form.commentPermissions.isEmpty ? "Leave as is" : form.commentPermissions,
-    showsDisclosure: true)
+            WritingChoiceRow(
+                title: "Who can comment",
+                value: $form.commentPermissions,
+                options: form.commentPermissionOptions
+            )
         }
         .subjectPanel()
     }
