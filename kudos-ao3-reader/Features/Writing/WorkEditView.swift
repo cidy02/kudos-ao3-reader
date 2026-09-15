@@ -240,6 +240,15 @@ struct WorkEditView: View {
                             needsPublicationRefresh = true
                         }
                     }
+                SubjectRowSeparator()
+                // 1bp's own page, reachable at last. Gated exactly like Add chapter
+                // rather than on `workID` alone: AO3 keeps `/works/<id>/edit_tags`
+                // for a work that exists publicly, and a draft's tags are already
+                // editable in the form above this row.
+                SubjectFormRow(label: "Edit tags", value: "", showsDisclosure: true)
+                    .subjectRowNavigation(accessibilityLabel: "Edit tags") {
+                        WritingTagsDestination(workID: workID)
+                    }
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Work skin",
