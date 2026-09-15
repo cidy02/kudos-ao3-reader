@@ -37,6 +37,7 @@ struct ReadingQueueSettingsView: View {
     @State private var showingRename = false
     @State private var renameText = ""
     @State private var confirmDelete = false
+    @State private var showingTags = false
 
     private var palette: SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: queue.displayHue)
@@ -96,6 +97,32 @@ struct ReadingQueueSettingsView: View {
         .subjectPanel()
     }
 
+    /// 1h's queue tags. The row states the count and opens the shared-vocabulary
+    /// editor; 1i's organizer rail filters on the same relationship.
+    private var tagsPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SubjectFormRow(
+                label: "Tags",
+                value: queue.tags.isEmpty ? "None" : "\(queue.tags.count)",
+                showsDisclosure: true
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { showingTags = true }
+            .accessibilityAddTraits(.isButton)
+            if !queue.tags.isEmpty {
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(queue.tags.sorted { $0.name < $1.name }) { tag in
+                        SubjectChip(text: tag.name, style: .tinted, palette: palette)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .subjectPanel()
+    }
+
     var body: some View {
         List {
             Section {
@@ -122,6 +149,13 @@ struct ReadingQueueSettingsView: View {
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             }
 
+            Section {
+                SubjectFieldLabel(text: "Tags", style: .formGroup)
+                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
+                tagsPanel
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+            }
+
             if queue.kind == .custom {
                 Section {
                     SubjectFieldLabel(text: "Rename & Delete", style: .formGroup)
@@ -133,6 +167,7 @@ struct ReadingQueueSettingsView: View {
         }
         .cardList()
         .subjectScreenWash(palette: palette)
+        .sheet(isPresented: $showingTags) { QueueTagSheet(queue: queue) }
         #if os(macOS)
         .navigationTitle(queue.displayName)
         #endif
