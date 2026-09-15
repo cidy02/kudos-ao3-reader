@@ -951,6 +951,49 @@ add chapter, delete — so the standing no-write rule puts the whole turn out of
 bounds for a visual pass. The copy fix below was found by static analysis for
 that reason.
 
+<a id="series-edit-1br-2026-09-15"></a>
+**1br Series Edit and Reorder — built 2026-09-15, over an API that was already
+finished.** `SeriesEditView`, `SeriesReorderView` and `SeriesEditDestination`
+call `loadSeriesForm`, `saveSeries` and `reorderSeries`, which had no callers at
+all. `reorderSeries` already implemented the board's own constraint — one save,
+N sequential POSTs through request-coordinator slots, because position lives on
+each work — so the screen's only job there is not to start those writes until
+the reader stops dragging.
+
+Reached from `AO3SeriesDetailView`'s overflow menu, gated on
+`AO3SeriesSummary.isCreator(username:)`. That rule is its own tested value
+because the obvious version is wrong in both directions: **a byline is a pseud**,
+so comparing the displayed name to the account name both misses a creator posting
+under a pseud and matches a stranger whose pseud equals your account name.
+`SeriesCreatorTests` pins that pair, plus orphaned (a real navigable username
+that still must not unlock Edit), anonymous/deleted (no username at all), and
+co-creator lists.
+
+**Three things 1br draws are deliberately absent, each because the app has no
+call behind them:**
+
+1. **"Remove works"** — there is no remove-from-series endpoint anywhere; the
+   manage page is parsed for order only. The row would open nothing.
+2. **The reorder rows' metadata** ("4,200 words · posted Jan 2023").
+   `parseSeriesManagePage` reads AO3's sortable list, which prints neither, and
+   `AO3SeriesWorkRow` carries only workID, serialWorkID, title, position and
+   isDraft. Drawing either figure would mean inventing it.
+3. **Delete is an Open-on-AO3 link**, which is what the artboard's own label
+   ("Delete series **on AO3**") says. There is no delete call, and this is the
+   right side of that line: deleting a series is irreversible and belongs on
+   AO3's own confirm page.
+
+The header subtitle *is* real — `AO3SeriesSummary` carries `workCount` and
+`words`, so "Water · 3 works · 118,600 words" comes from the blurb the reader
+tapped, with each part dropped rather than zeroed when AO3 did not print it.
+
+**Unverifiable on the simulator, like the whole writing turn.** Every control
+here POSTs to AO3 — save, reorder, delete — so the standing no-write rule rules
+out exercising any of it against the signed-in account. The signed-in account
+also has no series to open the screen from. Compiled, linted and unit-tested
+only; the write paths need the owner.
+
+
 
 
 

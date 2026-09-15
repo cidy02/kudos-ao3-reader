@@ -27,6 +27,20 @@ struct AO3SeriesDetailView: View {
     @State private var isShowingStaleCache = false
     @State private var expandAll = false
     @State private var loadTask: Task<Void, Never>?
+    /// 1br's Edit series, pushed rather than presented — a `NavigationLink` inside
+    /// a `Menu` does not reliably push.
+    @State private var isEditingSeries = false
+
+    /// Whether the signed-in account is one of this series' creators — the gate on
+    /// 1br's Edit series.
+    ///
+    /// Matched on the *registered identity's username*, not on the displayed
+    /// byline: a byline is a pseud, and comparing it to `auth.username` would both
+    /// miss a creator posting under a pseud and match a stranger whose pseud
+    /// happens to equal your account name.
+    private var canEditSeries: Bool {
+        auth.isLoggedIn && series.isCreator(username: auth.username)
+    }
 
     var body: some View {
         List {
@@ -58,6 +72,11 @@ struct AO3SeriesDetailView: View {
                 ActionToolbar(items: [
                     AnyView(
                         Menu {
+                            if canEditSeries {
+                                Button { isEditingSeries = true } label: {
+                                    Label("Edit series", systemImage: "square.and.pencil")
+                                }
+                            }
                             Button { router.open(series.url) } label: {
                                 Label("Open on AO3", systemImage: "safari")
                             }
@@ -72,6 +91,9 @@ struct AO3SeriesDetailView: View {
                         }
                     )
                 ])
+            }
+            .navigationDestination(isPresented: $isEditingSeries) {
+                SeriesEditDestination(series: series)
             }
             .refreshable {
                 // bypassCache clears the app-level AO3AuthorPageCache; this clears the
