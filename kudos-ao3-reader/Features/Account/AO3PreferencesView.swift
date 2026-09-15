@@ -61,6 +61,11 @@ struct AO3PreferencesView: View {
                 }
             }
         }
+        // 1bb: the confirmation is "a transient toast above the tab bar — no
+        // row-level spinner, no banner that pushes content down. It sits over
+        // everything and leaves on its own." It used to be a row inside the list,
+        // which is the one thing that board rules out.
+        .overlay(alignment: .bottom) { toastOverlay }
         #if os(macOS)
         .navigationTitle("My Preferences")
         #endif
@@ -89,9 +94,6 @@ struct AO3PreferencesView: View {
         List {
             Section {
                 header.pageBodyRow(top: 20, gutter: selfGuttered)
-                if let banner {
-                    bannerView(banner).pageBodyRow(top: 14, gutter: gutter)
-                }
             }
 
             accountLinksSection
@@ -469,7 +471,47 @@ struct AO3PreferencesView: View {
 // MARK: - 1z page furniture
 
 extension AO3PreferencesView {
+    /// Floats over the content and clears itself. A success leaves on its own —
+    /// 1bb's "leaves on its own" — while a failure stays until it is dismissed or
+    /// retried, because a save that did not happen is not something to let slide
+    /// past unread.
     @ViewBuilder
+    private var toastOverlay: some View {
+        if let banner {
+            HStack(spacing: 10) {
+                bannerView(banner)
+                if !bannerIsSuccess(banner) {
+                    Button("Retry") { Task { await save() } }
+                        .font(.system(size: 14, weight: .semibold))
+                        .disabled(isSaving)
+                }
+            }
+            .padding(.horizontal, 6)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(themeManager.appTheme.glassStroke(0.12), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+            .padding(.bottom, 18)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .task(id: bannerToastID) {
+                guard bannerIsSuccess(banner) else { return }
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                withAnimation { self.banner = nil }
+            }
+            .accessibilityAddTraits(.isStaticText)
+        }
+    }
+
+    /// Restarts the dismissal timer when a second save replaces the first toast,
+    /// rather than letting the original timer clear the new one early.
+    private var bannerToastID: String {
+        switch banner {
+        case let .success(text): "success:\(text)"
+        case let .error(text): "error:\(text)"
+        case nil: "none"
+        }
+    }
+
     private func bannerView(_ banner: Banner) -> some View {
         HStack(spacing: 9) {
             Image(systemName: bannerIsSuccess(banner) ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")

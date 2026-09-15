@@ -1122,6 +1122,87 @@ fields "map to AO3's query parameters", and `AO3AuthorRoute.contentURL` takes
 only a page — so 1v needs the route to carry sort params first. Neither was
 attempted this tick.
 
+<a id="states-turn-audit-2026-09-15"></a>
+**"Six states the locked screens never drew" (1ay–1bf) audited 2026-09-15 —
+seven of eight already built. One real divergence, fixed.**
+
+Built, with doc comments that match their boards almost word for word:
+**1ay** `LibraryFilterEmptyState` ("states the hidden count, names the filters
+that collide, offers single-filter drops with real remaining counts"),
+**1az** (the empty branch ends in an `AccountExternalNavCard` to `series/new`,
+which is the board's "the action leaves for Safari"), **1bc**'s per-fandom
+watermark (`ReadingLogService.markVisited`), **1bd** (`ReadingAffinities.tags`),
+and **1ba / 1be / 1bf** — the comment composer, its keyboard detent and the
+formatting tray (`CommentMarkup`, whose own comment makes the board's argument:
+AO3 has no rich text editor, so the tray writes `<strong>` and names it).
+
+**Those three notes are stale in an interesting way.** 1ba/1be/1bf each say
+"posting comments is an AO3 write the app does not implement" — it does, and the
+composer was seen running on the simulator during the 1f tick, character budget
+and format bar included.
+
+**1bb was the one real gap, and it is a spec'd anti-pattern.** The board asks for
+"a transient toast above the tab bar — no row-level spinner, **no banner that
+pushes content down**. It sits over everything and leaves on its own."
+`AO3PreferencesView` put its confirmation in a `Section` at the top of the list,
+which is exactly the banner 1bb rules out. It is now an `.overlay(alignment:
+.bottom)` capsule that floats over the content. A **success dismisses itself**
+after three seconds; a **failure stays and carries Retry**, because a save that
+did not happen should not slide past unread — which is also the board's "a
+failure needs the same slot with the red wash and a Retry". The dismissal timer
+is keyed on the toast's text so a second save restarts it rather than letting the
+first timer clear the second toast.
+
+Not attempted: 1az's exact empty copy ("You have not made a series. / A series
+groups your works so they read in order…"), which differs in wording from the
+app's generic message while the structure and the AO3 escape hatch match.
+
+
+<a id="destinations-turn-audit-2026-09-15"></a>
+**1bg–1bm audited 2026-09-15 — mostly built. Two real gaps closed, two recorded.**
+
+Already built and reachable, sub-clauses checked: **1bi** Reading Insights (the
+words-per-hour join it names works, because `ReadingSession` stores `workID` and
+`wordCount`), **1bj** Recently Deleted (Restore / Delete Permanently, the
+expiring-soon threshold, and the file already documents the board's 30 days
+against the app's real 90), **1bl** the AO3 collection form, **1bm** the
+collections sort-and-filter sheet.
+
+**1bg — Tag added.** The board names four things a queue can do to a selection:
+Download, Move to, Tag, Remove. `ScopedRemovalBulkActionBar` had Remove plus an
+Actions menu (save, favourite, saved-for-later, add to queue, add to collection,
+finished) and no Tag — while `WorkBulkTagSheet`, built earlier for 1af, was
+already wired into Library's own bar and takes exactly this input. Both surfaces
+that mount the scoped bar (a queue and a collection) hold local works, so Tag
+applies to each.
+
+Still missing from 1bg, recorded: **Move to** and **Download**. Move-to is not
+add-to-queue — it is add *and* remove, two verbs as the board's own note says,
+and the destination picker (`AddToQueueView`) exists but the paired removal does
+not. There is no bulk download anywhere in the app.
+
+**1bk — the collection colour, the same defect as the queue's.**
+`WorkCollection` had no hue and `Collections.swift` derived it from
+`CoverArt.hue(for: collection.name)`, so **renaming a collection silently
+repainted it** — exactly what `ReadingQueue.hue` fixed. 1bk is explicit: "colour
+is the collection's identity everywhere else in the app, so it is picked here
+rather than assigned". `WorkCollection.hue` + `displayHue` mirror the queue's,
+including the nil-means-name-hash fallback that leaves every existing collection
+looking identical. Backup carries it as an additive optional whose merge only
+ever fills a colour in, never clears one. The picker sits beside Rename in
+Collection Details, since 1bk's edit sheet is name + colour + delete and those
+two already live there.
+
+`QueueHueSwatches` became **`SubjectHueSwatches`**: it now serves queues *and*
+collections, and a name that says "queue" would be the kind of half-truth this
+sweep keeps finding.
+
+Not built: **1bk's create-time colour** (local collections are created by a
+name-only alert in two places, not a sheet) and its reorder row. **1bh** is
+blocked on the same queue-tags schema already recorded — a shared queue's tag
+manager cannot exist before queues have tags at all.
+
+
 <a id="own-works-1u-2026-09-15"></a>
 **1u built 2026-09-15 — the swipe actions.** `AO3AuthorWorksSection` gained
 `onOwnWorkAction`, and `AuthorProfileView` turns each action into navigation:
