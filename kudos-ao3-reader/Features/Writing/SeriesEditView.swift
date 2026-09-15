@@ -188,11 +188,10 @@ struct SeriesEditView: View {
     }
 
     private var deletePanel: some View {
-        SubjectFormRow(label: "Delete series on AO3", value: "", showsDisclosure: true)
-            .contentShape(Rectangle())
-            .onTapGesture { openURL(series.url) }
-            .accessibilityAddTraits(.isButton)
-            .subjectPanel()
+        SubjectFormRow(label: "Delete series on AO3", value: "", showsDisclosure: true) {
+            openURL(series.url)
+        }
+        .subjectPanel()
     }
 
     // MARK: Copy

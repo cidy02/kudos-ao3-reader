@@ -321,7 +321,6 @@ struct TagSetView: View {
             SubjectFormRow(
                 label: "Fandoms per person",
                 value: "\(tagSet?.fandomNominationLimit ?? 0)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
@@ -330,7 +329,6 @@ struct TagSetView: View {
             SubjectFormRow(
                 label: "Characters per person",
                 value: "\(tagSet?.characterNominationLimit ?? 0)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
@@ -339,7 +337,6 @@ struct TagSetView: View {
             SubjectFormRow(
                 label: "Relationships per person",
                 value: "\(tagSet?.relationshipNominationLimit ?? 0)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
@@ -348,7 +345,6 @@ struct TagSetView: View {
             SubjectFormRow(
                 label: "Additional tags per person",
                 value: "\(tagSet?.freeformNominationLimit ?? 0)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
         }
