@@ -95,16 +95,26 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
         Self.makeURL(segments: ["users", username, "profile"])
     }
 
-    func contentURL(_ content: Content, page: Int = 1) -> URL {
+    /// 1v's sort rides here rather than on the sheet, because AO3 sorts this
+    /// index server-side: the control cannot mean anything until the URL it
+    /// builds carries `work_search[...]`. Applies to `.works` only — bookmarks
+    /// use a `bookmark_search` form of their own, and the series index has no
+    /// sort form at all, so passing a works sort to either would build a URL
+    /// AO3 ignores while the UI claimed it had sorted.
+    func contentURL(_ content: Content, page: Int = 1, sort: AO3WorksSort? = nil) -> URL {
         var segments = ["users", username]
         if let pseud {
             segments += ["pseuds", pseud]
         }
         segments.append(content.rawValue)
-        return Self.makeURL(
-            segments: segments,
-            queryItems: page > 1 ? [URLQueryItem(name: "page", value: String(page))] : []
-        )
+        var queryItems: [URLQueryItem] = []
+        if page > 1 {
+            queryItems.append(URLQueryItem(name: "page", value: String(page)))
+        }
+        if content == .works, let sort {
+            queryItems += sort.queryItems
+        }
+        return Self.makeURL(segments: segments, queryItems: queryItems)
     }
 
     static func isAO3URL(_ url: URL) -> Bool {
