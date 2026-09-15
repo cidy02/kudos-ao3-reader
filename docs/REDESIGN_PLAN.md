@@ -644,6 +644,29 @@ its own design pass, and building the ledger rows over the existing `!hasEPUB`
 partition would put the artboard's chrome on the wrong set of works. **Not
 started deliberately.**
 
+> **CLOSED 2026-09-15 — and the "not stored today" above was already stale when
+> it was written.** The log exists: commit `725695e` added `ReadingSession`
+> (which stores `durationSeconds`, `didFinish` for the reread count, and
+> `chapterCountAtVisit` commented *"for 'changed since' (1ah)"*) and
+> `ReadingLogService` (whose `defaultAbandonedThreshold` is commented *"1ai
+> default"*). The screens exist too — `LibraryHistoryGrouping` (Time / State /
+> Fandom / Flat), `ReadingHistoryFactsStrip`, `ReadingAffinities` and
+> `FavoriteAffinityRow` — as the Phase 9 table records. What was genuinely still
+> wrong was one line: `LibrarySectionKind.history` still selected `!hasEPUB`, so
+> the right chrome was drawn over the wrong set of works, and 1ai's **Abandoned
+> bucket was unreachable by construction** — `isAbandoned` requires
+> `isInProgress`, which requires the EPUB that `!hasEPUB` excludes.
+> `LibraryHistoryGrouping` had found that overlap and documented it rather than
+> fixing it, correctly declining to redefine the shelf from inside a grouping
+> helper. The predicate is now `hasStartedReading || isFinished`, ordered
+> most-recently-read (the time buckets assume that sort).
+>
+> The lesson is the one this plan keeps paying for: **a blocker is a claim with
+> a date on it.** This one survived several ticks of a sweep purely because it
+> read like a settled fact and nobody re-grepped for the model it said was
+> missing. Re-verify a blocker before routing around it, exactly as a "done"
+> gets re-verified before being trusted.
+
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
 one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs
 to is "Home — the tab and every subsection behind its chevrons". The app instead

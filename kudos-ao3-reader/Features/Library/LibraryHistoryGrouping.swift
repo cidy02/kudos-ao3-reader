@@ -66,15 +66,15 @@ nonisolated enum LibraryHistoryGrouping: String, CaseIterable, Hashable, Sendabl
             // Five buckets, not the spec's three, because `SavedWork.ReadingState`
             // is a four-way partition and one of the four needs splitting.
             //
-            // **Abandoned cannot occur on today's Reading History shelf**, and that
-            // is worth knowing rather than discovering. `ReadingLogService.isAbandoned`
-            // requires `isInProgress`, which requires the EPUB to be on disk;
-            // `LibrarySectionKind.history` selects `!hasEPUB`. The two never overlap.
-            // The bucket stays because the rule is right and the shelf may widen —
-            // quietly widening the shelf here to light it up would change what
-            // Reading History *contains*, which is not this screen's call to make.
-            // Meanwhile "Read, not finished" is the bucket that actually populates,
-            // and it is the same idea for a work whose file has already been freed.
+            // Abandoned populates now. It could not while `LibrarySectionKind`
+            // selected `!hasEPUB`: `ReadingLogService.isAbandoned` requires
+            // `isInProgress`, which requires the EPUB on disk, so the two never
+            // overlapped and this bucket was dead. That predicate is now "works you
+            // have read", per 1ah, and mid-way works are in the shelf.
+            //
+            // "Read, not finished" stays and is not a duplicate: it is the same idea
+            // for a work whose file has already been freed, which cannot be
+            // `.inProgress` and so can never be judged abandoned.
             return ordered(
                 ["In progress", "Abandoned", "Read, not finished", "Finished", "Not started"],
                 bucketing: works

@@ -51,8 +51,8 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .downloaded:
             "No downloads yet. Download a work as EPUB to read it offline."
         case .history:
-            "Works you finish without saving land here. Their files are freed, "
-                + "but you can re-download and revisit them anytime."
+            "Nothing read yet. Works you open land here with the time you spent on "
+                + "them, how often you have reread them, and whether they changed since."
         case .favorites:
             "Swipe a work in your Library, or tap the star on its page, to favorite it."
         }
@@ -99,13 +99,23 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
                 .filter { $0.hasEPUB && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { $0.dateAdded > $1.dateAdded }
         case .history:
-            // Works whose EPUB was freed after finishing (revisitable by
-            // re-downloading). Queued works whose preservation is pending/failed also
-            // have hasEPUB == false but are protected — keep them out, matching the
-            // partition the old Account-tab Local Reading History list used.
+            // Works you have actually read — artboard 1ah's "the local one, not
+            // AO3's". This was `!hasEPUB` (downloads freed after finishing), which
+            // was the only reading record the app had before the local reading log
+            // landed. That partition cannot hold 1ah's own content: hours spent,
+            // reread count and changed-since are all zero for a work freed without
+            // ever being opened, and 1ai's Abandoned section — mid-way and untouched
+            // — could never populate at all, because being mid-way needs the EPUB
+            // that `!hasEPUB` excludes.
+            //
+            // Reading evidence rather than file state, so a freed work you did read
+            // stays and a queue-only work you never opened never arrives; the
+            // `!isQueuedForLater` guard that kept those out is no longer what does
+            // the work. Ordered most-recently-read, which is the order
+            // `LibraryHistoryGrouping` buckets assume.
             works
-                .filter { !$0.hasEPUB && !$0.isQueuedForLater && visible($0) }
-                .sorted { $0.dateAdded > $1.dateAdded }
+                .filter { ($0.hasStartedReading || $0.isFinished) && visible($0) }
+                .sorted { recency($0) > recency($1) }
         case .favorites:
             works
                 .filter { $0.isFavorite && visible($0) }
