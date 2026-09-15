@@ -234,13 +234,12 @@ struct WorkEditView: View {
             }
             if let workID = form.workID, form.isPosted {
                 SubjectRowSeparator()
-                NavigationLink {
-                    WritingChapterDestination(workID: workID, workTitle: form.title) {
-                        needsPublicationRefresh = true
+                SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
+                    .subjectRowNavigation(accessibilityLabel: "Add chapter") {
+                        WritingChapterDestination(workID: workID, workTitle: form.title) {
+                            needsPublicationRefresh = true
+                        }
                     }
-                } label: {
-                    SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
-                }.buttonStyle(.plain)
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Work skin",

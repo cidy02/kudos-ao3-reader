@@ -126,34 +126,37 @@ extension WorkDetailView {
                     SubjectFieldLabel(text: "Comments", style: .formGroup)
 
                     VStack(spacing: 0) {
-                        NavigationLink(value: AO3CommentsRoute(workID: id, context: commentsWorkContext)) {
-                            SubjectFormRow(
-                                label: "All comments",
-                                value: displayComments.map { $0.formatted() } ?? "",
-                                showsDisclosure: true
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        SubjectFormRow(
+                            label: "All comments",
+                            value: displayComments.map { $0.formatted() } ?? "",
+                            showsDisclosure: true
+                        )
+                        .subjectRowNavigation(
+                            to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
+                            accessibilityLabel: "All comments"
+                        )
 
                         // A single-chapter work has no per-chapter view worth
                         // opening; unknown totals ("5/?") keep the entry.
                         if SavedWork.totalChapterCount(from: displayChapters) != 1 {
                             SubjectRowSeparator()
-                            NavigationLink(value: AO3CommentsRoute(
-                                workID: id, context: commentsWorkContext, focusesChapter: true
-                            )) {
-                                SubjectFormRow(label: "Chapter comments", value: "", showsDisclosure: true)
-                            }
-                            .buttonStyle(.plain)
+                            SubjectFormRow(label: "Chapter comments", value: "", showsDisclosure: true)
+                                .subjectRowNavigation(
+                                    to: AO3CommentsRoute(
+                                        workID: id, context: commentsWorkContext, focusesChapter: true
+                                    ),
+                                    accessibilityLabel: "Chapter comments"
+                                )
                         }
 
                         SubjectRowSeparator()
-                        NavigationLink(value: AO3CommentsRoute(
-                            workID: id, context: commentsWorkContext, composes: true
-                        )) {
-                            SubjectFormRow(label: "Write a comment", value: "", showsDisclosure: true)
-                        }
-                        .buttonStyle(.plain)
+                        SubjectFormRow(label: "Write a comment", value: "", showsDisclosure: true)
+                            .subjectRowNavigation(
+                                to: AO3CommentsRoute(
+                                    workID: id, context: commentsWorkContext, composes: true
+                                ),
+                                accessibilityLabel: "Write a comment"
+                            )
                     }
                     .subjectPanel()
 

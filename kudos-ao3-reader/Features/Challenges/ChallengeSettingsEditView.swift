@@ -245,13 +245,11 @@ struct ChallengeSettingsEditView: View {
     /// challenge field, so editing it opens the collection's own form rather
     /// than a duplicate control here.
     private var faqPanel: some View {
-        NavigationLink {
-            AO3CollectionFormView(slug: collectionSlug)
-        } label: {
-            SubjectFormRow(label: "FAQ", value: "Edit on collection", showsDisclosure: true)
-        }
-        .buttonStyle(.plain)
-        .subjectPanel()
+        SubjectFormRow(label: "FAQ", value: "Edit on collection", showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "FAQ") {
+                AO3CollectionFormView(slug: collectionSlug)
+            }
+            .subjectPanel()
     }
 
     // MARK: - Schedule
@@ -405,12 +403,10 @@ struct ChallengeSettingsEditView: View {
         VStack(spacing: 0) {
             ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
                 if index > 0 { SubjectRowSeparator() }
-                NavigationLink {
-                    TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
-                } label: {
-                    SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
-                }
-                .buttonStyle(.plain)
+                SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
+                    .subjectRowNavigation(accessibilityLabel: link.title) {
+                        TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
+                    }
             }
         }
         .subjectPanel()

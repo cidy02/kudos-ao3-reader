@@ -322,12 +322,10 @@ struct ChallengeSettingsView: View {
         VStack(spacing: 0) {
             ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
                 if index > 0 { SubjectRowSeparator() }
-                NavigationLink {
-                    TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: false)
-                } label: {
-                    SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
-                }
-                .buttonStyle(.plain)
+                SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
+                    .subjectRowNavigation(accessibilityLabel: link.title) {
+                        TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: false)
+                    }
             }
         }
         .subjectPanel()
@@ -335,17 +333,16 @@ struct ChallengeSettingsView: View {
 
     private var assignmentsPanel: some View {
         VStack(spacing: 0) {
-            NavigationLink {
+            SubjectFormRow(
+                label: "Sign-ups",
+                value: "\(signUpCount)",
+                showsDisclosure: true,
+                isMonospaced: true
+            )
+            .subjectRowNavigation(accessibilityLabel: "Sign-ups") {
                 ChallengeSignUpsView(
                     collectionSlug: collectionSlug,
                     collectionTitle: effectiveTitle
-                )
-            } label: {
-                SubjectFormRow(
-                    label: "Sign-ups",
-                    value: "\(signUpCount)",
-                    showsDisclosure: true,
-                    isMonospaced: true
                 )
             }
             .buttonStyle(.plain)

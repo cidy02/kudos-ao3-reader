@@ -365,6 +365,38 @@ extension View {
     func cardNavigation(to value: some Hashable, accessibilityLabel: String) -> some View {
         modifier(CardNavigationModifier(value: value, accessibilityLabel: accessibilityLabel))
     }
+
+    /// Makes a row that **already draws its own chevron** pushable, without the
+    /// second one `List` adds.
+    ///
+    /// A `NavigationLink` whose label is the row gets a system disclosure
+    /// indicator on top of whatever the row drew — and because the row's own
+    /// chevron sits inside its panel while the system one sits at the list row's
+    /// trailing edge, the two do not even line up: the card ends up with a
+    /// chevron inside it and another floating outside. Putting the link in the
+    /// background with an empty label leaves nothing for `List` to decorate,
+    /// which is the same trick `cardNavigation` already uses for work cards.
+    func subjectRowNavigation(to value: some Hashable, accessibilityLabel: String) -> some View {
+        background {
+            NavigationLink(value: value) { EmptyView() }
+                .opacity(0)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityAddTraits(.isButton)
+        }
+    }
+
+    /// Destination-based variant, for rows that push a view rather than a value.
+    func subjectRowNavigation(
+        accessibilityLabel: String,
+        @ViewBuilder destination: @escaping () -> some View
+    ) -> some View {
+        background {
+            NavigationLink { destination() } label: { EmptyView() }
+                .opacity(0)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityAddTraits(.isButton)
+        }
+    }
 }
 
 /// Background `NavigationLink` for work cards — observes author-navigation suppress

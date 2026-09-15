@@ -22,11 +22,10 @@ struct WritingTagsRow: View {
     var kind: AO3TagKind?
 
     var body: some View {
-        NavigationLink {
-            WritingTagsEditor(title: title, values: $values, options: options, kind: kind)
-        } label: {
-            SubjectFormRow(label: title, value: values.isEmpty ? "None" : "\(values.count)", showsDisclosure: true)
-        }.buttonStyle(.plain)
+        SubjectFormRow(label: title, value: values.isEmpty ? "None" : "\(values.count)", showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: title) {
+                WritingTagsEditor(title: title, values: $values, options: options, kind: kind)
+            }
     }
 }
 
