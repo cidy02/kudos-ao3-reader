@@ -196,6 +196,29 @@ struct AO3AuthorFandomFilterSection: View {
 /// The Works rows of an author profile: loading skeletons, empty/failed copy,
 /// work cards merged against the local library, optional select mode, and
 /// pagination. Extracted verbatim from `AuthorProfileView.worksRows`.
+/// Artboard **1u**'s swipe actions on your own works: "Swipe exposes AO3's real
+/// actions — Edit, Tags, Delete". The mock also swipes a Chapter action, and all
+/// four already have destinations or endpoints in the app.
+///
+/// A value rather than four closures, so the row only has to say *what* was
+/// asked for and the profile decides how to open it — pushing from inside a
+/// swipe button does not work, so the host turns this into a navigation.
+nonisolated enum AO3OwnWorkAction: Identifiable, Hashable, Sendable {
+    case edit(workID: Int)
+    case tags(workID: Int)
+    case chapter(workID: Int, title: String)
+    case delete(workID: Int, title: String)
+
+    var id: String {
+        switch self {
+        case let .edit(id): "edit-\(id)"
+        case let .tags(id): "tags-\(id)"
+        case let .chapter(id, _): "chapter-\(id)"
+        case let .delete(id, _): "delete-\(id)"
+        }
+    }
+}
+
 struct AO3AuthorWorksSection: View {
     var model: AO3AuthorProfileModel
     var expandAll: Bool
@@ -211,6 +234,9 @@ struct AO3AuthorWorksSection: View {
     var onAdultContentVisibilityChange: (Bool) -> Void = { _ in }
     /// Own-profile hosts opt into the same in-card strip as Dashboard (1y).
     var showsPerformance: Bool = false
+    /// 1u's swipe actions. `nil` on someone else's works, where AO3 would refuse
+    /// every one of them — the swipe simply does not exist rather than failing.
+    var onOwnWorkAction: ((AO3OwnWorkAction) -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -291,6 +317,9 @@ struct AO3AuthorWorksSection: View {
                             usesLedger: layout != .scroll,
                             showsPerformance: showsPerformance
                         )
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            ownWorkSwipeActions(entry)
+                        }
                     }
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)
@@ -313,6 +342,41 @@ struct AO3AuthorWorksSection: View {
 
     private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
         CanonicalWorkMerge.remoteLed(remote: model.works, localLibrary: localLibrary)
+    }
+
+    /// 1u's four. Empty when these are not your works, which leaves the row with
+    /// no trailing swipe at all.
+    @ViewBuilder
+    private func ownWorkSwipeActions(_ entry: CanonicalWork) -> some View {
+        if let onOwnWorkAction, let remote = entry.remote {
+            Button {
+                onOwnWorkAction(.delete(workID: remote.id, title: remote.title))
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .tint(.red)
+
+            Button {
+                onOwnWorkAction(.chapter(workID: remote.id, title: remote.title))
+            } label: {
+                Label("Chapter", systemImage: "text.append")
+            }
+            .tint(.indigo)
+
+            Button {
+                onOwnWorkAction(.tags(workID: remote.id))
+            } label: {
+                Label("Tags", systemImage: "tag")
+            }
+            .tint(.teal)
+
+            Button {
+                onOwnWorkAction(.edit(workID: remote.id))
+            } label: {
+                Label("Edit", systemImage: "square.and.pencil")
+            }
+            .tint(.blue)
+        }
     }
 
     private func selectableWorkRow(_ work: AO3WorkSummary) -> some View {

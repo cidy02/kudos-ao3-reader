@@ -14,6 +14,10 @@ struct AuthorProfileView: View {
     @State private var bulkSelection = RemoteWorkSelectionController()
     /// 1bn: pushed rather than presented, so the bulk form gets a real back stack.
     @State private var isBulkEditing = false
+    /// 1u's swipe actions. Edit / Tags / Chapter push; Delete confirms first.
+    @State private var pendingOwnWorkAction: AO3OwnWorkAction?
+    @State private var pendingDeleteWork: (id: Int, title: String)?
+    @State private var deleteErrorMessage: String?
     @State private var confirmingUnsubscribe = false
     /// Signed-out Mute/Block/Subscribe — same prompt for all profile write actions.
     @State private var showingLoginRequired = false
@@ -67,6 +71,23 @@ struct AuthorProfileView: View {
                 AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
             }
             .navigationDestination(isPresented: $isBulkEditing) { bulkEditDestination }
+            .navigationDestination(item: ownWorkPushBinding) { ownWorkDestination($0) }
+            .confirmationDialog(
+                "Delete “\(pendingDeleteWork?.title ?? "this work")”?",
+                isPresented: deleteConfirmationBinding,
+                titleVisibility: .visible
+            ) {
+                Button("Delete on AO3", role: .destructive) { confirmDeleteWork() }
+                Button("Cancel", role: .cancel) { pendingDeleteWork = nil }
+            } message: {
+                Text("This removes the work from AO3 for everyone, with its chapters, "
+                    + "kudos, comments and bookmarks. It cannot be undone.")
+            }
+            .alert("Couldn’t delete", isPresented: deleteErrorBinding) {
+                Button("OK") { deleteErrorMessage = nil }
+            } message: {
+                Text(deleteErrorMessage ?? "AO3 refused the delete.")
+            }
             .remoteWorkSelectionChrome(bulkSelection)
             .sheet(isPresented: $showingLogin, onDismiss: {
                 Task { await resumePendingAuthActionIfNeeded() }
@@ -355,7 +376,10 @@ private extension AuthorProfileView {
                 // yourself. Gating on `isOwnProfile` rather than on a flag the
                 // Dashboard passes means no future caller can turn a stranger's
                 // per-work kudos and hits on by mistake.
-                showsPerformance: isOwnProfile
+                showsPerformance: isOwnProfile,
+                // 1u's swipe actions, on the same gate: AO3 refuses every one of
+                // them on someone else's work, so the swipe does not exist there.
+                onOwnWorkAction: ownWorkActionHandler
             )
         case .series:
             AO3AuthorSeriesSection(
@@ -444,6 +468,81 @@ private extension AuthorProfileView {
     /// bulk editor behind them.
     private var showsBulkEdit: Bool {
         isOwnProfile && auth.isLoggedIn && model.selectedTab == .works
+    }
+
+    /// Edit / Tags / Chapter push; Delete is filtered out here and routed to the
+    /// confirmation instead, so a destructive swipe can never navigate straight
+    /// into doing the thing.
+    private var ownWorkPushBinding: Binding<AO3OwnWorkAction?> {
+        Binding(
+            get: {
+                if case .delete = pendingOwnWorkAction { return nil }
+                return pendingOwnWorkAction
+            },
+            set: { pendingOwnWorkAction = $0 }
+        )
+    }
+
+    private var deleteConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteWork != nil },
+            set: { if !$0 { pendingDeleteWork = nil } }
+        )
+    }
+
+    private var deleteErrorBinding: Binding<Bool> {
+        Binding(
+            get: { deleteErrorMessage != nil },
+            set: { if !$0 { deleteErrorMessage = nil } }
+        )
+    }
+
+    @ViewBuilder
+    private func ownWorkDestination(_ action: AO3OwnWorkAction) -> some View {
+        switch action {
+        case let .edit(workID):
+            WritingWorkDestination(workID: workID)
+        case let .tags(workID):
+            WritingTagsDestination(workID: workID)
+        case let .chapter(workID, title):
+            WritingChapterDestination(workID: workID, workTitle: title) {
+                Task { await model.refresh(auth: auth) }
+            }
+        case .delete:
+            // Never reached: `ownWorkPushBinding` filters delete out.
+            EmptyView()
+        }
+    }
+
+    /// Spelled out with its type rather than inlined as
+    /// `showsBulkEdit ? handleOwnWorkAction : nil`: a ternary producing an
+    /// optional closure inside that call is what made the type checker give up
+    /// with "failed to produce diagnostic for expression".
+    private var ownWorkActionHandler: ((AO3OwnWorkAction) -> Void)? {
+        guard showsBulkEdit else { return nil }
+        return handleOwnWorkAction
+    }
+
+    /// Delete forks to the confirmation; everything else becomes a push.
+    private func handleOwnWorkAction(_ action: AO3OwnWorkAction) {
+        if case let .delete(workID, title) = action {
+            pendingDeleteWork = (id: workID, title: title)
+        } else {
+            pendingOwnWorkAction = action
+        }
+    }
+
+    private func confirmDeleteWork() {
+        guard let pending = pendingDeleteWork else { return }
+        pendingDeleteWork = nil
+        Task {
+            do {
+                _ = try await auth.deleteWork(workID: pending.id)
+                await model.refresh(auth: auth)
+            } catch {
+                deleteErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     /// Resolved when the push happens, so it acts on the live selection rather
