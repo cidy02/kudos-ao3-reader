@@ -3496,3 +3496,58 @@ widening; 1v's sort params; 1u's hero tallies and segments; 1bg's Move to and
 Download; 1bk's create-time colour and reorder row; 1az's exact empty copy;
 1t's visit count (unbuildable — the fixture is synthetic and the live page is
 authenticated).
+
+### ledger-1u-1v-2026-09-15
+
+**Items 1 and 2 of `owner-decisions-2026-09-15` are closed.** 1u and 1v are the
+same screen in two states, and both are now built and seen on the simulator
+against the live account.
+
+**1v's sort** (`7b08ff6b`, `9a77172f`). `AO3WorksSort` carries column,
+direction and completion; `AO3AuthorRoute.contentURL(_:page:sort:)` emits them
+as `work_search[...]`. The sheet is 1v's own shape — nine fields as a menu,
+direction a segmented pair, completion as chips, icon-only Cancel/Apply, the
+active count on the funnel. Every value is read from otwarchive's
+`WorkSearchForm`, which corrected two guesses: the list is **nine**, not ten
+(`sort_options` returns `SORT_OPTIONS[1..-1]` for a faceted or collected index,
+dropping "Best Match" — the same nine 1v's note names), and
+`default_sort_direction` ascends only for `authors_to_sort_on` /
+`title_to_sort_on`. Picking a column adopts that column's direction.
+**Divergence, deliberate:** completion is sent to AO3 rather than applied
+client-side as 1v's note says — a client-side filter over a paged list narrows
+only the loaded page.
+
+**1u's segments** (`afecd75a`, `9a77172f`). `Content` gained `.collectedWorks`
+and `.gifts`. "In collections" is a `collected` action on the **nested** works
+resource — `/users/:id/works/collected`, two path segments — so `contentURL`
+appends `pathSegments`; a single percent-encoded segment would 404. Gifts are
+works given **to** the user. Both render the standard work blurb (gifts wraps
+`works/work_module`; collected renders `work_blurb`), so the existing parser
+reads all three. Sort applicability is `Content.acceptsWorkSearch` — works and
+collected only, since `collected` runs `clean_work_search_params` too.
+
+**1u's hero** (`ca6f163b`). `/users/:id/stats`, which nothing parsed before.
+`@current_year` falls back to **"All Years"**, so a plain GET is the career
+total and `userStatsURL` sends no query at all. The page is **own-only**
+(`users_only` + `check_ownership` + `@user = current_user`), so the fetch is
+gated on the same ownership test `isOwnProfile` uses, computed in the service
+rather than passed by a host. **Parse trap:** `dd.kudos` and `dd.bookmarks`
+repeat on every work in the listing below the Totals block, so the parse is
+scoped to `dl.statistics.meta` — the fixture includes that listing and the test
+asserts the career total and explicitly *not* the first work's figure.
+`user_subscriptions` humanizes to two classes (`user subscriptions`), so a bare
+`.subscriptions` selector matches it too; both are read by full class list.
+
+**Two bugs the simulator caught that compiled and linted clean**, both the
+sweep's recurring defect — right chrome over wrong data:
+
+1. The hero captioned the **collected** list with the works-index count from
+   `AO3AccountListCountsCache`. It now drops to the name alone under any scope
+   but `.works`.
+2. The **Fandom facet stayed up** under "In collections", offering the works
+   index's fandoms over a list they do not describe. AO3 serves that facet on
+   the plain works index only — `collected` renders its own
+   `_collection_filters`, gifts has none — so it is gated on scope.
+
+**The generalisation worth keeping: when a scope or filter changes, ask what
+other chrome on screen was derived from the OLD scope.**
