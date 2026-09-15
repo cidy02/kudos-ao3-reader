@@ -242,6 +242,13 @@ struct AO3AuthorWorksSection: View {
     /// 1u's swipe actions. `nil` on someone else's works, where AO3 would refuse
     /// every one of them — the swipe simply does not exist rather than failing.
     var onOwnWorkAction: ((AO3OwnWorkAction) -> Void)?
+    /// The host's Refine panel, applied to the rows this section draws. Empty by
+    /// default, so every caller that does not offer refining is unchanged.
+    ///
+    /// Narrowing happens where `model.works` enters the merge, so the filtered
+    /// set is what the rows, the adult-content check and the host's own count
+    /// line all see — they cannot disagree about what is on screen.
+    var filters = AO3SearchFilters()
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -346,7 +353,10 @@ struct AO3AuthorWorksSection: View {
     }
 
     private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
-        CanonicalWorkMerge.remoteLed(remote: model.works, localLibrary: localLibrary)
+        CanonicalWorkMerge.remoteLed(
+            remote: filters.apply(to: model.works),
+            localLibrary: localLibrary
+        )
     }
 
     /// 1u's four. Empty when these are not your works, which leaves the row with
