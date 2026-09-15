@@ -658,6 +658,43 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// 1bk: "Show on Home adds a shelf above Recently Updated." Defaulted false
     /// so no existing collection starts claiming space on Home.
     var showsOnHome: Bool = false
+    /// 1bk's "Reorder works": the reader's own order, as comma-joined work UUIDs.
+    ///
+    /// A local collection has no join model to hang a per-work `sortOrder` on —
+    /// it is a plain `[SavedWork]` relationship — so the order lives here. Stored
+    /// as one string rather than an array for the same reason
+    /// `AccountShortcutStore` does: no transformer, and nothing to go wrong in a
+    /// lightweight migration.
+    ///
+    /// Empty means "never reordered", which keeps the newest-first default. A
+    /// work missing from the list still appears — sorted after the ordered ones —
+    /// so adding a work to a reordered collection can never hide it.
+    var workOrderRaw: String = ""
+
+    /// `works` in the reader's order when they have set one, newest-first when
+    /// they have not. Anything not in the stored order follows, newest-first,
+    /// rather than being dropped.
+    func inReadingOrder(_ works: [SavedWork]) -> [SavedWork] {
+        let order = workOrderRaw
+            .split(separator: ",")
+            .enumerated()
+            .reduce(into: [String: Int]()) { $0[String($1.element)] = $1.offset }
+        guard !order.isEmpty else {
+            return works.sorted { $0.dateAdded > $1.dateAdded }
+        }
+        return works.sorted { lhs, rhs in
+            switch (order[lhs.id.uuidString], order[rhs.id.uuidString]) {
+            case let (l?, r?): return l < r
+            case (_?, nil): return true
+            case (nil, _?): return false
+            case (nil, nil): return lhs.dateAdded > rhs.dateAdded
+            }
+        }
+    }
+
+    func setReadingOrder(_ works: [SavedWork]) {
+        workOrderRaw = works.map(\.id.uuidString).joined(separator: ",")
+    }
     var dateAdded: Date = Date()
     var createdAt: Date = Date()
     var lastModifiedAt: Date = Date()

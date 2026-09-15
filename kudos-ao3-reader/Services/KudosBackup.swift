@@ -1247,6 +1247,10 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
     /// they were written in — never asked, and not shown on Home.
     let keepsWorksOffline: Bool?
     let showsOnHome: Bool?
+    /// 1bk's manual work order. Additive and optional; `nil` from an older
+    /// archive or Android means "never reordered", which is the state they were
+    /// written in.
+    let workOrderRaw: String?
 
     @MainActor
     init(collection: WorkCollection) {
@@ -1265,6 +1269,7 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
         hue = collection.hue
         keepsWorksOffline = collection.keepsWorksOffline
         showsOnHome = collection.showsOnHome
+        workOrderRaw = collection.workOrderRaw
     }
 }
 
@@ -2161,6 +2166,12 @@ enum KudosBackupService {
             // collection off Home unless it genuinely wins on recency.
             if let archivedHome = archived.showsOnHome, incomingWins || !collection.showsOnHome {
                 collection.showsOnHome = archivedHome || collection.showsOnHome
+            }
+            // Fill-in-only: an empty order is "never reordered", and letting that
+            // win would throw away an arrangement made on this device.
+            if let archivedOrder = archived.workOrderRaw, !archivedOrder.isEmpty,
+               incomingWins || collection.workOrderRaw.isEmpty {
+                collection.workOrderRaw = archivedOrder
             }
             collection.dateAdded = min(collection.dateAdded, archived.dateAdded)
             if let archivedCreatedAt = archived.createdAt {
