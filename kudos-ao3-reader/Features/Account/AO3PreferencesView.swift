@@ -94,6 +94,8 @@ struct AO3PreferencesView: View {
                 }
             }
 
+            accountLinksSection
+
             ForEach(Array(snapshot.sections.enumerated()), id: \.element.id) { sectionIndex, section in
                 Section {
                     sectionHeader(title: section.title, help: section.help)
@@ -507,6 +509,62 @@ extension AO3PreferencesView {
     }
 
     /// Artboard 1z's own header, at the 16pt account gutter every subsection uses.
+    /// 1z opens with an Account group of links to the AO3 pages this app does
+    /// not implement natively.
+    ///
+    /// Five of its seven rows are here. Blocked users and Muted users are not:
+    /// `/users/<name>/blocked` and `/muted` both answer 404 unauthenticated, and
+    /// so do their `/index` variants — which is genuinely ambiguous, because
+    /// `/change_password` *redirects* to login rather than 404ing, so a 404 here
+    /// may mean "not your account" rather than "no such page". Every row that is
+    /// here was confirmed to exist by probe; a row that drops someone on a 404
+    /// in Browse is worse than a row that is missing.
+    @ViewBuilder
+    private var accountLinksSection: some View {
+        Section {
+            SubjectFieldLabel(text: "Account", style: .formGroup)
+                .pageBodyRow(top: 18, gutter: gutter)
+            VStack(spacing: 0) {
+                AccountExternalNavCard(
+                    title: "Edit profile",
+                    systemImage: "person.text.rectangle",
+                    pathSuffix: "profile/edit",
+                    isFormRow: true
+                )
+                SubjectRowSeparator()
+                AccountExternalNavCard(
+                    title: "Manage pseuds",
+                    systemImage: "person.2",
+                    pathSuffix: "pseuds",
+                    isFormRow: true
+                )
+                SubjectRowSeparator()
+                AccountExternalNavCard(
+                    title: "Change username",
+                    systemImage: "at",
+                    pathSuffix: "change_username",
+                    isFormRow: true
+                )
+                SubjectRowSeparator()
+                AccountExternalNavCard(
+                    title: "Change password",
+                    systemImage: "key",
+                    pathSuffix: "change_password",
+                    isFormRow: true
+                )
+                SubjectRowSeparator()
+                AccountExternalNavCard(
+                    title: "Change email",
+                    systemImage: "envelope",
+                    pathSuffix: "change_email",
+                    isFormRow: true
+                )
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 8, gutter: gutter)
+        }
+    }
+
     private var header: some View {
         SubjectHeaderBlock(
             kicker: "AO3 Account",
