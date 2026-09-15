@@ -552,14 +552,20 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         try? context.save()
     }
 
-    private func createQueue() {
+    private func createQueue(_ options: NewQueueOptions) {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let hue = newQueueHue
         newQueueName = ""
         newQueueHue = nil
         showingNewQueue = false
-        _ = ReadingQueueService.createQueue(named: trimmed, hue: hue, in: context)
+        _ = ReadingQueueService.createQueue(
+            named: trimmed,
+            hue: hue,
+            keepsWorksOffline: options.keepsWorksOffline,
+            seededFrom: options.seed,
+            in: context
+        )
     }
 
     // MARK: Card details
