@@ -1242,6 +1242,11 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
     /// it — and `nil` is exactly "take the colour from the name", the state those
     /// archives were written in. Same additive shape as `ReadingQueue.hue`.
     let hue: Double?
+    /// 1bk's Behaviour group. Additive optionals for the same reason as `hue`:
+    /// an older archive and Android carry neither, and `nil` there is the state
+    /// they were written in — never asked, and not shown on Home.
+    let keepsWorksOffline: Bool?
+    let showsOnHome: Bool?
 
     @MainActor
     init(collection: WorkCollection) {
@@ -1258,6 +1263,8 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
         description = collection.collectionDescription
         sortOrder = collection.sortOrder
         hue = collection.hue
+        keepsWorksOffline = collection.keepsWorksOffline
+        showsOnHome = collection.showsOnHome
     }
 }
 
@@ -2143,6 +2150,17 @@ enum KudosBackupService {
             // nil, and letting that win would strip a colour the reader chose here.
             if let archivedHue = archived.hue, incomingWins || collection.hue == nil {
                 collection.hue = archivedHue
+            }
+            // Same fill-in-only rule as the queue's. `nil` is "never asked", so
+            // an older archive cannot be read as the reader having said no.
+            if let archivedOffline = archived.keepsWorksOffline,
+               incomingWins || collection.keepsWorksOffline == nil {
+                collection.keepsWorksOffline = archivedOffline
+            }
+            // ORs rather than assigns: an archive carrying false must not take a
+            // collection off Home unless it genuinely wins on recency.
+            if let archivedHome = archived.showsOnHome, incomingWins || !collection.showsOnHome {
+                collection.showsOnHome = archivedHome || collection.showsOnHome
             }
             collection.dateAdded = min(collection.dateAdded, archived.dateAdded)
             if let archivedCreatedAt = archived.createdAt {
