@@ -324,30 +324,13 @@ struct AccountView: View {
         }
     }
 
+    /// Dead in practice: `usesLibraryStyleCompactLayout` requires
+    /// `showsWorkListControls`, which every scope now returns false for, because
+    /// no scope draws an inline work list any more. Kept exhaustive rather than
+    /// deleted in the same commit as the display-mode fix.
     @ViewBuilder
     private var compactWorksContent: some View {
-        switch selectedTab {
-        case .reading:
-            EmptyView()
-        case .writing:
-            EmptyView()
-        case .activity:
-            if activityTab == .history {
-                AccountWorksInlineSection(
-                    kind: .history,
-                    expandAll: expandAll,
-                    displayMode: .compact,
-                    layout: .scroll,
-                    reloadToken: listReloadToken,
-                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                        for: matureContentScope
-                    ),
-                    onRefine: { path.append(AO3AccountWorksList.Kind.history) }
-                )
-            }
-        case .overview:
-            EmptyView()
-        }
+        EmptyView()
     }
 
     // MARK: Activation
@@ -517,7 +500,9 @@ struct AccountView: View {
             // controls belong to the screen each row opens, which carries its own.
             return false
         case .activity:
-            return activityTab == .history
+            // History and Inbox open their own screens too, so nothing on this
+            // page is a work list any more.
+            return false
         }
     }
 

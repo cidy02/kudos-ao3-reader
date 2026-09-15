@@ -202,7 +202,7 @@ struct LibrarySectionListView: View {
             }
         } else {
             Group {
-                if displayMode == .detailed {
+                if displayMode != .compact {
                     detailedList
                 } else {
                     compactGrid
@@ -462,6 +462,13 @@ struct LibrarySectionListView: View {
         )
     }
 
+    /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
+    /// separate presentations and a screen shows one of them — this used to pass
+    /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
+    private var rowPresentation: WorkRow.Presentation {
+        displayMode == .ledger ? .ledger : .standard
+    }
+
     private var detailedList: some View {
         // Both bound once: `groupedItems` buckets the whole list and `summaries`
         // fetches the session table. Reading either through its property inside the
@@ -596,7 +603,7 @@ struct LibrarySectionListView: View {
                     isSelecting: true,
                     isSelected: selection.contains(work.id),
                     onToggleSelection: { toggleSelection(work) },
-                    presentation: .ledger
+                    presentation: rowPresentation
                 )
                 factsStrip(work, summary: summary)
             }
@@ -626,7 +633,7 @@ struct LibrarySectionListView: View {
                 work: work,
                 openMode: .reader,
                 onSelect: { isSelecting = true; selection = [work.id] },
-                presentation: .ledger
+                presentation: rowPresentation
             )
             factsStrip(work, summary: summary)
         }
