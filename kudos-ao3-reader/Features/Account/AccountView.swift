@@ -36,6 +36,9 @@ struct AccountView: View {
     /// Detailed list rows vs compact two-up cover cards — shared across Account
     /// work lists (Reading / Writing / Activity) and persisted like Home/Library.
     @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
+    /// The reader's chosen Shortcuts, as an ordered list of raw values.
+    @AppStorage(AccountShortcutStore.key) private var shortcutsRaw = ""
+    @State private var editingShortcuts = false
     @AppStorage("hideMatureContent") private var hideMature = true
     @State private var postingPseudName: String?
     /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
@@ -59,6 +62,8 @@ struct AccountView: View {
         /// the profile surface opened at that scope.
         case myWorks
         case mySeries
+        /// Artboard 1l.
+        case inbox
     }
 
     enum AccountTab: String, CaseIterable, Identifiable {
@@ -189,6 +194,9 @@ struct AccountView: View {
                 .ao3AuthorNavigation(path: $path, tab: .account)
                 .toolbar { accountToolbarContent }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
+                .sheet(isPresented: $editingShortcuts) {
+                    AccountShortcutsEditor(raw: $shortcutsRaw)
+                }
                 .sheet(isPresented: $showingFilters) {
                     AO3FilterPanel(
                         filters: $filters,
@@ -242,7 +250,6 @@ struct AccountView: View {
             profileCardSection
 
             if auth.isLoggedIn {
-                tabPickerSection
                 tabSections
             } else {
                 signedOutPreviewSection
@@ -453,6 +460,16 @@ struct AccountView: View {
         case .drafts: WritingDraftsView()
         case .myWorks: ownProfile(title: "Works", tab: .works)
         case .mySeries: ownProfile(title: "Series", tab: .series)
+        case .inbox:
+            AccountInboxScreen(
+                model: inboxModel,
+                onOpen: openInboxItem,
+                onReply: openInboxReply,
+                onOpenChapter: openInboxChapter,
+                workContext: { knownWorkContext(for: $0) },
+                metadataTaskID: inboxMetadataTaskID,
+                onEnrichVisible: enrichVisibleInboxWorkContexts
+            )
         }
     }
 
@@ -560,35 +577,24 @@ struct AccountView: View {
 
     // MARK: Primary segments
 
-    /// Artboard 1m's scope pills. `SubjectSegmentedControl` rather than a
-    /// `Picker(.segmented)`: §1a records that the spec's control is a 9pt-over-7pt
-    /// inline shape *and* that the native segmented picker clips rather than
-    /// reflows at accessibility text sizes, which is the whole reason this
-    /// component exists. Four scope names is exactly the width where that bites.
-    private var tabPickerSection: some View {
-        Section {
-            SubjectSegmentedControl(
-                options: AccountTab.allCases,
-                title: \.rawValue,
-                selection: $selectedTab
-            )
-            .accessibilityLabel("Account Content")
-            .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
-        }
-    }
 
+    /// The whole hub, in one list.
+    ///
+    /// This used to be four scopes behind a segmented control. Once every scope
+    /// row opened its own screen the scopes were pure menus, and a control that
+    /// swapped between four menus was a level of navigation that existed only to
+    /// reach navigation. Flattened, per the owner: shortcuts, the three scopes in
+    /// order, then the account's own two pages.
+    ///
+    /// 1m and 1bt draw the pills, so this is a deliberate departure from them —
+    /// recorded here rather than left for someone to "fix" back.
     @ViewBuilder
     private var tabSections: some View {
-        switch selectedTab {
-        case .overview:
-            overviewSections
-        case .reading:
-            readingSections
-        case .writing:
-            writingSections
-        case .activity:
-            activitySections
-        }
+        shortcutsSection
+        readingScopeGroups
+        writingScopeGroups
+        activityScopeGroups
+        accountGroupSection
     }
 
     // MARK: Overview — identity hub
@@ -605,73 +611,62 @@ struct AccountView: View {
         return Array(repeating: GridItem(.flexible(), spacing: 10), count: isCramped ? 2 : 3)
     }
 
+    /// The Shortcuts grid: whatever the reader has chosen, in their order.
+    ///
+    /// Every tile opens its destination directly. They used to select a scope —
+    /// "Subscriptions lands on Reading" — which is meaningless now that the page
+    /// has no scopes to land on.
     @ViewBuilder
-    private var overviewSections: some View {
-        Section {
-            // 3×2 of individual icon cards (not one shared panel).
-            LazyVGrid(columns: shortcutGridColumns, spacing: 10) {
-                shortcutGridButton(
-                    title: "Dashboard",
-                    systemImage: "square.grid.2x2"
-                ) {
-                    path.append(Route.dashboard)
+    private var shortcutsSection: some View {
+        let shortcuts = AccountShortcutStore.decode(shortcutsRaw)
+        if !shortcuts.isEmpty {
+            Section {
+                LazyVGrid(columns: shortcutGridColumns, spacing: 10) {
+                    ForEach(shortcuts) { shortcut in
+                        shortcutGridButton(
+                            title: shortcut.title,
+                            systemImage: shortcut.systemImage,
+                            count: shortcut.countKind.flatMap { cachedCount($0) }
+                        ) {
+                            openShortcut(shortcut)
+                        }
+                    }
                 }
-                shortcutGridButton(
-                    title: "Subscriptions",
-                    systemImage: "bell",
-                    count: cachedCount(.subscriptions)
-                ) {
-                    readingTab = .subscriptions
-                    selectedTab = .reading
-                }
-                shortcutGridButton(
-                    title: "Works",
-                    systemImage: "doc.text",
-                    count: cachedCount(.myWorks)
-                ) {
-                    writingTab = .works
-                    selectedTab = .writing
-                }
-                shortcutGridButton(
-                    title: "Bookmarks",
-                    systemImage: "bookmark",
-                    count: cachedCount(.bookmarks)
-                ) {
-                    readingTab = .bookmarks
-                    selectedTab = .reading
-                }
-                shortcutGridButton(
-                    title: "Collections",
-                    systemImage: "square.stack",
-                    count: cachedCount(.collections)
-                ) {
-                    path.append(Route.myCollections)
-                }
-                shortcutGridButton(
-                    title: "History",
-                    systemImage: "clock",
-                    count: cachedCount(.history)
-                ) {
-                    activityTab = .history
-                    selectedTab = .activity
-                }
+                .listRowInsets(EdgeInsets(
+                    top: 6,
+                    leading: CardListMetrics.sideMargin,
+                    bottom: 6,
+                    trailing: CardListMetrics.sideMargin
+                ))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            } header: {
+                SectionRuleHeader(title: "Shortcuts", onSeeAll: { editingShortcuts = true })
+                    .pageBodyRow(top: 18, gutter: 0)
             }
-            .listRowInsets(EdgeInsets(
-                top: 6,
-                leading: CardListMetrics.sideMargin,
-                bottom: 6,
-                trailing: CardListMetrics.sideMargin
-            ))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-        } header: {
-            // The redesign's own rule header, not a plain `Text`: every other
-            // restyled screen in this app heads a group this way, and 1m draws
-            // the same uppercase rule over both of the hub's groups.
-            SectionRuleHeader(title: "Shortcuts")
-                .pageBodyRow(top: 18, gutter: 0)
         }
+    }
 
+    private func openShortcut(_ shortcut: AccountShortcut) {
+        switch shortcut {
+        case .dashboard: path.append(Route.dashboard)
+        case .markedForLater: path.append(AO3AccountWorksList.Kind.markedForLater)
+        case .bookmarks: path.append(AO3AccountWorksList.Kind.bookmarks)
+        case .collections: path.append(Route.myCollections)
+        case .subscriptions: path.append(AO3AccountWorksList.Kind.subscriptions)
+        case .works: path.append(Route.myWorks)
+        case .series: path.append(Route.mySeries)
+        case .drafts: path.append(Route.drafts)
+        case .history: path.append(AO3AccountWorksList.Kind.history)
+        case .inbox: path.append(Route.inbox)
+        case .preferences: path.append(Route.preferences)
+        case .moreOnAO3: path.append(Route.moreOnAO3)
+        }
+    }
+
+    /// The page's last group, per the owner's ordering: the two AO3 pages that
+    /// belong to the account rather than to reading, writing or activity.
+    private var accountGroupSection: some View {
         Section {
             VStack(spacing: 0) {
                 panelNavRow(
@@ -691,74 +686,14 @@ struct AccountView: View {
         } header: {
             SectionRuleHeader(title: "Account")
                 .pageBodyRow(top: 18, gutter: 0)
-        } footer: {
-            // 1m closes Overview with a caption. Its first sentence explains the
-            // hub's information architecture to a reader of the spec, which would
-            // read oddly as on-screen copy; this is the half that tells the user
-            // something they cannot otherwise see — that a shortcut is a jump
-            // *into a scope*, not a push onto a new screen.
-            Text("Tapping a shortcut selects the scope it lives in, "
-                + "so Subscriptions lands on Reading and History on Activity.")
-                // A `List` footer does not style a `Text` that carries its own
-                // row insets, so this drew at body size in the primary colour,
-                // flush to the screen edge. 1m sets it at 11.5 and dims it.
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
-                .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         }
     }
 
     // MARK: Reading — Marked for Later | Bookmarks | Collections | Subscriptions
 
-    /// 1bt draws the groups and nothing else: after its last group comes the tab
-    /// bar. The inline list that used to sit here was a second copy of the screen
-    /// each row now opens — the same works, fetched again, under a heading that
-    /// repeated the row above it.
-    private var readingSections: some View {
-        readingScopeGroups
-    }
 
     // MARK: Activity — History | Inbox
 
-    @ViewBuilder
-    private var activitySections: some View {
-        activityScopeGroups
-
-        switch activityTab {
-        case .history:
-            AccountWorksInlineSection(
-                kind: .history,
-                expandAll: expandAll,
-                displayMode: displayMode,
-                reloadToken: listReloadToken,
-                onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                    for: matureContentScope
-                ),
-                onRefine: { path.append(AO3AccountWorksList.Kind.history) }
-            )
-        case .inbox:
-            Section {
-                AccountInboxRows(
-                    model: inboxModel,
-                    limit: nil,
-                    onOpen: openInboxItem,
-                    onReply: openInboxReply,
-                    onOpenChapter: openInboxChapter,
-                    workContext: { knownWorkContext(for: $0) }
-                )
-            } header: {
-                Text("Inbox")
-            } footer: {
-                if let total = inboxModel.totalComments {
-                    let unread = inboxModel.unreadCount ?? 0
-                    Text("\(total) comments in your AO3 inbox, \(unread) unread. "
-                        + "Use Select to manage read state or remove notifications; "
-                        + "Reply opens the native comments flow.")
-                }
-            }
-            .task(id: inboxMetadataTaskID) { await enrichVisibleInboxWorkContexts() }
-        }
-    }
 
     // MARK: Shared profile content
 
@@ -1148,21 +1083,9 @@ private extension AccountView {
     }
 }
 
-// MARK: - Writing scope (artboard 1bt)
+// MARK: - Scope groups (artboard 1bt)
 
 private extension AccountView {
-    // MARK: Writing — Works | Series | Drafts
-
-    @ViewBuilder
-    /// Like Reading: 1bt draws the groups and nothing else. Works, Series and
-    /// Drafts each open their own screen now, so the inline list that used to sit
-    /// here was a second copy of what the row opens.
-    private var writingSections: some View {
-        writingScopeGroups
-    }
-
-    // MARK: Scope groups (artboard 1bt)
-
     @ViewBuilder
     var readingScopeGroups: some View {
         // 1bt groups Reading by what a shelf means: saved or followed.
@@ -1402,7 +1325,7 @@ private extension AccountView {
     private func openActivity(_ tab: AccountActivityTab) {
         switch tab {
         case .history: path.append(AO3AccountWorksList.Kind.history)
-        case .inbox: activityTab = tab
+        case .inbox: path.append(Route.inbox)
         }
     }
 }
