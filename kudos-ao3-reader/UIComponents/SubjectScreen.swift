@@ -514,15 +514,24 @@ struct FandomClusterChip: View {
                     .fill(palette.accent)
                     .frame(width: 2.5, height: 14)
             }
+            // Stated as the card's own accent rather than `.primary`/`.secondary`.
+            //
+            // Those are *levels of the inherited foreground style*, not text
+            // colours, and every one of these chips is the label of a
+            // `.buttonStyle(.borderless)` — which sets that style to the app
+            // accent. So the name and count resolved to the app's purple on every
+            // card, whatever hue the card itself was: a pink category and a blue
+            // one drew identically tinted chips. Naming the colour fixes both the
+            // inheritance and the mismatch.
             Text(name)
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(palette.accent)
                 .lineLimit(1)
             if let workCount {
                 Text(workCount.formatted())
                     .font(.system(size: 11))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(palette.accent.opacity(0.62))
             }
         }
         .padding(.horizontal, 11)

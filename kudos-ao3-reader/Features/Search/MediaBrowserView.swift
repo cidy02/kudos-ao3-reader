@@ -151,7 +151,7 @@ struct MediaBrowserView: View {
                     .font(.system(size: 15))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
-                statsLine(stats)
+                statsLine(stats, palette: palette)
             }
         } content: {
             if let stats, !stats.clusterFandoms.isEmpty {
@@ -377,7 +377,7 @@ struct MediaBrowserView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(nil)
 
-            statsLine(stats)
+            statsLine(stats, palette: categoryPalette(category))
 
             if let stats, !stats.recentFandoms.isEmpty {
                 // Space, not a rule: the card's own edge is already the boundary in
@@ -395,24 +395,24 @@ struct MediaBrowserView: View {
         .overlay(alignment: .topTrailing) {
             Image(systemName: category.symbol)
                 .font(.headline)
-                .foregroundStyle(.tint)
+                .foregroundStyle(categoryPalette(category).accent)
         }
     }
 
     @ViewBuilder
-    private func statsLine(_ stats: CategoryStats?) -> some View {
+    private func statsLine(_ stats: CategoryStats?, palette: SubjectPalette? = nil) -> some View {
         if let count = stats?.fandomCount {
             FlowLayout(spacing: 16, rowSpacing: 4) {
-                statItem("books.vertical", "\(count.formatted()) fandoms")
+                statItem("books.vertical", "\(count.formatted()) fandoms", palette: palette)
                 if let works = stats?.workCount {
                     let figure = compact(works)
                     let label = (stats?.isApproximateWorkCount == true)
                         ? "~\(figure) works"
                         : "\(figure) works"
-                    statItem("doc.text", label)
+                    statItem("doc.text", label, palette: palette)
                 }
                 if let saved = stats?.savedCount, saved > 0 {
-                    statItem(WorkActionLabels.downloadedSymbol, "\(saved) downloaded")
+                    statItem(WorkActionLabels.downloadedSymbol, "\(saved) downloaded", palette: palette)
                 }
             }
             .font(.caption2)
@@ -450,13 +450,15 @@ struct MediaBrowserView: View {
         .skeletonShimmer()
     }
 
-    private func statItem(_ symbol: String, _ text: String) -> some View {
+    private func statItem(_ symbol: String, _ text: String, palette: SubjectPalette? = nil) -> some View {
         // Icon hugs its label and is bold + tinted — matches the Search/Library
-        // result-card stats for visual consistency.
+        // result-card stats for visual consistency. On a category card the tint
+        // is that card's own accent, so a pink category does not carry the app's
+        // purple glyphs; `.tint` remains the fallback where there is no card.
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.tint)
+                .foregroundStyle(palette.map { AnyShapeStyle($0.accent) } ?? AnyShapeStyle(.tint))
             Text(text)
         }
         .fixedSize()
