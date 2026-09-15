@@ -20,6 +20,8 @@ struct AO3WorkRow: View {
     /// Search opts into the redesign without changing the shared row in Browse,
     /// Account, Authors, or Library before those screens receive their own pass.
     var presentation: Presentation = .standard
+    /// Own Works and Dashboard put parsed performance figures inside the card.
+    var showsPerformance = false
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -272,6 +274,9 @@ struct AO3WorkRow: View {
             }
 
             searchLedgerMetadataRow
+            if showsPerformance {
+                AO3AuthorPerformanceStrip(work: work)
+            }
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -323,11 +328,15 @@ struct AO3WorkRow: View {
     }
 
     private var searchLedgerMetadata: [String] {
-        Self.ledgerMetadata(for: work, showsZeroStats: showsZeroStats)
+        Self.ledgerMetadata(for: work, showsZeroStats: showsZeroStats, includesPerformance: !showsPerformance)
     }
 
     /// Pure formatting seam for the ledger's visible text and regression tests.
-    static func ledgerMetadata(for work: AO3WorkSummary, showsZeroStats: Bool) -> [String] {
+    static func ledgerMetadata(
+        for work: AO3WorkSummary,
+        showsZeroStats: Bool,
+        includesPerformance: Bool = true
+    ) -> [String] {
         var metadata: [String] = []
         let language = work.language.trimmingCharacters(in: .whitespacesAndNewlines)
         if !language.isEmpty {
@@ -340,6 +349,7 @@ struct AO3WorkRow: View {
         if !chapters.isEmpty {
             metadata.append(chapters)
         }
+        guard includesPerformance else { return metadata }
         for item in [
             ledgerCount(work.comments, singular: "comment", showsZeroStats: showsZeroStats),
             ledgerCount(work.kudos, singular: "kudos", plural: "kudos", showsZeroStats: showsZeroStats),

@@ -164,19 +164,23 @@ final class AO3AuthorProfileModel {
     private var authenticationScope = ""
     private var activeTask: Task<Void, Never>?
     private let pageLoader: PageLoader
+    private let dashboardOnly: Bool
 
     init(
         route: AO3AuthorRoute,
-        pageLoader: @escaping PageLoader = { url, auth, bypassCache in
+        dashboardOnly: Bool = false,
+        pageLoader: PageLoader? = nil
+    ) {
+        self.route = route
+        self.dashboardOnly = dashboardOnly
+        self.pageLoader = pageLoader ?? { url, auth, bypassCache in
             try await AO3AuthorProfileFetcher.page(
                 at: url,
                 auth: auth,
+                cacheScope: dashboardOnly ? AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth) : nil,
                 bypassCache: bypassCache
             )
         }
-    ) {
-        self.route = route
-        self.pageLoader = pageLoader
     }
 
     var hasMore: Bool {
@@ -207,12 +211,14 @@ final class AO3AuthorProfileModel {
     }
 
     func activate(auth: AO3AuthService) {
-        let scope = AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        let scope = dashboardOnly
+            ? AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+            : AO3AuthorProfileFetcher.authenticationScope(for: auth)
         if authenticationScope != scope {
             authenticationScope = scope
             resetForAuthenticationChange()
         }
-        guard headerPhase != .loaded || !loadedTabs.contains(selectedTab) else { return }
+        guard headerPhase != .loaded || (!dashboardOnly && !loadedTabs.contains(selectedTab)) else { return }
         launch {
             await self.loadHeader(auth: auth)
             guard self.headerPhase == .loaded else { return }
@@ -539,6 +545,9 @@ final class AO3AuthorProfileModel {
         force: Bool = false,
         bypassCache: Bool = false
     ) async {
+        // 1y uses the recent groups from loadHeader's single dashboard request.
+        // Full lists remain lazy destinations; don't fetch Works just to draw it.
+        guard !dashboardOnly else { return }
         let tab = selectedTab
         if !force, loadedTabs.contains(tab) {
             contentPhase = .loaded
@@ -764,7 +773,10 @@ final class AO3AuthorProfileModel {
             return (try parse(page.html), page.isStale)
         } catch {
             if let ao3Error = error as? AO3Error, case .parse = ao3Error {
-                await AO3AuthorProfileFetcher.invalidate(url, auth: auth)
+                await AO3AuthorProfileFetcher.invalidate(
+                    url, auth: auth,
+                    cacheScope: dashboardOnly ? AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth) : nil
+                )
             }
             throw error
         }

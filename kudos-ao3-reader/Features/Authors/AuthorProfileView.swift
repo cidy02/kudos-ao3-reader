@@ -15,9 +15,12 @@ struct AuthorProfileView: View {
     @State private var showingLogin = false
     /// Resume after the login sheet succeeds (cleared on cancel / failed login).
     @State private var pendingAuthAction: PendingAuthAction?
+    @State private var dashboardDestination: AO3AuthorProfileTab?
     /// Nav bar title. Account's **My Dashboard** reuses this surface for the
     /// signed-in user's home (`/users/:login`) under the title "Dashboard".
     private let navigationTitle: String
+    private let showsDashboard: Bool
+    private let isContentDestination: Bool
 
     /// `initialTab` lets Account's Writing scope open this surface directly on
     /// Works (1u) or Series (1w) rather than on whichever tab the model defaults
@@ -25,12 +28,15 @@ struct AuthorProfileView: View {
     init(
         route: AO3AuthorRoute,
         navigationTitle: String = "Author",
-        initialTab: AO3AuthorProfileTab? = nil
+        initialTab: AO3AuthorProfileTab? = nil,
+        showsDashboard: Bool = false
     ) {
-        let model = AO3AuthorProfileModel(route: route)
+        let model = AO3AuthorProfileModel(route: route, dashboardOnly: showsDashboard)
         if let initialTab { model.selectedTab = initialTab }
         _model = State(initialValue: model)
         self.navigationTitle = navigationTitle
+        self.showsDashboard = showsDashboard
+        isContentDestination = initialTab != nil
     }
 
     var body: some View {
@@ -52,6 +58,9 @@ struct AuthorProfileView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar { toolbarContent }
+            .navigationDestination(item: $dashboardDestination) { tab in
+                AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
+            }
             .remoteWorkSelectionChrome(bulkSelection)
             .sheet(isPresented: $showingLogin, onDismiss: {
                 Task { await resumePendingAuthActionIfNeeded() }
@@ -141,45 +150,51 @@ private enum PendingAuthAction: Equatable {
 
 private extension AuthorProfileView {
     private var authenticationScope: String {
-        AO3AuthorProfileFetcher.authenticationScope(for: auth)
+        showsDashboard
+            ? AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+            : AO3AuthorProfileFetcher.authenticationScope(for: auth)
     }
 
     private var profileList: some View {
         List {
-            Section {
-                if let header = model.header {
-                    AO3AuthorHero(
-                        header: header,
-                        route: model.route,
-                        profileTitle: model.about?.profileTitle ?? "",
-                        isOwnProfile: isOwnProfile,
-                        isPerformingSubscription: model.isPerformingSubscription,
-                        isPerformingModeration: model.isPerformingModeration,
-                        muteAction: muteAction,
-                        blockAction: blockAction,
-                        onSubscription: subscriptionTapped,
-                        onModerationAction: moderationTapped
-                    )
-                    .cardRow()
+            if usesAccountHeader {
+                accountHeader
+            } else {
+                Section {
+                    if let header = model.header {
+                        AO3AuthorHero(
+                            header: header,
+                            route: model.route,
+                            profileTitle: model.about?.profileTitle ?? "",
+                            isOwnProfile: isOwnProfile,
+                            isPerformingSubscription: model.isPerformingSubscription,
+                            isPerformingModeration: model.isPerformingModeration,
+                            muteAction: muteAction,
+                            blockAction: blockAction,
+                            onSubscription: subscriptionTapped,
+                            onModerationAction: moderationTapped
+                        )
+                        .cardRow()
+                    }
                 }
             }
 
-            if let header = model.header, header.pseuds.count > 1 {
+            if !usesAccountHeader, let header = model.header, header.pseuds.count > 1 {
                 Section {
                     pseudSelector(header.pseuds)
                         .cardRow()
                 }
             }
 
-            Section {
-                Picker("Profile Content", selection: tabSelection) {
-                    ForEach(AO3AuthorProfileTab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
-                    }
+            if !showsDashboard, !isContentDestination {
+                Section {
+                    SubjectSegmentedControl(
+                        options: AO3AuthorProfileTab.allCases,
+                        title: { $0.rawValue },
+                        selection: tabSelection
+                    )
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .cardRow()
             }
 
             if model.isShowingStaleCache {
@@ -191,12 +206,63 @@ private extension AuthorProfileView {
                 }
             }
 
-            AO3AuthorFandomFilterSection(model: model, onWillChange: bulkSelection.exitSelectMode)
-
-            contentRows
+            if showsDashboard, let header = model.header {
+                AO3DashboardSections(
+                    header: header,
+                    route: model.route,
+                    expandAll: expandAll,
+                    onSeeAll: { dashboardDestination = $0 }
+                )
+            } else {
+                AO3AuthorFandomFilterSection(model: model, onWillChange: bulkSelection.exitSelectMode)
+                contentRows
+            }
         }
         .cardList()
+        .subjectScreenWash(palette: theme.scopePalette)
         .refreshable { await model.refresh(auth: auth) }
+    }
+
+    private var usesAccountHeader: Bool { showsDashboard || (isOwnProfile && isContentDestination) }
+
+    private var accountHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SubjectHeaderBlock(
+                kicker: "AO3 Account",
+                title: showsDashboard ? model.route.displayName : model.selectedTab.rawValue,
+                subtitle: accountSubtitle,
+                palette: theme.scopePalette,
+                gutter: SubjectMetrics.accountGutter
+            )
+            if let header = model.header, !header.pseuds.isEmpty {
+                pseudSelector(header.pseuds)
+                    .padding(.horizontal, SubjectMetrics.accountGutter)
+            }
+            if isOwnProfile, showsDashboard || model.selectedTab == .works {
+                NavigationLink { WritingWorkDestination(workID: nil) } label: {
+                    SubjectChip(text: "New work", style: .tinted, systemImage: "plus", palette: theme.scopePalette)
+                        .minimumHitTarget()
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, SubjectMetrics.accountGutter)
+            }
+        }
+        .pageBodyRow(top: 16, gutter: 0)
+    }
+
+    private var accountSubtitle: String? {
+        if showsDashboard {
+            // Joined lives on About, not this page. Don't fetch a profile just
+            // for the artboard's date, or invent pseud/invitation totals.
+            return model.route.pseud.map { _ in "Pseud of \(model.route.username)" }
+        }
+        guard isOwnProfile, model.route.pseud == nil,
+              let kind = AO3DashboardSections.listKind(for: model.selectedTab),
+              let count = AO3AccountListCountsCache.shared.count(
+                  for: kind,
+                  authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+              )?.displayText else { return model.route.displayName }
+        return "\(count) \(model.selectedTab.rawValue.lowercased()) · \(model.route.displayName)"
     }
 
     private var tabSelection: Binding<AO3AuthorProfileTab> {
@@ -474,14 +540,19 @@ private extension AuthorProfileView {
                 }
             }
 
-            if model.selectedTab == .works, !model.works.isEmpty {
+            if !showsDashboard, model.selectedTab == .works, !model.works.isEmpty {
                 Divider()
                 Button { bulkSelection.isSelecting = true } label: {
                     Label("Select Works", systemImage: "checklist")
                 }
             }
-            if !currentContentIsEmpty, model.selectedTab != .about {
+            if showsDashboard || (!currentContentIsEmpty && model.selectedTab != .about) {
                 ExpandAllMenuItem(expandAll: $expandAll)
+            }
+            if showsDashboard {
+                Button { dashboardDestination = .about } label: {
+                    Label("About", systemImage: "person.text.rectangle")
+                }
             }
         } label: {
             Label("Author actions", systemImage: "ellipsis")
