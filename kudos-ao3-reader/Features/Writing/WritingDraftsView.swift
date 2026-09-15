@@ -143,6 +143,52 @@ struct WritingWorkDestination: View {
     }
 }
 
+/// Loads a posted work's tag form and hands it to `EditTagsView` — artboard
+/// **1bp**, which keeps tags on their own page "so a tag fix never opens the
+/// text".
+///
+/// The screen was written and then never reachable: `EditTagsView` had no caller
+/// anywhere in the app or its tests. Same loader shape as its two siblings here,
+/// including the `sessionGeneration` keying, so a sign-out mid-load cannot hand
+/// the next account a form built for the previous one.
+struct WritingTagsDestination: View {
+    @Environment(AO3AuthService.self) private var auth
+    let workID: Int
+    @State private var form: AO3EditTagsForm?
+    @State private var loadedGeneration: Int?
+    @State private var errorMessage: String?
+    @State private var retry = 0
+
+    var body: some View {
+        Group {
+            if let form, loadedGeneration == auth.sessionGeneration {
+                EditTagsView(form: form).id(auth.sessionGeneration)
+            } else if let errorMessage {
+                VStack {
+                    Text(errorMessage)
+                    Button("Retry") { retry += 1 }
+                }.padding()
+            } else {
+                ProgressView("Loading tags…")
+            }
+        }
+        .task(id: "\(auth.sessionGeneration):\(retry)") {
+            form = nil
+            errorMessage = nil
+            let generation = auth.sessionGeneration
+            do {
+                let loaded = try await auth.loadEditTagsForm(workID: workID)
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                loadedGeneration = generation
+                form = loaded
+            } catch {
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
 struct WritingChapterDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let workID: Int

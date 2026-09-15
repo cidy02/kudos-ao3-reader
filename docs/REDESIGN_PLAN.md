@@ -902,6 +902,56 @@ One more is now merely stale rather than blocked: `ReadingQueueSettingsView` say
 a "Last read" row would "print a true-looking date for a fact the app does not
 actually track" — the reading log tracks it now, so that row is derivable.
 
+<a id="writing-turn-audit-2026-09-15"></a>
+**Writing turn (1bo–1bs) audited 2026-09-15 — the screens are built; the problem
+is that several of them cannot be opened.**
+
+Only `1bp` and `1bq` carry BUILD lines, and both name dependencies that exist:
+tag autocomplete is `AO3TagAutocomplete` + `AO3Client.autocompleteTags`, and
+chapter create is `AO3WorkActions.createChapter`, with `AddChapterView` already
+writing the work's chapter total for the last-chapter switch and hiding Position
+on a one-shot.
+
+**Reachability is the real gap.** Grepping every reference to each writing view:
+
+| Board | Screen | Reachable |
+|---|---|---|
+| 1bo | `WorkEditView` | yes, from `WritingDraftsView` / Account / author profile |
+| 1bp | `EditTagsView` | **no — zero references anywhere, app or tests** |
+| 1bq | `AddChapterView` | yes, pushed by `WorkEditView` |
+| 1br | *(no view exists)* | **no** |
+| 1bs | `WritingDraftsView` | yes |
+| — | `EditMultipleWorksView` | **no — zero references anywhere** |
+
+`1bp` is fixed: `WritingTagsDestination` (same loader shape and
+`sessionGeneration` keying as its two siblings) plus an "Edit tags" row beside
+"Add chapter" in `WorkEditView`. Gated on `workID != nil && isPosted` exactly
+like Add chapter — AO3 keeps `/works/<id>/edit_tags` for a work that exists
+publicly, and a draft's tags are already editable in the form above that row.
+
+**`1br` Series Edit and Reorder has no screen at all, and its entire service
+layer is written and dead.** `AO3WorkActions` has `loadSeriesForm`,
+`loadSeriesManagePage`, `saveSeries`, `createSeries` and `reorderSeries`;
+`AO3SeriesForm` (title, creators, summary, notes, isComplete, works) and
+`AO3SeriesWorkRow` (workID, position, isDraft) are complete, with
+`parameters()` ready to POST. Nothing in `Features/` calls any of it. This is a
+two-screen build — the form, and the drag-reorder — over an API that already
+exists, and it is the largest single piece of unclaimed work the sweep has found.
+1br's own footnote states the constraint the reorder screen has to honour:
+position lives on the work, so reordering three works is three requests and saves
+once rather than per drag.
+
+`EditMultipleWorksView` is likewise built and unreachable; it belongs to the bulk
+edit flow rather than to this turn's five boards, and is recorded here only
+because the same grep found it.
+
+**Nothing in this turn can be verified on the simulator.** Every control on these
+screens performs an AO3 write against the signed-in account — post, edit tags,
+add chapter, delete — so the standing no-write rule puts the whole turn out of
+bounds for a visual pass. The copy fix below was found by static analysis for
+that reason.
+
+
 
 
 
