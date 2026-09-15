@@ -202,13 +202,19 @@ struct EditMultipleWorksView: View {
                 options: leaveAsIsOptions(form.ratingOptions)
             )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Archive warnings",
-    value: listLabel(added: changes.tagsToAdd.warnings.count, removed: changes.tagsToRemove.warnings.count),
-    showsDisclosure: true)
+            bulkStateRow(
+                title: "Archive warnings",
+                options: form.warningOptions,
+                added: $changes.tagsToAdd.warnings,
+                removed: $changes.tagsToRemove.warnings
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Categories",
-    value: listLabel(added: changes.tagsToAdd.categories.count, removed: changes.tagsToRemove.categories.count),
-    showsDisclosure: true)
+            bulkStateRow(
+                title: "Categories",
+                options: form.categoryOptions,
+                added: $changes.tagsToAdd.categories,
+                removed: $changes.tagsToRemove.categories
+            )
             SubjectRowSeparator()
             WritingChoiceRow(
                 title: "Language",
@@ -221,15 +227,28 @@ struct EditMultipleWorksView: View {
 
     private var collectionsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Add to collections",
-    value: countLabel(changes.collectionsToAdd.count),
-    showsDisclosure: true)
+            BulkNameListRow(
+                title: "Add to collections",
+                placeholder: "Collection name",
+                names: $changes.collectionsToAdd
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Remove from collections",
-    value: countLabel(changes.collectionsToRemove.count),
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Remove from collections",
+                values: $changes.collectionsToRemove,
+                options: form.currentCollections
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Gift recipients", value: "None", showsDisclosure: true)
+            // 1bn draws this row, so it stays on the page — but AO3's own
+            // edit_multiple form carries no gift-recipient field, so there is
+            // nothing for a chevron to open. Disabled and explained beats a
+            // control that opens nothing and can only ever read "None".
+            SubjectFormRow(
+                label: "Gift recipients",
+                value: "Per work",
+                showsDisclosure: false,
+                isDisabled: true
+            )
         }
         .subjectPanel()
     }
@@ -252,26 +271,57 @@ struct EditMultipleWorksView: View {
                 .labelsHidden()
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Who can comment",
-    value: changes.commentPermissions ?? "Leave as is",
-    showsDisclosure: true)
+            WritingChoiceRow(
+                title: "Who can comment",
+                value: leaveAsIsBinding(\.commentPermissions),
+                options: leaveAsIsOptions(form.commentPermissionOptions)
+            )
         }
         .subjectPanel()
     }
 
     private var creatorsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Add co-creators",
-    value: changes.pseudsToAdd.isEmpty ? "None" : "1",
-    showsDisclosure: true)
+            SubjectFormRow(label: "Add co-creators", arrangement: .control) {
+                TextField("Pseud", text: $changes.pseudsToAdd)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .multilineTextAlignment(.trailing)
+            }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Remove co-creators", value: "None", showsDisclosure: true)
+            // AO3's field is `remove_me`: one checkbox taking the signed-in user
+            // off the selected works. It never was a list of other people to
+            // pick from, which is why this row read a hardcoded "None".
+            SubjectFormRow(label: "Remove me as a co-creator", arrangement: .control) {
+                Toggle("", isOn: $changes.removesSelfAsCreator)
+                    .labelsHidden()
+            }
         }
         .subjectPanel()
     }
 
-    private func countLabel(_ count: Int) -> String {
-        count == 0 ? "None" : "\(count)"
+    /// Only drawn when AO3 actually sent options for the field — a row that
+    /// opens an empty list is the dead chevron in a new coat.
+    @ViewBuilder
+    private func bulkStateRow(
+        title: String,
+        options: [AO3FormOption],
+        added: Binding<[String]>,
+        removed: Binding<[String]>
+    ) -> some View {
+        let row = SubjectFormRow(
+            label: title,
+            value: listLabel(added: added.wrappedValue.count, removed: removed.wrappedValue.count),
+            showsDisclosure: !options.isEmpty,
+            isDisabled: options.isEmpty
+        )
+        if options.isEmpty {
+            row
+        } else {
+            row.subjectRowNavigation(accessibilityLabel: title) {
+                BulkTagStatePicker(title: title, options: options, added: added, removed: removed)
+            }
+        }
     }
 
     private func listLabel(added: Int, removed: Int) -> String {
