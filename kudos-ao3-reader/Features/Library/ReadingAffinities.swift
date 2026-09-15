@@ -28,6 +28,12 @@ enum ReadingAffinities {
         /// Time spent in those works.
         var totalSeconds: Double
         var lastRead: Date?
+        /// The AO3 account behind this byline, when the work carried a registered
+        /// identity. Authors only, and `nil` is normal: an orphaned, anonymous or
+        /// hand-imported work has no account to point at. 1ak's newest-work line
+        /// needs this rather than `name`, because a byline is a *pseud* and
+        /// `/users/<pseud>/works` is not that account's works page.
+        var username: String?
         /// Works in the library carrying this name that have never been opened.
         var unreadInLibrary: Int
         /// Of those, how many have their file on disk.
@@ -65,9 +71,26 @@ enum ReadingAffinities {
         summaries: [UUID: WorkReadingSummary],
         order: Order = .recent
     ) -> [Row] {
-        rows(works: works, summaries: summaries, order: order) { work in
+        // One byline can appear on many works; the first registered identity wins,
+        // and a byline that never carried one keeps a nil username.
+        var usernames: [String: String] = [:]
+        for work in works {
+            let byline = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !byline.isEmpty, usernames[byline] == nil else { continue }
+            if let username = work.verifiedAuthorIdentities
+                .first(where: { $0.kind == .registered && $0.username?.isEmpty == false })?
+                .username {
+                usernames[byline] = username
+            }
+        }
+        return rows(works: works, summaries: summaries, order: order) { work in
             let byline = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
             return byline.isEmpty ? [] : [byline]
+        }
+        .map { row in
+            var row = row
+            row.username = usernames[row.name]
+            return row
         }
     }
 

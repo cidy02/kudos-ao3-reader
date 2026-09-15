@@ -743,6 +743,54 @@ per visible row, cache with a TTL like `AO3AccountListCountsCache`, or only on a
 explicit tap. The per-author aggregation the same note asks for is already done
 (`ReadingAffinities.authors`), so the line is all that is left.
 
+> **BUILT 2026-09-15.** The fetch strategy turned out to be mostly decided
+> already: `AO3AuthorProfileFetcher.page` caches HTML per URL and auth scope and
+> runs inside `AO3RequestCoordinator.withSlot`, which caps concurrency, and it
+> falls back to stale HTML on error. `AuthorNewestWorkStore` adds only a parsed-
+> answer cache with a 30-minute TTL, and the fetch is per-row in `.task`, so N
+> authors cost N requests only if N rows are actually looked at.
+>
+> **Two things the artboard says that the app cannot honestly say.** Both were
+> probed live on 2026-09-15 rather than assumed:
+>
+> - A user's works page defaults to `revised_at` (**Date Updated**) — confirmed by
+>   the selected `<option>` in the live markup — so its first row is the most
+>   recently *edited* work, not the newest. The request now pins
+>   `work_search[sort_column]=created_at`; that URL returns 200 and reports "Date
+>   Posted" selected.
+> - The artboard's line reads "posted 2 Sep 2026". A works-page blurb carries one
+>   date and the parser stores it as `AO3WorkSummary.dateUpdated`, because that is
+>   the date AO3 prints there. **The app writes "updated".** The *ordering* is by
+>   date posted, which is what decides which work the line shows; the label is the
+>   date the app actually has.
+>
+> **A byline is not a username.** `ReadingAffinities.Row` gained `username`,
+> resolved from `SavedWork.verifiedAuthorIdentities` rather than parsed out of the
+> byline — AO3 bylines point at pseuds, and `/users/<pseud>/works` is not that
+> account's works page. An orphaned, anonymous or hand-imported work has no
+> registered identity, so those rows simply draw no newest-work block.
+>
+> Also built: the 38pt tile at its real per-scope shape (authors and tags are
+> circles, fandoms a rounded square — not derivable from the existing
+> `usesHashTile` flag), and the filled gold star the spec draws on every row of
+> all three scopes. The star is not a toggle: `ReadingLogService.setFavorite`
+> still has no callers, and these scopes are *derived* favourites, so drawing a
+> tappable star would imply state nothing writes.
+>
+> **Dropped, and it is the spec's call not mine:** the Authors rows no longer show
+> the library line ("N unread works in your library"). 1ak replaces it with the
+> newest-work block and its own label says the counts belong on the author's page
+> "rather than crowding the row". Fandoms and tags keep it. One line to reverse if
+> that reads wrong on a real library.
+>
+> **Not built:** (a) the row's trailing chevron to the author's own page — Library
+> registers no author destination and adding one means touching `LibraryView`,
+> the view whose type checker stops terminating; (b) the "With new work" chip.
+> That one is not laziness: it filters on a fact fetched per visible row, so the
+> answer is unknown for every row not yet on screen, and a filter that silently
+> omits unfetched rows is worse than no filter. It needs all rows fetched up
+> front — the fan-out this design was built to avoid — or a different definition.
+
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
 one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs
 to is "Home — the tab and every subsection behind its chevrons". The app instead

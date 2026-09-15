@@ -361,6 +361,32 @@ struct LibrarySectionListView: View {
         }
     }
 
+    /// 1ak's Authors rows carry a fetched newest-work line; 1bc and 1bd do not, so
+    /// only the Authors scope takes the wrapper that does the fetching.
+    @ViewBuilder
+    private func affinityRow(_ row: ReadingAffinities.Row) -> some View {
+        if favoriteScope == .authors {
+            FavoriteAuthorRow(row: row, palette: scopePalette, readWorkIDs: readAO3WorkIDs)
+        } else {
+            FavoriteAffinityRow(
+                row: row,
+                palette: scopePalette,
+                usesHashTile: favoriteScope == .tags,
+                usesCircularTile: favoriteScope != .fandoms
+            )
+        }
+    }
+
+    /// AO3 ids of works the reader has opened — 1ak's UNREAD tag is the absence of
+    /// the author's newest work from this set.
+    private var readAO3WorkIDs: Set<Int> {
+        var ids: Set<Int> = []
+        for work in works where work.hasStartedReading || work.isFinished {
+            if let id = work.ao3WorkID { ids.insert(id) }
+        }
+        return ids
+    }
+
     private var showsFavoriteScopes: Bool { kind == .favorites }
 
     /// True when an aggregate scope is showing, so the work list, its filters and
@@ -481,11 +507,7 @@ struct LibrarySectionListView: View {
                     SectionRuleHeader(title: favoriteScope.title, count: rows.count)
                         .pageBodyRow(top: 18, gutter: 0)
                     ForEach(rows) { row in
-                        FavoriteAffinityRow(
-                            row: row,
-                            palette: scopePalette,
-                            usesHashTile: favoriteScope == .tags
-                        )
+                        affinityRow(row)
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                     }
                 }

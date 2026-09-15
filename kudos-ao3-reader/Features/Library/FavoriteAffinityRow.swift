@@ -15,36 +15,154 @@ struct FavoriteAffinityRow: View {
     /// own distinction, and it is doing work: a tag's first letter is not a thing
     /// anyone sorts or scans by.
     var usesHashTile = false
+    /// Authors (1ak) and tags (1bd) draw a circular tile; fandoms (1bc) draw a
+    /// rounded square. Not derivable from `usesHashTile` — tags are circles *and*
+    /// hashed, authors are circles and lettered, fandoms are squares and lettered.
+    var usesCircularTile = true
+    /// 1ak's "Newest work" block. Only the Authors scope has one: 1bc and 1bd draw
+    /// no such block, and there is no per-fandom or per-tag equivalent to fetch.
+    var newestWork: AO3WorkSummary?
+    /// Whether `newestWork` is absent from what you have opened — 1ak's UNREAD tag.
+    var isNewestWorkUnread = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            tile
-            VStack(alignment: .leading, spacing: 4) {
-                Text(row.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(2)
-                Text(logLine)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                libraryLine
+        VStack(alignment: .leading, spacing: 10) {
+            identityLine
+            if let newestWork {
+                SubjectRowSeparator(inset: 0)
+                newestWorkBlock(newestWork)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .subjectCard(palette: palette)
-        .combinedAccessibilityRow("\(row.name). \(logLine). \(libraryText)")
+        .combinedAccessibilityRow(accessibilityText)
+    }
+
+    private var identityLine: some View {
+        HStack(alignment: .top, spacing: 11) {
+            tile
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(row.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .lineLimit(2)
+                    // Filled on every row of all three scopes, as the spec draws it:
+                    // being on this page *is* the favourite. The explicit
+                    // `ReadingFavorite` star is a separate axis nothing writes yet
+                    // (`ReadingLogService.setFavorite` still has no callers), so this
+                    // is not a toggle and does not pretend to be one.
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.subjectFavoriteGold)
+                        .accessibilityHidden(true)
+                }
+                Text(logLine)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // 1ak replaces this line with the newest-work block — its own label
+                // says the counts belong on the author's page "rather than crowding
+                // the row" — so Authors shows one or the other, never both.
+                if newestWork == nil {
+                    libraryLine
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// 1ak's second half: what this author posted most recently, and whether you
+    /// have opened it.
+    private func newestWorkBlock(_ work: AO3WorkSummary) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            // A dimmed uppercase label, not a `SubjectKicker`: the kicker is the
+            // accent-coloured subject line with a rule under it, and this is a
+            // section label inside a card the kicker's own rule would fight.
+            Text("Newest work")
+                .font(.system(size: 8.5, weight: .bold))
+                .kerning(0.85)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 9) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(work.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(2)
+                    Text(newestWorkMetadata(work))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if isNewestWorkUnread {
+                    Text("UNREAD")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .kerning(0.6)
+                        .foregroundStyle(palette.accent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(palette.chipFill)
+                        )
+                }
+            }
+            .contentShape(Rectangle())
+            // A background link rather than a NavigationLink wrapping the content:
+            // as a label it would restyle the block and draw a second chevron.
+            // `LibraryView` already registers the `AO3WorkSummary` destination.
+            .subjectRowNavigation(
+                to: work,
+                accessibilityLabel: "Open \(work.title)"
+            )
+        }
+    }
+
+    /// "Good Omens (TV) · updated 2 Sep 2026 · 12k words".
+    ///
+    /// The artboard reads **posted**. A works-page blurb carries one date and the
+    /// parser stores it as `dateUpdated`, because that is the date AO3 prints
+    /// there — so this says "updated". Naming it "posted" would be a label the app
+    /// cannot stand behind, and the request is already pinned to the Date Posted
+    /// *ordering* (see `AuthorNewestWorkStore`), which is the part that decides
+    /// which work this is.
+    private func newestWorkMetadata(_ work: AO3WorkSummary) -> String {
+        var parts: [String] = []
+        if let fandom = work.fandoms.first(where: { !$0.isEmpty }) {
+            parts.append(fandom)
+        }
+        if !work.dateUpdated.isEmpty {
+            parts.append("updated \(work.dateUpdated)")
+        }
+        if let words = work.words, words > 0 {
+            parts.append("\(words.formatted(.number.notation(.compactName))) words")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var accessibilityText: String {
+        var text = "\(row.name). \(logLine)."
+        if let newestWork {
+            text += " Newest work: \(newestWork.title), \(newestWorkMetadata(newestWork))."
+            if isNewestWorkUnread { text += " Unread." }
+        } else {
+            text += " \(libraryText)"
+        }
+        return text
     }
 
     private var tile: some View {
         Text(usesHashTile ? "#" : String(row.name.prefix(1)).uppercased())
             .font(.system(size: 15, weight: .bold, design: usesHashTile ? .monospaced : .default))
             .foregroundStyle(palette.accent)
-            .frame(width: 30, height: 30)
+            .frame(width: 38, height: 38)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(palette.chipFill)
+                RoundedRectangle(
+                    cornerRadius: usesCircularTile ? 19 : 11,
+                    style: .continuous
+                )
+                .fill(palette.chipFill)
             )
             .accessibilityHidden(true)
     }
@@ -84,5 +202,42 @@ struct FavoriteAffinityRow: View {
         if row.savedForLater > 0 { extras.append("\(row.savedForLater) in Saved for Later") }
         if !extras.isEmpty { text += " · " + extras.joined(separator: " · ") }
         return text
+    }
+}
+
+/// 1ak's Authors row: `FavoriteAffinityRow` plus the newest-work line.
+///
+/// A wrapper rather than state on the row itself, because the newest work is a
+/// network fact and only this scope has one — and because the list this sits in
+/// is already at the Swift type checker's limit, so the `@State` and the `.task`
+/// belong anywhere but there.
+///
+/// The fetch is per-row and runs when the row appears, so a list of forty authors
+/// costs forty requests only if forty rows are actually looked at.
+/// `AuthorNewestWorkStore` caches the parsed answer and
+/// `AO3AuthorProfileFetcher`/`AO3RequestCoordinator` already cache the HTML and
+/// cap concurrency, so scrolling back over a row costs nothing.
+struct FavoriteAuthorRow: View {
+    let row: ReadingAffinities.Row
+    let palette: SubjectPalette
+    /// AO3 work ids the reader has opened, for the UNREAD tag.
+    let readWorkIDs: Set<Int>
+
+    @Environment(AO3AuthService.self) private var auth
+    @State private var newestWork: AO3WorkSummary?
+
+    var body: some View {
+        FavoriteAffinityRow(
+            row: row,
+            palette: palette,
+            newestWork: newestWork,
+            isNewestWorkUnread: newestWork.map { !readWorkIDs.contains($0.id) } ?? false
+        )
+        .task(id: row.username) {
+            // No registered identity means no account page to read — an orphaned,
+            // anonymous or hand-imported work. The block simply does not appear.
+            guard let username = row.username else { return }
+            newestWork = await AuthorNewestWorkStore.newestWork(username: username, auth: auth)
+        }
     }
 }
