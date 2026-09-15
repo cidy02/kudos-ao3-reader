@@ -3398,3 +3398,65 @@ to answer. So:
   what AO3 does and does not allow. Extracting each screen to its own file and
   printing an indented outline of tags + inline styles is how the tokens in §1
   were measured.
+
+### pickers-built-2026-09-15
+
+The owner's answer to the dead-chevron question was "build the pickers".
+Eighteen rows drew a disclosure chevron and pushed nowhere. Closed as:
+
+**Built (18 rows across 3 screens).**
+
+*Edit Multiple Works (1bn), 8.* Archive warnings and Categories are
+three-state add/remove, reusing Search's `FilterSelectionState` cycle and
+its include/exclude colour roles. Remove from collections reuses
+`WritingTagsRow` with `kind: nil`, which already renders a multi-select
+over options. Add to collections is free text, because AO3's field is
+`work[collections_to_add]`, a comma-separated input — a picker over
+`currentCollections` would have offered the *remove* list. Who can comment
+is now parsed: `parseBulkEditForm` reads `work[comment_permissions]` with
+the same `parseRadios` helper the single-work form uses. Add co-creators is
+a text field. Remove co-creators was relabelled **Remove me as a
+co-creator** and rebuilt as a toggle — AO3's field is `remove_me`, one
+checkbox taking *you* off the works, never a list of people.
+
+*Work Edit (1bo/1bs), 5.* The item recorded three; there were five. Work
+skin and Who can comment were one `WritingChoiceRow` each — `parseWorkForm`
+had populated `workSkinOptions` and `commentPermissionOptions` all along
+and nothing read them. Co-creators got a screen combining the pseud
+multi-select with the co-author byline (both parsed by `parseCreators`,
+neither previously editable). Inspired by got a screen for AO3's
+`parent_attributes` group. Chapters posted follows 1bo's own footnote: the
+posted count is AO3's to report, the total is the writer's to set.
+
+*Edit tags (1bq), 5.* Rating plus the four tag rows, straight reuse of
+`WritingChoiceRow` / `WritingTagsRow`.
+
+**Not built, and why.**
+
+*Gift recipients (1bn).* otwarchive's `edit_multiple` carries no gift field
+at all. 1bn draws the row so it stays, disabled and reading "Per work"
+rather than a chevron into nothing.
+
+*Twelve read-only rows.* `ChallengeSettingsView` is read-only by its own
+doc comment; `TagSetView`'s nomination limits and `ModeratedItemsView`'s
+tallies are the same. AO3 has no native edit for them. The chevron was
+removed; the rows and their values stay.
+
+*One row deleted.* "Minimum words: 5,000" was a hardcoded string with no
+model behind it — the artboard's mock figure shipped as fact.
+
+**Method note.** The repo's `ao3_edit_multiple.html` fixture is hand-written
+and lacks fields the real page has, so its silence is not evidence; three
+answers here came from reading otwarchive's own `edit_multiple.html.erb`
+and `_work_form_pseuds.html.erb`. The fixture now carries the
+`comment_permissions` radios and `remove_me` checkbox, with a test pinning
+the rule that matters most: **a field the reader did not touch must not
+appear in the POST**, or a bulk save overwrites it on every selected work.
+
+**Detector note.** A naive `showsDisclosure: true` vs `subjectRowNavigation`
+count reads 30 dead where the truth was 15. `SubjectFormRow`'s convenience
+init takes `action:` **last**, so a trailing closure binds to it; rows using
+`.onTapGesture` are live too. Count a row dead only if it has no `action:`,
+no `.subjectRowNavigation`, and no trailing action closure.
+
+Repo-wide check is clean: every chevron now has somewhere to go.
