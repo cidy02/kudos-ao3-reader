@@ -434,6 +434,21 @@ struct AO3AuthorSeriesSection: View {
                         emptySymbol: "square.stack"
                     )
                 } else if showsNewSeriesOnAO3 {
+                    // 1az's own copy, verbatim. The generic empty message said
+                    // nothing about what a series is FOR, which is the half that
+                    // earns the trip to Safari underneath it.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("You have not made a series.")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("A series groups your works so they read in order. "
+                            + "Series are created on AO3; anything you make there "
+                            + "appears here on the next refresh.")
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .cardRow()
                     AccountExternalNavCard(
                         title: "New series on AO3",
                         systemImage: "square.stack.badge.plus",

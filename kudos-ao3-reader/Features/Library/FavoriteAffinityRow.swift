@@ -61,12 +61,13 @@ struct FavoriteAffinityRow: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                // 1ak replaces this line with the newest-work block — its own label
-                // says the counts belong on the author's page "rather than crowding
-                // the row" — so Authors shows one or the other, never both.
-                if newestWork == nil {
-                    libraryLine
-                }
+                // 1ak's own label says these counts belong on the author's page
+                // "rather than crowding the row", so this used to be hidden
+                // whenever the newest-work block appeared. The owner overrode
+                // that on 2026-09-15: Fandoms and Tags both keep the line, and
+                // an Authors row that silently drops it reads as a different
+                // kind of row rather than the same row with more on it.
+                libraryLine
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
