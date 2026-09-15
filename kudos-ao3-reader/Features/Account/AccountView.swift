@@ -732,6 +732,7 @@ struct AccountView: View {
                     }
                 }
                 if profileTab == .works {
+                    AO3AuthorWorksScopeSection(model: model, layout: layout, showsScopes: true)
                     AO3AuthorFandomFilterSection(model: model, layout: layout)
                     AO3AuthorWorksSection(
                         model: model,
