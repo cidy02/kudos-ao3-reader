@@ -262,7 +262,7 @@ struct HomeSectionListView: View {
                         }
                     }
                 } header: {
-                    SectionRuleHeader(title: kind.title, count: visibleItems.count)
+                    SectionRuleHeader(title: kind.groupTitle, count: visibleItems.count)
                         .textCase(nil)
                         .listRowInsets(EdgeInsets())
                         .padding(.bottom, 10)
@@ -344,7 +344,7 @@ struct HomeSectionListView: View {
             VStack(alignment: .leading, spacing: 16) {
                 subjectHeader.padding(.top, 20)
                 filterChipRail
-                SectionRuleHeader(title: kind.title, count: visibleItems.count)
+                SectionRuleHeader(title: kind.groupTitle, count: visibleItems.count)
                 if visibleItems.isEmpty, filters.hasActiveFilters {
                     filterCollisionCard.padding(.horizontal, 16)
                 } else {
@@ -382,9 +382,15 @@ struct HomeSectionListView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
     }
+    /// 1ae's per-cover badge: "+2 CH", not "+2 new". Home's carousel keeps the
+    /// longer "+N new" footer, which is what 1b draws there — the grid tile has
+    /// less room and the spec abbreviates it for exactly that reason.
+    ///
+    /// Always at least +1: `.recentlyUpdated` filters on `hasUpdate`, which is
+    /// `postedChapterCount > knownChapterCount`.
     private func updateFooter(for work: SavedWork) -> String? {
         guard kind == .recentlyUpdated else { return nil }
-        return "+\(work.postedChapterCount - work.knownChapterCount) new"
+        return "+\(work.postedChapterCount - work.knownChapterCount) CH"
     }
 
 }
