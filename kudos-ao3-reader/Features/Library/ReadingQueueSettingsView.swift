@@ -109,6 +109,16 @@ struct ReadingQueueSettingsView: View {
                 showingTags = true
             }
             .accessibilityAddTraits(.isButton)
+            // 1h: "Manage all tags as the way out to the shared vocabulary" —
+            // 1bh's screen. Offered only once there is something to manage; on a
+            // queue with no tags the sheet above is the whole story.
+            if !queue.tags.isEmpty {
+                SubjectRowSeparator()
+                SubjectFormRow(label: "Manage tags", value: "", showsDisclosure: true)
+                    .subjectRowNavigation(accessibilityLabel: "Manage tags") {
+                        QueueTagManagerView(queue: queue)
+                    }
+            }
             if !queue.tags.isEmpty {
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(queue.tags.sorted { $0.name < $1.name }) { tag in
