@@ -173,7 +173,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     HomeSectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
-                .navigationDestination(for: SubscriptionsRoute.self) { _ in AO3AccountWorksList(kind: .subscriptions) }
+                .navigationDestination(for: SubscriptionsRoute.self) { _ in
+                    // 1ag: the same screen the Account tab pushes, on Home's own
+                    // stack, announcing the tab it was actually opened from.
+                    AO3AccountWorksList(kind: .subscriptions, originKicker: "Home")
+                }
                 .navigationDestination(for: AllReadingQueuesDestination.self) { destination in
                     // Chevron passes nil → stack grid (owns its own New Queue sheet).
                     // A specific queue id opens the Safari-style browser.

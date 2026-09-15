@@ -117,6 +117,13 @@ struct AO3AccountWorksList: View {
     }
 
     let kind: Kind
+    /// Where the reader came from, drawn as the header's kicker.
+    ///
+    /// 1ag: Home's Subscriptions chevron opens *this* screen rather than a second
+    /// copy, and "The path anchor follows the same source, reading Home or AO3
+    /// Account to match." It was hardcoded to AO3 Account, so arriving from Home
+    /// announced a tab you had not been in.
+    var originKicker: String = "AO3 Account"
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
@@ -433,7 +440,7 @@ struct AO3AccountWorksList: View {
     /// than pages *about* one, and the spec sets them accordingly.
     private var subjectHeader: some View {
         SubjectHeaderBlock(
-            kicker: "AO3 Account",
+            kicker: originKicker,
             title: kind.title,
             subtitle: headerTallyLine,
             palette: accountPalette,
