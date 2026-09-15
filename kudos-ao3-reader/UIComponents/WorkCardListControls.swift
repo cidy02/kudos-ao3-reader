@@ -3,9 +3,41 @@ import SwiftUI
 /// A category detail page's card layout — "Detailed" is the existing full `WorkRow`/
 /// `AO3WorkRow` list; "Compact" lays the same works out as `WorkCoverCard`/
 /// `AO3WorkCoverCard` cover cards, two side-by-side, Apple Books-style.
+/// How a work list draws each work. Three presentations, and a screen shows one
+/// of them — mixing two on one page is a bug, not a density choice.
+///
+/// `ledger` was missing, and its absence was doing real damage: screens that
+/// wanted ledger rows checked `== .compact`, fell through, and drew ledger under
+/// a menu that said "Detailed". Worse, a list holding both local and remote works
+/// drew `WorkRow.ledger` for the saved ones and `AO3WorkRow.searchLedger` for the
+/// rest — two different-looking rows on one screen, decided by whether a work
+/// happened to be in the library.
+///
+/// Raw values are unchanged for the two existing cases, so a stored preference
+/// still decodes.
 nonisolated enum WorkListDisplayMode: String, CaseIterable {
+    /// The full card: summary, complete metadata line, expandable tags.
     case detailed
+    /// The dense single-work row: kicker, rule, title, byline, signal grid.
+    case ledger
+    /// The two-up cover grid.
     case compact
+
+    var title: String {
+        switch self {
+        case .detailed: "Detailed"
+        case .ledger: "Ledger"
+        case .compact: "Compact"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .detailed: "list.bullet.rectangle"
+        case .ledger: "list.bullet"
+        case .compact: "square.grid.2x2"
+        }
+    }
 }
 
 /// The filter button + its "Clear All Filters" long-press menu — the one control
@@ -120,8 +152,9 @@ struct DisplayModeMenuPicker: View {
 
     var body: some View {
         Picker("Layout", selection: $mode) {
-            Label("Detailed", systemImage: "list.bullet").tag(WorkListDisplayMode.detailed)
-            Label("Compact", systemImage: "square.grid.2x2").tag(WorkListDisplayMode.compact)
+            ForEach(WorkListDisplayMode.allCases, id: \.self) { mode in
+                Label(mode.title, systemImage: mode.systemImage).tag(mode)
+            }
         }
     }
 }

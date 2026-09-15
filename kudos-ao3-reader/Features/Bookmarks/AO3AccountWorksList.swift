@@ -202,7 +202,7 @@ struct AO3AccountWorksList: View {
                             }
                             if hasWorks {
                                 DisplayModeMenuPicker(mode: $displayMode)
-                                if displayMode == .detailed {
+                                if displayMode != .compact {
                                     ExpandAllMenuItem(expandAll: $expandAll)
                                 }
                                 if tracksNewChapters, worksWithNewChapters > 0 {
@@ -301,7 +301,11 @@ struct AO3AccountWorksList: View {
                                 // non-selecting branch — re-wrapping it stacks a second,
                                 // unhidden, real-titled NavigationLink behind the blurred
                                 // branch's reveal gate.
-                                SensitiveWorkRow(work: work, expandAll: expandAll, presentation: .ledger)
+                                SensitiveWorkRow(
+                                    work: work,
+                                    expandAll: expandAll,
+                                    presentation: displayMode == .ledger ? .ledger : .standard
+                                )
                                     // The badge belongs on this branch too: a
                                     // subscribed work already in the library renders
                                     // here, and it is the one most worth telling
@@ -317,8 +321,13 @@ struct AO3AccountWorksList: View {
                                     ))
                             } else if let remote = entry.remote {
                                 let newChapters = newChapterCount(for: entry)
+                                // Local and remote take the *same* presentation, so a
+                                // list holding both does not change shape work by work
+                                // depending on which ones happen to be in the library.
                                 EnrichingAO3WorkRow(
-                                    work: remote, expandAll: expandAll, presentation: .searchLedger
+                                    work: remote,
+                                    expandAll: expandAll,
+                                    presentation: displayMode == .ledger ? .searchLedger : .standard
                                 )
                                 .overlay(alignment: .topTrailing) {
                                     newChapterBadge(newChapters).padding(10)
