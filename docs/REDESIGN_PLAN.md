@@ -727,6 +727,22 @@ build after each step, not as a rider on something else.
 > a different place. `FavoriteQuickFilter` is its own testable value with four
 > cases pinned by `FavoriteQuickFilterTests`.
 
+**1ak's newest-work line: the stated blocker is stale, but the real constraint is
+different and worth deciding before building, 2026-09-15.** 1ak's BUILD note says
+the line "needs the author page parsed, which the app does not do yet". The app
+does: `AO3Client+Authors.parseAuthorWorksPage` parses an author's works page, and
+`AO3AuthorProfileService` already exposes `works: [AO3WorkSummary]` from it. That
+is the **third** stale claim this sweep, after 1ah/1ai's reading log and the
+Phase 9 table's own "not stored today".
+
+The genuine constraint is cost, not capability. 1ak draws one row per author — the
+artboard shows nine — and each newest-work line is a separate fetch of that
+author's works page. Nine requests to paint one screen, against a site that rate
+limits, is not a thing to do on appear. Before building this, decide: fetch lazily
+per visible row, cache with a TTL like `AO3AccountListCountsCache`, or only on an
+explicit tap. The per-author aggregation the same note asks for is already done
+(`ReadingAffinities.authors`), so the line is all that is left.
+
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
 one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs
 to is "Home — the tab and every subsection behind its chevrons". The app instead
