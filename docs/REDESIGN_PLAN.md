@@ -824,6 +824,41 @@ hub still owns a works list is that turn's call, and `AccountView` is one of the
 views whose type checker stops terminating. The new count line does not appear
 there — `refineSource` defaults to empty — so nothing on screen lies about it.
 
+<a id="browse-turn-audit-2026-09-15"></a>
+**Browse turn (1g, 1am, 1an) audited 2026-09-15 — all three notes say "Needs
+building" and all three were substantially built.**
+
+`1an` is `FandomListFilterSheet`, with the three parser switches (`rpf`,
+`allMediaTypes`, `relatedFandoms`), minimum works, favourited and downloads, each
+carrying the count it would remove. `1am` is `FandomFamily` + `FandomFamilyRows`
+(commit `a0913bf6`), including the tilde on a summed family figure and the logic
+that drops it once a family has been opened and AO3 has answered with a
+deduplicated total. `1g` is `MediaBrowserView`, whose own doc comment already
+answers that board's build note: AO3's featured subset is not parsed, but the app
+caches the whole per-category list with a work count on each, so the cluster shows
+the largest fandoms — no new request, and a better list than a hand-curated one.
+`1am`'s "the same fix applies a level up" is done too: the category header prints
+`~3.6M works` with the tilde, via `isApproximateWorkCount`.
+
+Built this tick: **1g's second requirement, the `FandomDisplayName` split on the
+cluster chips.** They were drawing the raw AO3 tag at `lineLimit(1)`, so the
+panel read "僕のヒーローアカデミア | Boku no Hero Aca…" and
+"Pocket Monsters | Pokemon - All Media Typ…" — truncated mid-word, and the two
+One Piece tags were separated only by text past the cut. The chip now takes a
+split `title` + dimmed `qualifier`, computed once in `computeStats` (already off
+the main actor) rather than per render. Identity is untouched: the tap still
+sends `fandom.name`, because splitting is not reversible.
+
+**The screenshot caught what the build could not.** Reusing
+`FandomQualifier.displayText(parts:fallback:)` with the nested-member-row's
+`fallback: split.title` made every unqualified chip repeat itself —
+"Haikyuu!! Haikyuu!!", "Attack on Titan Attack on Titan". The fallback is correct
+where it came from (a member row under a family title that is printed once needs
+*something* to name it) and wrong in a standalone chip, where the title is
+already the first word. Passing an empty fallback fixes it. Verified on the
+simulator before and after.
+
+
 
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
 one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs

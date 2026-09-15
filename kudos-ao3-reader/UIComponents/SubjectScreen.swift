@@ -537,7 +537,14 @@ struct SubjectPanel<Heading: View, Content: View>: View {
 /// second, and the bar is a mark rather than content. Folding it in would have
 /// meant three more optional parameters that no other chip uses.
 struct FandomClusterChip: View {
-    let name: String
+    /// The split display title — 1g asks for `FandomDisplayName` splitting here
+    /// "so qualifiers do not wrap". The raw tag stays the caller's business: it is
+    /// what the tap searches on, and splitting is not reversible.
+    let title: String
+    /// AO3's delimiter already stripped. Drawn dimmer and after the title, so
+    /// "One Piece · All Media Types" and "One Piece · Anime & Manga" differ where
+    /// the eye is already looking rather than past a truncation.
+    var qualifier: String = ""
     var workCount: Int?
     /// Marks a fandom the reader has actually read from, so a cluster of twenty
     /// names is not uniform. Drawn as a bar rather than a colour change: the
@@ -563,10 +570,17 @@ struct FandomClusterChip: View {
             // card, whatever hue the card itself was: a pink category and a blue
             // one drew identically tinted chips. Naming the colour fixes both the
             // inheritance and the mismatch.
-            Text(name)
+            Text(title)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(palette.accent)
                 .lineLimit(1)
+            if !qualifier.isEmpty {
+                Text(qualifier)
+                    .font(.system(size: 11))
+                    .foregroundStyle(palette.accent.opacity(0.62))
+                    .lineLimit(1)
+                    .layoutPriority(-1)
+            }
             if let workCount {
                 Text(workCount.formatted())
                     .font(.system(size: 11))
@@ -581,7 +595,8 @@ struct FandomClusterChip: View {
     }
 
     private var accessibilityText: String {
-        var spoken = name
+        var spoken = title
+        if !qualifier.isEmpty { spoken += ", \(qualifier)" }
         if let workCount { spoken += ", \(workCount.formatted()) works" }
         if isFamiliar { spoken += ", read before" }
         return spoken
