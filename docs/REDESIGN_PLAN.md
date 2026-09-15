@@ -667,6 +667,34 @@ started deliberately.**
 > missing. Re-verify a blocker before routing around it, exactly as a "done"
 > gets re-verified before being trusted.
 
+**1aj Favorites — Works is the one board in this group still short, 2026-09-15.**
+The scopes, the affinity aggregates and the ordering are all built. Three things
+in 1aj's own line are not:
+
+1. **The Rereads and Offline chips.** Offline is free (`hasEPUB`). Rereads is
+   `finishCount > 1`, which only `ReadingLogService.summaries(in:)` knows, and
+   that call fetches the whole session table. `visibleItems` is referenced about
+   ten times per render, so filtering inside it would fetch the log ten times a
+   frame. `WorkReadingSummary` is a plain derived struct, not a `@Model`, so
+   there is no `@Query` to lean on, and an unconditional `@Query` over
+   `ReadingSession` would load the log for all seven sections — the exact cost
+   the existing gate in this view was written to avoid.
+2. **The reread count on the row footer.** `ReadingHistoryFactsStrip` already
+   draws it but is gated to History and also draws duration and new-chapters,
+   which 1aj does not ask for. Needs a style parameter, not a second view.
+3. **The filled star beside the title.** Sanctioned in advance: the note above
+   on the removed glyph slot says 1t and 1aj "can re-add the pair when one of
+   those is built". Note the removal that was *explicitly approved* was the
+   offline tick, not the slot — so re-adding the slot for the star is in scope,
+   but re-adding the offline tick that 1aj's line also mentions is **not**,
+   because the owner approved its removal as a density reduction.
+
+The blocker on (1) is that the fix wants `visibleItems` computed once per render
+and threaded, and this view is 703 lines — the file class where adding an
+`if`/`else` in a closure or a multi-argument modifier closure makes the Swift
+type checker stop terminating rather than fail. Do it as its own change with a
+build after each step, not as a rider on something else.
+
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
 one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs
 to is "Home — the tab and every subsection behind its chevrons". The app instead
