@@ -139,7 +139,12 @@ final class CommentsModel {
     /// always re-fetches the correct target page (the view's `onChange` resets
     /// and reloads) rather than reversing whatever page happens to be cached —
     /// on a multi-page thread, the current page usually isn't the target page.
-    var newestFirst = false
+    ///
+    /// **Defaults to newest-first, per spec 1f**: "the default sort is Newest".
+    /// AO3's own pages open oldest-first, which is right for reading a fic's
+    /// comments as a conversation and wrong for the thing this sheet is usually
+    /// opened to do — see what was said recently.
+    var newestFirst = true
 
     // Composer
     var composerContext: AO3CommentContext?
