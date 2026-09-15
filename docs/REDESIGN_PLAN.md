@@ -858,6 +858,51 @@ where it came from (a member row under a family title that is printed once needs
 already the first word. Passing an empty fallback fixes it. Verified on the
 simulator before and after.
 
+<a id="queue-turn-audit-2026-09-15"></a>
+**Queue turn (1h, 1i, 1j) audited 2026-09-15 — the gaps here are the data model,
+not the layout, and three files had already said so.**
+
+`1h` carries no BUILD line at all; it is a pure description. `1i` and `1j` say
+"Needs building", and the screens exist — `ReadingQueueBrowser`,
+`ReadingQueueOrganizer`, `ReadingQueueSettingsView`, `NewReadingQueueSheet`. What
+they lack is schema. `ReadingQueueOrganizer`, `ReadingQueueSettingsView` and
+`NewReadingQueueSheet` each carry a careful doc comment listing what its artboard
+draws that it does not build and why, and all three reduce to the same sentence:
+`ReadingQueue` has no tags, no pin flag, no per-queue download policy, and no
+stored colour. Each note was right to stop where it did — those were restyling
+tasks. This sweep is chartered for missing functionality, so the schema change is
+in scope now.
+
+Built this tick: **the stored colour** (`ReadingQueue.hue`), which 1h and 1j both
+name explicitly — 1j calls it "stored, not hashed from the name" and 1h says
+"every accent ... is the queue's stored hue". It fixes a real defect on the way:
+the colour was `CoverArt.hue(for: queue.displayName)`, so **renaming a queue
+silently repainted it**. `displayHue` falls back to that same hash when `hue` is
+nil, so every existing queue keeps exactly the colour it had and the addition
+needs no migration. `QueueHueSwatches` holds 1j's five swatches as hues rather
+than the mock's hex, so one swatch means the same thing under every theme.
+Backup carries it as an optional field — additive, no version bump, and the merge
+only ever fills a colour in, never clears one, so an archive written before this
+(or by Android, which does not write it) cannot strip a colour the reader picked.
+
+**The simulator found a duplicate nobody knew was there.** The swatches did not
+appear, through two clean reinstalls. `NewReadingQueueSheet` exists precisely to
+replace the "near-identical plain `Form`" the organizer and browser each had —
+but **Home had a third copy**, inline in `HomeView`, never migrated. So Home's
+New Queue card silently missed every improvement made to the shared sheet. Home
+now uses it: one sheet, three entry points.
+
+Not built, and each needs its own schema decision: queue **tags** (1h's "+ Tag",
+1i's tag rail and "Edit tags"), a **pin** flag (1i's Pinned section, currently
+stood in for by Saved for Later), a per-queue **offline** policy (1h.3's "Keep
+works offline" — today every queued work is preserved, so the toggle would offer
+a choice the app does not have), and 1j's **seed step**. Also 1i's
+cross-queue/tag/work search, which has no search behind it anywhere in the app.
+One more is now merely stale rather than blocked: `ReadingQueueSettingsView` says
+a "Last read" row would "print a true-looking date for a fact the app does not
+actually track" — the reading log tracks it now, so that row is derivable.
+
+
 
 
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate

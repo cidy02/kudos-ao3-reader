@@ -1266,6 +1266,12 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     let deletedAt: Date?
     let isDeleted: Bool?
     let permanentDeletionScheduledAt: Date?
+    /// 1j's stored queue colour. Optional and added after v8, so it decodes as
+    /// `nil` from every older archive and from Android, which does not write it —
+    /// and `nil` is exactly "take the colour from the name", the state those
+    /// archives were written in. No version bump: this is additive, and the
+    /// existing optional fields here were added the same way.
+    let hue: Double?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -1279,6 +1285,7 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         deletedAt = queue.deletedAt
         isDeleted = queue.isPendingDeletion
         permanentDeletionScheduledAt = queue.permanentDeletionScheduledAt
+        hue = queue.hue
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -2261,6 +2268,13 @@ enum KudosBackupService {
                 queue.name = archived.name
                 queue.kind = kind
                 queue.sortOrder = archived.sortOrder
+            }
+            // Only ever fills a colour in, never clears one: an archive written
+            // before `hue` existed (or by Android, which does not write it) carries
+            // nil, and letting that win would strip a colour the reader had picked
+            // on this device.
+            if let archivedHue = archived.hue, incomingWins || queue.hue == nil {
+                queue.hue = archivedHue
             }
             queue.dateCreated = min(queue.dateCreated, archived.dateCreated)
             queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)

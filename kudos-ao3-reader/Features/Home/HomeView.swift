@@ -34,6 +34,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @State private var isLoadingSubscriptions = false
     @State private var showingNewQueue = false
     @State private var newQueueName = ""
+    /// 1j's colour swatch for the queue being created.
+    @State private var newQueueHue: Double?
 
     // Multi-select / bulk actions, mirroring LibraryView's carousel selection.
     // Scoped to local works (Resume hero+strip + Recently Updated) — Subscriptions
@@ -254,37 +256,24 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         }
                     }
                 }
-                // Sheet for the dashboard carousel's New Queue card — same reliability
-                // reasons as AllReadingQueuesGridView / ReadingQueueBrowserView.
+                // Sheet for the dashboard carousel's New Queue card.
+                //
+                // This was a third inline copy of the same plain `Form`, which is
+                // exactly what `NewReadingQueueSheet` was extracted to replace — the
+                // organizer and the browser were migrated to it and Home was not, so
+                // Home quietly missed 1j's colour swatches when they landed. One
+                // sheet, three entry points.
                 .sheet(isPresented: $showingNewQueue) {
-                    NavigationStack {
-                        Form {
-                            TextField("Name", text: $newQueueName)
-                                #if os(iOS)
-                                .textInputAutocapitalization(.words)
-                                #endif
+                    NewReadingQueueSheet(
+                        name: $newQueueName,
+                        hue: $newQueueHue,
+                        onCreate: createQueue,
+                        onCancel: {
+                            newQueueName = ""
+                            newQueueHue = nil
+                            showingNewQueue = false
                         }
-                        .navigationTitle("New Queue")
-                        #if !os(macOS)
-                        .navigationBarTitleDisplayMode(.inline)
-                        #endif
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Cancel") {
-                                    newQueueName = ""
-                                    showingNewQueue = false
-                                }
-                            }
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Create") { createQueue() }
-                                    .disabled(newQueueName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                    }
-                    #if os(iOS)
-                    .presentationDetents([.medium])
-                    .presentationDragIndicator(.visible)
-                    #endif
+                    )
                 }
         }
         // Declared on the stack itself so the cards inside it and the screens
@@ -566,9 +555,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func createQueue() {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let hue = newQueueHue
         newQueueName = ""
+        newQueueHue = nil
         showingNewQueue = false
-        _ = ReadingQueueService.createQueue(named: trimmed, in: context)
+        _ = ReadingQueueService.createQueue(named: trimmed, hue: hue, in: context)
     }
 
     // MARK: Card details

@@ -23,10 +23,11 @@ import SwiftUI
 ///   changed (`lastMembershipChangedAt`) — not when a work inside it was last
 ///   opened — so a "Last read" label would print a true-looking date for a
 ///   fact the app does not actually track.
-/// - The colour swatch's edit affordance (mock draws a chevron). The colour
-///   itself is real (see `ReadingQueueBrowserView.subjectPalette`'s note) but
-///   it is *derived* from the queue's name, not a stored, independently
-///   editable field — there is nothing a chevron here could open.
+///
+/// **The colour is editable now.** It used to be derived from the queue's name,
+/// so there was nothing an edit affordance could open; `ReadingQueue.hue` is a
+/// stored field and 1h's Colour row sets it. A queue that has never been given
+/// one still falls back to the name hash, so nothing changed appearance.
 struct ReadingQueueSettingsView: View {
     let queue: ReadingQueue
 
@@ -38,7 +39,7 @@ struct ReadingQueueSettingsView: View {
     @State private var confirmDelete = false
 
     private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: queue.displayName))
+        themeManager.appTheme.subjectPalette(hue: queue.displayHue)
     }
 
     private var works: [SavedWork] {
@@ -67,6 +68,34 @@ struct ReadingQueueSettingsView: View {
         preservedWorks.isEmpty ? "None" : "\(preservedWorks.count) · \(queueByteCountString(preservedByteCount))"
     }
 
+    /// 1h.3's Colour row. Writes straight through to the model rather than holding
+    /// a draft: there is no Save on this screen, and every other control here
+    /// (rename, delete) commits on its own action too.
+    private var colourPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            QueueHueSwatchRow(
+                selection: Binding(
+                    get: { queue.hue },
+                    set: { newValue in
+                        queue.hue = newValue
+                        queue.markModified()
+                        context.saveBestEffort(reason: "Saving queue colour failed")
+                    }
+                ),
+                fallbackHue: queue.displayHue
+            )
+            Text(queue.hue == nil
+                ? "Taken from the queue's name, so renaming it changes the colour."
+                : "Set on the queue, so renaming it keeps this colour.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .subjectPanel()
+    }
+
     var body: some View {
         List {
             Section {
@@ -83,6 +112,13 @@ struct ReadingQueueSettingsView: View {
                 SubjectFieldLabel(text: "Details", style: .formGroup)
                     .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
                 detailsPanel
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+            }
+
+            Section {
+                SubjectFieldLabel(text: "Colour", style: .formGroup)
+                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
+                colourPanel
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             }
 

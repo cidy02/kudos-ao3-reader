@@ -28,6 +28,9 @@ struct ReadingQueueBrowserView: View {
     @State var showingSwitcher = false
     @State var showingNewQueue = false
     @State var newQueueName = ""
+    /// 1j's colour swatch for the queue being created. `nil` keeps the
+    /// name-derived hue.
+    @State var newQueueHue: Double?
 
     // MARK: Manage-surface state (formerly ReadingQueueDetailView)
 
@@ -135,7 +138,7 @@ struct ReadingQueueBrowserView: View {
     /// comes from.
     private var subjectPalette: SubjectPalette {
         guard let selectedQueue else { return themeManager.scopePalette }
-        return themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: selectedQueue.displayName))
+        return themeManager.appTheme.subjectPalette(hue: selectedQueue.displayHue)
     }
 
     private var preservedWorks: [SavedWork] {
@@ -749,9 +752,11 @@ extension ReadingQueueBrowserView {
     func createQueue() {
         let trimmed = newQueueName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let hue = newQueueHue
         newQueueName = ""
+        newQueueHue = nil
         showingNewQueue = false
-        let queue = ReadingQueueService.createQueue(named: trimmed, in: context)
+        let queue = ReadingQueueService.createQueue(named: trimmed, hue: hue, in: context)
         select(queue)
     }
 

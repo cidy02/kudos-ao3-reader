@@ -5,27 +5,27 @@ import SwiftUI
 /// (`ReadingQueueBrowserView`), which each opened their own near-identical
 /// plain `Form` before this.
 ///
-/// **What 1j draws that this does not build, and why:** a colour swatch
-/// picker, a Tags field, a "Keep works offline" toggle, and a "Start from"
-/// seed picker (Empty / copy another queue's works). 1j's own footnote under
-/// the colour swatches says why the first is out of reach here: "Set once
-/// instead of derived from the name" — the mock is describing a *different*
-/// colour model than the one this app has. Every queue's colour is
-/// `CoverArt.hue(for: queue.displayName)`, derived fresh from the name every
-/// time (see `ReadingQueueBrowserView.subjectPalette`'s note) — adding an
-/// independent, storable colour would be a schema change, not a restyle, and
-/// this task is the latter. Tags and the offline toggle have no backing for
-/// the same reason `ReadingQueueSettingsView` already gives in full. "Start
-/// from" is closer to real — `ReadingQueueService.addAndPreserve` could be
-/// looped over another queue's works — but it is still a new capability
-/// (`createQueue(named:)` takes only a name today), not a restyle of an
-/// existing one, so it was left for whoever picks up that feature rather than
-/// folded in here.
+/// **The colour swatches are built.** They were not, and the note that used to
+/// sit here explained why: 1j wants a colour "set once instead of derived from
+/// the name", every queue's colour was `CoverArt.hue(for: queue.displayName)`,
+/// and storing one independently "would be a schema change, not a restyle".
+/// That was the right call for a restyling task. `ReadingQueue.hue` is that
+/// schema change, made by the sweep that was chartered for missing
+/// functionality rather than layout, and it fixes a real defect on the way:
+/// renaming a queue used to silently repaint it.
 ///
-/// So this sheet stays exactly what the app can honestly back: a name field,
-/// styled in the redesign's own form vocabulary, and Cancel/Create.
+/// **What 1j still draws that this does not build:** a Tags field, a "Keep works
+/// offline" toggle, and a "Start from" seed picker. The first two need their own
+/// schema — queues have no tag concept and no per-queue download policy, the gap
+/// `ReadingQueueSettingsView` and `ReadingQueueOrganizer` both record in full.
+/// "Start from" is closer to real, since `ReadingQueueService.addAndPreserve`
+/// could be looped over another queue's works, but `createQueue(named:)` takes
+/// only a name today, so seeding is a new capability rather than a control.
 struct NewReadingQueueSheet: View {
     @Binding var name: String
+    /// 1j: the colour is chosen before the name is typed, so it is committed with
+    /// the queue rather than set afterwards. `nil` keeps the name-derived hue.
+    @Binding var hue: Double?
     let onCreate: () -> Void
     let onCancel: () -> Void
 
@@ -40,6 +40,16 @@ struct NewReadingQueueSheet: View {
                         .onSubmit(onCreate)
                 } header: {
                     SubjectFieldLabel(text: "Name", style: .formGroup)
+                }
+
+                Section {
+                    QueueHueSwatchRow(selection: $hue, fallbackHue: previewHue)
+                } header: {
+                    SubjectFieldLabel(text: "Colour", style: .formGroup)
+                } footer: {
+                    Text(hue == nil
+                        ? "Without a colour, the queue takes one from its name — and changes it if you rename it."
+                        : "Set once, so renaming the queue keeps its colour.")
                 }
                 .appThemedRows()
             }
@@ -62,5 +72,12 @@ struct NewReadingQueueSheet: View {
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         #endif
+    }
+
+    /// What the name would give this queue if no swatch is picked — the same hash
+    /// `ReadingQueue.displayHue` falls back to, so the preview cannot disagree
+    /// with the queue that gets created.
+    private var previewHue: Double {
+        CoverArt.hue(for: name.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }
