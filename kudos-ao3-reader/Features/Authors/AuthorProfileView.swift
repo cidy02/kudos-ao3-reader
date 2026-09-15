@@ -8,6 +8,9 @@ struct AuthorProfileView: View {
 
     @State private var model: AO3AuthorProfileModel
     @State private var expandAll = false
+    /// Per-screen, like Home's and Library's section lists. This screen drew its
+    /// rows from the *layout* before, so Ledger and Detailed were unreachable.
+    @AppStorage("authorProfile.displayMode") private var displayMode: WorkListDisplayMode = .detailed
     @State private var bulkSelection = RemoteWorkSelectionController()
     @State private var confirmingUnsubscribe = false
     /// Signed-out Mute/Block/Subscribe — same prompt for all profile write actions.
@@ -341,6 +344,7 @@ private extension AuthorProfileView {
             AO3AuthorWorksSection(
                 model: model,
                 expandAll: expandAll,
+                displayMode: displayMode,
                 isSelecting: bulkSelection.isSelecting,
                 selection: bulkSelection.selection,
                 onToggleSelection: bulkSelection.toggle,
@@ -351,9 +355,13 @@ private extension AuthorProfileView {
                 showsPerformance: isOwnProfile
             )
         case .series:
-            AO3AuthorSeriesSection(model: model, showsNewSeriesOnAO3: isOwnProfile)
+            AO3AuthorSeriesSection(
+                model: model,
+                showsNewSeriesOnAO3: isOwnProfile,
+                displayMode: displayMode
+            )
         case .bookmarks:
-            AO3AuthorBookmarksSection(model: model, expandAll: expandAll)
+            AO3AuthorBookmarksSection(model: model, expandAll: expandAll, displayMode: displayMode)
         case .about:
             aboutRows
         }
@@ -563,7 +571,12 @@ private extension AuthorProfileView {
                 }
             }
             if showsDashboard || (!currentContentIsEmpty && model.selectedTab != .about) {
-                ExpandAllMenuItem(expandAll: $expandAll)
+                Divider()
+                DisplayModeMenuPicker(mode: $displayMode)
+                // Expand All acts on cards, so it has nothing to do in Compact.
+                if displayMode != .compact {
+                    ExpandAllMenuItem(expandAll: $expandAll)
+                }
             }
             if showsDashboard {
                 Button { dashboardDestination = .about } label: {

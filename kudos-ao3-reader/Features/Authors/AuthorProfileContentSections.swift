@@ -347,6 +347,7 @@ struct AO3AuthorSeriesSection: View {
     /// Other authors get the existing empty copy. Creating a series is an AO3 write
     /// this screen does not implement.
     var showsNewSeriesOnAO3: Bool = false
+    var displayMode: WorkListDisplayMode = .detailed
     var layout: AccountWorksLayout = .list
 
     @Environment(AO3AuthService.self) private var auth
@@ -382,7 +383,14 @@ struct AO3AuthorSeriesSection: View {
                     AO3AuthorInlineErrorRow(message: message)
                 }
                 ForEach(model.series) { series in
-                    AO3SeriesRow(series: series, presentation: layout == .scroll ? .standard : .ledger)
+                    // Follows the chosen mode, not the layout. It used to draw
+                    // ledger rows on the list layout whatever the reader picked,
+                    // which is the same Ledger/Detailed conflation fixed
+                    // elsewhere — and this screen had no picker at all until now.
+                    AO3SeriesRow(
+                        series: series,
+                        presentation: displayMode == .ledger ? .ledger : .standard
+                    )
                         .cardNavigation(to: series, accessibilityLabel: series.title)
                         .cardRow()
                 }
