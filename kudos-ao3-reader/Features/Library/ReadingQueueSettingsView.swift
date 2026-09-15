@@ -105,9 +105,9 @@ struct ReadingQueueSettingsView: View {
                 label: "Tags",
                 value: queue.tags.isEmpty ? "None" : "\(queue.tags.count)",
                 showsDisclosure: true
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { showingTags = true }
+            ) {
+                showingTags = true
+            }
             .accessibilityAddTraits(.isButton)
             if !queue.tags.isEmpty {
                 FlowLayout(spacing: 6, rowSpacing: 6) {

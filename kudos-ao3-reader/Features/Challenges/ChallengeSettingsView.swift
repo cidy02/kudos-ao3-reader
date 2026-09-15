@@ -255,7 +255,6 @@ struct ChallengeSettingsView: View {
             SubjectFormRow(
                 label: "Fandoms per request",
                 value: "\(fandomReq) to \(fandomAllowed)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
@@ -264,7 +263,6 @@ struct ChallengeSettingsView: View {
             SubjectFormRow(
                 label: "Relationships per request",
                 value: "\(relReq) to \(relAllowed)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
@@ -273,7 +271,6 @@ struct ChallengeSettingsView: View {
             SubjectFormRow(
                 label: "Characters per request",
                 value: "\(charReq) to \(charAllowed)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
@@ -281,8 +278,7 @@ struct ChallengeSettingsView: View {
 
             SubjectFormRow(
                 label: "Additional tags",
-                value: restriction.optionalTagsAllowed ? "Optional" : "Required",
-                showsDisclosure: true
+                value: restriction.optionalTagsAllowed ? "Optional" : "Required"
             )
 
             SubjectRowSeparator()
@@ -351,8 +347,7 @@ struct ChallengeSettingsView: View {
 
             SubjectFormRow(
                 label: "Assignments",
-                value: assignmentsSummaryText,
-                showsDisclosure: true
+                value: assignmentsSummaryText
             )
 
             SubjectRowSeparator()
@@ -360,18 +355,9 @@ struct ChallengeSettingsView: View {
             SubjectFormRow(
                 label: "Defaults and pinch hits",
                 value: "\(defaultsCount)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
-            SubjectRowSeparator()
-
-            SubjectFormRow(
-                label: "Minimum words",
-                value: "5,000",
-                showsDisclosure: true,
-                isMonospaced: true
-            )
         }
         .subjectPanel()
     }

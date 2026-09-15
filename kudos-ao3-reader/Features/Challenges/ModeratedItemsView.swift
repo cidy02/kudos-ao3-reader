@@ -262,7 +262,6 @@ struct ModeratedItemsView: View {
             SubjectFormRow(
                 label: "Approved",
                 value: "\(approvedCount)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
 
@@ -271,7 +270,6 @@ struct ModeratedItemsView: View {
             SubjectFormRow(
                 label: "Rejected",
                 value: "\(rejectedCount)",
-                showsDisclosure: true,
                 isMonospaced: true
             )
         }

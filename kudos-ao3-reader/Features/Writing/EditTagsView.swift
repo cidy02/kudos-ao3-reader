@@ -95,9 +95,11 @@ struct EditTagsView: View {
 
     private var ratingPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Rating",
-    value: form.tags.rating.isEmpty ? "None" : form.tags.rating,
-    showsDisclosure: true)
+            WritingChoiceRow(
+                title: "Rating",
+                value: $form.tags.rating,
+                options: form.ratingOptions
+            )
         }
         .subjectPanel()
     }
@@ -156,21 +158,29 @@ struct EditTagsView: View {
 
     private var tagsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Fandoms",
-    value: form.tags.fandoms.isEmpty ? "Add" : "\(form.tags.fandoms.count)",
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Fandoms",
+                values: $form.tags.fandoms,
+                kind: .fandom
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Relationships",
-    value: form.tags.relationships.isEmpty ? "Add" : "\(form.tags.relationships.count)",
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Relationships",
+                values: $form.tags.relationships,
+                kind: .relationship
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Characters",
-    value: form.tags.characters.isEmpty ? "Add" : "\(form.tags.characters.count)",
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Characters",
+                values: $form.tags.characters,
+                kind: .character
+            )
             SubjectRowSeparator()
-            SubjectFormRow(label: "Additional tags",
-    value: form.tags.additionalTags.isEmpty ? "Add" : "\(form.tags.additionalTags.count)",
-    showsDisclosure: true)
+            WritingTagsRow(
+                title: "Additional tags",
+                values: $form.tags.additionalTags,
+                kind: .freeform
+            )
         }
         .subjectPanel()
     }
