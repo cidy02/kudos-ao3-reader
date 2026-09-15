@@ -42,7 +42,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Namespace private var cardZoomNamespace
     @State private var filters = LibraryFilters()
     @State private var showingNewCollection = false
-    @State private var newCollectionName = ""
 
     // MARK: Section cache
     //
@@ -111,7 +110,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             items: collections,
             destination: { $0 },
             onNew: {
-                newCollectionName = ""
                 showingNewCollection = true
             },
             card: { CollectionCard(collection: $0) },
@@ -154,12 +152,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 // the (unrelated) tab icons whenever a selection was active.
                 .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
-                .alert("New Collection", isPresented: $showingNewCollection) {
-                    TextField("Name", text: $newCollectionName)
-                    Button("Create") { createCollection() }
-                    Button("Cancel", role: .cancel) { newCollectionName = "" }
-                } message: {
-                    Text("Name your collection.")
+                // 1bk draws a form — name, description, colour, and a Behaviour
+                // group — not the bare name alert this replaced. One sheet
+                // serves both entry points, which both flip the same flag.
+                .sheet(isPresented: $showingNewCollection) {
+                    NewCollectionSheet()
                 }
                 .inspector(isPresented: router.isShowing(.libraryFilters)) {
                     LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
@@ -408,7 +405,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             switch dashboardLayout {
             case .shelves:
                 Button {
-                    newCollectionName = ""
                     showingNewCollection = true
                 } label: {
                     NewCollectionCard()
@@ -423,7 +419,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
             case .ledger:
                 Button {
-                    newCollectionName = ""
                     showingNewCollection = true
                 } label: {
                     NewCollectionLedgerRow()
@@ -632,14 +627,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 await WorkTags.refreshFromAO3(for: work, in: context)
             }
         }
-    }
-
-    private func createCollection() {
-        let trimmed = newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines)
-        newCollectionName = ""
-        guard !trimmed.isEmpty else { return }
-        context.insert(WorkCollection(name: trimmed))
-        try? context.save()
     }
 
     // MARK: Multi-select / bulk actions

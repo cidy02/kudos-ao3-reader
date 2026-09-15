@@ -650,6 +650,14 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// someone chooses. Same shape and the same reason as `ReadingQueue.hue`,
     /// including the defect it fixes: renaming a collection silently repainted it.
     var hue: Double?
+    /// 1bk's Behaviour group. "Keep downloads exempts these works from the cache
+    /// sweep" — the same choice `ReadingQueue.keepsWorksOffline` offers, and
+    /// optional for the same reason: `nil` is "never asked", which must stay
+    /// tellable from "asked and said no".
+    var keepsWorksOffline: Bool?
+    /// 1bk: "Show on Home adds a shelf above Recently Updated." Defaulted false
+    /// so no existing collection starts claiming space on Home.
+    var showsOnHome: Bool = false
     var dateAdded: Date = Date()
     var createdAt: Date = Date()
     var lastModifiedAt: Date = Date()
