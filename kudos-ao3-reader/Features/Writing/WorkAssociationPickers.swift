@@ -347,3 +347,206 @@ struct WorkSeriesPickerView: View {
         return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 }
+
+/// 1bo/1bs's **Co-creators** row.
+///
+/// Two different things wear one label on AO3, and the row that pushed nowhere
+/// hid both: which of *your own* pseuds this work is posted under, and an
+/// invitation to another account. The first is a plain multi-select; the second
+/// is a byline that AO3 turns into an invitation the other person must accept,
+/// which is why it is stated on the screen rather than left to surprise anyone.
+struct WorkCreatorsPickerView: View {
+    @Binding var creators: AO3CreatorDraft
+    let workTitle: String
+
+    @Environment(ThemeManager.self) private var theme
+
+    private var palette: SubjectPalette { theme.scopePalette }
+    private var gutter: CGFloat { SubjectMetrics.accountGutter }
+
+    var body: some View {
+        List {
+            Section {
+                SubjectHeaderBlock(
+                    kicker: "Edit work",
+                    title: "Co-creators",
+                    subtitle: workTitle,
+                    palette: palette,
+                    gutter: gutter
+                )
+                .pageBodyRow(top: 20, gutter: 0)
+            }
+
+            Section {
+                SectionRuleHeader(title: "Your pseuds", count: creators.availablePseuds.count)
+                    .pageBodyRow(top: 18, gutter: 0)
+                pseudsPanel.pageBodyRow(top: 8, gutter: gutter)
+            }
+
+            Section {
+                SectionRuleHeader(title: "Invite a co-creator")
+                    .pageBodyRow(top: 18, gutter: 0)
+                bylinePanel.pageBodyRow(top: 8, gutter: gutter)
+                Text("A co-creator is invited rather than added: the work is unchanged "
+                    + "until the other account accepts. Use the byline exactly as it "
+                    + "appears on AO3, as username or username (pseud).")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .pageBodyRow(top: 8, gutter: gutter)
+            }
+        }
+        .cardList()
+        .navigationTitle("Co-creators")
+        .subjectScreenWash(palette: palette)
+    }
+
+    @ViewBuilder
+    private var pseudsPanel: some View {
+        if creators.availablePseuds.isEmpty {
+            VStack(spacing: 0) {
+                SubjectFormRow(label: "AO3 listed no pseuds for this work", value: "", isDisabled: true)
+            }
+            .subjectPanel()
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(creators.availablePseuds.enumerated()), id: \.element.id) { index, pseud in
+                    if index > 0 { SubjectRowSeparator() }
+                    SubjectFormRow(label: pseud.title, arrangement: .control) {
+                        Toggle("", isOn: binding(for: pseud.value))
+                            .labelsHidden()
+                    }
+                }
+            }
+            .subjectPanel()
+        }
+    }
+
+    private var bylinePanel: some View {
+        VStack(spacing: 0) {
+            SubjectFormRow(label: "Byline", arrangement: .control) {
+                TextField("username (pseud)", text: $creators.coauthorByline)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .multilineTextAlignment(.trailing)
+            }
+        }
+        .subjectPanel()
+    }
+
+    /// AO3 posts a work under at least one pseud, so the last one on cannot be
+    /// turned off here — an empty set would post the work under nobody.
+    private func binding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { creators.selectedPseudIDs.contains(id) },
+            set: { isOn in
+                if isOn {
+                    if !creators.selectedPseudIDs.contains(id) {
+                        creators.selectedPseudIDs.append(id)
+                    }
+                } else if creators.selectedPseudIDs.count > 1 {
+                    creators.selectedPseudIDs.removeAll { $0 == id }
+                }
+            }
+        )
+    }
+}
+
+/// 1bo's **Inspired by** row — AO3's parent-work fields.
+///
+/// A URL alone is enough for a work already on AO3; the title and author exist
+/// for a source that is not, and the translation flag changes what AO3 calls the
+/// relationship. All four are the same `work[parent_attributes]` group, so they
+/// belong on one screen rather than four rows that each push somewhere.
+struct WorkParentWorkPickerView: View {
+    @Binding var parentWork: AO3ParentWorkDraft
+    let languageOptions: [AO3FormOption]
+
+    @Environment(ThemeManager.self) private var theme
+
+    private var palette: SubjectPalette { theme.scopePalette }
+    private var gutter: CGFloat { SubjectMetrics.accountGutter }
+
+    var body: some View {
+        List {
+            Section {
+                SubjectHeaderBlock(
+                    kicker: "Edit work",
+                    title: "Inspired by",
+                    subtitle: parentWork.url.isEmpty
+                        ? "No source work"
+                        : parentWork.url,
+                    palette: palette,
+                    gutter: gutter
+                )
+                .pageBodyRow(top: 20, gutter: 0)
+            }
+
+            Section {
+                SectionRuleHeader(title: "Source work")
+                    .pageBodyRow(top: 18, gutter: 0)
+                sourcePanel.pageBodyRow(top: 8, gutter: gutter)
+                Text("A work already on AO3 needs only its URL. Title and author are for "
+                    + "a source somewhere else, and are shown instead of the link.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .pageBodyRow(top: 8, gutter: gutter)
+            }
+
+            Section {
+                SectionRuleHeader(title: "Translation")
+                    .pageBodyRow(top: 18, gutter: 0)
+                translationPanel.pageBodyRow(top: 8, gutter: gutter)
+            }
+        }
+        .cardList()
+        .navigationTitle("Inspired by")
+        .subjectScreenWash(palette: palette)
+    }
+
+    private var sourcePanel: some View {
+        VStack(spacing: 0) {
+            SubjectFormRow(label: "URL", arrangement: .control) {
+                TextField("https://archiveofourown.org/works/…", text: $parentWork.url)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .multilineTextAlignment(.trailing)
+                    #if os(iOS)
+                        .keyboardType(.URL)
+                    #endif
+            }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Title", arrangement: .control) {
+                TextField("Optional", text: $parentWork.title)
+                    .multilineTextAlignment(.trailing)
+            }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Author", arrangement: .control) {
+                TextField("Optional", text: $parentWork.author)
+                    .multilineTextAlignment(.trailing)
+            }
+        }
+        .subjectPanel()
+    }
+
+    private var translationPanel: some View {
+        VStack(spacing: 0) {
+            SubjectFormRow(label: "This work is a translation", arrangement: .control) {
+                Toggle("", isOn: $parentWork.isTranslation)
+                    .labelsHidden()
+            }
+            SubjectRowSeparator()
+            WritingChoiceRow(
+                title: "Language of the source",
+                value: $parentWork.languageID,
+                options: languageOptions
+            )
+        }
+        .subjectPanel()
+    }
+}
