@@ -40,6 +40,10 @@ struct WorkRow: View {
     /// Falls back to purely-internal state when nil.
     var externalExpanded: Binding<Bool>?
     var presentation: Presentation = .standard
+    /// 1aj draws a filled gold star beside the title on Favorites. Off elsewhere:
+    /// 1ah and 1ai draw no star, so this is not a property of being favourited but
+    /// of being on the screen that is about it.
+    var showsFavoriteStar = false
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
@@ -131,6 +135,8 @@ struct WorkRow: View {
             kicker: nonemptyFandomNames.first,
             additionalKickerCount: max(0, nonemptyFandomNames.count - 1),
             title: work.title,
+            titleSymbol: showsFavoriteStar && work.isFavorite ? "star.fill" : nil,
+            titleSymbolTint: .subjectFavoriteGold,
             metadataSegments: ledgerMetadataSegments,
             leading: {
                 WorkProgressRing(

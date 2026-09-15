@@ -9,26 +9,42 @@ import SwiftUI
 /// as their own strip rather than folded into the shared `WorkRow` metadata line,
 /// where they would appear on six other screens that have no log behind them.
 struct ReadingHistoryFactsStrip: View {
+    /// Which of the three facts to draw.
+    ///
+    /// A style rather than a second view: 1ah and 1aj draw the same footer and
+    /// differ only in whether the changed-since fact appears, so the alternative
+    /// is the same rules written twice.
+    enum Style: Equatable {
+        /// 1ah: time read, reread count, and what is new since the last visit.
+        case history
+        /// 1aj: time read and the reread count. Favorites drops the changed-since
+        /// fact and nothing else — the two artboards draw an identical footer
+        /// otherwise, down to the hairline above it.
+        case favorites
+    }
+
     let summary: WorkReadingSummary
     /// AO3's current posted-chapter count, against `summary.chapterCountAtLastVisit`.
+    /// Unused by `.rereadOnly`, which draws no chapter fact.
     let postedChapterCount: Int
     let palette: SubjectPalette
+    var style: Style = .history
 
     var body: some View {
         FlowLayout(spacing: 8, rowSpacing: 6) {
             if summary.totalSeconds > 0 {
-                fact(ReadingInsights.durationLabel(summary.totalSeconds), isTinted: false)
+                fact(ReadingInsights.durationLabel(summary.totalSeconds))
             }
             // "Read ×2" is the *finish* count, not the visit count: two sittings of
             // one read-through is one read, and the spec's own note ties the reread
             // count to finishing sessions.
             if summary.finishCount > 1 {
-                fact("Read ×\(summary.finishCount)", isTinted: false)
+                fact("Read ×\(summary.finishCount)", tint: .subjectFavoriteGold)
             }
-            if newChapterCount > 0 {
+            if style == .history, newChapterCount > 0 {
                 fact(
                     newChapterCount == 1 ? "1 new chapter" : "\(newChapterCount) new chapters",
-                    isTinted: true
+                    tint: palette.accent
                 )
             }
         }
@@ -43,15 +59,17 @@ struct ReadingHistoryFactsStrip: View {
         return max(0, postedChapterCount - summary.chapterCountAtLastVisit)
     }
 
-    private func fact(_ text: String, isTinted: Bool) -> some View {
-        Text(text)
+    private func fact(_ text: String, tint: Color? = nil) -> some View {
+        let foreground = tint ?? Color.secondary
+        let fill = tint.map { $0.opacity(0.16) } ?? Color.primary.opacity(0.06)
+        return Text(text)
             .font(.system(size: 11, weight: .semibold, design: .monospaced))
-            .foregroundStyle(isTinted ? palette.accent : Color.secondary)
+            .foregroundStyle(foreground)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: SubjectMetrics.chipRadius, style: .continuous)
-                    .fill(isTinted ? palette.chipFill : Color.primary.opacity(0.06))
+                    .fill(fill)
             )
     }
 }
