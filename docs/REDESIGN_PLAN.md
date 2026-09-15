@@ -791,6 +791,40 @@ explicit tap. The per-author aggregation the same note asks for is already done
 > omits unfetched rows is worse than no filter. It needs all rows fetched up
 > front — the fan-out this design was built to avoid — or a different definition.
 
+<a id="search-turn-audit-2026-09-15"></a>
+**Search turn (1al, 1ao–1ax) audited 2026-09-15 — nine of eleven boards were
+already built, and five spec notes are themselves stale.**
+
+Notes that say **"Matches the code"** and do: `1ao` (medium detent), `1aq`
+(status/dates/language), `1as` (tag fields), `1aw` (typing with a selection).
+Notes that say **"Needs building"** for work that is already done: `1ap` —
+`SemanticThemeColors.includeColor` exists, resolving through
+`statusSuccessColor` with the exact rationale the note argues for, and both
+strikethroughs are in place (`AO3FilterPanel:370`, `TagSelectField:253`); `1ar`
+(`FilterLanguagePicker`); `1at` (`FilterRangeSlider`); `1ax` (`SaveSearchSheet`
+plus the `SavedSearch` model); `1al` (`FandomFamily`, commit `a0913bf6`).
+**1ap was additionally confirmed on screen** — the included row draws tinted
+green with a filled plus, plainly distinct from the app's red accent.
+
+Built this tick: **1au's live count.** The panel took no loaded works at all, so
+"the count updates live above the form" had nothing to count. `AO3FilterPanel`
+now takes `refineSource` and `AO3AccountWorksList` passes the same array
+`visibleWorks` narrows, so the line and the list cannot disagree. Verified on the
+simulator: "14 of the 14 works on this page match", then "1 of the 14" on
+including one warning, then back on Reset. Also **1av's no-fandom copy**, which
+fell through to the same bare "Type above…" that a failed suggestion load shows.
+
+**Found in passing, NOT fixed — `AccountView` has a Refine panel that filters
+nothing.** `AccountView.filters` is declared, handed to an `AO3FilterPanel` in
+`.refine` mode, and never applied to anything; the works list it used to narrow
+now lives in `AO3AccountWorksList`. Its toolbar button is gated on
+`selectedTab == .writing && writingTab == .works`, so whether it is reachable at
+all is an Account-turn question. Left alone deliberately: deciding whether that
+hub still owns a works list is that turn's call, and `AccountView` is one of the
+views whose type checker stops terminating. The new count line does not appear
+there — `refineSource` defaults to empty — so nothing on screen lies about it.
+
+
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
 one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs
 to is "Home — the tab and every subsection behind its chevrons". The app instead

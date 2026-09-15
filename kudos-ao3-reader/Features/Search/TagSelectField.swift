@@ -183,7 +183,7 @@ struct TagPickerView: View {
                             if isSearching {
                                 loadingRow("Searching…")
                             } else if isSearchEmpty {
-                                searchPrompt
+                                emptyQueryPrompt
                             } else if results.isEmpty {
                                 Text("No tags found for “\(query)”.")
                                     .foregroundStyle(.secondary)
@@ -227,6 +227,29 @@ struct TagPickerView: View {
     private var searchPrompt: some View {
         Text("Type above to search AO3 \(title.lowercased()).")
             .foregroundStyle(.secondary)
+    }
+
+    /// 1av's opening state when nothing has been typed yet.
+    ///
+    /// With a fandom set the screen opens on that fandom's popular tags, which is
+    /// "the difference between a picker you can browse and one you have to already
+    /// know the answer to". With none there is nothing to suggest — so this says
+    /// why, rather than repeating the bare prompt, which in that position reads
+    /// like the suggestions failed to load. Fandom itself has no parent to draw
+    /// suggestions from, so it keeps the plain prompt.
+    @ViewBuilder
+    private var emptyQueryPrompt: some View {
+        if kind == .fandom || !fandomContext.isEmpty {
+            searchPrompt
+        } else {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Type above to search AO3 \(title.lowercased()).")
+                Text("Add a fandom and this opens on its most-used \(title.lowercased()).")
+                    .font(.footnote)
+            }
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// Placeholder tag rows shown while suggestions are being fetched — the shape of
