@@ -42,6 +42,18 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
         }
     }
 
+    /// The label over the rows themselves, which is the *state* they are in
+    /// rather than the section's name — 1ad heads its list "IN PROGRESS" and 1ae
+    /// heads its grid "NEW CHAPTERS", where the page title above already says
+    /// Reading Now / Recently Updated. Repeating the title inside the page said
+    /// the same thing twice and named the shelf instead of the condition.
+    var groupTitle: String {
+        switch self {
+        case .readingNow: "In progress"
+        case .recentlyUpdated: "New chapters"
+        }
+    }
+
     var emptyIcon: String {
         switch self {
         case .readingNow: "book"
