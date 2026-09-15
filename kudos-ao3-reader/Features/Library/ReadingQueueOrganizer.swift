@@ -48,6 +48,10 @@ struct AllReadingQueuesGridView: View {
     @State private var renameText = ""
     @State private var pendingDelete: ReadingQueue?
     #if os(iOS)
+    /// 1i: "search over queues, tags and works". One field over all three,
+    /// rather than three — the reader is looking for a queue and does not know
+    /// or care which of the three matched it.
+    @State private var searchText = ""
     @State private var reorderMode: EditMode = .inactive
     #else
     @State private var isReorderingMac = false
@@ -61,18 +65,36 @@ struct AllReadingQueuesGridView: View {
         #endif
     }
 
-    /// 1i: "Pinned queues sit above the rest." Pinning is a second sort key
-    /// rather than a separate section, so the reader's own drag order still
-    /// holds within each group and unpinning drops a queue back exactly where
-    /// they had put it.
     private var customQueues: [ReadingQueue] {
         readingQueues
             .filter { $0.kind == .custom }
-            .sorted { lhs, rhs in
-                if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
-                return lhs.sortOrder < rhs.sortOrder
-            }
+            .sorted { $0.sortOrder < $1.sortOrder }
             .filter(matchesTagFilter)
+            .filter(matchesSearch)
+    }
+
+    /// What the section header counts. `readingQueues.count` is the total, and
+    /// under a search or a tag filter that put "2" above a single row — the same
+    /// wrong-count defect this sweep keeps finding. With nothing filtering, this
+    /// is the total anyway.
+    private var visibleQueueCount: Int {
+        let savedForLaterShown = savedForLaterQueue.map(matchesSearch) ?? false
+        return customQueues.count + (savedForLaterShown ? 1 : 0)
+    }
+
+    /// 1i draws **Pinned** as its own section above **All queues**, and the tree
+    /// lists the same queue in both — so a pin is a shortcut to the top, not a
+    /// reordering. Keeping the main list in pure `sortOrder` also means the drag
+    /// order has no pin boundary to fight over.
+    ///
+    /// Saved for Later can be pinned like any other: the tree shows it in the
+    /// Pinned section.
+    private var pinnedQueues: [ReadingQueue] {
+        readingQueues
+            .filter(\.isPinned)
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .filter(matchesTagFilter)
+            .filter(matchesSearch)
     }
 
     /// 1i's rail: All, then one chip per tag actually in use, then Untagged.
@@ -80,6 +102,27 @@ struct AllReadingQueuesGridView: View {
     /// returns nothing is furniture.
     private var queueTagNames: [String] {
         Set(readingQueues.flatMap { $0.tags.map(\.name) }).sorted()
+    }
+
+    /// The works half is what makes this cross-queue: a queue matches when a work
+    /// INSIDE it matches, so typing a title finds the queue you filed it under
+    /// without having to remember which one that was.
+    ///
+    /// Only loaded memberships are searched, which is honest here — they are
+    /// local SwiftData relationships, not a paged remote list, so there is no
+    /// "rest of the results" being silently skipped.
+    private func matchesSearch(_ queue: ReadingQueue) -> Bool {
+        let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return true }
+        if queue.name.localizedCaseInsensitiveContains(term) { return true }
+        if queue.tags.contains(where: { $0.name.localizedCaseInsensitiveContains(term) }) {
+            return true
+        }
+        return queue.memberships.contains { membership in
+            guard !membership.isPendingDeletion, let work = membership.work else { return false }
+            return work.title.localizedCaseInsensitiveContains(term)
+                || work.author.localizedCaseInsensitiveContains(term)
+        }
     }
 
     private func matchesTagFilter(_ queue: ReadingQueue) -> Bool {
@@ -94,6 +137,30 @@ struct AllReadingQueuesGridView: View {
     /// user text, and a name could never be this — it is not a legal `Tag.name`
     /// the sheet can produce, since that trims to non-empty plain text.
     static let untaggedFilter = "\u{0}untagged"
+
+    /// 1i's own placeholder, verbatim.
+    private var queueSearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search queues, tags and works", text: $searchText)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .subjectPanel()
+    }
 
     private var tagRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -154,6 +221,11 @@ struct AllReadingQueuesGridView: View {
             Section {
                 SubjectHeaderBlock(kicker: "Library", title: "Queues", palette: organizerPalette)
                     .pageBodyRow(top: 20, gutter: 0)
+                // 1i's tree puts the search between the title and the signal
+                // strip, in the content — not in the navigation bar, where a
+                // `.searchable` drawer would hide it until the list is scrolled.
+                queueSearchField
+                    .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
                 statStrip
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             }
@@ -164,11 +236,22 @@ struct AllReadingQueuesGridView: View {
                 }
             }
 
+            if !pinnedQueues.isEmpty {
+                Section {
+                    SectionRuleHeader(title: "Pinned", count: pinnedQueues.count)
+                        .pageBodyRow(top: 18, gutter: 0)
+                    ForEach(pinnedQueues) { queue in
+                        organizerRow(queue, isReorderable: false)
+                            .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                    }
+                }
+            }
+
             Section {
-                SectionRuleHeader(title: "All Queues", count: readingQueues.count)
+                SectionRuleHeader(title: "All queues", count: visibleQueueCount)
                     .pageBodyRow(top: 18, gutter: 0)
 
-                if let savedForLaterQueue {
+                if let savedForLaterQueue, matchesSearch(savedForLaterQueue) {
                     organizerRow(savedForLaterQueue, isReorderable: false)
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 }
@@ -386,12 +469,9 @@ struct AllReadingQueuesGridView: View {
 /// membership's position inside one queue, so it stays local to this screen —
 /// the only caller — rather than in the service.
 ///
-/// Indices come from the DISPLAYED order, which is pinned-first. Dragging an
-/// unpinned queue above a pinned one therefore lands it at the top of the
-/// unpinned group rather than above the pin — which is what "pinned queues sit
-/// above the rest" means, and is better than snapping the row back to where it
-/// started. Order within each group is still exactly what the reader dragged,
-/// so unpinning returns a queue to its own place rather than to the end.
+/// The list this reorders is in pure `sortOrder` — pinning does not reorder it,
+/// it adds a separate Pinned section above (1i lists the same queue in both) —
+/// so a drag here means exactly what it looks like.
 private func reorderCustomQueues(_ orderedIDs: [UUID], context: ModelContext) {
     let queues = (try? context.fetch(FetchDescriptor<ReadingQueue>())) ?? []
     let byID = Dictionary(uniqueKeysWithValues: queues.map { ($0.id, $0) })
