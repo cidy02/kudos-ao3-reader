@@ -1282,6 +1282,12 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// uses, because they are the same `Tag`. Optional and additive for the same
     /// reason as `hue`.
     let tagNames: [String]?
+    /// 1i's pin and 1h's offline choice. Optional and additive for the same
+    /// reason as `hue` and `tagNames`: an older archive, or Android, simply
+    /// does not carry them, and `nil` is the state those archives were written
+    /// in — unpinned, and never asked about offline.
+    let isPinned: Bool?
+    let keepsWorksOffline: Bool?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -1297,6 +1303,8 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         permanentDeletionScheduledAt = queue.permanentDeletionScheduledAt
         hue = queue.hue
         tagNames = queue.tags.map(\.name).sorted()
+        isPinned = queue.isPinned
+        keepsWorksOffline = queue.keepsWorksOffline
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -2292,6 +2300,19 @@ enum KudosBackupService {
             // on this device.
             if let archivedHue = archived.hue, incomingWins || queue.hue == nil {
                 queue.hue = archivedHue
+            }
+            // Same rule for the pin and the offline choice. `isPinned` only ever
+            // fills a pin IN — an archive carrying nil, or false, must not unpin
+            // a queue the reader pinned on this device unless it genuinely wins
+            // on recency.
+            if let archivedPin = archived.isPinned, incomingWins || !queue.isPinned {
+                queue.isPinned = archivedPin || queue.isPinned
+            }
+            // `nil` here is "never asked", which is why it is optional: an older
+            // archive cannot be read as the reader having chosen "no".
+            if let archivedOffline = archived.keepsWorksOffline,
+               incomingWins || queue.keepsWorksOffline == nil {
+                queue.keepsWorksOffline = archivedOffline
             }
             // Union-only, exactly like SavedWork's user tags above: there is no
             // per-tag tombstone, so absence from a stale archive can never be read

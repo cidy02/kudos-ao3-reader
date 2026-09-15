@@ -730,6 +730,21 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// calls it out: renaming a queue silently repainted it.
     var hue: Double?
 
+    /// 1i: "Pinned queues sit above the rest", and its overflow menu offers bulk
+    /// pin. Defaults false so every existing queue keeps the order it had.
+    var isPinned: Bool = false
+
+    /// 1h's Queue Details lists "offline with its consequence spelled out"
+    /// beside colour, order and last read.
+    ///
+    /// `nil` means the queue has never been asked — the app's ordinary
+    /// behaviour, where a work's EPUB is freed once it is neither saved,
+    /// favourited nor queued. `true` opts this queue's works out of that.
+    /// Optional rather than a defaulted Bool so "not chosen" stays tellable
+    /// from "chosen no", which is what lets a later default change apply only
+    /// to queues nobody has decided about.
+    var keepsWorksOffline: Bool?
+
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
     /// The reader's own tags on this queue — 1h draws them under the header with
