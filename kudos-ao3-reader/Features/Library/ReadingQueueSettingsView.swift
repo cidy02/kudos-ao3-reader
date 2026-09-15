@@ -156,6 +156,23 @@ struct ReadingQueueSettingsView: View {
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             }
 
+            Section {
+                SubjectFieldLabel(text: "Offline and order", style: .formGroup)
+                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
+                offlinePanel
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                Text("A work in a queue already keeps its download. Keep downloaded "
+                    + "holds on to it even after the work leaves this queue, so it "
+                    + "stays readable offline — and keeps using space until you "
+                    + "remove it.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+            }
+
             if queue.kind == .custom {
                 Section {
                     SubjectFieldLabel(text: "Rename & Delete", style: .formGroup)
@@ -205,6 +222,42 @@ struct ReadingQueueSettingsView: View {
     /// drag-reordered order `ReadingQueueBrowserView`'s Reorder mode writes —
     /// there is no other sort mode to name here. "Preserved" is the same
     /// figure `ReadingQueueStorageView` shows app-wide, scoped to this queue.
+    /// 1h's Queue Details asks for "offline with its consequence spelled out",
+    /// and 1i for the pin that lifts a queue above the rest. The consequence is
+    /// spelled out because it is the whole point of the setting: queued works
+    /// already keep their EPUB, so what this changes is what happens when the
+    /// work leaves the queue.
+    private var offlinePanel: some View {
+        VStack(spacing: 0) {
+            SubjectFormRow(label: "Pin to the top", arrangement: .control) {
+                Toggle("", isOn: Binding(
+                    get: { queue.isPinned },
+                    set: { isOn in
+                        queue.isPinned = isOn
+                        queue.markModified()
+                        context.saveBestEffort(reason: "Saving queue pin failed")
+                    }
+                ))
+                .labelsHidden()
+            }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Keep downloaded", arrangement: .control) {
+                Toggle("", isOn: Binding(
+                    // nil is "never asked", which reads as off but is not a
+                    // choice the reader made — see `ReadingQueue.keepsWorksOffline`.
+                    get: { queue.keepsWorksOffline ?? false },
+                    set: { isOn in
+                        queue.keepsWorksOffline = isOn
+                        queue.markModified()
+                        context.saveBestEffort(reason: "Saving queue offline setting failed")
+                    }
+                ))
+                .labelsHidden()
+            }
+        }
+        .subjectPanel()
+    }
+
     private var detailsPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "Order", value: "Manual")

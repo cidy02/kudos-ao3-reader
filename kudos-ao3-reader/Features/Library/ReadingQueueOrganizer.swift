@@ -61,10 +61,17 @@ struct AllReadingQueuesGridView: View {
         #endif
     }
 
+    /// 1i: "Pinned queues sit above the rest." Pinning is a second sort key
+    /// rather than a separate section, so the reader's own drag order still
+    /// holds within each group and unpinning drops a queue back exactly where
+    /// they had put it.
     private var customQueues: [ReadingQueue] {
         readingQueues
             .filter { $0.kind == .custom }
-            .sorted { $0.sortOrder < $1.sortOrder }
+            .sorted { lhs, rhs in
+                if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
+                return lhs.sortOrder < rhs.sortOrder
+            }
             .filter(matchesTagFilter)
     }
 
@@ -378,6 +385,13 @@ struct AllReadingQueuesGridView: View {
 /// `ReadingQueue.sortOrder` itself (the queues' own order) rather than a
 /// membership's position inside one queue, so it stays local to this screen —
 /// the only caller — rather than in the service.
+///
+/// Indices come from the DISPLAYED order, which is pinned-first. Dragging an
+/// unpinned queue above a pinned one therefore lands it at the top of the
+/// unpinned group rather than above the pin — which is what "pinned queues sit
+/// above the rest" means, and is better than snapping the row back to where it
+/// started. Order within each group is still exactly what the reader dragged,
+/// so unpinning returns a queue to its own place rather than to the end.
 private func reorderCustomQueues(_ orderedIDs: [UUID], context: ModelContext) {
     let queues = (try? context.fetch(FetchDescriptor<ReadingQueue>())) ?? []
     let byID = Dictionary(uniqueKeysWithValues: queues.map { ($0.id, $0) })
