@@ -128,6 +128,7 @@ struct CollectionDetailView: View {
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingRename = false
     @State private var showingColour = false
+    @State private var showingReorder = false
     @State private var renameText = ""
     @State private var confirmDelete = false
     @State private var showingAddWorks = false
@@ -145,7 +146,7 @@ struct CollectionDetailView: View {
     // A soft-deleted work stays linked to the collection (restore brings it back
     // here) but renders only in Recently Deleted until then.
     private var works: [SavedWork] {
-        collection.works.filter { !$0.isPendingDeletion }.sorted { $0.dateAdded > $1.dateAdded }
+        collection.inReadingOrder(collection.works.filter { !$0.isPendingDeletion })
     }
 
     /// The collection's works after the active filters. With no filter set, the default
@@ -333,6 +334,16 @@ struct CollectionDetailView: View {
                             } label: {
                                 Label("Colour", systemImage: "paintpalette")
                             }
+                            // 1bk's Contents group. "Remove works" is Select by
+                            // another name — this screen already removes through
+                            // selection — so it is not built twice.
+                            if works.count > 1 {
+                                Button {
+                                    showingReorder = true
+                                } label: {
+                                    Label("Reorder works", systemImage: "arrow.up.arrow.down")
+                                }
+                            }
                             Button(role: .destructive) {
                                 confirmDelete = true
                             } label: {
@@ -351,6 +362,9 @@ struct CollectionDetailView: View {
                 AddWorksToCollectionView(collection: collection)
             }
             .sheet(isPresented: $showingColour) { colourSheet }
+            .sheet(isPresented: $showingReorder) {
+                CollectionReorderSheet(collection: collection, works: works)
+            }
             .alert("Rename Collection", isPresented: $showingRename) {
                 TextField("Name", text: $renameText)
                 Button("Save") {

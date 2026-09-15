@@ -3634,3 +3634,39 @@ to it and will work the moment that branch is reachable.
 `profileContentSections` block as post-flattening vestiges. That is the removal
 option they declined — but they declined it on my description of a working panel
 over a real list, which is not what is there.
+
+### test-filter-trap-2026-09-15
+
+**Correction. Three commits today claimed "84 tests pass across KudosBackupTests,
+PersistenceSyncTests, BackupLazyReadTests and ReadingQueueTests". Only
+ReadingQueueTests ran.**
+
+`-only-testing:KudosTests/KudosBackupTests` matches **zero** cases and
+**xcodebuild still exits 0**, printing `** TEST SUCCEEDED **`. Those suites are
+nested: the real identifier is
+`KudosTests/PersistenceGateSuites/KudosBackupTests`, because they serialize
+against a process-wide `PersistenceOperationGate`. `BackupLazyReadTests` is not
+a suite at all — it is an `extension PersistenceGateSuites.KudosBackupTests`, and
+its own file says so in a comment warning about exactly this trap.
+
+The "84" was 42 × 2: `ReadingQueueTests` has 42 cases and each logs a `Test case
+'…' passed` line twice, so counting stdout lines doubled it.
+
+**The rule, now in the loop brief:**
+
+- Never trust `** TEST SUCCEEDED **`. Read the result bundle:
+  `xcrun xcresulttool get test-results summary --path <newest .xcresult>` and
+  check `result` is `Passed` and `passedTests` is non-zero. A filter that matches
+  nothing reports `result: "unknown"` with `passedTests: 0`.
+- Counting `Test case '…' passed` lines from stdout **double-counts**.
+- Before using a `-only-testing:` identifier, confirm the suite is top-level.
+  `grep -n "extension .*Suites" <file>` finds the nested ones.
+
+Correct identifiers for the backup gate:
+`KudosTests/PersistenceGateSuites/KudosBackupTests` and
+`KudosTests/PersistenceGateSuites/PersistenceSyncTests`.
+
+**Re-run with the right filters: 115 passed, 0 failed** — covering every backup
+DTO change made today (`ReadingQueue.isPinned` / `keepsWorksOffline`,
+`WorkCollection.keepsWorksOffline` / `showsOnHome` / `workOrderRaw`). The changes
+were correct; the verification claim was not.

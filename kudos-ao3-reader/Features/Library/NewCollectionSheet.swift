@@ -133,3 +133,69 @@ struct NewCollectionSheet: View {
         dismiss()
     }
 }
+
+/// Artboard **1bk**'s "Reorder works", from its Contents group.
+///
+/// Drag-to-reorder over the collection's own works, written to
+/// `WorkCollection.workOrderRaw`. Offered only when there is more than one work,
+/// because reordering one thing is a control that cannot do anything.
+///
+/// The order is committed on Done rather than on every drag: a collection can
+/// hold hundreds of works, and rewriting the whole order string on each frame of
+/// a drag would be a save per frame.
+struct CollectionReorderSheet: View {
+    let collection: WorkCollection
+    let works: [SavedWork]
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var ordered: [SavedWork]
+
+    init(collection: WorkCollection, works: [SavedWork]) {
+        self.collection = collection
+        self.works = works
+        self._ordered = State(initialValue: works)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(ordered) { work in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(work.title)
+                            .font(.system(size: 14, weight: .medium))
+                            .lineLimit(2)
+                        if !work.author.isEmpty {
+                            Text(work.author)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .onMove { indices, destination in
+                    ordered.move(fromOffsets: indices, toOffset: destination)
+                }
+            }
+            .appThemedRows()
+            .appThemedScroll()
+            .navigationTitle("Reorder works")
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                .environment(\.editMode, .constant(.active))
+            #endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            collection.setReadingOrder(ordered)
+                            collection.markModified()
+                            context.saveBestEffort(reason: "Saving collection order failed")
+                            dismiss()
+                        }
+                    }
+                }
+        }
+    }
+}
