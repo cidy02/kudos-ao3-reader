@@ -695,6 +695,38 @@ and threaded, and this view is 703 lines — the file class where adding an
 type checker stop terminating rather than fail. Do it as its own change with a
 build after each step, not as a rider on something else.
 
+> **BUILT 2026-09-15 — and reading the artboard tree corrected the write-up
+> above twice.** Both corrections came from the element tree, not the prose note:
+>
+> - The rail is **single-select with four chips — All / Rereads / Offline / WIP**,
+>   All carrying the solid accent. The BUILD note names only "the Rereads and
+>   Offline chips", so a note-only read produced two independent toggles and
+>   missed WIP entirely. The prose says what a screen is *for*; only the tree says
+>   what is on it.
+> - The footer is **duration *and* reread count** — "6h 42m · Read ×3". 1aj drops
+>   only the changed-since fact, so `ReadingHistoryFactsStrip` took a `.favorites`
+>   style rather than the "reread alone" one the note above predicted.
+>
+> Also settled from the tree: **"Read ×N" is `#F2C879` on both 1ah and 1aj,
+> whatever the card's own accent** — on 1ah it sits on a card accented `#7FC9E0`
+> and stays gold. It is the one mark in the ledger row deliberately *not* taking
+> the card's hue, because it belongs to the star rather than to the fandom, so it
+> is `Color.subjectFavoriteGold` and not `palette.accent`. That is a genuine
+> exception to the owner's "accent from the card colour" rule, not a miss.
+>
+> The star went in through a re-added `WorkLedgerRow.titleSymbol` /
+> `titleSymbolTint` pair — on the *title* line, where 1aj draws it, not back on
+> the metadata line the removed pair sat on. It is gated by a `showsFavoriteStar`
+> flag rather than read from `work.isFavorite`, because 1ah and 1ai draw no star:
+> it marks the screen that is about favourites, not the state of being one. The
+> offline tick 1aj's prose also names stays gone, per the approved reduction.
+>
+> Not built: 1aj's dashed **Sort** chip. This screen already carries
+> `filterChipRail`, whose pinned dashed chip opens the panel that owns both the
+> filters and the sort order, and two ways to set one value is worse than one in
+> a different place. `FavoriteQuickFilter` is its own testable value with four
+> cases pinned by `FavoriteQuickFilterTests`.
+
 **1ad Reading Now sits on the wrong stack — a real divergence, but a deliberate
 one, so the owner's call.** 1ad's kicker reads **HOME**, and the turn it belongs
 to is "Home — the tab and every subsection behind its chevrons". The app instead

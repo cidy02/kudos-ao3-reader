@@ -277,6 +277,13 @@ struct SubjectFilterRail<Chips: View>: View {
 
 // MARK: - Ledger row
 
+extension Color {
+    /// The star gold, on every card whatever its own accent — 1aj's filled star and
+    /// the reread count on 1ah/1aj's footer. The one mark in the ledger row that is
+    /// deliberately *not* the card's hue: it belongs to the star, not to the fandom.
+    static let subjectFavoriteGold = Color(red: 0.949, green: 0.784, blue: 0.475)
+}
+
 /// The redesign's full-width work row — the "ledger row" the spec names on
 /// artboards 1c/1d, 1k, 1o, 1t, 1u, 1x, 1ad, 1ah, 1ai and 1aj.
 ///
@@ -296,6 +303,17 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     /// Fandoms beyond the first, shown as the kicker's dimmed `+N`.
     var additionalKickerCount: Int = 0
     let title: String
+    /// A glyph beside the title — 1aj's filled star.
+    ///
+    /// The `metadataSymbol`/`metadataSymbolTint` pair that used to sit on the
+    /// metadata line went out with the offline tick, a density reduction the owner
+    /// approved, and the note recording that said the slot could come back for
+    /// whichever of 1t or 1aj was built first. This is that slot, on the title line
+    /// where 1aj draws it rather than back on the metadata line. The offline tick
+    /// itself stays gone.
+    var titleSymbol: String?
+    /// Defaults to the card's own accent; 1aj overrides it with the star gold.
+    var titleSymbolTint: Color?
     /// Pre-joined by the caller; drawn with the spec's dimmed middle dots.
     var metadataSegments: [String] = []
     /// Sits at the leading edge — a `WorkProgressRing`, a position number, or
@@ -331,7 +349,7 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
                 VStack(alignment: .leading, spacing: 12) {
                     kickerView
                     leading()
-                    titleText
+                    titleLine
                     if !metadataSegments.isEmpty { metadataLine }
                     trailing()
                 }
@@ -341,7 +359,7 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
 
                     VStack(alignment: .leading, spacing: 5) {
                         kickerView
-                        titleText
+                        titleLine
                         if !metadataSegments.isEmpty { metadataLine }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -379,6 +397,28 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
         )
         .opacity(kicker == nil ? 0 : 1)
         .accessibilityHidden(kicker == nil)
+    }
+
+    /// The title, with 1aj's star beside it when one is set. The star is
+    /// `flex:none` on the artboard and the title `min-width:0` — the glyph keeps its
+    /// size and the title truncates into what is left.
+    ///
+    /// Hidden from VoiceOver: the only screen that sets it is one whose every row is
+    /// favourited, where reading "favorited" aloud on all 34 rows is noise, and the
+    /// swipe action that changes the state is labelled.
+    @ViewBuilder
+    private var titleLine: some View {
+        if let titleSymbol {
+            HStack(spacing: 6) {
+                titleText
+                Image(systemName: titleSymbol)
+                    .font(.system(size: titleSize * 0.78, weight: .semibold))
+                    .foregroundStyle(titleSymbolTint ?? palette.accent)
+                    .accessibilityHidden(true)
+            }
+        } else {
+            titleText
+        }
     }
 
     @ViewBuilder

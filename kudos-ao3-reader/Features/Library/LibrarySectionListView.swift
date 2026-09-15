@@ -48,6 +48,21 @@ struct LibrarySectionListView: View {
     /// its three aggregate scopes are ranked by. Favorites only.
     @AppStorage("library.favorites.scope") private var favoriteScope: FavoriteScope = .works
     @AppStorage("library.favorites.order") private var favoriteOrder: ReadingAffinities.Order = .recent
+    /// 1aj's quick-filter rail over the Works scope. Single-select with All as the
+    /// default, which is how the artboard draws it — All carries the solid accent
+    /// and the other three are plain pills.
+    @AppStorage("library.favorites.quickFilter") private var favoriteQuickFilter: FavoriteQuickFilter = .all
+
+    /// Finishing sessions only — the reread signal, and the whole reason this is a
+    /// predicated `@Query` rather than a `ReadingLogService.summaries(in:)` call.
+    /// A work is a reread when it has been *finished* more than once, so sessions
+    /// that ended without finishing cannot affect the answer and are not loaded.
+    ///
+    /// `visibleItems` is read many times per render, so a fetch inside it would run
+    /// many times per frame; a `@Query` is resolved once by SwiftUI and reused, and
+    /// this one is a small slice of the log rather than all of it.
+    @Query(filter: #Predicate<ReadingSession> { $0.didFinish })
+    private var finishingSessions: [ReadingSession]
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
     /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
     /// tracks a card that's grown wider with Dynamic Type instead of assuming the
@@ -83,7 +98,34 @@ struct LibrarySectionListView: View {
     /// filter is set, the section's own ordering (e.g. most-recently-read first) is kept
     /// rather than re-sorted by the filter's default sort.
     private var visibleItems: [SavedWork] {
-        filters.hasActiveFilters ? filters.apply(to: items) : items
+        let filtered = filters.hasActiveFilters ? filters.apply(to: items) : items
+        return applyFavoriteChips(to: filtered)
+    }
+
+    /// 1aj's Rereads and Offline chips, applied after the filter panel so the two
+    /// narrow together rather than one replacing the other. A named method because
+    /// branching inside `visibleItems` is the shape that makes this view's type
+    /// checker stop terminating.
+    private func applyFavoriteChips(to works: [SavedWork]) -> [SavedWork] {
+        // `.all` short-circuits so `finishCounts` — a walk of every finishing
+        // session — is not built on the default selection.
+        guard showsFavoriteWorks, favoriteQuickFilter != .all else { return works }
+        return favoriteQuickFilter.apply(to: works, finishCounts: finishCounts)
+    }
+
+    /// How many times each work has been *finished* — what 1aj's Rereads chip
+    /// filters on.
+    ///
+    /// Counted from `finishingSessions` rather than read from `WorkReadingSummary`,
+    /// because that is built by fetching the whole session table and this runs
+    /// inside `visibleItems`, which is read many times per render. The footer's own
+    /// reread count comes from the summary, which it needs anyway for the duration.
+    private var finishCounts: [UUID: Int] {
+        var counts: [UUID: Int] = [:]
+        for session in finishingSessions {
+            counts[session.workID, default: 0] += 1
+        }
+        return counts
     }
 
     private var hasAnyContent: Bool { !items.isEmpty }
@@ -328,6 +370,13 @@ struct LibrarySectionListView: View {
         showsFavoriteScopes && favoriteScope != .works
     }
 
+    /// Favorites' Works scope — the only one 1aj's two chips mean anything on. The
+    /// aggregate scopes are lists of names, and neither "downloaded" nor "reread"
+    /// is a property a fandom has.
+    private var showsFavoriteWorks: Bool {
+        showsFavoriteScopes && favoriteScope == .works
+    }
+
     private var favoriteScopeStrip: some View {
         VStack(spacing: 8) {
             SubjectSegmentedControl(
@@ -342,8 +391,43 @@ struct LibrarySectionListView: View {
                     selection: $favoriteOrder
                 )
             }
+            if showsFavoriteWorks {
+                favoriteChipRow
+            }
         }
         .padding(.horizontal, SubjectMetrics.gutter)
+    }
+
+    /// 1aj's All / Rereads / Offline / WIP rail.
+    ///
+    /// The artboard also pins a dashed **Sort** chip at the rail's trailing edge.
+    /// That is not rebuilt here: this screen already carries `filterChipRail`, whose
+    /// pinned dashed chip opens the panel that owns both the filters and the sort
+    /// order, and a second sort control would be two ways to set one value.
+    private var favoriteChipRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                ForEach(FavoriteQuickFilter.allCases) { option in
+                    favoriteChip(option)
+                }
+            }
+        }
+    }
+
+    private func favoriteChip(_ option: FavoriteQuickFilter) -> some View {
+        let isSelected = favoriteQuickFilter == option
+        return Button {
+            favoriteQuickFilter = option
+        } label: {
+            SubjectChip(
+                text: option.title,
+                style: .pill(isSelected: isSelected),
+                palette: scopePalette
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     /// Every work the reader may see, not just the starred ones: the spec's rows say
@@ -488,11 +572,17 @@ struct LibrarySectionListView: View {
         // fetches the session table. Reading either through its property inside the
         // builder would repeat that work per section.
         //
-        // The session fetch is gated on History. Six of the seven sections never draw
-        // the facts strip, and fetching the whole log on every render of Downloaded
-        // to throw it away would be the most expensive thing this screen does.
+        // The session fetch is gated on the two sections that draw log facts —
+        // History (1ah) and Favorites' Works scope (1aj). The others never draw the
+        // strip, and fetching the whole log on every render of Downloaded to throw
+        // it away would be the most expensive thing this screen does.
+        //
+        // This is the *footer* source, which needs each work's total time and so
+        // needs every session. The Rereads chip does not: it counts finishes, which
+        // the `finishingSessions` query already holds, and it runs inside
+        // `visibleItems` where a fetch would run many times per frame.
         let groups = groupedItems
-        let summaries = showsGroupingStrip
+        let summaries = showsGroupingStrip || showsFavoriteWorks
             ? ReadingLogService.summaries(in: context)
             : [:]
         let byID = Dictionary(visibleItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -617,7 +707,8 @@ struct LibrarySectionListView: View {
                     isSelecting: true,
                     isSelected: selection.contains(work.id),
                     onToggleSelection: { toggleSelection(work) },
-                    presentation: rowPresentation
+                    presentation: rowPresentation,
+                    showsFavoriteStar: showsFavoriteWorks
                 )
                 factsStrip(work, summary: summary)
             }
@@ -626,17 +717,19 @@ struct LibrarySectionListView: View {
         }
     }
 
-    /// Spec 1ah's per-row log facts — time read, the reread count, what is new since
-    /// the last visit. Only on History, and only when the log has something to say:
-    /// a row that read "0m · Read ×0" would be three pieces of furniture saying
-    /// nothing.
+    /// Per-row log facts: 1ah's full set on History — time read, reread count, what
+    /// is new since the last visit — and 1aj's reread count alone on Favorites.
+    ///
+    /// Only when the log has something to say, on either screen: a row reading
+    /// "0m · Read ×0" would be three pieces of furniture saying nothing.
     @ViewBuilder
     private func factsStrip(_ work: SavedWork, summary: WorkReadingSummary?) -> some View {
-        if showsGroupingStrip, let summary, summary.visitCount > 0 {
+        if let summary, summary.visitCount > 0, showsGroupingStrip || showsFavoriteWorks {
             ReadingHistoryFactsStrip(
                 summary: summary,
                 postedChapterCount: work.postedChapterCount,
-                palette: scopePalette
+                palette: scopePalette,
+                style: showsGroupingStrip ? .history : .favorites
             )
         }
     }
@@ -647,7 +740,8 @@ struct LibrarySectionListView: View {
                 work: work,
                 openMode: .reader,
                 onSelect: { isSelecting = true; selection = [work.id] },
-                presentation: rowPresentation
+                presentation: rowPresentation,
+                showsFavoriteStar: showsFavoriteWorks
             )
             factsStrip(work, summary: summary)
         }

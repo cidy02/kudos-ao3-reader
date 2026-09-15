@@ -121,6 +121,8 @@ struct SensitiveWorkRow: View {
     /// Forwarded to `WorkRow` so a screen that has moved to the redesign's
     /// compact ledger row gets it here too, blurred or not.
     var presentation: WorkRow.Presentation = .standard
+    /// Forwarded to `WorkRow` for 1aj's Favorites star.
+    var showsFavoriteStar = false
     /// Lists use their row-activation link; ScrollView dashboards need a real
     /// link inside the privacy boundary. Insets belong inside that same boundary
     /// so tapping the card's padding reveals/selects exactly like its content.
@@ -156,7 +158,8 @@ struct SensitiveWorkRow: View {
                 expandAll: expandAll,
                 showsExpandButton: false,
                 externalExpanded: $blurredExpanded,
-                presentation: presentation
+                presentation: presentation,
+                showsFavoriteStar: showsFavoriteStar
             )
                 .padding(contentInsets)
                 .environment(\.ao3AuthorNavigationEnabled, false)
@@ -224,7 +227,8 @@ struct SensitiveWorkRow: View {
             expandAll: expandAll,
             isSelecting: isSelecting,
             isSelected: isSelected,
-            presentation: presentation
+            presentation: presentation,
+            showsFavoriteStar: showsFavoriteStar
         )
         .padding(contentInsets)
         .contentShape(Rectangle())
