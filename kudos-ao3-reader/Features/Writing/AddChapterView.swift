@@ -59,7 +59,7 @@ struct AddChapterView: View {
                 SectionRuleHeader(title: "Publication")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 publicationPanel.disabled(chapterSaved || isSaving || isPosting).pageBodyRow(top: 8, gutter: gutter)
-                Text("The last-chapter switch writes the total on the work rather"
+                Text("The last-chapter switch writes the total on the work rather "
                     + "than a flag of its own, which is how AO3 records a finished work.")
 
                     .font(.system(size: 11.5))
@@ -74,7 +74,7 @@ struct AddChapterView: View {
                 SectionRuleHeader(title: "Post")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 postPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("Subscribers are notified on post, so the draft path exists to write"
+                Text("Subscribers are notified on post, so the draft path exists to write "
                     + "a chapter over several sittings without sending twelve notifications.")
 
                     .font(.system(size: 11.5))

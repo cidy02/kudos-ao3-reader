@@ -80,7 +80,7 @@ struct WorkEditView: View {
                     Button("Reload chapter totals") { publicationRetry += 1 }
                         .pageBodyRow(top: 8, gutter: gutter)
                 }
-                Text("Chapters posted of total is AO3’s own field — setting a total above what is"
+                Text("Chapters posted of total is AO3’s own field — setting a total above what is "
                     + "posted is what marks a work in progress, and Complete writes the same value.")
 
                     .font(.system(size: 11.5))

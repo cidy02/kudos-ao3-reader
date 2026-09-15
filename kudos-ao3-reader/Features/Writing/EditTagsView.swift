@@ -46,7 +46,7 @@ struct EditTagsView: View {
                 SectionRuleHeader(title: "Archive warnings")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 warningsPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("AO3 requires exactly one of these six, and the first is"
+                Text("AO3 requires exactly one of these six, and the first is "
                     + "how a creator declines to warn. None of them can be left blank.")
 
                     .font(.system(size: 11.5))
@@ -67,7 +67,7 @@ struct EditTagsView: View {
                 SectionRuleHeader(title: "Tags")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 tagsPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("Tags are AO3’s autocomplete: typing offers canonical tags first, and a tag"
+                Text("Tags are AO3’s autocomplete: typing offers canonical tags first, and a tag "
                     + "that is not canonical still posts. Removing a tag here never deletes it from AO3.")
 
                     .font(.system(size: 11.5))
