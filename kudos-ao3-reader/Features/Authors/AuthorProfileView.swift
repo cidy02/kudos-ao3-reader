@@ -258,11 +258,27 @@ private extension AuthorProfileView {
         }
         guard isOwnProfile, model.route.pseud == nil,
               let kind = AO3DashboardSections.listKind(for: model.selectedTab),
-              let count = AO3AccountListCountsCache.shared.count(
+              let stored = AO3AccountListCountsCache.shared.count(
                   for: kind,
                   authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
-              )?.displayText else { return model.route.displayName }
-        return "\(count) \(model.selectedTab.rawValue.lowercased()) · \(model.route.displayName)"
+              ),
+              let count = stored.displayText else { return model.route.displayName }
+        return "\(count) \(scopeNoun(stored.exact)) · \(model.route.displayName)"
+    }
+
+    /// The tab's own name is always the plural — "Works", "Bookmarks" — so an
+    /// account with one work read "1 works". Spelled out per case rather than
+    /// trimming an "s", because "series" is both forms and would lose one.
+    ///
+    /// Only an exact 1 singularises: a lower bound is rendered "100+", which is
+    /// never one of anything.
+    private func scopeNoun(_ exact: Int?) -> String {
+        switch model.selectedTab {
+        case .works: exact == 1 ? "work" : "works"
+        case .series: "series"
+        case .bookmarks: exact == 1 ? "bookmark" : "bookmarks"
+        case .about: "about"
+        }
     }
 
     private var tabSelection: Binding<AO3AuthorProfileTab> {
