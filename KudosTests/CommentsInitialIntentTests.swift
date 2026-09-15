@@ -40,6 +40,14 @@ struct CommentsInitialIntentTests {
         )
     }
 
+    /// Spec 1f: "the default sort is Newest". AO3's own pages open oldest-first,
+    /// so this is a deliberate divergence from the site and easy to undo by
+    /// accident — the ordering itself is well covered elsewhere, but nothing
+    /// pinned which way a freshly opened sheet starts.
+    @Test func commentsOpenNewestFirstByDefault() {
+        #expect(Self.makeModel().newestFirst)
+    }
+
     @Test func chapterIntentOpensByChapterOnTheFirstChapter() async {
         let auth = Self.makeAuth()
         await auth.login(username: "alice", password: "password")

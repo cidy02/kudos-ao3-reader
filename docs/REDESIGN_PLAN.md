@@ -1044,6 +1044,41 @@ confirming needs a maintainer session, and every control behind the gate is a
 write.** If the rows still do not appear for the owner, the next suspect is the
 show fetch returning cached anonymous HTML.
 
+<a id="comments-1f-audit-2026-09-15"></a>
+**1f Comments audited 2026-09-15 — one line wrong, one divergence recorded.**
+
+1f carries no BUILD line; it is a pure description. The screen exists, is
+reachable, and most of what the board draws is there: the hairline rail with its
+elbows behind each reply avatar (`ThreadConnectors`), "…" on every row, chapter
+and sort as dropdowns under the signal strip, sans comment text, and the centred
+"Write a comment" pill. `CommentThreadRow.swift` shows zero external references
+but that is a filename, not a type — everything in it is used.
+
+**Fixed: the default sort.** `CommentsModel.newestFirst` was `false`, so the
+sheet opened oldest-first; 1f says "the default sort is Newest". The ordering
+itself was fully implemented (newest-first starts from the last page and reverses
+within each page) — only the default was wrong. Now `true`, pinned by a test,
+and **verified on screen**: the sheet opens with the Newest pill selected.
+
+**Recorded, not built: 1f wants continuous streaming, the app pages.** The board
+says "older comments stream in continuously at the bottom instead of paging";
+`CommentsView.paginationSection` draws Previous / "Page N of M" / Next. Three
+reasons this is the owner's call rather than a unilateral rewrite:
+
+1. `CommentsModel.loadPage` **replaces** `page` and rebuilds `displayThreads`.
+   Streaming needs accumulation across pages, in the model that also owns the
+   page cache, session invalidation and the jump-to-comment highlight — the
+   app's most-audited subsystem (T-97 through T-103).
+2. It removes the ability to jump to a page. AO3 threads run to dozens of pages,
+   and the screen itself currently explains its own paging in a footnote
+   ("AO3 pages its comments, and only the comment total is the whole work's").
+3. **It is ambiguous under the sort toggle the same board asks for.** "Older
+   comments at the bottom" is coherent newest-first and inverted oldest-first,
+   and 1f does not say what streaming means in the other direction.
+
+Worth doing, but as its own change with the owner's call on (2) and (3).
+
+
 
 
 
