@@ -613,8 +613,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     }
 
     /// The URL of a user's AO3 reading history — the readings page with no filter.
-    /// Same `li.work.blurb` markup as search, so `worksPage` / `parseSearchPage`
-    /// read it directly.
+    ///
+    /// The work blurbs are search-shaped, so `worksPage` / `parseSearchPage`
+    /// read them. **But the page is NOT only work blurbs**: otwarchive renders
+    /// `readings/_reading_blurb`, which wraps each `works/work_module` in a
+    /// `li.reading.work` and adds a `div.user.module` carrying the visit count,
+    /// last-visited date, version note and Marked-for-Later / Flagged-to-skip
+    /// flags. This comment used to say the markup was simply "the same as
+    /// search", and that is why 1t's visit counts were discarded for so long.
+    /// `parseReadingEntries` reads the rest; the two are meant to be used
+    /// together.
     static func historyURL(username: String, page: Int) -> URL? {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
