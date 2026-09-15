@@ -304,7 +304,21 @@ private extension AuthorProfileView {
                   authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
               ),
               let count = stored.displayText else { return model.route.displayName }
-        return "\(count) \(scopeNoun(stored.exact)) · \(model.route.displayName)"
+        // 1u's hero is "12 works · 248,400 words · 3,812 kudos". Words and kudos
+        // come from /users/:id/stats and exist only for the signed-in account,
+        // so on anyone else's page — and before the fetch lands — this stays the
+        // count and the name it has always been rather than showing blanks.
+        var parts = ["\(count) \(scopeNoun(stored.exact))"]
+        if model.selectedTab == .works, let stats = model.stats {
+            if let words = stats.wordCount {
+                parts.append("\(words.formatted()) words")
+            }
+            if let kudos = stats.kudos {
+                parts.append("\(kudos.formatted()) kudos")
+            }
+        }
+        if parts.count > 1 { return parts.joined(separator: " · ") }
+        return "\(parts[0]) · \(model.route.displayName)"
     }
 
     /// The tab's own name is always the plural — "Works", "Bookmarks" — so an
