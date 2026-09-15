@@ -18,6 +18,7 @@ struct WorkBulkActionBar: View {
     @State private var confirmDelete = false
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
+    @State private var showingTag = false
 
     private var allSaved: Bool {
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
@@ -85,6 +86,14 @@ struct WorkBulkActionBar: View {
             } label: {
                 Label("Add to Collection", systemImage: "square.stack")
             }
+            // 1af lists Tag among the four actions that must accept a set.
+            // Tagging one work already existed in Work Detail; this is the same
+            // local relationship applied to many.
+            Button {
+                showingTag = true
+            } label: {
+                Label("Tag", systemImage: "tag")
+            }
             Button {
                 bulkToggleFinished()
             } label: {
@@ -113,6 +122,9 @@ struct WorkBulkActionBar: View {
         }
         .sheet(isPresented: $showingAddToCollection) {
             AddToCollectionView(works: selectedWorks)
+        }
+        .sheet(isPresented: $showingTag) {
+            WorkBulkTagSheet(works: selectedWorks)
         }
         .confirmationDialog(
             "Delete \(selectedWorks.count) work\(selectedWorks.count == 1 ? "" : "s")?",
