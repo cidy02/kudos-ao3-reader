@@ -578,6 +578,13 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 @Model final class Tag {
     @Attribute(.unique) var name: String = ""
     var works: [SavedWork] = []
+    /// Queues carrying this tag — artboard 1h's "+ Tag" and 1i's tag rail.
+    ///
+    /// The *same* `Tag` a work carries, not a parallel queue-only vocabulary:
+    /// 1h calls the way out of the queue's tag list "Manage all tags as the way
+    /// out to **the shared vocabulary**", and a reader who tags a work "Comfort"
+    /// means the same word when they tag a queue with it.
+    var queues: [ReadingQueue] = []
 
     init(name: String) {
         self.name = name
@@ -725,6 +732,10 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
+    /// The reader's own tags on this queue — 1h draws them under the header with
+    /// a dashed "+ Tag", and 1i filters the organizer by them. Shares `Tag` with
+    /// `SavedWork.tags` so the vocabulary is one list, not two.
+    @Relationship(inverse: \Tag.queues) var tags: [Tag] = []
 
     init(
         id: UUID = UUID(),

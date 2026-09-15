@@ -14,9 +14,10 @@ import SwiftUI
 /// - The "Search queues, tags and works" search field. There is no
 ///   cross-queue/tag/work search anywhere in the app to back it — building the
 ///   field without the search behind it would be decoration, not a control.
-/// - The tag filter pills (All/Rereads/Comfort/Long fic/Untagged) and their
-///   "Edit tags" chip. Same gap as `ReadingQueueSettingsView`'s file note:
-///   queues have no tag concept at all.
+/// - The tag filter pills are **built now**: `ReadingQueue.tags` exists, so the
+///   rail filters on the real relationship. Their "Edit tags" chip is not — tags
+///   are edited per queue in Queue Details (1h), not from a rail that filters by
+///   them, and a second editor here would be two ways to write one list.
 /// - The "Pinned" section. There is no per-queue pin/favorite flag — Saved for
 ///   Later is the only queue this app treats specially, and it already gets
 ///   its own un-reorderable row at the top of "All Queues" here, which is what
@@ -39,6 +40,9 @@ struct AllReadingQueuesGridView: View {
 
     @State private var showingNewQueue = false
     @State private var newQueueHue: Double?
+    /// 1i's tag rail. Empty means All; `untaggedFilter` means the queues with no
+    /// tags; anything else is a tag name.
+    @AppStorage("library.queueOrganizer.tagFilter") private var tagFilter = ""
     @State private var newQueueName = ""
     @State private var pendingRename: ReadingQueue?
     @State private var renameText = ""
@@ -61,6 +65,58 @@ struct AllReadingQueuesGridView: View {
         readingQueues
             .filter { $0.kind == .custom }
             .sorted { $0.sortOrder < $1.sortOrder }
+            .filter(matchesTagFilter)
+    }
+
+    /// 1i's rail: All, then one chip per tag actually in use, then Untagged.
+    /// Only tags that are on a queue appear — a rail offering a filter that
+    /// returns nothing is furniture.
+    private var queueTagNames: [String] {
+        Set(readingQueues.flatMap { $0.tags.map(\.name) }).sorted()
+    }
+
+    private func matchesTagFilter(_ queue: ReadingQueue) -> Bool {
+        switch tagFilter {
+        case "": true
+        case Self.untaggedFilter: queue.tags.isEmpty
+        default: queue.tags.contains { $0.name == tagFilter }
+        }
+    }
+
+    /// Sentinel rather than an enum: the other cases are tag names, which are
+    /// user text, and a name could never be this — it is not a legal `Tag.name`
+    /// the sheet can produce, since that trims to non-empty plain text.
+    static let untaggedFilter = "\u{0}untagged"
+
+    private var tagRail: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                tagChip("All", value: "")
+                ForEach(queueTagNames, id: \.self) { name in
+                    tagChip(name, value: name)
+                }
+                if readingQueues.contains(where: { $0.tags.isEmpty }) {
+                    tagChip("Untagged", value: Self.untaggedFilter)
+                }
+            }
+            .padding(.horizontal, SubjectMetrics.gutter)
+        }
+    }
+
+    private func tagChip(_ title: String, value: String) -> some View {
+        let isSelected = tagFilter == value
+        return Button {
+            tagFilter = isSelected ? "" : value
+        } label: {
+            SubjectChip(
+                text: title,
+                style: .pill(isSelected: isSelected),
+                palette: organizerPalette
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var savedForLaterQueue: ReadingQueue? {
@@ -93,6 +149,12 @@ struct AllReadingQueuesGridView: View {
                     .pageBodyRow(top: 20, gutter: 0)
                 statStrip
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+            }
+
+            if !queueTagNames.isEmpty {
+                Section {
+                    tagRail.pageBodyRow(top: 14, gutter: 0)
+                }
             }
 
             Section {

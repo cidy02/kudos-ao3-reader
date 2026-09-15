@@ -1278,6 +1278,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// archives were written in. No version bump: this is additive, and the
     /// existing optional fields here were added the same way.
     let hue: Double?
+    /// 1h/1i's queue tags, by name — the same identity `SavedWork`'s `userTags`
+    /// uses, because they are the same `Tag`. Optional and additive for the same
+    /// reason as `hue`.
+    let tagNames: [String]?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -1292,6 +1296,7 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         isDeleted = queue.isPendingDeletion
         permanentDeletionScheduledAt = queue.permanentDeletionScheduledAt
         hue = queue.hue
+        tagNames = queue.tags.map(\.name).sorted()
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -2287,6 +2292,25 @@ enum KudosBackupService {
             // on this device.
             if let archivedHue = archived.hue, incomingWins || queue.hue == nil {
                 queue.hue = archivedHue
+            }
+            // Union-only, exactly like SavedWork's user tags above: there is no
+            // per-tag tombstone, so absence from a stale archive can never be read
+            // as a deletion. Matches on exact `Tag.name`, which is the model's
+            // `@Attribute(.unique)` identity, and reuses the existing Tag rather
+            // than inserting a duplicate — inserting one by name would throw.
+            var existingQueueTagNames = Set(queue.tags.map(\.name))
+            for name in archived.tagNames ?? [] {
+                let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, existingQueueTagNames.insert(trimmed).inserted else { continue }
+                let tag: Tag
+                if let existingTag = tagsByName[trimmed] {
+                    tag = existingTag
+                } else {
+                    tag = Tag(name: trimmed)
+                    context.insert(tag)
+                    tagsByName[trimmed] = tag
+                }
+                queue.tags.append(tag)
             }
             queue.dateCreated = min(queue.dateCreated, archived.dateCreated)
             queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)
