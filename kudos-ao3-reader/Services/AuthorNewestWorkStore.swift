@@ -99,4 +99,29 @@ enum AuthorNewestWorkStore {
             return nil
         }
     }
+
+    /// Fetches every distinct author in the order presented by Favorites' Authors
+    /// scope. Sequential requests preserve AO3 pacing; callers enable a filter only
+    /// once every account has a cached answer, never from a partially loaded list.
+    /// Returns false when an answer is still missing (for example, after a request
+    /// failure or cancellation).
+    static func prefetch(
+        usernames: [String],
+        auth: AO3AuthService,
+        isCurrent: @escaping @MainActor () -> Bool = { true }
+    ) async -> Bool {
+        let scope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        var distinctUsernames: [String] = []
+        var seen = Set<String>()
+        for username in usernames where seen.insert(username.lowercased()).inserted {
+            distinctUsernames.append(username)
+        }
+
+        for username in distinctUsernames {
+            guard !Task.isCancelled, isCurrent() else { return false }
+            _ = await newestWork(username: username, auth: auth, isCurrent: isCurrent)
+        }
+        guard !Task.isCancelled, isCurrent() else { return false }
+        return distinctUsernames.allSatisfy { cached(username: $0, scope: scope) != nil }
+    }
 }

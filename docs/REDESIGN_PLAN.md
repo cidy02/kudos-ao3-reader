@@ -783,13 +783,18 @@ explicit tap. The per-author aggregation the same note asks for is already done
 > "rather than crowding the row". Fandoms and tags keep it. One line to reverse if
 > that reads wrong on a real library.
 >
-> **Not built:** (a) the row's trailing chevron to the author's own page — Library
-> registers no author destination and adding one means touching `LibraryView`,
-> the view whose type checker stops terminating; (b) the "With new work" chip.
-> That one is not laziness: it filters on a fact fetched per visible row, so the
-> answer is unknown for every row not yet on screen, and a filter that silently
-> omits unfetched rows is worse than no filter. It needs all rows fetched up
-> front — the fan-out this design was built to avoid — or a different definition.
+> **Still not built:** the row's trailing chevron to the author's own page —
+> Library registers no author destination and adding one means touching
+> `LibraryView`, the view whose type checker stops terminating.
+>
+> **Updated 2026-09-16 — 1ak's “With new work” chip is built.** The owner chose
+> the previously-deferred complete-answer path: opening Favorites → Authors starts
+> `AuthorNewestWorkStore.prefetch` for every registered author, sequentially under
+> the existing request coordinator and pacing. `FavoriteAuthorQuickFilter` reads
+> the store's tri-state cache synchronously and stays unavailable until every
+> registered row has an answer; a cache miss or a row with no registered account
+> does not count as new. This replaces the earlier per-visible-row fetch, so the
+> filter never silently omits an author whose answer has not arrived.
 
 <a id="search-turn-audit-2026-09-15"></a>
 **Search turn (1al, 1ao–1ax) audited 2026-09-15 — nine of eleven boards were
