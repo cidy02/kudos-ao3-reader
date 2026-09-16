@@ -58,6 +58,50 @@ struct FavoriteQuickFilterTests {
         #expect(titles == ["Ongoing"])
     }
 
+    @Test func authorNewWorkNeedsAFetchedUnreadAccount() {
+        let unread = remoteWork(id: 1)
+        let alreadyRead = remoteWork(id: 2)
+        let rows = [
+            authorRow("Unread", username: "unread"),
+            authorRow("Already read", username: "seen"),
+            authorRow("No visible works", username: "empty"),
+            authorRow("Not fetched", username: "missing"),
+            authorRow("Anonymous", username: nil)
+        ]
+        let newestWorks: [String: AO3WorkSummary?] = [
+            "unread": unread,
+            "seen": alreadyRead,
+            "empty": Optional<AO3WorkSummary>.none
+        ]
+
+        let filtered = FavoriteAuthorQuickFilter.withNewWork.apply(
+            to: rows,
+            newestWorkForUsername: { newestWorks[$0] },
+            readWorkIDs: [alreadyRead.id]
+        )
+
+        // A cache miss is unknown rather than new, and an author without a
+        // registered account has no AO3 works page to inspect.
+        #expect(filtered.map(\.name) == ["Unread"])
+    }
+
+    private func authorRow(_ name: String, username: String?) -> ReadingAffinities.Row {
+        ReadingAffinities.Row(
+            name: name,
+            worksRead: 1,
+            totalSeconds: 0,
+            lastRead: nil,
+            username: username,
+            unreadInLibrary: 0,
+            downloadedInLibrary: 0,
+            savedForLater: 0
+        )
+    }
+
+    private func remoteWork(id: Int) -> AO3WorkSummary {
+        AO3WorkSummary.subscription(id: id, title: "Work \(id)", authors: [])
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

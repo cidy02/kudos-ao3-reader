@@ -52,6 +52,11 @@ struct LibrarySectionListView: View {
     /// default, which is how the artboard draws it — All carries the solid accent
     /// and the other three are plain pills.
     @AppStorage("library.favorites.quickFilter") private var favoriteQuickFilter: FavoriteQuickFilter = .all
+    /// 1ak's Authors-only rail. It is separate from the Works rail because an
+    /// author needs a fetched newest-work answer while a saved work does not.
+    @AppStorage("library.favorites.authorQuickFilter")
+    private var favoriteAuthorQuickFilter: FavoriteAuthorQuickFilter = .all
+    @State private var authorNewestWorkUnavailable = false
 
     /// Finishing sessions only — the reread signal, and the whole reason this is a
     /// predicated `@Query` rather than a `ReadingLogService.summaries(in:)` call.
@@ -403,7 +408,7 @@ struct LibrarySectionListView: View {
         showsFavoriteScopes && favoriteScope == .works
     }
 
-    private var favoriteScopeStrip: some View {
+    private func favoriteScopeStrip(authorRows: [ReadingAffinities.Row] = []) -> some View {
         VStack(spacing: 8) {
             SubjectSegmentedControl(
                 options: FavoriteScope.allCases,
@@ -415,6 +420,14 @@ struct LibrarySectionListView: View {
                     options: ReadingAffinities.Order.allCases,
                     title: \.title,
                     selection: $favoriteOrder
+                )
+            }
+            if favoriteScope == .authors {
+                FavoriteAuthorFilterRail(
+                    selection: $favoriteAuthorQuickFilter,
+                    isReady: authorNewestWorkFilterReady(for: authorRows),
+                    isUnavailable: authorNewestWorkUnavailable,
+                    palette: scopePalette
                 )
             }
             if showsFavoriteWorks {
@@ -481,18 +494,74 @@ struct LibrarySectionListView: View {
         }
     }
 
+    private var authorNewestWorkCacheScope: String {
+        AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+    }
+
+    /// Only registered accounts have an AO3 works page to inspect. A pseud-less
+    /// local/anonymous row remains in All but cannot match "With new work".
+    private func authorUsernames(in rows: [ReadingAffinities.Row]) -> [String] {
+        rows.compactMap(\.username)
+    }
+
+    private func authorNewestWorkPrefetchKey(for rows: [ReadingAffinities.Row]) -> String {
+        guard favoriteScope == .authors else { return favoriteScope.rawValue }
+        return authorNewestWorkCacheScope + "|" + authorUsernames(in: rows).joined(separator: "\u{001F}")
+    }
+
+    /// A fresh outer optional means the store has an answer, including `.some(nil)`
+    /// for an author with no visible works. That distinction is what prevents the
+    /// filter from treating an incomplete prefetch as an empty result.
+    private func authorNewestWorkFilterReady(for rows: [ReadingAffinities.Row]) -> Bool {
+        authorUsernames(in: rows).allSatisfy {
+            AuthorNewestWorkStore.cached(username: $0, scope: authorNewestWorkCacheScope) != nil
+        }
+    }
+
+    private func displayedAffinityRows(from rows: [ReadingAffinities.Row]) -> [ReadingAffinities.Row] {
+        guard favoriteScope == .authors,
+              favoriteAuthorQuickFilter == .withNewWork,
+              authorNewestWorkFilterReady(for: rows)
+        else { return rows }
+        let scope = authorNewestWorkCacheScope
+        return favoriteAuthorQuickFilter.apply(
+            to: rows,
+            newestWorkForUsername: { AuthorNewestWorkStore.cached(username: $0, scope: scope) },
+            readWorkIDs: readAO3WorkIDs
+        )
+    }
+
+    private func prefetchAuthorNewestWorks(rows: [ReadingAffinities.Row]) async {
+        guard favoriteScope == .authors, !authorNewestWorkFilterReady(for: rows) else { return }
+        let scope = authorNewestWorkCacheScope
+        let usernames = authorUsernames(in: rows)
+        authorNewestWorkUnavailable = false
+        let complete = await AuthorNewestWorkStore.prefetch(
+            usernames: usernames,
+            auth: auth,
+            isCurrent: {
+                !Task.isCancelled && AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth) == scope
+            }
+        )
+        guard !Task.isCancelled,
+              AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth) == scope
+        else { return }
+        authorNewestWorkUnavailable = !complete
+    }
+
     /// The aggregate scopes as their own list. Deliberately not folded into
     /// `detailedList`: that one is built around works — swipes, selection, the
     /// filter rail — and none of it applies to a row that is a tag name.
     private var affinityList: some View {
-        let rows = affinityRows
+        let allRows = affinityRows
+        let rows = displayedAffinityRows(from: allRows)
         return List {
             Section {
                 affinityHeader(count: rows.count)
                     .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                favoriteScopeStrip
+                favoriteScopeStrip(authorRows: allRows)
                     .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -515,6 +584,9 @@ struct LibrarySectionListView: View {
         }
         .cardList()
         .subjectScreenWash(palette: scopePalette)
+        .task(id: authorNewestWorkPrefetchKey(for: allRows)) {
+            await prefetchAuthorNewestWorks(rows: allRows)
+        }
     }
 
     /// The same header block, tallying rows rather than works — on the Tags scope
@@ -613,7 +685,7 @@ struct LibrarySectionListView: View {
 
             if showsFavoriteScopes {
                 Section {
-                    favoriteScopeStrip
+                    favoriteScopeStrip()
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)

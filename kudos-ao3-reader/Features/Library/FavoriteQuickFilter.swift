@@ -48,3 +48,44 @@ nonisolated enum FavoriteQuickFilter: String, CaseIterable, Hashable, Identifiab
         }
     }
 }
+
+/// Artboard **1ak**'s quick-filter rail over Favorites' Authors scope.
+///
+/// This deliberately owns the author rule rather than adding another case to
+/// `FavoriteQuickFilter`: works and authors make different claims, and a row with
+/// no registered account cannot honestly be checked for new AO3 work.
+nonisolated enum FavoriteAuthorQuickFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case all
+    case withNewWork
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .withNewWork: "With new work"
+        }
+    }
+
+    /// Narrows author rows to accounts whose newest fetched work is not in the
+    /// reader's opened-work set. Cache misses and rows without an account do not
+    /// match: treating either as new would turn unknown data into a positive claim.
+    func apply(
+        to rows: [ReadingAffinities.Row],
+        newestWorkForUsername: (String) -> AO3WorkSummary??,
+        readWorkIDs: Set<Int>
+    ) -> [ReadingAffinities.Row] {
+        switch self {
+        case .all:
+            rows
+        case .withNewWork:
+            rows.filter { row in
+                guard let username = row.username,
+                      let cachedWork = newestWorkForUsername(username),
+                      let newestWork = cachedWork
+                else { return false }
+                return !readWorkIDs.contains(newestWork.id)
+            }
+        }
+    }
+}

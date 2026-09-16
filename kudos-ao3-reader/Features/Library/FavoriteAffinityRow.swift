@@ -213,11 +213,9 @@ struct FavoriteAffinityRow: View {
 /// is already at the Swift type checker's limit, so the `@State` and the `.task`
 /// belong anywhere but there.
 ///
-/// The fetch is per-row and runs when the row appears, so a list of forty authors
-/// costs forty requests only if forty rows are actually looked at.
-/// `AuthorNewestWorkStore` caches the parsed answer and
-/// `AO3AuthorProfileFetcher`/`AO3RequestCoordinator` already cache the HTML and
-/// cap concurrency, so scrolling back over a row costs nothing.
+/// The parent list prefetches every registered author before it enables 1ak's
+/// "With new work" filter. This wrapper reads that cache rather than issuing a
+/// second, per-row request.
 struct FavoriteAuthorRow: View {
     let row: ReadingAffinities.Row
     let palette: SubjectPalette
@@ -225,20 +223,23 @@ struct FavoriteAuthorRow: View {
     let readWorkIDs: Set<Int>
 
     @Environment(AO3AuthService.self) private var auth
-    @State private var newestWork: AO3WorkSummary?
 
     var body: some View {
+        let newestWork = cachedNewestWork
         FavoriteAffinityRow(
             row: row,
             palette: palette,
             newestWork: newestWork,
             isNewestWorkUnread: newestWork.map { !readWorkIDs.contains($0.id) } ?? false
         )
-        .task(id: row.username) {
-            // No registered identity means no account page to read — an orphaned,
-            // anonymous or hand-imported work. The block simply does not appear.
-            guard let username = row.username else { return }
-            newestWork = await AuthorNewestWorkStore.newestWork(username: username, auth: auth)
+    }
+
+    private var cachedNewestWork: AO3WorkSummary? {
+        guard let username = row.username else { return nil }
+        let scope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        guard let cached = AuthorNewestWorkStore.cached(username: username, scope: scope) else {
+            return nil
         }
+        return cached
     }
 }
