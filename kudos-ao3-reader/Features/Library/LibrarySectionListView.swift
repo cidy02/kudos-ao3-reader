@@ -506,7 +506,10 @@ struct LibrarySectionListView: View {
 
     private func authorNewestWorkPrefetchKey(for rows: [ReadingAffinities.Row]) -> String {
         guard favoriteScope == .authors else { return favoriteScope.rawValue }
-        return authorNewestWorkCacheScope + "|" + authorUsernames(in: rows).joined(separator: "\u{001F}")
+        // Sort changes the rendered order but must not cancel and restart the same
+        // author batch. `prefetch` keeps the displayed order when it does run.
+        let usernames = Set(authorUsernames(in: rows).map { $0.lowercased() }).sorted()
+        return authorNewestWorkCacheScope + "|" + usernames.joined(separator: "\u{001F}")
     }
 
     /// A fresh outer optional means the store has an answer, including `.some(nil)`
