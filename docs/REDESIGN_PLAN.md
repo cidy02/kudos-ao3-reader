@@ -1480,6 +1480,14 @@ canonical mark", with non-canonical marked amber.
 canonical flag — so the screen cannot show either without the autocomplete parse
 being widened first. Worth doing; it is a services change, not a layout one.
 
+> **Superseded 2026-09-17 — the parse cannot be widened, and the screen was the
+> work after all. Built; see
+> [item-3-1bu-built-2026-09-17](#item-3-1bu-built-2026-09-17).** The canonical
+> mark turned out to be free (the autocomplete set is canonical-only by
+> construction in `otwarchive`); the count turned out to cost 36 KB and 16
+> seconds per name and is not drawn. "It is a services change, not a layout one"
+> was backwards: the picker was an un-redesigned `Section("Selected")` list.
+
 **1bv is explicitly not to be built.** Its own BUILD note ends: "Mockup, not the
 editor. What is drawn here is the shape of the screen, not a working editor — the
 real one still has to be built, and it should almost certainly sit on an existing
@@ -3766,6 +3774,70 @@ empty and be indistinguishable from one that does not exist.
 
 **Recorded, not built** — the cost is real and different from what was
 approved, so it is the owner's call.
+
+<a id="item-3-1bu-built-2026-09-17"></a>
+> **Built 2026-09-17 on the owner's "build it". Two of the notes above are
+> wrong and are corrected here.**
+>
+> **1. Canonicity is free and provable, not a guess.** The note treats
+> `span.canonical` on `/tags/search` as the only source. It is not needed:
+> `otwarchive`'s `Tag#after_create` adds a tag to the autocomplete set only
+> `if tag.canonical`, `after_update` removes it the moment it is
+> decanonicalised, and `refresh_autocomplete` opens `return unless canonical`.
+> **The autocomplete set is canonical-only by construction**, so 1bu's green
+> badge is AO3's own invariant. `AO3TagAutocomplete`'s `isCanonical: true` was
+> already right; only its comment ("no flag, so assume true") was wrong.
+>
+> **2. The count is not affordable, and the *ordering* is not a stand-in.**
+> Measured, not estimated: `/tags/search?tag_search[name]=<exact name>` is
+> **36 KB in 16.4 seconds** for one name. Five visible rows per settled term is
+> ~180 KB and up to a minute of AO3's time for a decorative figure. The tag
+> landing page (`/tags/<name>`, 20 KB / 4.0 s) was probed as a cheaper source
+> and carries no count at all. So **the count column is absent**, not drawn as
+> 1bu's em dash: a dash in every row is a column of nothing, and beside the
+> accent `+` it reads as a minus. `parseEditorAutocomplete` still honours a
+> `work_count` key, and the row draws the figure the moment AO3 sends one.
+>
+> An intermediate draft of this screen said "most-used first" in its subtitle,
+> reasoning from `autocomplete_score = taggings_count_cache`. **That was wrong
+> and shipped nowhere.** `lib/autocomplete_source.rb`'s comparator sorts on
+> substring match, then on how many of the typed words the phrase matched, and
+> only then on summed score. Live, `freeform?term=fluff` returns six
+> "fluffbruary's Fluffbruary Prompt Month" tags *above* "Fluff". The copy now
+> claims only what AO3 guarantees: these are its canonical tags.
+>
+> **What shipped.** `WritingTagsEditor` moved out of `WritingFormFields.swift`
+> into its own file and became 1bu: kicker + title + "N chosen" subtitle
+> (`SubjectHeaderBlock`), a `GlassFieldBar` on a 12pt `subjectPanel`, the chosen
+> tags as round `SubjectChip`s with a trailing ×, a `SubjectFieldLabel`
+> (`.formGroup`) over a `subjectPanel` of suggestion rows — name, green
+> ✓ Canonical, accent `+`, `SubjectRowSeparator` between — and the footnote. The
+> label and the card appear together or not at all, so "SUGGESTIONS" never heads
+> an empty panel. Suggestions are cached per lowercased term, so a retyped term
+> does not refetch, and a stale list is left standing while the next one loads
+> rather than blanking the card on every keystroke.
+>
+> **1bu's orange row is the typed term**, labelled **"Posts as typed"** and not
+> its "Not canonical — posts as typed": AO3 caps the list at 15
+> (`limit = options[:limit] || 15`), so a canonical tag ranked below the cap is
+> indistinguishable from one that does not exist. "Posts as typed" is true
+> either way. Its rule lives on `AO3TagAutocomplete.freeTypedTerm` rather than
+> in the view, with five tests.
+>
+> **Not built:** the count (above), and 1bu's "drag to reorder". Order is
+> preserved because appends land at the end, but there is no reorder gesture and
+> the subtitle does not promise one. 1bu's local "Recently used" / "From your
+> other works" sections are also not built — its own footer calls them local
+> conveniences, and nothing stores that history yet.
+>
+> **Verified on the simulator** (Account → Drafts → New work → a tag row):
+> typed-term row in orange above canonical rows in green, no count column, chip
+> with × after a tap, subtitle counting to "1 chosen", suggestions and their
+> label both gone when the field is empty. The nav bar no longer repeats the tag
+> kind — an inner `navigationTitle` outranks the empty one `subjectScreenWash`
+> sets, which is why the old screen drew the name twice. **Not verified:** the
+> warnings/categories branch on screen — its title expression is unchanged for
+> `kind == nil`, so it is provably identical, but I did not photograph it.
 
 ### item-13-refine-panel-is-dead-code-2026-09-15
 

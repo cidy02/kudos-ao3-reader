@@ -61,4 +61,46 @@ struct AO3TagAutocompleteTests {
     @Test func debounceConstantMatchesSearchPicker() {
         #expect(AO3TagAutocomplete.debounceMilliseconds == 300)
     }
+
+    // MARK: 1bu's typed-term row
+
+    @Test func aTermNoSuggestionMatchesIsOfferedOnItsOwnRow() {
+        let suggestions = AO3TagAutocomplete.editorTags(
+            fromCanonicalNames: ["Gojo Satoru Needs a Hug"]
+        )
+        let offered = AO3TagAutocomplete.freeTypedTerm(
+            term: "  gojo sat ", suggestions: suggestions, chosen: []
+        )
+        #expect(offered == "gojo sat")
+    }
+
+    @Test func aTermASuggestionAlreadyIsNeverDuplicated() {
+        // AO3 tag names are case-insensitively unique, so a "fluff" row under a
+        // suggested "Fluff" would offer the same tag twice.
+        let suggestions = AO3TagAutocomplete.editorTags(fromCanonicalNames: ["Fluff"])
+        #expect(AO3TagAutocomplete.freeTypedTerm(
+            term: "fluff", suggestions: suggestions, chosen: []
+        ) == nil)
+    }
+
+    @Test func aTermAlreadyChosenIsNotOfferedAgain() {
+        // Tapping it would append nothing — a row that does nothing.
+        #expect(AO3TagAutocomplete.freeTypedTerm(
+            term: "Slow Burn", suggestions: [], chosen: ["slow burn"]
+        ) == nil)
+    }
+
+    @Test func aBlankTermOffersNoRow() {
+        #expect(AO3TagAutocomplete.freeTypedTerm(
+            term: "   ", suggestions: [], chosen: []
+        ) == nil)
+    }
+
+    @Test func aTermWithNoSuggestionsAtAllStillPosts() {
+        // The whole point: a brand-new tag has no suggestion to match and must
+        // still be reachable.
+        #expect(AO3TagAutocomplete.freeTypedTerm(
+            term: "My Original Tag", suggestions: [], chosen: []
+        ) == "My Original Tag")
+    }
 }
