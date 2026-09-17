@@ -821,6 +821,34 @@ explicit tap. The per-author aggregation the same note asks for is already done
 > header count follows what is shown, the honest empty state appears, and All
 > restores both rows. Codex had shipped this without ever looking at it.
 
+<a id="item-12-nonempty-match-unobserved-2026-09-17"></a>
+**Still unobserved on screen: "With new work" selecting a non-empty subset.**
+Three separate authors have now been fetched into the simulator's library, and
+the filter has honestly returned **0** every time — each for a checkable reason,
+not a fault:
+
+- taintedsnow0 and Badasspercyjackson — the downloaded work *was* each author's
+  newest posted work, and it was read.
+- Theta_the_Threat — "hunting dogs headcanons" was **posted the same day**, so it
+  is that author's newest posted work too, and reading it excluded them. The
+  guess that a recently-*updated* WIP would not be the newest *posted* was wrong
+  here: it was both.
+
+Getting a match needs an author whose newest posted work is absent from the
+library or never started, and the only download path on a work page is
+**Download & Read**, which marks it started (`readAO3WorkIDs` counts local works
+where `hasStartedReading || isFinished`, `LibrarySectionListView.swift:389`).
+The work page's `•••` menu is **entirely AO3 writes** — Give Kudos, Comments,
+Bookmark on AO3, Mark for Later, Subscribe, Open on AO3 — so there is no local
+download-without-opening there.
+
+So the non-empty branch rests on `FavoriteQuickFilterTests`
+.`authorNewWorkNeedsAFetchedUnreadAccount`, which exercises exactly it with real
+`ReadingAffinities.Row` and `AO3WorkSummary` values, **not on observation**.
+Everything around it has been seen: the chip settling from "Checking" to
+enabled, the list narrowing 2 → 0, the header count following, the honest
+"No new work" empty state, and All restoring the rows.
+
 <a id="item-12-dead-byline-2026-09-16"></a>
 **A dead byline no longer disables 1ak's filter (2026-09-16).**
 `AuthorNewestWorkStore.prefetch` stopped at the first author with no cached
