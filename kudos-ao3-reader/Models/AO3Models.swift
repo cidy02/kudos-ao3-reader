@@ -694,6 +694,27 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             }
         }
 
+        /// AO3's own ladder, so "Rating+" and "Rating−" mean something client-side
+        /// too. `nil` for the two cases that are not rungs on it: `.any` is no
+        /// constraint, and `.notRated` is the absence of a rating rather than a
+        /// step below General — which is why `includeNotRated` is a separate
+        /// choice rather than the bottom of this scale.
+        var severityRank: Int? {
+            switch self {
+            case .any, .notRated: nil
+            case .general: 0
+            case .teen: 1
+            case .mature: 2
+            case .explicit: 3
+            }
+        }
+
+        /// The rung a blurb's rating text sits on, or `nil` when AO3 printed
+        /// something this ladder does not name.
+        static func severityRank(ofRatingText text: String) -> Int? {
+            allCases.first { $0.severityRank != nil && $0.matchesRatingText(text) }?.severityRank
+        }
+
         /// AO3's `rating_ids` value, or nil to leave rating unfiltered.
         var ao3ID: String? {
             switch self {

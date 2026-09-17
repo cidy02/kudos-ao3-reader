@@ -162,21 +162,18 @@ struct AO3FilterPanel: View {
                             filters.ratingMatch = .exact
                         }
                     }
-                    // Query-only, for the same reason Crossover and Updated are below:
-                    // `AO3SummaryFilter.matchesSummary` reads neither. A blurb carries
-                    // one rating string, with nothing about how AO3 would have matched
-                    // it and no way to tell "Not Rated" apart from a rating AO3 simply
-                    // did not print. Both were shown in refine and did nothing.
-                    if mode == .search {
-                        if filters.rating != .any {
-                            Picker("Match", selection: $filters.ratingMatch) {
-                                ForEach(AO3SearchFilters.RatingMatch.allCases) {
-                                    Text($0.title).tag($0)
-                                }
+                    // Both stay in refine: artboard 1au draws "Match — Rating+" and
+                    // "Include Not Rated" on the Refine panel itself, and
+                    // `AO3SummaryFilter.ratingMatches` now reads them off the blurb's
+                    // rating text rather than ignoring them.
+                    if filters.rating != .any {
+                        Picker("Match", selection: $filters.ratingMatch) {
+                            ForEach(AO3SearchFilters.RatingMatch.allCases) {
+                                Text($0.title).tag($0)
                             }
                         }
-                        Toggle("Include Not Rated", isOn: $filters.includeNotRated)
                     }
+                    Toggle("Include Not Rated", isOn: $filters.includeNotRated)
                 }
 
                 Section("Warnings") {
@@ -205,14 +202,11 @@ struct AO3FilterPanel: View {
                     Picker("Completion", selection: $filters.completion) {
                         ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
                     }
-                    // Also query-only. Completion above survives in refine because
-                    // `completionMatches` reads the blurb's own complete flag; the
-                    // chapter *count* has no such check, so offering it here would
-                    // narrow nothing.
-                    if mode == .search {
-                        Picker("Chapters", selection: $filters.chapterCount) {
-                            ForEach(AO3SearchFilters.ChapterCount.allCases) { Text($0.title).tag($0) }
-                        }
+                    // 1au draws "Chapters — Any" too, and `chapterCountMatches` reads
+                    // the blurb's own "posted/total" text, so this narrows in refine
+                    // as well as in search.
+                    Picker("Chapters", selection: $filters.chapterCount) {
+                        ForEach(AO3SearchFilters.ChapterCount.allCases) { Text($0.title).tag($0) }
                     }
                 } footer: {
                     // Artboard 1aq says this out loud, and the reason was only a

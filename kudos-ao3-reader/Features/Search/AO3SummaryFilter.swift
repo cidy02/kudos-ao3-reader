@@ -21,12 +21,49 @@ extension AO3SearchFilters {
     /// refine panel hides them.
     func matchesSummary(_ work: AO3WorkSummary) -> Bool {
         tagsMatch(work)
-            && (rating == .any || rating.matchesRatingText(work.rating))
+            && ratingMatches(work)
             && warningsMatch(work)
             && categoriesMatch(work)
             && completionMatches(work)
+            && chapterCountMatches(work)
             && languageMatches(work)
             && wordCountMatches(work)
+    }
+
+    /// Rating, its match mode, and Not Rated — all three of which artboard 1au
+    /// draws on this very panel, and none of which used to be read here: the
+    /// rating clause was a bare `matchesRatingText`, so "Rating+" narrowed
+    /// exactly as much as "Exact" and the Not Rated toggle did nothing at all.
+    ///
+    /// A blurb does carry enough to answer them. The rating text names a rung on
+    /// `Rating.severityRank`, so "or higher" / "or lower" are comparisons; and
+    /// "Not Rated" is a rating AO3 prints by name, so it can be kept or dropped
+    /// rather than guessed at.
+    private func ratingMatches(_ work: AO3WorkSummary) -> Bool {
+        guard rating != .any else { return true }
+        // Handled before the ladder: Not Rated is not a rung on it, so it is in or
+        // out by its own toggle whatever the selected rating and match mode are.
+        if Rating.notRated.matchesRatingText(work.rating) { return includeNotRated }
+        guard let wanted = rating.severityRank,
+              let found = Rating.severityRank(ofRatingText: work.rating)
+        else { return false }
+        switch ratingMatch {
+        case .exact: return found == wanted
+        case .orHigher: return found >= wanted
+        case .orLower: return found <= wanted
+        }
+    }
+
+    /// AO3 counts a work as single-chapter when it is finished at one chapter, so
+    /// a blurb reading "1/?" is a one-chapter WIP rather than a match — the author
+    /// has said more is coming. Anything the parser could not read stays visible.
+    private func chapterCountMatches(_ work: AO3WorkSummary) -> Bool {
+        guard chapterCount == .singleChapter else { return true }
+        let parts = work.chapters.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return true }
+        let posted = parts[0].trimmingCharacters(in: .whitespaces)
+        let total = parts[1].trimmingCharacters(in: .whitespaces)
+        return posted == "1" && total == "1"
     }
 
     /// Include tags must all be present (AND); no excluded tag may appear.
