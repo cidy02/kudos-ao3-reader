@@ -118,6 +118,11 @@ struct AO3FilterPanel: View {
                 // search needs a query/filter before it can run.
                 Image(systemName: mode == .refine ? "checkmark" : "magnifyingglass")
             }
+            // 1au draws this one ACCENT-FILLED with a dark glyph, against the
+            // leading Reset's plain glass — the confirm is the only filled circle
+            // on the board. Reset stays unfilled so the pair reads as one primary
+            // and one secondary rather than two equal buttons.
+            .buttonStyle(.borderedProminent)
             .disabled(mode == .search && !filters.isSearchable)
             .accessibilityLabel(mode == .refine ? "Done" : "Apply filters")
         }
