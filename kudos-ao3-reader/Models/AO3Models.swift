@@ -395,6 +395,33 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
             || sort != .relevance || sortDirection != .descending
     }
 
+    /// How many facets a **refine** surface is actually narrowing by — only the
+    /// ones `AO3SummaryFilter.matchesSummary` reads.
+    ///
+    /// Deliberately not `hasActiveFilters`, which also counts the search-only
+    /// facets (hits, kudos, comments, bookmarks, the date axis, crossover, sort).
+    /// Badging a refine funnel with those would promise narrowing that never
+    /// happens, and a count has to count what is on screen.
+    var refineActiveCount: Int {
+        var count = 0
+        if rating != .any { count += 1 }
+        if !warnings.isEmpty { count += 1 }
+        if !excludedWarnings.isEmpty { count += 1 }
+        if !categories.isEmpty { count += 1 }
+        if !excludedCategories.isEmpty { count += 1 }
+        if completion != .any { count += 1 }
+        if chapterCount != .any { count += 1 }
+        if language != .any { count += 1 }
+        if !wordsFrom.isBlank || !wordsTo.isBlank { count += 1 }
+        for field in [fandom, characters, relationships, additionalTags,
+                      excludedFandoms, excludedCharacters,
+                      excludedRelationships, excludedAdditionalTags]
+            where !field.isBlank {
+            count += 1
+        }
+        return count
+    }
+
     /// True when there's enough to run a search (free text or any filter).
     var isSearchable: Bool {
         !query.isBlank || hasActiveFilters

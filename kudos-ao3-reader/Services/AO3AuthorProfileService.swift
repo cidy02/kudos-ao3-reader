@@ -163,6 +163,11 @@ final class AO3AuthorProfileModel {
     /// refetch rather than a resort of what is already loaded — sorting only
     /// the rows on screen would reorder page 1 and call it the whole list.
     private(set) var worksSort: AO3WorksSort = .default
+    /// The rest of 1v's sheet — the facets AO3 will not re-query for this index.
+    /// Deliberately separate from `worksSort`: that one maps to AO3's own query
+    /// parameters and so costs a refetch, while these narrow the pages already
+    /// parsed, in place and offline. Same sheet, two different costs.
+    private(set) var worksFilters = AO3SearchFilters()
     /// 1u's hero totals. `nil` until fetched, and it stays `nil` for anyone but
     /// the signed-in account — otwarchive's `StatsController` sets
     /// `@user = current_user` behind `users_only`, so there is no stats page for
@@ -306,6 +311,14 @@ final class AO3AuthorProfileModel {
         reloadWorks(auth: auth)
     }
 
+    /// No refetch, unlike `applyWorksSort`: these facets are read off blurbs the
+    /// app has already parsed, so re-asking AO3 would spend a request to receive
+    /// the same page back.
+    func applyWorksFilters(_ filters: AO3SearchFilters) {
+        guard selectedTab == .works, worksFilters != filters else { return }
+        worksFilters = filters
+    }
+
     /// A new author, or a sign-out, starts on Works with AO3's own ordering.
     /// Carrying a scope across would show one person's Gifts under another's
     /// name, and carrying a sort would silently reorder a list the reader never
@@ -313,6 +326,10 @@ final class AO3AuthorProfileModel {
     private func resetWorksScoping() {
         worksScope = .works
         worksSort = .default
+        // Same reason as the sort: a narrowed list carried onto another author
+        // would hide works the reader never asked to hide, and the emptiness
+        // would look like that author having nothing.
+        worksFilters = AO3SearchFilters()
     }
 
     /// Fetched beside the header rather than with the works page, because it is

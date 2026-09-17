@@ -407,7 +407,13 @@ private extension AuthorProfileView {
                 showsPerformance: isOwnProfile,
                 // 1u's swipe actions, on the same gate: AO3 refuses every one of
                 // them on someone else's work, so the swipe does not exist there.
-                onOwnWorkAction: ownWorkActionHandler
+                onOwnWorkAction: ownWorkActionHandler,
+                // 1v's sheet edits these; the section applies them where
+                // `model.works` enters the merge, so the rows, the adult-content
+                // check and the count line all narrow together. Held on the model
+                // rather than here because `AO3AuthorWorksScopeSection` owns the
+                // sheet and this view is at the type checker's limit.
+                filters: model.worksFilters
             )
         case .series:
             AO3AuthorSeriesSection(
