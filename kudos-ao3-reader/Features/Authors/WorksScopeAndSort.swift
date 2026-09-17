@@ -180,6 +180,7 @@ struct AO3AuthorWorksScopeSection: View {
 
     @Environment(AO3AuthService.self) private var auth
     @State private var showingSort = false
+    @State private var showingFilters = false
 
     var body: some View {
         if model.selectedTab == .works {
@@ -190,11 +191,13 @@ struct AO3AuthorWorksScopeSection: View {
                             + CardListMetrics.innerHorizontal)
                 }
                 .sheet(isPresented: $showingSort) { sortSheet }
+                .filterPanelPresentation(isPresented: $showingFilters) { refinePanel }
             } else {
                 Section {
                     controls.cardRow()
                 }
                 .sheet(isPresented: $showingSort) { sortSheet }
+                .filterPanelPresentation(isPresented: $showingFilters) { refinePanel }
             }
         }
     }
@@ -205,18 +208,68 @@ struct AO3AuthorWorksScopeSection: View {
                 WorksScopeSegments(scope: scopeBinding)
             }
             Spacer(minLength: 0)
+            refineButton
             sortButton
         }
     }
 
-    /// The funnel carries the active count, per 1v: "the active count rides on
-    /// the funnel in the chrome". Zero draws no badge rather than a "0".
+    /// Refine sits beside the sort control rather than inside its sheet. 1v draws
+    /// both on one surface and merging them is the right end state, but the two
+    /// carry different costs — a sort change refetches from AO3, these facets
+    /// narrow pages already parsed — and the panel that renders every facet
+    /// correctly already exists. Kept separate until that panel is redesigned to
+    /// 1au's card grammar.
+    private var refineButton: some View {
+        FilterButton(
+            filtersActive: model.worksFilters.refineActiveCount > 0,
+            showingFilters: $showingFilters,
+            filterHelp: "Refine the works on this page",
+            onClearFilters: { model.applyWorksFilters(AO3SearchFilters()) },
+            badgeCount: model.worksFilters.refineActiveCount
+        )
+    }
+
+    private var refinePanel: some View {
+        AO3FilterPanel(
+            filters: filtersBinding,
+            mode: .refine,
+            canReset: model.worksFilters.refineActiveCount > 0,
+            onApply: { showingFilters = false },
+            onReset: { model.applyWorksFilters(AO3SearchFilters()) },
+            // The same array `AO3AuthorWorksSection` narrows, so 1au's match line
+            // and the list behind it cannot disagree.
+            refineSource: model.works
+        )
+        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+    }
+
+    /// Writes straight through to the model. No draft copy, unlike the sort
+    /// sheet: applying a facet costs no request, so the match line and the list
+    /// can both move as the reader taps.
+    private var filtersBinding: Binding<AO3SearchFilters> {
+        Binding(
+            get: { model.worksFilters },
+            set: { filters in
+                onWillChange()
+                model.applyWorksFilters(filters)
+            }
+        )
+    }
+
+    /// Sort takes the up/down arrows and leaves the funnel to Refine beside it.
+    /// Both drew `line.3.horizontal.decrease` when Refine arrived, which put two
+    /// identical glyphs side by side with nothing to tell them apart.
+    ///
+    /// ponytail: 1v draws ONE control for both, and merging them is the right end
+    /// state — the count would then ride on a single funnel as its prose says.
+    /// That needs the redesigned panel to host AO3's nine sort fields, so until
+    /// then two legible controls beat one ambiguous pair.
     private var sortButton: some View {
         Button {
             showingSort = true
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: "line.3.horizontal.decrease")
+                Image(systemName: "arrow.up.arrow.down")
                 if model.worksSort.activeCount > 0 {
                     Text("\(model.worksSort.activeCount)")
                         .font(.system(size: 11, weight: .semibold))
