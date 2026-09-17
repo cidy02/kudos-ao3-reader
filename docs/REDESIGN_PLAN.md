@@ -821,6 +821,40 @@ explicit tap. The per-author aggregation the same note asks for is already done
 > header count follows what is shown, the honest empty state appears, and All
 > restores both rows. Codex had shipped this without ever looking at it.
 
+<a id="item-12-dead-byline-2026-09-16"></a>
+**A dead byline no longer disables 1ak's filter (2026-09-16).**
+`AuthorNewestWorkStore.prefetch` stopped at the first author with no cached
+answer, and failures cached nothing — so one deleted or renamed account
+disabled "With new work" for the whole session, **deterministically**: leaving
+the Authors scope and coming back re-ran the same batch into the same dead
+account, forever.
+
+The fix follows this codebase's own precedent rather than inventing a policy.
+`AO3InboxModel`'s metadata hydration already draws the line
+(`AO3InboxModel.swift:270-278`): `AO3Error.notFound` → **continue**, because
+"one deleted/restricted work must not prevent later visible notifications from
+receiving their metadata"; anything else → **stop**, because "offline,
+rate-limit, CDN, and parser failures are likely to affect the whole batch. Stop
+instead of multiplying retries."
+
+`prefetch` now does the same. A new `FetchOutcome` splits `.unresolvable` (an
+unroutable byline, or a 404 — `AO3Client.swift:279` maps 404 to
+`AO3Error.notFound`) from `.systemicFailure`. An unresolvable byline is cached
+as "no visible works", which is the honest answer for a byline with no works
+page and which the filter already reads as "no new work"; a systemic failure
+still stops the batch. The loop also skips authors that are already fresh, so a
+re-run after a stop resumes where the batch left off instead of refetching.
+
+**Tested:** `AuthorNewestWorkStoreTests` (new) pins the tri-state cache contract
+the whole filter rests on — not-fetched vs fetched-and-empty, TTL expiry
+returning an author to "not fetched", session-scope isolation, and
+case-insensitive lookup matching the prefetch's own de-duplication. The review
+had flagged this store as having no tests at all.
+
+**Not verified on screen:** the `.notFound` branch needs a genuinely deleted
+account to exercise, so it is verified by construction and by the 404 →
+`AO3Error.notFound` mapping, not by observation.
+
 <a id="verification-debt-closed-2026-09-16"></a>
 **Verification debt closed 2026-09-16 — all five never-seen screens seen.**
 The sweep shipped five screens that had never been rendered, because the
