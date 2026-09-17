@@ -56,7 +56,9 @@ struct LibrarySectionListView: View {
     /// author needs a fetched newest-work answer while a saved work does not.
     @AppStorage("library.favorites.authorQuickFilter")
     private var favoriteAuthorQuickFilter: FavoriteAuthorQuickFilter = .all
-    @State private var authorNewestWorkUnavailable = false
+    /// `nil` until a batch settles, so "not asked yet" stays tellable from "asked,
+    /// and some author never answered" — the rail draws a different chip for each.
+    @State private var authorNewestWorkComplete: Bool?
 
     /// Finishing sessions only — the reread signal, and the whole reason this is a
     /// predicated `@Query` rather than a `ReadingLogService.summaries(in:)` call.
@@ -408,7 +410,7 @@ struct LibrarySectionListView: View {
         showsFavoriteScopes && favoriteScope == .works
     }
 
-    private func favoriteScopeStrip(authorRows: [ReadingAffinities.Row] = []) -> some View {
+    private var favoriteScopeStrip: some View {
         VStack(spacing: 8) {
             SubjectSegmentedControl(
                 options: FavoriteScope.allCases,
@@ -425,8 +427,8 @@ struct LibrarySectionListView: View {
             if favoriteScope == .authors {
                 FavoriteAuthorFilterRail(
                     selection: $favoriteAuthorQuickFilter,
-                    isReady: authorNewestWorkFilterReady(for: authorRows),
-                    isUnavailable: authorNewestWorkUnavailable,
+                    isReady: authorNewestWorkFilterReady,
+                    isUnavailable: authorNewestWorkComplete == false,
                     palette: scopePalette
                 )
             }
@@ -512,19 +514,19 @@ struct LibrarySectionListView: View {
         return authorNewestWorkCacheScope + "|" + usernames.joined(separator: "\u{001F}")
     }
 
-    /// A fresh outer optional means the store has an answer, including `.some(nil)`
-    /// for an author with no visible works. That distinction is what prevents the
-    /// filter from treating an incomplete prefetch as an empty result.
-    private func authorNewestWorkFilterReady(for rows: [ReadingAffinities.Row]) -> Bool {
-        authorUsernames(in: rows).allSatisfy {
-            AuthorNewestWorkStore.cached(username: $0, scope: authorNewestWorkCacheScope) != nil
-        }
-    }
+    /// Readiness is the prefetch's own settled answer, never a re-derivation from
+    /// `AuthorNewestWorkStore`'s cache. The store is a plain static dictionary, so
+    /// filling it cannot invalidate this view — and re-deriving readiness in `body`
+    /// left the rail stuck on "Checking new work…" for the whole of the *success*
+    /// path, because SwiftUI does not re-render a same-value `@State` write and the
+    /// batch settled `false` → `false`. Only the failure path flipped the value, so
+    /// the feature repainted solely to announce that it had failed.
+    private var authorNewestWorkFilterReady: Bool { authorNewestWorkComplete == true }
 
     private func displayedAffinityRows(from rows: [ReadingAffinities.Row]) -> [ReadingAffinities.Row] {
         guard favoriteScope == .authors,
               favoriteAuthorQuickFilter == .withNewWork,
-              authorNewestWorkFilterReady(for: rows)
+              authorNewestWorkFilterReady
         else { return rows }
         let scope = authorNewestWorkCacheScope
         return favoriteAuthorQuickFilter.apply(
@@ -535,10 +537,14 @@ struct LibrarySectionListView: View {
     }
 
     private func prefetchAuthorNewestWorks(rows: [ReadingAffinities.Row]) async {
-        guard favoriteScope == .authors, !authorNewestWorkFilterReady(for: rows) else { return }
+        guard favoriteScope == .authors else { return }
         let scope = authorNewestWorkCacheScope
         let usernames = authorUsernames(in: rows)
-        authorNewestWorkUnavailable = false
+        // Back to "not asked yet" for the duration: this runs only when `.task`'s
+        // id changed, i.e. the author set or the session did, so the previous
+        // batch's answer no longer describes this list. Already-cached authors
+        // cost no request — `newestWork` returns them without one.
+        authorNewestWorkComplete = nil
         let complete = await AuthorNewestWorkStore.prefetch(
             usernames: usernames,
             auth: auth,
@@ -549,7 +555,7 @@ struct LibrarySectionListView: View {
         guard !Task.isCancelled,
               AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth) == scope
         else { return }
-        authorNewestWorkUnavailable = !complete
+        authorNewestWorkComplete = complete
     }
 
     /// The aggregate scopes as their own list. Deliberately not folded into
@@ -564,7 +570,7 @@ struct LibrarySectionListView: View {
                     .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                favoriteScopeStrip(authorRows: allRows)
+                favoriteScopeStrip
                     .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -572,7 +578,8 @@ struct LibrarySectionListView: View {
 
             if rows.isEmpty {
                 Section {
-                    affinityEmptyCard.pageBodyRow(top: 14, gutter: SubjectMetrics.gutter)
+                    affinityEmptyCard(hiddenByFilter: !allRows.isEmpty)
+                        .pageBodyRow(top: 14, gutter: SubjectMetrics.gutter)
                 }
             } else {
                 Section {
@@ -612,12 +619,22 @@ struct LibrarySectionListView: View {
         }
     }
 
-    private var affinityEmptyCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Nothing read yet")
+    /// `hiddenByFilter` distinguishes "you have read nothing" from "the active chip
+    /// matched none of the rows you do have". Without it an active "With new work"
+    /// told a reader with a full history that nothing had been read yet — the empty
+    /// state described a different list than the one that produced it.
+    private func affinityEmptyCard(hiddenByFilter: Bool) -> some View {
+        let scopeNoun = favoriteScope.title.lowercased()
+        let title: String = hiddenByFilter ? "No new work" : "Nothing read yet"
+        let detail: String = hiddenByFilter
+            ? "None of these \(scopeNoun) has posted something you have not already read. "
+                + "Tap All to see them again."
+            : "These are the \(scopeNoun) behind the works you have "
+                + "actually read, ranked. They fill in as you read — there is nothing to star."
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(title)
                 .font(.system(size: 15, weight: .semibold))
-            Text("These are the \(favoriteScope.title.lowercased()) behind the works you have "
-                + "actually read, ranked. They fill in as you read — there is nothing to star.")
+            Text(detail)
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -688,7 +705,7 @@ struct LibrarySectionListView: View {
 
             if showsFavoriteScopes {
                 Section {
-                    favoriteScopeStrip()
+                    favoriteScopeStrip
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)

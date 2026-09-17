@@ -796,6 +796,31 @@ explicit tap. The per-author aggregation the same note asks for is already done
 > does not count as new. This replaces the earlier per-visible-row fetch, so the
 > filter never silently omits an author whose answer has not arrived.
 
+<a id="item-12-invalidation-fix-2026-09-16"></a>
+> **Fixed 2026-09-16 — as first written the chip never enabled.** Readiness was
+> re-derived in `body` from `AuthorNewestWorkStore`'s cache, which is a plain
+> static dictionary and therefore cannot invalidate the view when it fills. The
+> only `@State` the feature added settled `false` → `false` on the success path,
+> and **SwiftUI does not re-render a same-value `@State` write** — measured here,
+> not assumed: five same-value writes produced **0** body evaluations, while a
+> toggling positive control produced 5. So the rail stayed on "Checking new
+> work…", disabled, for the whole of the happy path; only the *failure* path
+> flipped the value, meaning the feature repainted solely to announce that it had
+> failed. The fix makes readiness the prefetch's own settled answer — an optional
+> `Bool`, `nil` until a batch settles, so "not asked yet" stays tellable from
+> "asked, and some author never answered" — and drops the per-body cache scan.
+>
+> **Also fixed: the filtered-to-empty state lied.** `affinityEmptyCard` was
+> unconditional, so filtering every author away printed "Nothing read yet — they
+> fill in as you read" to a reader with a full history. It now distinguishes
+> "you have read nothing" from "the active chip matched none of your rows" and
+> names the way back.
+>
+> **Seen on screen** (simulator, 2 downloaded works by 2 registered authors):
+> the chip settles from Checking → enabled, filtering narrows the list, the
+> header count follows what is shown, the honest empty state appears, and All
+> restores both rows. Codex had shipped this without ever looking at it.
+
 <a id="search-turn-audit-2026-09-15"></a>
 **Search turn (1al, 1ao–1ax) audited 2026-09-15 — nine of eleven boards were
 already built, and five spec notes are themselves stale.**
@@ -3606,6 +3631,47 @@ empty and be indistinguishable from one that does not exist.
 approved, so it is the owner's call.
 
 ### item-13-refine-panel-is-dead-code-2026-09-15
+
+<a id="item-13-premise-corrected-2026-09-16"></a>
+> **Corrected 2026-09-16 — the conclusion holds, the stated reason did not, and
+> a deletion gate came back NO-GO.**
+>
+> *Reason.* This note said `selectedTab` "is assigned exactly once in the file —
+> to `.overview`". It is not: it is bound to a live `SubjectSegmentedControl`
+> over `AccountTab.allCases` (`AccountView.swift:298-301`), and also re-assigned
+> `.overview` on logout (`:385`). The real reason nothing can reach `.writing` is
+> one level deeper — `showsWorkListControls` returns `false` in **all four**
+> cases (`:493-511`), so `usesLibraryStyleCompactLayout` (`:129`) is always
+> false, `libraryStyleCompactRoot` (`:275`) never mounts, and the segmented
+> control is never on screen. Confirmed on the simulator: the Account page is
+> push-navigation only (SHORTCUTS / SAVED / POSTED / UNPOSTED / READ ON AO3 /
+> ARRIVES / ACCOUNT), with no segmented control and no Refine button.
+>
+> *The gate.* The owner asked for the capability set to be confirmed before
+> deleting. Codex audited it and returned **NO-GO**, refuting the premise that
+> `AO3AccountWorksList` is the replacement. It is not: `Kind` has **no own-works
+> case** (`AO3AccountWorksList.swift:13-19` — markedForLater, bookmarks, history,
+> subscriptions, collection). Own Works routes `Route.myWorks` →
+> `ownProfile(title: "Works")` (`AccountView.swift:448`) → `AuthorProfileView`
+> (`:469`) → `AO3AuthorWorksSection` **with no `filters:` argument**
+> (`AuthorProfileView.swift:396`), so it takes the empty default.
+>
+> *So what is actually dropped if this is deleted:* the live own-Works screen has
+> only a single server-side fandom chip plus sort (9 fields + direction). Rating,
+> warnings, categories, chapter count, language, character/relationship/
+> additional-tag include+exclude, word-count range, and the panel's "N of M
+> match" line exist **nowhere** on it. They were never reachable, so no user has
+> ever had them — but deleting removes the only implementation.
+>
+> Codex also found three things worth keeping: `ratingMatch`, `includeNotRated`
+> and `chapterCount` are exposed by the panel but **not implemented** by
+> `AO3SummaryFilter.apply(to:)` (`AO3SummaryFilter.swift:22`) in either host;
+> `selectedTab`/`readingTab`/`writingTab`/`activityTab` are still load-bearing
+> through `activationKey` (`:342`) and `refreshCurrentTab` (`:404`) and cannot be
+> removed without reworking activation and pull-to-refresh; and
+> `profileSeriesSections` (`:784`) is separately dead already.
+>
+> **Not deleted.** The owner's instruction was conditional on Codex's OK.
 
 **The owner chose "wire the Refine panel to the list" over "remove it". Wiring
 is done, but the panel and the list are BOTH unreachable — I described the
