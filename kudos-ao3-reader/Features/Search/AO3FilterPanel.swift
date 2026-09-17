@@ -128,6 +128,15 @@ struct AO3FilterPanel: View {
         }
     }
 
+    /// 1au draws every group label as `600 11px`, `.07em` tracking, uppercase, at
+    /// 55% — which is exactly `SubjectFieldLabel`'s `.formGroup` style, the one the
+    /// form artboards use over a group of rows. A bare `Section("Warnings")` gave
+    /// sentence case with no tracking, and that mismatch was the loudest remaining
+    /// "this is the old app" signal on the panel.
+    private func groupLabel(_ text: String) -> some View {
+        SubjectFieldLabel(text: text, style: .formGroup)
+    }
+
     private var form: some View {
         Form {
             // Group so .appThemedRows() reaches every section's rows (it doesn't
@@ -181,20 +190,24 @@ struct AO3FilterPanel: View {
                     Toggle("Include Not Rated", isOn: $filters.includeNotRated)
                 }
 
-                Section("Warnings") {
+                Section {
                     ForEach(AO3SearchFilters.Warning.allCases) { warning in
                         cyclingFacetRow(warning.title, state: warningState(warning)) {
                             cycle(warning)
                         }
                     }
+                } header: {
+                    groupLabel("Warnings")
                 }
 
-                Section("Categories") {
+                Section {
                     ForEach(AO3SearchFilters.Category.allCases) { category in
                         cyclingFacetRow(category.title, state: categoryState(category)) {
                             cycle(category)
                         }
                     }
+                } header: {
+                    groupLabel("Categories")
                 }
 
                 Section {
@@ -278,7 +291,7 @@ struct AO3FilterPanel: View {
         // which also matches summaries and tags, so an author searched through it
         // comes back far noisier. The only *text* fields in this group.
         if mode == .search {
-            Section("Title & creator") {
+            Section {
                 // AO3 pseuds are case-sensitive-looking and rarely start
                 // capitalized, so autocapitalization gets in the way — but the
                 // modifier is iOS-only, like the keyboard types below.
@@ -288,6 +301,8 @@ struct AO3FilterPanel: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 #endif
+            } header: {
+                groupLabel("Title & creator")
             }
         }
 
@@ -298,7 +313,7 @@ struct AO3FilterPanel: View {
                 defaultMaximum: FilterRangeSlider.wordCountMaximum
             )
         } header: {
-            Text("Word count")
+            groupLabel("Word count")
         } footer: {
             if mode == .refine {
                 openBoundFooter
@@ -308,26 +323,32 @@ struct AO3FilterPanel: View {
         // AO3 accepts the same range grammar on each of these. Refine hides
         // them — they aren't on a loaded blurb — and keeps word count.
         if mode == .search {
-            Section("Hits") {
+            Section {
                 FilterRangeSlider(
                     from: $filters.hitsFrom,
                     to: $filters.hitsTo,
                     defaultMaximum: FilterRangeSlider.hitsMaximum
                 )
+            } header: {
+                groupLabel("Hits")
             }
-            Section("Kudos") {
+            Section {
                 FilterRangeSlider(
                     from: $filters.kudosFrom,
                     to: $filters.kudosTo,
                     defaultMaximum: FilterRangeSlider.kudosMaximum
                 )
+            } header: {
+                groupLabel("Kudos")
             }
-            Section("Comments") {
+            Section {
                 FilterRangeSlider(
                     from: $filters.commentsFrom,
                     to: $filters.commentsTo,
                     defaultMaximum: FilterRangeSlider.commentsMaximum
                 )
+            } header: {
+                groupLabel("Comments")
             }
             Section {
                 FilterRangeSlider(
@@ -336,7 +357,7 @@ struct AO3FilterPanel: View {
                     defaultMaximum: FilterRangeSlider.bookmarksMaximum
                 )
             } header: {
-                Text("Bookmarks")
+                groupLabel("Bookmarks")
             } footer: {
                 openBoundFooter
             }
@@ -366,7 +387,7 @@ struct AO3FilterPanel: View {
                            included: $filters.additionalTags, excluded: $filters.excludedAdditionalTags,
                            fandomContext: selectedFandoms)
         } header: {
-            Text("Tags")
+            groupLabel("Tags")
         } footer: {
             Text("Tap a tag once to include it, twice to exclude it, and a third time to clear it.")
         }
