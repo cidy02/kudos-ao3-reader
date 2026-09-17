@@ -821,6 +821,40 @@ explicit tap. The per-author aggregation the same note asks for is already done
 > header count follows what is shown, the honest empty state appears, and All
 > restores both rows. Codex had shipped this without ever looking at it.
 
+<a id="verification-debt-closed-2026-09-16"></a>
+**Verification debt closed 2026-09-16 — all five never-seen screens seen.**
+The sweep shipped five screens that had never been rendered, because the
+simulator had no local collections, no queue tags and no works in any queue.
+Fixtures were built (2 downloaded works by 2 registered authors, a local
+collection, a queue) and every one of them has now been looked at:
+
+- **`NewCollectionSheet`** — 1bk's real form: name, description, five hue
+  swatches, Keep downloads / Show on Home, honest local-only copy. **Create is
+  correctly disabled while the name is empty.**
+- **`CollectionReorderSheet`** — both works with drag handles, Cancel/Done.
+  ⚠️ **Open question:** it shows a mature work's **title in clear**, while the
+  same work sits behind a "Tap to reveal" gate in every list. `PrivacyGate` does
+  not cover this sheet. Owner's call — not changed.
+- **1j's seed step** — **the `.medium`-detent worry is resolved.** NAME, COLOUR,
+  OFFLINE and **START FROM (Empty | Saved for Later)** are all visible without
+  scrolling. The colour copy also *discloses* its own derivation ("takes one from
+  its name — and changes it if you rename it"), so the derived-identity rule is
+  stated rather than silent.
+- **1bg's bulk bar** — Mark as Finished · Download missing copies · Tag · Move to
+  Queue · Add to Collection · Add to Queue · Save for Later · Favorite · Download.
+  **"Download missing copies" is correctly disabled** when the selection has no
+  missing EPUB — the lying-label fix holds on screen.
+- **`QueueTagManagerView`** — reached via the bulk bar's Tag action. Adding
+  "comfort" applied it live. Copy is number-correct: "Applies to the selected
+  **work**" for a single selection.
+
+Also confirmed while building the fixtures: adding an unsaved, unfavorited work
+to a queue removes it from the Downloaded shelf. **Not a defect** —
+`isQueueOnlyWork = isQueuedForLater && !isSaved && !isFavorite`
+(`Models.swift:413`), whose comment states queue-only works are "intentionally
+hidden from normal Library shelves until the user explicitly saves or favorites
+them".
+
 <a id="item-12-ttl-honesty-2026-09-16"></a>
 > **Second pass 2026-09-16 — the first fix traded one defect for a worse one.**
 > Making readiness *only* the `@State` flag meant a settled batch stayed "ready"
@@ -853,9 +887,14 @@ explicit tap. The per-author aggregation the same note asks for is already done
 >   nonisolated and runs on the caller; `AuthorNewestWorkStore` is `@MainActor`.
 >   **Not a regression** — the old per-row `.task` parsed on main too. The batch
 >   only concentrates them.
-> - *Shared 128-entry author page cache evicted by works pages* — **not
->   substantiated here.** The cap could not be located in
->   `AO3AuthorProfileService.swift`; recorded as unverified rather than asserted.
+> - *Shared 128-entry author page cache evicted by works pages* — **substantiated
+>   2026-09-16.** The cache is `actor AO3AuthorPageCache` in
+>   `AO3Client+Authors.swift:576` — not the file the finding named, which is why
+>   the first pass could not find it — with `maxEntries: 128`, `ttl: 5 * 60`,
+>   `staleTTL: 24h`, and eviction once full at `:625`. The prefetch inserts one
+>   full works page per author, so a large Authors list does displace other
+>   screens' cached HTML. Severity is bounded by that 5-minute TTL: it costs
+>   refetches, not correctness.
 
 <a id="search-turn-audit-2026-09-15"></a>
 **Search turn (1al, 1ao–1ax) audited 2026-09-15 — nine of eleven boards were
