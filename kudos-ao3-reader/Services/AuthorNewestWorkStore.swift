@@ -70,9 +70,10 @@ enum AuthorNewestWorkStore {
     /// Fetches and caches this author's newest work. Returns the cached answer
     /// without a request when one is fresh.
     ///
-    /// Failures cache nothing: a 525 or a dropped connection is not evidence that
-    /// an author has no works, and caching it as such would hide the line for the
-    /// rest of the session.
+    /// Transient failures cache nothing: a 525 or a dropped connection is not
+    /// evidence that an author has no works, and caching it as such would hide the
+    /// line for the rest of the session. A byline with no readable works page at
+    /// all is the one exception — see `FetchOutcome.unresolvable`.
     static func newestWork(
         username: String,
         auth: AO3AuthService,
@@ -82,7 +83,35 @@ enum AuthorNewestWorkStore {
         if let cached = cached(username: username, scope: scope) {
             return cached
         }
-        guard let url = newestWorkURL(username: username) else { return nil }
+        _ = await fetchAndStore(username: username, auth: auth, isCurrent: isCurrent)
+        return cached(username: username, scope: scope) ?? nil
+    }
+
+    /// Why one author's fetch ended. A batch needs the difference, and it is the
+    /// same line `AO3InboxModel` draws for Inbox metadata hydration: a byline that
+    /// has no readable page is gone for good and must not stall every author queued
+    /// behind it, while offline / rate-limited / CDN / parser trouble is likely to
+    /// hit the rest too, so carrying on would only multiply retries.
+    private enum FetchOutcome {
+        case answered
+        /// No page to read — an unroutable byline or a 404. Cached as "no visible
+        /// works", because for a byline with no works page that *is* the honest
+        /// answer, unlike a 525, which is evidence of nothing either way.
+        case unresolvable
+        /// Includes cancellation: both mean stop, and neither caches anything.
+        case systemicFailure
+    }
+
+    private static func fetchAndStore(
+        username: String,
+        auth: AO3AuthService,
+        isCurrent: @escaping @MainActor () -> Bool
+    ) async -> FetchOutcome {
+        let scope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        guard let url = newestWorkURL(username: username) else {
+            store(nil, username: username, scope: scope)
+            return .unresolvable
+        }
         do {
             let page = try await AO3AuthorProfileFetcher.page(
                 at: url,
@@ -91,20 +120,31 @@ enum AuthorNewestWorkStore {
                 isCurrent: isCurrent
             )
             let parsed = try AO3Client.parseAuthorWorksPage(page.html, page: 1)
-            guard isCurrent() else { return nil }
-            let newest = parsed.works.first
-            store(newest, username: username, scope: scope)
-            return newest
+            guard isCurrent() else { return .systemicFailure }
+            store(parsed.works.first, username: username, scope: scope)
+            return .answered
+        } catch AO3Error.notFound {
+            guard isCurrent() else { return .systemicFailure }
+            store(nil, username: username, scope: scope)
+            return .unresolvable
         } catch {
-            return nil
+            return .systemicFailure
         }
     }
 
     /// Fetches every distinct author in the order presented by Favorites' Authors
     /// scope. Sequential requests preserve AO3 pacing; callers enable a filter only
     /// once every account has a cached answer, never from a partially loaded list.
-    /// Stops at the first missing answer, so one failed response does not keep
-    /// probing later authors. Returns false after a failure or cancellation.
+    ///
+    /// **A dead byline no longer stalls the batch.** Stopping at the first *missing*
+    /// answer meant one deleted or renamed account disabled the whole filter for the
+    /// session — and deterministically, because leaving the scope and returning
+    /// re-ran the same batch into the same dead account. It now skips an
+    /// unresolvable byline (already cached as "no visible works", so it cannot match
+    /// "With new work") and stops only on a systemic failure, where continuing would
+    /// just multiply retries against an unwell AO3.
+    ///
+    /// Returns false after a systemic failure or cancellation.
     static func prefetch(
         usernames: [String],
         auth: AO3AuthService,
@@ -119,8 +159,15 @@ enum AuthorNewestWorkStore {
 
         for username in distinctUsernames {
             guard !Task.isCancelled, isCurrent() else { return false }
-            _ = await newestWork(username: username, auth: auth, isCurrent: isCurrent)
-            guard cached(username: username, scope: scope) != nil else { return false }
+            // A fresh answer costs no request, so a re-run after a stop walks the
+            // cached prefix and resumes where the batch actually left off.
+            if cached(username: username, scope: scope) != nil { continue }
+            switch await fetchAndStore(username: username, auth: auth, isCurrent: isCurrent) {
+            case .answered, .unresolvable:
+                continue
+            case .systemicFailure:
+                return false
+            }
         }
         return !Task.isCancelled
             && isCurrent()
