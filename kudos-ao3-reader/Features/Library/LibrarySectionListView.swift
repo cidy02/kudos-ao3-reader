@@ -410,7 +410,7 @@ struct LibrarySectionListView: View {
         showsFavoriteScopes && favoriteScope == .works
     }
 
-    private var favoriteScopeStrip: some View {
+    private func favoriteScopeStrip(authorsReady: Bool) -> some View {
         VStack(spacing: 8) {
             SubjectSegmentedControl(
                 options: FavoriteScope.allCases,
@@ -427,8 +427,11 @@ struct LibrarySectionListView: View {
             if favoriteScope == .authors {
                 FavoriteAuthorFilterRail(
                     selection: $favoriteAuthorQuickFilter,
-                    isReady: authorNewestWorkFilterReady,
-                    isUnavailable: authorNewestWorkComplete == false,
+                    isReady: authorsReady,
+                    // A batch that settled and then went stale is not "checking" —
+                    // nothing is in flight — so it draws the retry chip, whose copy
+                    // is accurate: leaving the scope and returning re-fires `.task`.
+                    isUnavailable: authorNewestWorkComplete != nil && !authorsReady,
                     palette: scopePalette
                 )
             }
@@ -514,19 +517,37 @@ struct LibrarySectionListView: View {
         return authorNewestWorkCacheScope + "|" + usernames.joined(separator: "\u{001F}")
     }
 
-    /// Readiness is the prefetch's own settled answer, never a re-derivation from
-    /// `AuthorNewestWorkStore`'s cache. The store is a plain static dictionary, so
-    /// filling it cannot invalidate this view — and re-deriving readiness in `body`
-    /// left the rail stuck on "Checking new work…" for the whole of the *success*
-    /// path, because SwiftUI does not re-render a same-value `@State` write and the
-    /// batch settled `false` → `false`. Only the failure path flipped the value, so
-    /// the feature repainted solely to announce that it had failed.
-    private var authorNewestWorkFilterReady: Bool { authorNewestWorkComplete == true }
+    /// Both halves are load-bearing, and dropping either one breaks a different way.
+    ///
+    /// `authorNewestWorkComplete` is what makes the transition *visible*: the store
+    /// is a plain static dictionary, so filling it cannot invalidate this view, and
+    /// SwiftUI does not re-render a same-value `@State` write — deriving readiness
+    /// from the cache alone left the rail stuck on "Checking new work…" for the
+    /// whole of the success path.
+    ///
+    /// The cache scan is what keeps it *honest*: entries expire on a 30-minute TTL,
+    /// and a settled batch does not un-settle when they do. Trusting the flag alone
+    /// would filter against a half-expired cache and silently drop the very authors
+    /// this filter exists to surface — the defect it was built to fix.
+    ///
+    /// ponytail: an expiry while the screen is open un-filters the list and shows
+    /// the retry chip rather than re-fetching on the spot. `.task(id:)`'s key is the
+    /// author set, so leaving the scope and coming back is what re-fires the batch —
+    /// which is exactly what the chip's copy tells the reader to do.
+    private func authorNewestWorkFilterReady(for rows: [ReadingAffinities.Row]) -> Bool {
+        guard authorNewestWorkComplete == true else { return false }
+        let scope = authorNewestWorkCacheScope
+        return authorUsernames(in: rows).allSatisfy {
+            AuthorNewestWorkStore.cached(username: $0, scope: scope) != nil
+        }
+    }
 
-    private func displayedAffinityRows(from rows: [ReadingAffinities.Row]) -> [ReadingAffinities.Row] {
+    private func displayedAffinityRows(
+        from rows: [ReadingAffinities.Row], ready: Bool
+    ) -> [ReadingAffinities.Row] {
         guard favoriteScope == .authors,
               favoriteAuthorQuickFilter == .withNewWork,
-              authorNewestWorkFilterReady
+              ready
         else { return rows }
         let scope = authorNewestWorkCacheScope
         return favoriteAuthorQuickFilter.apply(
@@ -563,14 +584,17 @@ struct LibrarySectionListView: View {
     /// filter rail — and none of it applies to a row that is a tag name.
     private var affinityList: some View {
         let allRows = affinityRows
-        let rows = displayedAffinityRows(from: allRows)
+        // One value, read by both the chip and the list in the same body pass, so
+        // the rail can never describe a list the rows below it do not match.
+        let authorsReady = authorNewestWorkFilterReady(for: allRows)
+        let rows = displayedAffinityRows(from: allRows, ready: authorsReady)
         return List {
             Section {
                 affinityHeader(count: rows.count)
                     .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                favoriteScopeStrip
+                favoriteScopeStrip(authorsReady: authorsReady)
                     .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -705,7 +729,7 @@ struct LibrarySectionListView: View {
 
             if showsFavoriteScopes {
                 Section {
-                    favoriteScopeStrip
+                    favoriteScopeStrip(authorsReady: false)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)

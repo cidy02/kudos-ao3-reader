@@ -821,6 +821,42 @@ explicit tap. The per-author aggregation the same note asks for is already done
 > header count follows what is shown, the honest empty state appears, and All
 > restores both rows. Codex had shipped this without ever looking at it.
 
+<a id="item-12-ttl-honesty-2026-09-16"></a>
+> **Second pass 2026-09-16 — the first fix traded one defect for a worse one.**
+> Making readiness *only* the `@State` flag meant a settled batch stayed "ready"
+> after the store's 30-minute TTL expired. `apply` then re-read the cache, got
+> `nil` for every expired author, and **silently dropped those rows** — the exact
+> silent-omission bug this filter was built to prevent, and strictly worse than
+> the stuck chip it replaced. Readiness is now **both**: the `@State` flag (which
+> is what makes the transition *visible*, since the store cannot invalidate the
+> view) **and** the cache-completeness scan (which is what keeps it *honest*).
+> Computed once per body pass and handed to both the rail and the filter, so the
+> chip can never describe a list the rows below it do not match. A stale batch
+> draws the retry chip rather than "Checking…", because nothing is in flight and
+> its copy — leave the scope and come back — is what actually re-fires `.task`.
+>
+> **The other four review findings, checked from source:**
+> - *Prefetch survives backgrounding* — **partly true**. `.task` is cancelled on
+>   disappear (tab switch), but backgrounding does not remove the view, so a
+>   batch continues. Bounded: sequential, coordinator-paced, finite, and it stops
+>   at the first failure. Low.
+> - *Stale HTML stored as a fresh answer* — **confirmed mechanism.**
+>   `AO3AuthorProfileFetcher.page` falls back to `staleValue` and returns
+>   `isStale: true` (`AO3AuthorProfileService.swift:68-73`); `newestWork` never
+>   reads `page.isStale` and caches the parse as fresh. So the networking policy's
+>   "stops at the first unresolved response" overstates: a ≤24h stale fallback
+>   counts as resolved. Judged acceptable — the stale fallback is the app's
+>   documented offline behaviour, not something this feature introduced — but the
+>   policy wording is wrong.
+> - *N SwiftSoup parses on the main actor* — **confirmed.**
+>   `AO3Client.parseAuthorWorksPage` is a `static func` on an `actor`, so it is
+>   nonisolated and runs on the caller; `AuthorNewestWorkStore` is `@MainActor`.
+>   **Not a regression** — the old per-row `.task` parsed on main too. The batch
+>   only concentrates them.
+> - *Shared 128-entry author page cache evicted by works pages* — **not
+>   substantiated here.** The cap could not be located in
+>   `AO3AuthorProfileService.swift`; recorded as unverified rather than asserted.
+
 <a id="search-turn-audit-2026-09-15"></a>
 **Search turn (1al, 1ao–1ax) audited 2026-09-15 — nine of eleven boards were
 already built, and five spec notes are themselves stale.**
