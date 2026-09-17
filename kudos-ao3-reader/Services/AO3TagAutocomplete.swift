@@ -14,8 +14,15 @@ enum AO3TagAutocomplete {
     static let debounceMilliseconds: UInt64 = 300
 
     /// Maps AO3's autocomplete names onto editor tags. Live JSON is
-    /// `[{"id": name, "name": name}]` with no canonical/count fields, so
-    /// suggestions are `isCanonical: true`. Extra keys are parsed when present.
+    /// `[{"id": name, "name": name}]` with no canonical or count fields.
+    ///
+    /// `isCanonical: true` is not a fallback guess — it is AO3's own invariant.
+    /// `otwarchive`'s `Tag#after_create` adds a tag to the autocomplete set only
+    /// `if tag.canonical`, `after_update` removes it the moment it is
+    /// decanonicalised, and `refresh_autocomplete` opens with
+    /// `return unless canonical`. The set is canonical-only by construction.
+    /// `workCount` stays nil: the count lives only on `/tags/search`, measured
+    /// at 36 KB and 16 seconds for a single exact name.
     static func editorTags(fromCanonicalNames names: [String]) -> [AO3EditorTag] {
         names
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -34,6 +41,27 @@ enum AO3TagAutocomplete {
             return match
         }
         return AO3EditorTag(name: trimmed, isCanonical: false, workCount: nil)
+    }
+
+    /// The typed term, when 1bu should offer it as its own row — trimmed, and
+    /// nil once a suggestion or an already-chosen chip *is* that term.
+    ///
+    /// Case-insensitive on both sides, matching `accept`: AO3 tag names are
+    /// case-insensitively unique, so offering "fluff" under a suggested "Fluff"
+    /// would be offering the same tag twice, and offering one already chipped
+    /// would be a row that does nothing when tapped.
+    static func freeTypedTerm(
+        term: String,
+        suggestions: [AO3EditorTag],
+        chosen: [String]
+    ) -> String? {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let known = suggestions.map(\.name) + chosen
+        let isKnown = known.contains {
+            $0.localizedCaseInsensitiveCompare(trimmed) == .orderedSame
+        }
+        return isKnown ? nil : trimmed
     }
 
     /// Parse AO3 autocomplete JSON. Uses `id`/`name` like
