@@ -108,6 +108,7 @@ struct AO3WorkFormParsingTests {
     @Test func bulkPostCarriesOnlyUniformFieldsAndTagsMergePerWork() throws {
         let form = try AO3Client.parseBulkEditForm(from: try fixture("ao3_edit_multiple"))
         #expect(form.workIDs == [11, 22, 33])
+        #expect(form.workTitles == ["The Weight of Water", "Salt and Static", "Long Way from Home"])
         #expect(form.csrfToken == "bulk-csrf==")
         #expect(form.httpMethodOverride == "patch")
         #expect(form.actionURL.path.contains("update_multiple"))
@@ -142,8 +143,11 @@ struct AO3WorkFormParsingTests {
     /// single-work form uses rather than offering invented values.
     @Test func bulkFormParsesCommentPermissionsAndSelfRemoval() throws {
         let form = try AO3Client.parseBulkEditForm(from: try fixture("ao3_edit_multiple"))
+        // AO3's keep-current radio is parsed like any other; the view's own
+        // "Leave as is" stands in for it, so it must not be offered twice.
         #expect(form.commentPermissionOptions.map(\.value)
-            == ["enable_all", "users_only", "disable_all"])
+            == ["", "enable_all", "disable_anon", "disable_all"])
+        #expect(form.commentPermissionOptions.last?.title == "No one can comment")
 
         var changes = AO3BulkEditChanges(workIDs: form.workIDs)
         // Untouched: neither field may appear in a POST that did not set it,
@@ -153,12 +157,12 @@ struct AO3WorkFormParsingTests {
         #expect(!untouched.contains { $0.0 == AO3WorkFormField.removeSelfAsCreator })
         #expect(changes.hasUniformChanges == false)
 
-        changes.commentPermissions = "users_only"
+        changes.commentPermissions = "disable_anon"
         changes.removesSelfAsCreator = true
         let dict = Dictionary(uniqueKeysWithValues:
             changes.parameters(csrfToken: form.csrfToken)
                 .filter { $0.0 != AO3WorkFormField.workIDs })
-        #expect(dict[AO3WorkFormField.commentPermissions] == "users_only")
+        #expect(dict[AO3WorkFormField.commentPermissions] == "disable_anon")
         #expect(dict[AO3WorkFormField.removeSelfAsCreator] == "1")
         #expect(changes.hasUniformChanges)
     }
