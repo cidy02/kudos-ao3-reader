@@ -169,8 +169,11 @@ struct CollectionModerationView: View {
 
         Section {
             SectionRuleHeader(title: "Maintainers")
+                .padding(.bottom, 8)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            maintainersPanel.pageBodyRow(top: 8, gutter: gutter)
+        }
+        Section {
+            maintainersRows
             maintainersFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
 
@@ -428,31 +431,32 @@ struct CollectionModerationView: View {
     /// artboard 1bx. Both rows push the same destination: one reads as "see
     /// who", the other as "add someone", but neither duplicates the roster
     /// or the invite text field here.
-    private var maintainersPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(
-                label: "Owners and moderators",
-                value: maintainers.count == 1 ? "1 person" : "\(maintainers.count) people",
-                showsDisclosure: true
-            )
-            .subjectRowNavigation(accessibilityLabel: "Owners and moderators") {
-                CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
-            }
-
-            SubjectRowSeparator()
-
-            NavigationLink {
-                CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
-            } label: {
-                Text("Invite a maintainer")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(palette.accent)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.plain)
+    ///
+    /// One `List` row each: as one `VStack` row, a tap fired both links, so
+    /// either row pushed the roster twice and Back had to be pressed twice.
+    @ViewBuilder
+    private var maintainersRows: some View {
+        SubjectFormRow(
+            label: "Owners and moderators",
+            value: maintainers.count == 1 ? "1 person" : "\(maintainers.count) people",
+            showsDisclosure: true
+        )
+        .subjectRowNavigation(accessibilityLabel: "Owners and moderators") {
+            CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
         }
-        .subjectPanel()
+        .panelSegment(0, of: 2, gutter: gutter)
+
+        // The hidden link, like the row above, so `List` draws no second
+        // chevron beside the card.
+        Text("Invite a maintainer")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(palette.accent)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 12)
+            .subjectRowNavigation(accessibilityLabel: "Invite a maintainer") {
+                CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
+            }
+            .panelSegment(1, of: 2, gutter: gutter)
     }
 
     private var maintainersFootnote: some View {
