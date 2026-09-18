@@ -169,6 +169,7 @@ struct CollectionReorderSheet: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
     @State private var ordered: [SavedWork]
 
     init(collection: WorkCollection, works: [SavedWork]) {
@@ -177,30 +178,88 @@ struct CollectionReorderSheet: View {
         self._ordered = State(initialValue: works)
     }
 
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: collection.displayHue)
+    }
+
+    private var gutter: CGFloat { SubjectMetrics.gutter }
+
+    /// 1bk draws only the way in ("Reorder works · 14 ›"); the reorder screen
+    /// itself is 1br's, which `SeriesReorderView` already builds — header block,
+    /// a "Reading order" group, rows carrying the position they will be saved
+    /// at, a note under them. This follows it, except that the group heading is
+    /// the `.formGroup` label 1br's tree draws rather than that view's rule.
+    ///
+    /// Titles and creators are shown exactly as before. Whether a mature work's
+    /// title belongs behind `PrivacyGate` here, as it is elsewhere, is an open
+    /// question for the owner — not decided by a restyle.
     var body: some View {
         NavigationStack {
             List {
-                ForEach(ordered) { work in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(work.title)
-                            .font(.system(size: 14, weight: .medium))
-                            .lineLimit(2)
-                        if !work.author.isEmpty {
-                            Text(work.author)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
+                Section {
+                    SubjectHeaderBlock(
+                        kicker: "Library › Collections",
+                        title: "Reorder",
+                        subtitle: "\(collection.name) · drag to change the reading order",
+                        palette: palette,
+                        gutter: gutter
+                    )
+                    .pageBodyRow(top: 20, gutter: 0)
+                }
+
+                Section {
+                    SubjectFieldLabel(text: "Reading order", style: .formGroup)
+                        .pageBodyRow(top: 18, gutter: gutter)
+                }
+
+                Section {
+                    // Enumerated so each row gets its position without a
+                    // `firstIndex` search — per row, per frame of a drag, over a
+                    // collection that can hold hundreds of works.
+                    // Keyed on edge position too — see `PanelSegment`.
+                    ForEach(PanelSegment.keyed(ordered, id: \.id), id: \.key) { segment in
+                        let offset = segment.offset
+                        let work = segment.element
+                        orderRow(work, position: offset + 1)
+                            .subjectPanelSegmentRow(
+                                isFirst: offset == 0,
+                                isLast: offset == ordered.count - 1,
+                                gutter: gutter
+                            )
+                    }
+                    .onMove { indices, destination in
+                        ordered.move(fromOffsets: indices, toOffset: destination)
                     }
                 }
-                .onMove { indices, destination in
-                    ordered.move(fromOffsets: indices, toOffset: destination)
+
+                Section {
+                    // True of `inReadingOrder` and `setReadingOrder` as written,
+                    // and no more. Only Done writes `workOrderRaw` (and backup
+                    // restore), so a work removed or deleted AFTER this keeps its
+                    // slot and returns to it — an earlier draft of this note said
+                    // restored works "join at the end", which was only true of
+                    // works already in Recently Deleted when Done was tapped (they
+                    // are not in this list, so Done drops their place). Ids
+                    // missing from the order sort after it. An active Library
+                    // filter re-sorts (`LibraryFilters.apply`).
+                    Text("The collection lists its works in this order unless a filter "
+                        + "is on. Works not in it — added later, or in Recently "
+                        + "Deleted when you tap Done — appear after it.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .pageBodyRow(top: 8, gutter: gutter)
                 }
             }
-            .appThemedRows()
-            .appThemedScroll()
+            .cardList()
             .navigationTitle("Reorder works")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .subjectScreenWash(palette: palette)
+            #if os(iOS)
                 .environment(\.editMode, .constant(.active))
             #endif
                 .toolbar {
@@ -217,5 +276,37 @@ struct CollectionReorderSheet: View {
                     }
                 }
         }
+    }
+
+    /// The number is the position after dragging — what Done will write — as
+    /// on 1br, "because the number is the thing being written".
+    private func orderRow(_ work: SavedWork, position: Int) -> some View {
+        HStack(spacing: 12) {
+            Text("\(position)")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(palette.accent)
+                // Wide enough for three digits, so titles do not jog right at
+                // row 100 in a collection that can hold hundreds of works.
+                .frame(minWidth: 26, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(work.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(2)
+                // Unclipped, as before the redesign: a multi-creator byline is
+                // how two works with the same title are told apart.
+                if !work.author.isEmpty {
+                    Text(work.author)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        // The creator is read too: the combined label it replaces did read it,
+        // and it is what tells two same-titled works apart while dragging.
+        .accessibilityLabel(work.author.isEmpty
+            ? "\(position). \(work.title)"
+            : "\(position). \(work.title), \(work.author)")
     }
 }

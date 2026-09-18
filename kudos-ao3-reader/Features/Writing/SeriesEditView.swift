@@ -281,14 +281,24 @@ struct SeriesReorderView: View {
                 .pageBodyRow(top: 20, gutter: 0)
             }
 
+            // 1br's tree draws a `.formGroup` label here, not a rule header,
+            // and one card of rows rather than a full-bleed band.
             Section {
-                SectionRuleHeader(title: "Reading order")
-                    .pageBodyRow(top: 18, gutter: 0)
+                SubjectFieldLabel(text: "Reading order", style: .formGroup)
+                    .pageBodyRow(top: 18, gutter: gutter)
             }
 
             Section {
-                ForEach(rows) { row in
-                    orderRow(row)
+                // Keyed on edge position too — see `PanelSegment`.
+                ForEach(PanelSegment.keyed(rows, id: \.id), id: \.key) { segment in
+                    let offset = segment.offset
+                    let row = segment.element
+                    orderRow(row, position: offset + 1)
+                        .subjectPanelSegmentRow(
+                            isFirst: offset == 0,
+                            isLast: offset == rows.count - 1,
+                            gutter: gutter
+                        )
                 }
                 .onMove { indices, destination in
                     rows.move(fromOffsets: indices, toOffset: destination)
@@ -336,13 +346,12 @@ struct SeriesReorderView: View {
 
     /// The number is the position *after* dragging, not the one AO3 currently
     /// holds: it is what Save will write.
-    private func orderRow(_ row: AO3SeriesWorkRow) -> some View {
-        let index = (rows.firstIndex(of: row) ?? 0) + 1
-        return HStack(spacing: 12) {
+    private func orderRow(_ row: AO3SeriesWorkRow, position index: Int) -> some View {
+        HStack(spacing: 12) {
             Text("\(index)")
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundStyle(accountPalette.accent)
-                .frame(minWidth: 18, alignment: .trailing)
+                .frame(minWidth: 26, alignment: .trailing)
             Text(row.title.isEmpty ? "Untitled work" : row.title)
                 .font(.system(size: 14.5, weight: .medium))
                 .lineLimit(2)
@@ -351,9 +360,11 @@ struct SeriesReorderView: View {
                 SubjectChip(text: "Draft", style: .neutral, palette: accountPalette)
             }
         }
-        .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(index). \(row.title)")
+        // Reads what the row shows: "Untitled work" for an empty title, and
+        // the Draft chip, which was drawn but never spoken.
+        .accessibilityLabel("\(index). \(row.title.isEmpty ? "Untitled work" : row.title)"
+            + (row.isDraft ? ", Draft" : ""))
     }
 
     private func save() {

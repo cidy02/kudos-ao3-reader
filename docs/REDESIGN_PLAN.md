@@ -3998,6 +3998,48 @@ sheet's checkmarks. **Fixture changed:** Detective Agency now carries the queue
 tag "comfort"; a global "Angst" tag exists on no work or queue. 151 tests
 passed / 0 failed.
 
+### reorder-sheets-1br-2026-09-18
+
+**`CollectionReorderSheet` redesigned to 1br's reorder grammar;
+`SeriesReorderView` brought onto the same rows; a shared panel-segment row
+added for reorderable lists.**
+
+1bk draws only the way in ("Reorder works · 14 ›"); the reorder screen itself
+is 1br's. The collection sheet was a plain `List` in forced edit mode on
+`appThemedRows`. It now draws the collection's own wash, a header block
+("Library › Collections", "Reorder", "<name> · drag to change the reading
+order"), a `.formGroup` "Reading order" label, the works as ONE card with an
+accent position number, title and creator per row, and a footnote.
+`SeriesReorderView` used a rule header where 1br's tree draws a `.formGroup`
+label, and drew its rows as a full-bleed band; both fixed.
+
+**Shared piece.** `.onMove` only reorders real `List` rows, so the card cannot
+be one `VStack` — `subjectPanelSegmentRow(isFirst:isLast:gutter:)` draws each
+row as a segment. **Measured on the simulator:** `List` keeps a cell's
+`listRowBackground` across `.onMove`, so after a drag the moved rows kept
+their old corners; `PanelSegment.keyed` folds the edge position into the row
+key, and the same drag re-measured clean.
+
+**Review (read-only workflow) found, and fixed:** VoiceOver no longer read the
+creator (the new row label replaced the combined one) — restored, and the
+byline is unclipped again; the footnote claimed restored works "join at the
+end", but only Done (and backup restore) writes `workOrderRaw`, so a work
+removed or deleted later keeps its slot — the note now says what is true,
+including that an active filter re-sorts; the series row label now reads
+"Untitled work" and ", Draft" as drawn; the position column fits three digits.
+**Refuted by measurement:** a reviewer inferred the sheet lost its nav title —
+the screenshot shows "Reorder works" (an inner `navigationTitle` outranks the
+wash's empty one).
+
+**PrivacyGate:** the sheet shows exactly what it did before — titles and
+creators, no summaries or tags. Whether mature titles belong behind the gate
+here is still the owner's question.
+
+**Not verified:** `SeriesReorderView` on screen (the account has no series);
+VoiceOver (no `inspect`). **Verified:** the collection sheet, a drag that
+renumbers, clean corners after the drag, the hairline, the footnote. 151 tests
+passed / 0 failed. The test drag was cancelled; fixture order unchanged.
+
 ### item-13-refine-panel-is-dead-code-2026-09-15
 
 <a id="item-13-premise-corrected-2026-09-16"></a>
