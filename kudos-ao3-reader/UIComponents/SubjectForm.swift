@@ -49,6 +49,85 @@ extension View {
     }
 }
 
+/// A `List` row drawn as one segment of a `subjectPanel` card.
+///
+/// For lists whose rows must stay real `List` rows — `.onMove` only reorders
+/// those — so the card cannot be one `VStack` with `.subjectPanel()` on it.
+/// The first row rounds the card's top corners, the last its bottom, and every
+/// row but the last draws the panel's inset hairline under itself, so a column
+/// of these reads as the single card 1br draws. Without it the reorder screens
+/// drew their rows as a full-bleed opaque band, edge to edge, under a header
+/// block that sat on the wash with a gutter.
+///
+/// ponytail: fill and hairlines only — `subjectPanel`'s 0.5pt outer stroke is
+/// not drawn, because stroking each segment would put a full-width line
+/// between every pair of rows. Draw an open-edged stroke if the edge is missed.
+struct SubjectPanelSegmentRow: ViewModifier {
+    var isFirst: Bool
+    var isLast: Bool
+    var gutter: CGFloat
+    var cornerRadius: CGFloat = 14
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    func body(content: Content) -> some View {
+        let theme = themeManager.appTheme
+        let top: CGFloat = isFirst ? cornerRadius : 0
+        let bottom: CGFloat = isLast ? cornerRadius : 0
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: top,
+            bottomLeadingRadius: bottom,
+            bottomTrailingRadius: bottom,
+            topTrailingRadius: top,
+            style: .continuous
+        )
+        return content
+            .padding(.leading, 14)
+            .padding(.vertical, 11)
+            // The trailing inset is wider than the card's own edge so the
+            // system's drag handle sits inside the card rather than on its rim.
+            .listRowInsets(EdgeInsets(top: 0, leading: gutter, bottom: 0, trailing: gutter + 8))
+            .listRowSeparator(.hidden)
+            .listRowBackground(
+                shape
+                    .fill(theme.glassFill(0.09))
+                    .overlay(alignment: .bottom) {
+                        if !isLast { SubjectRowSeparator() }
+                    }
+                    .padding(.horizontal, gutter)
+            )
+    }
+}
+
+/// A row of a `SubjectPanelSegmentRow` column with the key its `ForEach` must
+/// use. `List` keeps a cell's `listRowBackground` across `.onMove`, so keying
+/// on the element alone left a row that stopped being first or last with its
+/// old rounded corners — measured on the simulator after one drag. Folding the
+/// edge position into the key rebuilds just the rows whose edge changed.
+struct PanelSegment<Element> {
+    let offset: Int
+    let element: Element
+    let key: String
+
+    static func keyed<ID: Hashable>(_ elements: [Element], id: KeyPath<Element, ID>) -> [PanelSegment] {
+        let last = elements.count - 1
+        return elements.enumerated().map { offset, element in
+            PanelSegment(
+                offset: offset,
+                element: element,
+                key: "\(element[keyPath: id])|\(offset == 0)|\(offset == last)"
+            )
+        }
+    }
+}
+
+extension View {
+    /// One segment of a panel card, for a `List` row that has to stay a row.
+    func subjectPanelSegmentRow(isFirst: Bool, isLast: Bool, gutter: CGFloat) -> some View {
+        modifier(SubjectPanelSegmentRow(isFirst: isFirst, isLast: isLast, gutter: gutter))
+    }
+}
+
 /// The hairline between two rows in a panel.
 ///
 /// Drawn by the row below it rather than placed between rows by the container.
