@@ -43,22 +43,36 @@ struct AddChapterView: View {
                 .pageBodyRow(top: 20, gutter: selfGuttered)
             }
 
+            // One `List` row per field, as segments of one card. The Text card
+            // was one `VStack` row, and a `List` row fires every
+            // `NavigationLink` inside it — tapping Summary would have pushed all
+            // four editors. The other two cards carry no links; they are
+            // converted so the screen keeps one card style.
             Section {
                 SectionRuleHeader(title: "Chapter")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                chapterPanel.disabled(chapterSaved || isSaving || isPosting).pageBodyRow(top: 8, gutter: gutter)
+            }
+            Section {
+                Group { chapterRows }.disabled(chapterSaved || isSaving || isPosting)
             }
 
             Section {
                 SectionRuleHeader(title: "Text")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                textPanel.disabled(chapterSaved || isSaving || isPosting).pageBodyRow(top: 8, gutter: gutter)
+            }
+            Section {
+                Group { textRows }.disabled(chapterSaved || isSaving || isPosting)
             }
 
             Section {
                 SectionRuleHeader(title: "Publication")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                publicationPanel.disabled(chapterSaved || isSaving || isPosting).pageBodyRow(top: 8, gutter: gutter)
+            }
+            Section {
+                Group { publicationRows }.disabled(chapterSaved || isSaving || isPosting)
                 Text("The last-chapter switch writes the total on the work rather "
                     + "than a flag of its own, which is how AO3 records a finished work.")
 
@@ -98,38 +112,37 @@ struct AddChapterView: View {
         } message: { Text(errorMessage ?? "") }
     }
 
-    private var chapterPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Title", arrangement: .control) {
-                TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Expected chapter total", arrangement: .control) {
-                TextField("Unknown", text: $form.wipLength).multilineTextAlignment(.trailing)
-            }
-            if form.includePosition {
-                SubjectRowSeparator()
-                SubjectFormRow(label: "Position", arrangement: .control) {
-                    TextField("Position", text: $form.position).multilineTextAlignment(.trailing)
-                }
-            }
+    @ViewBuilder
+    private var chapterRows: some View {
+        let count = form.includePosition ? 3 : 2
+        SubjectFormRow(label: "Title", arrangement: .control) {
+            TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
         }
-        .subjectPanel()
+        .panelSegment(0, of: count, gutter: gutter)
+        SubjectFormRow(label: "Expected chapter total", arrangement: .control) {
+            TextField("Unknown", text: $form.wipLength).multilineTextAlignment(.trailing)
+        }
+        .panelSegment(1, of: count, gutter: gutter)
+        if form.includePosition {
+            SubjectFormRow(label: "Position", arrangement: .control) {
+                TextField("Position", text: $form.position).multilineTextAlignment(.trailing)
+            }
+            .panelSegment(2, of: count, gutter: gutter)
+        }
     }
 
     private var recoveryTarget: String { "work:\(form.workID):chapter:\(form.chapterID.map(String.init) ?? "new")" }
 
-    private var textPanel: some View {
-        VStack(spacing: 0) {
-            WritingTextEditorRow(title: "Chapter text", text: $form.content, target: recoveryTarget, field: "content")
-            SubjectRowSeparator()
-            WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
-            SubjectRowSeparator()
-            WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
-            SubjectRowSeparator()
-            WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
-        }
-        .subjectPanel()
+    @ViewBuilder
+    private var textRows: some View {
+        WritingTextEditorRow(title: "Chapter text", text: $form.content, target: recoveryTarget, field: "content")
+            .panelSegment(0, of: 4, gutter: gutter)
+        WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
+            .panelSegment(1, of: 4, gutter: gutter)
+        WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
+            .panelSegment(2, of: 4, gutter: gutter)
+        WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
+            .panelSegment(3, of: 4, gutter: gutter)
     }
 
     private var publicationDate: Binding<Date> {
@@ -149,27 +162,34 @@ struct AddChapterView: View {
         )
     }
 
-    private var publicationPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Set a different publication date", arrangement: .control) {
-                Toggle("Custom publication date", isOn: Binding(
-                    get: { !form.publishedYear.isEmpty },
-                    set: { enabled in
-                        if enabled { publicationDate.wrappedValue = Date() } else { form.publishedYear = ""; form.publishedMonth = ""; form.publishedDay = "" }
-                    }
-                )).labelsHidden()
-            }
-            if !form.publishedYear.isEmpty {
-                DatePicker("Publication date", selection: publicationDate, displayedComponents: .date)
-                    .padding()
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "This is the last chapter", arrangement: .control) {
-                Toggle("", isOn: $isLastChapter)
-                .labelsHidden()
-            }
+    @ViewBuilder
+    private var publicationRows: some View {
+        let showsDate = !form.publishedYear.isEmpty
+        let count = showsDate ? 3 : 2
+        SubjectFormRow(label: "Set a different publication date", arrangement: .control) {
+            Toggle("Custom publication date", isOn: Binding(
+                get: { !form.publishedYear.isEmpty },
+                set: { enabled in
+                    if enabled { publicationDate.wrappedValue = Date() } else { form.publishedYear = ""; form.publishedMonth = ""; form.publishedDay = "" }
+                }
+            )).labelsHidden()
         }
-        .subjectPanel()
+        .panelSegment(0, of: count, gutter: gutter)
+        if showsDate {
+            SubjectFormRow(label: "Publication date", arrangement: .control) {
+                DatePicker("Publication date", selection: publicationDate, displayedComponents: .date)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .panelSegment(1, of: count, gutter: gutter)
+        }
+        // Titled even though hidden: `labelsHidden` keeps the title for
+        // VoiceOver, and an empty one announced a bare "switch".
+        SubjectFormRow(label: "This is the last chapter", arrangement: .control) {
+            Toggle("This is the last chapter", isOn: $isLastChapter)
+                .labelsHidden()
+        }
+        .panelSegment(count - 1, of: count, gutter: gutter)
     }
 
     private var postPanel: some View {
