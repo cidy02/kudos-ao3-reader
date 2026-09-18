@@ -125,6 +125,14 @@ struct WritingWorkDestination: View {
             } else { ProgressView("Loading work form…") }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
+            // `.task` re-runs every time this view reappears — including on
+            // Back from any editor it pushed — and resetting `form` here threw
+            // away everything typed. Measured on the simulator: a title typed
+            // on the new-work form was gone after one round trip to Fandoms.
+            // A form already loaded for this session is kept; Retry and a
+            // session change still reload, because they change the id or clear
+            // the form first.
+            if form != nil, loadedGeneration == auth.sessionGeneration { return }
             form = nil
             errorMessage = nil
             let generation = auth.sessionGeneration
@@ -154,6 +162,8 @@ struct WritingWorkDestination: View {
 struct WritingTagsDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let workID: Int
+    /// Forwarded to `EditTagsView` — see `WorkEditView.needsTagRefresh`.
+    var onSaved: () -> Void = {}
     @State private var form: AO3EditTagsForm?
     @State private var loadedGeneration: Int?
     @State private var errorMessage: String?
@@ -162,7 +172,7 @@ struct WritingTagsDestination: View {
     var body: some View {
         Group {
             if let form, loadedGeneration == auth.sessionGeneration {
-                EditTagsView(form: form).id(auth.sessionGeneration)
+                EditTagsView(form: form, onSaved: onSaved).id(auth.sessionGeneration)
             } else if let errorMessage {
                 VStack {
                     Text(errorMessage)
@@ -173,6 +183,8 @@ struct WritingTagsDestination: View {
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
+            // Kept across reappearance — see `WritingWorkDestination`.
+            if form != nil, loadedGeneration == auth.sessionGeneration { return }
             form = nil
             errorMessage = nil
             let generation = auth.sessionGeneration
@@ -220,6 +232,8 @@ struct WritingBulkEditDestination: View {
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
+            // Kept across reappearance — see `WritingWorkDestination`.
+            if form != nil, loadedGeneration == auth.sessionGeneration { return }
             form = nil
             errorMessage = nil
             let generation = auth.sessionGeneration
@@ -257,6 +271,8 @@ struct WritingChapterDestination: View {
             } else { ProgressView("Loading chapter form…") }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
+            // Kept across reappearance — see `WritingWorkDestination`.
+            if form != nil, loadedGeneration == auth.sessionGeneration { return }
             form = nil
             errorMessage = nil
             let generation = auth.sessionGeneration

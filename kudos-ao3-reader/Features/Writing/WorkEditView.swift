@@ -16,6 +16,14 @@ struct WorkEditView: View {
     @State private var isCheckingDelete = false
     @State private var needsPublicationRefresh = false
     @State private var publicationRetry = 0
+    /// Set when the pushed Edit tags screen saves. That screen writes tags to
+    /// AO3 on its own, and this form's Save posts every tag string it holds —
+    /// so keeping the pre-edit tags would silently undo the tag edit on the
+    /// next Save. Same shape as `needsPublicationRefresh` for Add chapter: only
+    /// the tag fields are refreshed, every other unsaved edit is kept, and Save
+    /// waits until the refresh lands.
+    @State private var needsTagRefresh = false
+    @State private var tagRetry = 0
 
     init(form: AO3WorkForm) {
         self._form = State(initialValue: form)
@@ -42,15 +50,25 @@ struct WorkEditView: View {
             }
 
             Section {
+                // The bottom padding is the 8pt a `.pageBodyRow(top: 8)` card
+                // below gets; segment rows sit flush and cannot carry it.
                 SectionRuleHeader(title: "Required")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                requiredPanel.pageBodyRow(top: 8, gutter: gutter)
             }
+            Section { requiredRows }
 
             Section {
                 SectionRuleHeader(title: "Tags")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                tagsPanel.pageBodyRow(top: 8, gutter: gutter)
+                if needsTagRefresh {
+                    Button("Reload tags") { tagRetry += 1 }
+                        .pageBodyRow(top: 4, gutter: gutter)
+                }
+            }
+            Section {
+                tagsRows
                 Text("Tags can also be edited separately from the work text.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
@@ -121,12 +139,31 @@ struct WorkEditView: View {
                 errorMessage = "Reload chapter totals before saving this work. " + error.localizedDescription
             }
         }
+        .task(id: "\(needsTagRefresh):\(tagRetry)") {
+            guard needsTagRefresh, let workID = form.workID else { return }
+            let generation = auth.sessionGeneration
+            do {
+                let fresh = try await auth.loadWorkForm(workID: workID)
+                guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                form.rating = fresh.rating
+                form.warnings = fresh.warnings
+                form.categories = fresh.categories
+                form.fandoms = fresh.fandoms
+                form.relationships = fresh.relationships
+                form.characters = fresh.characters
+                form.additionalTags = fresh.additionalTags
+                needsTagRefresh = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = "Reload tags before saving this work. " + error.localizedDescription
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     save(submit: form.isPosted ? .update : .saveDraft)
                 }
-                .disabled(isSaving || isPosting || needsPublicationRefresh)
+                .disabled(isSaving || isPosting || needsPublicationRefresh || needsTagRefresh)
             }
             if !form.isPosted {
                 ToolbarItem(placement: .primaryAction) {
@@ -158,34 +195,38 @@ struct WorkEditView: View {
         }
     }
 
-    private var requiredPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Title", arrangement: .control) {
-                TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
-            }
-            SubjectRowSeparator()
-            WritingChoiceRow(title: "Rating", value: $form.rating, options: form.ratingOptions)
-            SubjectRowSeparator()
-            WritingTagsRow(title: "Archive warnings", values: $form.warnings, options: form.warningOptions)
-            SubjectRowSeparator()
-            WritingTagsRow(title: "Fandoms", values: $form.fandoms, kind: .fandom)
-            SubjectRowSeparator()
-            WritingChoiceRow(title: "Language", value: $form.languageID, options: form.languageOptions)
+    /// One `List` row per field, drawn as segments of one card. These were a
+    /// `VStack` in a single row, and a `List` row fires EVERY navigation link
+    /// inside it: tapping Fandoms pushed Archive warnings and Fandoms both, and
+    /// tapping Relationships landed on Additional tags (measured on the
+    /// simulator). A row holding one link fires only that one.
+    @ViewBuilder
+    private var requiredRows: some View {
+        SubjectFormRow(label: "Title", arrangement: .control) {
+            TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
         }
-        .subjectPanel()
+        .panelSegment(0, of: 5, gutter: gutter)
+        WritingChoiceRow(title: "Rating", value: $form.rating, options: form.ratingOptions)
+            .panelSegment(1, of: 5, gutter: gutter)
+        WritingTagsRow(title: "Archive warnings", values: $form.warnings, options: form.warningOptions)
+            .panelSegment(2, of: 5, gutter: gutter)
+        WritingTagsRow(title: "Fandoms", values: $form.fandoms, kind: .fandom)
+            .panelSegment(3, of: 5, gutter: gutter)
+        WritingChoiceRow(title: "Language", value: $form.languageID, options: form.languageOptions)
+            .panelSegment(4, of: 5, gutter: gutter)
     }
 
-    private var tagsPanel: some View {
-        VStack(spacing: 0) {
-            WritingTagsRow(title: "Categories", values: $form.categories, options: form.categoryOptions)
-            SubjectRowSeparator()
-            WritingTagsRow(title: "Relationships", values: $form.relationships, kind: .relationship)
-            SubjectRowSeparator()
-            WritingTagsRow(title: "Characters", values: $form.characters, kind: .character)
-            SubjectRowSeparator()
-            WritingTagsRow(title: "Additional tags", values: $form.additionalTags, kind: .freeform)
-        }
-        .subjectPanel()
+    /// See `requiredRows` — four links in one row pushed the wrong screen.
+    @ViewBuilder
+    private var tagsRows: some View {
+        WritingTagsRow(title: "Categories", values: $form.categories, options: form.categoryOptions)
+            .panelSegment(0, of: 4, gutter: gutter)
+        WritingTagsRow(title: "Relationships", values: $form.relationships, kind: .relationship)
+            .panelSegment(1, of: 4, gutter: gutter)
+        WritingTagsRow(title: "Characters", values: $form.characters, kind: .character)
+            .panelSegment(2, of: 4, gutter: gutter)
+        WritingTagsRow(title: "Additional tags", values: $form.additionalTags, kind: .freeform)
+            .panelSegment(3, of: 4, gutter: gutter)
     }
 
     private var associationPanel: some View {
@@ -310,7 +351,7 @@ struct WorkEditView: View {
                 // editable in the form above this row.
                 SubjectFormRow(label: "Edit tags", value: "", showsDisclosure: true)
                     .subjectRowNavigation(accessibilityLabel: "Edit tags") {
-                        WritingTagsDestination(workID: workID)
+                        WritingTagsDestination(workID: workID) { needsTagRefresh = true }
                     }
             }
             SubjectRowSeparator()
@@ -393,7 +434,7 @@ struct WorkEditView: View {
     }
 
     private func save(submit: AO3WorkSubmitAction) {
-        guard !isSaving && !isPosting && !needsPublicationRefresh else { return }
+        guard !isSaving && !isPosting && !needsPublicationRefresh && !needsTagRefresh else { return }
         guard editingGeneration == auth.sessionGeneration else {
             errorMessage = "Your AO3 session changed. Reopen this form before saving."
             return
