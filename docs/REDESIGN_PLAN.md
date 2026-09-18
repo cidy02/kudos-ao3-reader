@@ -3839,6 +3839,102 @@ approved, so it is the owner's call.
 > warnings/categories branch on screen — its title expression is unchanged for
 > `kind == nil`, so it is provably identical, but I did not photograph it.
 
+### before-pictures-1j-and-control-rows-2026-09-17
+
+<a id="1j-new-queue-and-write-only-toggles-2026-09-17"></a>
+**1j's New Queue sheet redesigned; three write-only toggles found; the
+`.control` row fixed at the component, for 70 rows at once.**
+
+**1j.** `NewReadingQueueSheet` was half-done: `.formGroup` labels over a plain
+`Form` with a bare `TextField`, an inline-labelled `Toggle` and a segmented
+seed picker. It now draws 1j on `cardList` + `subjectScreenWash`: the name as a
+boxed field alone under its label, bare swatches, the toggle in a
+`SubjectFormRow`, and **Start from as 1j's radio list rather than a segmented
+pair**. The spec's grammar rule sends a two-way choice to a segmented control,
+but 1j draws radio rows, and the board wins for a visible reason: its second row
+carries "Copy all 12", and a segmented pair has nowhere to put the count. The
+count comes from a new read-only `savedForLaterSeedCount` (it must not call
+`ensureSavedForLaterQueue`, which renames, merges and can insert), and the row
+is disabled at zero rather than offering a choice that would make an empty
+queue. Chrome stays `NewCollectionSheet`'s text Cancel/Create, not 1j's
+circles, so the two sibling sheets keep one vocabulary. **Not built:** 1j's
+Tags field (left to `QueueTagSheet`, as before) and its dashed custom-hue "+".
+
+**Seeding now walks `orderedWorks`.** An adversarial review found the count
+and the seed both built on raw memberships, which `softDelete` leaves in place:
+a work in Recently Deleted made the sheet say "Copy all 12" beside a Saved for
+Later card reading 11, and the new queue quietly held the deleted work. Both now
+use the `orderedWorks` projection the queue screen draws, which also fixes
+"in the same order" for tied `sortOrderInQueue` values that
+`ensureSavedForLaterQueue` creates when it merges a duplicate queue. Pinned by
+`seedCountMatchesWhatSeedingActuallyCopies` (asserts 2, not just equality —
+the first draft of that test asserted equality and so locked in the bug) and
+`seedCountNeverCreatesTheQueueItCounts`.
+
+**Three toggles are write-only.** Traced, then attacked by an independent
+refuter over the whole repo (Android included), which could not break it:
+
+- `ReadingQueue.keepsWorksOffline` and `WorkCollection.keepsWorksOffline` —
+  written, backed up, restored, never read to decide anything. `isProtected`
+  is `isSaved || isFavorite || isQueuedForLater || ao3WorkID == nil`, so ANY
+  queue membership already protects a work, toggle or no toggle; collection
+  membership protects nothing; `ReadingQueueService.preserve` checks only
+  `isQueuedForLater`.
+- `WorkCollection.showsOnHome` — written and backed up, never read. Home has no
+  collection shelf.
+
+Three screens promised these: New Queue ("keep their download even after they
+leave it"), New Collection ("exempts these works from the cache sweep", "adds
+a shelf above Recently Updated") and Queue Details ("holds on to it even after
+the work leaves this queue"). All three now say what is true. **Wiring any of
+them up is a product change — how much disk the app uses, what Home shows —
+and is the owner's call, not a restyle's.**
+
+**The `.control` row.** `SubjectFormRow`'s `.control` arrangement promised that
+trailing content "takes the remaining width" and did not: a hidden-label
+`Toggle`, a menu `Picker` or a `Menu` is intrinsically sized, so with the label
+hugging too the whole row hugged. In a panel stretched by its separators the
+VStack then **centred** the row — New Collection's two toggles sat mid-card,
+out of line with each other; the new-work form's Rating and Language rows sat
+centred under left-aligned Title and Fandoms. Fixed once in the component
+(`.control` only; `.value` is byte-identical). A workflow audited every row it
+reaches — 61 direct call sites plus 9 through `WritingChoiceRow`, 70 rows —
+and found **0 regressions, 43 improvements, 27 unchanged**; an adversarial
+verifier had nothing to verify. Five call sites had hand-rolled
+`.frame(maxWidth: .infinity, alignment: .trailing)` around exactly this bug
+(`AO3CollectionFormView:267`, `AO3CollectionItemsView:310, :323`,
+`AO3CollectionsFilterPanel:53, :108`); they are now redundant and left in place.
+
+**Accessibility, found in review.** A `Toggle("", …).labelsHidden()` has an
+empty VoiceOver label — `labelsHidden` hides the title from the eye, not from
+assistive tech, but there has to be a title to keep. That is the house grammar
+rule's own spelling. Fixed on the screens touched here (New Queue, New
+Collection's two, Queue Details' two); **27 more remain across 13 files**,
+filed separately. The seed rows now expose their subtitle (the count, or why
+the row is disabled) as an accessibility value, and the name field is labelled
+"Name" rather than its placeholder.
+
+**Also:** New Collection's swatch row had no row inset, so the first swatch sat
+at the card edge under a label inset 14pt; it now takes the row insets.
+
+**Found, not fixed:** `WorksSortSheet` applies `.subjectPanel()` to a `List`
+`Section` (`WorksScopeAndSort.swift:81-82`), which by `AppThemeSurface.swift:315`
+paints a panel per row — so 1v likely draws three panels, not one card. Not
+checked on screen. And the Library's Saved for Later *shelf* counts
+`isOnSavedForLaterShelf` (queue members plus downloaded, unqueued works) while
+every *queue* surface — and now this sheet — counts queue members only; seeding
+still copies the queue, not the shelf.
+
+**Verified** on the simulator: New Queue (every card full-width, Offline toggle
+at the edge, Create enabling on a name, the swatch ring and its footnote
+switching, the Saved for Later row disabled with its reason at a zero count),
+New Collection (toggles at the edge and aligned, swatch inset, new footnote)
+and the new-work form's Rating/Language rows. **Not verified:** the count > 0
+path on screen (the fixture's Saved for Later is empty — the unit test covers
+it), any VoiceOver announcement (the simulator's `inspect` action is
+unavailable), and the other 40 improved rows individually. 147 tests passed / 0
+failed.
+
 ### item-13-refine-panel-is-dead-code-2026-09-15
 
 <a id="item-13-premise-corrected-2026-09-16"></a>
