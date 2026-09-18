@@ -410,6 +410,93 @@ struct ReadingQueueTests {
         #expect(queues.isEmpty)
     }
 
+    // MARK: 1bh — renaming a tag onto another tag's name
+
+    /// Pins the SwiftData behaviour `QueueTagEditSheet.renameConflict` exists
+    /// to keep away from a Save button — measured, not assumed (an earlier
+    /// comment guessed the save would throw and poison the context; it does
+    /// neither). If this starts failing, the guard's rationale has changed.
+    @Test func collidingTagRenameCollapsesTheTwoTags() throws {
+        let context = try makeContext()
+        let slowBurn = Kudos.Tag(name: "slow burn")
+        let fluff = Kudos.Tag(name: "fluff")
+        context.insert(slowBurn)
+        context.insert(fluff)
+        let first = SavedWork(title: "First", author: "X",
+                              sourceURL: "https://archiveofourown.org/works/991")
+        let second = SavedWork(title: "Second", author: "X",
+                               sourceURL: "https://archiveofourown.org/works/992")
+        context.insert(first)
+        context.insert(second)
+        first.tags.append(slowBurn)
+        second.tags.append(fluff)
+        let queue = ReadingQueueService.createQueue(named: "Q", in: context)
+        queue.tags.append(slowBurn)
+        try context.save()
+
+        slowBurn.name = "fluff"
+        try context.save()   // does not throw
+
+        let tags = try context.fetch(FetchDescriptor<Kudos.Tag>())
+        #expect(tags.map(\.name) == ["fluff"])
+        #expect(Set(tags[0].works.map(\.title)) == ["First", "Second"])
+        #expect(queue.tags.map(\.name) == ["fluff"])
+
+        // The constraint is case-sensitive: these two coexist.
+        let upper = Kudos.Tag(name: "Angst")
+        let other = Kudos.Tag(name: "hurt")
+        context.insert(upper)
+        context.insert(other)
+        try context.save()
+        other.name = "angst"
+        try context.save()
+        let names = try context.fetch(FetchDescriptor<Kudos.Tag>()).map(\.name).sorted()
+        #expect(names == ["Angst", "angst", "fluff"])
+    }
+
+    @Test func aRenameOntoAnExistingTagIsCaughtCaseInsensitively() throws {
+        let context = try makeContext()
+        let slowBurn = Kudos.Tag(name: "slow burn")
+        let fluff = Kudos.Tag(name: "Fluff")
+        context.insert(slowBurn)
+        context.insert(fluff)
+        let all = [slowBurn, fluff]
+        #expect(Kudos.Tag.renameConflict(for: slowBurn, proposedName: " fluff ", among: all) === fluff)
+        #expect(Kudos.Tag.renameConflict(for: slowBurn, proposedName: "angst", among: all) == nil)
+    }
+
+    @Test func aCaseOnlyRenameOfItselfIsNotAConflict() throws {
+        let context = try makeContext()
+        let slowBurn = Kudos.Tag(name: "slow burn")
+        context.insert(slowBurn)
+        #expect(Kudos.Tag.renameConflict(for: slowBurn, proposedName: "Slow Burn", among: [slowBurn]) == nil)
+        #expect(Kudos.Tag.renameConflict(for: slowBurn, proposedName: "   ", among: [slowBurn]) == nil)
+    }
+
+    @Test func tagCountsAreThisQueuesAndSkipRecentlyDeleted() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Counted", in: context)
+        let comfort = Kudos.Tag(name: "comfort")
+        context.insert(comfort)
+        var works: [SavedWork] = []
+        for id in 1...3 {
+            let work = SavedWork(title: "W\(id)", author: "A",
+                                 sourceURL: "https://archiveofourown.org/works/88\(id)")
+            context.insert(work)
+            work.tags.append(comfort)
+            ReadingQueueService.add(work, to: queue, in: context)
+            works.append(work)
+        }
+        // Tagged but outside the queue: must not count.
+        let outside = SavedWork(title: "Outside", author: "A",
+                                sourceURL: "https://archiveofourown.org/works/889")
+        context.insert(outside)
+        outside.tags.append(comfort)
+        PreservedWorkService.softDelete(works[2], in: context)
+
+        #expect(queue.workCountsByTag()[comfort.persistentModelID] == 2)
+    }
+
     @Test func orderedWorksProjectionSortsAndSkipsSoftDeleted() throws {
         let context = try makeContext()
         let queue = ReadingQueueService.createQueue(named: "Projection", in: context)

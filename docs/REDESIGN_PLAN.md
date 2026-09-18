@@ -3935,6 +3935,69 @@ it), any VoiceOver announcement (the simulator's `inspect` action is
 unavailable), and the other 40 improved rows individually. 147 tests passed / 0
 failed.
 
+### queue-tags-1bh-2026-09-18
+
+**1bh's tag manager and its edit sheet redesigned; the "+ Tag" sheet given the
+multi-select grammar; three behaviour bugs fixed on the way, one of them
+measured into a different bug than I first assumed.**
+
+**Screens.** `QueueTagManagerView` was `appThemedRows` with sentence-case
+headers. It now draws 1bh on the queue's own wash: header block (queue name as
+kicker, "Tags", "N tags across N works"), `.formGroup` groups **In this queue**
+(by count), **Unused** (with its note) and **Add** — last, where the tree puts
+it — as `subjectPanel` cards of `SubjectFormRow`s. `QueueTagEditSheet` draws
+1bh's **Name** / **Merge into another tag** (each sibling with its count in
+this queue) / **Remove** groups. `QueueTagSheet` (1h draws the "Add tag" chip,
+not the sheet) takes the spec's multi-select grammar: tappable rows with a
+trailing checkmark in the queue's accent and the `isSelected` trait.
+**Not built:** 1bh's per-tag colour dots — `Tag` has no colour, and one derived
+from the name would repaint on rename, the defect `ReadingQueue.hue` fixed;
+and its "· you" author column — there is no sharing, so it could only ever say
+"you".
+
+**Colliding rename — measured.** `Tag.name` is `@Attribute(.unique)` and
+`rename()` wrote the new name straight in. I first wrote that this "left a
+unique-violating name that `saveBestEffort` only logged". **Wrong, and
+corrected before commit:** a probe with a positive control showed the save
+does not throw and later saves are fine — SwiftData silently **collapses the
+two tags into one across the whole library**, carrying both tags' works and
+queues onto the survivor. Nothing lost, but a library-wide merge under a button
+labelled Save. The constraint is case-sensitive ("Angst" and "angst"
+coexist). Rename is now blocked on a case-insensitive collision, matching every
+in-app add path; the note points at Merge only when the colliding tag is on
+this queue. `collidingTagRenameCollapsesTheTwoTags` pins the measured
+behaviour, so the guard's rationale fails loudly if SwiftData changes.
+
+**Merge and Remove reached hidden works.** Found by two independent reviewers:
+both walked raw memberships, which `softDelete` leaves in place, so a work in
+Recently Deleted was retagged or stripped while every count and sentence on the
+sheet excluded it — it came back from Recently Deleted changed. Both now walk
+`orderedWorks`, the population the counts use (`workCountsByTag`, one pass per
+body instead of a walk per row and per sort comparison). Verified by code only:
+the actions are private view methods no test can reach.
+
+**Merge ran on the first tap** of an action the board itself calls impossible
+to undo from the app; it now asks, like Remove beside it. At zero works the
+note says merging "only takes it off the queue, the same as Remove" — the
+simulator caught "moves all 0 works", and the review caught the zero case
+wrongly claiming it could not be undone.
+
+**Also:** the macOS title the redesign dropped is back; "That work keeps its
+other tags" for one work; the Add button stays present and dimmed while the
+field is empty, as before, rather than appearing mid-panel for VoiceOver.
+
+**Found, not fixed:** the house components use fixed point sizes (15, 11.5,
+11), so these screens no longer grow with Dynamic Type where the old `List`
+screens did — true of every redesigned form screen, a design-system question.
+
+**Verified on the simulator:** the manager (used and unused groups, dimmed Add),
+adding a tag, the edit sheet's three groups, the sibling and non-sibling
+collision notes with Save disabled, the zero-work merge and remove notes, the
+merge confirmation, a real merge and a real remove, and the redesigned "+ Tag"
+sheet's checkmarks. **Fixture changed:** Detective Agency now carries the queue
+tag "comfort"; a global "Angst" tag exists on no work or queue. 151 tests
+passed / 0 failed.
+
 ### item-13-refine-panel-is-dead-code-2026-09-15
 
 <a id="item-13-premise-corrected-2026-09-16"></a>

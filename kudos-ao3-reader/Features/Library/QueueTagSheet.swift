@@ -17,6 +17,7 @@ struct QueueTagSheet: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var newTagName = ""
 
@@ -24,41 +25,42 @@ struct QueueTagSheet: View {
         Set(queue.tags.map(\.persistentModelID))
     }
 
+    /// The queue's own colour, as Queue Details — which opens this — draws it.
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+    }
+
+    private var gutter: CGFloat { SubjectMetrics.gutter }
+
+    /// 1h draws the way in — its dashed "Add tag" chip — but not this sheet, so
+    /// it takes the spec's grammar for a multi-select list: a tappable row per
+    /// tag with a trailing tinted checkmark, where the old sheet drew bare
+    /// leading circles on white rows under a sentence-case "Your tags".
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    HStack {
-                        TextField("New tag", text: $newTagName)
-                            .onSubmit(addTypedTag)
-                        Button("Add", action: addTypedTag)
-                            .buttonStyle(.borderless)
-                            .disabled(trimmedNewTag.isEmpty)
-                    }
-                } footer: {
-                    Text("Tags are shared with your works, so one word means the same "
-                        + "thing wherever you use it.")
+                    groupLabel("Add")
+                    addPanel.pageBodyRow(top: 8, gutter: gutter)
+                    footnote("Tags are shared with your works, so one word means the "
+                        + "same thing wherever you use it.")
                 }
 
-                if allTags.isEmpty {
-                    Section {
-                        Text("No tags yet — add one above.")
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Section("Your tags") {
-                        ForEach(allTags) { tag in
-                            row(for: tag)
-                        }
+                Section {
+                    groupLabel("Your tags")
+                    if allTags.isEmpty {
+                        footnote("No tags yet — add one above.")
+                    } else {
+                        tagPanel.pageBodyRow(top: 8, gutter: gutter)
                     }
                 }
             }
-            .appThemedRows()
-            .appThemedScroll()
+            .cardList()
             .navigationTitle("Tags")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .subjectScreenWash(palette: palette)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { dismiss() }
@@ -67,23 +69,67 @@ struct QueueTagSheet: View {
         }
     }
 
+    private func groupLabel(_ text: String) -> some View {
+        SubjectFieldLabel(text: text, style: .formGroup)
+            .pageBodyRow(top: 18, gutter: gutter)
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .pageBodyRow(top: 8, gutter: gutter)
+    }
+
+    /// The same field `QueueTagManagerView` draws, so adding a tag looks the
+    /// same from both ways into the vocabulary.
+    private var addPanel: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(palette.accent)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            TextField("New tag", text: $newTagName)
+                .font(.system(size: 15))
+                .onSubmit(addTypedTag)
+            Button("Add", action: addTypedTag)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(palette.accent)
+                .buttonStyle(.plain)
+                .disabled(trimmedNewTag.isEmpty)
+                .opacity(trimmedNewTag.isEmpty ? 0.35 : 1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .subjectPanel()
+    }
+
+    private var tagPanel: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(allTags.enumerated()), id: \.element.persistentModelID) { index, tag in
+                if index > 0 { SubjectRowSeparator() }
+                row(for: tag)
+            }
+        }
+        .subjectPanel()
+    }
+
     private func row(for tag: Tag) -> some View {
         let isOn = queueTagIDs.contains(tag.persistentModelID)
-        return Button {
-            toggle(tag, isOn: isOn)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
-                Text(tag.name)
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 0)
+        return SubjectFormRow(label: tag.name, action: { toggle(tag, isOn: isOn) }) {
+            if isOn {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(palette.accent)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(tag.name)
         .accessibilityValue(isOn ? "on this queue" : "not on this queue")
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
     }
 
     private func toggle(_ tag: Tag, isOn: Bool) {
