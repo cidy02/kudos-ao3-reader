@@ -66,6 +66,9 @@ struct SubjectPanelSegmentRow: ViewModifier {
     var isFirst: Bool
     var isLast: Bool
     var gutter: CGFloat
+    /// Off for a `SubjectFormRow`, which carries its own 14pt row padding — and
+    /// then the trailing inset is the card's edge, not room for a drag handle.
+    var padsContent: Bool = true
     var cornerRadius: CGFloat = 14
 
     @Environment(ThemeManager.self) private var themeManager
@@ -81,12 +84,15 @@ struct SubjectPanelSegmentRow: ViewModifier {
             topTrailingRadius: top,
             style: .continuous
         )
+        let contentInset: CGFloat = padsContent ? 14 : 0
+        let verticalInset: CGFloat = padsContent ? 11 : 0
+        // With padded content the trailing inset is wider than the card's own
+        // edge so the system's drag handle sits inside the card, not on its rim.
+        let trailing: CGFloat = padsContent ? gutter + 8 : gutter
         return content
-            .padding(.leading, 14)
-            .padding(.vertical, 11)
-            // The trailing inset is wider than the card's own edge so the
-            // system's drag handle sits inside the card rather than on its rim.
-            .listRowInsets(EdgeInsets(top: 0, leading: gutter, bottom: 0, trailing: gutter + 8))
+            .padding(.leading, contentInset)
+            .padding(.vertical, verticalInset)
+            .listRowInsets(EdgeInsets(top: 0, leading: gutter, bottom: 0, trailing: trailing))
             .listRowSeparator(.hidden)
             .listRowBackground(
                 shape
@@ -123,8 +129,23 @@ struct PanelSegment<Element> {
 
 extension View {
     /// One segment of a panel card, for a `List` row that has to stay a row.
-    func subjectPanelSegmentRow(isFirst: Bool, isLast: Bool, gutter: CGFloat) -> some View {
-        modifier(SubjectPanelSegmentRow(isFirst: isFirst, isLast: isLast, gutter: gutter))
+    /// A `SubjectFormRow` as segment `index` of a `count`-row card — the
+    /// shape every multi-link card needs so each link gets its own `List` row.
+    func panelSegment(_ index: Int, of count: Int, gutter: CGFloat) -> some View {
+        subjectPanelSegmentRow(
+            isFirst: index == 0, isLast: index == count - 1, gutter: gutter, padsContent: false
+        )
+    }
+
+    func subjectPanelSegmentRow(
+        isFirst: Bool,
+        isLast: Bool,
+        gutter: CGFloat,
+        padsContent: Bool = true
+    ) -> some View {
+        modifier(SubjectPanelSegmentRow(
+            isFirst: isFirst, isLast: isLast, gutter: gutter, padsContent: padsContent
+        ))
     }
 }
 
