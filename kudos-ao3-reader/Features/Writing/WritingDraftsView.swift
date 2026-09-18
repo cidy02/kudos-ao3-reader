@@ -11,45 +11,85 @@ struct WritingDraftsView: View {
     @State private var loadedGeneration: Int?
     @State private var errorMessage: String?
 
+    private var gutter: CGFloat { SubjectMetrics.accountGutter }
+
+    /// Artboard **1x**: header block, an orange notice that drafts expire, then
+    /// each draft as a card. What is not built, and why:
+    ///
+    /// - **The "N days left" chip and "Created …".** AO3 deletes a draft 30
+    ///   days after it is *created*, and the drafts listing carries no creation
+    ///   date — see `draftsTally`. A countdown from any other date would be a
+    ///   number the app cannot stand behind, on the one screen where a wrong
+    ///   number can cost someone their writing.
+    /// - **1x's Post and Delete swipe actions.** Both are AO3 writes — posting
+    ///   notifies subscribers and cannot be undone — and both already live in
+    ///   the editor (`WorkEditView`) behind its own buttons. A swipe is the
+    ///   easiest gesture in the app to fire by accident.
     var body: some View {
         List {
-            SubjectHeaderBlock(
-                kicker: "AO3 Account",
-                title: "Drafts",
-                subtitle: draftsTally,
-                palette: theme.scopePalette,
-                gutter: SubjectMetrics.accountGutter
-            )
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+            Section {
+                SubjectHeaderBlock(
+                    kicker: "AO3 Account",
+                    title: "Drafts",
+                    subtitle: draftsTally,
+                    palette: theme.scopePalette,
+                    gutter: gutter
+                )
+                .pageBodyRow(top: 20, gutter: 0)
+            }
 
-            NavigationLink("New work") { WritingWorkDestination(workID: nil) }
-            Text("AO3 drafts are unpublished. Local editor recovery copies stay on this device.")
-                .font(.caption).foregroundStyle(.secondary)
-            // Artboard 1x warns that drafts expire, which is the one thing about
-            // this screen that can cost someone their writing. Its own figure is
-            // 29 days; otwarchive's `work_drafts.feature` purges a draft created
-            // 31 days ago and keeps one created 29 days ago, so the number is 30
-            // and the spec is off by one. Stated as AO3's rule rather than the
-            // app's, because it is AO3 that deletes them.
-            Text("AO3 deletes an unposted draft 30 days after it is created.")
-                .font(.caption).foregroundStyle(.secondary)
-            if isLoading { ProgressView("Loading drafts…") }
+            Section {
+                deletionNotice.pageBodyRow(top: 18, gutter: gutter)
+            }
+
+            Section {
+                SubjectFormRow(label: "New work", value: "", showsDisclosure: true)
+                    .subjectRowNavigation(accessibilityLabel: "New work") {
+                        WritingWorkDestination(workID: nil)
+                    }
+                    .subjectPanel()
+                    .pageBodyRow(top: 12, gutter: gutter)
+            }
+
+            if isLoading {
+                ProgressView("Loading drafts…")
+                    .frame(maxWidth: .infinity)
+                    .pageBodyRow(top: 18, gutter: gutter)
+            }
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.secondary)
-                Button("Retry") { reload += 1 }
+                Section {
+                    footnote(errorMessage)
+                    Button("Retry") { reload += 1 }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(theme.scopePalette.accent)
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 14)
+                        .pageBodyRow(top: 8, gutter: gutter)
+                }
             }
             if let result, loadedGeneration == auth.sessionGeneration {
                 if result.works.isEmpty {
-                    ContentUnavailableView("No drafts", systemImage: "doc.badge.clock")
-                }
-                ForEach(result.works) { work in
-                    NavigationLink { WritingWorkDestination(workID: work.id) } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(work.title).font(.headline)
-                            Text(work.fandoms.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
-                        }
+                    // The header already says "0 drafts"; this says where
+                    // they come from rather than repeating it in a big glyph.
+                    // "Works", not "drafts": a chapter saved as a draft on a
+                    // posted work never appears here — AO3's drafts page lists
+                    // `unposted_works` only.
+                    footnote("Works you save as drafts appear here.")
+                } else {
+                    Section {
+                        SubjectFieldLabel(text: "On AO3", style: .formGroup)
+                            .pageBodyRow(top: 18, gutter: gutter)
+                    }
+                    // A background link, not a labelled `NavigationLink`: `List`
+                    // puts its own chevron on a labelled one, which no other work
+                    // card in the app carries. One card per row, so one link per
+                    // row — the rows cannot misfire.
+                    ForEach(result.works) { work in
+                        DraftCard(work: work)
+                            .subjectRowNavigation(accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title) {
+                                WritingWorkDestination(workID: work.id)
+                            }
+                            .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
                     }
                 }
                 // 1k's switcher pill, the same control every other paged screen
@@ -74,6 +114,37 @@ struct WritingDraftsView: View {
         .subjectScreenWash(palette: theme.scopePalette)
         .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
         .refreshable { reload += 1 }
+    }
+
+    /// 1x's orange notice. Artboard 1x warns that drafts expire, which is the
+    /// one thing about this screen that can cost someone their writing. Its own
+    /// figure is 29 days; otwarchive's `work_drafts.feature` purges a draft
+    /// created 31 days ago and keeps one created 29 days ago, so the number is
+    /// 30 and the spec is off by one. Stated as AO3's rule rather than the
+    /// app's, because it is AO3 that deletes them. The recovery copies are
+    /// `WritingTextRecovery`'s, which AO3 never sees.
+    private var deletionNotice: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return Text("AO3 deletes an unposted draft 30 days after it is created. The "
+            + "editor's recovery copies are separate and stay on this device.")
+            .font(.system(size: 12.5))
+            .foregroundStyle(.primary.opacity(0.78))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 13)
+            .background(shape.fill(Color.orange.opacity(0.1)))
+            .overlay(shape.strokeBorder(Color.orange.opacity(0.34), lineWidth: 0.5))
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .pageBodyRow(top: 12, gutter: gutter)
     }
 
     /// 1x heads the page "N drafts · N expiring this week". The second half is
@@ -103,6 +174,77 @@ struct WritingDraftsView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+}
+
+/// One draft as 1x draws it: fandom kicker, title, the AO3 required-tags
+/// square, summary, and the counts AO3's blurb carries. Built from the same
+/// parts as `AO3WorkRow`'s ledger card rather than that card itself: `AO3WorkRow`
+/// makes its fandom a link into search and hangs a long-press menu of AO3
+/// actions on the card, and neither belongs on a work nobody else can see yet.
+private struct DraftCard: View {
+    let work: AO3WorkSummary
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    private var fandoms: [String] {
+        work.fandoms.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+    }
+
+    /// The word count only. 1x also prints "1 chapter", but for a draft AO3's
+    /// blurb always says 1 before the slash — otwarchive's
+    /// `chapter_total_display` uses `work.posted? ? number_of_posted_chapters
+    /// : 1` — while the word count sums every chapter the draft has, so a
+    /// three-chapter draft would read "1 chapter · 9,000 words". Left out
+    /// rather than printed wrong.
+    private var counts: String? {
+        guard let words = work.words else { return nil }
+        return "\(words.formatted()) word\(words == 1 ? "" : "s")"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .top, spacing: 13) {
+                VStack(alignment: .leading, spacing: 5) {
+                    if let first = fandoms.first {
+                        SubjectKicker(text: first, palette: palette, trailingCount: fandoms.count - 1)
+                    }
+                    Text(work.title.isEmpty ? "Untitled" : work.title)
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                WorkStatusIconGrid(
+                    rating: work.rating.isEmpty ? nil : work.rating,
+                    categories: work.categories,
+                    warnings: work.warnings,
+                    completion: WorkCompletionStatus(isComplete: work.isComplete),
+                    tileSize: 22,
+                    announcesToVoiceOver: true,
+                    showsTray: true
+                )
+            }
+            if !work.summary.isEmpty {
+                Text(work.summary)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+            if let counts {
+                Text(counts)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
