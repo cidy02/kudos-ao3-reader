@@ -182,7 +182,7 @@ struct SeriesEditView: View {
                 seriesID: form.seriesID ?? series.id,
                 seriesTitle: series.title,
                 rows: form.works
-            )
+            ) { form.works = $0 }
         }
         .subjectPanel()
     }
@@ -258,11 +258,22 @@ struct SeriesReorderView: View {
     @State private var rows: [AO3SeriesWorkRow]
     @State private var isSaving = false
     @State private var errorMessage: String?
+    /// Handed the saved order, renumbered, before this screen dismisses. The
+    /// series editor that pushed it holds its own copy of the works and keeps
+    /// it across reappearance, so without this a second Reorder opened on the
+    /// pre-save order and a second Save wrote it back.
+    let onSaved: ([AO3SeriesWorkRow]) -> Void
 
-    init(seriesID: Int, seriesTitle: String, rows: [AO3SeriesWorkRow]) {
+    init(
+        seriesID: Int,
+        seriesTitle: String,
+        rows: [AO3SeriesWorkRow],
+        onSaved: @escaping ([AO3SeriesWorkRow]) -> Void = { _ in }
+    ) {
         self.seriesID = seriesID
         self.seriesTitle = seriesTitle
         self._rows = State(initialValue: rows.sorted { $0.position < $1.position })
+        self.onSaved = onSaved
     }
 
     private var accountPalette: SubjectPalette { theme.scopePalette }
@@ -379,6 +390,9 @@ struct SeriesReorderView: View {
         Task {
             do {
                 _ = try await auth.reorderSeries(seriesID: seriesID, orderedWorkIDs: orderedWorkIDs)
+                var saved = rows
+                for index in saved.indices { saved[index].position = index + 1 }
+                onSaved(saved)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -416,6 +430,8 @@ struct SeriesEditDestination: View {
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
+            // Kept across reappearance — see `WritingWorkDestination` in WritingDraftsView.swift.
+            if form != nil, loadedGeneration == auth.sessionGeneration { return }
             form = nil
             errorMessage = nil
             let generation = auth.sessionGeneration

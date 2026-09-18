@@ -10,10 +10,14 @@ struct EditTagsView: View {
     @State private var originalTags: AO3WorkTagSet
     @State private var isSaving = false
     @State private var errorMessage: String?
+    /// Told after AO3 accepts the save, before this screen dismisses — so a
+    /// work editor that pushed it can refresh the tags it is holding.
+    let onSaved: () -> Void
 
-    init(form: AO3EditTagsForm) {
+    init(form: AO3EditTagsForm, onSaved: @escaping () -> Void = {}) {
         self._form = State(initialValue: form)
         self._originalTags = State(initialValue: form.tags)
+        self.onSaved = onSaved
     }
 
     private var accountPalette: SubjectPalette {
@@ -190,6 +194,7 @@ struct EditTagsView: View {
         Task {
             do {
                 try await auth.editTags(workID: form.workID, current: originalTags, desired: form.tags)
+                onSaved()
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
