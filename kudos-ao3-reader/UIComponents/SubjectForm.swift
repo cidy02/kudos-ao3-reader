@@ -139,6 +139,15 @@ struct SubjectFormRow<Trailing: View>: View {
         // argument is `CGFloat?` and the branches are `.infinity` and `nil`,
         // which is exactly the shape that makes the type checker work for it.
         var labelWidth: CGFloat?
+        // `.control`'s trailing content "takes the remaining width", as the
+        // arrangement promises — which it did not: a hidden-label `Toggle`, a
+        // menu `Picker` or a `Menu` label is intrinsically sized, so with the
+        // label hugging too the whole row hugged. Inside a panel whose
+        // separators stretch it, the VStack then CENTRED the row (New
+        // collection's two toggles sat mid-card, out of line with each other);
+        // a lone row shrank the panel to fit (New queue's Offline card).
+        // Expanding controls — a trailing-aligned `TextField`, a segmented
+        // picker — already filled the width, so this changes nothing for them.
         if arrangement == .value {
             labelWidth = .infinity
         }
@@ -150,7 +159,20 @@ struct SubjectFormRow<Trailing: View>: View {
                 .frame(maxWidth: labelWidth, alignment: .leading)
                 .fixedSize(horizontal: labelHugs, vertical: false)
 
-            trailing()
+            // `.control` only. Wrapped so a multi-view `trailing` is framed as
+            // one group, with the gap the outer stack gave it. `.value` keeps
+            // the bare closure, byte-identical to before: an
+            // `HStack { EmptyView() }` would be a real zero-width child that the
+            // outer stack spaces, taking 10pt of label width from the three
+            // disclosure-only rows whose trailing is `EmptyView`.
+            if arrangement == .control {
+                HStack(spacing: arrangement.horizontalGap) {
+                    trailing()
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                trailing()
+            }
 
             if showsDisclosure {
                 Image(systemName: "chevron.right")
