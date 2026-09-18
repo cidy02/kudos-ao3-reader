@@ -381,7 +381,9 @@ extension AO3Client {
         let ids = inputs(form, name: AO3WorkFormField.workIDs).compactMap {
             Int((try? $0.attr("value")) ?? "")
         }
-        let titles = try doc.select(".work.blurb h4.heading a, .abbreviated h4 a, li.work a")
+        // otwarchive's `works/_work_abbreviated_list`: each `dt` holds the
+        // title link and then the fandom links, so only the first is the title.
+        let titles = try doc.select("dl.work.index > dt > a:first-of-type")
             .array()
             .compactMap { try? $0.text() }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
