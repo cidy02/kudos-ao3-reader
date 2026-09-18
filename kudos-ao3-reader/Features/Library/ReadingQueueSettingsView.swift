@@ -171,10 +171,14 @@ struct ReadingQueueSettingsView: View {
                     .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
                 offlinePanel
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                // The second sentence used to promise that Keep downloaded
+                // "holds on to it even after the work leaves this queue". Nothing
+                // reads `ReadingQueue.keepsWorksOffline` — see
+                // `NewReadingQueueSheet.offlineFootnote` — so a work that leaves
+                // every queue loses that protection whatever this says.
                 Text("A work in a queue already keeps its download. Keep downloaded "
-                    + "holds on to it even after the work leaves this queue, so it "
-                    + "stays readable offline — and keeps using space until you "
-                    + "remove it.")
+                    + "records your choice for this queue; Kudos does not act on it "
+                    + "yet, so a work that leaves every queue can still be freed.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
@@ -240,7 +244,7 @@ struct ReadingQueueSettingsView: View {
     private var offlinePanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "Pin to the top", arrangement: .control) {
-                Toggle("", isOn: Binding(
+                Toggle("Pin to the top", isOn: Binding(
                     get: { queue.isPinned },
                     set: { isOn in
                         queue.isPinned = isOn
@@ -252,7 +256,7 @@ struct ReadingQueueSettingsView: View {
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Keep downloaded", arrangement: .control) {
-                Toggle("", isOn: Binding(
+                Toggle("Keep downloaded", isOn: Binding(
                     // nil is "never asked", which reads as off but is not a
                     // choice the reader made — see `ReadingQueue.keepsWorksOffline`.
                     get: { queue.keepsWorksOffline ?? false },

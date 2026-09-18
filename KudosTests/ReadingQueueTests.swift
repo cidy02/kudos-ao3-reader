@@ -371,6 +371,45 @@ struct ReadingQueueTests {
         #expect(!(try context.fetch(FetchDescriptor<SyncTombstone>()).contains { $0.recordID == work.id }))
     }
 
+    // MARK: 1j's "Copy all N" — the count must be what seeding delivers
+
+    @Test func seedCountMatchesWhatSeedingActuallyCopies() throws {
+        let context = try makeContext()
+        let saved = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        var works: [SavedWork] = []
+        for id in 1...3 {
+            let work = SavedWork(title: "Saved \(id)", author: "W",
+                                 sourceURL: "https://archiveofourown.org/works/77\(id)")
+            context.insert(work)
+            ReadingQueueService.add(work, to: saved, in: context)
+            works.append(work)
+        }
+        // The awkward case: a work in Recently Deleted. `softDelete` leaves its
+        // membership in place, so a count and a seed built on raw memberships
+        // both said 3 while the Saved for Later card beside the sheet said 2.
+        PreservedWorkService.softDelete(works[2], in: context)
+
+        let promised = ReadingQueueService.savedForLaterSeedCount(in: context)
+        let shown = ReadingQueueService.orderedWorks(in: saved)
+        let seeded = ReadingQueueService.createQueue(
+            named: "Seeded", seededFrom: .savedForLater, in: context
+        )
+        #expect(promised == 2)
+        #expect(promised == shown.count)
+        #expect(promised == seeded.memberships.count)
+        // "In the same order" — the order Saved for Later shows, not the fetch's.
+        #expect(ReadingQueueService.orderedWorks(in: seeded).map(\.id) == shown.map(\.id))
+    }
+
+    @Test func seedCountNeverCreatesTheQueueItCounts() throws {
+        // `ensureSavedForLaterQueue` would insert one; a sheet previewing a
+        // choice must not write, so a fresh library reads zero and stays empty.
+        let context = try makeContext()
+        #expect(ReadingQueueService.savedForLaterSeedCount(in: context) == 0)
+        let queues = try context.fetch(FetchDescriptor<ReadingQueue>())
+        #expect(queues.isEmpty)
+    }
+
     @Test func orderedWorksProjectionSortsAndSkipsSoftDeleted() throws {
         let context = try makeContext()
         let queue = ReadingQueueService.createQueue(named: "Projection", in: context)

@@ -5,7 +5,8 @@ import SwiftUI
 ///
 /// A sheet rather than the bare name alert this replaced. 1bk draws two groups:
 /// **Collection** (name, an optional description, colour) and **Behaviour**
-/// (keep downloads, show on Home), each with its consequence written under it.
+/// (keep downloads, show on Home). 1bk writes each behaviour's consequence under
+/// it; neither consequence is built, so the footnote says so instead.
 ///
 /// Colour is picked here rather than assigned, which is the board's own point:
 /// a hue derived from the name silently repaints a collection when it is
@@ -41,8 +42,23 @@ struct NewCollectionSheet: View {
                         .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
                     behaviourPanel
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-                    footnote("Keep downloads exempts these works from the cache sweep. "
-                        + "Show on Home adds a shelf above Recently Updated.")
+                    // Both of 1bk's sentences here were untrue, and both
+                    // toggles are write-only. "Keep downloads exempts these works
+                    // from the cache sweep": `SavedWork.isProtected` is `isSaved
+                    // || isFavorite || isQueuedForLater || ao3WorkID == nil` —
+                    // collection membership is not in it — and nothing reads
+                    // `WorkCollection.keepsWorksOffline`. "Show on Home adds a
+                    // shelf above Recently Updated": nothing reads
+                    // `showsOnHome` either; Home draws Resume, Reading Queues and
+                    // Recently Updated and has no collection shelf. Both grepped
+                    // to zero readers outside this sheet and the backup DTO.
+                    // ponytail: the copy says what is true; wiring either toggle
+                    // up is a product change and the owner's call. See
+                    // `NewReadingQueueSheet.offlineFootnote` for the queue twin.
+                    footnote("Kudos records both choices with the collection, but "
+                        + "does not act on them yet: collection works are not kept "
+                        + "offline any differently, and Home has no collection "
+                        + "shelves.")
                 }
 
                 Section {
@@ -86,6 +102,10 @@ struct NewCollectionSheet: View {
                 selection: $hue,
                 fallbackHue: CoverArt.hue(for: trimmedName)
             )
+            // The row insets `SubjectFormRow` gives the labels above it, so the
+            // first swatch lines up under "Name" instead of touching the card.
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
         }
         .subjectPanel()
     }
@@ -93,11 +113,11 @@ struct NewCollectionSheet: View {
     private var behaviourPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "Keep downloads", arrangement: .control) {
-                Toggle("", isOn: $keepsWorksOffline).labelsHidden()
+                Toggle("Keep downloads", isOn: $keepsWorksOffline).labelsHidden()
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Show on Home", arrangement: .control) {
-                Toggle("", isOn: $showsOnHome).labelsHidden()
+                Toggle("Show on Home", isOn: $showsOnHome).labelsHidden()
             }
         }
         .subjectPanel()

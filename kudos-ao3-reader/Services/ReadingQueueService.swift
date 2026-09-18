@@ -186,14 +186,35 @@ enum ReadingQueueService {
         return queue
     }
 
-    /// Order is preserved: the new queue reads in the order Saved for Later did,
-    /// rather than whatever the fetch happens to return.
+    /// How many works `.savedForLater` seeding would actually copy, so 1j's
+    /// "Copy all N" can name a number rather than a vague promise.
+    ///
+    /// Deliberately NOT `ensureSavedForLaterQueue`, which renames the queue,
+    /// merges duplicates and can insert one — a sheet previewing a choice must
+    /// not write. It unions `orderedWorks` across every `.savedForLater` queue,
+    /// which is the set `ensureSavedForLaterQueue` merges into one before
+    /// `seedFromSavedForLater` walks it through the same projection. Built on
+    /// `orderedWorks` so it agrees with the Saved for Later queue card beside
+    /// the sheet, which counts the same way — including dropping a work sitting
+    /// in Recently Deleted, whose membership `softDelete` leaves in place.
+    static func savedForLaterSeedCount(in context: ModelContext) -> Int {
+        let queues = (try? context.fetch(FetchDescriptor<ReadingQueue>())) ?? []
+        var seen = Set<UUID>()
+        for queue in queues where queue.kind == .savedForLater {
+            for work in orderedWorks(in: queue) { seen.insert(work.id) }
+        }
+        return seen.count
+    }
+
+    /// Order is preserved: the new queue reads in the order Saved for Later
+    /// *shows*, because it walks the same `orderedWorks` projection the queue
+    /// screen draws. It used to sort on `sortOrderInQueue` alone, which left
+    /// ties — which `ensureSavedForLaterQueue` creates when it merges a
+    /// duplicate queue's memberships in with their old orders — to the
+    /// relationship array's unordered fetch, and copied works sitting in
+    /// Recently Deleted that the queue screen hides.
     private static func seedFromSavedForLater(into queue: ReadingQueue, in context: ModelContext) {
-        let source = ensureSavedForLaterQueue(in: context)
-        let works = source.memberships
-            .filter { !$0.isPendingDeletion }
-            .sorted { $0.sortOrderInQueue < $1.sortOrderInQueue }
-            .compactMap(\.work)
+        let works = orderedWorks(in: ensureSavedForLaterQueue(in: context))
         for work in works {
             _ = add(work, to: queue, in: context)
         }
