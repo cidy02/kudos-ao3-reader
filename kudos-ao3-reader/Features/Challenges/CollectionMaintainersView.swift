@@ -154,8 +154,11 @@ struct CollectionMaintainersView: View {
 
         Section {
             SectionRuleHeader(title: "Invitations")
+                .padding(.bottom, 8)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            invitationsPanel.pageBodyRow(top: 8, gutter: gutter)
+        }
+        Section {
+            invitationRows
             invitationsFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
 
@@ -265,54 +268,61 @@ struct CollectionMaintainersView: View {
         .frame(width: 32, height: 32)
     }
 
-    private var invitationsPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Invite by username", arrangement: .control) {
-                TextField("Add a username", text: $inviteUsername)
-                    .font(.system(size: 15))
-                    .foregroundStyle(.primary)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .multilineTextAlignment(.trailing)
-            }
-
-            SubjectRowSeparator()
-
-            SubjectFormRow(label: "Invite as", arrangement: .value) {
-                Picker("Invite as", selection: $inviteRole) {
-                    Text("Moderator").tag(AO3CollectionParticipantRole.moderator)
-                    Text("Owner").tag(AO3CollectionParticipantRole.owner)
-                }
-                .pickerStyle(.menu)
-                .tint(palette.accent)
-            }
-
-            if !inviteUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                SubjectRowSeparator()
-
-                Button {
-                    Task { await sendInvitation() }
-                } label: {
-                    HStack {
-                        if isInviting {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(.trailing, 4)
-                        }
-                        Text("Send invitation to \(inviteUsername.trimmingCharacters(in: .whitespacesAndNewlines))")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(palette.accent)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 12)
-                }
-                .buttonStyle(.plain)
-                .disabled(isInviting)
-            }
+    /// One `List` row per field. The card was one row holding a bare `Picker`,
+    /// and a `Picker` in a `List` row claims a tap anywhere in that row — so a
+    /// tap meant for "Send invitation" could open the role menu instead. The
+    /// role is `WritingChoiceRow`'s `Menu`, which answers only its own label.
+    @ViewBuilder
+    private var invitationRows: some View {
+        let username = inviteUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        let count = username.isEmpty ? 2 : 3
+        SubjectFormRow(label: "Invite by username", arrangement: .control) {
+            TextField("Add a username", text: $inviteUsername)
+                .font(.system(size: 15))
+                .foregroundStyle(.primary)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .multilineTextAlignment(.trailing)
         }
-        .subjectPanel()
+        .panelSegment(0, of: count, gutter: gutter)
+
+        WritingChoiceRow(
+            title: "Invite as",
+            value: Binding(
+                get: { inviteRole.rawValue },
+                set: { inviteRole = AO3CollectionParticipantRole(rawValue: $0) ?? .moderator }
+            ),
+            options: [
+                AO3FormOption(value: AO3CollectionParticipantRole.moderator.rawValue, title: "Moderator"),
+                AO3FormOption(value: AO3CollectionParticipantRole.owner.rawValue, title: "Owner"),
+            ]
+        )
+        .tint(palette.accent)
+        .panelSegment(1, of: count, gutter: gutter)
+
+        if !username.isEmpty {
+            Button {
+                Task { await sendInvitation() }
+            } label: {
+                HStack {
+                    if isInviting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.trailing, 4)
+                    }
+                    Text("Send invitation to \(username)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(palette.accent)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+            .disabled(isInviting)
+            .panelSegment(2, of: count, gutter: gutter)
+        }
     }
 
     private var invitationsFootnote: some View {
