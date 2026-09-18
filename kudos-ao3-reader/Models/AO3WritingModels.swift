@@ -523,9 +523,10 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
         if let collectionInbox {
             pairs.append((AO3WorkFormField.collectionInbox, collectionInbox ? "1" : "0"))
         }
-        if !workSkinID.isEmpty {
-            pairs.append((AO3WorkFormField.workSkinID, workSkinID))
-        }
+        // Sent even when empty: AO3's select always submits (`include_blank:
+        // true` in `_standard_form`), and an update only touches the fields it
+        // is given — omitting it left a chosen "Default" on the old skin.
+        pairs.append((AO3WorkFormField.workSkinID, workSkinID))
         if let chapter {
             pairs.append((AO3WorkFormField.chapterTitle, chapter.title))
             pairs.append((AO3WorkFormField.chapterSummary, chapter.summary))

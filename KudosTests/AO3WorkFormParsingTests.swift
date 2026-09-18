@@ -58,6 +58,13 @@ struct AO3WorkFormParsingTests {
         #expect(form.missingRequiredFields().isEmpty)
     }
 
+    @Test func clearedWorkSkinIsStillPosted() throws {
+        var form = try AO3Client.parseWorkForm(from: try fixture("ao3_work_edit"))
+        form.workSkinID = ""
+        let skin = form.parameters(submit: .update).filter { $0.0 == AO3WorkFormField.workSkinID }
+        #expect(skin.map(\.1) == [""])
+    }
+
     @Test func missingRequiredFieldsNamesWhatPostNeeds() throws {
         let form = try AO3Client.parseWorkForm(from: try fixture("ao3_work_new_draft"))
         #expect(form.kind == .new)

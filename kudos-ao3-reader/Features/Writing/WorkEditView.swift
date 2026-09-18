@@ -80,20 +80,27 @@ struct WorkEditView: View {
 
             Section {
                 SectionRuleHeader(title: "Association")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                associationPanel.pageBodyRow(top: 8, gutter: gutter)
             }
+            Section { associationRows }
 
             Section {
                 SectionRuleHeader(title: "Text")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                textPanel.pageBodyRow(top: 8, gutter: gutter)
             }
+            Section { textRows }
 
             Section {
                 SectionRuleHeader(title: "Publication")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                publicationPanel.disabled(needsPublicationRefresh).pageBodyRow(top: 8, gutter: gutter)
+            }
+            Section {
+                // Rows only, no links — converted so the screen keeps one card
+                // style rather than because this card could misfire.
+                Group { publicationRows }.disabled(needsPublicationRefresh)
                 if needsPublicationRefresh {
                     Button("Reload chapter totals") { publicationRetry += 1 }
                         .pageBodyRow(top: 8, gutter: gutter)
@@ -229,50 +236,50 @@ struct WorkEditView: View {
             .panelSegment(3, of: 4, gutter: gutter)
     }
 
-    private var associationPanel: some View {
-        VStack(spacing: 0) {
-            // 1bw's two pushes. These three rows drew a chevron and opened nothing
-            // until now; the form already carries every option they need, so the
-            // pickers edit what it will post back rather than fetching anything.
-            SubjectFormRow(label: "Series",
-    value: seriesValue,
-    showsDisclosure: true)
-                .subjectRowNavigation(accessibilityLabel: "Series") {
-                    WorkSeriesPickerView(series: $form.series, workTitle: form.title)
-                }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Add to collections",
-    value: collectionsValue,
-    showsDisclosure: true)
-                .subjectRowNavigation(accessibilityLabel: "Add to collections") {
-                    collectionsAndGifts
-                }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Gift recipients",
-    value: form.gifts.isEmpty ? "None" : "\(form.gifts.count)",
-    showsDisclosure: true)
-                .subjectRowNavigation(accessibilityLabel: "Gift recipients") {
-                    collectionsAndGifts
-                }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Co-creators",
-    value: creatorsValue,
-    showsDisclosure: true)
-                .subjectRowNavigation(accessibilityLabel: "Co-creators") {
-                    WorkCreatorsPickerView(creators: $form.creators, workTitle: form.title)
-                }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Inspired by",
-    value: form.parentWork.url.isEmpty ? "None" : "1",
-    showsDisclosure: true)
-                .subjectRowNavigation(accessibilityLabel: "Inspired by") {
-                    WorkParentWorkPickerView(
-                        parentWork: $form.parentWork,
-                        languageOptions: form.languageOptions
-                    )
-                }
+    /// 1bw's pushes, one `List` row each. They were one `VStack` row, and a
+    /// `List` row fires every `NavigationLink` inside it — tapping Series would
+    /// have pushed all five pickers. See `requiredRows`.
+    @ViewBuilder
+    private var associationRows: some View {
+        // These three rows drew a chevron and opened nothing until 1bw; the form
+        // already carries every option they need, so the pickers edit what it
+        // will post back rather than fetching anything.
+        SubjectFormRow(label: "Series", value: seriesValue, showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Series") {
+                WorkSeriesPickerView(series: $form.series, workTitle: form.title)
+            }
+            .panelSegment(0, of: 5, gutter: gutter)
+        SubjectFormRow(label: "Add to collections", value: collectionsValue, showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Add to collections") {
+                collectionsAndGifts
+            }
+            .panelSegment(1, of: 5, gutter: gutter)
+        SubjectFormRow(
+            label: "Gift recipients",
+            value: form.gifts.isEmpty ? "None" : "\(form.gifts.count)",
+            showsDisclosure: true
+        )
+        .subjectRowNavigation(accessibilityLabel: "Gift recipients") {
+            collectionsAndGifts
         }
-        .subjectPanel()
+        .panelSegment(2, of: 5, gutter: gutter)
+        SubjectFormRow(label: "Co-creators", value: creatorsValue, showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Co-creators") {
+                WorkCreatorsPickerView(creators: $form.creators, workTitle: form.title)
+            }
+            .panelSegment(3, of: 5, gutter: gutter)
+        SubjectFormRow(
+            label: "Inspired by",
+            value: form.parentWork.url.isEmpty ? "None" : "1",
+            showsDisclosure: true
+        )
+        .subjectRowNavigation(accessibilityLabel: "Inspired by") {
+            WorkParentWorkPickerView(
+                parentWork: $form.parentWork,
+                languageOptions: form.languageOptions
+            )
+        }
+        .panelSegment(4, of: 5, gutter: gutter)
     }
 
     /// One screen behind two rows — 1bw draws collections and gifts together,
@@ -303,13 +310,21 @@ struct WorkEditView: View {
         return "\(pseuds) + 1 invited"
     }
 
-    /// AO3's work-skin select has no blank entry, but "no skin" is a real
-    /// choice — so one is prepended rather than leaving the row stuck on
-    /// whatever happened to be first.
+    /// "No skin" is a real choice, and it needs a name. AO3's select DOES carry
+    /// a blank entry — otwarchive's `_standard_form` builds it with
+    /// `collection_select ... include_blank: true`, an `<option value="">` with
+    /// no text — so the old note here ("has no blank entry") was wrong, the
+    /// prepend never ran, and the row showed no value at all (seen on the
+    /// simulator). The blank entry is named; a list without one gets one.
     private func defaultFirst(_ options: [AO3FormOption], label: String) -> [AO3FormOption] {
-        options.contains { $0.value.isEmpty }
-            ? options
-            : [AO3FormOption(value: "", title: label)] + options
+        guard let blank = options.firstIndex(where: { $0.value.isEmpty }) else {
+            return [AO3FormOption(value: "", title: label)] + options
+        }
+        var named = options
+        if named[blank].title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            named[blank].title = label
+        }
+        return named
     }
 
     private var seriesValue: String {
@@ -319,99 +334,107 @@ struct WorkEditView: View {
 
     private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }
 
-    private var textPanel: some View {
-        VStack(spacing: 0) {
-            WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
-            SubjectRowSeparator()
-            WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
-            SubjectRowSeparator()
-            WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
-            if form.kind == .new || form.isDraft {
-                SubjectRowSeparator()
-                WritingTextEditorRow(title: "Work text", text: Binding(
-                    get: { form.chapter?.content ?? "" },
-                    set: { value in
-                        if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
-                        form.chapter?.content = value
-                    }
-                ), target: recoveryTarget, field: "content")
-            }
-            if let workID = form.workID, form.isPosted {
-                SubjectRowSeparator()
-                SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
-                    .subjectRowNavigation(accessibilityLabel: "Add chapter") {
-                        WritingChapterDestination(workID: workID, workTitle: form.title) {
-                            needsPublicationRefresh = true
-                        }
-                    }
-                SubjectRowSeparator()
-                // 1bp's own page, reachable at last. Gated exactly like Add chapter
-                // rather than on `workID` alone: AO3 keeps `/works/<id>/edit_tags`
-                // for a work that exists publicly, and a draft's tags are already
-                // editable in the form above this row.
-                SubjectFormRow(label: "Edit tags", value: "", showsDisclosure: true)
-                    .subjectRowNavigation(accessibilityLabel: "Edit tags") {
-                        WritingTagsDestination(workID: workID) { needsTagRefresh = true }
-                    }
-            }
-            SubjectRowSeparator()
-            WritingChoiceRow(
-                title: "Work skin",
-                value: $form.workSkinID,
-                options: defaultFirst(form.workSkinOptions, label: "Default")
-            )
+    /// One `List` row per editor — see `associationRows`. The rows are
+    /// conditional (Work text only before posting; Add chapter and Edit tags
+    /// only after), so the segment positions are counted, not fixed.
+    @ViewBuilder
+    private var textRows: some View {
+        let showsWorkText = form.kind == .new || form.isDraft
+        let postedWorkID: Int? = form.isPosted ? form.workID : nil
+        let count = 4 + (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 2)
+        let afterNotes = showsWorkText ? 4 : 3
+        WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
+            .panelSegment(0, of: count, gutter: gutter)
+        WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
+            .panelSegment(1, of: count, gutter: gutter)
+        WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
+            .panelSegment(2, of: count, gutter: gutter)
+        if showsWorkText {
+            WritingTextEditorRow(title: "Work text", text: Binding(
+                get: { form.chapter?.content ?? "" },
+                set: { value in
+                    if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
+                    form.chapter?.content = value
+                }
+            ), target: recoveryTarget, field: "content")
+            .panelSegment(3, of: count, gutter: gutter)
         }
-        .subjectPanel()
+        if let workID = postedWorkID {
+            SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Add chapter") {
+                    WritingChapterDestination(workID: workID, workTitle: form.title) {
+                        needsPublicationRefresh = true
+                    }
+                }
+                .panelSegment(afterNotes, of: count, gutter: gutter)
+            // 1bp's own page, reachable at last. Gated exactly like Add chapter
+            // rather than on `workID` alone: AO3 keeps `/works/<id>/edit_tags`
+            // for a work that exists publicly, and a draft's tags are already
+            // editable in the form above this row.
+            SubjectFormRow(label: "Edit tags", value: "", showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Edit tags") {
+                    WritingTagsDestination(workID: workID) { needsTagRefresh = true }
+                }
+                .panelSegment(afterNotes + 1, of: count, gutter: gutter)
+        }
+        WritingChoiceRow(
+            title: "Work skin",
+            value: $form.workSkinID,
+            options: defaultFirst(form.workSkinOptions, label: "Default")
+        )
+        .panelSegment(count - 1, of: count, gutter: gutter)
     }
 
-    private var publicationPanel: some View {
-        VStack(spacing: 0) {
-            // 1bo: "setting a total above what is posted is what marks a work in
-            // progress". The posted count is AO3's to report, the total is the
-            // writer's to set — so only one half of this row is editable.
-            SubjectFormRow(label: "Chapters posted", arrangement: .control) {
-                HStack(spacing: 6) {
-                    Text("\(form.chaptersPosted ?? 1) of")
-                        .foregroundStyle(.secondary)
-                    TextField("?", text: $form.chapterTotal)
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 64)
-                        #if os(iOS)
-                            .keyboardType(.numberPad)
-                        #endif
-                }
+    /// Segments, for one card style across the screen. The toggles are titled
+    /// even though the titles are hidden: `labelsHidden` hides a title from the
+    /// eye, not from VoiceOver, and these four announced as a bare "switch".
+    @ViewBuilder
+    private var publicationRows: some View {
+        // 1bo: "setting a total above what is posted is what marks a work in
+        // progress". The posted count is AO3's to report, the total is the
+        // writer's to set — so only one half of this row is editable.
+        SubjectFormRow(label: "Chapters posted", arrangement: .control) {
+            HStack(spacing: 6) {
+                Text("\(form.chaptersPosted ?? 1) of")
+                    .foregroundStyle(.secondary)
+                TextField("?", text: $form.chapterTotal)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 64)
+                    #if os(iOS)
+                        .keyboardType(.numberPad)
+                    #endif
             }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Work is complete", arrangement: .control) {
-                Toggle("", isOn: Binding(
-                    get: { form.chapterTotal == "\(form.chaptersPosted ?? 1)" },
-                    set: { form.chapterTotal = $0 ? "\(form.chaptersPosted ?? 1)" : "" }
-                ))
-                .labelsHidden()
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Set a different publication date", arrangement: .control) {
-                Toggle("", isOn: $form.backdate)
-                    .labelsHidden()
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Only show to registered users", arrangement: .control) {
-                Toggle("", isOn: $form.restricted)
-                    .labelsHidden()
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Enable comment moderation", arrangement: .control) {
-                Toggle("", isOn: $form.moderatedCommenting)
-                    .labelsHidden()
-            }
-            SubjectRowSeparator()
-            WritingChoiceRow(
-                title: "Who can comment",
-                value: $form.commentPermissions,
-                options: form.commentPermissionOptions
-            )
         }
-        .subjectPanel()
+        .panelSegment(0, of: 6, gutter: gutter)
+        SubjectFormRow(label: "Work is complete", arrangement: .control) {
+            Toggle("Work is complete", isOn: Binding(
+                get: { form.chapterTotal == "\(form.chaptersPosted ?? 1)" },
+                set: { form.chapterTotal = $0 ? "\(form.chaptersPosted ?? 1)" : "" }
+            ))
+            .labelsHidden()
+        }
+        .panelSegment(1, of: 6, gutter: gutter)
+        SubjectFormRow(label: "Set a different publication date", arrangement: .control) {
+            Toggle("Set a different publication date", isOn: $form.backdate)
+                .labelsHidden()
+        }
+        .panelSegment(2, of: 6, gutter: gutter)
+        SubjectFormRow(label: "Only show to registered users", arrangement: .control) {
+            Toggle("Only show to registered users", isOn: $form.restricted)
+                .labelsHidden()
+        }
+        .panelSegment(3, of: 6, gutter: gutter)
+        SubjectFormRow(label: "Enable comment moderation", arrangement: .control) {
+            Toggle("Enable comment moderation", isOn: $form.moderatedCommenting)
+                .labelsHidden()
+        }
+        .panelSegment(4, of: 6, gutter: gutter)
+        WritingChoiceRow(
+            title: "Who can comment",
+            value: $form.commentPermissions,
+            options: form.commentPermissionOptions
+        )
+        .panelSegment(5, of: 6, gutter: gutter)
     }
 
     private var deletePanel: some View {
