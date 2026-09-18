@@ -59,19 +59,35 @@ struct WritingTagsEditor: View {
             if let kind {
                 tagPicker(kind: kind)
             } else {
-                // Warnings and categories: a closed list of six, not a search.
-                // Not part of 1bu, which draws only the AO3-backed kinds.
-                ForEach(options) { option in
-                    Toggle(option.title, isOn: toggleBinding(for: option))
+                // Warnings and categories: a closed list, not a search. 1bu
+                // draws only the AO3-backed kinds, so this takes the spec's
+                // multi-select grammar — a tappable row per option with a
+                // trailing tinted checkmark — under the same header block as
+                // the picker beside it. It was a bare `Toggle` list on white
+                // rows under a system title.
+                Section {
+                    // "Choose", not 1bu's "Edit tags": this branch also serves
+                    // bulk edit's "Remove from collections", and collections are
+                    // not tags.
+                    SubjectHeaderBlock(
+                        kicker: "Choose",
+                        title: title,
+                        subtitle: values.isEmpty ? "None chosen" : "\(values.count) chosen",
+                        palette: palette,
+                        gutter: gutter
+                    )
+                    .pageBodyRow(top: 20, gutter: 0)
+                }
+                Section {
+                    optionsPanel.pageBodyRow(top: 18, gutter: gutter)
                 }
             }
         }
         .cardList()
-        // Blank for the picker, whose header block already says the tag kind —
-        // an inner `navigationTitle` outranks the empty one `subjectScreenWash`
-        // sets, so the old code drew the name twice. The warnings list has no
-        // header block, so it keeps the bar's title.
-        .navigationTitle(kind == nil ? title : "")
+        // Blank: both branches now state the field in a header block, and an
+        // inner `navigationTitle` outranks the empty one `subjectScreenWash`
+        // sets, so a title here would draw the name twice.
+        .navigationTitle("")
         .subjectScreenWash(palette: palette)
     }
 
@@ -279,17 +295,33 @@ struct WritingTagsEditor: View {
             .padding(.horizontal, 4)
     }
 
-    private func toggleBinding(for option: AO3FormOption) -> Binding<Bool> {
-        Binding(
-            get: { values.contains(option.value) },
-            set: { selected in
-                if selected {
-                    if !values.contains(option.value) { values.append(option.value) }
-                } else {
-                    values.removeAll { $0 == option.value }
+    private var optionsPanel: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                if index > 0 { SubjectRowSeparator() }
+                let isOn = values.contains(option.value)
+                SubjectFormRow(label: option.title, action: { toggle(option, isOn: isOn) }) {
+                    if isOn {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(palette.accent)
+                    }
                 }
+                .accessibilityLabel(option.title)
+                .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
             }
-        )
+        }
+        .subjectPanel()
+    }
+
+    /// Order kept as the reader chose, as the `Toggle` list it replaces did:
+    /// appended on, removed off.
+    private func toggle(_ option: AO3FormOption, isOn: Bool) {
+        if isOn {
+            values.removeAll { $0 == option.value }
+        } else if !values.contains(option.value) {
+            values.append(option.value)
+        }
     }
 
     private func loadSuggestions(kind: AO3TagKind) async {

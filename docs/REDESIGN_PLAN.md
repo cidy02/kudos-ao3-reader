@@ -4040,6 +4040,53 @@ VoiceOver (no `inspect`). **Verified:** the collection sheet, a drag that
 renumbers, clean corners after the drag, the hairline, the footnote. 151 tests
 passed / 0 failed. The test drag was cancelled; fixture order unchanged.
 
+### drafts-1x-and-work-form-bugs-2026-09-18
+
+**1x Drafts redesigned; the warnings/categories picker given the multi-select
+grammar; and three old bugs on the work editor found by looking at it —
+lost edits, misrouted taps, a picker stealing taps.**
+
+**Bugs (commit `cd13251e`, measured on the simulator):**
+1. `WritingWorkDestination`'s `.task(id:)` set `form = nil` and refetched on
+   every reappearance, so Back from any pushed editor erased every unsaved
+   edit (a typed title vanished). Five loaders had it. Now a loaded form is
+   kept; re-measured, the title survives.
+2. A `List` row fires EVERY `NavigationLink` inside it; the REQUIRED and TAGS
+   cards were one row each, so Fandoms pushed Archive warnings too and
+   Relationships landed on Additional tags. **Earlier ticks blamed that on
+   "coordinate drift" — wrong.** Fixed with one List row per field
+   (`panelSegment`, `9e25df33`). `.buttonStyle(.plain)` on the hidden links
+   did not help; a real link label drew a second chevron.
+3. A bare `Picker` in that row stole taps anywhere in it. `WritingChoiceRow`
+   is now `Menu { Picker }` with a plain button style.
+Keeping the form opened a stale-overwrite hole (review): Edit tags saves tags
+itself, and WorkEditView's Save posts all tags — now `onSaved` refreshes only
+the tag fields and holds Save; Series reorder hands its order back. Verified
+by code only — both need an AO3 write.
+
+**Still open — found by an app-wide audit, not yet fixed:** multi-link rows in
+WorkEditView (Association, Text), AddChapterView (Text), EditTagsView (Tags),
+EditMultipleWorksView (tags to add/remove, change-on-all, collections),
+AO3CollectionDetailView (Manage, 8 links), WorkDetailSections (comments, 3),
+CollectionModerationView, ChallengeSettingsView/EditView (tag sets),
+AO3PreferencesView; a bare Picker in CollectionMaintainersView (invitations).
+
+**1x Drafts:** header, the orange 30-day notice (AO3's figure is 30, not 1x's
+29 — `work_drafts.feature`), "New work" as a panel row, and each draft as a
+card (fandom kicker, title, AO3 required-tags square, summary, word count).
+**Not built:** 1x's "N days left" chip and "Created …" (the listing has no
+creation date); its chapter count (for a draft AO3 always sends 1 —
+`chapter_total_display` — while the word count sums every chapter); its
+Post/Delete swipes (AO3 writes; both live in the editor). The empty-state line
+says "Works you save as drafts" — a chapter saved as a draft never appears here.
+**Not seen on screen:** a populated draft card (the account has none).
+
+**Warnings/categories picker:** header block ("Choose" — it also serves bulk
+edit's "Remove from collections") over tappable rows with a trailing checkmark.
+Seen: one tap, one checkmark, "1 chosen".
+
+151 tests passed / 0 failed.
+
 ### item-13-refine-panel-is-dead-code-2026-09-15
 
 <a id="item-13-premise-corrected-2026-09-16"></a>
