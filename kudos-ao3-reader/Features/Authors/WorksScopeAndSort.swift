@@ -52,6 +52,11 @@ struct WorksSortSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                // One `List` row per control, as segments of one card. A
+                // `Section`'s children are separate rows, so `.subjectPanel()`
+                // and `.pageBodyRow` on the `Section` reached each of them: the
+                // card drew as three panels — two rows and a stray hairline —
+                // each with its own 18pt gap above it.
                 Section {
                     SubjectFormRow(label: "Sort by", arrangement: .control) {
                         Menu {
@@ -66,7 +71,8 @@ struct WorksSortSheet: View {
                                 .font(.system(size: 14))
                         }
                     }
-                    SubjectRowSeparator()
+                    .panelSegment(0, of: 2, gutter: SubjectMetrics.accountGutter)
+
                     SubjectFormRow(label: "Direction", arrangement: .control) {
                         Picker("Direction", selection: $draft.direction) {
                             ForEach(AO3WorksSortDirection.allCases) { direction in
@@ -77,9 +83,8 @@ struct WorksSortSheet: View {
                         .labelsHidden()
                         .frame(maxWidth: 190)
                     }
+                    .panelSegment(1, of: 2, gutter: SubjectMetrics.accountGutter)
                 }
-                .subjectPanel()
-                .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
 
                 Section {
                     completionChips
