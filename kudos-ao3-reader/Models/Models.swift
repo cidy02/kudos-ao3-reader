@@ -422,6 +422,26 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         isSaved || isFavorite || isQueuedForLater || ao3WorkID == nil
     }
 
+    /// Memberships that still point at a queue the reader can actually open.
+    ///
+    /// `PreservedWorkService.softDelete(_ queue:)` deliberately KEEPS a deleted
+    /// queue's memberships, so restoring the queue brings every work back in
+    /// order — which means the raw array goes on naming queues that now sit in
+    /// Recently Deleted. Every count taken from it disagreed with the list drawn
+    /// beside it, so the projection lives here rather than at each call site.
+    var activeQueueMemberships: [ReadingQueueMembership] {
+        queueMemberships.filter { membership in
+            guard let queue = membership.queue else { return false }
+            return !membership.isPendingDeletion && !queue.isPendingDeletion
+        }
+    }
+
+    /// Collections that are not in Recently Deleted. A soft-deleted collection
+    /// keeps its works for the same restore reason, with the same consequence.
+    var activeCollections: [WorkCollection] {
+        collections.filter { !$0.isPendingDeletion }
+    }
+
     var isInSavedForLaterQueue: Bool {
         queueMemberships.contains { $0.queue?.kind == .savedForLater }
     }

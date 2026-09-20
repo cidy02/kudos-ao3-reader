@@ -122,51 +122,64 @@ extension WorkDetailView {
     var commentsSection: some View {
         if let id = ao3WorkID {
             Section {
-                VStack(alignment: .leading, spacing: 9) {
-                    SubjectFieldLabel(text: "Comments", style: .formGroup)
+                SubjectFieldLabel(text: "Comments", style: .formGroup)
+                    .padding(.bottom, 9)
+                    .pageBodyRow(top: 24)
 
-                    VStack(spacing: 0) {
-                        SubjectFormRow(
-                            label: "All comments",
-                            value: displayComments.map { $0.formatted() } ?? "",
-                            showsDisclosure: true
-                        )
-                        .subjectRowNavigation(
-                            to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
-                            accessibilityLabel: "All comments"
-                        )
+                commentsRows(workID: id)
 
-                        // A single-chapter work has no per-chapter view worth
-                        // opening; unknown totals ("5/?") keep the entry.
-                        if SavedWork.totalChapterCount(from: displayChapters) != 1 {
-                            SubjectRowSeparator()
-                            SubjectFormRow(label: "Chapter comments", value: "", showsDisclosure: true)
-                                .subjectRowNavigation(
-                                    to: AO3CommentsRoute(
-                                        workID: id, context: commentsWorkContext, focusesChapter: true
-                                    ),
-                                    accessibilityLabel: "Chapter comments"
-                                )
-                        }
-
-                        SubjectRowSeparator()
-                        SubjectFormRow(label: "Write a comment", value: "", showsDisclosure: true)
-                            .subjectRowNavigation(
-                                to: AO3CommentsRoute(
-                                    workID: id, context: commentsWorkContext, composes: true
-                                ),
-                                accessibilityLabel: "Write a comment"
-                            )
-                    }
-                    .subjectPanel()
-
-                    Text("Comment pages load when you open them; nothing is fetched in advance.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .pageBodyRow(top: 24)
+                Text("Comment pages load when you open them; nothing is fetched in advance.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .pageBodyRow(top: 9)
             }
         }
+    }
+
+    /// One `List` row per link.
+    ///
+    /// The three ways in shared a single `VStack` row, and `List` gives a row
+    /// one tap target — so a tap anywhere on the card fired every
+    /// `subjectRowNavigation` inside it and pushed Comments two or three deep,
+    /// with a Back press owed for each. `panelSegment` is the same card drawn
+    /// as separate rows, which is the shape the rest of the app now uses.
+    @ViewBuilder
+    private func commentsRows(workID id: Int) -> some View {
+        // A single-chapter work has no per-chapter view worth opening; an
+        // unknown total ("5/?") is not one chapter, so it keeps the entry.
+        let hasChapterComments = SavedWork.totalChapterCount(from: displayChapters) != 1
+        let count = hasChapterComments ? 3 : 2
+
+        SubjectFormRow(
+            label: "All comments",
+            value: displayComments.map { $0.formatted() } ?? "",
+            showsDisclosure: true
+        )
+        .subjectRowNavigation(
+            to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
+            accessibilityLabel: "All comments"
+        )
+        .panelSegment(0, of: count, gutter: SubjectMetrics.headerGutter)
+
+        if hasChapterComments {
+            SubjectFormRow(label: "Chapter comments", value: "", showsDisclosure: true)
+                .subjectRowNavigation(
+                    to: AO3CommentsRoute(
+                        workID: id, context: commentsWorkContext, focusesChapter: true
+                    ),
+                    accessibilityLabel: "Chapter comments"
+                )
+                .panelSegment(1, of: count, gutter: SubjectMetrics.headerGutter)
+        }
+
+        SubjectFormRow(label: "Write a comment", value: "", showsDisclosure: true)
+            .subjectRowNavigation(
+                to: AO3CommentsRoute(
+                    workID: id, context: commentsWorkContext, composes: true
+                ),
+                accessibilityLabel: "Write a comment"
+            )
+            .panelSegment(count - 1, of: count, gutter: SubjectMetrics.headerGutter)
     }
 
     // MARK: - Library section
@@ -285,7 +298,12 @@ extension WorkDetailView {
     }
 
     private func queuesRow(for work: SavedWork) -> some View {
-        Button {
+        // Counted from the very lines drawn beneath it. The label counted
+        // `queueMemberships` raw, and a soft-deleted queue keeps its
+        // memberships — so a work could read "In 2 Queues" above a list that
+        // named one, and "In 1 Queue" above no list at all.
+        let lines = queueMembershipLines(for: work)
+        return Button {
             withLocalWork { _ in showingAddToQueue = true }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
@@ -293,12 +311,12 @@ extension WorkDetailView {
                 // push — HIG reserves the disclosure indicator for the latter.
                 HStack {
                     Label(
-                        WorkDetailPresentation.queueLabel(count: work.queueMemberships.count),
+                        WorkDetailPresentation.queueLabel(count: lines.count),
                         systemImage: "list.bullet.rectangle"
                     )
                     Spacer()
                 }
-                ForEach(queueMembershipLines(for: work)) { line in
+                ForEach(lines) { line in
                     Text(line.text)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -320,10 +338,9 @@ extension WorkDetailView {
     /// "Queue name — #position of count" per queue, using the same ordering
     /// projection the queue screen itself renders.
     private func queueMembershipLines(for work: SavedWork) -> [QueueMembershipLine] {
-        work.queueMemberships
-            .filter { !$0.isPendingDeletion }
+        work.activeQueueMemberships
             .compactMap { membership -> QueueMembershipLine? in
-                guard let queue = membership.queue, !queue.isPendingDeletion else { return nil }
+                guard let queue = membership.queue else { return nil }
                 let orderedWorks = ReadingQueueService.orderedWorks(in: queue)
                 guard let index = orderedWorks.firstIndex(where: { $0.id == work.id }) else {
                     return QueueMembershipLine(id: membership.id, text: queue.name)
@@ -337,7 +354,10 @@ extension WorkDetailView {
     }
 
     private func collectionsRow(for work: SavedWork) -> some View {
-        let names = work.collections.map(\.name).sorted()
+        // A collection in Recently Deleted keeps its works, so the raw list
+        // both counted and NAMED a collection the reader has deleted.
+        let live = work.activeCollections
+        let names = live.map(\.name).sorted()
         return Button {
             withLocalWork { _ in showingAddToCollection = true }
         } label: {
@@ -346,7 +366,7 @@ extension WorkDetailView {
                 // push — HIG reserves the disclosure indicator for the latter.
                 HStack {
                     Label(
-                        WorkDetailPresentation.collectionLabel(count: work.collections.count),
+                        WorkDetailPresentation.collectionLabel(count: live.count),
                         systemImage: "square.stack"
                     )
                     Spacer()
