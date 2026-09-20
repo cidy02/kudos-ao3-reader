@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import SwiftUI
 
 // MARK: - Queue details (artboard 1h)
