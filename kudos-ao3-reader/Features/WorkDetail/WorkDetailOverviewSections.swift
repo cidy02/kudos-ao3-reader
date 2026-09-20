@@ -181,7 +181,7 @@ extension WorkDetailView {
 
     private var queueQuickAction: some View {
         quickAction(
-            title: WorkDetailPresentation.queueLabel(count: localWork?.queueMemberships.count ?? 0),
+            title: WorkDetailPresentation.queueLabel(count: localWork?.activeQueueMemberships.count ?? 0),
             systemImage: "list.bullet.rectangle",
             disabled: working
         ) {

@@ -215,9 +215,9 @@ extension WorkDetailView {
                 WorkDetailMyCopyRow(
                     summary: WorkDetailPresentation.myCopySummary(
                         isDownloaded: work.hasEPUB,
-                        queueCount: work.queueMemberships.count,
+                        queueCount: work.activeQueueMemberships.count,
                         tagCount: work.tags.count,
-                        collectionCount: work.collections.count
+                        collectionCount: work.activeCollections.count
                     ),
                     action: { showingMyCopy = true }
                 )
