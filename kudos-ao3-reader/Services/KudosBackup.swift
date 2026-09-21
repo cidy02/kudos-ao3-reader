@@ -920,6 +920,14 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let ao3WorkID: Int?
     let userTags: [String]
     let readiumLocator: String?
+    /// SHA-256 of the EPUB this record was exported with, when known.
+    ///
+    /// Optional, and absent in every archive written before this — which is
+    /// exactly what the comparisons need to tell apart from "the file is
+    /// empty". No manifest version bump: later fields are added this way here
+    /// (`createdAt`, `isDeleted`), and a decoder that has never heard of it is
+    /// unaffected.
+    let epubDigest: String?
 
     @MainActor
     init(work: SavedWork) {
@@ -983,6 +991,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         // serialized nil, and restoring it onto an iPhone lost the exact
         // reading position of every work that had one.
         readiumLocator = work.readiumLocator
+        epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1041,6 +1050,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case ao3WorkID
         case userTags
         case readiumLocator
+        case epubDigest
     }
 
     init(from decoder: Decoder) throws {
@@ -1116,6 +1126,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         ao3WorkID = try container.decodeIfPresent(Int.self, forKey: .ao3WorkID)
         userTags = try container.decodeIfPresent([String].self, forKey: .userTags) ?? []
         readiumLocator = try container.decodeIfPresent(String.self, forKey: .readiumLocator)
+        epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
     }
 }
 
@@ -2345,6 +2356,14 @@ enum KudosBackupService {
                 context.insert(work)
                 isNewRecord = true
             }
+            // Captured before `apply`, which raises `work.lastModifiedAt` to
+            // the incoming value and would make every archive look current.
+            let incomingAssetIsNewer = isNewRecord
+                || mode == .replaceLibrary
+                || SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: work.lastModifiedAt,
+                    incomingModifiedAt: archived.lastModifiedAt ?? archived.dateAdded
+                )
             apply(archived, to: work, isNewRecord: isNewRecord, mode: mode)
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
@@ -2385,8 +2404,9 @@ enum KudosBackupService {
             // D7: no `archivedID` parameter — a matching record id is not evidence of
             // provenance, because an A4 adversary reads record UUIDs straight out of the
             // sync folder's own manifest.
-            if Self.mayReplaceEPUB(local: work, isNewRecord: isNewRecord),
-               let epub = contents.epubData(for: archived.id) {
+            if Self.mayReplaceEPUB(
+                local: work, isNewRecord: isNewRecord, incomingIsNewer: incomingAssetIsNewer
+            ), let epub = contents.epubData(for: archived.id) {
                 // A5-F3: never let corrupt/untrusted bytes overwrite a valid local EPUB.
                 // Stage to a scratch file and preflight through the same hardened
                 // validator (`EPUBDocument.inspectPackage`, backed by the hardened
@@ -4097,13 +4117,28 @@ enum KudosBackupService {
     /// next line.
     ///
     /// Pure and internal so the policy is unit-testable without a `ModelContext`.
+    /// `incomingIsNewer` closes review finding 2: an ordinary work still has
+    /// bytes worth keeping, and an archive whose record is older than this
+    /// device's has no claim to replace them. It defaults to true so the gate's
+    /// own trust-boundary cases — which are about what may be replaced, not
+    /// about which copy is newer — read unchanged.
+    ///
+    /// Metadata freshness is a proxy for asset freshness, and an imperfect one:
+    /// a device can edit a record without touching the book. It fails by
+    /// declining a replacement rather than by making one, which is the right
+    /// direction — a skipped replacement is staleness, an unwanted one is a
+    /// destroyed book. This had to land with the digest comparison in
+    /// `readChangedRemoteAssets`: that change hands more bytes to this gate, and
+    /// without a freshness check more bytes means more overwritten books.
     nonisolated static func mayReplaceEPUB(
         local: SavedWork,
-        isNewRecord: Bool
+        isNewRecord: Bool,
+        incomingIsNewer: Bool = true
     ) -> Bool {
         if isNewRecord { return true }
         if !local.hasEPUB { return true }
-        return local.epubPreservationStatus != .preserved
+        guard local.epubPreservationStatus != .preserved else { return false }
+        return incomingIsNewer
     }
 
     /// The `(isPendingDeletion, permanentDeletionScheduledAt)` a soft-deletable record should
@@ -4258,6 +4293,11 @@ enum KudosBackupService {
         }
         if incomingWins || work.metadataSyncStatus == .unknown {
             work.metadataSyncStatusRaw = archived.metadataSyncStatusRaw
+        }
+        // Absent means the archive predates the field, not that the book has no
+        // identity — the same rule the locator follows.
+        if let archivedDigest = archived.epubDigest, !archivedDigest.isEmpty {
+            work.epubDigest = archivedDigest
         }
         work.preservedAt = newest(work.preservedAt, archived.preservedAt)
         work.lastPreservationAttemptAt = newest(

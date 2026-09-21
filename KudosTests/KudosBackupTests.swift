@@ -853,11 +853,17 @@ struct KudosBackupTests {
             ReadingAnnotation.self
         ])
         let workID = UUID()
-        let olderArchiveDate = Date(timeIntervalSince1970: 100)
-        let newerLocalDate = Date(timeIntervalSince1970: 200)
+        // The archive is deliberately NEWER than the local record. Byte
+        // replacement now also requires the incoming record to be the fresher
+        // one (review finding 2), and this case is about the VALIDATOR: the
+        // hostile bytes have to be allowed as far as the preflight, or the
+        // thing under test never runs and the assertion below would pass for
+        // the wrong reason.
+        let newerArchiveDate = Date(timeIntervalSince1970: 900)
+        let olderLocalDate = Date(timeIntervalSince1970: 100)
 
         let sourceWork = SavedWork(id: workID, title: "Corrupted Restore", author: "Writer")
-        sourceWork.markModified(olderArchiveDate)
+        sourceWork.markModified(newerArchiveDate)
         let baseContents = try KudosBackupService.makeContents(
             works: [sourceWork],
             bookmarks: [],
@@ -876,7 +882,7 @@ struct KudosBackupTests {
         let context = ModelContext(container)
         let localWork = SavedWork(id: workID, title: "Corrupted Restore", author: "Writer")
         localWork.hasEPUB = true
-        localWork.markModified(newerLocalDate)
+        localWork.markModified(olderLocalDate)
         context.insert(localWork)
         let validEPUB = try Data(contentsOf: EPUBTests.sampleEPUB)
         try validEPUB.write(to: localWork.fileURL)
@@ -931,7 +937,14 @@ struct KudosBackupTests {
         ])
         let workID = UUID()
 
+        // The archive is deliberately NEWER than the local record. Byte
+        // replacement now also requires the incoming record to be the fresher
+        // one (review finding 2), and this case is about the VALIDATOR: the
+        // hostile bytes have to be allowed as far as the preflight, or the
+        // thing under test never runs and the assertion below would pass for
+        // the wrong reason.
         let sourceWork = SavedWork(id: workID, title: "Hostile Blob", author: "Writer")
+        sourceWork.markModified(Date(timeIntervalSince1970: 900))
         let baseContents = try KudosBackupService.makeContents(
             works: [sourceWork],
             bookmarks: [],
@@ -954,6 +967,7 @@ struct KudosBackupTests {
         let container = try ModelContainer(for: schema, configurations: [configuration])
         let context = ModelContext(container)
         let localWork = SavedWork(id: workID, title: "Hostile Blob", author: "Writer")
+        localWork.markModified(Date(timeIntervalSince1970: 100))
         localWork.hasEPUB = true
         context.insert(localWork)
         let validEPUB = try Data(contentsOf: EPUBTests.sampleEPUB)

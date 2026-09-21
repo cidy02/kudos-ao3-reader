@@ -827,6 +827,10 @@ enum ReadingQueueService {
         } else {
             try FileManager.default.moveItem(at: temp, to: destination)
         }
+        // The one place an EPUB is written, so the one place the cached content
+        // identity can be kept honest. Every other caller — download, import,
+        // reconversion, restore, sync — comes through here.
+        work.epubDigest = Storage.fileDigest(at: destination) ?? ""
     }
 
     private static func nextQueueSortOrder(in context: ModelContext) -> Int {

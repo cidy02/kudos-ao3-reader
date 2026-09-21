@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Filesystem locations used by the app. `nonisolated` so the off-main
@@ -56,6 +57,22 @@ nonisolated enum Storage {
         let dir = base.appendingPathComponent("Works", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    /// SHA-256 of a file, streamed so a large book never becomes resident.
+    ///
+    /// The content identity a sync can compare. Equal size is not equal
+    /// content — the font branch of `readChangedRemoteAssets` says exactly that
+    /// and compares bytes, while the EPUB branch beside it settles for the byte
+    /// count and therefore never notices a same-length correction.
+    static func fileDigest(at url: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try? handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     /// Permanent home for the *original* file a converted import came from.
