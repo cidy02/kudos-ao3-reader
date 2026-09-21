@@ -67,7 +67,15 @@ enum PreservedWorkService {
 
     // MARK: - Restore
 
-    static func restore(_ work: SavedWork, in context: ModelContext) {
+    // These return whether the restore actually persisted. Recently Deleted used
+    // to call them as bare statements: the in-memory object flipped, the row
+    // vanished from the list, and a failed save left the record still
+    // `isPendingDeletion` with its `permanentDeletionScheduledAt` intact — so
+    // `sweepExpired` deleted it at the 90-day mark, having told the reader it
+    // was rescued. Silence is the whole bug; the caller must be able to speak.
+
+    @discardableResult
+    static func restore(_ work: SavedWork, in context: ModelContext) -> Bool {
         work.isPendingDeletion = false
         work.deletedAt = nil
         work.permanentDeletionScheduledAt = nil
@@ -79,25 +87,27 @@ enum PreservedWorkService {
             sourceURL: work.sourceURL,
             in: context
         )
-        context.saveBestEffort(reason: "Saving restored work failed")
+        return context.saveBestEffort(reason: "Saving restored work failed")
     }
 
-    static func restore(_ collection: WorkCollection, in context: ModelContext) {
+    @discardableResult
+    static func restore(_ collection: WorkCollection, in context: ModelContext) -> Bool {
         collection.isPendingDeletion = false
         collection.deletedAt = nil
         collection.permanentDeletionScheduledAt = nil
         collection.markModified()
         retractTombstone(recordID: collection.id, type: .workCollection, in: context)
-        context.saveBestEffort(reason: "Saving restored collection failed")
+        return context.saveBestEffort(reason: "Saving restored collection failed")
     }
 
-    static func restore(_ queue: ReadingQueue, in context: ModelContext) {
+    @discardableResult
+    static func restore(_ queue: ReadingQueue, in context: ModelContext) -> Bool {
         queue.isPendingDeletion = false
         queue.deletedAt = nil
         queue.permanentDeletionScheduledAt = nil
         queue.markModified()
         retractTombstone(recordID: queue.id, type: .readingQueue, in: context)
-        context.saveBestEffort(reason: "Saving restored queue failed")
+        return context.saveBestEffort(reason: "Saving restored queue failed")
     }
 
     /// Deletes the tombstone recorded at soft-delete time, rather than relying on a
