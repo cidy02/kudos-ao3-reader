@@ -33,6 +33,41 @@ nonisolated struct KudosBackupContents {
     static let maxFontEntryBytes = 4 * 1024 * 1024
     static let maxTotalFontBytes = 32 * 1024 * 1024
 
+    /// Every condition a restore enforces on one custom font, in the one place
+    /// installation and export can ask before creating a font that cannot come
+    /// back.
+    ///
+    /// Restore treats a font it will not accept as grounds to reject the
+    /// **whole** backup, deliberately — a payload that fails these checks is
+    /// not distinguishable from a hostile one, and
+    /// `KudosBackupFontRestoreTests` pins that. The consequence is that an
+    /// unvalidated install is a way to make an entire library unrestorable:
+    /// the font is accepted here, written into the backup, and then the reader
+    /// finds out only on the new phone, when the one thing they needed back
+    /// refuses to open. Fonts are decoration; the library is the point, so the
+    /// rules run when the font arrives instead.
+    ///
+    /// Returns nil when the font is fine, or a reader-facing reason when it is
+    /// not. The aggregate cap belongs to the caller — it needs a running total.
+    nonisolated static func fontRejectionReason(fileName: String, data: Data) -> String? {
+        guard isSafeFileName(fileName),
+              URL(fileURLWithPath: fileName).lastPathComponent == fileName
+        else { return "Its file name can't be stored in a backup." }
+
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        guard ["ttf", "otf"].contains(ext) else {
+            return "Only TrueType (.ttf) and OpenType (.otf) fonts can be backed up."
+        }
+        guard data.count <= maxFontEntryBytes else {
+            return "It's bigger than the \(maxFontEntryBytes / (1024 * 1024)) MB "
+                + "a backup can carry for one font."
+        }
+        guard let provider = CGDataProvider(data: data as CFData), CGFont(provider) != nil else {
+            return "The system can't read it as a font."
+        }
+        return nil
+    }
+
     let manifest: KudosBackupManifest
     let epubFiles: [UUID: Data]
     let fontFiles: [String: Data]

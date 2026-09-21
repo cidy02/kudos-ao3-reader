@@ -100,6 +100,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var pendingImport: PendingBackupImport?
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
+    @State private var fontNotice: BackupNotice?
     @State private var persistenceStatus = PersistenceStatusStore.snapshot()
     @State private var isPreparingPersistence = false
     @State private var folderSyncStatus = FolderSyncService.snapshot()
@@ -655,16 +656,59 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
 
-        guard let data = try? Data(contentsOf: url) else { return }
+        guard let data = try? Data(contentsOf: url) else {
+            fontNotice = BackupNotice(
+                title: "Couldn't Add Font",
+                message: "That file couldn't be read."
+            )
+            return
+        }
         let ext = url.pathExtension.isEmpty ? "ttf" : url.pathExtension
         let fileName = "\(UUID().uuidString).\(ext)"
+
+        // Checked against the rules a restore enforces, before anything is
+        // written. Nothing used to check: the picker's `.font` type accepts
+        // `.ttc`, `.woff` and the rest, and no size was looked at — so a font
+        // the app installed happily could make the reader's whole library
+        // backup refuse to restore, discovered only on the new phone.
+        if let reason = KudosBackupContents.fontRejectionReason(fileName: fileName, data: data) {
+            fontNotice = BackupNotice(
+                title: "Couldn't Add Font",
+                message: reason + " Keeping it would stop your library backup from restoring."
+            )
+            return
+        }
+        if let reason = fontTotalRejectionReason(adding: data.count) {
+            fontNotice = BackupNotice(title: "Couldn't Add Font", message: reason)
+            return
+        }
+
         let destination = Storage.fontsDirectory.appendingPathComponent(fileName)
-        guard (try? data.write(to: destination)) != nil else { return }
+        guard (try? data.write(to: destination)) != nil else {
+            fontNotice = BackupNotice(
+                title: "Couldn't Add Font",
+                message: "The font couldn't be saved to this device."
+            )
+            return
+        }
 
         let font = CustomFont(name: url.deletingPathExtension().lastPathComponent, fileName: fileName)
         context.insert(font)
         try? context.save()
         fontID = font.selectionID
+    }
+
+    /// Restore caps the *total* font payload too, and rejects the whole backup
+    /// when the set is over it — so fonts that are each perfectly valid can
+    /// still cost a library between them. Measured against what is installed.
+    private func fontTotalRejectionReason(adding newBytes: Int) -> String? {
+        let installed = customFonts.reduce(0) { total, font in
+            total + ((try? font.fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        guard installed + newBytes > KudosBackupContents.maxTotalFontBytes else { return nil }
+        let limit = KudosBackupContents.maxTotalFontBytes / (1024 * 1024)
+        return "Your fonts would go over the \(limit) MB a backup can carry, "
+            + "which would stop your library backup from restoring."
     }
 
     private func deleteCustomFonts(at offsets: IndexSet) {
@@ -1168,6 +1212,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 }
                 if let backupNotice { return .notice(backupNotice) }
                 if let epubNotice { return .notice(epubNotice) }
+                if let fontNotice { return .notice(fontNotice) }
                 return nil
             },
             set: { newValue in
@@ -1190,8 +1235,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     // left dangling.
                 } else if backupNotice != nil {
                     backupNotice = nil
-                } else {
+                } else if epubNotice != nil {
                     epubNotice = nil
+                } else {
+                    fontNotice = nil
                 }
             }
         )
