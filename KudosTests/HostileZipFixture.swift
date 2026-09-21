@@ -19,6 +19,25 @@ enum HostileZipFixture {
     /// Assembles a minimal ZIP (local headers + central directory + EOCD) from
     /// raw entry specs, allowing declared sizes/name-lengths to lie about the
     /// actual bytes present — exactly the shape a hostile archive would exploit.
+    /// Standard CRC-32 (IEEE, polynomial 0xEDB88320), written out here rather
+    /// than borrowed from `MiniZip`: a fixture used to test that reader should
+    /// not compute its own expected values with it.
+    private static let crcTable: [UInt32] = (0 ..< 256).map { index in
+        var value = UInt32(index)
+        for _ in 0 ..< 8 {
+            value = (value & 1) == 1 ? (value >> 1) ^ 0xEDB8_8320 : value >> 1
+        }
+        return value
+    }
+
+    private static func crc32(_ data: Data) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        for byte in data {
+            crc = (crc >> 8) ^ crcTable[Int((crc ^ UInt32(byte)) & 0xFF)]
+        }
+        return crc ^ 0xFFFF_FFFF
+    }
+
     static func build(_ entries: [Entry]) -> Data {
         var body = Data()
         var centralRecords: [Data] = []
@@ -38,7 +57,14 @@ enum HostileZipFixture {
             local.append(le16(entry.method))
             local.append(le16(0))
             local.append(le16(0))
-            local.append(le32(0))
+            // A real CRC-32, not zero. Backup restore now checks the checksum
+            // the exporter writes, so an archive declaring 0 for a non-empty
+            // payload is rejected — correctly, but it also made every fixture
+            // here unreadable through `KudosBackupContents`. Entries whose
+            // declared sizes deliberately lie still get a CRC over the real
+            // payload; nothing reads it for those, and MiniZip itself never
+            // checks CRCs.
+            local.append(le32(crc32(entry.payload)))
             local.append(le32(UInt32(truncatingIfNeeded: compressedSize)))
             local.append(le32(UInt32(truncatingIfNeeded: uncompressedSize)))
             local.append(le16(UInt16(truncatingIfNeeded: declaredNameLen)))
@@ -55,7 +81,7 @@ enum HostileZipFixture {
             central.append(le16(entry.method))
             central.append(le16(0))
             central.append(le16(0))
-            central.append(le32(0))
+            central.append(le32(crc32(entry.payload)))
             central.append(le32(UInt32(truncatingIfNeeded: compressedSize)))
             central.append(le32(UInt32(truncatingIfNeeded: uncompressedSize)))
             central.append(le16(UInt16(truncatingIfNeeded: declaredNameLen)))
