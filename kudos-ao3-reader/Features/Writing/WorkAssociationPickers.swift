@@ -428,7 +428,9 @@ struct WorkCreatorsPickerView: View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "Byline", arrangement: .control) {
                 TextField("username (pseud)", text: $creators.coauthorByline)
+                    #if os(iOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
                     .multilineTextAlignment(.trailing)
             }
@@ -513,7 +515,9 @@ struct WorkParentWorkPickerView: View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "URL", arrangement: .control) {
                 TextField("https://archiveofourown.org/works/…", text: $parentWork.url)
+                    #if os(iOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
                     .multilineTextAlignment(.trailing)
                     #if os(iOS)

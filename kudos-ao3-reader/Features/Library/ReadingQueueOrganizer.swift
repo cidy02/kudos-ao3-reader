@@ -47,11 +47,15 @@ struct AllReadingQueuesGridView: View {
     @State private var pendingRename: ReadingQueue?
     @State private var renameText = ""
     @State private var pendingDelete: ReadingQueue?
-    #if os(iOS)
     /// 1i: "search over queues, tags and works". One field over all three,
     /// rather than three — the reader is looking for a queue and does not know
     /// or care which of the three matched it.
+    ///
+    /// Outside the platform guard: the search field and the filtering it feeds
+    /// are both shared code, so guarding the declaration left them undefined on
+    /// macOS and broke that build. Only the reorder state below is iOS-shaped.
     @State private var searchText = ""
+    #if os(iOS)
     @State private var reorderMode: EditMode = .inactive
     #else
     @State private var isReorderingMac = false

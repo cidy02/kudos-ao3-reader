@@ -290,7 +290,9 @@ struct EditMultipleWorksView: View {
     private var creatorsRows: some View {
         SubjectFormRow(label: "Add co-creators", arrangement: .control) {
             TextField("Pseud", text: $changes.pseudsToAdd)
+                #if os(iOS)
                 .textInputAutocapitalization(.never)
+                #endif
                 .autocorrectionDisabled()
                 .multilineTextAlignment(.trailing)
         }

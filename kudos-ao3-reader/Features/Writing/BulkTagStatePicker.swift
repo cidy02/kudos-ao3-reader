@@ -156,7 +156,10 @@ private struct BulkNameListEditor: View {
             }
             Section {
                 TextField(placeholder, text: $entry)
+                    // iOS-only modifier; macOS has no software keyboard to tell.
+                    #if os(iOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
                     .onSubmit(add)
                 Button("Add", action: add)
