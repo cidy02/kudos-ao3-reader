@@ -487,7 +487,11 @@ nonisolated enum SyncMerge {
     struct ProgressSnapshot: Equatable {
         var lastSpineIndex: Int
         var lastScrollFraction: Double
-        var readiumLocator: String
+        /// nil means the source carried no position at all — an older backup,
+        /// or one written on macOS, where this used to be serialized as absent.
+        /// An empty string is a different thing: an explicit "no position".
+        /// Only the latter may clear a locator the reader already has.
+        var readiumLocator: String?
         var lastReadDate: Date?
         var modifiedAt: Date?
     }
@@ -537,7 +541,7 @@ nonisolated enum SyncMerge {
         let incomingHasProgress = incoming.lastReadDate != nil
             || incoming.lastSpineIndex > 0
             || incoming.lastScrollFraction > 0
-            || !incoming.readiumLocator.isEmpty
+            || !(incoming.readiumLocator ?? "").isEmpty
         guard incomingHasProgress else { return }
         if work.hasStartedReading {
             guard shouldApplyIncoming(
@@ -548,7 +552,12 @@ nonisolated enum SyncMerge {
 
         work.lastSpineIndex = incoming.lastSpineIndex
         work.lastScrollFraction = incoming.lastScrollFraction
-        work.readiumLocator = incoming.readiumLocator
+        // Absent is not a reset. A snapshot that never carried a locator must
+        // not wipe the precise position this device already has — that is how a
+        // backup round-tripped through macOS cost every work its exact page.
+        if let locator = incoming.readiumLocator {
+            work.readiumLocator = locator
+        }
         work.lastReadDate = incoming.lastReadDate
         work.progressModifiedAt = incomingModifiedAt
         work.markModified(work.progressModifiedAt ?? Date())
