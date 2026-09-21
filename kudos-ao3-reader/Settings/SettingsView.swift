@@ -852,6 +852,19 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
     }
 
+    /// Posts a backup alert from inside the confirmation alert's own button.
+    ///
+    /// Through a `Task` for exactly the reason the success path is — see below.
+    /// A notice assigned synchronously from that button races the confirmation
+    /// alert's dismissal, SwiftUI drops the second presentation, and the failure
+    /// becomes as silent as the bug this whole path exists to report. Yielding
+    /// once lets the confirmation finish dismissing first.
+    private func postBackupNotice(_ title: String, _ message: String) {
+        Task { @MainActor in
+            backupNotice = BackupNotice(title: title, message: message)
+        }
+    }
+
     /// Runs the merge and reports what changed.
     ///
     /// Deliberately hops through a `Task` before doing any work. The call site
@@ -866,20 +879,20 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         let pending = pendingImport
         pendingImport = nil
         guard let pending else {
-            // Never silent. This returning empty-handed is precisely how a
+            // Never silent. Returning empty-handed here is precisely how a
             // failed restore looked like a no-op: the reader tapped Restore,
             // nothing happened, and nothing said why.
-            backupNotice = BackupNotice(
-                title: "Couldn't Import Backup",
-                message: "Kudos lost track of the backup you chose before the "
-                    + "restore began. Pick the file again."
+            postBackupNotice(
+                "Couldn't Import Backup",
+                "Kudos lost track of the backup you chose before the restore "
+                    + "began. Pick the file again."
             )
             return
         }
         guard PersistenceOperationGate.begin(.backupImport) else {
-            backupNotice = BackupNotice(
-                title: "Import Already Busy",
-                message: "Kudos is already running "
+            postBackupNotice(
+                "Import Already Busy",
+                "Kudos is already running "
                     + "\(PersistenceOperationGate.active?.title ?? "another persistence operation")."
             )
             return
