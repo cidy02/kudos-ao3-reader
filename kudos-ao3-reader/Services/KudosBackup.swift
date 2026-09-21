@@ -2006,8 +2006,18 @@ enum KudosBackupService {
         TombstoneSigning.resignLocalUnsignedIfNeeded(in: context, defaults: defaults)
         let localTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
         var batchTombstones = localTombstones
-        var seenTombstoneKeys = Set(
-            localTombstones.map { "\($0.recordTypeRaw)|\($0.recordID.uuidString.lowercased())" }
+        // Keyed by identity rather than a plain seen-set, because "already have
+        // one for this record" is not the question — "which deletion happened
+        // last" is. The suppression key is `lastModifiedAt`, so keeping an
+        // older tombstone keeps a narrower window, and a snapshot dated between
+        // the two deletions walks back through it and resurrects the record.
+        var tombstonesByKey = Dictionary(
+            localTombstones.map {
+                ("\($0.recordTypeRaw)|\($0.recordID.uuidString.lowercased())", $0)
+            },
+            uniquingKeysWith: { first, second in
+                first.lastModifiedAt >= second.lastModifiedAt ? first : second
+            }
         )
         for archived in contents.manifest.tombstones {
             guard TombstoneSigning.shouldAdopt(archived, defaults: defaults) else {
@@ -2027,7 +2037,6 @@ enum KudosBackupService {
                 continue
             }
             let key = "\(archived.recordTypeRaw)|\(archived.recordID.uuidString.lowercased())"
-            guard seenTombstoneKeys.insert(key).inserted else { continue }
             guard let adopted = makeTombstone(from: archived) else { continue }
             // RC merge (G5) + TOMB-1: `makeTombstone` pins lastModifiedAt to the
             // signed createdAt (lastModifiedAt is unsigned and is the
@@ -2035,8 +2044,31 @@ enum KudosBackupService {
             // depth — a tombstone cannot legitimately be newer than the
             // snapshot that carries it.
             adopted.lastModifiedAt = min(adopted.lastModifiedAt, contents.manifest.exportedAt)
+
+            if let held = tombstonesByKey[key] {
+                // Newest deletion wins. An older one is not evidence that the
+                // later one did not happen, and the record only stays deleted
+                // for as long as the widest tombstone says it does. Carried onto
+                // the row already on file rather than inserted beside it, so the
+                // device keeps one tombstone per record and the next restore
+                // starts from the later date too.
+                guard adopted.lastModifiedAt > held.lastModifiedAt else { continue }
+                held.createdAt = adopted.createdAt
+                held.lastModifiedAt = adopted.lastModifiedAt
+                // The signature travels with the date it signs, or the row stops
+                // verifying. `shouldAdopt` already vouched for this pair.
+                held.signerPublicKey = adopted.signerPublicKey
+                held.signature = adopted.signature
+                held.deletedOnDeviceID = adopted.deletedOnDeviceID
+                held.deletionReason = adopted.deletionReason
+                if held.sourceURL.isEmpty { held.sourceURL = adopted.sourceURL }
+                if held.ao3WorkID == nil { held.ao3WorkID = adopted.ao3WorkID }
+                continue
+            }
+
             context.insert(adopted)
             batchTombstones.append(adopted)
+            tombstonesByKey[key] = adopted
         }
         let tombstones = TombstoneIndex(batchTombstones)
 
