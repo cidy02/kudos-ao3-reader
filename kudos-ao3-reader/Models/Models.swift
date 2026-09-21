@@ -168,6 +168,15 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// intentionally separate from title/author/source URL so future iCloud Documents
     /// asset lookup can survive AO3 metadata edits and local title changes.
     var assetIdentifier: String = ""
+    /// Set when a restore was promised an EPUB it never received — an iCloud
+    /// placeholder that had not downloaded, or an archive entry that failed its
+    /// checksum.
+    ///
+    /// It exists because `hasEPUB` in a manifest is a statement about the
+    /// *library*, not about this device's disk. Without it, a device that
+    /// simply had not finished downloading published "this work has no EPUB"
+    /// and every other device stopped looking for one.
+    var remoteEPUBPending: Bool = false
     /// SHA-256 of the EPUB currently on disk, or empty when unknown.
     ///
     /// Cached rather than computed on demand: a manifest is built on every

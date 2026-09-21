@@ -831,6 +831,8 @@ enum ReadingQueueService {
         // identity can be kept honest. Every other caller — download, import,
         // reconversion, restore, sync — comes through here.
         work.epubDigest = Storage.fileDigest(at: destination) ?? ""
+        // The bytes arrived, so nothing is outstanding any more.
+        work.remoteEPUBPending = false
     }
 
     private static func nextQueueSortOrder(in context: ModelContext) -> Int {
