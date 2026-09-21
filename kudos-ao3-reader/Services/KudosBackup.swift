@@ -1808,6 +1808,9 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     /// missing from the archive, or refused because the entry failed its CRC.
     /// Distinct from `skippedInvalidEPUBs`, which protected an existing local
     /// copy — here there is no copy, so the work restores as metadata only.
+    /// Collection memberships dropped because a trusted tombstone said they
+    /// were removed on another device.
+    var removedCollectionMemberships: Int = 0
     var worksMissingPromisedEPUB: Int = 0
     /// Missing local EPUBs refilled from the archive during a merge. The audit
     /// asked for "records skipped versus files recovered" — this is the
@@ -1870,6 +1873,10 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
         if skippedInvalidEPUBs > 0 {
             parts.append("Skipped \(skippedInvalidEPUBs) invalid EPUB file"
                 + "\(skippedInvalidEPUBs == 1 ? "" : "s") to protect your existing copy.")
+        }
+        if removedCollectionMemberships > 0 {
+            parts.append("Removed \(removedCollectionMemberships) collection membership"
+                + "\(removedCollectionMemberships == 1 ? "" : "s") deleted on another device.")
         }
         if worksMissingPromisedEPUB > 0 {
             parts.append("\(worksMissingPromisedEPUB) work"
@@ -2472,6 +2479,7 @@ enum KudosBackupService {
             uniquingKeysWith: { first, _ in first }
         )
         var suppressedCollections = 0
+        var removedCollectionMemberships = 0
         var revivedCollections = 0
         var ambiguousCollectionConflicts = 0
         for archived in contents.manifest.collections {
@@ -2598,6 +2606,41 @@ enum KudosBackupService {
                 }
                 if !work.collections.contains(where: { $0.id == collection.id }) {
                     work.collections.append(collection)
+                }
+            }
+
+            // Memberships this device still has that a trusted tombstone says
+            // were removed elsewhere. The loop above only declines to re-ADD
+            // one; nothing ever took away a membership already here, so a work
+            // removed from a collection on one device stayed in it on the
+            // other — and that device published it again on its next export,
+            // so the removal could never settle.
+            //
+            // Skipped under Replace, which bypasses tombstones entirely and
+            // has already made memberships match the snapshot above.
+            if mode != .replaceLibrary {
+                // `lastMembershipChangedAt` is when this device's reader last
+                // chose the contents of this collection. A membership chosen
+                // after the deletion elsewhere is a deliberate re-add and stays.
+                // Falling back to `lastModifiedAt` keeps a collection that
+                // predates the field safe rather than treating "unknown" as
+                // "delete it" — which is the direction that loses data.
+                let locallyChangedAt = collection.lastMembershipChangedAt
+                    ?? collection.lastModifiedAt
+                let doomed = collection.works.filter { member in
+                    tombstones.suppressesCollectionMembership(
+                        collectionID: collection.id,
+                        workID: member.id,
+                        incomingModifiedAt: locallyChangedAt
+                    )
+                }
+                for member in doomed {
+                    member.collections.removeAll { $0.id == collection.id }
+                }
+                if !doomed.isEmpty {
+                    let doomedIDs = Set(doomed.map(\.id))
+                    collection.works.removeAll { doomedIDs.contains($0.id) }
+                    removedCollectionMemberships += doomed.count
                 }
             }
 
@@ -3248,6 +3291,7 @@ enum KudosBackupService {
             revivedCollections: revivedCollections,
             ambiguousCollectionConflicts: ambiguousCollectionConflicts,
             skippedInvalidEPUBs: skippedInvalidEPUBs,
+            removedCollectionMemberships: removedCollectionMemberships,
             worksMissingPromisedEPUB: worksMissingPromisedEPUB,
             recoveredMissingEPUBs: recoveredMissingEPUBs,
             restoredOriginals: restoredOriginals,
