@@ -924,11 +924,12 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         lastAvailabilityCheck = work.lastAvailabilityCheck
         ao3WorkID = work.ao3WorkID
         userTags = work.tags.map(\.name).sorted()
-        #if canImport(ReadiumShared)
+        // Unconditional. `SavedWork.readiumLocator` is a plain String on every
+        // platform, so this guard was discarding a value the model was holding:
+        // a backup written on macOS, where the Readium reader is not built,
+        // serialized nil, and restoring it onto an iPhone lost the exact
+        // reading position of every work that had one.
         readiumLocator = work.readiumLocator
-        #else
-        readiumLocator = nil
-        #endif
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -3962,7 +3963,7 @@ enum KudosBackupService {
             SyncMerge.ProgressSnapshot(
                 lastSpineIndex: archived.lastSpineIndex,
                 lastScrollFraction: archived.lastScrollFraction,
-                readiumLocator: archived.readiumLocator ?? "",
+                readiumLocator: archived.readiumLocator,
                 lastReadDate: archived.lastReadDate,
                 modifiedAt: archived.progressModifiedAt
             ),
