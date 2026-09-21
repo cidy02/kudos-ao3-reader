@@ -64,14 +64,22 @@ struct RecentlyDeletedView: View {
                 get: { pendingPermanentWork != nil },
                 set: { if !$0 { pendingPermanentWork = nil } }
             ),
-            titleVisibility: .visible
-        ) {
+            titleVisibility: .visible,
+            // `presenting:` hands the value INTO the action. Without it the
+            // action re-read `pendingPermanentWork`, which the binding's own
+            // setter clears on dismissal — and on iOS 27 dismissal lands first,
+            // so "Delete Permanently" could silently do nothing. Same defect as
+            // the restore that no-opped on a new phone; this one at least fails
+            // in the safe direction, but a destructive control that quietly does
+            // nothing still teaches people not to trust the button.
+            presenting: pendingPermanentWork
+        ) { work in
             Button("Delete Permanently", role: .destructive) {
-                if let work = pendingPermanentWork { WorkLifecycle.hardDelete(work, in: context) }
+                WorkLifecycle.hardDelete(work, in: context)
                 pendingPermanentWork = nil
             }
             Button("Cancel", role: .cancel) { pendingPermanentWork = nil }
-        } message: {
+        } message: { _ in
             Text("This work is gone for good — it can't be restored afterward.")
         }
         .confirmationDialog(
@@ -80,16 +88,22 @@ struct RecentlyDeletedView: View {
                 get: { pendingPermanentCollection != nil },
                 set: { if !$0 { pendingPermanentCollection = nil } }
             ),
-            titleVisibility: .visible
-        ) {
+            titleVisibility: .visible,
+            // `presenting:` hands the value INTO the action. Without it the
+            // action re-read `pendingPermanentCollection`, which the binding's own
+            // setter clears on dismissal — and on iOS 27 dismissal lands first,
+            // so "Delete Permanently" could silently do nothing. Same defect as
+            // the restore that no-opped on a new phone; this one at least fails
+            // in the safe direction, but a destructive control that quietly does
+            // nothing still teaches people not to trust the button.
+            presenting: pendingPermanentCollection
+        ) { collection in
             Button("Delete Permanently", role: .destructive) {
-                if let collection = pendingPermanentCollection {
-                    PreservedWorkService.hardDelete(collection, in: context)
-                }
+                PreservedWorkService.hardDelete(collection, in: context)
                 pendingPermanentCollection = nil
             }
             Button("Cancel", role: .cancel) { pendingPermanentCollection = nil }
-        } message: {
+        } message: { _ in
             Text("This collection is gone for good — it can't be restored afterward. "
                 + "The works themselves stay in your Library.")
         }
@@ -99,14 +113,22 @@ struct RecentlyDeletedView: View {
                 get: { pendingPermanentQueue != nil },
                 set: { if !$0 { pendingPermanentQueue = nil } }
             ),
-            titleVisibility: .visible
-        ) {
+            titleVisibility: .visible,
+            // `presenting:` hands the value INTO the action. Without it the
+            // action re-read `pendingPermanentQueue`, which the binding's own
+            // setter clears on dismissal — and on iOS 27 dismissal lands first,
+            // so "Delete Permanently" could silently do nothing. Same defect as
+            // the restore that no-opped on a new phone; this one at least fails
+            // in the safe direction, but a destructive control that quietly does
+            // nothing still teaches people not to trust the button.
+            presenting: pendingPermanentQueue
+        ) { queue in
             Button("Delete Permanently", role: .destructive) {
-                if let queue = pendingPermanentQueue { PreservedWorkService.hardDelete(queue, in: context) }
+                PreservedWorkService.hardDelete(queue, in: context)
                 pendingPermanentQueue = nil
             }
             Button("Cancel", role: .cancel) { pendingPermanentQueue = nil }
-        } message: {
+        } message: { _ in
             Text("This queue is gone for good — it can't be restored afterward. "
                 + "The works themselves stay in your Library.")
         }
