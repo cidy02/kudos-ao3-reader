@@ -577,6 +577,15 @@ struct AccountView: View {
     ///
     /// 1m and 1bt draw the pills, so this is a deliberate departure from them —
     /// recorded here rather than left for someone to "fix" back.
+    ///
+    /// One group per scope, named for the scope — per the owner.
+    ///
+    /// Flattening took the segmented control away, and with it the only thing
+    /// saying which scope a group belonged to: "Saved", "Following", "Posted"
+    /// and the rest read as peers of one another, and of "Account". Putting the
+    /// scope name back as a *second* tier of heading only made ten headings on
+    /// one page compete instead of nest, so the scope name is now the group's
+    /// own heading and 1bt's inner split is dropped.
     @ViewBuilder
     private var tabSections: some View {
         shortcutsSection
@@ -1079,43 +1088,43 @@ private extension AccountView {
 private extension AccountView {
     @ViewBuilder
     var readingScopeGroups: some View {
-        // 1bt groups Reading by what a shelf means: saved or followed.
-        scopeGroup("Saved", [
+        // 1bt splits these into "Saved" and "Following"; flattened to one group
+        // named for the scope, with the board's own order kept — the three saved
+        // shelves first, then the followed one.
+        //
+        // Subscriptions still states only its list size:
+        // `SubscriptionWatermarks.newChapterCount(for:watermarks:)` needs loaded
+        // subscription works, and AO3AccountListCountsCache holds sizes only, so
+        // "N with new chapters" cannot be had without loading them.
+        scopeGroup("Reading", [
             readingDestination(.later, count: .markedForLater),
             readingDestination(.bookmarks, count: .bookmarks),
-            readingDestination(.collections, count: .collections)
-        ])
-        // `SubscriptionWatermarks.newChapterCount(for:watermarks:)` needs loaded
-        // subscription works. The hub's AO3AccountListCountsCache only holds list
-        // sizes, so it cannot supply "N with new chapters" without loading them.
-        scopeGroup("Following", [
+            readingDestination(.collections, count: .collections),
             readingDestination(.subscriptions, count: .subscriptions)
         ])
     }
 
     @ViewBuilder
     var writingScopeGroups: some View {
-        scopeGroup("Posted", [
+        // Was "Posted" / "Unposted". Flattened; Drafts keeps the subtitle that
+        // carried the distinction, so nothing the split said is lost —
+        // otwarchive's work_drafts.feature keeps 29-day drafts and purges 31-day
+        // ones, and WritingDraftsView records the same 30-day rule.
+        scopeGroup("Writing", [
             writingDestination(.works, count: .myWorks),
-            writingDestination(.series, count: .series)
-        ])
-        scopeGroup("Unposted", [
-            // otwarchive's work_drafts.feature keeps 29-day drafts and purges
-            // 31-day drafts; WritingDraftsView records the same 30-day rule.
+            writingDestination(.series, count: .series),
             writingDestination(.drafts, count: nil, subtitle: "Deleted by AO3 after 30 days")
         ])
     }
 
     @ViewBuilder
     var activityScopeGroups: some View {
-        // 1bt splits arrivals from exchanges; this scope has only Inbox for
-        // both, so there is no empty exchanges heading.
-        scopeGroup("Read on AO3", [
+        // Was "Read on AO3" / "Arrives". Both rows keep the subtitles that said
+        // which was which, so the flattening costs no meaning.
+        scopeGroup("Activity", [
             activityDestination(
                 .history, count: .history, subtitle: "AO3’s own history, not the local reading log"
-            )
-        ])
-        scopeGroup("Arrives", [
+            ),
             activityDestination(
                 .inbox,
                 count: nil,
