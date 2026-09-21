@@ -1733,6 +1733,11 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     var revivedCollections: Int = 0
     var ambiguousCollectionConflicts: Int = 0
     var skippedInvalidEPUBs: Int = 0
+    /// Works whose manifest entry said `hasEPUB` but whose bytes never arrived:
+    /// missing from the archive, or refused because the entry failed its CRC.
+    /// Distinct from `skippedInvalidEPUBs`, which protected an existing local
+    /// copy — here there is no copy, so the work restores as metadata only.
+    var worksMissingPromisedEPUB: Int = 0
     var suppressedAnnotations: Int = 0
     var removedWorks: Int = 0
     var removedCollections: Int = 0
@@ -1780,6 +1785,12 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
         if skippedInvalidEPUBs > 0 {
             parts.append("Skipped \(skippedInvalidEPUBs) invalid EPUB file"
                 + "\(skippedInvalidEPUBs == 1 ? "" : "s") to protect your existing copy.")
+        }
+        if worksMissingPromisedEPUB > 0 {
+            parts.append("\(worksMissingPromisedEPUB) work"
+                + "\(worksMissingPromisedEPUB == 1 ? "" : "s") restored without "
+                + "\(worksMissingPromisedEPUB == 1 ? "its" : "their") EPUB — the backup "
+                + "listed the file but did not contain readable bytes for it.")
         }
         if revivedQueues > 0 {
             parts.append("Restored \(revivedQueues) queue\(revivedQueues == 1 ? "" : "s") "
@@ -1976,6 +1987,7 @@ enum KudosBackupService {
         var workIndex = WorkRestoreIndex(existingWorks)
         var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
         var skippedInvalidEPUBs = 0
+        var worksMissingPromisedEPUB = 0
 
         // Phase 1: unsigned incoming tombstones still drop.
         // Phase 2: adopt only if the signature verifies over the incoming
@@ -2141,6 +2153,18 @@ enum KudosBackupService {
                     )
                 }
             } else if !FileManager.default.fileExists(atPath: work.fileURL.path) {
+                // The manifest promised a file and nothing usable arrived: the
+                // entry is absent from the archive, or `ZipSource` refused it
+                // because its CRC did not match. Until this was counted, that
+                // outcome was indistinguishable from a work that never had an
+                // EPUB — both simply landed in the "N Library records" total,
+                // and the reader found out on opening the work.
+                if archived.hasEPUB {
+                    worksMissingPromisedEPUB += 1
+                    Log.library.notice(
+                        "Backup listed an EPUB for a work but supplied no readable bytes."
+                    )
+                }
                 work.hasEPUB = false
                 if work.epubPreservationStatus == .preserved {
                     work.epubPreservationStatus = .missingFile
@@ -2861,6 +2885,7 @@ enum KudosBackupService {
             revivedCollections: revivedCollections,
             ambiguousCollectionConflicts: ambiguousCollectionConflicts,
             skippedInvalidEPUBs: skippedInvalidEPUBs,
+            worksMissingPromisedEPUB: worksMissingPromisedEPUB,
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
             removedCollections: removedCollections,
