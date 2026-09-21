@@ -408,7 +408,7 @@ _Consolidated from the former `docs/Bugs.md`._ **Status:** Open · In Progress �
 
 ## 💡 Feature Ideas (FI-N registry)
 
-_Consolidated from the former `docs/Feature_Ideas.md`._ **Status:** Idea · Planned · In Progress · Done · Parked. All current FI items are **Done** (board task in parens).
+_Consolidated from the former `docs/Feature_Ideas.md`._ **Status:** Idea · Planned · In Progress · Done · Parked. All FI items are **Done** (board task in parens) except **FI-20**, which is an Idea.
 
 - **Search & Filters:** FI-1 long-press clear filters (T-12) · FI-2 advanced rating (T-09) · FI-3 cycling include/exclude multi-select (T-09/T-23) · FI-4 expandable result cards (T-10).
 - **Browse / Web:** FI-5 sync browser theme (T-15) · FI-9 enrich browse-by-fandom cards (T-24).
@@ -416,6 +416,34 @@ _Consolidated from the former `docs/Feature_Ideas.md`._ **Status:** Idea · Plan
 - **Library:** FI-7 hide privacy eye when nothing hidden (T-13) · FI-8 tap tag → filter Library (T-11) · FI-15 download queue & bulk actions (T-37/T-38) · FI-17 Continue Reading shelf (T-40) · FI-18 reading statistics (T-41).
 - **App:** FI-16 About / Sources & Licenses (T-39) · FI-19 portable Library backup (T-42).
 - **Theming:** FI-6 AO3-red accent + color picker (T-16).
+- **TTS / on-device ML:** **FI-20 — use the A20 Pro's second Neural Engine (iPhone 18 Pro).** **Status: Idea**, owner-raised 2026-09-20.
+
+**FI-20 in full.** The A20 Pro adds a *second* NPU, so the 18 Pro has more ANE
+throughput than any previous iPhone. Nothing in the app currently asks for it:
+`KokoroAneComputeUnits.default` (T-208) picks compute units per graph, and that
+choice was tuned on one-NPU hardware. Worth investigating, in rough order:
+
+1. **Measure before changing anything.** There is still no audition harness
+   (T-209 phase 1 gates everything for the same reason). Get per-graph timings
+   on an 18 Pro before assuming the second NPU is being used at all — Core ML
+   schedules ANE work itself, so some of this may already be free.
+2. **Revisit the `cpuOnly` graphs.** T-208 sends noise and tail to `cpuOnly`
+   because they are fp32-only graphs the fp16 ANE cannot take, and Metal aborts
+   in MPSGraph on iOS 27 (FluidAudio #843). Whether the A20's ANE changes that
+   is an empirical question, not an assumption — and the libBNNS SIGSEGV
+   (#817/#844) is uncatchable, so any change needs `KokoroAneHealth`'s crash
+   sentinel watching it.
+3. **Concurrency, not just speed.** Two NPUs may matter more for *overlapping*
+   synthesis with something else (pre-flight phonemisation, prefetching the next
+   chunk) than for making one clip faster. That would attack T-209's real
+   ceiling — cross-chunk prosody context — rather than raw latency.
+4. **Gate it by hardware.** Any tuning must stay device-conditional: the same
+   binary runs on one-NPU phones, and the engine ladder (Core ML → Sherpa/ONNX
+   → Apple) must not regress for them.
+
+Related: T-208, T-209. Do not start before T-208's device listening — none of
+that work has produced audible audio yet, and tuning an engine nobody has heard
+is premature.
 
 ---
 
