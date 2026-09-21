@@ -865,7 +865,17 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     private func restorePendingBackup(mode: BackupImportMode = .merge) {
         let pending = pendingImport
         pendingImport = nil
-        guard let pending else { return }
+        guard let pending else {
+            // Never silent. This returning empty-handed is precisely how a
+            // failed restore looked like a no-op: the reader tapped Restore,
+            // nothing happened, and nothing said why.
+            backupNotice = BackupNotice(
+                title: "Couldn't Import Backup",
+                message: "Kudos lost track of the backup you chose before the "
+                    + "restore began. Pick the file again."
+            )
+            return
+        }
         guard PersistenceOperationGate.begin(.backupImport) else {
             backupNotice = BackupNotice(
                 title: "Import Already Busy",
@@ -1131,7 +1141,20 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 guard newValue == nil else { return }
                 if showImportConfirmation {
                     showImportConfirmation = false
-                    pendingImport = nil
+                    // Deliberately NOT clearing `pendingImport` here. Dismissal
+                    // writes this binding, and on iOS 27 that happens BEFORE the
+                    // alert's own button action runs — so clearing it destroyed
+                    // the import the "Restore from Backup" button was about to
+                    // perform. `restorePendingBackup` then hit its `guard let`
+                    // and returned in silence: no restore, no error, no alert.
+                    // It bit only the EMPTY-library path, because Merge/Replace
+                    // presents from its own `confirmationDialog` and never
+                    // routed through this setter — i.e. it broke exactly the
+                    // case that matters, moving to a brand-new phone.
+                    // Both buttons clear `pendingImport` themselves (Cancel
+                    // directly, Restore via `restorePendingBackup`), and an
+                    // `Alert` cannot be dismissed any other way, so nothing is
+                    // left dangling.
                 } else if backupNotice != nil {
                     backupNotice = nil
                 } else {
