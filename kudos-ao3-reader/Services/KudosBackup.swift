@@ -2273,7 +2273,7 @@ enum KudosBackupService {
                 context.insert(work)
                 isNewRecord = true
             }
-            apply(archived, to: work, isNewRecord: isNewRecord)
+            apply(archived, to: work, isNewRecord: isNewRecord, mode: mode)
             restoredWorksByArchivedID[archived.id] = work
             workIndex.index(work)
 
@@ -2413,9 +2413,12 @@ enum KudosBackupService {
             }
 
             // File Merge is add-only: keep the local collection name/fields.
-            let incomingWins = if mode == .merge {
-                isNewCollection
-            } else {
+            let incomingWins = switch mode {
+            case .merge: isNewCollection
+            // Snapshot: a rename or a setting changed here since the backup is
+            // exactly what Replace is being asked to undo.
+            case .replaceLibrary: true
+            case .reconcile:
                 isNewCollection || SyncMerge.shouldApplyIncoming(
                     localModifiedAt: collection.lastModifiedAt,
                     incomingModifiedAt: incomingModifiedAt
@@ -2495,6 +2498,20 @@ enum KudosBackupService {
                 if !work.collections.contains(where: { $0.id == collection.id }) {
                     work.collections.append(collection)
                 }
+            }
+
+            // Snapshot semantics: a work this archive does not list in the
+            // collection is not in it. The loop above is union-only, which is
+            // right for Merge — absence in a stale archive is not evidence of
+            // removal — and wrong for Replace, where absence is the whole point.
+            if mode == .replaceLibrary {
+                let snapshotWorkIDs = Set(
+                    archived.workIDs.compactMap { restoredWorksByArchivedID[$0]?.id }
+                )
+                for member in collection.works where !snapshotWorkIDs.contains(member.id) {
+                    member.collections.removeAll { $0.id == collection.id }
+                }
+                collection.works.removeAll { !snapshotWorkIDs.contains($0.id) }
             }
         }
 
@@ -2582,9 +2599,10 @@ enum KudosBackupService {
                 )
             }
             let localModifiedAt = SyncMerge.effectiveQueueModifiedAt(queue)
-            let incomingWins = if mode == .merge {
-                false
-            } else {
+            let incomingWins = switch mode {
+            case .merge: false
+            case .replaceLibrary: true
+            case .reconcile:
                 SyncMerge.shouldApplyIncoming(
                     localModifiedAt: localModifiedAt,
                     incomingModifiedAt: incomingModifiedAt
@@ -3447,10 +3465,14 @@ enum KudosBackupService {
                 // File Merge is add-only by annotation id: never overwrite a
                 // highlight/note this device already has. New ids still insert.
                 if mode == .merge { continue }
-                guard SyncMerge.shouldApplyIncoming(
-                    localModifiedAt: local.lastModifiedAt,
-                    incomingModifiedAt: incomingModifiedAt
-                ) else { continue }
+                // Replace is a snapshot; a note edited here since the backup is
+                // one of the things the reader is asking to roll back.
+                if mode != .replaceLibrary {
+                    guard SyncMerge.shouldApplyIncoming(
+                        localModifiedAt: local.lastModifiedAt,
+                        incomingModifiedAt: incomingModifiedAt
+                    ) else { continue }
+                }
                 // M1f. This id-keyed path — not the dedup path below — is where a forged
                 // annotation actually lands: an A4 adversary reads the real UUID out of the
                 // sync folder's own `manifest.json`, so there is no dedup loser and the
@@ -4005,7 +4027,12 @@ enum KudosBackupService {
         return (true, now.addingTimeInterval(PreservedWorkService.recoveryWindow))
     }
 
-    private static func apply(_ archived: KudosBackupWork, to work: SavedWork, isNewRecord: Bool) {
+    private static func apply(
+        _ archived: KudosBackupWork,
+        to work: SavedWork,
+        isNewRecord: Bool,
+        mode: BackupImportMode
+    ) {
         let incomingModifiedAt = archived.lastModifiedAt ?? archived.dateAdded
         // A freshly-created placeholder's lastModifiedAt is "now" (restore time), which is
         // always at least as new as any real archived snapshot — so incomingWins alone would
@@ -4134,7 +4161,10 @@ enum KudosBackupService {
                 lastReadDate: archived.lastReadDate,
                 modifiedAt: archived.progressModifiedAt
             ),
-            to: work
+            to: work,
+            // Replace is a snapshot: the archive's reading position wins even
+            // when this device has read further since.
+            force: mode == .replaceLibrary
         )
         work.lastModifiedAt = max(work.lastModifiedAt, incomingModifiedAt)
     }
