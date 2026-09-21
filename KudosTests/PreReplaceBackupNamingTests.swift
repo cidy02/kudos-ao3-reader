@@ -12,9 +12,12 @@ import Testing
 /// already-replaced library over the original. The file that could undo the
 /// first replace was destroyed by *considering* a second one.
 ///
-/// No `.serialized` and no `PersistenceGateSuites` nesting: this is pure naming,
-/// it touches no SwiftData and no process-wide gate.
-@Suite
+/// `.serialized` like every other suite here. The naming logic itself is pure,
+/// but running these five in parallel took the test host down — a trivial case
+/// asserting only `attemptLimit > 1` "failed" in 0.000s alongside the rest,
+/// which is a dead process, not an assertion. Serial execution is what the rest
+/// of this target does and it costs nothing at five tests.
+@Suite(.serialized)
 struct PreReplaceBackupNamingTests {
     private static func date(_ stamp: String) throws -> Date {
         let formatter = DateFormatter()
@@ -68,10 +71,15 @@ struct PreReplaceBackupNamingTests {
         #expect(url.lastPathComponent.hasPrefix("Kudos Library Before Replace "))
     }
 
-    /// Naming alone is not the guarantee — the write refuses to clobber. This
-    /// pins the option set `makePreReplaceBackup` depends on, so a later edit
-    /// that drops `.withoutOverwriting` fails here rather than in someone's
-    /// library.
+    /// Naming alone is not the guarantee — putting the file in place refuses to
+    /// clobber. This pins the mechanism `makePreReplaceBackup` depends on.
+    ///
+    /// It originally pinned `write(options: [.atomic, .withoutOverwriting])`,
+    /// and running it is what revealed that Foundation **traps** on that
+    /// combination ("withoutOverwriting is not supported with atomic") rather
+    /// than throwing — so the shipped safety copy would have crashed the app.
+    /// The write is now atomic to a scratch name followed by a move, which
+    /// cannot leave a partial file and cannot overwrite one.
     @Test func writingRefusesToOverwriteAnExistingCopy() throws {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("PreReplaceNaming-\(UUID().uuidString)", isDirectory: true)
@@ -83,10 +91,14 @@ struct PreReplaceBackupNamingTests {
             at: try Self.date("2026-09-20 09:15:00"),
             attempt: 0
         )
-        try Data("first".utf8).write(to: url, options: [.atomic, .withoutOverwriting])
+        let firstStage = directory.appendingPathComponent("stage-1")
+        try Data("first".utf8).write(to: firstStage, options: .atomic)
+        try FileManager.default.moveItem(at: firstStage, to: url)
 
+        let secondStage = directory.appendingPathComponent("stage-2")
+        try Data("second".utf8).write(to: secondStage, options: .atomic)
         #expect(throws: (any Error).self) {
-            try Data("second".utf8).write(to: url, options: [.atomic, .withoutOverwriting])
+            try FileManager.default.moveItem(at: secondStage, to: url)
         }
         #expect(try Data(contentsOf: url) == Data("first".utf8))
     }

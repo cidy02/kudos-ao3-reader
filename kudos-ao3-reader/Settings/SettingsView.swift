@@ -1059,10 +1059,29 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 )
                 let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let url = PreReplaceBackupNaming.url(in: docs, at: Date(), attempt: attempt)
-                // `.withoutOverwriting` is the guarantee, not the name: even if
-                // two attempts land in the same second, the second refuses
-                // rather than clobbering the first.
-                try contents.zipData().write(to: url, options: [.atomic, .withoutOverwriting])
+                // Staged, then moved into place.
+                //
+                // This used to be `write(options: [.atomic, .withoutOverwriting])`,
+                // which looks like it gives both guarantees and in fact gives
+                // neither: Foundation TRAPS on that combination — "withoutOverwriting
+                // is not supported with atomic" — so the one path that exists to
+                // protect the only undo a Replace has would have taken the app down
+                // instead of writing a copy.
+                //
+                // An atomic write to a scratch name cannot leave a partial file, and
+                // `moveItem` refuses an existing destination, so even two attempts
+                // inside the same second cannot clobber each other.
+                let staged = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(
+                        "\(UUID().uuidString).\(PreReplaceBackupNaming.fileExtension)"
+                    )
+                try contents.zipData().write(to: staged, options: .atomic)
+                do {
+                    try FileManager.default.moveItem(at: staged, to: url)
+                } catch {
+                    try? FileManager.default.removeItem(at: staged)
+                    throw error
+                }
                 return .success(url.lastPathComponent)
             } catch {
                 lastError = error
@@ -1886,16 +1905,22 @@ nonisolated enum PreReplaceBackupNaming {
 
     /// Seconds, not just the date. A date alone meant every copy taken on one
     /// day shared a filename.
-    static let timestampFormatter: DateFormatter = {
+    ///
+    /// Built per call rather than held as one shared instance. `DateFormatter`
+    /// cannot be used from two threads at once, and this type is `nonisolated`,
+    /// so nothing stops that from happening — two concurrent callers took the
+    /// process down. A few allocations on a path that runs once per Replace is
+    /// not worth a lock, and a crash here costs the reader their only undo.
+    static func makeTimestampFormatter() -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
         return formatter
-    }()
+    }
 
     static func fileName(at date: Date, attempt: Int) -> String {
-        let stamp = timestampFormatter.string(from: date)
+        let stamp = makeTimestampFormatter().string(from: date)
         // A retry within the same second still gets its own name, so the retry
         // cannot be the thing that overwrites the copy it is retrying for.
         let suffix = attempt == 0 ? "" : " (\(attempt + 1))"
