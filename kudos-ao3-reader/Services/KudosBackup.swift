@@ -2589,6 +2589,11 @@ enum KudosBackupService {
                 collection.sortOrder = archived.sortOrder ?? collection.sortOrder
             }
 
+            // Memberships this archive listed and that survived the tombstone
+            // check below. The sweep at the end of this block must leave them
+            // alone: their fate was already decided against the archive's
+            // clock, which is the only clock that can see the re-add.
+            var archiveAffirmedMemberships: Set<UUID> = []
             for workID in archived.workIDs {
                 guard let work = restoredWorksByArchivedID[workID] else { continue }
                 // A stale manifest can still list a work the user explicitly removed
@@ -2601,6 +2606,7 @@ enum KudosBackupService {
                 ) {
                     continue
                 }
+                archiveAffirmedMemberships.insert(work.id)
                 if !collection.works.contains(where: { $0.id == work.id }) {
                     collection.works.append(work)
                 }
@@ -2628,7 +2634,13 @@ enum KudosBackupService {
                 let locallyChangedAt = collection.lastMembershipChangedAt
                     ?? collection.lastModifiedAt
                 let doomed = collection.works.filter { member in
-                    tombstones.suppressesCollectionMembership(
+                    // Judged already, and by a better-informed clock: the loop
+                    // above kept this one because the archive was newer than the
+                    // removal. Re-testing it here against the *local* membership
+                    // clock would delete a re-add this device simply has not
+                    // heard about yet — and delete it again after every sync.
+                    !archiveAffirmedMemberships.contains(member.id)
+                        && tombstones.suppressesCollectionMembership(
                         collectionID: collection.id,
                         workID: member.id,
                         incomingModifiedAt: locallyChangedAt
@@ -4347,11 +4359,17 @@ enum KudosBackupService {
         if incomingWins || work.metadataSyncStatus == .unknown {
             work.metadataSyncStatusRaw = archived.metadataSyncStatusRaw
         }
-        // Absent means the archive predates the field, not that the book has no
-        // identity — the same rule the locator follows.
-        if let archivedDigest = archived.epubDigest, !archivedDigest.isEmpty {
-            work.epubDigest = archivedDigest
-        }
+        // `epubDigest` is deliberately NOT restored from the archive. It
+        // describes the bytes on this disk, not the record, and a restore that
+        // copied it would describe bytes that may never have arrived: the asset
+        // fetch can fail (an iCloud file not yet materialized) while the
+        // metadata lands regardless. The local file would then carry the remote
+        // file's identity, the next sync would compare the two digests, find
+        // them equal, and skip the download — permanently, because nothing
+        // would ever disagree again. `ReadingQueueService.replaceEPUB` stamps
+        // the digest where the bytes are actually written, which is the only
+        // place that can know it is true; a book whose digest is still empty is
+        // hashed by `PersistenceSync.backfillEPUBDigests`.
         work.preservedAt = newest(work.preservedAt, archived.preservedAt)
         work.lastPreservationAttemptAt = newest(
             work.lastPreservationAttemptAt,

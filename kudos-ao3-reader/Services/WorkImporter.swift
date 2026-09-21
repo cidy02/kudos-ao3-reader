@@ -255,7 +255,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
         }
         applyUserImportMetadata(inspection, to: duplicate, fillOnly: true)
         if !duplicate.hasEPUB {
-            try copyImportedEPUB(from: url, to: duplicate.fileURL)
+            try copyImportedEPUB(from: url, into: duplicate)
             duplicate.hasEPUB = true
             duplicate.markModified()
             WorkSearchIndex.reindex(duplicate)
@@ -281,7 +281,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
     work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
     work.markModified()
 
-    try copyImportedEPUB(from: url, to: work.fileURL)
+    try copyImportedEPUB(from: url, into: work)
 
     context.insert(work)
     WorkSearchIndex.reindex(work)
@@ -544,6 +544,17 @@ private func fileSize(of url: URL) -> UInt64? {
     }
     if let number = value as? NSNumber { return number.uint64Value }
     return value as? UInt64
+}
+
+/// Installs an imported EPUB as `work`'s file and stamps the content identity,
+/// the way `ReadingQueueService.replaceEPUB` does for every other write path.
+/// Without this the digest left over from a previous, freed copy would survive
+/// beside the new bytes and tell peers an equal-sized correction is the file
+/// they already have.
+private func copyImportedEPUB(from source: URL, into work: SavedWork) throws {
+    try copyImportedEPUB(from: source, to: work.fileURL)
+    work.epubDigest = Storage.fileDigest(at: work.fileURL) ?? ""
+    work.remoteEPUBPending = false
 }
 
 private func copyImportedEPUB(from source: URL, to destination: URL) throws {

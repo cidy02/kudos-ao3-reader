@@ -166,7 +166,12 @@ struct CollectionDetailView: View {
                             get: { collection.hue },
                             set: { newValue in
                                 collection.hue = newValue
-                                collection.markMembershipChanged()
+                                // Not `markMembershipChanged` — a colour is not
+                                // a choice about contents, and stamping that
+                                // clock here would make recolouring a
+                                // collection override a removal made on another
+                                // device.
+                                collection.markModified()
                                 context.saveBestEffort(reason: "Saving collection colour failed")
                             }
                         ),
@@ -371,7 +376,9 @@ struct CollectionDetailView: View {
                     let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         collection.name = trimmed
-                        collection.markMembershipChanged()
+                        // A rename says nothing about membership — see the
+                        // colour setter above.
+                        collection.markModified()
                         try? context.save()
                     }
                 }

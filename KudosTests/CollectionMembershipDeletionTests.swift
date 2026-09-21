@@ -143,5 +143,83 @@ struct CollectionMembershipDeletionTests {
 
         #expect(summary.removedCollectionMemberships == 0)
     }
+
+    /// The archive's own clock is the only one that can see a re-add.
+    ///
+    /// The other device removed the work, then put it back. Both events are
+    /// newer than this device's last membership choice, so the walk over the
+    /// archive's list correctly re-added it — and then the sweep, which judges
+    /// against the LOCAL clock, deleted it again in the same pass. Every
+    /// subsequent sync repeated the deletion, so the re-add could never land.
+    @Test func aReAddTheArchiveVouchesForSurvivesTheSweep() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        // This device last chose these contents long before either event.
+        let local = try local(chosenAt: Date(timeIntervalSince1970: 1_000))
+
+        let tomb = SyncTombstone(
+            recordID: SyncTombstone.collectionMembershipID(
+                collectionID: local.collection.id, workID: local.work.id
+            ),
+            recordType: .workCollectionMembership,
+            createdAt: Self.deletedElsewhereAt
+        )
+        tomb.lastModifiedAt = Self.deletedElsewhereAt
+        TombstoneSigning.sign(tomb, key: peer)
+
+        // The archive puts the work back, after the removal it carries.
+        let staging = try makeContext()
+        let archivedWork = SavedWork(id: local.work.id, title: "Shelved", author: "Writer")
+        let archivedCollection = WorkCollection(name: "Comfort reads")
+        archivedCollection.id = local.collection.id
+        staging.insert(archivedWork)
+        staging.insert(archivedCollection)
+        archivedCollection.works.append(archivedWork)
+        archivedWork.collections.append(archivedCollection)
+        archivedCollection.markMembershipChanged(Date(timeIntervalSince1970: 9_000))
+        try staging.save()
+
+        let summary = try KudosBackupService.restore(
+            try KudosBackupService.makeContents(
+                works: [archivedWork], bookmarks: [], fonts: [],
+                collections: [archivedCollection], readingQueues: [],
+                tombstones: [tomb], defaults: defaults
+            ),
+            into: local.context, defaults: defaults, mode: .merge
+        )
+
+        #expect(summary.removedCollectionMemberships == 0)
+        #expect(local.collection.works.count == 1)
+    }
+
+    /// `lastMembershipChangedAt` answers "when did this device's reader last
+    /// choose what is in this collection". Renaming or recolouring it is not
+    /// an answer to that question, and stamping the clock there made a
+    /// cosmetic edit outrank a removal made on another device — undoing it,
+    /// and republishing the membership so the other device took it back too.
+    @Test func renamingACollectionDoesNotOverrideARemovalElsewhere() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let local = try local(chosenAt: Date(timeIntervalSince1970: 1_000))
+
+        // What the rename sheet and the colour picker do, long after the
+        // removal the peer's tombstone records. This stands in for the call
+        // sites rather than driving them — the guard here is the model
+        // contract they depend on: `markModified` must not answer a question
+        // only `markMembershipChanged` is entitled to answer.
+        let chosenAt = local.collection.lastMembershipChangedAt
+        local.collection.name = "Comfort rereads"
+        local.collection.markModified(Date(timeIntervalSince1970: 9_000))
+        try local.context.save()
+        #expect(local.collection.lastMembershipChangedAt == chosenAt)
+
+        let summary = try KudosBackupService.restore(
+            try peerBackup(local, key: peer, defaults: defaults),
+            into: local.context, defaults: defaults, mode: .merge
+        )
+
+        #expect(summary.removedCollectionMemberships == 1)
+        #expect(local.collection.works.isEmpty)
+    }
 }
 }

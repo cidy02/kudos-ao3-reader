@@ -734,6 +734,20 @@ nonisolated private func readChangedRemoteAssets(
         // miss locally, exactly like the old whole-package path, rather than
         // retrying forever. A late upload is picked up when it materializes as
         // a placeholder or on the next manifest change.
+        //
+        // Deliberately NOT counted as an outstanding asset. Doing that was
+        // tried: it withholds the skip stamp, and a remote EPUB that is gone
+        // for good then keeps every later sync-down doing a full manifest read
+        // and restore, for ever — which is what
+        // `syncDownSkipsUnchangedRemotePackage` and
+        // `syncDownConvergesWhenFontLibraryExceedsAggregateCap` exist to stop.
+        // The case worth catching is already caught one line down: iCloud
+        // publishes a placeholder for a file it has not finished downloading,
+        // `remoteAssetExists` sees it, the read below fails, and THAT counts as
+        // outstanding — see `syncDownRetriesManifestReferencedEPUBOnceItAppears`.
+        // What is left uncovered is only the window where a manifest is visible
+        // and its EPUB is not yet listed at all, which ends as soon as the
+        // directory listing catches up or anything edits the manifest again.
         guard remoteAssetExists(remoteURL) else { continue }
         // Size is the change signal: EPUB replacements virtually never keep the
         // exact byte count, and the restore path re-validates whatever arrives.
