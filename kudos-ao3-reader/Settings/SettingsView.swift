@@ -937,31 +937,51 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Writes a timestamped copy of the current library so Replace can be undone
-    /// by importing that file. Returns a user-visible path or an error string.
+    /// Writes a copy of the current library so Replace can be undone by importing
+    /// that file. Returns a user-visible filename or the error to show.
+    ///
+    /// **This is the only undo a Replace has**, so it is written defensively:
+    ///
+    /// - The name carries a time, not just a date, and the write refuses to
+    ///   overwrite. It used to be `yyyy-MM-dd` written with plain `.atomic`, so
+    ///   *opening* the Replace sheet a second time on the same day — this runs
+    ///   from `onAppear`, and cancelling still ran it — silently wrote the
+    ///   ALREADY-REPLACED library over the original copy. The one file that
+    ///   could undo the first replace was destroyed by considering a second.
+    /// - It retries. A single failure is not proof that the disk cannot take a
+    ///   copy, and the alternative to a copy is an unrecoverable replace.
+    ///
+    /// `PreReplaceBackupNaming` owns the naming so it can be tested without a
+    /// SwiftUI view.
     private func makePreReplaceBackup() -> Result<String, Error> {
-        do {
-            let contents = try KudosBackupService.makeContents(
-                works: works,
-                bookmarks: bookmarks,
-                fonts: customFonts,
-                collections: collections,
-                readingQueues: readingQueues,
-                annotations: readingAnnotations,
-                savedSearches: savedSearches,
-                readingSessions: readingSessions,
-                readingFavorites: readingFavorites,
-                fandomReadWatermarks: fandomReadWatermarks,
-                tombstones: syncTombstones
-            )
-            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let name = "Kudos Library Before Replace \(Self.backupDateFormatter.string(from: Date()))"
-            let url = docs.appendingPathComponent(name).appendingPathExtension("kudosbackup")
-            try contents.zipData().write(to: url, options: .atomic)
-            return .success(url.lastPathComponent)
-        } catch {
-            return .failure(error)
+        var lastError: Error?
+        for attempt in 0 ..< PreReplaceBackupNaming.attemptLimit {
+            do {
+                let contents = try KudosBackupService.makeContents(
+                    works: works,
+                    bookmarks: bookmarks,
+                    fonts: customFonts,
+                    collections: collections,
+                    readingQueues: readingQueues,
+                    annotations: readingAnnotations,
+                    savedSearches: savedSearches,
+                    readingSessions: readingSessions,
+                    readingFavorites: readingFavorites,
+                    fandomReadWatermarks: fandomReadWatermarks,
+                    tombstones: syncTombstones
+                )
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let url = PreReplaceBackupNaming.url(in: docs, at: Date(), attempt: attempt)
+                // `.withoutOverwriting` is the guarantee, not the name: even if
+                // two attempts land in the same second, the second refuses
+                // rather than clobbering the first.
+                try contents.zipData().write(to: url, options: [.atomic, .withoutOverwriting])
+                return .success(url.lastPathComponent)
+            } catch {
+                lastError = error
+            }
         }
+        return .failure(lastError ?? CocoaError(.fileWriteUnknown))
     }
 
     private func applyRestoredTheme(_ settings: KudosBackupSettings) {
@@ -1585,6 +1605,25 @@ struct ReplaceLibraryConfirmationView: View {
     @State private var replaceEnabled = false
     @State private var backupFileName: String?
     @State private var backupError: String?
+    /// Whether this presentation actually produced an undo copy.
+    @State private var backupSucceeded = false
+    /// Whether to offer the override. True only when the safety backup failed
+    /// AND it had already failed on a previous attempt — so a first failure
+    /// blocks outright and only a deliberate retry can opt out.
+    @State private var offersRiskOverride = false
+    @State private var riskAccepted = false
+    /// Survives this sheet so "they tried again" is knowable at all.
+    @AppStorage("backup.replaceBlockedBySafetyFailure") private var wasBlockedBefore = false
+
+    /// Replace needs the deliberation delay AND a real undo copy — or, on a
+    /// repeat attempt, an explicit acceptance of the risk. The delay alone used
+    /// to be the whole gate, so a failed safety backup showed an error and then
+    /// let the destructive action proceed anyway.
+    private var canReplace: Bool {
+        guard replaceEnabled else { return false }
+        if backupSucceeded { return true }
+        return offersRiskOverride && riskAccepted
+    }
 
     /// Same identity order restore uses: ao3WorkID → canonical sourceURL → recordID.
     private var replaceDelta: (willAdd: Int, willRemove: Int, inBoth: Int) {
@@ -1595,6 +1634,46 @@ struct ReplaceLibraryConfirmationView: View {
     private var willAdd: Int { replaceDelta.willAdd }
     private var inBoth: Int { replaceDelta.inBoth }
     private var backupIsMuchSmaller: Bool { willRemove >= 20 && willRemove >= willAdd * 10 }
+
+    /// What the undo copy did or did not do, and the way out if it failed twice.
+    ///
+    /// Its own property because this view's `Form` is already long enough that
+    /// adding branches inline pushes the type checker past its limit in this
+    /// file — the same reason `AboutSettingsSection` was split out.
+    @ViewBuilder
+    private var safetyBackupStatus: some View {
+        if let backupFileName, backupSucceeded {
+            Text("A copy of your current library was saved as \(backupFileName).")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        if let backupError {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Could not save an undo copy")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.red)
+                Text(backupError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                if offersRiskOverride {
+                    Text("This is the second time. Replacing now will delete works "
+                        + "with no way to undo it — there is no copy of your current "
+                        + "library to put back.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                    Toggle(isOn: $riskAccepted) {
+                        Text("I understand the risks")
+                            .font(.footnote.weight(.semibold))
+                    }
+                } else {
+                    Text("Replace is blocked until a copy can be saved. Free some "
+                        + "space and try again.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -1622,16 +1701,7 @@ struct ReplaceLibraryConfirmationView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    if let backupFileName {
-                        Text("A copy of your current library was saved as \(backupFileName).")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let backupError {
-                        Text("Could not save an undo copy: \(backupError)")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
+                    safetyBackupStatus
                 } footer: {
                     Text("Replace Library only changes this device. It does not plant "
                         + "deletion records that would block a later Merge of your own backup.")
@@ -1649,14 +1719,26 @@ struct ReplaceLibraryConfirmationView: View {
                     Button("Replace Library") {
                         onConfirm(syncIsConnected && pauseSync)
                     }
-                    .disabled(!replaceEnabled)
-                    .foregroundStyle(replaceEnabled ? .red : .secondary)
+                    .disabled(!canReplace)
+                    .foregroundStyle(canReplace ? .red : .secondary)
                 }
             }
             .onAppear {
+                // Read BEFORE recording this attempt, or a first failure would
+                // immediately look like a repeat and offer its own override.
+                let hadBeenBlocked = wasBlockedBefore
                 switch makePreReplaceBackup() {
-                case let .success(name): backupFileName = name
-                case let .failure(error): backupError = error.localizedDescription
+                case let .success(name):
+                    backupFileName = name
+                    backupSucceeded = true
+                    // A good copy clears the escalation: the next Replace starts
+                    // from a blocked state again rather than a standing override.
+                    wasBlockedBefore = false
+                case let .failure(error):
+                    backupError = error.localizedDescription
+                    backupSucceeded = false
+                    offersRiskOverride = hadBeenBlocked
+                    wasBlockedBefore = true
                 }
             }
             .onChange(of: acknowledgedRemoval) { _, checked in
@@ -1668,6 +1750,43 @@ struct ReplaceLibraryConfirmationView: View {
                 }
             }
         }
+    }
+}
+
+/// Names the pre-replace safety copy.
+///
+/// Its own type so the uniqueness rule can be tested: this file is a SwiftUI
+/// view and `makePreReplaceBackup` cannot be called from a test.
+nonisolated enum PreReplaceBackupNaming {
+    /// How many times a safety backup is attempted before Replace is blocked.
+    /// More than one because a single write failure is not proof the disk is
+    /// full, and the cost of wrongly giving up is an unrecoverable replace.
+    static let attemptLimit = 3
+
+    static let fileExtension = "kudosbackup"
+
+    /// Seconds, not just the date. A date alone meant every copy taken on one
+    /// day shared a filename.
+    static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        return formatter
+    }()
+
+    static func fileName(at date: Date, attempt: Int) -> String {
+        let stamp = timestampFormatter.string(from: date)
+        // A retry within the same second still gets its own name, so the retry
+        // cannot be the thing that overwrites the copy it is retrying for.
+        let suffix = attempt == 0 ? "" : " (\(attempt + 1))"
+        return "Kudos Library Before Replace \(stamp)\(suffix)"
+    }
+
+    static func url(in directory: URL, at date: Date, attempt: Int) -> URL {
+        directory
+            .appendingPathComponent(fileName(at: date, attempt: attempt))
+            .appendingPathExtension(fileExtension)
     }
 }
 
