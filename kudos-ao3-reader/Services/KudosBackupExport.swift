@@ -1,5 +1,6 @@
 import CoreTransferable
 import Foundation
+import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -114,10 +115,36 @@ extension KudosBackupService {
             guard seenNames.insert(entryName).inserted else { continue }
             assets.append(.init(entryName: entryName, fileURL: work.fileURL))
         }
-        for font in fonts.sorted(by: { $0.fileName < $1.fileName })
-        where KudosBackupContents.isSafeFileName(font.fileName) {
-            let entryName = "Fonts/\(font.fileName)"
+        // Fonts a restore would refuse are left out of the archive rather than
+        // carried into it. Restore rejects the entire backup over one bad font,
+        // so including it trades a decoration for the whole library — and a
+        // library already holding such a font, installed back when nothing
+        // checked, still exports something that restores.
+        //
+        // The manifest goes on listing them: restore skips a font whose bytes
+        // are absent, and the entry preserves the name so the reader can see
+        // what to install again. Dropping it from the manifest instead would
+        // drop the `readerFontID` pointing at it.
+        var aggregateFontBytes = 0
+        for font in fonts.sorted(by: { $0.fileName < $1.fileName }) {
+            let name = font.fileName
+            let entryName = "Fonts/\(name)"
+            guard let data = try? Data(contentsOf: font.fileURL, options: .mappedIfSafe) else {
+                Log.library.error("Backup skips unreadable font \(name, privacy: .public).")
+                continue
+            }
+            if let reason = KudosBackupContents.fontRejectionReason(fileName: name, data: data) {
+                Log.library.error("Backup skips font \(name, privacy: .public): \(reason, privacy: .public)")
+                continue
+            }
+            // The total cap sinks a backup just as firmly as the per-font one,
+            // so eight individually-valid fonts can still cost a library.
+            guard aggregateFontBytes <= KudosBackupContents.maxTotalFontBytes - data.count else {
+                Log.library.error("Backup skips font \(name, privacy: .public): total reached.")
+                continue
+            }
             guard seenNames.insert(entryName).inserted else { continue }
+            aggregateFontBytes += data.count
             assets.append(.init(entryName: entryName, fileURL: font.fileURL))
         }
 
