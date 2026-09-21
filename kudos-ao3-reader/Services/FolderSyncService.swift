@@ -379,15 +379,43 @@ enum FolderSyncService {
                 syncDirectoryName,
                 isDirectory: true
             )
+            let manifestURL = syncDirectoryURL.appendingPathComponent(manifestFileName)
+            // Orphan pruning is only safe when this device's view of the folder
+            // is current.
+            //
+            // The automatic path (`FolderSyncObserver.scheduleFolderSyncUp`)
+            // calls `syncUp` ALONE, seven seconds after any local change — no
+            // sync-down first. So a device that never learned about another
+            // device's new work published a manifest without it, and the prune
+            // below deleted that work's remote EPUB: the local copy survived,
+            // the backup copy did not. Pruning by manifest membership is right,
+            // but only when the manifest being published is informed.
+            //
+            // "Current" means the remote manifest has not moved since the last
+            // one this device restored or wrote. A missing manifest is the
+            // first write and has nothing to lose. When the view is stale the
+            // prune is skipped and stale files simply remain — a later sync
+            // from an informed device clears them, and leftover bytes are not
+            // a data loss.
+            let storedStamp = defaults.object(forKey: lastRestoredRemoteStampKey) as? Date
+            let remoteStampBeforeWrite = try? manifestURL.resourceValues(
+                forKeys: [.contentModificationDateKey]
+            ).contentModificationDate
+            let viewIsCurrent = remoteStampBeforeWrite == nil
+                || remoteStampBeforeWrite == storedStamp
+
             try await Task.detached {
-                try coordinatedWriteSyncDirectory(contents, to: syncDirectoryURL)
+                try coordinatedWriteSyncDirectory(
+                    contents,
+                    to: syncDirectoryURL,
+                    pruneOrphans: viewIsCurrent
+                )
             }.value
             result.didWriteRemoteFile = true
             // Stamp our own manifest write so the next sync-down doesn't fully
             // re-restore it — unless a previous sync-down still has asset
             // fetches outstanding, in which case the stamp stays withheld so
             // those fetches retry.
-            let manifestURL = syncDirectoryURL.appendingPathComponent(manifestFileName)
             if !defaults.bool(forKey: pendingRemoteAssetsKey),
                let stamp = try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey])
                    .contentModificationDate {
@@ -756,7 +784,8 @@ nonisolated private func remoteAssetExists(_ url: URL) -> Bool {
 
 nonisolated private func coordinatedWriteSyncDirectory(
     _ contents: KudosBackupContents,
-    to directoryURL: URL
+    to directoryURL: URL,
+    pruneOrphans: Bool = true
 ) throws {
     let coordinator = NSFileCoordinator(filePresenter: nil)
     var coordinationError: NSError?
@@ -767,7 +796,9 @@ nonisolated private func coordinatedWriteSyncDirectory(
         error: &coordinationError
     ) { coordinatedURL in
         writeResult = Result {
-            try writeSyncDirectoryContents(contents, at: coordinatedURL)
+            try writeSyncDirectoryContents(
+                contents, at: coordinatedURL, pruneOrphans: pruneOrphans
+            )
         }
     }
     if let coordinationError { throw coordinationError }
@@ -776,7 +807,8 @@ nonisolated private func coordinatedWriteSyncDirectory(
 
 nonisolated private func writeSyncDirectoryContents(
     _ contents: KudosBackupContents,
-    at directoryURL: URL
+    at directoryURL: URL,
+    pruneOrphans: Bool
 ) throws {
     let fileManager = FileManager.default
     let worksDirectory = directoryURL.appendingPathComponent(
@@ -814,14 +846,16 @@ nonisolated private func writeSyncDirectoryContents(
     // later sync-up. A work still listed in the manifest keeps its remote EPUB
     // even when this device holds no local copy, so one device can never
     // discard an EPUB another device preserved.
-    removeOrphans(
-        in: worksDirectory,
-        keeping: Set(contents.manifest.works.map { "\($0.id.uuidString).epub" })
-    )
-    removeOrphans(
-        in: fontsDirectory,
-        keeping: Set(contents.manifest.fonts.map(\.fileName))
-    )
+    if pruneOrphans {
+        removeOrphans(
+            in: worksDirectory,
+            keeping: Set(contents.manifest.works.map { "\($0.id.uuidString).epub" })
+        )
+        removeOrphans(
+            in: fontsDirectory,
+            keeping: Set(contents.manifest.fonts.map(\.fileName))
+        )
+    }
 }
 
 nonisolated private func writeIfChanged(_ data: Data, to url: URL) throws {
