@@ -36,6 +36,10 @@ nonisolated enum MiniZipError: LocalizedError, Equatable {
 private struct ZipEntry {
     let name: String
     let method: UInt16
+    /// The entry's declared CRC-32, read straight from the central directory.
+    /// ZIP64 relocates sizes and the local-header offset into an extra field
+    /// but never the CRC, so this field is always the classic one at +16.
+    let crc: UInt32
     let compressedSize: Int
     let uncompressedSize: Int
     let localHeaderOffset: Int
@@ -124,6 +128,7 @@ nonisolated struct MiniZip {
             }
             guard let flags = data.safeU16(offset + 8),
                   let method = data.safeU16(offset + 10),
+                  let crc = data.safeU32(offset + 16),
                   let compressedSizeRaw = data.safeU32(offset + 20),
                   let uncompressedSizeRaw = data.safeU32(offset + 24),
                   let nameLenRaw = data.safeU16(offset + 28),
@@ -181,6 +186,7 @@ nonisolated struct MiniZip {
             parsed.append(ZipEntry(
                 name: name,
                 method: method,
+                crc: crc,
                 compressedSize: compressedSize,
                 uncompressedSize: uncompressedSize,
                 localHeaderOffset: localHeaderOffset
@@ -212,6 +218,19 @@ nonisolated struct MiniZip {
     func uncompressedSize(named name: String) -> Int? {
         guard let index = entryIndexByName[name] else { return nil }
         return entries[index].uncompressedSize
+    }
+
+    /// The CRC-32 the archive declares for an entry, for a caller that wants to
+    /// check extracted bytes against it.
+    ///
+    /// Deliberately not enforced inside `extract`: this reader is shared with
+    /// reader-supplied EPUBs, where a wrong CRC should not stop a book opening,
+    /// and the hostile-archive fixtures build records that declare a CRC of
+    /// zero. Callers who wrote the archive themselves — `.kudosbackup` — know
+    /// the value is real and check it.
+    func declaredCRC32(named name: String) -> UInt32? {
+        guard let index = entryIndexByName[name] else { return nil }
+        return entries[index].crc
     }
 
     /// Unzips every file entry, preserving relative paths. Extraction happens in
