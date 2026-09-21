@@ -1695,6 +1695,36 @@ struct ReplaceLibraryConfirmationView: View {
     @State private var replaceEnabled = false
     @State private var backupFileName: String?
     @State private var backupError: String?
+    /// What Replace actually does, because the previous wording was not true.
+    ///
+    /// It read: "It does not plant deletion records that would block a later
+    /// Merge of your own backup." That holds for works — they are soft-deleted
+    /// into Recently Deleted with no tombstone, and the code says why: standing
+    /// tombstones would block a later merge. It does not hold for the
+    /// immediate-delete classes. Replace hard-deletes saved links, saved
+    /// searches, reading history, stars and fandom watermarks and mints a
+    /// signed tombstone for each, which is exactly a deletion record that
+    /// blocks a later Merge. `replaceThenMergeDoesNotResurrectOmittedBookmarkOrSavedSearch`
+    /// pins that on purpose: without the tombstone, merging any older backup
+    /// would resurrect them.
+    ///
+    /// So the behaviour stays and the sentence changes — and it now names the
+    /// recovery that does work. Restore bypasses tombstones entirely in
+    /// `.replaceLibrary`, so importing the undo copy with **Replace** brings
+    /// these records back, while importing it with Merge silently will not.
+    /// That is the difference between an undo and a promise of one, and this is
+    /// the screen where the reader decides.
+    ///
+    /// Held as one string rather than built in the body: this view is already
+    /// at the type checker's limit.
+    private static let replaceFooterText = """
+        Replace Library only changes this device. Works it removes go to Recently \
+        Deleted, so a later Merge can bring them back. Saved links, saved searches, \
+        reading history, stars and fandom watermarks are removed outright and \
+        recorded as deletions, which a Merge will not undo. To undo this \
+        completely, import the undo copy with Replace rather than Merge.
+        """
+
     /// Whether this presentation actually produced an undo copy.
     @State private var backupSucceeded = false
     /// Whether to offer the override. True only when the safety backup failed
@@ -1793,8 +1823,7 @@ struct ReplaceLibraryConfirmationView: View {
                     }
                     safetyBackupStatus
                 } footer: {
-                    Text("Replace Library only changes this device. It does not plant "
-                        + "deletion records that would block a later Merge of your own backup.")
+                    Text(Self.replaceFooterText)
                 }
             }
             .navigationTitle("Replace Library")
