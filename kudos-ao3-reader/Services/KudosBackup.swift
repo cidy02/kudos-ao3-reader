@@ -77,11 +77,34 @@ nonisolated struct KudosBackupContents {
             return names
         }
 
+        /// Every manifest, work and font byte a ZIP-backed restore reads comes
+        /// through here, which makes it the one place worth checking the CRC-32
+        /// the export already computed for each entry. `MiniZip.extract` does
+        /// not check it — it is shared with reader-supplied EPUBs, where a bad
+        /// checksum should not stop a book opening — so until now a flipped
+        /// byte anywhere in a `.kudosbackup` restored silently.
+        ///
+        /// A failure reads as absent rather than throwing, which is the safe
+        /// direction for every caller: `epubData` returning nil leaves the
+        /// work's existing local file alone instead of overwriting a good copy
+        /// with a damaged one, and a corrupt `manifest.json` still fails the
+        /// import outright because its callers require it.
         func data(named name: String) -> Data? {
             lock.lock()
             names.append(name)
             lock.unlock()
-            return zip.data(named: name)
+            guard let payload = zip.data(named: name) else { return nil }
+            guard let declared = zip.declaredCRC32(named: name) else { return payload }
+            guard MiniZip.crc32(payload) == declared else {
+                Log.library.error(
+                    """
+                    Backup entry \(name, privacy: .public) failed its CRC-32 check; \
+                    treating it as missing rather than restoring damaged bytes.
+                    """
+                )
+                return nil
+            }
+            return payload
         }
     }
 
