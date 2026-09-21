@@ -47,8 +47,18 @@ struct PrivacyDataView: View {
 
     /// Works whose file was already freed — the local reading history the
     /// existing "Clear Reading History" action moves to Recently Deleted.
+    ///
+    /// Gated on `isProtected`, not on `isQueuedForLater` alone. The confirmation
+    /// promises "Your saved and downloaded works are not affected", and the old
+    /// filter did not keep it: a work the reader had SAVED or FAVOURITED but
+    /// never downloaded has no EPUB, so it matched, and clearing history
+    /// soft-deleted the very records the dialog said it would leave alone.
+    ///
+    /// `isProtected` also covers non-AO3 imports and works AO3 has 404'd — both
+    /// of which the dialog's other promise, that the works "can be re-downloaded
+    /// from AO3 anytime", is simply untrue for.
     private var freedHistory: [SavedWork] {
-        works.filter { !$0.hasEPUB && !$0.isQueuedForLater }
+        works.filter { !$0.hasEPUB && !$0.isProtected }
     }
 
     @State private var footprint = LocalStorageFootprint()
