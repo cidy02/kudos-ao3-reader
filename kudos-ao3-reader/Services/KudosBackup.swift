@@ -2001,58 +2001,66 @@ enum KudosBackupService {
     /// `replaceEPUB` runs, so it moves into place instead of replacing — there
     /// is nothing left for `backupItemName: nil` to throw away.
     final class EPUBDisplacementJournal {
-        private let directory: URL
         private var moves: [(original: URL, parked: URL)] = []
-        private var createdDirectory = false
 
-        init() {
-            directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("KudosRestoreJournal-\(UUID().uuidString)", isDirectory: true)
-        }
-
-        /// Moves whatever is at `url` aside. A missing file is not an error —
-        /// there is simply nothing to protect.
+        /// Parks whatever is at `url` beside itself. A missing file is not an
+        /// error — there is nothing to protect.
+        ///
+        /// Beside, deliberately, and not in `temporaryDirectory`. A park across
+        /// volumes is a copy: putting a large book back then needs room for a
+        /// second copy at exactly the moment the disk is full, and the failure
+        /// would land on the recovery path. Renaming within one directory needs
+        /// no free space, cannot half-copy, and keeps the only remaining copy
+        /// somewhere the system will not purge between a crash and the next
+        /// launch.
         func displace(_ url: URL) throws {
             let fileManager = FileManager.default
             guard fileManager.fileExists(atPath: url.path) else { return }
-            if !createdDirectory {
-                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-                createdDirectory = true
-            }
-            let parked = directory.appendingPathComponent(
-                "\(moves.count)-\(url.lastPathComponent)"
+            let parked = url.deletingLastPathComponent().appendingPathComponent(
+                ".kudos-restore-\(UUID().uuidString)-\(url.lastPathComponent)"
             )
             try fileManager.moveItem(at: url, to: parked)
             moves.append((original: url, parked: parked))
         }
 
-        /// Puts back the one file parked for `url`. Used when the replacement
-        /// for a single work failed and the rest of the restore carries on.
+        /// Puts back the one file parked for `url`, used when a single work is
+        /// skipped and the restore carries on. The entry is kept if the move
+        /// back fails, so the later sweep tries again rather than discarding it.
         func undoDisplacement(of url: URL) {
             guard let index = moves.lastIndex(where: { $0.original == url }) else { return }
-            let move = moves.remove(at: index)
-            putBack(move)
+            if putBack(moves[index]) { moves.remove(at: index) }
         }
 
-        /// Puts every parked file back, newest first. Best effort by necessity:
-        /// this runs when something has already gone wrong, and a file it
-        /// cannot move back is one nothing else could have saved either.
+        /// Puts every parked file back, newest first. An entry that will not go
+        /// back is LEFT on disk under its parked name rather than tidied away:
+        /// at that point it is the reader's only copy, and a failure here is
+        /// exactly when it must not be deleted.
         func restoreDisplaced() {
-            for move in moves.reversed() { putBack(move) }
-            moves.removeAll()
-            try? FileManager.default.removeItem(at: directory)
+            moves = moves.reversed().filter { !putBack($0) }
         }
 
-        /// The restore committed. The parked copies are the old versions now.
+        /// The restore committed, so the parked copies are the old versions and
+        /// can go. Only reached on success.
         func discard() {
+            let fileManager = FileManager.default
+            for move in moves { try? fileManager.removeItem(at: move.parked) }
             moves.removeAll()
-            try? FileManager.default.removeItem(at: directory)
         }
 
-        private func putBack(_ move: (original: URL, parked: URL)) {
+        private func putBack(_ move: (original: URL, parked: URL)) -> Bool {
             let fileManager = FileManager.default
-            try? fileManager.removeItem(at: move.original)
-            try? fileManager.moveItem(at: move.parked, to: move.original)
+            do {
+                if fileManager.fileExists(atPath: move.original.path) {
+                    try fileManager.removeItem(at: move.original)
+                }
+                try fileManager.moveItem(at: move.parked, to: move.original)
+                return true
+            } catch {
+                Log.library.error(
+                    "A displaced EPUB could not be put back; it is kept at its parked name."
+                )
+                return false
+            }
         }
     }
 
@@ -2143,10 +2151,16 @@ enum KudosBackupService {
                 // verifying. `shouldAdopt` already vouched for this pair.
                 held.signerPublicKey = adopted.signerPublicKey
                 held.signature = adopted.signature
+                // `ao3WorkID` and the canonical `sourceURL` are INSIDE the signed
+                // payload (`TombstoneSigning.payload`), so they travel with the
+                // signature or the row stops verifying. Keeping a local value
+                // "because it was populated" paired one identity with another
+                // one's signature: re-exported it was rejected by peers, and
+                // locally it went on suppressing the record it no longer named.
+                held.sourceURL = adopted.sourceURL
+                held.ao3WorkID = adopted.ao3WorkID
                 held.deletedOnDeviceID = adopted.deletedOnDeviceID
                 held.deletionReason = adopted.deletionReason
-                if held.sourceURL.isEmpty { held.sourceURL = adopted.sourceURL }
-                if held.ao3WorkID == nil { held.ao3WorkID = adopted.ao3WorkID }
                 continue
             }
 

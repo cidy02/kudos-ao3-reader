@@ -125,6 +125,54 @@ struct NewestTombstoneWinsTests {
         #expect(works.isEmpty)
     }
 
+    /// The adopted row must still verify.
+    ///
+    /// `ao3WorkID` and the canonical `sourceURL` are inside the signed payload
+    /// (`TombstoneSigning.payload`), so they have to travel with the signature.
+    /// Keeping a populated local identity beside an incoming signature produced
+    /// a row that peers reject on re-export, and that locally went on
+    /// suppressing a record it no longer named. Found by adversarial review.
+    @Test func theAdoptedRowStillVerifiesAndTakesTheSignedIdentity() throws {
+        let defaults = try testDefaults()
+        let peer = try trustedPeer(defaults)
+        let context = try makeContext()
+        let workID = UUID()
+
+        let local = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/111",
+            ao3WorkID: 111,
+            createdAt: Self.earlier
+        )
+        local.lastModifiedAt = Self.earlier
+        context.insert(local)
+        try context.save()
+
+        let peerTomb = SyncTombstone(
+            recordID: workID,
+            recordType: .savedWork,
+            sourceURL: "https://archiveofourown.org/works/222",
+            ao3WorkID: 222,
+            createdAt: Self.later
+        )
+        peerTomb.lastModifiedAt = Self.later
+        TombstoneSigning.sign(peerTomb, key: peer)
+        let backup = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [],
+            tombstones: [peerTomb], defaults: defaults
+        )
+
+        _ = try KudosBackupService.restore(backup, into: context, defaults: defaults, mode: .merge)
+
+        #expect(local.ao3WorkID == 222)
+        #expect(TombstoneSigning.verify(
+            payload: TombstoneSigning.payload(for: local, signerPublicKey: local.signerPublicKey),
+            publicKeyHex: local.signerPublicKey,
+            signatureHex: local.signature
+        ))
+    }
+
     /// Guard: an *older* incoming tombstone must not widen anything or replace
     /// the later one already on file.
     @Test func anOlderIncomingTombstoneLeavesTheLaterOneAlone() throws {
