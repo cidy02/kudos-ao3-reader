@@ -16,8 +16,6 @@ struct BackupImportSheet: View {
     let manifest: KudosBackupManifest
     let localWorks: [SavedWork]
     let syncIsConnected: Bool
-    /// Imported originals on this device, which a backup does not carry.
-    let preservedOriginalCount: Int
     let onMerge: () -> Void
     let onReplace: (Bool) -> Void
     let onCancel: () -> Void
@@ -50,7 +48,6 @@ struct BackupImportSheet: View {
                 contentsSection
                 mergeSection
                 if !localWorks.isEmpty { replaceSection }
-                if preservedOriginalCount > 0 { originalsSection }
             }
             .appThemedRows()
             .appThemedScroll()
@@ -97,20 +94,5 @@ struct BackupImportSheet: View {
                 + "backup says, and works it does not contain are removed. "
                 + "You will be asked to confirm, and an undo copy is written first.")
         }
-    }
-
-    private var originalsSection: some View {
-        Section {
-            Text(originalsMessage)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var originalsMessage: String {
-        let noun = preservedOriginalCount == 1 ? "original file is" : "original files are"
-        return "\(preservedOriginalCount.formatted()) imported \(noun) kept on this "
-            + "device only. A backup carries converted EPUBs, not the documents they "
-            + "were made from."
     }
 }

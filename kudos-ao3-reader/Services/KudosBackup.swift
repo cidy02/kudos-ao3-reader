@@ -71,6 +71,11 @@ nonisolated struct KudosBackupContents {
     let manifest: KudosBackupManifest
     let epubFiles: [UUID: Data]
     let fontFiles: [String: Data]
+    /// Imported originals, keyed by their on-disk file name (`<workID>.<ext>`,
+    /// and `<workID>.conversion.json` for the record beside it). Named rather
+    /// than keyed by UUID because each work has two of them and the extension
+    /// is the only thing that says what the original actually is.
+    let originalFiles: [String: Data]
     let zip: MiniZip?
     /// Set on the Settings directory-import path so `epubData`/`fontData`
     /// can pull one file at a time. Nil for ZIP and in-memory contents.
@@ -147,12 +152,14 @@ nonisolated struct KudosBackupContents {
         manifest: KudosBackupManifest,
         epubFiles: [UUID: Data] = [:],
         fontFiles: [String: Data] = [:],
+        originalFiles: [String: Data] = [:],
         zip: MiniZip? = nil,
         directoryURL: URL? = nil
     ) {
         self.manifest = manifest
         self.epubFiles = epubFiles
         self.fontFiles = fontFiles
+        self.originalFiles = originalFiles
         self.zip = zip
         self.directoryURL = directoryURL
         self.zipSource = zip.map(ZipSource.init)
@@ -199,6 +206,8 @@ nonisolated struct KudosBackupContents {
             fonts[font.fileName] = data
         }
         fontFiles = fonts
+        // Read lazily from the archive/directory, not held here.
+        originalFiles = [:]
         zip = nil
         directoryURL = nil
         zipSource = nil
@@ -372,6 +381,8 @@ nonisolated struct KudosBackupContents {
         // inflate the payloads until `fontData(for:)` / restore asks.
         epubFiles = [:]
         fontFiles = [:]
+        // Read lazily from the archive/directory, not held here.
+        originalFiles = [:]
         zip = parsed
         zipSource = source
         directoryURL = nil
@@ -397,6 +408,40 @@ nonisolated struct KudosBackupContents {
         }
         if let dir = directoryURL {
             let file = dir.appendingPathComponent("Works/\(id.uuidString).epub")
+            return try? Data(contentsOf: file, options: .mappedIfSafe)
+        }
+        return nil
+    }
+
+    /// File names under `Originals/`, without the prefix.
+    ///
+    /// Discovered from the entry names rather than the manifest: the name is
+    /// `<workID>.<ext>`, which already says which work it belongs to and what
+    /// kind of document it is, so there is nothing a manifest field would add
+    /// and no schema version to argue about.
+    nonisolated var originalFileNames: [String] {
+        if !originalFiles.isEmpty { return originalFiles.keys.sorted() }
+        if let zip {
+            return zip.names
+                .filter { $0.hasPrefix("Originals/") }
+                .map { String($0.dropFirst("Originals/".count)) }
+                .filter { !$0.isEmpty }
+                .sorted()
+        }
+        if let directoryURL {
+            let directory = directoryURL.appendingPathComponent("Originals", isDirectory: true)
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+            return names.filter { !$0.hasPrefix(".") }.sorted()
+        }
+        return []
+    }
+
+    nonisolated func originalData(named fileName: String) -> Data? {
+        guard Self.isSafeFileName(fileName) else { return nil }
+        if let data = originalFiles[fileName] { return data }
+        if let data = zipSource?.data(named: "Originals/\(fileName)") { return data }
+        if let directoryURL {
+            let file = directoryURL.appendingPathComponent("Originals/\(fileName)")
             return try? Data(contentsOf: file, options: .mappedIfSafe)
         }
         return nil
@@ -444,6 +489,10 @@ nonisolated struct KudosBackupContents {
         for (fileName, data) in fontFiles.sorted(by: { $0.key < $1.key })
             where Self.isSafeFileName(fileName) {
             entries.append((name: "Fonts/\(fileName)", data: data))
+        }
+        for (fileName, data) in originalFiles.sorted(by: { $0.key < $1.key })
+            where Self.isSafeFileName(fileName) {
+            entries.append((name: "Originals/\(fileName)", data: data))
         }
         return try MiniZip.archiveData(entries)
     }
@@ -1749,6 +1798,9 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     /// recovered half, and it is the whole point of merging a backup after a
     /// download has gone missing.
     var recoveredMissingEPUBs: Int = 0
+    /// Imported originals written back — the documents converted works were
+    /// made from, which backups did not carry at all until now.
+    var restoredOriginals: Int = 0
     var suppressedAnnotations: Int = 0
     var removedWorks: Int = 0
     var removedCollections: Int = 0
@@ -1770,6 +1822,9 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
         ]
         if recoveredMissingEPUBs > 0 {
             parts.append(line(recoveredMissingEPUBs, "recovered EPUB file", "recovered EPUB files"))
+        }
+        if restoredOriginals > 0 {
+            parts.append(line(restoredOriginals, "imported original", "imported originals"))
         }
         if revivedQueues > 0 {
             parts.append(line(revivedQueues, "restored Reading Queue", "restored Reading Queues"))
@@ -1910,6 +1965,22 @@ enum KudosBackupService {
 
         let queueMemberships = readingQueues.flatMap(\.memberships)
             .compactMap(KudosBackupReadingQueueMembership.init)
+        // Imported originals: the exact file a converted work was made from,
+        // plus the record naming the converter that made it. `preserveOriginal`
+        // calls that copy "insurance"; leaving it out of backups meant it did
+        // not survive the one event it insures against.
+        var originalFiles: [String: Data] = [:]
+        for work in works {
+            guard let original = Storage.existingOriginalDocumentURL(for: work.id) else { continue }
+            if let data = try? Data(contentsOf: original, options: .mappedIfSafe) {
+                originalFiles[original.lastPathComponent] = data
+            }
+            let record = WorkConversionRecord.url(for: work.id)
+            if let data = try? Data(contentsOf: record, options: .mappedIfSafe) {
+                originalFiles[record.lastPathComponent] = data
+            }
+        }
+
         let manifest = KudosBackupManifest(
             works: works.map(KudosBackupWork.init),
             bookmarks: bookmarks.map(KudosBackupBookmark.init),
@@ -1929,7 +2000,8 @@ enum KudosBackupService {
         return KudosBackupContents(
             manifest: manifest,
             epubFiles: epubFiles,
-            fontFiles: fontFiles
+            fontFiles: fontFiles,
+            originalFiles: originalFiles
         )
     }
 
@@ -3022,6 +3094,46 @@ enum KudosBackupService {
             restoredFonts += 1
         }
 
+        // Imported originals, remapped onto the work they actually landed on.
+        // A merge can bind an archived record to a local work with a different
+        // id, and an original filed under the archive's id would then belong to
+        // nothing.
+        var restoredOriginals = 0
+        for fileName in contents.originalFileNames {
+            guard KudosBackupContents.isSafeFileName(fileName),
+                  URL(fileURLWithPath: fileName).lastPathComponent == fileName
+            else { continue }
+            let base = (fileName as NSString).deletingPathExtension
+            let isRecord = base.hasSuffix(".conversion")
+            let archivedIDText = isRecord ? String(base.dropLast(".conversion".count)) : base
+            guard let archivedID = UUID(uuidString: archivedIDText),
+                  let work = restoredWorksByArchivedID[archivedID],
+                  let data = contents.originalData(named: fileName)
+            else { continue }
+
+            let destination = isRecord
+                ? WorkConversionRecord.url(for: work.id)
+                : Storage.originalDocumentURL(
+                    for: work.id,
+                    fileExtension: (fileName as NSString).pathExtension
+                )
+            // Never over one already here. A local original is the file the
+            // reader imported on this device; the archive's is at best the same
+            // bytes and at worst older, and re-conversion reads whichever is
+            // on disk.
+            guard !FileManager.default.fileExists(atPath: destination.path) else { continue }
+            do {
+                try FileManager.default.createDirectory(
+                    at: destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try data.write(to: destination, options: .atomic)
+                if !isRecord { restoredOriginals += 1 }
+            } catch {
+                Log.library.notice("An imported original in this backup could not be written.")
+            }
+        }
+
         var removedWorks = 0
         var removedCollections = 0
         var removedQueues = 0
@@ -3109,6 +3221,7 @@ enum KudosBackupService {
             skippedInvalidEPUBs: skippedInvalidEPUBs,
             worksMissingPromisedEPUB: worksMissingPromisedEPUB,
             recoveredMissingEPUBs: recoveredMissingEPUBs,
+            restoredOriginals: restoredOriginals,
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
             removedCollections: removedCollections,
