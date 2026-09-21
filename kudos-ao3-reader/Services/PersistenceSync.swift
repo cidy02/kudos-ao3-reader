@@ -119,6 +119,16 @@ enum PersistenceMigrationService {
     /// for the whole migration and a caller's loading indicator gets a chance to render.
     private static let yieldInterval = 50
 
+    /// How many books get their content identity computed per reconcile pass.
+    ///
+    /// `epubDigest` is filled in when a book is written, so a library that
+    /// predates the field has none — and sync then falls back to comparing
+    /// byte counts for those, which is the weaker check that let an
+    /// equal-sized correction go unnoticed. Hashing a whole library at once
+    /// would stall a launch, so a bounded number converge per pass and the
+    /// rest follow on later ones.
+    private static let digestBackfillPerPass = 100
+
     @discardableResult
     static func runIfNeeded(
         in context: ModelContext,
@@ -289,11 +299,25 @@ enum PersistenceMigrationService {
     private static func reconcileAssets(in context: ModelContext, stage: String) async throws {
         do {
             var processed = 0
+            var backfilled = 0
             for work in try context.fetch(FetchDescriptor<SavedWork>()) {
                 processed += 1
                 if processed.isMultiple(of: yieldInterval) { await Task.yield() }
                 guard work.modelContext != nil, work.hasEPUB else { continue }
                 if FileManager.default.fileExists(atPath: work.fileURL.path) {
+                    // The book is here and has no content identity yet, so give
+                    // it one. Hashed off the main actor: this walks the whole
+                    // library and the reader is looking at the app while it does.
+                    if work.epubDigest.isEmpty, backfilled < digestBackfillPerPass {
+                        let fileURL = work.fileURL
+                        let digest = await Task.detached(priority: .utility) {
+                            Storage.fileDigest(at: fileURL)
+                        }.value
+                        if let digest {
+                            work.epubDigest = digest
+                            backfilled += 1
+                        }
+                    }
                     continue
                 }
                 work.hasEPUB = false
