@@ -90,6 +90,9 @@ enum FolderSyncService {
     nonisolated static let manifestFileName = "manifest.json"
     nonisolated static let worksSubdirectoryName = "Works"
     nonisolated static let fontsSubdirectoryName = "Fonts"
+    /// The documents converted works were made from. A sync folder is a backup,
+    /// so it carries the same insurance a `.kudosbackup` does.
+    nonisolated static let originalsSubdirectoryName = "Originals"
 
     /// The pre-2026 payload: the whole library as one `.kudosbackup` directory
     /// package. Strictly read-only now — folded into local state during
@@ -327,7 +330,8 @@ enum FolderSyncService {
                 let contents = KudosBackupContents(
                     manifest: manifest,
                     epubFiles: assets.epubFiles,
-                    fontFiles: assets.fontFiles
+                    fontFiles: assets.fontFiles,
+                    originalFiles: assets.originalFiles
                 )
                 let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
                 result.absorb(summary)
@@ -349,7 +353,8 @@ enum FolderSyncService {
                         contents: KudosBackupContents(
                             manifest: conflictManifest,
                             epubFiles: assets.epubFiles,
-                            fontFiles: assets.fontFiles
+                            fontFiles: assets.fontFiles,
+                            originalFiles: assets.originalFiles
                         ),
                         missingAssetCount: assets.missingAssetCount
                     )
@@ -686,6 +691,7 @@ nonisolated private func coordinatedReadManifest(from url: URL) throws -> KudosB
 nonisolated private struct RemoteAssetSelection: Sendable {
     var epubFiles: [UUID: Data] = [:]
     var fontFiles: [String: Data] = [:]
+    var originalFiles: [String: Data] = [:]
     var missingAssetCount = 0
 }
 
@@ -768,6 +774,39 @@ nonisolated private func readChangedRemoteAssets(
             selection.missingAssetCount += 1
         }
     }
+
+    // Imported originals. Fetched only for works this manifest lists, and only
+    // when this device does not already hold one: a local original is the file
+    // the reader imported here, and re-conversion reads whichever is on disk.
+    // A folder that predates this simply has no `Originals` directory, which
+    // reads as nothing to fetch rather than as an error.
+    let originalsDirectory = syncDirectoryURL.appendingPathComponent(
+        FolderSyncService.originalsSubdirectoryName,
+        isDirectory: true
+    )
+    let manifestWorkIDs = Set(manifest.works.map { $0.id.uuidString.lowercased() })
+    let remoteOriginals = (
+        try? FileManager.default.contentsOfDirectory(atPath: originalsDirectory.path)
+    ) ?? []
+    for name in remoteOriginals where !name.hasPrefix(".") {
+        let base = (name as NSString).deletingPathExtension
+        let workIDText = base.hasSuffix(".conversion")
+            ? String(base.dropLast(".conversion".count))
+            : base
+        guard let workID = UUID(uuidString: workIDText),
+              manifestWorkIDs.contains(workIDText.lowercased()),
+              KudosBackupContents.isSafeFileName(name)
+        else { continue }
+        if Storage.existingOriginalDocumentURL(for: workID) != nil { continue }
+        let remoteURL = originalsDirectory.appendingPathComponent(name)
+        guard remoteAssetExists(remoteURL) else { continue }
+        requestDownloadIfNeeded(remoteURL)
+        if let data = try? coordinatedReadData(from: remoteURL) {
+            selection.originalFiles[name] = data
+        } else {
+            selection.missingAssetCount += 1
+        }
+    }
     return selection
 }
 
@@ -819,8 +858,13 @@ nonisolated private func writeSyncDirectoryContents(
         FolderSyncService.fontsSubdirectoryName,
         isDirectory: true
     )
+    let originalsDirectory = directoryURL.appendingPathComponent(
+        FolderSyncService.originalsSubdirectoryName,
+        isDirectory: true
+    )
     try fileManager.createDirectory(at: worksDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: fontsDirectory, withIntermediateDirectories: true)
+    try fileManager.createDirectory(at: originalsDirectory, withIntermediateDirectories: true)
 
     // Assets first, manifest last: the manifest is the commit point, so a
     // manifest never references an asset file that wasn't already written.
@@ -834,6 +878,10 @@ nonisolated private func writeSyncDirectoryContents(
     for (fileName, data) in contents.fontFiles
     where KudosBackupContents.isSafeFileName(fileName) {
         try writeIfChanged(data, to: fontsDirectory.appendingPathComponent(fileName))
+    }
+    for (fileName, data) in contents.originalFiles
+    where KudosBackupContents.isSafeFileName(fileName) {
+        try writeIfChanged(data, to: originalsDirectory.appendingPathComponent(fileName))
     }
 
     try contents.manifestData().write(
@@ -850,6 +898,12 @@ nonisolated private func writeSyncDirectoryContents(
         removeOrphans(
             in: worksDirectory,
             keeping: Set(contents.manifest.works.map { "\($0.id.uuidString).epub" })
+        )
+        // Originals are named `<workID>.<ext>` and `<workID>.conversion.json`,
+        // so they are kept or dropped by the work rather than by an exact name.
+        removeOrphanedOriginals(
+            in: originalsDirectory,
+            keepingWorkIDs: Set(contents.manifest.works.map { $0.id.uuidString.lowercased() })
         )
         removeOrphans(
             in: fontsDirectory,
@@ -874,6 +928,27 @@ nonisolated private func writeIfChanged(_ data: Data, to url: URL) throws {
 
 nonisolated private func fileSize(of url: URL) -> Int? {
     (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+}
+
+/// Drops originals for works no manifest record mentions any more.
+///
+/// Prefix-matched rather than exact-name, because one work can have two files
+/// here and the extension is whatever the reader imported. Runs under the same
+/// staleness gate as the other sweeps, so a device with an out-of-date view of
+/// the folder never prunes anything.
+nonisolated private func removeOrphanedOriginals(in directory: URL, keepingWorkIDs: Set<String>) {
+    let fileManager = FileManager.default
+    guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return }
+    for name in names where !name.hasPrefix(".") {
+        let base = (name as NSString).deletingPathExtension
+        let workIDText = base.hasSuffix(".conversion")
+            ? String(base.dropLast(".conversion".count))
+            : base
+        // Anything not shaped like one of ours is left strictly alone.
+        guard UUID(uuidString: workIDText) != nil else { continue }
+        guard !keepingWorkIDs.contains(workIDText.lowercased()) else { continue }
+        try? fileManager.removeItem(at: directory.appendingPathComponent(name))
+    }
 }
 
 nonisolated private func removeOrphans(in directory: URL, keeping expected: Set<String>) {
