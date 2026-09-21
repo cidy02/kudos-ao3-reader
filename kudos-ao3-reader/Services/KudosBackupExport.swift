@@ -148,6 +148,24 @@ extension KudosBackupService {
             assets.append(.init(entryName: entryName, fileURL: font.fileURL))
         }
 
+        // Imported originals travel with the works they belong to. Streamed
+        // from disk like every other asset, so a 200 MB PDF never has to be
+        // resident — the reader's `.backup` limits (1 GB per entry, 64 GB
+        // total) already cover anything a document import can produce.
+        for work in works.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            guard let original = Storage.existingOriginalDocumentURL(for: work.id) else { continue }
+            let entryName = "Originals/\(original.lastPathComponent)"
+            if seenNames.insert(entryName).inserted {
+                assets.append(.init(entryName: entryName, fileURL: original))
+            }
+            let record = WorkConversionRecord.url(for: work.id)
+            guard FileManager.default.fileExists(atPath: record.path) else { continue }
+            let recordName = "Originals/\(record.lastPathComponent)"
+            if seenNames.insert(recordName).inserted {
+                assets.append(.init(entryName: recordName, fileURL: record))
+            }
+        }
+
         return KudosBackupExportPlan(
             manifestData: try KudosBackupContents(manifest: manifest).manifestData(),
             assets: assets

@@ -569,7 +569,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 manifest: pending.manifest,
                 localWorks: works.filter { !$0.isPendingDeletion },
                 syncIsConnected: folderSyncStatus.isConnected,
-                preservedOriginalCount: Self.preservedOriginalCount(),
                 onMerge: { restorePendingBackup(mode: .merge) },
                 onReplace: { pauseSync in
                     if pauseSync { setAutoSyncEnabled(false) }
@@ -758,26 +757,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             parts.append("\(missingAssets.formatted()) \(noun) listed but could not be read, "
                 + "so they are not in this backup. Those works restore without their EPUB.")
         }
-        let originals = preservedOriginalCount()
-        if originals > 0 {
-            let noun = originals == 1 ? "original file is" : "original files are"
-            parts.append("\(originals.formatted()) imported \(noun) kept on this device only. "
-                + "A backup carries converted EPUBs, not the documents they were made from, "
-                + "so copy them off separately before erasing this device.")
-        }
         return parts.joined(separator: "\n\n")
-    }
-
-    /// Preserved originals on this device. The conversion sidecars sharing the
-    /// directory are bookkeeping, not documents, so they are not counted.
-    private static func preservedOriginalCount() -> Int {
-        let contents = (try? FileManager.default.contentsOfDirectory(
-            at: Storage.originalsDirectory,
-            includingPropertiesForKeys: nil
-        )) ?? []
-        return contents.filter {
-            !$0.lastPathComponent.hasSuffix(Storage.conversionRecordSuffix)
-        }.count
     }
 
     // MARK: Backup export / import
