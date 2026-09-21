@@ -24,7 +24,8 @@ private final class SecurityScopedURL: Sendable {
 /// Confirm-time handle: scoped URL + manifest + identity. Full contents
 /// are read only at execute so a hostile archive cannot sit decoded in
 /// `@State` for the whole Merge/Replace extra step.
-private struct PendingBackupImport {
+private struct PendingBackupImport: Identifiable {
+    let id = UUID()
     let scopedURL: SecurityScopedURL
     let manifest: KudosBackupManifest
     let identity: KudosBackupContents.SourceIdentity
@@ -84,7 +85,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var exportingBackup = false
     @State private var isImportingEPUB = false
     @State private var epubImportProgress: String?
-    @State private var showImportConfirmation = false
     @State private var showSavedWorkMigrationConfirmation = false
     @State private var isMigratingSavedWorks = false
     @State private var savedWorkMigrationProgress: String?
@@ -110,8 +110,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var showingSyncDetails = false
     @State private var showingAvailabilitySweep = false
     @State private var lastFolderSyncResult: FolderSyncResult?
-    @State private var showImportModeChoice = false
-    @State private var showReplaceConfirmation = false
 
     /// All selectable fonts: built-ins followed by imported ones.
     private var fontOptions: [ReaderFontOption] {
@@ -541,21 +539,6 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     message: Text(notice.message),
                     dismissButton: .default(Text("OK"))
                 )
-            case let .confirmImport(manifest):
-                Alert(
-                    title: Text("Restore from Backup"),
-                    message: Text(
-                        "This backup contains \(manifest.works.count) Library records, "
-                            + "\(manifest.bookmarks.count) saved links, and "
-                            + "\(manifest.fonts.count) custom fonts."
-                    ),
-                    primaryButton: .default(Text("Restore from Backup")) {
-                        restorePendingBackup(mode: .merge)
-                    },
-                    secondaryButton: .cancel {
-                        pendingImport = nil
-                    }
-                )
             }
         }
         .confirmationDialog(
@@ -576,51 +559,25 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 + "with a pause between AO3 requests."
             Text(migrationMessage)
         }
-        .confirmationDialog(
-            "Import this backup?",
-            isPresented: $showImportModeChoice,
-            titleVisibility: .visible
-        ) {
-            if pendingImport != nil {
-                Button("Merge") {
-                    restorePendingBackup(mode: .merge)
-                }
-                Button("Replace Library…", role: .destructive) {
-                    showReplaceConfirmation = true
-                }
-                Button("Cancel", role: .cancel) {
-                    pendingImport = nil
-                }
-            }
-        } message: {
-            if let pending = pendingImport {
-                let importMessage =
-                    "This backup contains \(pending.manifest.works.count) works. "
-                    + "Merge adds new works without removing existing ones. "
-                    + "Replace Library makes your library match this backup."
-                Text(importMessage)
-            }
-        }
-        .sheet(isPresented: $showReplaceConfirmation) {
-            if let pending = pendingImport {
-                ReplaceLibraryConfirmationView(
-                    manifest: pending.manifest,
-                    localWorks: works.filter { !$0.isPendingDeletion },
-                    syncIsConnected: folderSyncStatus.isConnected,
-                    onConfirm: { pauseSync in
-                        if pauseSync {
-                            setAutoSyncEnabled(false)
-                        }
-                        showReplaceConfirmation = false
-                        restorePendingBackup(mode: .replaceLibrary)
-                    },
-                    onCancel: {
-                        showReplaceConfirmation = false
-                        pendingImport = nil
-                    },
-                    makePreReplaceBackup: makePreReplaceBackup
-                )
-            }
+        // One sheet for the whole import decision. It replaces an alert on an
+        // empty library, a confirmation dialog on a non-empty one, and the
+        // separate sheet Replace used to open on top of that. Presenting is
+        // simply `pendingImport` being non-nil, so nothing can get out of step
+        // with it — which is what the old boolean-plus-optional pairing did.
+        .sheet(item: $pendingImport) { pending in
+            BackupImportSheet(
+                manifest: pending.manifest,
+                localWorks: works.filter { !$0.isPendingDeletion },
+                syncIsConnected: folderSyncStatus.isConnected,
+                preservedOriginalCount: Self.preservedOriginalCount(),
+                onMerge: { restorePendingBackup(mode: .merge) },
+                onReplace: { pauseSync in
+                    if pauseSync { setAutoSyncEnabled(false) }
+                    restorePendingBackup(mode: .replaceLibrary)
+                },
+                onCancel: { pendingImport = nil },
+                makePreReplaceBackup: makePreReplaceBackup
+            )
         }
         #if os(iOS)
         .sheet(isPresented: $showCustomize) {
@@ -922,14 +879,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 manifest: manifest,
                 identity: identity
             )
-            let activeWorks = works.filter { !$0.isPendingDeletion }
-            if activeWorks.isEmpty {
-                // Empty library: single "Restore from Backup" button.
-                showImportConfirmation = true
-            } else {
-                // Non-empty library: offer Merge vs Replace Library.
-                showImportModeChoice = true
-            }
+            // Presenting is `pendingImport` being non-nil — one sheet, which
+            // asks the question and owns Replace's gate as its second step.
         } catch {
             pendingImport = nil
             backupNotice = BackupNotice(
@@ -1252,26 +1203,25 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// (see the call site — SwiftUI drops all but one per view).
     private enum SettingsAlert: Identifiable {
         case notice(BackupNotice)
-        case confirmImport(KudosBackupManifest)
 
         var id: String {
             switch self {
             case let .notice(notice): "notice-\(notice.id)"
-            case .confirmImport: "confirm-import"
             }
         }
     }
 
-    /// Projects the individual alert states onto the single modifier, newest
-    /// decision first. Writing `nil` back (the user dismissed) clears whichever
-    /// state produced the alert, so the existing call sites keep setting
-    /// `backupNotice`/`epubNotice`/`showImportConfirmation` exactly as before.
+    /// Projects the notice states onto the single modifier. Writing `nil` back
+    /// (the reader dismissed) clears whichever one produced the alert.
+    ///
+    /// Import confirmation used to live here too, and carried a subtle bug with
+    /// it: dismissal writes this binding, and on iOS 27 that happens BEFORE the
+    /// alert's own button action runs, so clearing `pendingImport` here
+    /// destroyed the import the button was about to perform. That whole class
+    /// of problem left with the alert — the decision is a sheet now.
     private var activeAlertBinding: Binding<SettingsAlert?> {
         Binding(
             get: {
-                if showImportConfirmation, let pending = pendingImport {
-                    return .confirmImport(pending.manifest)
-                }
                 if let backupNotice { return .notice(backupNotice) }
                 if let epubNotice { return .notice(epubNotice) }
                 if let fontNotice { return .notice(fontNotice) }
@@ -1279,23 +1229,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             },
             set: { newValue in
                 guard newValue == nil else { return }
-                if showImportConfirmation {
-                    showImportConfirmation = false
-                    // Deliberately NOT clearing `pendingImport` here. Dismissal
-                    // writes this binding, and on iOS 27 that happens BEFORE the
-                    // alert's own button action runs — so clearing it destroyed
-                    // the import the "Restore from Backup" button was about to
-                    // perform. `restorePendingBackup` then hit its `guard let`
-                    // and returned in silence: no restore, no error, no alert.
-                    // It bit only the EMPTY-library path, because Merge/Replace
-                    // presents from its own `confirmationDialog` and never
-                    // routed through this setter — i.e. it broke exactly the
-                    // case that matters, moving to a brand-new phone.
-                    // Both buttons clear `pendingImport` themselves (Cancel
-                    // directly, Restore via `restorePendingBackup`), and an
-                    // `Alert` cannot be dismissed any other way, so nothing is
-                    // left dangling.
-                } else if backupNotice != nil {
+                if backupNotice != nil {
                     backupNotice = nil
                 } else if epubNotice != nil {
                     epubNotice = nil
