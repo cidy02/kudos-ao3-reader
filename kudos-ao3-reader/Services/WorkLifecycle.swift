@@ -49,6 +49,11 @@ enum WorkLifecycle {
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         work.hasEPUB = false
+        // A promised remote copy is a promise about bytes this device wanted.
+        // Freeing is the reader saying they do not want them, so the promise
+        // goes too — otherwise the next export advertises an EPUB that was
+        // deliberately deleted, and peers skip sending the real one.
+        work.remoteEPUBPending = false
         if work.isQueuedForLater {
             work.epubPreservationStatus = .missingFile
         }

@@ -112,7 +112,14 @@ struct ReadingLogBackupTests {
         #expect(restoredWatermark.newestWorkIDSeen == 42)
     }
 
-    @Test func keepInProgressOverrideDecodesFalseWhenAbsent() throws {
+    /// Renamed from `keepInProgressOverrideDecodesFalseWhenAbsent`, which
+    /// asserted the defect rather than the behaviour: decoding an absent key as
+    /// `false` is exactly what let a backup written before this field existed
+    /// turn off a preference the reader had turned on. `Bool?` and
+    /// `decodeIfPresent` keep "the archive does not say" distinct from "the
+    /// archive says no" — see `OmittedFieldKeepsPreferenceTests` for the
+    /// restore-side half.
+    @Test func keepInProgressOverrideDecodesNilWhenAbsent() throws {
         let work = SavedWork(title: "Legacy", author: "A")
         work.keepInProgressOverride = true
         let contents = try KudosBackupService.makeContents(
@@ -127,7 +134,7 @@ struct ReadingLogBackupTests {
         object["works"] = works
         let stripped = try JSONSerialization.data(withJSONObject: object)
         let decoded = try KudosBackupContents.decodeManifest(stripped)
-        #expect(decoded.works.first?.keepInProgressOverride == false)
+        #expect(decoded.works.first?.keepInProgressOverride == nil)
     }
 
     @Test func v7AndV8ArchivesWithoutNewKeysStillImport() throws {

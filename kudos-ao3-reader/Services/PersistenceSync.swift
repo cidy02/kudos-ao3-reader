@@ -137,9 +137,48 @@ enum PersistenceMigrationService {
         // Independent of the SwiftData prep flag: first Phase 2 launch re-signs
         // local unsigned tombstones even when metadata migration already completed.
         TombstoneSigning.resignLocalUnsignedIfNeeded(in: context, defaults: defaults)
+        // Runs whatever the migration state says, and before the guard below.
+        // `epubDigest` arrived after migration did: every installation upgrading
+        // into it is already `.completed`, so a backfill living inside the
+        // migration would never run on a single existing library — the only
+        // libraries that have anything to hash. It also caps each pass, so a
+        // large library needs several launches to finish, which a one-shot
+        // migration cannot give it.
+        await backfillEPUBDigests(in: context)
         let current = PersistenceStatusStore.snapshot(defaults: defaults).migrationState
         guard current != .completed else { return current }
         return await run(in: context, defaults: defaults)
+    }
+
+    /// Gives content identities to books that have none, a bounded number per
+    /// launch, repeating on later launches until nothing is left. Needs no
+    /// completion flag: once every EPUB is hashed the fetch below returns
+    /// nothing and this costs one query.
+    static func backfillEPUBDigests(in context: ModelContext) async {
+        var descriptor = FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.hasEPUB && $0.epubDigest == "" }
+        )
+        descriptor.fetchLimit = digestBackfillPerPass
+        guard let works = try? context.fetch(descriptor), !works.isEmpty else { return }
+        var changed = false
+        for work in works {
+            guard work.modelContext != nil else { continue }
+            let fileURL = work.fileURL
+            // Off the main actor: this reads whole EPUBs while the reader is
+            // looking at the app.
+            let digest = await Task.detached(priority: .utility) {
+                Storage.fileDigest(at: fileURL)
+            }.value
+            // `isEmpty` re-checked for the same reason as in `reconcileAssets`:
+            // a write that landed during the hash knows better than this does.
+            if let digest, work.epubDigest.isEmpty {
+                work.epubDigest = digest
+                changed = true
+            }
+        }
+        if changed {
+            context.saveBestEffort(reason: "Saving backfilled EPUB digests failed")
+        }
     }
 
     @discardableResult
@@ -313,7 +352,11 @@ enum PersistenceMigrationService {
                         let digest = await Task.detached(priority: .utility) {
                             Storage.fileDigest(at: fileURL)
                         }.value
-                        if let digest {
+                        // Re-checked after the await: hashing suspends the main
+                        // actor, and an import finishing in that window writes
+                        // the digest of the bytes it actually installed. This
+                        // one describes the file as it was before that.
+                        if let digest, work.epubDigest.isEmpty {
                             work.epubDigest = digest
                             backfilled += 1
                         }
