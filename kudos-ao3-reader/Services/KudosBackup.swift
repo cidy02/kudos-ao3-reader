@@ -2064,6 +2064,21 @@ enum KudosBackupService {
         }
     }
 
+    /// `.missingFile` is a statement about the bytes: "this is a work the reader
+    /// chose to keep, and I no longer have it." Once the bytes are back that is
+    /// simply untrue, so installing an EPUB puts the work back to `.preserved`.
+    ///
+    /// A promotion, which the monotonic rule in `apply(_:to:isNewRecord:)`
+    /// allows — that rule exists to stop an *archive* demoting a preserved
+    /// work, and this is driven by something observed instead: the file was
+    /// written a line ago. `ReadingQueueService` already does the same repair
+    /// for a queued work whose file it finds present again.
+    private static func markPreservedIfFileRestored(_ work: SavedWork) {
+        guard work.epubPreservationStatus == .missingFile else { return }
+        work.epubPreservationStatus = .preserved
+        if work.preservedAt == nil { work.preservedAt = Date() }
+    }
+
     // Intentionally linear for data-safety review.
     //
     // RC merge (G5): WP-A's M15 split `restore` into this inner implementation
@@ -2228,6 +2243,7 @@ enum KudosBackupService {
                                 try epub.write(to: staged, options: .atomic)
                                 try ReadingQueueService.replaceEPUB(for: existing, with: staged)
                                 existing.hasEPUB = true
+                                markPreservedIfFileRestored(existing)
                                 recoveredMissingEPUBs += 1
                             } catch {
                                 try? FileManager.default.removeItem(at: staged)
@@ -2318,6 +2334,7 @@ enum KudosBackupService {
                     try journal.displace(work.fileURL)
                     try ReadingQueueService.replaceEPUB(for: work, with: staged)
                     work.hasEPUB = true
+                    markPreservedIfFileRestored(work)
                 } catch {
                     try? FileManager.default.removeItem(at: staged)
                     // This one work is being skipped while the restore carries

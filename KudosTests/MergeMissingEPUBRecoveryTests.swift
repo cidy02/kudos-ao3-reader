@@ -75,6 +75,10 @@ struct MergeMissingEPUBRecoveryTests {
         let target = try context(schema)
         let local = SavedWork(id: id, title: "Local Title", author: "Local Author")
         local.hasEPUB = false
+        // The state a preserved work lands in when its file goes missing —
+        // freed for space, lost to a crash mid-write, or never downloaded on a
+        // new device.
+        local.epubPreservationStatus = .missingFile
         target.insert(local)
         try target.save()
         defer { try? FileManager.default.removeItem(at: local.fileURL) }
@@ -88,6 +92,9 @@ struct MergeMissingEPUBRecoveryTests {
         #expect(summary.recoveredMissingEPUBs == 1)
         #expect(FileManager.default.fileExists(atPath: local.fileURL.path))
         #expect(local.hasEPUB)
+        // The status said the bytes were gone. They are not gone any more.
+        #expect(local.epubPreservationStatus == .preserved)
+        #expect(local.preservedAt != nil)
         // The active-overlap contract is untouched: only the bytes were filled.
         #expect(local.title == "Local Title")
         #expect(local.author == "Local Author")
