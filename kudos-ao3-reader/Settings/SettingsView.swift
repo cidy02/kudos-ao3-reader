@@ -101,6 +101,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
     @State private var fontNotice: BackupNotice?
+    /// Assets `writeArchive` had to skip, carried to the export confirmation.
+    @State private var backupExportSkippedAssets = 0
     @State private var persistenceStatus = PersistenceStatusStore.snapshot()
     @State private var isPreparingPersistence = false
     @State private var folderSyncStatus = FolderSyncService.snapshot()
@@ -504,7 +506,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             case .success:
                 backupNotice = BackupNotice(
                     title: "Backup Exported",
-                    message: Self.exportSuccessMessage(recordCount: works.count)
+                    message: Self.exportSuccessMessage(
+                        recordCount: works.count,
+                        missingAssets: backupExportSkippedAssets
+                    )
                 )
             case let .failure(error):
                 backupNotice = BackupNotice(
@@ -789,14 +794,21 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// not survive the one event it exists for: migrating to a new phone and
     /// erasing the old one. Saying so at export time is the difference between
     /// a reader who can copy the files off and one who finds out afterwards.
-    private static func exportSuccessMessage(recordCount: Int) -> String {
-        let records = "\(recordCount.formatted()) Library records were included."
+    private static func exportSuccessMessage(recordCount: Int, missingAssets: Int) -> String {
+        var parts = ["\(recordCount.formatted()) Library records were included."]
+        if missingAssets > 0 {
+            let noun = missingAssets == 1 ? "file was" : "files were"
+            parts.append("\(missingAssets.formatted()) \(noun) listed but could not be read, "
+                + "so they are not in this backup. Those works restore without their EPUB.")
+        }
         let originals = preservedOriginalCount()
-        guard originals > 0 else { return records }
-        let noun = originals == 1 ? "original file is" : "original files are"
-        return records + "\n\n\(originals.formatted()) imported \(noun) kept on this "
-            + "device only — a backup carries converted EPUBs, not the documents they were "
-            + "made from. Copy them off separately before erasing this device."
+        if originals > 0 {
+            let noun = originals == 1 ? "original file is" : "original files are"
+            parts.append("\(originals.formatted()) imported \(noun) kept on this device only. "
+                + "A backup carries converted EPUBs, not the documents they were made from, "
+                + "so copy them off separately before erasing this device.")
+        }
+        return parts.joined(separator: "\n\n")
     }
 
     /// Preserved originals on this device. The conversion sidecars sharing the
@@ -871,7 +883,8 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             }.value
             isPreparingBackupExport = false
             switch result {
-            case .success:
+            case let .success(skipped):
+                backupExportSkippedAssets = skipped.count
                 backupExportURL = destination
                 exportingBackup = true
             case let .failure(error):

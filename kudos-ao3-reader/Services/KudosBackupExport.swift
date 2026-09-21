@@ -164,11 +164,18 @@ extension KudosBackupService {
     /// `try? Data(contentsOf:)` behavior — but any failure past the preflight
     /// (including a source file changing size mid-stream) aborts and removes
     /// the partial file, so a torn archive is never left behind.
+    ///
+    /// **Returns the entry names it skipped**, so a caller can say so. The skip
+    /// itself is right — one evicted file should not fail a whole export — but
+    /// it was silent, while the manifest goes on claiming those works have
+    /// EPUBs. A reader migrating to a new phone was told only how many records
+    /// went in, and found the gap when they opened the work.
+    @discardableResult
     nonisolated static func writeArchive(
         _ plan: KudosBackupExportPlan,
         to destination: URL,
         limits: MiniZip.Limits = .backup
-    ) throws {
+    ) throws -> [String] {
         guard plan.assets.count + 1 <= limits.maxEntryCount else {
             throw KudosBackupExportError.tooManyEntries(
                 count: plan.assets.count + 1,
@@ -183,11 +190,15 @@ extension KudosBackupService {
             )
         }
         var includedAssets: [KudosBackupExportPlan.Asset] = []
+        var skipped: [String] = []
         var total = UInt64(plan.manifestData.count)
         for asset in plan.assets {
             guard let probe = try? FileHandle(forReadingFrom: asset.fileURL),
                   let size = try? probe.seekToEnd()
-            else { continue }
+            else {
+                skipped.append(asset.entryName)
+                continue
+            }
             try? probe.close()
             guard size <= UInt64(limits.maxSingleEntryUncompressedSize) else {
                 throw KudosBackupExportError.assetTooLarge(
@@ -217,7 +228,10 @@ extension KudosBackupService {
             for asset in includedAssets {
                 // Re-probed just before appending: a file that vanished since
                 // the preflight is still a skip, not a failed export.
-                guard let probe = try? FileHandle(forReadingFrom: asset.fileURL) else { continue }
+                guard let probe = try? FileHandle(forReadingFrom: asset.fileURL) else {
+                    skipped.append(asset.entryName)
+                    continue
+                }
                 try? probe.close()
                 try writer.append(name: asset.entryName, contentsOf: asset.fileURL)
             }
@@ -228,5 +242,6 @@ extension KudosBackupService {
             try? fm.removeItem(at: destination)
             throw error
         }
+        return skipped
     }
 }
