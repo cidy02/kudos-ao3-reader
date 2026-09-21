@@ -948,7 +948,12 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         isSaved = work.isSaved
         isFinished = work.isFinished
         keepInProgressOverride = work.keepInProgressOverride
-        hasEPUB = work.hasEPUB
+        // `|| remoteEPUBPending`: a device that was promised a book and has
+        // not received it yet must not publish its absence as fact. The remote
+        // file is still there — the prune keeps assets by manifest work id —
+        // but a false here removes the only reference to it, and the download
+        // pass (`where work.hasEPUB`) then stops looking for good.
+        hasEPUB = work.hasEPUB || work.remoteEPUBPending
         isComplete = work.isComplete
         rating = work.rating
         language = work.language
@@ -2446,6 +2451,10 @@ enum KudosBackupService {
                 // and the reader found out on opening the work.
                 if archived.hasEPUB {
                     worksMissingPromisedEPUB += 1
+                    // The archive said this work has an EPUB; we just do not
+                    // have the bytes. Remembering that is what stops the next
+                    // sync-up telling every other device the book is gone.
+                    work.remoteEPUBPending = true
                     Log.library.notice(
                         "Backup listed an EPUB for a work but supplied no readable bytes."
                     )
