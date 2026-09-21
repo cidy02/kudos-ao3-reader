@@ -1738,6 +1738,11 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
     /// Distinct from `skippedInvalidEPUBs`, which protected an existing local
     /// copy — here there is no copy, so the work restores as metadata only.
     var worksMissingPromisedEPUB: Int = 0
+    /// Missing local EPUBs refilled from the archive during a merge. The audit
+    /// asked for "records skipped versus files recovered" — this is the
+    /// recovered half, and it is the whole point of merging a backup after a
+    /// download has gone missing.
+    var recoveredMissingEPUBs: Int = 0
     var suppressedAnnotations: Int = 0
     var removedWorks: Int = 0
     var removedCollections: Int = 0
@@ -1757,6 +1762,9 @@ nonisolated struct KudosBackupRestoreSummary: Equatable {
             line(bookmarks, "saved link", "saved links"),
             line(fonts, "custom font", "custom fonts")
         ]
+        if recoveredMissingEPUBs > 0 {
+            parts.append(line(recoveredMissingEPUBs, "recovered EPUB file", "recovered EPUB files"))
+        }
         if revivedQueues > 0 {
             parts.append(line(revivedQueues, "restored Reading Queue", "restored Reading Queues"))
         }
@@ -1988,6 +1996,7 @@ enum KudosBackupService {
         var restoredWorksByArchivedID: [UUID: SavedWork] = [:]
         var skippedInvalidEPUBs = 0
         var worksMissingPromisedEPUB = 0
+        var recoveredMissingEPUBs = 0
 
         // Phase 1: unsigned incoming tombstones still drop.
         // Phase 2: adopt only if the signature verifies over the incoming
@@ -2065,7 +2074,36 @@ enum KudosBackupService {
                         work = existing
                         isNewRecord = false
                     } else {
-                        // Active overlap: leave local state entirely.
+                        // Active overlap: leave local state entirely — a stale
+                        // backup must not overwrite metadata the reader has
+                        // moved on from.
+                        //
+                        // An absent *file* is the exception, and used to be
+                        // swept up by the same `continue`. There is nothing
+                        // local to protect, the archive holds the only copy
+                        // left, and restoring a backup is exactly what someone
+                        // does when a download has gone missing — yet merge
+                        // bypassed asset restoration entirely and still counted
+                        // the work as restored. Metadata stays untouched; only
+                        // the missing bytes are filled, through the same
+                        // validate-then-install helper every other path uses.
+                        // `replaceEPUB` moves rather than replaces when the
+                        // destination is absent, so nothing can be displaced.
+                        if !FileManager.default.fileExists(atPath: existing.fileURL.path),
+                           let epub = contents.epubData(for: archived.id) {
+                            let staged = FileManager.default.temporaryDirectory
+                                .appendingPathComponent("\(UUID().uuidString).epub")
+                            do {
+                                try epub.write(to: staged, options: .atomic)
+                                try ReadingQueueService.replaceEPUB(for: existing, with: staged)
+                                existing.hasEPUB = true
+                                recoveredMissingEPUBs += 1
+                            } catch {
+                                try? FileManager.default.removeItem(at: staged)
+                                skippedInvalidEPUBs += 1
+                                Log.library.notice("Invalid backup EPUB while filling a gap.")
+                            }
+                        }
                         restoredWorksByArchivedID[archived.id] = existing
                         continue
                     }
@@ -2886,6 +2924,7 @@ enum KudosBackupService {
             ambiguousCollectionConflicts: ambiguousCollectionConflicts,
             skippedInvalidEPUBs: skippedInvalidEPUBs,
             worksMissingPromisedEPUB: worksMissingPromisedEPUB,
+            recoveredMissingEPUBs: recoveredMissingEPUBs,
             suppressedAnnotations: suppressedAnnotations,
             removedWorks: removedWorks,
             removedCollections: removedCollections,
