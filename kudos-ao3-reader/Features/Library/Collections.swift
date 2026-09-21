@@ -166,7 +166,7 @@ struct CollectionDetailView: View {
                             get: { collection.hue },
                             set: { newValue in
                                 collection.hue = newValue
-                                collection.markModified()
+                                collection.markMembershipChanged()
                                 context.saveBestEffort(reason: "Saving collection colour failed")
                             }
                         ),
@@ -371,7 +371,7 @@ struct CollectionDetailView: View {
                     let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         collection.name = trimmed
-                        collection.markModified()
+                        collection.markMembershipChanged()
                         try? context.save()
                     }
                 }
@@ -409,7 +409,7 @@ struct CollectionDetailView: View {
         SyncTombstones.recordCollectionMembershipRemoval(work: work, collection: collection, in: context)
         work.collections.removeAll { $0.id == collection.id }
         work.markModified()
-        collection.markModified()
+        collection.markMembershipChanged()
         try? context.save()
     }
 
@@ -556,7 +556,7 @@ struct AddToCollectionView: View {
                 work.markModified(now)
             }
         }
-        collection.markModified(now)
+        collection.markMembershipChanged(now)
         try? context.save()
     }
 
@@ -598,7 +598,7 @@ enum CollectionWorkPicker {
             work.collections.append(collection)
             work.markModified(now)
         }
-        collection.markModified(now)
+        collection.markMembershipChanged(now)
         try? context.save()
     }
 }

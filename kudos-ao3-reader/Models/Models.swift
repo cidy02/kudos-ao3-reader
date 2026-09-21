@@ -744,6 +744,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var dateAdded: Date = Date()
     var createdAt: Date = Date()
     var lastModifiedAt: Date = Date()
+    /// See `markMembershipChanged`. Optional so a collection that predates the
+    /// field is tellable from one whose memberships this device has chosen.
+    var lastMembershipChangedAt: Date?
     var deletedAt: Date?
     var isPendingDeletion: Bool = false
     /// See `SavedWork.permanentDeletionScheduledAt`.
@@ -789,6 +792,21 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     func markModified(_ date: Date = Date()) {
         lastModifiedAt = date
         if syncStatus == .synced { syncStatus = .pending }
+    }
+
+    /// When THIS device's reader last added or removed a work here.
+    ///
+    /// Collection membership has no join model, so it has no timestamp of its
+    /// own — and without one there is no telling a membership the reader
+    /// re-added from one they never touched, which is the whole difference
+    /// between dropping a stale membership and deleting a wanted one.
+    ///
+    /// Deliberately NOT stamped by a restore: this records local intent, and a
+    /// restore that stamped it would make every membership look freshly chosen
+    /// and defeat the sweep it exists to inform.
+    func markMembershipChanged(_ date: Date = Date()) {
+        lastMembershipChangedAt = date
+        markModified(date)
     }
 }
 
