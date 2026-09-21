@@ -438,6 +438,20 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                             : "Mature and Explicit works are shown normally.")
                     }
 
+                    // Artboard 1ab groups the library's disk cost under
+                    // "Downloads". Only this row of that group is real — see
+                    // `StorageUsedRow` for why the other two are absent.
+                    if includeAppSettings {
+                        Section {
+                            StorageUsedRow()
+                        } header: {
+                            Text("Downloads")
+                        } footer: {
+                            Text("Privacy and local data breaks this down and can free "
+                                + "space a title at a time.")
+                        }
+                    }
+
                     // Moved from Account's own "Help & Project" section as part of
                     // folding Account's App/Help rows into Settings.
                     AO3AccountSettingsSection(onLogIn: { showAO3Login = true })
