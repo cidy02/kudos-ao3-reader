@@ -828,7 +828,11 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let hasGivenKudos: Bool
     let isSaved: Bool
     let isFinished: Bool
-    let keepInProgressOverride: Bool
+    /// Optional so that "this archive does not carry the field" stays tellable
+    /// from "the reader turned it off". An older client that never knew about
+    /// the override used to decode as `false` and, on winning the timestamp
+    /// comparison, silently clear a preference it had no opinion about.
+    let keepInProgressOverride: Bool?
     let hasEPUB: Bool
     let isComplete: Bool
     let rating: String
@@ -1011,10 +1015,11 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hasGivenKudos = try container.decodeIfPresent(Bool.self, forKey: .hasGivenKudos) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isFinished = try container.decodeIfPresent(Bool.self, forKey: .isFinished) ?? false
+        // No `?? false`: absent must stay absent.
         keepInProgressOverride = try container.decodeIfPresent(
             Bool.self,
             forKey: .keepInProgressOverride
-        ) ?? false
+        )
         hasEPUB = try container.decodeIfPresent(Bool.self, forKey: .hasEPUB) ?? false
         isComplete = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
         rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
@@ -4019,9 +4024,11 @@ enum KudosBackupService {
         work.hasGivenKudos = work.hasGivenKudos || archived.hasGivenKudos
         work.isSaved = incomingWins ? archived.isSaved : work.isSaved
         work.isFinished = incomingWins ? archived.isFinished : work.isFinished
-        work.keepInProgressOverride = incomingWins
-            ? archived.keepInProgressOverride
-            : work.keepInProgressOverride
+        // An archive that carries no opinion cannot overrule one the reader has
+        // expressed here, however new that archive is.
+        if let archivedKeepInProgress = archived.keepInProgressOverride, incomingWins {
+            work.keepInProgressOverride = archivedKeepInProgress
+        }
         work.isComplete = incomingWins ? archived.isComplete : work.isComplete
         work.deletedAt = newest(work.deletedAt, archived.deletedAt)
         // incomingWins-gated like the flags above — a device that already called restore()
