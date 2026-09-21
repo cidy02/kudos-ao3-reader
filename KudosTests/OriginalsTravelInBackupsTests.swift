@@ -89,6 +89,38 @@ struct OriginalsTravelInBackupsTests {
         #expect(WorkConversionRecord.read(for: work.id)?.originalFileName == "thesis.pdf")
     }
 
+    /// A sync folder is a backup too, so it carries them as well — and a
+    /// directory-form read of that folder finds them.
+    @Test func aSyncFolderCarriesOriginals() async throws {
+        let source = try makeContext()
+        let work = try workWithOriginal(in: source)
+        defer { cleanUp([work.id]) }
+
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OriginalsSync-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let defaults = try testDefaults()
+        defer { FolderSyncService.disconnect(defaults: defaults) }
+        try FolderSyncService.connect(to: folder, defaults: defaults)
+        _ = try await FolderSyncService.syncUp(in: source, defaults: defaults)
+
+        let syncDirectory = folder.appendingPathComponent(FolderSyncService.syncDirectoryName)
+        let originals = syncDirectory
+            .appendingPathComponent(FolderSyncService.originalsSubdirectoryName)
+        let uploaded = try FileManager.default.contentsOfDirectory(atPath: originals.path)
+            .filter { !$0.hasPrefix(".") }
+        // The document and the record naming its converter.
+        #expect(uploaded.count == 2)
+
+        // The folder read back as a backup exposes them.
+        let contents = try KudosBackupContents.read(from: syncDirectory)
+        #expect(contents.originalFileNames.count == 2)
+        let name = try #require(contents.originalFileNames.first { $0.hasSuffix(".pdf") })
+        #expect(contents.originalData(named: name) == Self.originalBytes)
+    }
+
     /// Guard: a local original is the file the reader imported on this device.
     /// The archive's copy is at best the same bytes and at worst older, and
     /// re-conversion reads whichever is on disk — so restore must not clobber.
