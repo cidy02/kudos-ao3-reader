@@ -172,13 +172,10 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                 // *does* touch AO3 is the login directly below, and it says so.
                 if includeAppSettings {
                     Section {
-                        Text("App only · nothing here reaches AO3")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        SettingsHeaderBlock()
                             .listRowBackground(Color.clear)
-                            .accessibilityLabel(
-                                "These settings are stored on this device only and are never sent to AO3."
-                            )
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
                     }
                 }
 
