@@ -321,8 +321,17 @@ enum FolderSyncService {
             // Fetch only assets that are missing or changed relative to local
             // state — unchanged EPUBs never leave disk, unlike the old
             // whole-package read that materialized every blob in memory.
+            // Built here rather than inside the detached read: these come from
+            // SwiftData, which is the main actor's.
+            let localDigests = Dictionary(
+                ((try? context.fetch(FetchDescriptor<SavedWork>())) ?? [])
+                    .map { ($0.id, $0.epubDigest) },
+                uniquingKeysWith: { first, _ in first }
+            )
             var assets = await Task.detached {
-                readChangedRemoteAssets(in: syncDirectoryURL, manifest: manifest)
+                readChangedRemoteAssets(
+                    in: syncDirectoryURL, manifest: manifest, localDigests: localDigests
+                )
             }.value
             result.didReadRemoteFile = true
             let missingMainAssets = assets.missingAssetCount
@@ -348,7 +357,7 @@ enum FolderSyncService {
                     let assets = readChangedRemoteAssets(
                         in: syncDirectoryURL,
                         manifest: conflictManifest
-                    )
+                    , localDigests: localDigests)
                     return ConflictVersionRead(
                         contents: KudosBackupContents(
                             manifest: conflictManifest,
@@ -697,7 +706,8 @@ nonisolated private struct RemoteAssetSelection: Sendable {
 
 nonisolated private func readChangedRemoteAssets(
     in syncDirectoryURL: URL,
-    manifest: KudosBackupManifest
+    manifest: KudosBackupManifest,
+    localDigests: [UUID: String] = [:]
 ) -> RemoteAssetSelection {
     let worksDirectory = syncDirectoryURL.appendingPathComponent(
         FolderSyncService.worksSubdirectoryName,
@@ -729,7 +739,15 @@ nonisolated private func readChangedRemoteAssets(
         // exact byte count, and the restore path re-validates whatever arrives.
         let localSize = fileSize(of: localURL)
         if let localSize, let remoteSize = fileSize(of: remoteURL), localSize == remoteSize {
-            continue
+            // Equal size is not equal content — the font branch below says so in
+            // as many words and compares bytes. When both sides know their
+            // digest that settles it; when either does not, this is a manifest
+            // written before digests existed and the byte count is all there is.
+            let localDigest = localDigests[work.id] ?? ""
+            let remoteDigest = work.epubDigest ?? ""
+            if localDigest.isEmpty || remoteDigest.isEmpty || localDigest == remoteDigest {
+                continue
+            }
         }
         requestDownloadIfNeeded(remoteURL)
         if let data = try? coordinatedReadData(from: remoteURL) {

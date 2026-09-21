@@ -168,6 +168,15 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// intentionally separate from title/author/source URL so future iCloud Documents
     /// asset lookup can survive AO3 metadata edits and local title changes.
     var assetIdentifier: String = ""
+    /// SHA-256 of the EPUB currently on disk, or empty when unknown.
+    ///
+    /// Cached rather than computed on demand: a manifest is built on every
+    /// folder sync, and hashing every book each time would be a real cost.
+    /// `ReadingQueueService.replaceEPUB` is the one place an EPUB is written,
+    /// so keeping it current there keeps it current everywhere. Empty simply
+    /// means "not known yet" — a work whose file predates this, which the
+    /// comparisons fall back to size for.
+    var epubDigest: String = ""
     var syncStatusRaw: String = SyncRecordStatus.localOnly.rawValue
     var lastSyncAttemptAt: Date?
     var lastSyncError: String = ""
