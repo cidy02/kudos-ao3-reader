@@ -418,8 +418,16 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// with no known AO3 origin is also always protected — freeing only makes sense
     /// when the EPUB can be re-downloaded, and a plain (non-AO3) import has no way
     /// back if its only copy is deleted.
+    ///
+    /// `ao3Unavailable` is protected for exactly the reason the sentence above
+    /// gives. It is set ONLY when AO3 answered 404 — deleted or hidden, never a
+    /// network blip (see `preservationState`) — so the EPUB on this device is the
+    /// last copy in existence. Without this, finishing such a work ran
+    /// `WorkLifecycle.markFinished` → `freeEPUB`, which deletes the file outright
+    /// and does not pass through Recently Deleted: the reader lost the only copy of
+    /// a work AO3 had already removed, by reaching the end of it.
     var isProtected: Bool {
-        isSaved || isFavorite || isQueuedForLater || ao3WorkID == nil
+        isSaved || isFavorite || isQueuedForLater || ao3WorkID == nil || ao3Unavailable
     }
 
     /// Memberships that still point at a queue the reader can actually open.
