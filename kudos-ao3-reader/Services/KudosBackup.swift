@@ -1965,11 +1965,89 @@ enum KudosBackupService {
         context.autosaveEnabled = false
         defer { context.autosaveEnabled = callerAutosave }
 
+        // The filesystem half of the discard-on-throw contract. `rollback()`
+        // only undoes the database.
+        let journal = EPUBDisplacementJournal()
         do {
-            return try restoreIsolatedContents(contents, into: context, defaults: defaults, mode: mode)
+            let summary = try restoreIsolatedContents(
+                contents, into: context, defaults: defaults, mode: mode, journal: journal
+            )
+            journal.discard()
+            return summary
         } catch {
+            journal.restoreDisplaced()
             context.rollback()
             throw error
+        }
+    }
+
+    /// Parks an EPUB before a restore overwrites it, so a restore that fails
+    /// later can put it back.
+    ///
+    /// `restore` discards its database work on failure (`context.rollback()`),
+    /// but the filesystem has no rollback and the EPUB writes are deliberately
+    /// monotonic. Worse, `ReadingQueueService.replaceEPUB` replaces with
+    /// `backupItemName: nil`, which *discards* the file it displaces — correct
+    /// for a download, wrong for a restore. So a restore that threw partway
+    /// through had already, permanently, swapped every EPUB it had reached and
+    /// thrown the originals away.
+    ///
+    /// Parking the original first also means the destination is absent when
+    /// `replaceEPUB` runs, so it moves into place instead of replacing — there
+    /// is nothing left for `backupItemName: nil` to throw away.
+    final class EPUBDisplacementJournal {
+        private let directory: URL
+        private var moves: [(original: URL, parked: URL)] = []
+        private var createdDirectory = false
+
+        init() {
+            directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("KudosRestoreJournal-\(UUID().uuidString)", isDirectory: true)
+        }
+
+        /// Moves whatever is at `url` aside. A missing file is not an error —
+        /// there is simply nothing to protect.
+        func displace(_ url: URL) throws {
+            let fileManager = FileManager.default
+            guard fileManager.fileExists(atPath: url.path) else { return }
+            if !createdDirectory {
+                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+                createdDirectory = true
+            }
+            let parked = directory.appendingPathComponent(
+                "\(moves.count)-\(url.lastPathComponent)"
+            )
+            try fileManager.moveItem(at: url, to: parked)
+            moves.append((original: url, parked: parked))
+        }
+
+        /// Puts back the one file parked for `url`. Used when the replacement
+        /// for a single work failed and the rest of the restore carries on.
+        func undoDisplacement(of url: URL) {
+            guard let index = moves.lastIndex(where: { $0.original == url }) else { return }
+            let move = moves.remove(at: index)
+            putBack(move)
+        }
+
+        /// Puts every parked file back, newest first. Best effort by necessity:
+        /// this runs when something has already gone wrong, and a file it
+        /// cannot move back is one nothing else could have saved either.
+        func restoreDisplaced() {
+            for move in moves.reversed() { putBack(move) }
+            moves.removeAll()
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        /// The restore committed. The parked copies are the old versions now.
+        func discard() {
+            moves.removeAll()
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        private func putBack(_ move: (original: URL, parked: URL)) {
+            let fileManager = FileManager.default
+            try? fileManager.removeItem(at: move.original)
+            try? fileManager.moveItem(at: move.parked, to: move.original)
         }
     }
 
@@ -1990,7 +2068,8 @@ enum KudosBackupService {
         _ contents: KudosBackupContents,
         into context: ModelContext,
         defaults: UserDefaults,
-        mode: BackupImportMode
+        mode: BackupImportMode,
+        journal: EPUBDisplacementJournal
     ) throws -> KudosBackupRestoreSummary {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
         var workIndex = WorkRestoreIndex(existingWorks)
@@ -2214,10 +2293,17 @@ enum KudosBackupService {
                     .appendingPathComponent("\(UUID().uuidString).epub")
                 do {
                     try epub.write(to: staged, options: .atomic)
+                    // Park the copy this is about to replace. `replaceEPUB`
+                    // discards what it displaces, and the restore's failure path
+                    // rolls back the database but cannot roll back the disk.
+                    try journal.displace(work.fileURL)
                     try ReadingQueueService.replaceEPUB(for: work, with: staged)
                     work.hasEPUB = true
                 } catch {
                     try? FileManager.default.removeItem(at: staged)
+                    // This one work is being skipped while the restore carries
+                    // on, so its original goes back now rather than at the end.
+                    journal.undoDisplacement(of: work.fileURL)
                     skippedInvalidEPUBs += 1
                     Log.library.notice(
                         "Skipped an invalid backup EPUB: \(error.localizedDescription, privacy: .public)"
