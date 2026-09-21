@@ -504,7 +504,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             case .success:
                 backupNotice = BackupNotice(
                     title: "Backup Exported",
-                    message: "\(works.count.formatted()) Library records were included."
+                    message: Self.exportSuccessMessage(recordCount: works.count)
                 )
             case let .failure(error):
                 backupNotice = BackupNotice(
@@ -779,6 +779,36 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
 
         epubNotice = BackupNotice(title: summary.title, message: summary.message)
+    }
+
+    /// What the archive actually contains, including what it does not.
+    ///
+    /// A converted import keeps the exact file it came from
+    /// (`UserDocumentImport.preserveOriginal`), described there as "insurance".
+    /// Both exporters enumerate works and fonts only, so that insurance does
+    /// not survive the one event it exists for: migrating to a new phone and
+    /// erasing the old one. Saying so at export time is the difference between
+    /// a reader who can copy the files off and one who finds out afterwards.
+    private static func exportSuccessMessage(recordCount: Int) -> String {
+        let records = "\(recordCount.formatted()) Library records were included."
+        let originals = preservedOriginalCount()
+        guard originals > 0 else { return records }
+        let noun = originals == 1 ? "original file is" : "original files are"
+        return records + "\n\n\(originals.formatted()) imported \(noun) kept on this "
+            + "device only — a backup carries converted EPUBs, not the documents they were "
+            + "made from. Copy them off separately before erasing this device."
+    }
+
+    /// Preserved originals on this device. The conversion sidecars sharing the
+    /// directory are bookkeeping, not documents, so they are not counted.
+    private static func preservedOriginalCount() -> Int {
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: Storage.originalsDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        return contents.filter {
+            !$0.lastPathComponent.hasSuffix(Storage.conversionRecordSuffix)
+        }.count
     }
 
     // MARK: Backup export / import
