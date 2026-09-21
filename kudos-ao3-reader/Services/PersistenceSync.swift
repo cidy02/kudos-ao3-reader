@@ -534,8 +534,19 @@ nonisolated enum SyncMerge {
         return incomingModifiedAt > tombstoneDeletedAt ? .reviveNewerData : .suppressStaleData
     }
 
+    /// `force` is Replace's snapshot semantics: the file wins even when this
+    /// device read further since. Without it a Replace kept the newer local
+    /// position, which made Replace neither a snapshot nor a merge.
+    ///
+    /// It deliberately does NOT override the two other guards. An incoming
+    /// snapshot carrying no progress at all still leaves local progress alone,
+    /// and a nil locator still means "this archive carried no position" rather
+    /// than "reset it" — that distinction is what stopped a backup written on
+    /// macOS wiping every reading position.
     @MainActor
-    static func applyProgress(_ incoming: ProgressSnapshot, to work: SavedWork) {
+    static func applyProgress(
+        _ incoming: ProgressSnapshot, to work: SavedWork, force: Bool = false
+    ) {
         let localModifiedAt = work.progressModifiedAt ?? work.lastReadDate
         let incomingModifiedAt = incoming.modifiedAt ?? incoming.lastReadDate
         let incomingHasProgress = incoming.lastReadDate != nil
@@ -543,7 +554,7 @@ nonisolated enum SyncMerge {
             || incoming.lastScrollFraction > 0
             || !(incoming.readiumLocator ?? "").isEmpty
         guard incomingHasProgress else { return }
-        if work.hasStartedReading {
+        if !force, work.hasStartedReading {
             guard shouldApplyIncoming(
                 localModifiedAt: localModifiedAt,
                 incomingModifiedAt: incomingModifiedAt
