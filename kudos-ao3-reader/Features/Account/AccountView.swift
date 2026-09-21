@@ -147,7 +147,12 @@ struct AccountView: View {
             // The bar comes back for the inbox's selection mode, and only that:
             // Select All is a `.confirmationAction`, which has nowhere to live
             // without a bar, and it is a distinct, self-contained state.
+            // `.navigationBar` is an iOS toolbar placement; macOS has no
+            // navigation bar to hide, and the floating chrome below already
+            // stands on its own there.
+            #if os(iOS)
             .toolbar(inboxModel.isSelecting ? .visible : .hidden, for: .navigationBar)
+            #endif
                 .overlay(alignment: .topTrailing) {
                     if !inboxModel.isSelecting { floatingChromeRow }
                 }

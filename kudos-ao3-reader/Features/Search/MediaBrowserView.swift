@@ -12,8 +12,13 @@ import SwiftUI
 struct MediaBrowserView: View {
     var onSelectFandom: (String) -> Void
 
-    #if os(iOS)
+    /// Deliberately not inside the iOS section below. The category card body is
+    /// shared by both platforms and reads the palette, and `ThemeManager` is put
+    /// into the environment on both — `ContentView` injects it in its macOS
+    /// branch as well as its iOS one. Guarding this declaration is what left
+    /// `categoryPalette` undefined on macOS and broke that build.
     @Environment(ThemeManager.self) private var themeManager
+    #if os(iOS)
     /// Set by BrowseView on the stack; pairs a category card with the fandom list
     /// it pushes. Absent elsewhere (Search's idle state), where the helper no-ops.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -78,6 +83,12 @@ struct MediaBrowserView: View {
         .task(id: statsToken) { await recomputeStats() }
     }
 
+    /// Used by the iOS panels *and* by the card body further down, which is
+    /// shared with macOS — so it cannot live inside the iOS-only section.
+    private func categoryPalette(_ category: AO3MediaCategory) -> SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: category.name))
+    }
+
     private var categoryList: some View {
         #if os(iOS)
         categoryGrid
@@ -132,10 +143,6 @@ struct MediaBrowserView: View {
             await AO3Client.shared.invalidateCachedResponses()
             await refresh()
         }
-    }
-
-    private func categoryPalette(_ category: AO3MediaCategory) -> SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: category.name))
     }
 
     private func categoryPanel(_ category: AO3MediaCategory) -> some View {
