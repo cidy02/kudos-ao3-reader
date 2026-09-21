@@ -28,6 +28,10 @@ struct RecentlyDeletedView: View {
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
     @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
 
+    /// Set when a restore did not persist. Recently Deleted is the last stop
+    /// before permanent deletion, so "it looked like it worked" is the one
+    /// outcome this screen must never produce.
+    @State private var restoreFailure: String?
     @State private var pendingPermanentWork: SavedWork?
     @State private var pendingPermanentCollection: WorkCollection?
     @State private var pendingPermanentQueue: ReadingQueue?
@@ -140,6 +144,18 @@ struct RecentlyDeletedView: View {
             }
         }
         .cardList()
+        .alert(
+            "Couldn't Restore",
+            isPresented: Binding(
+                get: { restoreFailure != nil },
+                set: { if !$0 { restoreFailure = nil } }
+            ),
+            presenting: restoreFailure
+        ) { _ in
+            Button("OK", role: .cancel) { restoreFailure = nil }
+        } message: { message in
+            Text(message)
+        }
     }
 
     private func header(count: Int) -> some View {
@@ -197,7 +213,12 @@ struct RecentlyDeletedView: View {
                 detail: workDetail(work),
                 authorIdentities: work.verifiedAuthorIdentities,
                 daysRemaining: Self.daysRemaining(work.permanentDeletionScheduledAt),
-                onRestore: { PreservedWorkService.restore(work, in: context) },
+                onRestore: {
+                    if !PreservedWorkService.restore(work, in: context) {
+                        restoreFailure = "Kudos could not save the restored work. "
+                            + "It is still scheduled for permanent deletion, so try again."
+                    }
+                },
                 onDeletePermanently: { pendingPermanentWork = work }
             ))
         }
@@ -208,7 +229,12 @@ struct RecentlyDeletedView: View {
                 title: collection.name,
                 detail: countPhrase(collection.works.count, "work"),
                 daysRemaining: Self.daysRemaining(collection.permanentDeletionScheduledAt),
-                onRestore: { PreservedWorkService.restore(collection, in: context) },
+                onRestore: {
+                    if !PreservedWorkService.restore(collection, in: context) {
+                        restoreFailure = "Kudos could not save the restored collection. "
+                            + "It is still scheduled for permanent deletion, so try again."
+                    }
+                },
                 onDeletePermanently: { pendingPermanentCollection = collection }
             ))
         }
@@ -219,7 +245,12 @@ struct RecentlyDeletedView: View {
                 title: queue.displayName,
                 detail: countPhrase(queue.memberships.count, "work"),
                 daysRemaining: Self.daysRemaining(queue.permanentDeletionScheduledAt),
-                onRestore: { PreservedWorkService.restore(queue, in: context) },
+                onRestore: {
+                    if !PreservedWorkService.restore(queue, in: context) {
+                        restoreFailure = "Kudos could not save the restored reading queue. "
+                            + "It is still scheduled for permanent deletion, so try again."
+                    }
+                },
                 onDeletePermanently: { pendingPermanentQueue = queue }
             ))
         }
