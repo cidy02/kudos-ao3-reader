@@ -2624,6 +2624,17 @@ enum KudosBackupService {
                 savedSearchesByID[archived.id] = search
             }
         }
+        // Searches this device still has that a trusted tombstone says were
+        // deleted elsewhere. The loop above only declines to *add* one back;
+        // nothing ever took away a copy already here, so a search deleted on
+        // one paired device stayed visible on the other — and that device
+        // published it again on its next export, so the deletion could never
+        // settle. Same pass the reading-log restorers run, and skipped in
+        // `replaceLibrary` for the reason the helper documents.
+        applyTombstonesToExisting(existingSavedSearches, in: context, mode: mode) {
+            tombstones.savedSearchResolution(id: $0.id, incomingModifiedAt: $0.dateAdded)
+        }
+
         if mode == .replaceLibrary {
             let snapshotSearchIDs = Set(contents.manifest.savedSearches.map(\.id))
             for search in existingSavedSearches where !snapshotSearchIDs.contains(search.id) {
