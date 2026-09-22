@@ -48,6 +48,19 @@ enum AO3ArchivePage: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Artboard 1aa routes that are easy to point at the wrong AO3 path.
+///
+/// Checked against otwarchive master on 2026-09-21 (`config/routes.rb`,
+/// `features/support/paths.rb`, and the views those routes render). Import is
+/// `GET /works/new?import=true`, not `/works/new/import`. Bulk edit is the GET
+/// `show_multiple` page; `edit_multiple` is POST-only.
+enum AO3MoreOnAO3Route {
+    static let importWork = "/works/new?import=true"
+    static let editWorksInBulk = "works/show_multiple"
+    static let collectionItems = "collection_items"
+    static let invitations = "invitations"
+}
+
 /// Long-tail AO3 destinations that open in Browse, artboard **1aa**.
 ///
 /// Restyled onto the shared 1o account header (`SubjectHeaderBlock`) and the
@@ -114,11 +127,21 @@ struct AccountMoreOnAO3View: View {
 
     // MARK: - Panels
 
-    /// 1aa's first group. It also draws Import work, Edit works in bulk and
-    /// Manage collection items; those are not here because their AO3 paths could
-    /// not be confirmed — GitHub was unreachable for otwarchive's routes and AO3
-    /// answered those probes with Cloudflare 525s, which say nothing either way.
-    /// A row that sends someone to a 404 in Browse is worse than a missing row.
+    /// 1aa's first group, in the drawn row order. Drafts is not on the artboard;
+    /// it stays at the end because this screen already offered it.
+    ///
+    /// No count badges. The figures drawn beside bulk edit, collection items,
+    /// and related works are not in `AO3AccountListCountsCache`, and this screen
+    /// does not fetch AO3 to fill them.
+    ///
+    /// Paths checked against otwarchive master on 2026-09-21. Import is
+    /// `GET /works/new?import=true` (`WorksController#new` renders the import
+    /// form when `params[:import]` is set). `/works/new/import` is not a route,
+    /// and `POST /works/import` only submits that form. Bulk edit is
+    /// `GET /users/:id/works/show_multiple` ("Edit Multiple Works");
+    /// `edit_multiple` is POST-only and is not a page you can open. Collection
+    /// items is `GET /users/:id/collection_items`, the "Manage Collection Items"
+    /// link on the user's own collections index.
     private var postAndManagePanel: some View {
         VStack(spacing: 0) {
             AccountExternalNavCard(
@@ -129,27 +152,52 @@ struct AccountMoreOnAO3View: View {
             )
             SubjectRowSeparator()
             AccountExternalNavCard(
-                title: "Drafts",
-                systemImage: "doc.badge.clock",
-                pathSuffix: "works/drafts",
+                title: "Import work",
+                systemImage: "square.and.arrow.down",
+                sitePath: AO3MoreOnAO3Route.importWork,
                 isFormRow: true
             )
             SubjectRowSeparator()
-            // 1aa files Related works under posting rather than challenges.
+            AccountExternalNavCard(
+                title: "Edit works in bulk",
+                systemImage: "checklist",
+                pathSuffix: AO3MoreOnAO3Route.editWorksInBulk,
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Manage collection items",
+                systemImage: "rectangle.stack",
+                pathSuffix: AO3MoreOnAO3Route.collectionItems,
+                isFormRow: true
+            )
+            SubjectRowSeparator()
             AccountExternalNavCard(
                 title: "Related works",
                 systemImage: "arrow.triangle.branch",
                 pathSuffix: "related_works",
                 isFormRow: true
             )
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Drafts",
+                systemImage: "doc.badge.clock",
+                pathSuffix: "works/drafts",
+                isFormRow: true
+            )
         }
         .subjectPanel()
     }
 
-    /// 1aa's third group. Its Invitations and Fannish next of kin rows are
-    /// absent: the first could not be confirmed, and `fannish_next_of_kin` under
-    /// a user path answered a definite 404, so whatever AO3 calls that page, it
-    /// is not that.
+    /// 1aa's third group, drawn order, then destinations this screen already had
+    /// that the artboard does not name (Pseuds, Co-Creator Requests, Statistics).
+    ///
+    /// Invitations is `GET /users/:id/invitations` ("Invite a friend"). The
+    /// "N left" figure on the artboard is that page's unsent-invite count, and
+    /// nothing caches it. Fannish next of kin is absent on purpose: otwarchive
+    /// has no user route for it (only an admin `update_next_of_kin`), profile
+    /// edit does not carry the field, and AO3 tells people to contact Support,
+    /// which is already the first row of The archive.
     private var yourAccountPanel: some View {
         VStack(spacing: 0) {
             AccountExternalNavCard(
@@ -160,9 +208,9 @@ struct AccountMoreOnAO3View: View {
             )
             SubjectRowSeparator()
             AccountExternalNavCard(
-                title: "Pseuds",
-                systemImage: "person.2",
-                pathSuffix: "pseuds",
+                title: "Invitations",
+                systemImage: "envelope",
+                pathSuffix: AO3MoreOnAO3Route.invitations,
                 isFormRow: true
             )
             SubjectRowSeparator()
@@ -170,6 +218,13 @@ struct AccountMoreOnAO3View: View {
                 title: "Skins and site styles",
                 systemImage: "paintpalette",
                 pathSuffix: "skins",
+                isFormRow: true
+            )
+            SubjectRowSeparator()
+            AccountExternalNavCard(
+                title: "Pseuds",
+                systemImage: "person.2",
+                pathSuffix: "pseuds",
                 isFormRow: true
             )
             SubjectRowSeparator()

@@ -36,4 +36,28 @@ struct AccountMoreOnAO3Tests {
         #expect(AccountExternalNavCard.userURL(suffix: "", username: "testuser")?.absoluteString == "https://archiveofourown.org/users/testuser")
         #expect(AccountExternalNavCard.userURL(suffix: "works/drafts", username: nil) == nil)
     }
+
+    /// Pins the 1aa rows added 2026-09-21. Import in particular is a query on
+    /// `/works/new`, not the `/works/new/import` path that does not exist.
+    @Test func longTailRoutesMatchOtwarchive() {
+        #expect(
+            AccountExternalNavCard.siteWideURL(path: AO3MoreOnAO3Route.importWork)?.absoluteString
+                == "https://archiveofourown.org/works/new?import=true"
+        )
+        #expect(
+            AccountExternalNavCard.userURL(
+                suffix: AO3MoreOnAO3Route.editWorksInBulk, username: "testuser"
+            )?.absoluteString == "https://archiveofourown.org/users/testuser/works/show_multiple"
+        )
+        #expect(
+            AccountExternalNavCard.userURL(
+                suffix: AO3MoreOnAO3Route.collectionItems, username: "testuser"
+            )?.absoluteString == "https://archiveofourown.org/users/testuser/collection_items"
+        )
+        #expect(
+            AccountExternalNavCard.userURL(
+                suffix: AO3MoreOnAO3Route.invitations, username: "testuser"
+            )?.absoluteString == "https://archiveofourown.org/users/testuser/invitations"
+        )
+    }
 }
