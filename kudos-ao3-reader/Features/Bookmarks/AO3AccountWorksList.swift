@@ -172,6 +172,12 @@ struct AO3AccountWorksList: View {
     /// 1q's All / Recs / Private / With notes pills. They narrow the loaded
     /// page. Ignored by every other list kind.
     @State private var bookmarksFilter = AO3BookmarksFilter.all
+    /// Subscriptions' All / Updated pills. They narrow the loaded page.
+    /// Ignored by every other list kind.
+    @State private var subscriptionsFilter = AO3SubscriptionsFilter.all
+    /// Each subscription row's unsubscribe form action, keyed by work id the
+    /// way `bookmarkDetails` is. Empty for every other list.
+    @State private var unsubscribePaths: [Int: String] = [:]
     /// Marked for Later's own "since you looked" clock. Not the subscriptions
     /// map: the same work can be on both lists, and one look must not clear both.
     @State private var markedForLaterWatermarks: [Int: SubscriptionWatermark] = [:]
@@ -187,6 +193,11 @@ struct AO3AccountWorksList: View {
     @State private var confirmClearHistory = false
     @State private var historyWriteError: String?
     @State private var historyWriteInFlight = false
+    /// The row whose AO3 subscription the reader asked to drop. Setting it
+    /// opens the confirm; the write runs only from that confirm.
+    @State private var pendingUnsubscribe: CanonicalWork?
+    @State private var subscriptionWriteError: String?
+    @State private var subscriptionWriteInFlight = false
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -261,8 +272,10 @@ struct AO3AccountWorksList: View {
                                 // 1o is one layout — covers for what changed, ledger
                                 // rows for the rest — so the account-wide display
                                 // switch would change a preference this screen
-                                // does not draw.
-                                if kind != .markedForLater {
+                                // does not draw. Subscriptions is one list too:
+                                // the chapter range and the unsubscribe swipe
+                                // are on that row, and the switch would not draw them.
+                                if kind != .markedForLater, kind != .subscriptions {
                                     DisplayModeMenuPicker(mode: $displayMode)
                                     if displayMode != .compact {
                                         ExpandAllMenuItem(expandAll: $expandAll)
@@ -342,6 +355,32 @@ struct AO3AccountWorksList: View {
                 Button("OK", role: .cancel) { historyWriteError = nil }
             } message: {
                 Text(historyWriteError ?? "")
+            }
+            .destructiveConfirmation(
+                for: $pendingUnsubscribe,
+                title: "Unsubscribe?",
+                confirmLabel: "Unsubscribe",
+                message: { entry in
+                    let title = entry.title
+                    if title.isEmpty {
+                        return "This removes the work from your AO3 subscriptions. "
+                            + "The work itself is left where it is."
+                    }
+                    return "“\(title)” will be removed from your AO3 subscriptions. "
+                        + "The work itself is left where it is."
+                },
+                perform: { entry in Task { await unsubscribe(entry) } }
+            )
+            .alert(
+                "Couldn't unsubscribe",
+                isPresented: Binding(
+                    get: { subscriptionWriteError != nil },
+                    set: { if !$0 { subscriptionWriteError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { subscriptionWriteError = nil }
+            } message: {
+                Text(subscriptionWriteError ?? "")
             }
     }
 
@@ -487,6 +526,22 @@ struct AO3AccountWorksList: View {
                     isLoading: phase == .loading,
                     filter: $bookmarksFilter,
                     onPage: { page in Task { await load(page: page) } }
+                )
+            } else if kind == .subscriptions {
+                AO3SubscriptionsWorksBrowser(
+                    entries: visibleEntries,
+                    watermarks: subscriptionWatermarks,
+                    unsubscribePaths: unsubscribePaths,
+                    expandAll: expandAll,
+                    palette: accountPalette,
+                    kicker: originKicker,
+                    showPagination: showPagination,
+                    currentPage: currentPage,
+                    totalPages: totalPages,
+                    isLoading: phase == .loading,
+                    filter: $subscriptionsFilter,
+                    onPage: { page in Task { await load(page: page) } },
+                    onUnsubscribe: { pendingUnsubscribe = $0 }
                 )
             } else if displayMode == .compact {
                 ScrollView {
@@ -787,9 +842,11 @@ struct AO3AccountWorksList: View {
             // and a date. `AO3SearchPage` has nowhere to put those, and a second
             // fetch of the same URL would spend another paced request to recover
             // them. One `accountBookmarksPage` feeds both the work list and
-            // `bookmarkDetails`. Every other kind still goes through `fetch`.
+            // `bookmarkDetails`. Subscriptions does the same with the unsubscribe
+            // form already on the index. Every other kind still goes through `fetch`.
             let result: AO3SearchPage
             let details: [Int: AO3AuthorBookmark]
+            let paths: [Int: String]
             if kind == .bookmarks {
                 let parsed = try await AO3Client.shared.accountBookmarksPage(for: request, page: page)
                 result = AO3SearchPage(
@@ -801,9 +858,19 @@ struct AO3AccountWorksList: View {
                     parsed.bookmarks.map { ($0.work.id, $0) },
                     uniquingKeysWith: { first, _ in first }
                 )
+                paths = [:]
+            } else if kind == .subscriptions {
+                // The unsubscribe action is the `<dd><form>` beside each work.
+                // `AO3SearchPage` has nowhere to put it. One `subscriptionsIndex`
+                // feeds both the work list and `unsubscribePaths`.
+                let parsed = try await AO3Client.shared.subscriptionsIndex(for: request, page: page)
+                result = parsed.page
+                details = [:]
+                paths = parsed.unsubscribePaths
             } else {
                 result = try await kind.fetch(for: request, page: page)
                 details = [:]
+                paths = [:]
             }
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
             works = result.works
@@ -814,6 +881,7 @@ struct AO3AccountWorksList: View {
                 uniquingKeysWith: { first, _ in first }
             )
             bookmarkDetails = details
+            unsubscribePaths = paths
             currentPage = result.currentPage
             totalPages = result.totalPages
             if kind == .markedForLater {
@@ -841,6 +909,7 @@ struct AO3AccountWorksList: View {
             works = []
             readingEntries = [:]
             bookmarkDetails = [:]
+            unsubscribePaths = [:]
             phase = .idle // back to the signed-out prompt
         } catch is CancellationError {
             // This view's own `.task(id: auth.isLoggedIn)` restarts (cancelling
@@ -881,6 +950,31 @@ struct AO3AccountWorksList: View {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
             historyWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// AO3 unsubscribe always asks first. The swipe only stages the row.
+    /// A flick does not post: the button sets `pendingUnsubscribe`, and the
+    /// confirm is what calls this.
+    private func unsubscribe(_ entry: CanonicalWork) async {
+        guard !subscriptionWriteInFlight else { return }
+        guard let workID = entry.ao3WorkID,
+              let path = unsubscribePaths[workID],
+              !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            subscriptionWriteError = "AO3 didn't show an unsubscribe link for this row, so nothing was changed."
+            return
+        }
+        subscriptionWriteInFlight = true
+        defer { subscriptionWriteInFlight = false }
+        do {
+            _ = try await auth.unsubscribe(path: path, page: currentPage)
+            works.removeAll { $0.id == workID }
+            unsubscribePaths[workID] = nil
+        } catch is CancellationError {
+            // Session changed between the form GET and the POST. Nothing landed.
+        } catch {
+            subscriptionWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
