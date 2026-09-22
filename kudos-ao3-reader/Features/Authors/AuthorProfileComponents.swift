@@ -192,10 +192,7 @@ struct AO3SeriesRow: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(seriesPalette.chipStroke, lineWidth: 0.5)
                     )
-                    .overlay(
-                        Image(systemName: "books.vertical")
-                            .foregroundStyle(fandomColor)
-                    )
+                    .overlay(SeriesSpineStackMark(color: fandomColor))
 
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
@@ -206,18 +203,10 @@ struct AO3SeriesRow: View {
                             .foregroundStyle(fandomColor)
                             .lineLimit(1)
                         if series.isComplete == true {
-                            Text("COMPLETE")
-                                .font(.system(size: 9.5, weight: .semibold, design: .default))
-                                .tracking(0.5)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.green.opacity(0.15))
-                                .foregroundStyle(Color.green)
-                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .strokeBorder(Color.green.opacity(0.35), lineWidth: 0.5)
-                                )
+                            seriesStateBadge("Complete", color: .green)
+                        }
+                        if series.isRestricted {
+                            seriesStateBadge("Restricted", color: restrictedColor)
                         }
                     }
 
@@ -243,25 +232,29 @@ struct AO3SeriesRow: View {
 
             HStack(spacing: 8) {
                 if let workCount = series.workCount {
-                    Text("\(workCount) works")
+                    Text(workCount == 1 ? "1 work" : "\(workCount) works")
                 }
-                if series.words != nil {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
+                if series.words != nil, series.workCount != nil {
+                    Text("·").foregroundStyle(.tertiary)
                 }
                 if let words = series.words {
                     Text("\(words.formatted()) words")
+                }
+                if series.bookmarkCount != nil, series.workCount != nil || series.words != nil {
+                    Text("·").foregroundStyle(.tertiary)
+                }
+                if let bookmarks = series.bookmarkCount {
+                    Text(bookmarks == 1 ? "1 bookmark" : "\(bookmarks.formatted()) bookmarks")
+                }
+                Spacer(minLength: 8)
+                if !series.dateUpdated.isEmpty {
+                    Text(series.dateUpdated)
                 }
             }
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
 
             AO3AuthorBylineView(names: series.creatorNames, identities: series.creatorIdentities, compact: true)
-            if !series.dateUpdated.isEmpty {
-                Text(series.dateUpdated)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 18)
@@ -279,6 +272,27 @@ struct AO3SeriesRow: View {
 
     private var fandomColor: Color {
         seriesPalette.accent
+    }
+
+    /// 1w's restricted chip. Orange is the board's own, the way Complete is green.
+    private var restrictedColor: Color {
+        Color(red: 1, green: 159.0 / 255, blue: 10.0 / 255)
+    }
+
+    private func seriesStateBadge(_ title: String, color: Color) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 9.5, weight: .semibold))
+            .tracking(0.5)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.15))
+            .foregroundStyle(color)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
+            )
+            .accessibilityLabel(title)
     }
 
     private var standardBody: some View {
@@ -320,6 +334,18 @@ struct AO3SeriesRow: View {
                         accessibilityLabel: "\(words.formatted()) words"
                     )
                 }
+                if let bookmarks = series.bookmarkCount {
+                    WorkStatLabel(
+                        text: bookmarks.formatted(),
+                        symbol: "bookmark",
+                        accessibilityLabel: bookmarks == 1
+                            ? "1 bookmark"
+                            : "\(bookmarks.formatted()) bookmarks"
+                    )
+                }
+                if series.isRestricted {
+                    WorkStatLabel(text: "Restricted", symbol: "lock.fill")
+                }
                 if let complete = series.isComplete {
                     WorkStatLabel(
                         text: complete ? "Complete" : "In progress",
@@ -335,6 +361,29 @@ struct AO3SeriesRow: View {
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 1w's series mark: three offset book spines. The rear one is lighter.
+/// The artboard draws this instead of a list glyph, at every work count —
+/// the stack is the series, and the posted-work count stays in the stats line.
+private struct SeriesSpineStackMark: View {
+    var color: Color
+
+    var body: some View {
+        ZStack {
+            spine(opacity: 0.55).offset(x: 4.2, y: -4.6)
+            spine(opacity: 1).offset(x: 2.1, y: -2.3)
+            spine(opacity: 1)
+        }
+        .frame(width: 17, height: 17)
+        .accessibilityHidden(true)
+    }
+
+    private func spine(opacity: Double) -> some View {
+        RoundedRectangle(cornerRadius: 1.6, style: .continuous)
+            .stroke(color.opacity(opacity), lineWidth: 1.25)
+            .frame(width: 9, height: 10)
     }
 }
 

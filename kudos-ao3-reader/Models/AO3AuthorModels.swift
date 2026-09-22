@@ -456,8 +456,16 @@ nonisolated struct AO3SeriesSummary: Identifiable, Hashable {
     var summary: String
     var words: Int?
     var workCount: Int?
+    /// Public bookmarks on the series, from `dd.bookmarks`. Absent when AO3
+    /// printed none — a series with zero bookmarks omits the row entirely.
+    var bookmarkCount: Int?
+    /// `p.datetime` is the series' revised date. AO3 prints it as a date or a
+    /// relative phrase; this keeps that text rather than reinterpreting it.
     var dateUpdated: String
     var isComplete: Bool?
+    /// The blue lock beside the title (`series/_series_module.html.erb` when
+    /// `series.restricted`). The red lock is hidden-by-admin and is not this.
+    var isRestricted: Bool
     var url: URL
 }
 

@@ -271,11 +271,34 @@ struct AO3AuthorProfileParserTests {
         #expect(series.creatorIdentities.first?.route?.pseud == "Avery Writes")
         #expect(series.workCount == 3)
         #expect(series.words == 45678)
+        #expect(series.bookmarkCount == 62)
+        #expect(series.dateUpdated == "08 Jul 2026")
         #expect(series.isComplete == true)
+        #expect(series.isRestricted)
+        // No blue lock and no bookmarks row: omitted is not zero, and not restricted.
+        #expect(seriesPage.series[1].bookmarkCount == nil)
+        #expect(seriesPage.series[1].isRestricted == false)
         #expect(seriesPage.series[1].creatorNames == ["Anonymous"])
         #expect(seriesPage.series[1].creatorIdentities.first?.kind == .anonymous)
         #expect(seriesPage.series[1].creatorIdentities.first?.route == nil)
         #expect(seriesPage.series[1].isComplete == false)
+        // A summary that says the word, and the red admin lock, are not the
+        // members-only mark. Only the blue lock (or its "Restricted" title) is.
+        let decoy = try AO3Client.parseAuthorSeriesPage(
+            """
+            <ul class="series index group">
+              <li class="series blurb group">
+                <h4 class="heading"><a href="/series/9">Locked words</a>
+                  <img src="/images/lockred.png" alt="Hidden by Administrator" title="Hidden by Administrator">
+                </h4>
+                <blockquote class="userstuff summary"><p>A restricted morning.</p></blockquote>
+              </li>
+            </ul>
+            """,
+            page: 1
+        )
+        #expect(decoy.series.first?.isRestricted == false)
+        #expect(decoy.series.first?.bookmarkCount == nil)
 
         let bookmarksPage = try AO3Client.parseAuthorBookmarksPage(
             fixture("ao3_author_bookmarks"),

@@ -430,8 +430,23 @@ struct AO3AuthorSeriesSection: View {
     var layout: AccountWorksLayout = .list
 
     @Environment(AO3AuthService.self) private var auth
+    /// 1w's Edit and Reorder, pushed. A `NavigationLink` inside a swipe action
+    /// does not reliably push, which is the same reason the series detail page
+    /// opens Edit from a button rather than a link in a menu.
+    @State private var editingSeries: AO3SeriesSummary?
+    @State private var reorderingSeries: AO3SeriesSummary?
 
     var body: some View {
+        seriesList
+            .navigationDestination(item: $editingSeries) { series in
+                SeriesEditDestination(series: series)
+            }
+            .navigationDestination(item: $reorderingSeries) { series in
+                SeriesReorderDestination(series: series)
+            }
+    }
+
+    private var seriesList: some View {
         Section("Series") {
             if model.contentPhase == .loading, model.series.isEmpty {
                 AO3AuthorLoadingRows()
@@ -487,9 +502,35 @@ struct AO3AuthorSeriesSection: View {
                     )
                         .cardNavigation(to: series, accessibilityLabel: series.title)
                         .cardRow()
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            seriesSwipeActions(series)
+                        }
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
+        }
+    }
+
+    /// Only a creator of this series. The same gate as the detail page's Edit:
+    /// the byline is a pseud, so the match is the registered username.
+    @ViewBuilder
+    private func seriesSwipeActions(_ series: AO3SeriesSummary) -> some View {
+        if auth.isLoggedIn, series.isCreator(username: auth.username) {
+            // Trailing actions: the first button sits at the screen edge.
+            // 1w draws Edit nearer the card and Reorder at the edge.
+            Button {
+                reorderingSeries = series
+            } label: {
+                Label("Reorder", systemImage: "list.number")
+            }
+            .tint(.gray)
+
+            Button {
+                editingSeries = series
+            } label: {
+                Label("Edit", systemImage: "square.and.pencil")
+            }
+            .tint(.blue)
         }
     }
 }
