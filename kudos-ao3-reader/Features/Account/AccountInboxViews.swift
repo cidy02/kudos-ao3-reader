@@ -700,8 +700,9 @@ struct AccountInboxCommentListRow: View {
         .padding(.horizontal, 14)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // Full swipe stays off. Marking read posts to AO3, and a flick
-            // must not be the thing that sends it. Same gate as the overflow.
-            if canToggleReadState && !isPerformingAction {
+            // must not be the thing that sends it. Same gate as the overflow,
+            // and absent in Select mode: that write clears the whole selection.
+            if !isSelecting && canToggleReadState && !isPerformingAction {
                 Button(action: toggleReadState) {
                     Label(
                         item.isUnread ? "Mark Read" : "Mark Unread",
