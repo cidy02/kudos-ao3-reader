@@ -99,4 +99,90 @@ struct AO3AccountWorksSessionReloadTests {
         #expect(screen.unsubscribePaths.isEmpty)
         #expect(screen.phaseIsIdle)
     }
+
+    /// The defer, the failure catch, and the success removal all call
+    /// `shouldApplyCapturedGeneration`. This screen applies that decision in
+    /// the same places: a matching generation clears the flag, stores the
+    /// error, and removes the row; any other generation touches none of them.
+    /// `switchAccount` uses the cleared flag, which is what the next account
+    /// actually starts from.
+    private struct WriteFinish {
+        var generation: Int
+        var inFlight = false
+        var error: String?
+        var works: [Int] = []
+
+        mutating func begin() -> Int? {
+            guard !inFlight else { return nil }
+            inFlight = true
+            return generation
+        }
+
+        mutating func finish(captured: Int, remove workID: Int?, failure: String?) {
+            guard AO3AccountWorksSessionReload.shouldApplyCapturedGeneration(
+                captured,
+                sessionGeneration: generation
+            ) else { return }
+            if let failure {
+                error = failure
+            }
+            if let workID {
+                works.removeAll { $0 == workID }
+            }
+            inFlight = false
+        }
+
+        mutating func switchAccount(to next: Int) {
+            generation = next
+            inFlight = AO3AccountWorksSessionReload.cleared.subscriptionWriteInFlight
+            error = AO3AccountWorksSessionReload.cleared.subscriptionWriteError
+            works = []
+        }
+    }
+
+    @Test func aCapturedGenerationAppliesOnlyWhileItIsCurrent() {
+        #expect(AO3AccountWorksSessionReload.shouldApplyCapturedGeneration(4, sessionGeneration: 4))
+        #expect(!AO3AccountWorksSessionReload.shouldApplyCapturedGeneration(4, sessionGeneration: 5))
+    }
+
+    @Test func theSameGenerationClearsTheFlagStoresTheErrorAndRemovesTheRow() {
+        var screen = WriteFinish(generation: 3, works: [8, 2])
+        #expect(screen.begin() == 3)
+        screen.finish(captured: 3, remove: nil, failure: "Couldn't unsubscribe.")
+        #expect(screen.inFlight == false)
+        #expect(screen.error == "Couldn't unsubscribe.")
+        #expect(screen.works == [8, 2])
+        // The flag is false, so a retry on this account can start.
+        #expect(screen.begin() == 3)
+
+        screen.finish(captured: 3, remove: 8, failure: nil)
+        #expect(screen.inFlight == false)
+        #expect(screen.error == "Couldn't unsubscribe.")
+        #expect(screen.works == [2])
+    }
+
+    /// Account A is mid-write. The switch clears the flag. B starts a write.
+    /// A's success and A's failure must neither clear B's flag nor show A's
+    /// error nor remove B's row, including when the work id is the same.
+    @Test func aStaleWriteFinishLeavesTheNextAccountsWriteAlone() {
+        var screen = WriteFinish(generation: 1, works: [9, 4])
+        #expect(screen.begin() == 1)
+
+        screen.switchAccount(to: 2)
+        #expect(screen.inFlight == false)
+        screen.works = [9, 4]
+        #expect(screen.begin() == 2)
+
+        screen.finish(captured: 1, remove: 9, failure: "Couldn't unsubscribe.")
+        #expect(screen.inFlight)
+        #expect(screen.error == nil)
+        #expect(screen.works == [9, 4])
+        // B's guard still holds, so a second write cannot start.
+        #expect(screen.begin() == nil)
+
+        screen.finish(captured: 2, remove: 4, failure: nil)
+        #expect(screen.inFlight == false)
+        #expect(screen.works == [9])
+        #expect(screen.error == nil)
+    }
 }

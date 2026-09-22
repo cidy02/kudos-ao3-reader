@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import Kudos
 
@@ -220,5 +221,146 @@ struct AO3SubscriptionsScreenTests {
                 == "Subscriptions live on AO3 — unsubscribing here unsubscribes there. "
                 + "Pagination follows the list: 1 of 1 page."
         )
+    }
+
+    /// The Updated pill never draws a row that has not been enriched, so the
+    /// page has to ask for every sparse id, not only a screenful. A row that
+    /// already has chapters is not fetched again. A repeated id is one fetch.
+    @Test func aLoadedPageSelectsEverySparseRow() {
+        let sparse = (1...20).map {
+            AO3WorkSummary.subscription(id: $0, title: "Work \($0)", authors: ["someone"])
+        }
+        var complete = summary(id: 100, chapters: "14/20")
+        complete.rating = "General"
+        complete.fandoms = ["A Fandom"]
+        var page = sparse
+        page.insert(complete, at: 3)
+        page.append(sparse[0])
+
+        #expect(AO3SubscriptionsPageEnrichment.sparseWorks(in: page).map(\.id) == Array(1...20))
+    }
+
+    @Test func enrichmentOnTheCurrentGenerationIsRecorded() async {
+        let noted = OSAllocatedUnfairLock(initialState: [Int]())
+        let work = AO3WorkSummary.subscription(id: 9, title: "Work", authors: ["someone"])
+        await AO3SubscriptionsPageEnrichment.enrichPage(
+            [work],
+            generation: 4,
+            sessionGeneration: { 4 },
+            note: { summary in noted.withLock { $0.append(summary.id) } },
+            fetch: { _ in work }
+        )
+        #expect(noted.withLock { $0 } == [9])
+    }
+
+    /// The generation is read after the fetch returns. A switch during the
+    /// fetch must not store that summary on the account now on screen.
+    @Test func enrichmentFromAnOldGenerationIsNotRecorded() async {
+        let generation = OSAllocatedUnfairLock(initialState: 1)
+        let noted = OSAllocatedUnfairLock(initialState: [Int]())
+        let work = AO3WorkSummary.subscription(id: 9, title: "Work", authors: ["someone"])
+        await AO3SubscriptionsPageEnrichment.enrichPage(
+            [work],
+            generation: 1,
+            sessionGeneration: { generation.withLock { $0 } },
+            note: { summary in noted.withLock { $0.append(summary.id) } },
+            fetch: { _ in
+                generation.withLock { $0 = 2 }
+                return work
+            }
+        )
+        #expect(noted.withLock { $0.isEmpty })
+    }
+
+    @Test func theHandoffCapIsTheRequestCoordinatorsWidth() async {
+        let limit = await AO3RequestCoordinator.shared.limit
+        #expect(AO3SubscriptionsPageEnrichment.maxInFlight == limit)
+    }
+
+    /// Three fetches park. A fourth must not start. Cancelling then letting
+    /// the parked ones finish must not start the rest: `enrich` will not
+    /// cancel a fetch it has already detached, so the cap is what keeps a
+    /// page change from queuing the whole page.
+    @Test func enrichmentHandsOffOnlyTheCapAndCancelStopsTheRest() async {
+        let gate = SubscriptionEnrichmentFetchGate()
+        let cap = AO3SubscriptionsPageEnrichment.maxInFlight
+        let works = (1...(cap + 2)).map {
+            AO3WorkSummary.subscription(id: $0, title: "Work \($0)", authors: ["someone"])
+        }
+        let task = Task {
+            await AO3SubscriptionsPageEnrichment.enrichPage(
+                works,
+                generation: 1,
+                sessionGeneration: { 1 },
+                note: { _ in },
+                fetch: { work in
+                    await gate.enter(work.id)
+                    return nil
+                }
+            )
+        }
+
+        var reachedCap = false
+        for _ in 0..<200 {
+            if await gate.startedCount() >= cap {
+                reachedCap = true
+                break
+            }
+            await Task.yield()
+        }
+        #expect(reachedCap)
+        for _ in 0..<40 { await Task.yield() }
+        #expect(await gate.startedCount() == cap)
+
+        task.cancel()
+        for _ in 0..<40 { await Task.yield() }
+        #expect(await gate.startedCount() == cap)
+
+        await gate.releaseAllAndOpen()
+        let finished = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await task.value
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        #expect(finished)
+        #expect(await gate.startedCount() == cap)
+    }
+}
+
+/// Parks enrichment fetches so a test can see how many have been handed off.
+private actor SubscriptionEnrichmentFetchGate {
+    private var started: [Int] = []
+    private var parked: [CheckedContinuation<Void, Never>] = []
+    private var open = false
+
+    func enter(_ id: Int) async {
+        started.append(id)
+        if open { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            if open {
+                continuation.resume()
+            } else {
+                parked.append(continuation)
+            }
+        }
+    }
+
+    func startedCount() -> Int { started.count }
+
+    func releaseAllAndOpen() {
+        open = true
+        let waiting = parked
+        parked.removeAll()
+        for continuation in waiting {
+            continuation.resume()
+        }
     }
 }
