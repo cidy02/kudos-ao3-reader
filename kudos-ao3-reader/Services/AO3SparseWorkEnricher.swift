@@ -8,11 +8,12 @@ import os
 /// sparse `AO3WorkSummary` and the cards render with no tags, no stats and no
 /// summary while every other list in the app shows all three.
 ///
-/// **One work at a time, on demand, and never as a batch.** Filling a 20-work page
-/// eagerly would mean 20 `/works/<id>` fetches before anything could be shown, each
-/// taking a `pace()` slot — the list would sit empty for as long as that took, and
-/// scrolling past a work you didn't care about would still have cost a request. So
-/// rows ask for their own metadata as they appear and the card fills in behind them.
+/// One work per call. `AO3SubscriptionsPageEnrichment` makes that call for every
+/// sparse row on a subscriptions page that is already on screen, a few at a time,
+/// so Updated can classify a row that has not appeared. The list is not held
+/// empty for those fetches. Other callers still ask as a row appears. The task
+/// this method creates is not a child of the caller: cancelling the caller does
+/// not stop a fetch that has already been handed over.
 ///
 /// Results are memoised for the process lifetime: paging back to a list must not
 /// re-fetch what it already has. Nothing is written to disk — this is presentation

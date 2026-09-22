@@ -191,8 +191,9 @@ struct AO3SubscriptionsWorksBrowser: View {
     let entries: [CanonicalWork]
     let watermarks: [Int: SubscriptionWatermark]
     let unsubscribePaths: [Int: String]
-    /// Work-page summaries keyed by work id. Empty until a row's enrichment
-    /// reports one. Grouping reads these in preference to `entry.remote`.
+    /// Work-page summaries keyed by work id. The loaded page asks for every
+    /// sparse row. A row's own task reports the same summary when that walk
+    /// has not stored it yet. Grouping reads these in preference to `entry.remote`.
     let enrichedSummaries: [Int: AO3WorkSummary]
     let expandAll: Bool
     let palette: SubjectPalette
@@ -324,8 +325,10 @@ struct AO3SubscriptionsWorksBrowser: View {
             }
         }
         // A saved work renders `SensitiveWorkRow`, not `EnrichingAO3WorkRow`,
-        // so the shared row never reports a chapter count for it. The index
-        // blurb is still sparse. Ask for the work page the same way.
+        // so the shared row never reports a chapter count for it. The page
+        // walk asks for the same id. This still reports it when that walk
+        // was cancelled after the row was on screen. `enrich` coalesces the
+        // two, and a failed fetch stays failed: this does not retry it.
         .task(id: savedRowEnrichmentID(entry)) {
             await enrichSavedRow(entry)
         }

@@ -206,6 +206,10 @@ struct AO3AccountWorksList: View {
     @State private var pendingUnsubscribe: CanonicalWork?
     @State private var subscriptionWriteError: String?
     @State private var subscriptionWriteInFlight = false
+    /// Chapter-count fetches for the subscriptions page on screen. Not part of
+    /// `AO3AccountWorksSessionReload.cleared`: a task is not that value. A new
+    /// generation cancels it from `clearLoadedAccount`, and a new page replaces it.
+    @State private var subscriptionEnrichment: Task<Void, Never>?
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -343,8 +347,16 @@ struct AO3AccountWorksList: View {
                     clearLoadedAccount()
                     loadedSessionGeneration = auth.sessionGeneration
                 }
-                if auth.isLoggedIn, phase == .idle { await load(page: 1) }
+                if auth.isLoggedIn, phase == .idle {
+                    await load(page: 1)
+                } else if kind == .subscriptions, phase == .loaded,
+                          subscriptionEnrichment?.isCancelled != false {
+                    // Reappearing after the walk was cancelled. The same
+                    // generation keeps the page, so this is not a new load.
+                    enrichLoadedSubscriptionPage(works, generation: auth.sessionGeneration)
+                }
             }
+            .onDisappear { subscriptionEnrichment?.cancel() }
             .sheet(isPresented: $showLogin) { AO3LoginView() }
             .destructiveConfirmation(
                 for: $pendingHistoryDelete,
@@ -930,6 +942,9 @@ struct AO3AccountWorksList: View {
             // that displayed it.
             baselineWatermarks()
             baselineMarkedForLater(result.works)
+            // After the page is stored, so the list is not held empty while
+            // chapter counts arrive. No-op for every kind but subscriptions.
+            enrichLoadedSubscriptionPage(result.works, generation: expectedSessionGeneration)
             if let countsKind = kind.countsKind {
                 AO3AccountListCountsCache.shared.record(
                     page: result,
@@ -974,19 +989,36 @@ struct AO3AccountWorksList: View {
             return
         }
         historyWriteInFlight = true
-        defer { historyWriteInFlight = false }
+        defer {
+            if writeResultStillOwnsScreen(generation) {
+                historyWriteInFlight = false
+            }
+        }
         do {
             _ = try await auth.deleteReading(readingID: readingID, page: currentPage)
             // The POST is generation-fenced. This list may already be the next
-            // account's by the time that result comes back.
-            guard auth.sessionGeneration == generation else { return }
+            // account's by the time that result comes back. The defer uses the
+            // same check, so it does not drop a write that account has started.
+            guard writeResultStillOwnsScreen(generation) else { return }
             works.removeAll { $0.id == workID }
             readingEntries[workID] = nil
         } catch is CancellationError {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
+            guard writeResultStillOwnsScreen(generation) else { return }
             historyWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    /// The flag, the error, and the row edit for one write. A later generation
+    /// has its own flag: `clearLoadedAccount` set it false, and that
+    /// generation's write may have set it true. See
+    /// `shouldApplyCapturedGeneration`.
+    private func writeResultStillOwnsScreen(_ generation: Int) -> Bool {
+        AO3AccountWorksSessionReload.shouldApplyCapturedGeneration(
+            generation,
+            sessionGeneration: auth.sessionGeneration
+        )
     }
 
     /// AO3 unsubscribe always asks first. The swipe only stages the row.
@@ -1003,17 +1035,23 @@ struct AO3AccountWorksList: View {
             return
         }
         subscriptionWriteInFlight = true
-        defer { subscriptionWriteInFlight = false }
+        defer {
+            if writeResultStillOwnsScreen(generation) {
+                subscriptionWriteInFlight = false
+            }
+        }
         do {
             _ = try await auth.unsubscribe(path: path, page: currentPage)
             // The path was this session's. A switch that lands while the POST
-            // is in flight must not drop that work id from the next account.
-            guard auth.sessionGeneration == generation else { return }
+            // is in flight must not drop that work id from the next account,
+            // and must not clear the flag or show this failure on that account.
+            guard writeResultStillOwnsScreen(generation) else { return }
             works.removeAll { $0.id == workID }
             unsubscribePaths[workID] = nil
         } catch is CancellationError {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
+            guard writeResultStillOwnsScreen(generation) else { return }
             subscriptionWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -1022,6 +1060,8 @@ struct AO3AccountWorksList: View {
     /// idle so the load gate below actually fetches. The pending confirms go
     /// too: an Unsubscribe staged for account A must not post after B signs in.
     private func clearLoadedAccount() {
+        subscriptionEnrichment?.cancel()
+        subscriptionEnrichment = nil
         let cleared = AO3AccountWorksSessionReload.cleared
         works = cleared.works
         currentPage = cleared.currentPage
@@ -1060,10 +1100,14 @@ struct AO3AccountWorksList: View {
         guard !historyWriteInFlight else { return }
         let generation = auth.sessionGeneration
         historyWriteInFlight = true
-        defer { historyWriteInFlight = false }
+        defer {
+            if writeResultStillOwnsScreen(generation) {
+                historyWriteInFlight = false
+            }
+        }
         do {
             _ = try await auth.clearReadingHistory()
-            guard auth.sessionGeneration == generation else { return }
+            guard writeResultStillOwnsScreen(generation) else { return }
             works = []
             readingEntries = [:]
             currentPage = 1
@@ -1071,7 +1115,24 @@ struct AO3AccountWorksList: View {
         } catch is CancellationError {
             // Session changed between the confirm-page GET and the POST.
         } catch {
+            guard writeResultStillOwnsScreen(generation) else { return }
             historyWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Starts chapter-count fetches for this subscriptions page and stops the
+    /// previous page's walk. Rows that have not been handed to the enricher
+    /// yet are not fetched. A result from the old generation is not recorded.
+    private func enrichLoadedSubscriptionPage(_ works: [AO3WorkSummary], generation: Int) {
+        guard kind == .subscriptions else { return }
+        subscriptionEnrichment?.cancel()
+        subscriptionEnrichment = Task {
+            await AO3SubscriptionsPageEnrichment.enrichPage(
+                works,
+                generation: generation,
+                sessionGeneration: { auth.sessionGeneration },
+                note: noteEnrichedSubscription
+            )
         }
     }
 }
@@ -1079,10 +1140,11 @@ struct AO3AccountWorksList: View {
 /// An AO3 work row that fills itself in when the listing it came from was sparse.
 ///
 /// AO3's subscriptions page lists only title, id and author, so those cards would
-/// otherwise show no tags, no stats and no summary. The fetch happens per row as it
-/// appears rather than for the whole page up front: 20 works would be 20 paced
-/// requests before anything could render, and scrolling past a work you didn't care
-/// about would still have cost one.
+/// otherwise show no tags, no stats and no summary. This task runs when the row
+/// appears, which is what paints the card. The subscriptions list also asks for
+/// the rest of the loaded page (`AO3SubscriptionsPageEnrichment`) after the page
+/// is on screen, so a chapter count does not wait for the row to appear. Both
+/// calls share `AO3SparseWorkEnricher`, so a visible row is not a second request.
 ///
 /// A row that is already complete — every other list in the app — does no work at
 /// all; `enrich` returns nil immediately and this stays exactly `AO3WorkRow`.

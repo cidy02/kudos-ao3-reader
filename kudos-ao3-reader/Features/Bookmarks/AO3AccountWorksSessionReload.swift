@@ -22,7 +22,9 @@ struct AO3AccountWorksLoadID: Equatable, Sendable {
 enum AO3AccountWorksSessionReload {
     /// Loaded account rows, emptied. Device watermarks are not here. They
     /// record "last looked", not the account's list, and a launch restore
-    /// bumps the generation too.
+    /// bumps the generation too. The write flags go false here. A finish
+    /// from the generation that just ended must not set them again:
+    /// `shouldApplyCapturedGeneration` is that guard.
     struct ClearedAccount: Equatable {
         var works: [AO3WorkSummary] = []
         var currentPage = 1
@@ -48,5 +50,23 @@ enum AO3AccountWorksSessionReload {
     /// drop a page that is already on screen.
     static func shouldClear(boundGeneration: Int?, sessionGeneration: Int) -> Bool {
         boundGeneration != sessionGeneration
+    }
+
+    /// Whether a write or a page enrichment that started under
+    /// `capturedGeneration` may still change this screen.
+    ///
+    /// The in-flight flag, the write error, the removed row, and a
+    /// subscription chapter count all belong to that generation.
+    /// `clearLoadedAccount` runs when the generation changes and sets the
+    /// flag false before the next account can start a write. A stale finish
+    /// must not clear the flag or store the error: the new generation's
+    /// write may already have set the flag true, and the old failure is not
+    /// this account's. The same generation still applies, so a retry on
+    /// this account can run once the flag drops.
+    static func shouldApplyCapturedGeneration(
+        _ capturedGeneration: Int,
+        sessionGeneration: Int
+    ) -> Bool {
+        capturedGeneration == sessionGeneration
     }
 }
