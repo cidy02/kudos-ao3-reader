@@ -16,6 +16,13 @@ struct AO3PreferencesView: View {
     @State private var banner: Banner?
     @State private var hasEdits = false
     @State private var helpSheet: HelpSheetState?
+    /// 1z's section disclosure chevrons. Kept in memory only, not
+    /// `@AppStorage`: AO3's own preference-page headings ("Privacy",
+    /// "Skins", …) are parsed text, not a fixed set this app owns — a
+    /// per-title persisted key would survive AO3 renaming or reordering
+    /// them and collect stale entries forever. Collapsed by title, so a
+    /// remount (pull to refresh) keeps what the reader had open or shut.
+    @State private var collapsedSectionTitles: Set<String> = []
 
     private enum Phase: Equatable {
         case loading
@@ -102,20 +109,22 @@ struct AO3PreferencesView: View {
                 Section {
                     sectionHeader(title: section.title, help: section.help)
                         .pageBodyRow(top: 18, gutter: gutter)
-                    VStack(spacing: 0) {
-                        ForEach(Array(section.toggles.enumerated()), id: \.element.id) { toggleIndex, toggle in
-                            if toggleIndex > 0 {
-                                SubjectRowSeparator()
+                    if !collapsedSectionTitles.contains(section.title) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(section.toggles.enumerated()), id: \.element.id) { toggleIndex, toggle in
+                                if toggleIndex > 0 {
+                                    SubjectRowSeparator()
+                                }
+                                preferenceToggleRow(
+                                    label: toggle.label,
+                                    isOn: bindingToggle(section: sectionIndex, toggle: toggleIndex),
+                                    help: toggle.help
+                                )
                             }
-                            preferenceToggleRow(
-                                label: toggle.label,
-                                isOn: bindingToggle(section: sectionIndex, toggle: toggleIndex),
-                                help: toggle.help
-                            )
                         }
+                        .subjectPanel()
+                        .pageBodyRow(top: 8, gutter: gutter)
                     }
-                    .subjectPanel()
-                    .pageBodyRow(top: 8, gutter: gutter)
                 }
             }
 
@@ -180,12 +189,27 @@ struct AO3PreferencesView: View {
 
     @ViewBuilder
     private func sectionHeader(title: String, help: AO3PreferenceHelpRef?) -> some View {
-        HStack(spacing: 8) {
+        let isCollapsed = collapsedSectionTitles.contains(title)
+        return HStack(spacing: 8) {
             SubjectFieldLabel(text: title, style: .formGroup)
             Spacer(minLength: 8)
             if let help {
                 helpButton(help)
             }
+            Button {
+                if isCollapsed {
+                    collapsedSectionTitles.remove(title)
+                } else {
+                    collapsedSectionTitles.insert(title)
+                }
+            } label: {
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
         }
     }
 
