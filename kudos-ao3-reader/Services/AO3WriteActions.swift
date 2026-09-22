@@ -122,6 +122,45 @@ extension AO3AuthService {
         )
     }
 
+    /// Unsubscribes using the form action the subscriptions index already
+    /// rendered (`/users/<name>/subscriptions/<id>`). The path is not read off
+    /// the work page again: the list had it.
+    ///
+    /// The POST body is the same pair `toggleSubscribe` sends for its
+    /// unsubscribe branch: `_method=delete` and the CSRF token. The token
+    /// comes from a fresh GET of the subscriptions index, the page that
+    /// rendered the form — the same split `deleteReading` uses. The generation
+    /// is checked before that GET and again before the POST. A row is removed
+    /// only when this returns. The classification is `readingsWriteResult`,
+    /// the one history's destroy uses, so a maintenance page is not treated
+    /// as an unsubscribe.
+    ///
+    /// The POST itself has not been sent against a live session.
+    func unsubscribe(path: String, page: Int) async throws -> String {
+        let generation = sessionGeneration
+        try requireSessionGeneration(generation)
+        guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let endpoint = Self.absoluteURL(trimmed),
+              AO3RequestDefaults.isTrustedURL(endpoint),
+              let referer = AO3Client.subscriptionsURL(username: username, page: max(page, 1))
+        else { throw AO3WriteError.rejected("Couldn't build the subscription address.") }
+
+        let (_, token) = try await fetchCSRFPage(at: referer)
+        try requireSessionGeneration(generation)
+        // AO3's unsubscribe form is a POST carrying `_method=delete`.
+        let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
+        let request = try writeRequest(
+            to: endpoint, body: body, csrf: token, referer: referer, ajax: false
+        )
+        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
+        )
+    }
+
     /// Adds the work to the user's Marked-for-Later reading list. AO3's control is
     /// a `button_to` form — `POST /works/<id>/mark_for_later` carrying
     /// `_method=patch` (verified live 2026-07-16); without the Rails method

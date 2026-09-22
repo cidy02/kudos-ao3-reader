@@ -11,6 +11,19 @@ import SwiftSoup
 
 // Lint: the existing client keeps scraping/parsing behavior centralized.
 // swiftlint:disable file_length
+/// Work subscriptions, plus the unsubscribe form beside each work row.
+///
+/// `page` is the list `parseSubscriptionsPage` already returns. The paths
+/// stay beside it: `AO3SearchPage` is also Marked for Later, History, and
+/// collections, and an unsubscribe action is a fact about this row, not
+/// about the work. Series and author subscriptions are not in either field.
+nonisolated struct AO3SubscriptionsIndex: Sendable {
+    var page: AO3SearchPage
+    /// Work id → the form's `action`, such as `/users/me/subscriptions/1`.
+    /// Absent when the row had no form.
+    var unsubscribePaths: [Int: String]
+}
+
 /// Central AO3 network access: every request is paced (see `pace()`), retried with
 /// backoff only when transient, coalesced when identical, and status-checked into
 /// typed errors — one place owns the politeness rules.
@@ -1176,7 +1189,18 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
     func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try await Self.parseSubscriptionsPage(authenticatedHTML(for: request), page: page)
+        try await subscriptionsIndex(for: request, page: page).page
+    }
+
+    /// The same GET as `subscriptionsPage`, keeping each row's unsubscribe form.
+    ///
+    /// The action is already in that HTML. This does not post, and it does not
+    /// ask AO3 for series or user subscriptions. Those are not work rows.
+    func subscriptionsIndex(
+        for request: URLRequest, page: Int
+    ) async throws -> AO3SubscriptionsIndex {
+        let html = try await authenticatedHTML(for: request)
+        return try Self.parseSubscriptionsIndex(html, page: page)
     }
 
     /// Downloads a work's EPUB to a temp file. AO3 accepts any filename slug, so
@@ -1663,8 +1687,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// subscribed item plus a byline; we keep the ones linking to `/works/<id>` and
     /// build a sparse summary (title + author only — the page carries no stats).
     static func parseSubscriptionsPage(_ html: String, page: Int) throws -> AO3SearchPage {
+        try parseSubscriptionsIndex(html, page: page).page
+    }
+
+    /// The work rows plus each row's unsubscribe action.
+    ///
+    /// The action is the next sibling `<dd>`'s `<form action>`. A work `<dt>`
+    /// with no such sibling keeps the work and omits the path, so the row
+    /// stays and the swipe has nothing to post. A series or user `<dt>` is
+    /// skipped before its form is read: those links are not `/works/<id>`,
+    /// and this screen does not scope the index to series or authors.
+    static func parseSubscriptionsIndex(_ html: String, page: Int) throws -> AO3SubscriptionsIndex {
         let doc = try SwiftSoup.parse(html)
         var works: [AO3WorkSummary] = []
+        var paths: [Int: String] = [:]
         for dt in try doc.select("dl.subscription dt").array() {
             // The work link points at /works/<id>; series/user subscriptions have no
             // such link and are skipped.
@@ -1683,9 +1719,25 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                 authors: authors,
                 authorIdentities: identities
             ))
+            if paths[id] == nil, let action = try unsubscribeAction(after: dt) {
+                paths[id] = action
+            }
         }
         let totalPages = try Self.paginationTotal(in: doc, currentPage: page)
-        return AO3SearchPage(works: works, currentPage: page, totalPages: totalPages)
+        return AO3SubscriptionsIndex(
+            page: AO3SearchPage(works: works, currentPage: page, totalPages: totalPages),
+            unsubscribePaths: paths
+        )
+    }
+
+    /// The unsubscribe form AO3 puts in the `<dd>` after a subscription `<dt>`.
+    /// Nil when that sibling is missing, is not a `<dd>`, or has no action.
+    private static func unsubscribeAction(after heading: Element) throws -> String? {
+        guard let details = try heading.nextElementSibling(), details.tagName() == "dd",
+              let form = try details.select("form").first()
+        else { return nil }
+        let action = try form.attr("action").trimmingCharacters(in: .whitespacesAndNewlines)
+        return action.isEmpty ? nil : action
     }
 
     /// `requireParseableBlurbs` is the caller's assertion that every blurb its

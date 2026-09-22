@@ -61,4 +61,38 @@ struct AO3SubscriptionsParseTests {
         #expect(page.currentPage == 1)
         #expect(page.totalPages == 3)
     }
+
+    /// The unsubscribe form is the `<dd>` after the work `<dt>`. Series and
+    /// user rows have forms too, and they are not stored: those rows are not works.
+    @Test func readsTheUnsubscribeActionBesideEachWork() throws {
+        let index = try AO3Client.parseSubscriptionsIndex(html, page: 1)
+        #expect(index.page.works.map(\.id) == [45_678_901, 12_345])
+        #expect(index.unsubscribePaths == [
+            45_678_901: "/users/me/subscriptions/1",
+            12_345: "/users/me/subscriptions/2"
+        ])
+    }
+
+    /// A work `<dt>` with no sibling `<dd>` keeps the work and omits the path.
+    /// The form that belongs to the next work is not borrowed.
+    @Test func aWorkWithoutAnUnsubscribeFormKeepsTheRowAndOmitsThePath() throws {
+        let bare = """
+        <html><body>
+        <dl class="subscription index group">
+          <dt>
+            <a href="/works/11">Bare</a>
+            by <a href="/users/a/pseuds/a" rel="author">a</a>
+          </dt>
+          <dt>
+            <a href="/works/22">Formed</a>
+            by <a href="/users/b/pseuds/b" rel="author">b</a>
+          </dt>
+          <dd><form action="/users/me/subscriptions/9" method="post"></form></dd>
+        </dl>
+        </body></html>
+        """
+        let index = try AO3Client.parseSubscriptionsIndex(bare, page: 1)
+        #expect(index.page.works.map(\.id) == [11, 22])
+        #expect(index.unsubscribePaths == [22: "/users/me/subscriptions/9"])
+    }
 }
