@@ -127,7 +127,7 @@ struct CollectionDetailView: View {
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var showingRename = false
-    @State private var showingColour = false
+    @State private var showingDetails = false
     @State private var showingReorder = false
     @State private var renameText = ""
     @State private var confirmDelete = false
@@ -157,34 +157,105 @@ struct CollectionDetailView: View {
 
     /// Writes straight through to the model, like Rename beside it — there is no
     /// Save on this screen and never was.
-    private var colourSheet: some View {
+    ///
+    /// 1bk's create sheet (`NewCollectionSheet`) has two groups, Collection and
+    /// Behaviour, and every field in both was editable exactly once: at
+    /// creation. Colour had its own sheet already; description and the two
+    /// behaviour toggles had no edit path at all — set once, permanent. This is
+    /// that sheet widened to cover the rest of what creation asks for, rather
+    /// than a fourth single-purpose one next to Rename/Colour/Reorder/Delete.
+    // Split out of `detailsSheet` one section at a time — three sections'
+    // worth of inline Bindings in one `Form` timed out the type checker.
+    private var detailsColourSection: some View {
+        Section {
+            SubjectHueSwatchRow(
+                selection: Binding(
+                    get: { collection.hue },
+                    set: { newValue in
+                        collection.hue = newValue
+                        // Not `markMembershipChanged` — a colour is not a
+                        // choice about contents, and stamping that clock here
+                        // would make recolouring a collection override a
+                        // removal made on another device.
+                        collection.markModified()
+                        context.saveBestEffort(reason: "Saving collection colour failed")
+                    }
+                ),
+                fallbackHue: collection.displayHue
+            )
+        } header: {
+            SubjectFieldLabel(text: "Colour", style: .formGroup)
+        } footer: {
+            Text(collection.hue == nil
+                ? "Taken from the collection's name, so renaming it changes the colour."
+                : "Set on the collection, so renaming it keeps this colour.")
+        }
+        .appThemedRows()
+    }
+
+    private var detailsDescriptionSection: some View {
+        Section {
+            TextField(
+                "Optional",
+                text: Binding(
+                    get: { collection.collectionDescription ?? "" },
+                    set: { newValue in
+                        collection.collectionDescription = newValue
+                        collection.markModified()
+                        context.saveBestEffort(reason: "Saving collection description failed")
+                    }
+                ),
+                axis: .vertical
+            )
+        } header: {
+            SubjectFieldLabel(text: "Description", style: .formGroup)
+        }
+        .appThemedRows()
+    }
+
+    private var detailsBehaviourSection: some View {
+        Section {
+            Toggle(
+                "Keep downloads",
+                isOn: Binding(
+                    get: { collection.keepsWorksOffline ?? false },
+                    set: { newValue in
+                        collection.keepsWorksOffline = newValue
+                        collection.markModified()
+                        context.saveBestEffort(reason: "Saving collection behaviour failed")
+                    }
+                )
+            )
+            Toggle(
+                "Show on Home",
+                isOn: Binding(
+                    get: { collection.showsOnHome },
+                    set: { newValue in
+                        collection.showsOnHome = newValue
+                        collection.markModified()
+                        context.saveBestEffort(reason: "Saving collection behaviour failed")
+                    }
+                )
+            )
+        } header: {
+            SubjectFieldLabel(text: "Behaviour", style: .formGroup)
+        } footer: {
+            // Same caveat NewCollectionSheet states at creation — neither
+            // choice is acted on anywhere yet. See its own footnote for the
+            // full accounting of what was grepped to confirm that.
+            Text("Kudos records both choices with the collection, but does not "
+                + "act on them yet: collection works are not kept offline any "
+                + "differently, and Home has no collection shelves.")
+        }
+        .appThemedRows()
+    }
+
+    private var detailsSheet: some View {
         NavigationStack {
             Form {
-                Section {
-                    SubjectHueSwatchRow(
-                        selection: Binding(
-                            get: { collection.hue },
-                            set: { newValue in
-                                collection.hue = newValue
-                                // Not `markMembershipChanged` — a colour is not
-                                // a choice about contents, and stamping that
-                                // clock here would make recolouring a
-                                // collection override a removal made on another
-                                // device.
-                                collection.markModified()
-                                context.saveBestEffort(reason: "Saving collection colour failed")
-                            }
-                        ),
-                        fallbackHue: collection.displayHue
-                    )
-                } header: {
-                    SubjectFieldLabel(text: "Colour", style: .formGroup)
-                } footer: {
-                    Text(collection.hue == nil
-                        ? "Taken from the collection's name, so renaming it changes the colour."
-                        : "Set on the collection, so renaming it keeps this colour.")
-                }
-                .appThemedRows()
+                detailsColourSection
+                detailsDescriptionSection
+                detailsBehaviourSection
             }
             .appThemedScroll()
             .navigationTitle(collection.name)
@@ -193,12 +264,12 @@ struct CollectionDetailView: View {
             #endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showingColour = false }
+                        Button("Done") { showingDetails = false }
                     }
                 }
         }
         #if os(iOS)
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
         #endif
     }
 
@@ -330,14 +401,16 @@ struct CollectionDetailView: View {
                             } label: {
                                 Label("Rename", systemImage: "pencil")
                             }
-                            // 1bk: "colour is the collection's identity everywhere
-                            // else in the app, so it is picked here rather than
-                            // assigned". Beside Rename because the two together are
-                            // what that board's edit sheet is for.
+                            // 1bk: "editing is the same sheet with the values
+                            // filled". Rename stays its own quick alert — a name
+                            // is the one field worth changing without leaving
+                            // this screen — but colour, description and the two
+                            // behaviour toggles are `detailsSheet`, which is
+                            // creation's own Collection/Behaviour shape, filled.
                             Button {
-                                showingColour = true
+                                showingDetails = true
                             } label: {
-                                Label("Colour", systemImage: "paintpalette")
+                                Label("Details", systemImage: "paintpalette")
                             }
                             // 1bk's Contents group. "Remove works" is Select by
                             // another name — this screen already removes through
@@ -366,7 +439,7 @@ struct CollectionDetailView: View {
             .sheet(isPresented: $showingAddWorks) {
                 AddWorksToCollectionView(collection: collection)
             }
-            .sheet(isPresented: $showingColour) { colourSheet }
+            .sheet(isPresented: $showingDetails) { detailsSheet }
             .sheet(isPresented: $showingReorder) {
                 CollectionReorderSheet(collection: collection, works: works)
             }
