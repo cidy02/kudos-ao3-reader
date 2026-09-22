@@ -15,6 +15,12 @@ import SwiftUI
 struct BackupImportSheet: View {
     let manifest: KudosBackupManifest
     let localWorks: [SavedWork]
+    /// Whether this library holds anything Replace would take away. Not the
+    /// same as "has works": saved links, saved searches, collections and
+    /// reading queues are all pruned by Replace and all outlive the last work,
+    /// so a library emptied of works can still have plenty to remove — and
+    /// offering only Merge there makes it impossible to remove.
+    let hasReplaceableRecords: Bool
     let syncIsConnected: Bool
     let onMerge: () -> Void
     let onReplace: (Bool) -> Void
@@ -47,7 +53,7 @@ struct BackupImportSheet: View {
             Form {
                 contentsSection
                 mergeSection
-                if !localWorks.isEmpty { replaceSection }
+                if hasReplaceableRecords { replaceSection }
             }
             .appThemedRows()
             .appThemedScroll()
