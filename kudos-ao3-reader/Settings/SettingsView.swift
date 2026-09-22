@@ -63,6 +63,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
+    @AppStorage("keepScreenAwake") private var keepScreenAwake = false
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage("hideMatureContent") private var hideMatureContent = true
@@ -255,6 +256,13 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                         Toggle("Two-page spread", isOn: $twoPageEnabled)
                             .disabled(readingMode != .paged || !twoPageAvailable)
                     }
+
+                    // 1ab files this under Reading. iOS only: macOS has no idle
+                    // timer to hold open, and a switch that did nothing there
+                    // would be worse than its absence.
+                    #if os(iOS)
+                    Toggle("Keep screen awake", isOn: $keepScreenAwake)
+                    #endif
                 } header: {
                     Text("Reading")
                 } footer: {
