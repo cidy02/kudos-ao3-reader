@@ -933,6 +933,23 @@ private extension AccountView {
     /// faded out at the bottom. Built from `scopeDestinationRow` — the same row
     /// the hub itself draws — so it cannot drift from the thing it previews, and
     /// inert because there is nothing behind it to open yet.
+    /// The preview's own opening row: what `signedOutCard` looks like once an
+    /// account fills it in, faded the same way every row under it is. Avatar
+    /// and name only — no bio, no join date — because this is a glimpse of the
+    /// *shape*, and the one identity statement already made by `signedOutCard`
+    /// above this section should not be repeated with real-looking values that
+    /// aren't real.
+    private var identitySkeletonRow: some View {
+        HStack(spacing: 13) {
+            AO3AuthorAvatar(url: nil, name: "AO3 account", size: 44, isCircular: true)
+            Text("Your username")
+                .font(.system(size: 19, weight: .bold))
+                .foregroundStyle(.primary)
+            Spacer(minLength: 0)
+        }
+        .accessibilityHidden(true)
+    }
+
     @ViewBuilder
     var signedOutPreviewSection: some View {
         Section {
@@ -941,6 +958,9 @@ private extension AccountView {
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 14)
+
+                identitySkeletonRow
+                    .padding(.bottom, 16)
 
                 previewGroup("Reading", ["Marked for Later", "Bookmarks", "Collections"])
                 previewGroup("Writing", ["Works", "Series"])
