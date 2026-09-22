@@ -142,6 +142,79 @@ extension AO3AuthService {
         )
     }
 
+    /// Removes one row from AO3's reading history.
+    ///
+    /// Routes confirmed 2026-09-21 against otwarchive master, not guessed:
+    /// `resources :readings` under `resources :users` (`config/routes.rb`),
+    /// `ReadingsController#destroy`, and `_reading_blurb.html.erb`'s
+    /// `form_tag user_reading_path(..., method: 'delete')` plus
+    /// `hidden_field_tag :reading, reading.id`. The readings fixture's
+    /// `form.ajax-remove` action is that same path. The CSRF page is the
+    /// history index, which is the page that renders the form.
+    ///
+    /// The POST itself has not been sent against a live session.
+    func deleteReading(readingID: Int, page: Int) async throws -> String {
+        let generation = sessionGeneration
+        try requireSessionGeneration(generation)
+        guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
+        guard let history = AO3Client.historyURL(username: username, page: max(page, 1)),
+              let endpoint = AO3Client.deleteReadingURL(
+                username: username, readingID: readingID, page: page
+              )
+        else { throw AO3WriteError.rejected("Couldn't build the history address.") }
+
+        let (_, token) = try await fetchCSRFPage(at: history)
+        try requireSessionGeneration(generation)
+        // Rails `form_tag method: 'delete'` is a POST with `_method=delete`.
+        let body = Self.formEncoded([
+            ("_method", "delete"),
+            ("authenticity_token", token),
+            ("reading", String(readingID))
+        ])
+        let request = try writeRequest(
+            to: endpoint, body: body, csrf: token, referer: history, ajax: false
+        )
+        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+            return "Removed from history."
+        }
+        throw AO3WriteError.rejected(
+            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't remove that from history."
+        )
+    }
+
+    /// Clears the signed-in user's entire AO3 reading history.
+    ///
+    /// `GET .../readings/confirm_clear` is the page whose form posts to
+    /// `POST .../readings/clear` (`form_with method: :post`, no `_method`
+    /// override — `confirm_clear.html.erb` and `post :clear`). CSRF comes from
+    /// that confirm page, the same way every other write reads the page that
+    /// holds its form.
+    ///
+    /// The POST itself has not been sent against a live session.
+    func clearReadingHistory() async throws -> String {
+        let generation = sessionGeneration
+        try requireSessionGeneration(generation)
+        guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
+        guard let confirm = AO3Client.confirmClearReadingsURL(username: username),
+              let endpoint = AO3Client.clearReadingsURL(username: username)
+        else { throw AO3WriteError.rejected("Couldn't build the history address.") }
+
+        let (_, token) = try await fetchCSRFPage(at: confirm)
+        try requireSessionGeneration(generation)
+        let body = Self.formEncoded([("authenticity_token", token)])
+        let request = try writeRequest(
+            to: endpoint, body: body, csrf: token, referer: confirm, ajax: false
+        )
+        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
+            return "History cleared."
+        }
+        throw AO3WriteError.rejected(
+            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't clear history."
+        )
+    }
+
     /// The fields of a new AO3 bookmark. `nonisolated` so the nonisolated
     /// work-page parser (`AO3Client.parseExistingBookmark`) can build the
     /// prefill without inheriting this service's MainActor isolation.

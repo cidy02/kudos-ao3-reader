@@ -16,6 +16,8 @@ struct AO3ReadingsParsingTests {
         let entries = try AO3Client.parseReadingEntries(from: fixture("ao3_readings"))
         #expect(entries.count == 4)
         #expect(entries.map(\.workID) == [11, 22, 33, nil])
+        // The form posts the reading id, which is not the work id.
+        #expect(entries.map(\.readingID) == [1, 2, nil, nil])
     }
 
     /// The figure that made 1t look unbuildable. AO3 writes "Visited once" for
