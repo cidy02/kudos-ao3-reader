@@ -62,4 +62,58 @@ struct DownloadOnSubscribeTests {
         #expect(item.seriesURL.isEmpty)
     }
 }
+
+/// `DownloadQueue.disposition(for:)` — the part `downloadItem` alone cannot
+/// prove. A queued `Item` reaching the real queue is, by construction,
+/// already the work it names (source-matched to itself), so the case that
+/// matters most here is the one the production bug got backwards: an
+/// ordinary, undeleted match with no EPUB has to fall through to a download,
+/// not skip because *something* matched.
+@MainActor
+@Suite(.serialized)
+struct DownloadQueueDispositionTests {
+    private func work(hasEPUB: Bool, isPendingDeletion: Bool = false) -> SavedWork {
+        let work = SavedWork(title: "Bound By Starlight", author: "Writer")
+        work.hasEPUB = hasEPUB
+        work.isPendingDeletion = isPendingDeletion
+        return work
+    }
+
+    /// No match at all — nothing to be skipped for.
+    @Test func noExistingMatchDownloads() {
+        #expect(DownloadQueue.disposition(for: nil) == .download)
+    }
+
+    /// The bug this test would have caught: `downloadItem` only ever queues a
+    /// work that is already in the library and already missing its EPUB —
+    /// the exact shape reached here. Before the fix this returned `.skip`,
+    /// which is why "Download on subscribe" queued an item and then silently
+    /// did nothing with it.
+    @Test func ordinaryMatchMissingEPUBDownloads() {
+        #expect(DownloadQueue.disposition(for: work(hasEPUB: false)) == .downloadOverMissingEPUB)
+    }
+
+    /// Already has the file: this is `downloadSeries`'s ordinary case, and
+    /// must still skip.
+    @Test func ordinaryMatchWithEPUBSkips() {
+        #expect(DownloadQueue.disposition(for: work(hasEPUB: true)) == .skip)
+    }
+
+    /// Recently Deleted, EPUB still on disk: restore, don't re-fetch.
+    @Test func pendingDeletionMatchWithEPUBRestores() {
+        #expect(
+            DownloadQueue.disposition(for: work(hasEPUB: true, isPendingDeletion: true))
+                == .restoreThenSkip
+        )
+    }
+
+    /// Recently Deleted, EPUB gone: revive it via the download, the same way
+    /// `importEPUB`'s own Recently Deleted reuse does.
+    @Test func pendingDeletionMatchMissingEPUBDownloads() {
+        #expect(
+            DownloadQueue.disposition(for: work(hasEPUB: false, isPendingDeletion: true))
+                == .downloadOverMissingEPUB
+        )
+    }
+}
 }

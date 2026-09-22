@@ -70,26 +70,49 @@ final class DownloadQueue {
         items.removeAll { $0.status == .queued }
     }
 
+    /// What an already-existing match means for a queued item — separated from
+    /// `run()` so the decision is a plain function a test can call directly,
+    /// rather than one only observable by letting the loop reach a real network
+    /// fetch. A test that never exercises this is a test that cannot fail when
+    /// this disposition is wrong, which is exactly how the ordinary-match branch
+    /// stayed unconditional after the comment above it said otherwise.
+    enum ExistingMatchDisposition: Equatable {
+        /// No existing match (or none was looked up) — proceed to download.
+        case download
+        /// An existing match with no EPUB — proceed to download, filling it in.
+        case downloadOverMissingEPUB
+        /// An existing, undeleted match that already has its EPUB.
+        case skip
+        /// A Recently Deleted match with its EPUB still on disk — restore it
+        /// rather than re-fetching.
+        case restoreThenSkip
+    }
+
+    static func disposition(for existing: SavedWork?) -> ExistingMatchDisposition {
+        guard let existing else { return .download }
+        if !existing.isPendingDeletion {
+            return existing.hasEPUB ? .skip : .downloadOverMissingEPUB
+        }
+        return existing.hasEPUB ? .restoreThenSkip : .downloadOverMissingEPUB
+    }
+
     private func run() async {
         defer { isRunning = false }
         guard let context else { return }
 
         while let index = items.firstIndex(where: { $0.status == .queued }) {
             let item = items[index]
-            // Already in the library? skip rather than make a duplicate. A match in
-            // Recently Deleted that still has its EPUB on disk is simply restored —
-            // no download needed; one without an EPUB falls through to the download,
-            // which revives it via importEPUB's Recently Deleted reuse.
-            if let source = item.sourceURL, let existing = existingWork(forSource: source, in: context) {
-                if !existing.isPendingDeletion {
-                    items[index].status = .skipped
-                    continue
-                }
-                if existing.hasEPUB {
-                    PreservedWorkService.restore(existing, in: context)
-                    items[index].status = .skipped
-                    continue
-                }
+            let existing = item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+            switch Self.disposition(for: existing) {
+            case .download, .downloadOverMissingEPUB:
+                break
+            case .skip:
+                items[index].status = .skipped
+                continue
+            case .restoreThenSkip:
+                if let existing { PreservedWorkService.restore(existing, in: context) }
+                items[index].status = .skipped
+                continue
             }
             items[index].status = .downloading
             do {
