@@ -575,10 +575,13 @@ struct SectionRuleHeader: View {
                 .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
             }
 
-            Rectangle()
-                .fill(Color.primary.opacity(0.14))
-                .frame(height: 0.5)
-                .padding(.horizontal, 2)
+            // A filled leader rule ran here — one component, every section
+            // header in the app. Owner call: too many hairlines across a
+            // scrolling screen read as visual noise rather than structure, so
+            // this is now a plain spacer: it keeps the same layout job (push
+            // count/collapse to the left, chevron to the right) without
+            // drawing anything.
+            Spacer(minLength: 2)
 
             if let onSeeAll {
                 Button(action: onSeeAll) {
