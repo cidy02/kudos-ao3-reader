@@ -504,9 +504,10 @@ private struct InboxRepliedBadge: View {
     }
 }
 
-/// The inbox rows for one Account section — the Overview preview (`limit` set)
-/// or the full Activity feed (`limit` nil, with pagination). State lives in the
-/// host's shared `AO3InboxModel`, so the two surfaces share one fetch.
+/// Loading, failure, and empty states for the Inbox list. The comments
+/// themselves are `AccountInboxCommentListRow`s, one List row each, so a
+/// swipe can mark a single comment read. State lives in the host's
+/// `AO3InboxModel`.
 struct AccountInboxRows: View {
     var model: AO3InboxModel
     /// Caps the rows for the Overview preview; nil shows the whole page.
@@ -522,36 +523,20 @@ struct AccountInboxRows: View {
 
     @Environment(AO3AuthService.self) private var auth
 
+    /// Status only. The comment rows are direct children of the Inbox `List`
+    /// (`AccountInboxScreen`), because `.swipeActions` attaches to a row and
+    /// this view used to pack every comment into one `VStack`.
     var body: some View {
         switch model.phase {
-        case .idle, .loading:
-            if model.items.isEmpty {
-                loadingRows
-            } else {
-                itemRows
-            }
+        case .idle where model.items.isEmpty, .loading where model.items.isEmpty:
+            loadingRows
         case let .failed(message):
-            AO3ProfileMessageRow(
+            statusRow(
                 title: "Couldn't load your inbox",
                 systemImage: "exclamationmark.triangle",
                 message: message,
-                actionTitle: "Try Again",
-                action: { model.retry(auth: auth) }
+                actionTitle: "Try Again"
             )
-            .accountControlCardRow()
-        case let .paginationFailed(requestedPage, message):
-            // The last successfully loaded page's items/pagination stay on
-            // screen; only a page-specific error/retry is added below them
-            // (T91-RF8) — a failed page 2 must not hide page 1's comments.
-            itemRows
-            AO3ProfileMessageRow(
-                title: "Couldn't load page \(requestedPage)",
-                systemImage: "exclamationmark.triangle",
-                message: message,
-                actionTitle: "Try Again",
-                action: { model.retry(auth: auth) }
-            )
-            .accountControlCardRow()
         case .loaded where model.items.isEmpty:
             AO3ProfileMessageRow(
                 title: "No comments yet",
@@ -560,97 +545,50 @@ struct AccountInboxRows: View {
                     + "posted, show up here from your AO3 inbox."
             )
             .accountControlCardRow()
-        case .loaded:
-            itemRows
+        case let .paginationFailed(requestedPage, message):
+            // The loaded page's rows stay in the list above this one. A failed
+            // page 2 must not hide page 1's comments (T91-RF8).
+            statusRow(
+                title: "Couldn't load page \(requestedPage)",
+                systemImage: "exclamationmark.triangle",
+                message: message,
+                actionTitle: "Try Again"
+            )
+        default:
+            EmptyView()
         }
+    }
+
+    private func statusRow(
+        title: String,
+        systemImage: String,
+        message: String,
+        actionTitle: String
+    ) -> some View {
+        AO3ProfileMessageRow(
+            title: title,
+            systemImage: systemImage,
+            message: message,
+            actionTitle: actionTitle,
+            action: { model.retry(auth: auth) }
+        )
+        .accountControlCardRow()
     }
 
     private var loadingRows: some View {
-        ForEach(0..<3, id: \.self) { _ in
-            HStack(alignment: .top, spacing: 10) {
-                SkeletonBlock(height: 40, width: 40, cornerRadius: 20)
-                VStack(alignment: .leading, spacing: 6) {
-                    SkeletonTextLine(width: 140)
-                    SkeletonTextLine(width: 220)
-                    SkeletonTextLine(width: 180)
-                }
-            }
-            .padding(.vertical, 2)
-            .skeletonShimmer()
-            .cardRow()
-        }
-    }
-
-    @Environment(ThemeManager.self) private var theme
-
-    private var subjectHeader: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account",
-            title: "Inbox",
-            subtitle: headerTallyLine,
-            palette: theme.scopePalette,
-            gutter: SubjectMetrics.accountGutter
-        )
-    }
-
-    private var headerTallyLine: String {
-        let shown = limit != nil ? visibleItems.count : (model.totalComments ?? model.items.count)
-        var line = shown == 1 ? "1 message" : "\(shown) messages"
-        if let unread = model.unreadCount, unread > 0 {
-            line += " · \(unread) unread"
-        }
-        if limit == nil, model.totalPages > 1 {
-            line += " · page \(model.currentPage) of \(model.totalPages)"
-        }
-        return line
-    }
-
-    @ViewBuilder
-    private var itemRows: some View {
-        if limit == nil {
-            subjectHeader
-                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-        }
-
         VStack(spacing: 0) {
-            if model.isShowingStaleCache {
-                Label("Showing cached AO3 data", systemImage: "wifi.slash")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                SubjectRowSeparator(inset: 14)
-            }
-            ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
-                if index > 0 || model.isShowingStaleCache {
-                    SubjectRowSeparator(inset: 0)
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(alignment: .top, spacing: 10) {
+                    SkeletonBlock(height: 40, width: 40, cornerRadius: 20)
+                    VStack(alignment: .leading, spacing: 6) {
+                        SkeletonTextLine(width: 140)
+                        SkeletonTextLine(width: 220)
+                        SkeletonTextLine(width: 180)
+                    }
                 }
-                let context = workContext(item)
-                AccountInboxItemRow(
-                    item: item,
-                    workAuthors: context.authors,
-                    workAuthorIdentities: context.authorIdentities,
-                    isSelecting: limit == nil && model.isSelecting,
-                    isSelected: model.selectedItemIDs.contains(item.id),
-                    isSelectable: model.selectableItemIDs.contains(item.id),
-                    onOpen: { onOpen(item) },
-                    onOpenChapter: { onOpenChapter(item) },
-                    onToggleSelection: { model.toggleSelection(for: item) },
-                    canToggleReadState: model.canPerformItemAction(
-                        item.isUnread ? .markRead : .markUnread, item: item
-                    ),
-                    canDeleteFromInbox: model.canPerformItemAction(.delete, item: item),
-                    isPerformingAction: model.isPerformingBulkAction,
-                    onReply: { onReply(item) },
-                    onToggleReadState: {
-                        perform(item.isUnread ? .markRead : .markUnread, for: item)
-                    },
-                    onDeleteFromInbox: { perform(.delete, for: item) }
-                )
+                .padding(.vertical, 2)
                 .padding(.horizontal, 14)
+                .skeletonShimmer()
             }
         }
         .subjectPanel()
@@ -662,45 +600,244 @@ struct AccountInboxRows: View {
         ))
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
+    }
 
-        if let onSeeAll, !model.items.isEmpty {
-            Button(action: onSeeAll) {
-                HStack {
-                    Text("See All Comments")
-                    Spacer()
-                    if let unread = model.unreadCount, unread > 0 {
-                        Text("\(unread) unread")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accountControlCardRow()
+    /// "N messages · N unread · N awaiting your reply · page X of Y".
+    ///
+    /// The message count is the heading total on the full feed (`totalComments`),
+    /// and the preview cap when `limit` is set. Unread is that same heading.
+    /// Awaiting reply is not in the heading, so it counts `model.items` — the
+    /// loaded page — rather than a total this response does not carry. The page
+    /// clause stays last: it says where you are, not how many comments.
+    var headerTallyLine: String {
+        let shown = limit != nil ? visibleItems.count : (model.totalComments ?? model.items.count)
+        var line = shown == 1 ? "1 message" : "\(shown) messages"
+        if let unread = model.unreadCount, unread > 0 {
+            line += " · \(unread) unread"
+        }
+        let awaiting = AO3InboxTally.awaitingReplyCount(model.items)
+        if awaiting > 0 {
+            line += " · \(awaiting) awaiting your reply"
         }
         if limit == nil, model.totalPages > 1 {
-            SearchPaginationBar(
-                currentPage: model.currentPage,
-                totalPages: model.totalPages
-            ) { page in
-                model.goToPage(page, auth: auth)
-            }
-            .accountControlCardRow()
-            .disabled(model.isPerformingBulkAction)
+            line += " · page \(model.currentPage) of \(model.totalPages)"
         }
+        return line
     }
 
     private var visibleItems: [AO3InboxItem] {
         if let limit { Array(model.items.prefix(limit)) } else { model.items }
     }
+}
 
-    private func perform(_ action: AO3InboxBulkAction, for item: AO3InboxItem) {
-        model.startItemAction(action, item: item, auth: auth)
+/// The second Inbox title, under the screen's own header. Its subtitle is
+/// `AccountInboxRows.headerTallyLine` (messages, unread, awaiting reply, page).
+struct AccountInboxFeedHeader: View {
+    var tally: String
+
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        SubjectHeaderBlock(
+            kicker: "AO3 Account",
+            title: "Inbox",
+            subtitle: tally,
+            palette: theme.scopePalette,
+            gutter: SubjectMetrics.accountGutter
+        )
+        .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+}
+
+/// One comment in the Inbox list. Trailing swipe marks it read or unread.
+/// Delete stays in the overflow and the bulk bar: both already confirm, and a
+/// swipe must not post that write.
+struct AccountInboxCommentListRow: View {
+    var model: AO3InboxModel
+    let item: AO3InboxItem
+    var workContext: AO3CommentsWorkContext
+    var isSelecting: Bool
+    var isFirst: Bool
+    var isLast: Bool
+    var onOpen: () -> Void
+    var onOpenChapter: () -> Void
+    var onReply: () -> Void
+
+    @Environment(AO3AuthService.self) private var auth
+
+    private var readAction: AO3InboxBulkAction {
+        item.isUnread ? .markRead : .markUnread
+    }
+
+    private var canToggleReadState: Bool {
+        model.canPerformItemAction(readAction, item: item)
+    }
+
+    private var isPerformingAction: Bool {
+        model.isPerformingBulkAction
+    }
+
+    var body: some View {
+        AccountInboxItemRow(
+            item: item,
+            workAuthors: workContext.authors,
+            workAuthorIdentities: workContext.authorIdentities,
+            isSelecting: isSelecting,
+            isSelected: model.selectedItemIDs.contains(item.id),
+            isSelectable: model.selectableItemIDs.contains(item.id),
+            onOpen: onOpen,
+            onOpenChapter: onOpenChapter,
+            onToggleSelection: { model.toggleSelection(for: item) },
+            canToggleReadState: canToggleReadState,
+            canDeleteFromInbox: model.canPerformItemAction(.delete, item: item),
+            isPerformingAction: isPerformingAction,
+            onReply: onReply,
+            onToggleReadState: toggleReadState,
+            onDeleteFromInbox: { model.startItemAction(.delete, item: item, auth: auth) }
+        )
+        .padding(.horizontal, 14)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // Full swipe stays off. Marking read posts to AO3, and a flick
+            // must not be the thing that sends it. Same gate as the overflow.
+            if canToggleReadState && !isPerformingAction {
+                Button(action: toggleReadState) {
+                    Label(
+                        item.isUnread ? "Mark Read" : "Mark Unread",
+                        systemImage: item.isUnread ? "envelope.open" : "envelope.badge"
+                    )
+                }
+                .tint(.accentColor)
+            }
+        }
+        .modifier(InboxPanelSegment(isFirst: isFirst, isLast: isLast))
+    }
+
+    private func toggleReadState() {
+        model.startItemAction(readAction, item: item, auth: auth)
+    }
+}
+
+/// The cached-data line, as the first segment of the same panel as the comments.
+struct AccountInboxStaleCacheRow: View {
+    var isLast: Bool
+
+    var body: some View {
+        Label("Showing cached AO3 data", systemImage: "wifi.slash")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(InboxPanelSegment(isFirst: true, isLast: isLast))
+    }
+}
+
+struct AccountInboxSeeAllRow: View {
+    var unreadCount: Int?
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text("See All Comments")
+                Spacer()
+                if let unreadCount, unreadCount > 0 {
+                    Text("\(unreadCount) unread")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accountControlCardRow()
+    }
+}
+
+/// One segment of the Inbox panel.
+///
+/// The old feed was one `VStack` with `.subjectPanel()`, so every comment
+/// shared a single bordered card and a single List row. A swipe has to be its
+/// own row. `subjectPanelSegmentRow` is the same idea (first and last round
+/// the corners, the rest draw the hairline) and it deliberately does not
+/// stroke each segment — a full stroke on every row would draw a line between
+/// them. This copy keeps the Inbox hairline full-bleed (`inset: 0`, which is
+/// what the old separators used) and the 12pt gap above the first row and
+/// below the last, outside the fill, which the one-row panel got from its
+/// list insets. The 0.5pt outer stroke is not drawn. Joining an open stroke
+/// across rows was not something this change could check on a signed-in inbox.
+private struct InboxPanelSegment: ViewModifier {
+    var isFirst: Bool
+    var isLast: Bool
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    func body(content: Content) -> some View {
+        let gutter = SubjectMetrics.accountGutter
+        let topGap: CGFloat = isFirst ? 12 : 0
+        let bottomGap: CGFloat = isLast ? 12 : 0
+        let theme = themeManager.appTheme
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: isFirst ? 14 : 0,
+            bottomLeadingRadius: isLast ? 14 : 0,
+            bottomTrailingRadius: isLast ? 14 : 0,
+            topTrailingRadius: isFirst ? 14 : 0,
+            style: .continuous
+        )
+        content
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(
+                top: topGap,
+                leading: gutter,
+                bottom: bottomGap,
+                trailing: gutter
+            ))
+            .listRowBackground(
+                shape
+                    .fill(theme.glassFill(0.09))
+                    .overlay(alignment: .bottom) {
+                        if !isLast {
+                            SubjectRowSeparator(inset: 0)
+                        }
+                    }
+                    .padding(.horizontal, gutter)
+                    .padding(.top, topGap)
+                    .padding(.bottom, bottomGap)
+            )
+    }
+}
+
+/// Identity includes whether the row is the panel's first or last segment.
+/// List keeps a row's background when only the id's payload changes, so a
+/// comment that becomes the bottom of the card would keep square corners.
+struct AccountInboxPanelSegment: Identifiable {
+    let id: String
+    let item: AO3InboxItem
+    let isFirst: Bool
+    let isLast: Bool
+
+    static func rows(items: [AO3InboxItem], hasStaleBanner: Bool) -> [AccountInboxPanelSegment] {
+        let offset = hasStaleBanner ? 1 : 0
+        let count = items.count + offset
+        guard count > 0 else { return [] }
+        let lastIndex = count - 1
+        return items.enumerated().map { index, item in
+            let segment = index + offset
+            let isFirst = segment == 0
+            let isLast = segment == lastIndex
+            return AccountInboxPanelSegment(
+                id: "\(item.id)|\(isFirst)|\(isLast)",
+                item: item,
+                isFirst: isFirst,
+                isLast: isLast
+            )
+        }
     }
 }
 

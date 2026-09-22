@@ -203,6 +203,25 @@ nonisolated struct AO3InboxFilterForm: Hashable {
     }
 }
 
+/// How many loaded inbox comments the reader can still reply to.
+///
+/// `totalComments` and `unreadCount` are the two integers in the page heading
+/// ("My Inbox (12 comments, 3 unread)"). That heading is the filtered inbox,
+/// not a count of the rows on this page: the parser fixture lists 3 comments
+/// under a heading of 12, and only 1 of those 3 is unread while the heading
+/// says 3. Nothing on the page is an awaiting-reply total. This counts the
+/// array it is given — the header passes the loaded page's `items` — and does
+/// not fetch the other pages to invent a figure the heading does not print.
+nonisolated enum AO3InboxTally {
+    /// A comment AO3 rendered a Reply action for, and has not marked replied.
+    /// Both flags come from `parseInboxItem`. A row with a Reply link and a
+    /// replied marker is already answered. A row with neither is not an offer
+    /// to reply.
+    static func awaitingReplyCount(_ items: [AO3InboxItem]) -> Int {
+        items.count(where: { $0.canReply && !$0.isReplied })
+    }
+}
+
 /// One page of the AO3 Inbox, plus the exact totals AO3 prints in the page
 /// heading ("My Inbox (12 comments, 3 unread)") when they could be read.
 nonisolated struct AO3InboxPage {

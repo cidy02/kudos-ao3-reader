@@ -379,3 +379,44 @@ struct AO3InboxParseTests {
         #expect(AO3Client.inboxURL(username: "   ", page: 1) == nil)
     }
 }
+
+struct AO3InboxTallyTests {
+    @Test func countsOnlyCommentsTheReaderCanStillAnswer() {
+        #expect(AO3InboxTally.awaitingReplyCount([]) == 0)
+
+        let items = [
+            item(id: 1, canReply: true, isReplied: false),
+            item(id: 2, canReply: true, isReplied: true),
+            item(id: 3, canReply: false, isReplied: false),
+            item(id: 4, canReply: false, isReplied: true),
+            item(id: 5, canReply: true, isReplied: false, isUnread: true)
+        ]
+        // 1 and 5. Already replied (2, 4) and a row with no Reply action (3)
+        // are not waiting. Unread does not matter.
+        #expect(AO3InboxTally.awaitingReplyCount(items) == 2)
+    }
+
+    private func item(
+        id: Int,
+        canReply: Bool,
+        isReplied: Bool,
+        isUnread: Bool = false
+    ) -> AO3InboxItem {
+        AO3InboxItem(
+            id: id,
+            commenterName: "Reader",
+            isGuest: false,
+            commenterIdentity: nil,
+            avatarURL: nil,
+            subjectTitle: "Work",
+            subjectURL: nil,
+            workID: nil,
+            excerpt: "",
+            postedAgo: "",
+            isUnread: isUnread,
+            isReplied: isReplied,
+            canReply: canReply,
+            bulkSelectionField: nil
+        )
+    }
+}
