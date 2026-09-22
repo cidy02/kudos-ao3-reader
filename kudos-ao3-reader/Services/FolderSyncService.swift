@@ -829,7 +829,17 @@ nonisolated private func readChangedRemoteAssets(
               manifestWorkIDs.contains(workIDText.lowercased()),
               KudosBackupContents.isSafeFileName(name)
         else { continue }
-        if Storage.existingOriginalDocumentURL(for: workID) != nil { continue }
+        // Ask about the file being fetched, not about its neighbour.
+        // `existingOriginalDocumentURL` deliberately ignores the
+        // `.conversion.json` sidecar, so testing it meant that once the
+        // original document landed, its conversion record was skipped by this
+        // same `continue` — for ever, since the sidecar's own absence was never
+        // what was being tested. A work could sit with its original preserved
+        // and no record of how it was converted.
+        let localURL = base.hasSuffix(".conversion")
+            ? WorkConversionRecord.url(for: workID)
+            : Storage.existingOriginalDocumentURL(for: workID)
+        if let localURL, FileManager.default.fileExists(atPath: localURL.path) { continue }
         let remoteURL = originalsDirectory.appendingPathComponent(name)
         guard remoteAssetExists(remoteURL) else { continue }
         requestDownloadIfNeeded(remoteURL)

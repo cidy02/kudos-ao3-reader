@@ -2549,10 +2549,13 @@ enum KudosBackupService {
                incomingWins || collection.keepsWorksOffline == nil {
                 collection.keepsWorksOffline = archivedOffline
             }
-            // ORs rather than assigns: an archive carrying false must not take a
-            // collection off Home unless it genuinely wins on recency.
+            // An archive carrying false must not take a collection off Home
+            // unless it genuinely wins on recency — which is why this assigns
+            // rather than ORs. See the identical case on `queue.isPinned`: the
+            // guard's other branch already implies `showsOnHome == false`, so
+            // an OR here would only bite when the archive HAS won.
             if let archivedHome = archived.showsOnHome, incomingWins || !collection.showsOnHome {
-                collection.showsOnHome = archivedHome || collection.showsOnHome
+                collection.showsOnHome = archivedHome
             }
             // Fill-in-only: an empty order is "never reordered", and letting that
             // win would throw away an arrangement made on this device.
@@ -2784,7 +2787,12 @@ enum KudosBackupService {
             // a queue the reader pinned on this device unless it genuinely wins
             // on recency.
             if let archivedPin = archived.isPinned, incomingWins || !queue.isPinned {
-                queue.isPinned = archivedPin || queue.isPinned
+                // Assign, not OR. The OR could only ever change the outcome
+                // when `incomingWins` — the one case the comment above says the
+                // archive is allowed to unpin — because the other branch of the
+                // guard already implies `queue.isPinned == false`. So it fired
+                // exclusively where it must not.
+                queue.isPinned = archivedPin
             }
             // `nil` here is "never asked", which is why it is optional: an older
             // archive cannot be read as the reader having chosen "no".
@@ -2792,9 +2800,12 @@ enum KudosBackupService {
                incomingWins || queue.keepsWorksOffline == nil {
                 queue.keepsWorksOffline = archivedOffline
             }
-            // Union-only, exactly like SavedWork's user tags above: there is no
-            // per-tag tombstone, so absence from a stale archive can never be read
-            // as a deletion. Matches on exact `Tag.name`, which is the model's
+            // Union-only under merge and reconcile, exactly like SavedWork's
+            // user tags above: there is no per-tag tombstone, so absence from a
+            // stale archive can never be read as a deletion. Replace is the
+            // exception — it is not a stale archive, it is the reader asking
+            // for this file's contents exactly — so it drops tags the snapshot
+            // does not carry, below. Matches on exact `Tag.name`, which is the model's
             // `@Attribute(.unique)` identity, and reuses the existing Tag rather
             // than inserting a duplicate — inserting one by name would throw.
             var existingQueueTagNames = Set(queue.tags.map(\.name))
@@ -2810,6 +2821,17 @@ enum KudosBackupService {
                     tagsByName[trimmed] = tag
                 }
                 queue.tags.append(tag)
+            }
+            if mode == .replaceLibrary {
+                // The snapshot is the answer, so a tag only this device has is
+                // one the reader asked to be rid of. The `Tag` rows themselves
+                // are left alone — they are shared with works and other queues.
+                let snapshot = Set(
+                    (archived.tagNames ?? []).map {
+                        $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                )
+                queue.tags.removeAll { !snapshot.contains($0.name) }
             }
             queue.dateCreated = min(queue.dateCreated, archived.dateCreated)
             queue.dateUpdated = max(queue.dateUpdated, archived.dateUpdated)
@@ -2878,10 +2900,23 @@ enum KudosBackupService {
             }
             if let existing = work.queueMemberships.first(where: { $0.queue?.id == queue.id }) {
                 let incomingModifiedAt = archived.lastModifiedAt ?? archived.queuedAt
-                if mode != .merge, SyncMerge.shouldApplyIncoming(
-                    localModifiedAt: existing.lastModifiedAt,
-                    incomingModifiedAt: incomingModifiedAt
-                ) {
+                // Replace takes the archive's order and note outright. Leaving
+                // this gated on recency meant a membership the reader had moved
+                // or annotated SINCE the backup kept its local position — which
+                // is precisely the edit a Replace is asking to undo, so Replace
+                // silently did not restore the queue's order. Merge still never
+                // touches an existing membership; reconcile still settles on
+                // recency.
+                let membershipWins = switch mode {
+                case .merge: false
+                case .replaceLibrary: true
+                case .reconcile:
+                    SyncMerge.shouldApplyIncoming(
+                        localModifiedAt: existing.lastModifiedAt,
+                        incomingModifiedAt: incomingModifiedAt
+                    )
+                }
+                if membershipWins {
                     existing.sortOrderInQueue = archived.sortOrderInQueue
                     existing.note = archived.note
                     existing.lastModifiedAt = incomingModifiedAt
@@ -3201,11 +3236,25 @@ enum KudosBackupService {
                     for: work.id,
                     fileExtension: (fileName as NSString).pathExtension
                 )
-            // Never over one already here. A local original is the file the
-            // reader imported on this device; the archive's is at best the same
-            // bytes and at worst older, and re-conversion reads whichever is
-            // on disk.
-            guard !FileManager.default.fileExists(atPath: destination.path) else { continue }
+            // Never over one already here, and never BESIDE one either. A
+            // local original is the file the reader imported on this device;
+            // the archive's is at best the same bytes and at worst older.
+            //
+            // Asking only whether `destination` exists was not the same
+            // question: the destination takes its name from the LOCAL work and
+            // its extension from the ARCHIVED file, so a local `B.pdf` and an
+            // archived `A.html` remapped onto B produce `B.html`, which does
+            // not exist, and both then sit there. Nothing downstream can choose
+            // between them — `existingOriginalDocumentURL` returns whichever
+            // `contentsOfDirectory` lists first, and that is what reconversion
+            // reads, what permanent deletion removes, and what the next export
+            // carries. They need not agree. The sibling check in
+            // `FolderSyncService.readChangedRemoteAssets` already asks it this
+            // way.
+            let alreadyHere = isRecord
+                ? FileManager.default.fileExists(atPath: destination.path)
+                : Storage.existingOriginalDocumentURL(for: work.id) != nil
+            guard !alreadyHere else { continue }
             do {
                 try FileManager.default.createDirectory(
                     at: destination.deletingLastPathComponent(),

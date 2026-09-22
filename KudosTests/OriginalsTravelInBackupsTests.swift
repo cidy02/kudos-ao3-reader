@@ -147,5 +147,55 @@ struct OriginalsTravelInBackupsTests {
         #expect(summary.restoredOriginals == 0)
         #expect(try Data(contentsOf: original) == mine)
     }
+
+    /// The same guard, when the two copies are not named alike.
+    ///
+    /// The destination took its name from the LOCAL work and its extension from
+    /// the ARCHIVED file, so a local `.html` and an archived `.pdf` produced a
+    /// path that did not exist — the "already here?" test passed, and both
+    /// landed. Nothing downstream can choose between two originals for one
+    /// work: `existingOriginalDocumentURL` returns whichever the directory
+    /// listing yields first, and that is what re-conversion reads, what
+    /// permanent deletion removes, and what the next export carries. They need
+    /// not be the same file.
+    @Test func restoreDoesNotLeaveASecondOriginalBesideTheFirst() throws {
+        let source = try makeContext()
+        let work = try workWithOriginal(in: source)
+        defer { cleanUp([work.id]) }
+
+        // The archive carries the PDF.
+        let contents = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], readingQueues: [],
+            defaults: try testDefaults()
+        )
+
+        // This device's copy of the same work was converted from HTML instead,
+        // so it sits under a different name.
+        let pdf = try #require(Storage.existingOriginalDocumentURL(for: work.id))
+        try FileManager.default.removeItem(at: pdf)
+        let html = Storage.originalDocumentURL(for: work.id, fileExtension: "html")
+        let mine = Data("<html>the copy already on this device</html>".utf8)
+        try mine.write(to: html, options: .atomic)
+
+        let target = try makeContext()
+        let summary = try KudosBackupService.restore(
+            contents, into: target, defaults: try testDefaults(), mode: .merge
+        )
+
+        #expect(summary.restoredOriginals == 0)
+        #expect(originalsOnDisk(for: work.id) == 1)
+        #expect(try Data(contentsOf: html) == mine)
+    }
+
+    /// Every preserved original for `id`, sidecars excluded — the invariant is
+    /// that this is never more than one.
+    private func originalsOnDisk(for id: UUID) -> Int {
+        let names = (try? FileManager.default.contentsOfDirectory(
+            atPath: Storage.originalsDirectory.path
+        )) ?? []
+        return names.filter {
+            $0.hasPrefix(id.uuidString) && !$0.hasSuffix(Storage.conversionRecordSuffix)
+        }.count
+    }
 }
 }
