@@ -131,6 +131,45 @@ struct AO3SubscriptionsScreenTests {
         ) == nil)
     }
 
+    /// The index row is `AO3WorkSummary.subscription`, whose chapters string is
+    /// empty, so it is not updated and has no range. The work-page summary is
+    /// what grouping sees once enrichment has stored it under the work id.
+    @Test func enrichmentIsWhatMakesAnIndexRowUpdated() {
+        let sparse = AO3WorkSummary.subscription(id: 4, title: "Work", authors: ["someone"])
+        var enriched = sparse
+        enriched.chapters = "14/20"
+        enriched.rating = "Teen And Up Audiences"
+        let seen = [4: SubscriptionWatermark(postedChapterCount: 12, seenAt: Date())]
+
+        let before = AO3SubscriptionsChapterSource.summary(remote: sparse, enrichedSummaries: [:])
+        #expect(before.chapters.isEmpty)
+        #expect(!AO3SubscriptionsClassification.isUpdated(work: before, watermarks: seen))
+        #expect(AO3SubscriptionsChapterRange.label(work: before, watermarks: seen) == nil)
+        #expect(AO3SubscriptionsGrouping.sections(
+            [before], filter: .all, isUpdated: { work in
+                AO3SubscriptionsClassification.isUpdated(work: work, watermarks: seen)
+            }
+        ).map(\.group) == [.everythingElse])
+
+        let after = AO3SubscriptionsChapterSource.summary(
+            remote: sparse, enrichedSummaries: [4: enriched]
+        )
+        #expect(AO3SubscriptionsClassification.isUpdated(work: after, watermarks: seen))
+        #expect(
+            AO3SubscriptionsChapterRange.label(work: after, watermarks: seen) == "Chapters 13-14 new"
+        )
+        #expect(AO3SubscriptionsGrouping.sections(
+            [after], filter: .all, isUpdated: { work in
+                AO3SubscriptionsClassification.isUpdated(work: work, watermarks: seen)
+            }
+        ).map(\.group) == [.updatedSinceYouLooked])
+        #expect(AO3SubscriptionsGrouping.sections(
+            [after], filter: .updated, isUpdated: { work in
+                AO3SubscriptionsClassification.isUpdated(work: work, watermarks: seen)
+            }
+        ).map(\.group) == [.updatedSinceYouLooked])
+    }
+
     /// The line exists exactly when the watermark says the posted count grew.
     @Test func rangeAgreesWithTheNewChapterCount() {
         let samples = ["", "1/1", "7/?", "14/20", "10/20"]

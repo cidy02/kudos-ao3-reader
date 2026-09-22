@@ -100,6 +100,11 @@ enum SubscriptionWatermarks {
     /// that **are** watermarked alone so their badges survive the page load that
     /// displayed them.
     ///
+    /// A chapters string that does not name a posted count is not a sight.
+    /// The subscriptions index leaves that string empty, and storing 0 would
+    /// make the real total — once the work page arrives — look like every
+    /// chapter was new.
+    ///
     /// Returns the updated map, or `nil` when nothing changed — so a caller can skip
     /// the write on the overwhelmingly common repeat visit.
     static func baseline(
@@ -109,7 +114,7 @@ enum SubscriptionWatermarks {
     ) -> [Int: SubscriptionWatermark]? {
         var updated = watermarks
         var changed = false
-        for work in works where updated[work.id] == nil {
+        for work in works where updated[work.id] == nil && hasKnownPostedChapterCount(work.chapters) {
             updated[work.id] = SubscriptionWatermark(
                 postedChapterCount: SavedWork.postedChapterCount(from: work.chapters),
                 seenAt: now
@@ -120,18 +125,32 @@ enum SubscriptionWatermarks {
     }
 
     /// Marks every given work as seen at its current chapter count, clearing badges.
+    ///
+    /// A work whose chapters string names no count is left alone. Writing 0
+    /// there would erase a real watermark the same way `baseline` would.
     static func markSeen(
         _ works: [AO3WorkSummary],
         in watermarks: [Int: SubscriptionWatermark],
         now: Date = Date()
     ) -> [Int: SubscriptionWatermark] {
         var updated = watermarks
-        for work in works {
+        for work in works where hasKnownPostedChapterCount(work.chapters) {
             updated[work.id] = SubscriptionWatermark(
                 postedChapterCount: SavedWork.postedChapterCount(from: work.chapters),
                 seenAt: now
             )
         }
         return updated
+    }
+
+    /// Whether `chapters` names a posted count (`"14/20"`, `"7/?"`), as opposed
+    /// to the empty string the subscriptions index always carries.
+    ///
+    /// `postedChapterCount` turns both `""` and a real `"0/1"` into 0. Those
+    /// are not the same fact, and only the second one may be stored.
+    nonisolated static func hasKnownPostedChapterCount(_ chapters: String) -> Bool {
+        let posted = chapters.split(separator: "/", maxSplits: 1).first
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        return Int(posted) != nil
     }
 }
