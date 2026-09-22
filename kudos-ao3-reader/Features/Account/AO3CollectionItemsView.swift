@@ -29,7 +29,7 @@ struct AO3CollectionItemsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
 
-    @State private var tab: AO3CollectionItemTab = .unreviewed
+    @State private var tab: AO3CollectionItemTab
     @State private var items: [AO3CollectionItem] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
@@ -39,6 +39,22 @@ struct AO3CollectionItemsView: View {
     @State private var submitError: String?
 
     private enum Phase: Equatable { case idle, loading, loaded, submitting, failed(String) }
+
+    /// AO3's own default differs by which page this is. A single collection's
+    /// items page defaults to "awaiting the collection" (`unreviewed`); the
+    /// account-wide page (`slug == nil`) defaults to "awaiting you" (`invited`)
+    /// — `AO3CollectionURL.userItems` already encodes this in its own query,
+    /// but a `@State` var with one fixed initial value never asked it, so the
+    /// account-wide screen opened on the collection-scoped default regardless.
+    static func defaultTab(slug: String?) -> AO3CollectionItemTab {
+        slug == nil ? .invited : .unreviewed
+    }
+
+    init(slug: String?, title: String) {
+        self.slug = slug
+        self.title = title
+        _tab = State(initialValue: Self.defaultTab(slug: slug))
+    }
 
     /// The spec's four pills. `rejectedByUser` is deliberately not one: AO3 keeps
     /// it as a separate tab, but a creator who declined their own work has made a
@@ -176,8 +192,9 @@ struct AO3CollectionItemsView: View {
                     .minimumHitTarget(28)
                 }
                 Button {
-                    if tab != .unreviewed {
-                        tab = .unreviewed
+                    let resetTab = Self.defaultTab(slug: slug)
+                    if tab != resetTab {
+                        tab = resetTab
                     }
                 } label: {
                     SubjectChip(
@@ -287,6 +304,12 @@ struct AO3CollectionItemsView: View {
         }
         let expectedSessionGeneration = auth.sessionGeneration
         let requestedTab = tab
+        // A page change (unlike a tab change) keeps the prior page's rows on
+        // screen while the next page loads, per the doc comment above. Setting
+        // `currentPage` before the fetch resolves let the pagination bar claim
+        // a page number the visible rows did not match on failure. Restored on
+        // every failure branch below; only a success moves it for real.
+        let displayedPage = currentPage
         loadGeneration += 1
         let generation = loadGeneration
         if replacing {
@@ -326,16 +349,19 @@ struct AO3CollectionItemsView: View {
             guard generation == loadGeneration else { return }
             guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             items = []
+            currentPage = displayedPage
             phase = .failed("Log in to AO3 to manage collection items.")
         } catch is CancellationError {
         } catch let urlError as URLError where urlError.code == .cancelled {
         } catch let error as AO3Error {
             guard generation == loadGeneration,
                   auth.sessionGeneration == expectedSessionGeneration else { return }
+            currentPage = displayedPage
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
             guard generation == loadGeneration,
                   auth.sessionGeneration == expectedSessionGeneration else { return }
+            currentPage = displayedPage
             phase = .failed(error.localizedDescription)
         }
     }

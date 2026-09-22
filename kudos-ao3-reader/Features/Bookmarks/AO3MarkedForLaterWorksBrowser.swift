@@ -248,14 +248,25 @@ struct AO3MarkedForLaterWorksBrowser: View {
         .subjectScreenWash(palette: palette)
     }
 
+    /// "synced 2 min ago" is a duration, not a fixed fact, and a
+    /// screen the reader can leave open for a while would otherwise print a
+    /// stale age forever — nothing else in this view invalidates on the
+    /// clock alone. `SubjectHeaderBlock`'s `subtitle` is a plain `String`,
+    /// shared by every redesigned page; re-evaluating the string here, once a
+    /// minute, is cheaper and safer than teaching that component to take a
+    /// live clock for one screen.
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: kicker,
-            title: "Marked for Later",
-            subtitle: AO3MarkedForLaterCopy.subtitle(workCount: shownCount, syncedAt: syncedAt),
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            SubjectHeaderBlock(
+                kicker: kicker,
+                title: "Marked for Later",
+                subtitle: AO3MarkedForLaterCopy.subtitle(
+                    workCount: shownCount, syncedAt: syncedAt, now: context.date
+                ),
+                palette: palette,
+                gutter: SubjectMetrics.accountGutter
+            )
+        }
     }
 
     private var paginationBar: some View {

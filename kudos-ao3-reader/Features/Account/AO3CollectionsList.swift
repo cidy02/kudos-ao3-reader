@@ -76,6 +76,25 @@ struct AO3CollectionsList: View {
             if auth.isLoggedIn, phase == .idle { await load(page: 1) }
         }
         .sheet(isPresented: $showLogin) { AO3LoginView() }
+        // A failed page change (page 2+, say) while `collections` still holds
+        // the prior page falls through to the ordinary list below — nothing
+        // else in `signedInContent` ever surfaces it, so a tap that silently
+        // failed read as a tap that did nothing. This is the only place that
+        // failure becomes visible.
+        .alert(
+            "Couldn't load that page",
+            isPresented: Binding(
+                get: {
+                    if case .failed = phase, !collections.isEmpty { return true }
+                    return false
+                },
+                set: { if !$0, case .failed = phase { phase = .loaded } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if case let .failed(message) = phase { Text(message) }
+        }
     }
 
     @ViewBuilder
