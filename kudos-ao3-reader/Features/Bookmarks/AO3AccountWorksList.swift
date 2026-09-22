@@ -156,6 +156,15 @@ struct AO3AccountWorksList: View {
     /// contextual to this account list rather than a fresh AO3 search.
     @State private var filters = AO3SearchFilters()
     @State private var showingFilters = false
+    /// 1t's Everything / In progress / Finished pills. Local reading state only;
+    /// ignored by every other list kind.
+    @State private var historyProgressFilter = AO3HistoryProgressFilter.everything
+    /// The row whose AO3 history entry the reader asked to remove. Setting it
+    /// opens the confirm; the write runs only from that confirm.
+    @State private var pendingHistoryDelete: CanonicalWork?
+    @State private var confirmClearHistory = false
+    @State private var historyWriteError: String?
+    @State private var historyWriteInFlight = false
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -164,6 +173,18 @@ struct AO3AccountWorksList: View {
     /// The loaded page narrowed by the active refine filters.
     private var visibleWorks: [AO3WorkSummary] {
         filters.apply(to: works)
+    }
+
+    /// History's progress pills, applied after the refine facets. Other lists
+    /// leave the merged page alone.
+    private var historyDisplayedEntries: [CanonicalWork] {
+        guard kind == .history else { return visibleEntries }
+        return visibleEntries.filter {
+            historyProgressFilter.includes(
+                isInProgress: $0.local?.readingState == .inProgress,
+                isFinished: $0.local?.isFinished == true
+            )
+        }
     }
 
     /// The visible page with locally-saved matches paired in, so each renders as
@@ -224,6 +245,13 @@ struct AO3AccountWorksList: View {
                                         Label("Mark All as Seen", systemImage: "bell.badge.slash")
                                     }
                                 }
+                                if kind == .history {
+                                    Button(role: .destructive) {
+                                        confirmClearHistory = true
+                                    } label: {
+                                        Label("Clear History", systemImage: "trash")
+                                    }
+                                }
                             }
                         })
                     ].compactMap { $0 })
@@ -251,6 +279,39 @@ struct AO3AccountWorksList: View {
                 if auth.isLoggedIn, phase == .idle { await load(page: 1) }
             }
             .sheet(isPresented: $showLogin) { AO3LoginView() }
+            .destructiveConfirmation(
+                for: $pendingHistoryDelete,
+                title: "Delete from History?",
+                confirmLabel: "Delete from History",
+                message: { entry in
+                    let title = entry.title
+                    if title.isEmpty {
+                        return "This removes the work from your AO3 reading history. "
+                            + "The work itself is left where it is."
+                    }
+                    return "“\(title)” will be removed from your AO3 reading history. "
+                        + "The work itself is left where it is."
+                },
+                perform: { entry in Task { await deleteHistoryEntry(entry) } }
+            )
+            .destructiveConfirmation(
+                isPresented: $confirmClearHistory,
+                title: "Clear your entire history?",
+                confirmLabel: "Clear History",
+                message: "This removes every work from your AO3 reading history. It cannot be undone.",
+                perform: { Task { await clearHistory() } }
+            )
+            .alert(
+                "Couldn't update history",
+                isPresented: Binding(
+                    get: { historyWriteError != nil },
+                    set: { if !$0 { historyWriteError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { historyWriteError = nil }
+            } message: {
+                Text(historyWriteError ?? "")
+            }
     }
 
     // MARK: Signed in
@@ -348,7 +409,24 @@ struct AO3AccountWorksList: View {
         // Compact: Library-style root ScrollView + NavigationLink grid.
         // Detailed: card List with one NavigationLink/cardNavigation per row.
         Group {
-            if displayMode == .compact {
+            if kind == .history {
+                AO3HistoryWorksBrowser(
+                    entries: historyDisplayedEntries,
+                    readings: readingEntries,
+                    displayMode: displayMode,
+                    expandAll: expandAll,
+                    palette: accountPalette,
+                    kicker: originKicker,
+                    subtitle: headerTallyLine,
+                    showPagination: showPagination,
+                    currentPage: currentPage,
+                    totalPages: totalPages,
+                    isLoading: phase == .loading,
+                    filter: $historyProgressFilter,
+                    onPage: { page in Task { await load(page: page) } },
+                    onDelete: { pendingHistoryDelete = $0 }
+                )
+            } else if displayMode == .compact {
                 ScrollView {
                     VStack(spacing: 12) {
                         subjectHeader.padding(.top, 20)
@@ -543,8 +621,16 @@ struct AO3AccountWorksList: View {
     /// what is *visible*, since the refine facets can hide part of a page and a
     /// tally that ignored them would contradict the rows underneath it.
     private var headerTallyLine: String {
-        let shown = visibleEntries.count
+        let shown = kind == .history ? historyDisplayedEntries.count : visibleEntries.count
         var line = shown == 1 ? "1 work" : "\(shown) works"
+        if kind == .history, historyProgressFilter == .everything {
+            let inProgress = visibleEntries.filter { $0.local?.readingState == .inProgress }.count
+            if inProgress == 1 {
+                line += " · 1 in progress"
+            } else if inProgress > 1 {
+                line += " · \(inProgress) in progress"
+            }
+        }
         let newCount = worksWithNewChapters
         if newCount > 0 {
             line += " · \(newCount) with new chapters"
@@ -653,6 +739,44 @@ struct AO3AccountWorksList: View {
         } catch {
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.localizedDescription)
+        }
+    }
+
+    /// AO3 history removal always asks first. `confirmBeforeDelete` gates the
+    /// local trash; this write is not that trash, and a swipe must not post.
+    private func deleteHistoryEntry(_ entry: CanonicalWork) async {
+        guard !historyWriteInFlight else { return }
+        guard let workID = entry.ao3WorkID, let readingID = readingEntries[workID]?.readingID else {
+            historyWriteError = "AO3 didn't show a delete link for this row, so nothing was removed."
+            return
+        }
+        historyWriteInFlight = true
+        defer { historyWriteInFlight = false }
+        do {
+            _ = try await auth.deleteReading(readingID: readingID, page: currentPage)
+            works.removeAll { $0.id == workID }
+            readingEntries[workID] = nil
+        } catch is CancellationError {
+            // Session changed between the form GET and the POST. Nothing landed.
+        } catch {
+            historyWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func clearHistory() async {
+        guard !historyWriteInFlight else { return }
+        historyWriteInFlight = true
+        defer { historyWriteInFlight = false }
+        do {
+            _ = try await auth.clearReadingHistory()
+            works = []
+            readingEntries = [:]
+            currentPage = 1
+            totalPages = 1
+        } catch is CancellationError {
+            // Session changed between the confirm-page GET and the POST.
+        } catch {
+            historyWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }
