@@ -99,6 +99,24 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     /// read at execute inside `restorePendingBackup` (M4). The identity
     /// snapshot refuses a swapped file between confirm and restore (FIX-5).
     @State private var pendingImport: PendingBackupImport?
+
+    /// Whether Replace has anything to take away, which decides whether it is
+    /// offered at all.
+    ///
+    /// Asking only "are there works?" was too narrow: saved links, saved
+    /// searches, collections and the reader's own queues all outlive the last
+    /// work and are all pruned by Replace. A library emptied of works but still
+    /// holding those was shown Merge alone — and Merge cannot remove anything,
+    /// so there was no way left to make the library match the file. The
+    /// built-in Saved for Later queue is excluded: it always exists, so
+    /// counting it would make this permanently true.
+    private var hasAnythingReplaceWouldRemove: Bool {
+        works.contains { !$0.isPendingDeletion }
+            || !bookmarks.isEmpty
+            || !savedSearches.isEmpty
+            || !collections.isEmpty
+            || readingQueues.contains { $0.kind != .savedForLater }
+    }
     @State private var backupNotice: BackupNotice?
     @State private var epubNotice: BackupNotice?
     @State private var fontNotice: BackupNotice?
@@ -587,6 +605,7 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
             BackupImportSheet(
                 manifest: pending.manifest,
                 localWorks: works.filter { !$0.isPendingDeletion },
+                hasReplaceableRecords: hasAnythingReplaceWouldRemove,
                 syncIsConnected: folderSyncStatus.isConnected,
                 onMerge: { restorePendingBackup(mode: .merge) },
                 onReplace: { pauseSync in
@@ -1643,6 +1662,9 @@ struct ReplaceLibraryConfirmationView: View {
     let makePreReplaceBackup: () -> Result<String, Error>
 
     @State private var acknowledgedRemoval = false
+    /// The pending "enable the red button" wait, held so a re-tick starts its
+    /// own 1.5 seconds instead of inheriting what is left of the last one.
+    @State private var enableTask: Task<Void, Never>?
     @State private var pauseSync = true
     @State private var replaceEnabled = false
     @State private var backupFileName: String?
@@ -1813,11 +1835,19 @@ struct ReplaceLibraryConfirmationView: View {
                 }
             }
             .onChange(of: acknowledgedRemoval) { _, checked in
+                // Cancel the one already waiting. The delay exists so the red
+                // button cannot be reached by a reflex, and without this a
+                // check / uncheck / re-check could ride the FIRST sleep to
+                // completion — the re-check only has to land before it
+                // finishes, and the current-value test at the end would then
+                // see a box that is ticked and enable the button early.
+                enableTask?.cancel()
                 replaceEnabled = false
                 guard checked else { return }
-                Task { @MainActor in
+                enableTask = Task { @MainActor in
                     try? await Task.sleep(for: .seconds(1.5))
-                    if acknowledgedRemoval { replaceEnabled = true }
+                    guard !Task.isCancelled, acknowledgedRemoval else { return }
+                    replaceEnabled = true
                 }
             }
         }
