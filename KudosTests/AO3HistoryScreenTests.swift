@@ -124,4 +124,55 @@ struct AO3HistoryScreenTests {
             ) == nil
         )
     }
+
+    /// `AO3AuthService.readingsWriteResult` — the classification the two
+    /// history writes share. Both routes end in a Rails destroy-style
+    /// redirect, so a bare 3xx counts; a silent 2xx with neither an error nor
+    /// a success flash must NOT be read as success — that was the original
+    /// bug this pins against regressing.
+    @MainActor
+    @Test func readingsWriteResultRequiresPositiveEvidence() throws {
+        // An explicit flash notice.
+        #expect(
+            try AO3AuthService.readingsWriteResult(
+                status: 200,
+                body: "<div class=\"flash notice\">Reading was successfully removed.</div>",
+                success: "Removed.", rejectedFallback: "Couldn't remove."
+            ) == "Removed."
+        )
+        // A bare redirect with no rendered flash — the ordinary Rails destroy shape.
+        #expect(
+            try AO3AuthService.readingsWriteResult(
+                status: 302, body: "", success: "Removed.", rejectedFallback: "Couldn't remove."
+            ) == "Removed."
+        )
+        // A recognized error flash always rejects, whatever the status.
+        #expect(throws: AO3WriteError.self) {
+            try AO3AuthService.readingsWriteResult(
+                status: 200,
+                body: "<p class=\"error\">You can't do that.</p>",
+                success: "Removed.", rejectedFallback: "Couldn't remove."
+            )
+        }
+        // The bug: a 200 with neither flash — a maintenance page, an
+        // interstitial, a blank body — must throw unconfirmed, not claim
+        // success just because nothing explicitly rejected it.
+        #expect {
+            try AO3AuthService.readingsWriteResult(
+                status: 200, body: "<html><body>Under maintenance</body></html>",
+                success: "Removed.", rejectedFallback: "Couldn't remove."
+            )
+        } throws: { error in
+            (error as? AO3WriteError) == .unconfirmed
+        }
+        // Outside 2xx/3xx entirely: a real rejection, using the fallback
+        // message since AO3 sent no specific reason.
+        #expect {
+            try AO3AuthService.readingsWriteResult(
+                status: 500, body: "", success: "Removed.", rejectedFallback: "Couldn't remove."
+            )
+        } throws: { error in
+            (error as? AO3WriteError) == .rejected("Couldn't remove.")
+        }
+    }
 }

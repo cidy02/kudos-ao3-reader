@@ -175,11 +175,9 @@ extension AO3AuthService {
             to: endpoint, body: body, csrf: token, referer: history, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
-            return "Removed from history."
-        }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't remove that from history."
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Removed from history.", rejectedFallback: "Couldn't remove that from history."
         )
     }
 
@@ -207,12 +205,37 @@ extension AO3AuthService {
             to: endpoint, body: body, csrf: token, referer: confirm, ajax: false
         )
         let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
-            return "History cleared."
-        }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't clear history."
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "History cleared.", rejectedFallback: "Couldn't clear history."
         )
+    }
+
+    /// Shared by `deleteReading`/`clearReadingHistory`. Both routes end in a
+    /// Rails destroy-style redirect, not a re-rendered page — matches the
+    /// error → flash notice → bare redirect layering `AO3WorkActions`' own
+    /// write path already uses, rather than the weaker "2xx/3xx and no error
+    /// flash" this pair originally checked, which read a maintenance page or
+    /// blank interstitial as a confirmed delete. `.unconfirmed` is exactly
+    /// what its own doc comment says delete/history writes should surface: an
+    /// explicit "couldn't confirm" rather than a claimed success with nothing
+    /// behind it.
+    /// Internal, not `private`, for the same reason `AO3Client.commentWriteVerdict`
+    /// is: pure and static, so the classification is unit-testable without a
+    /// network call.
+    static func readingsWriteResult(
+        status: Int, body: String, success: String, rejectedFallback: String
+    ) throws -> String {
+        if let error = AO3Client.writeErrorMessage(in: body) {
+            throw AO3WriteError.rejected(error)
+        }
+        if AO3Client.writeSuccessMessage(in: body) != nil { return success }
+        if (300 ... 399).contains(status) { return success }
+        if (200 ... 299).contains(status), body.localizedCaseInsensitiveContains("successfully") {
+            return success
+        }
+        if (200 ... 399).contains(status) { throw AO3WriteError.unconfirmed }
+        throw AO3WriteError.rejected(rejectedFallback)
     }
 
     /// The fields of a new AO3 bookmark. `nonisolated` so the nonisolated
