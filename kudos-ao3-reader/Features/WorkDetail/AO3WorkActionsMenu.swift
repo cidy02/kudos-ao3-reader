@@ -12,6 +12,9 @@ struct AO3WorkActionsMenu: View {
     /// When shown from a reader, the AO3 story chapter to open comments on so the
     /// user lands on the chapter they're reading. nil (Work Detail) → All comments.
     var commentsInitialChapterPosition: Int?
+    /// See `WorkAO3ActionChips.onSubscribeSuccess` — same rule, same reason
+    /// the two carry it independently rather than sharing one call site.
+    var onSubscribeSuccess: (() -> Void)? = nil
 
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -42,7 +45,9 @@ struct AO3WorkActionsMenu: View {
             }
             .disabled(actions.isWorking)
 
-            Button { actions.subscribe(workID: workID, auth: auth) } label: {
+            Button {
+                actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
+            } label: {
                 if actions.workPageStates?.isSubscribed == true {
                     Label("Unsubscribe", systemImage: "bell.slash")
                 } else {

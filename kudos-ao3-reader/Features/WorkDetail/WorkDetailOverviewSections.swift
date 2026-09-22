@@ -91,7 +91,8 @@ extension WorkDetailView {
                     workID: id,
                     kudosCount: displayKudos,
                     actions: workActions,
-                    palette: workPalette
+                    palette: workPalette,
+                    onSubscribeSuccess: downloadIfSubscribedWithoutEPUB
                 )
                 .pageBodyRow(top: 24)
             }

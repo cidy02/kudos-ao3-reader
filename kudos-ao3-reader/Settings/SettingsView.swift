@@ -64,6 +64,9 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("keepScreenAwake") private var keepScreenAwake = false
+    /// 1ab's Downloads toggle. Read at the one place a subscribe can turn
+    /// into a download — `WorkDetailView.downloadIfSubscribedWithoutEPUB`.
+    @AppStorage("downloadOnSubscribe") private var downloadOnSubscribe = false
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @AppStorage("hideMatureContent") private var hideMatureContent = true
@@ -466,12 +469,14 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
                     // `StorageUsedRow` for why the other two are absent.
                     if includeAppSettings {
                         Section {
+                            Toggle("Download on subscribe", isOn: $downloadOnSubscribe)
                             StorageUsedRow()
                         } header: {
                             Text("Downloads")
                         } footer: {
-                            Text("Privacy and local data breaks this down and can free "
-                                + "space a title at a time.")
+                            Text("Applies to works already in your library without "
+                                + "their EPUB. Privacy and local data breaks storage "
+                                + "down and can free space a title at a time.")
                         }
                     }
 

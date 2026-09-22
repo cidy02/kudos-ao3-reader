@@ -70,8 +70,16 @@ final class AO3WorkActionsModel {
         run { try await auth.giveKudos(workID: workID) }
     }
 
-    func subscribe(workID: Int, auth: AO3AuthService) {
-        run(afterSuccessRefresh: (workID, auth)) { try await auth.toggleSubscribe(workID: workID) }
+    func subscribe(workID: Int, auth: AO3AuthService, onSubscribed: (() -> Void)? = nil) {
+        run(afterSuccessRefresh: (workID, auth)) {
+            let message = try await auth.toggleSubscribe(workID: workID)
+            // `toggleSubscribe` is a toggle — this same call unsubscribes on a
+            // second tap. Its own three return strings are the only way to
+            // tell which one happened; a hook that fired on both would queue
+            // a download on the tap that takes a work OFF the reader's list.
+            if message == "Subscribed." { onSubscribed?() }
+            return message
+        }
     }
 
     func markForLater(workID: Int, auth: AO3AuthService) {

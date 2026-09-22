@@ -19,6 +19,10 @@ struct WorkAO3ActionChips: View {
     let kudosCount: Int?
     let actions: AO3WorkActionsModel
     let palette: SubjectPalette
+    /// Fired only when this subscribe call actually subscribed (not on the
+    /// unsubscribe half of the same toggle). nil at call sites with nothing to
+    /// hook — the reader and the menu's other consumers.
+    var onSubscribeSuccess: (() -> Void)? = nil
 
     @Environment(AO3AuthService.self) private var auth
 
@@ -66,7 +70,7 @@ struct WorkAO3ActionChips: View {
             systemImage: isSubscribed ? "bell.slash" : "bell",
             isDone: isSubscribed
         ) {
-            actions.subscribe(workID: workID, auth: auth)
+            actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
         }
     }
 
