@@ -1119,6 +1119,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await Self.parseBookmarksPage(authenticatedHTML(for: request), page: page)
     }
 
+    /// The same authenticated GET as `bookmarksPage`, parsed as bookmark rows.
+    ///
+    /// `bookmarksPage` keeps only the work blurb. The note, tags, privacy flag,
+    /// and date are already read by `parseAuthorBookmarksPage` for an author's
+    /// Bookmarks tab; the Account hub's own list needs those fields too. This
+    /// does not post.
+    func accountBookmarksPage(for request: URLRequest, page: Int) async throws -> AO3AuthorBookmarksPage {
+        try await Self.parseAuthorBookmarksPage(authenticatedHTML(for: request), page: page)
+    }
+
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
     func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
         try await Self.parseSubscriptionsPage(authenticatedHTML(for: request), page: page)
