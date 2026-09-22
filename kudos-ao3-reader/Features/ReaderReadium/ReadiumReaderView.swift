@@ -18,6 +18,10 @@ struct BookReaderView: View {
     let work: SavedWork
 
     var body: some View {
+        reader.keepScreenAwakeWhileReading()
+    }
+
+    @ViewBuilder private var reader: some View {
         #if os(iOS)
         ReadiumReaderView(work: work)
         #else
