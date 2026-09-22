@@ -46,14 +46,50 @@ struct AccountInboxScreen: View {
             }
 
             Section {
-                AccountInboxRows(
-                    model: model,
-                    limit: nil,
-                    onOpen: onOpen,
-                    onReply: onReply,
-                    onOpenChapter: onOpenChapter,
-                    workContext: workContext
-                )
+                // The ForEach has to sit in this List. A view that returned
+                // every comment from its own body was one row, and a swipe on
+                // a comment inside it does not attach.
+                if showsCommentFeed {
+                    AccountInboxFeedHeader(tally: inboxStatus.headerTallyLine)
+                    if model.isShowingStaleCache {
+                        AccountInboxStaleCacheRow(isLast: model.items.isEmpty)
+                            .id("inbox-stale-\(model.items.isEmpty)")
+                    }
+                    ForEach(commentSegments) { segment in
+                        AccountInboxCommentListRow(
+                            model: model,
+                            item: segment.item,
+                            workContext: workContext(segment.item),
+                            isSelecting: model.isSelecting,
+                            isFirst: segment.isFirst,
+                            isLast: segment.isLast,
+                            onOpen: { onOpen(segment.item) },
+                            onOpenChapter: { onOpenChapter(segment.item) },
+                            onReply: { onReply(segment.item) }
+                        )
+                    }
+                    if let onSeeAll = inboxStatus.onSeeAll, !model.items.isEmpty {
+                        AccountInboxSeeAllRow(
+                            unreadCount: model.unreadCount,
+                            action: onSeeAll
+                        )
+                    }
+                    if model.totalPages > 1 {
+                        SearchPaginationBar(
+                            currentPage: model.currentPage,
+                            totalPages: model.totalPages
+                        ) { page in
+                            model.goToPage(page, auth: auth)
+                        }
+                        .accountControlCardRow()
+                        .disabled(model.isPerformingBulkAction)
+                    }
+                    if case .paginationFailed = model.phase {
+                        inboxStatus
+                    }
+                } else {
+                    inboxStatus
+                }
             }
         }
         .cardList()
@@ -72,11 +108,50 @@ struct AccountInboxScreen: View {
     }
 
     /// 1l heads the page with what is waiting rather than only what it is.
+    /// Awaiting reply counts the loaded page. The heading has no such total —
+    /// see `AO3InboxTally`.
     private var tally: String? {
         guard let total = model.totalComments else { return nil }
-        let comments = total == 1 ? "1 comment" : "\(total.formatted()) comments"
-        guard let unread = model.unreadCount, unread > 0 else { return comments }
-        return "\(comments) · \(unread.formatted()) unread"
+        var line = total == 1 ? "1 comment" : "\(total.formatted()) comments"
+        if let unread = model.unreadCount, unread > 0 {
+            line += " · \(unread.formatted()) unread"
+        }
+        let awaiting = AO3InboxTally.awaitingReplyCount(model.items)
+        if awaiting > 0 {
+            line += " · \(awaiting.formatted()) awaiting your reply"
+        }
+        return line
+    }
+
+    /// Comments stay on screen through a failed page turn. An empty first load
+    /// does not: that is the loading or empty state, not a blank panel.
+    private var showsCommentFeed: Bool {
+        switch model.phase {
+        case .paginationFailed:
+            true
+        case .idle, .loading, .loaded:
+            !model.items.isEmpty
+        case .failed:
+            false
+        }
+    }
+
+    private var commentSegments: [AccountInboxPanelSegment] {
+        AccountInboxPanelSegment.rows(
+            items: model.items,
+            hasStaleBanner: model.isShowingStaleCache
+        )
+    }
+
+    private var inboxStatus: AccountInboxRows {
+        AccountInboxRows(
+            model: model,
+            limit: nil,
+            onOpen: onOpen,
+            onReply: onReply,
+            onOpenChapter: onOpenChapter,
+            workContext: workContext
+        )
     }
 
     @ToolbarContentBuilder
