@@ -53,6 +53,28 @@ struct AO3BookmarksWorksBrowserTests {
         #expect(!kept(plain, by: .withNotes))
     }
 
+    /// The footnote uses the same predicate as `SensitiveWorkRow`'s blur.
+    /// Revealed, not adult, privacy off, and Hide mode (the list drops the
+    /// row before this screen) all leave the footnote up. Only an unrevealed
+    /// adult work in Blur mode takes it down.
+    @Test func footnoteFollowsTheRowBlur() {
+        #expect(AO3BookmarksMatureBlur.isBlurred(
+            isAdult: true, hideMature: true, mode: .obscure, isRevealed: false
+        ))
+        #expect(!AO3BookmarksMatureBlur.isBlurred(
+            isAdult: true, hideMature: true, mode: .obscure, isRevealed: true
+        ))
+        #expect(!AO3BookmarksMatureBlur.isBlurred(
+            isAdult: false, hideMature: true, mode: .obscure, isRevealed: false
+        ))
+        #expect(!AO3BookmarksMatureBlur.isBlurred(
+            isAdult: true, hideMature: false, mode: .obscure, isRevealed: false
+        ))
+        #expect(!AO3BookmarksMatureBlur.isBlurred(
+            isAdult: true, hideMature: true, mode: .hide, isRevealed: false
+        ))
+    }
+
     /// The case a Bool passed in from the view could not catch: the note is
     /// empty, including a note element whose only text is whitespace.
     /// `!notes.blocks.isEmpty` would keep the whitespace row.

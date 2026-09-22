@@ -150,6 +150,89 @@ struct AO3ClientTests {
         #expect(page.totalPages == 1)
     }
 
+    /// The author profile still throws on that page. The account list does
+    /// not: none of the blurbs has a `/works/<id>` heading, so parsing again
+    /// cannot succeed. A heading that does link a work, and a page that is
+    /// not a bookmarks index at all, still throw. A note that merely mentions
+    /// another work is not a heading link.
+    static let onlyNonWorkBookmarksHTML = """
+    <html><body>
+    <ol class="bookmark index group">
+      <li id="bookmark_1" class="bookmark blurb group">
+        <div class="header module">
+          <h4 class="heading"><a href="/series/55">A Series</a> by <a rel="author" href="/users/dave">dave</a></h4>
+        </div>
+      </li>
+      <li id="bookmark_2" class="bookmark blurb group">
+        <div class="header module">
+          <h4 class="heading"><a href="/external_works/9">An External Work</a></h4>
+        </div>
+      </li>
+      <li id="bookmark_3" class="bookmark blurb group">
+        <p class="message">Deleted work</p>
+      </li>
+    </ol>
+    </body></html>
+    """
+
+    @Test func accountBookmarksPageOfOnlyNonWorkBookmarksIsEmpty() throws {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseAuthorBookmarksPage(Self.onlyNonWorkBookmarksHTML, page: 1)
+        }
+        let page = try AO3Client.accountBookmarksPage(from: Self.onlyNonWorkBookmarksHTML, page: 2)
+        #expect(page.bookmarks.isEmpty)
+        #expect(page.currentPage == 2)
+        #expect(page.totalPages == 1)
+
+        let paged = Self.onlyNonWorkBookmarksHTML.replacingOccurrences(
+            of: "</ol>",
+            with: "</ol><ol class=\"pagination\"><li><a href=\"?page=2\">2</a></li><li><a href=\"?page=4\">4</a></li></ol>"
+        )
+        let pagedResult = try AO3Client.accountBookmarksPage(from: paged, page: 2)
+        #expect(pagedResult.bookmarks.isEmpty)
+        #expect(pagedResult.totalPages == 4)
+
+        let noted = """
+        <html><body>
+        <ol class="bookmark index group">
+          <li id="bookmark_1" class="bookmark blurb group">
+            <h4 class="heading"><a href="/series/55">A Series</a></h4>
+            <blockquote class="userstuff notes"><p>see <a href="/works/789">this</a></p></blockquote>
+          </li>
+        </ol>
+        </body></html>
+        """
+        let notedPage = try AO3Client.accountBookmarksPage(from: noted, page: 1)
+        #expect(notedPage.bookmarks.isEmpty)
+    }
+
+    @Test func accountBookmarksPageStillThrowsWhenAWorkHeadingFailsToParse() throws {
+        let html = """
+        <html><body>
+        <ol class="bookmark index group">
+          <li id="bookmark_nope" class="bookmark blurb group">
+            <h4 class="heading"><a href="/works/789">Broken markup</a></h4>
+          </li>
+          <li id="bookmark_2" class="bookmark blurb group">
+            <h4 class="heading"><a href="/series/55">A Series</a></h4>
+          </li>
+        </ol>
+        </body></html>
+        """
+        #expect(throws: AO3Error.self) {
+            try AO3Client.accountBookmarksPage(from: html, page: 1)
+        }
+        #expect(throws: AO3Error.self) {
+            try AO3Client.accountBookmarksPage(from: "<html><body><p>nope</p></body></html>", page: 1)
+        }
+    }
+
+    @Test func accountBookmarksPageKeepsABookmarkThatParsed() throws {
+        let page = try AO3Client.accountBookmarksPage(from: Self.bookmarksHTML, page: 1)
+        #expect(page.bookmarks.count == 1)
+        #expect(page.bookmarks.first?.work.id == 789)
+    }
+
     // MARK: Marked for Later (reading list)
 
     @Test func buildsMarkedForLaterURL() {
