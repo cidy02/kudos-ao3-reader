@@ -24,17 +24,30 @@ nonisolated struct SubscriptionWatermark: Codable, Equatable, Sendable {
     var seenAt: Date
 }
 
+/// Which list's "last looked" clock a watermark belongs to.
+///
+/// Subscriptions and Marked for Later both mean "new chapters since you looked",
+/// and the same work can sit on both lists. One shared `UserDefaults` key would
+/// let leaving one screen clear the other's badges. The record is the same; the
+/// key is not.
+nonisolated enum SubscriptionWatermarkNamespace: String, Sendable {
+    case subscriptions = "ao3.subscriptions.watermarks"
+    case markedForLater = "ao3.markedForLater.watermarks"
+}
+
 @MainActor
 enum SubscriptionWatermarks {
-    private static let defaultsKey = "ao3.subscriptions.watermarks"
 
     /// Matching the ceiling `AO3_NETWORKING_POLICY` names for the other caches.
     /// Someone with more subscriptions than this loses the badge on the ones they
     /// looked at longest ago, which is the right thing to drop.
     static let entryLimit = 512
 
-    static func load(from defaults: UserDefaults = .standard) -> [Int: SubscriptionWatermark] {
-        guard let data = defaults.data(forKey: defaultsKey),
+    static func load(
+        from defaults: UserDefaults = .standard,
+        namespace: SubscriptionWatermarkNamespace = .subscriptions
+    ) -> [Int: SubscriptionWatermark] {
+        guard let data = defaults.data(forKey: namespace.rawValue),
               let decoded = try? JSONDecoder().decode([String: SubscriptionWatermark].self, from: data)
         else { return [:] }
         return Dictionary(
@@ -45,14 +58,15 @@ enum SubscriptionWatermarks {
 
     static func save(
         _ watermarks: [Int: SubscriptionWatermark],
-        to defaults: UserDefaults = .standard
+        to defaults: UserDefaults = .standard,
+        namespace: SubscriptionWatermarkNamespace = .subscriptions
     ) {
         let bounded = bound(watermarks)
         let encodable = Dictionary(
             bounded.map { (String($0.key), $0.value) }, uniquingKeysWith: { first, _ in first }
         )
         guard let data = try? JSONEncoder().encode(encodable) else { return }
-        defaults.set(data, forKey: defaultsKey)
+        defaults.set(data, forKey: namespace.rawValue)
     }
 
     /// Drops the least recently seen entries past `entryLimit`.

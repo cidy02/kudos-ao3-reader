@@ -159,6 +159,17 @@ struct AO3AccountWorksList: View {
     /// 1t's Everything / In progress / Finished pills. Local reading state only;
     /// ignored by every other list kind.
     @State private var historyProgressFilter = AO3HistoryProgressFilter.everything
+    /// 1o's All / Updated / Downloaded pills. Ignored by every other list kind.
+    @State private var markedForLaterFilter = AO3MarkedForLaterFilter.all
+    /// Marked for Later's own "since you looked" clock. Not the subscriptions
+    /// map: the same work can be on both lists, and one look must not clear both.
+    @State private var markedForLaterWatermarks: [Int: SubscriptionWatermark] = [:]
+    /// Pages fetched during this visit. Recorded when the screen goes away, so
+    /// the Updated group stays up for the visit that revealed it.
+    @State private var markedForLaterSeenThisVisit: [Int: AO3WorkSummary] = [:]
+    /// Set when a Marked for Later fetch succeeds. The artboard's "synced 2 min
+    /// ago". Not persisted: the next open fetches again and starts a new clock.
+    @State private var lastSyncedAt: Date?
     /// The row whose AO3 history entry the reader asked to remove. Setting it
     /// opens the confirm; the write runs only from that confirm.
     @State private var pendingHistoryDelete: CanonicalWork?
@@ -236,9 +247,15 @@ struct AO3AccountWorksList: View {
                                 MatureRevealToggle()
                             }
                             if hasWorks {
-                                DisplayModeMenuPicker(mode: $displayMode)
-                                if displayMode != .compact {
-                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                // 1o is one layout — covers for what changed, ledger
+                                // rows for the rest — so the account-wide display
+                                // switch would change a preference this screen
+                                // does not draw.
+                                if kind != .markedForLater {
+                                    DisplayModeMenuPicker(mode: $displayMode)
+                                    if displayMode != .compact {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
                                 }
                                 if tracksNewChapters, worksWithNewChapters > 0 {
                                     Button(action: markAllSeen) {
@@ -275,6 +292,9 @@ struct AO3AccountWorksList: View {
                 // signed-out state so we don't fire an unauthenticated request.
                 if tracksNewChapters, subscriptionWatermarks.isEmpty {
                     subscriptionWatermarks = SubscriptionWatermarks.load()
+                }
+                if kind == .markedForLater, markedForLaterWatermarks.isEmpty {
+                    markedForLaterWatermarks = SubscriptionWatermarks.load(namespace: .markedForLater)
                 }
                 if auth.isLoggedIn, phase == .idle { await load(page: 1) }
             }
@@ -426,6 +446,22 @@ struct AO3AccountWorksList: View {
                     onPage: { page in Task { await load(page: page) } },
                     onDelete: { pendingHistoryDelete = $0 }
                 )
+            } else if kind == .markedForLater {
+                AO3MarkedForLaterWorksBrowser(
+                    entries: visibleEntries,
+                    watermarks: markedForLaterWatermarks,
+                    expandAll: expandAll,
+                    palette: accountPalette,
+                    kicker: originKicker,
+                    syncedAt: lastSyncedAt,
+                    showPagination: showPagination,
+                    currentPage: currentPage,
+                    totalPages: totalPages,
+                    isLoading: phase == .loading,
+                    filter: $markedForLaterFilter,
+                    onPage: { page in Task { await load(page: page) } }
+                )
+                .onDisappear { persistMarkedForLaterLook() }
             } else if displayMode == .compact {
                 ScrollView {
                     VStack(spacing: 12) {
@@ -561,6 +597,33 @@ struct AO3AccountWorksList: View {
         return visibleEntries.filter { newChapterCount(for: $0) > 0 }.count
     }
 
+    /// Same first-sight rule as subscriptions, on Marked for Later's own key.
+    /// Adds only: a work already watermarked keeps its "updated" place through
+    /// the load that is drawing it. Leaving the screen is what records the look
+    /// (`persistMarkedForLaterLook`).
+    private func baselineMarkedForLater(_ works: [AO3WorkSummary]) {
+        guard kind == .markedForLater, !works.isEmpty else { return }
+        guard let updated = SubscriptionWatermarks.baseline(works, into: markedForLaterWatermarks) else {
+            return
+        }
+        markedForLaterWatermarks = updated
+        SubscriptionWatermarks.save(updated, namespace: .markedForLater)
+    }
+
+    /// Writes this visit's pages as seen, without touching the map the screen is
+    /// still drawing from. The next open loads the saved counts, so "updated"
+    /// means chapters posted since the reader left — not since the row appeared.
+    private func persistMarkedForLaterLook() {
+        guard kind == .markedForLater, !markedForLaterSeenThisVisit.isEmpty else { return }
+        let stored = SubscriptionWatermarks.load(namespace: .markedForLater)
+        let updated = SubscriptionWatermarks.markSeen(
+            Array(markedForLaterSeenThisVisit.values),
+            in: stored
+        )
+        SubscriptionWatermarks.save(updated, namespace: .markedForLater)
+        markedForLaterSeenThisVisit = [:]
+    }
+
     /// Records a first sight for anything not yet watermarked, so a reader opening
     /// this screen for the first time does not meet three hundred badges — every one
     /// technically true and collectively meaningless.
@@ -615,11 +678,13 @@ struct AO3AccountWorksList: View {
         theme.scopePalette
     }
 
-    /// Spec 1o prints "12 works · synced 2 min ago". The app does not record when
-    /// a list was last synced, so the second fact here is which page you are on —
-    /// true, and the thing a reader of a nine-page list actually needs. Counts
-    /// what is *visible*, since the refine facets can hide part of a page and a
-    /// tally that ignored them would contradict the rows underneath it.
+    /// Counts what is *visible*, since the refine facets can hide part of a page
+    /// and a tally that ignored them would contradict the rows underneath it.
+    ///
+    /// Marked for Later does not use this line. Its own header is "N works ·
+    /// synced … ago" (`AO3MarkedForLaterCopy`), which needs a fetch timestamp
+    /// this shared tally does not have. Everyone else still says which page
+    /// you are on — the fact a nine-page list can actually use.
     private var headerTallyLine: String {
         let shown = kind == .history ? historyDisplayedEntries.count : visibleEntries.count
         var line = shown == 1 ? "1 work" : "\(shown) works"
@@ -703,12 +768,19 @@ struct AO3AccountWorksList: View {
             )
             currentPage = result.currentPage
             totalPages = result.totalPages
+            if kind == .markedForLater {
+                lastSyncedAt = Date()
+                for work in result.works {
+                    markedForLaterSeenThisVisit[work.id] = work
+                }
+            }
             phase = .loaded
             // First sight baselines rather than badges. Runs after `works` is
             // replaced so it sees the page that just arrived, and only ever adds
             // entries — a work already watermarked keeps its badge through the load
             // that displayed it.
             baselineWatermarks()
+            baselineMarkedForLater(result.works)
             if let countsKind = kind.countsKind {
                 AO3AccountListCountsCache.shared.record(
                     page: result,
