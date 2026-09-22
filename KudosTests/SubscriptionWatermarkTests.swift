@@ -66,6 +66,36 @@ struct SubscriptionWatermarkTests {
         ) == 0)
     }
 
+    /// The subscriptions index has no chapters string. Baselining that as 0
+    /// makes the work page's real total look like every chapter is new.
+    @Test func anEmptyChaptersStringIsNotAFirstSight() {
+        let sparse = AO3WorkSummary.subscription(id: 4, title: "Work", authors: ["someone"])
+        let known = summary(id: 5, chapters: "3/3")
+
+        #expect(SubscriptionWatermarks.hasKnownPostedChapterCount("") == false)
+        #expect(SubscriptionWatermarks.hasKnownPostedChapterCount(sparse.chapters) == false)
+        #expect(SubscriptionWatermarks.hasKnownPostedChapterCount("14/20"))
+        #expect(SubscriptionWatermarks.hasKnownPostedChapterCount("7/?"))
+        #expect(SubscriptionWatermarks.baseline([sparse], into: [:]) == nil)
+
+        let marks = SubscriptionWatermarks.baseline([sparse, known], into: [:])
+        #expect(marks?[4] == nil)
+        #expect(marks?[5]?.postedChapterCount == 3)
+    }
+
+    /// Mark All as Seen runs on whatever summary the screen has. A row that
+    /// is still the empty index blurb must not overwrite a real watermark with 0.
+    @Test func markingSeenDoesNotReplaceACountWithAnUnknownOne() {
+        let seen = [4: SubscriptionWatermark(postedChapterCount: 12, seenAt: Date())]
+        let sparse = AO3WorkSummary.subscription(id: 4, title: "Work", authors: ["someone"])
+        let after = SubscriptionWatermarks.markSeen([sparse], in: seen)
+
+        #expect(after[4]?.postedChapterCount == 12)
+        #expect(SubscriptionWatermarks.newChapterCount(
+            for: summary(id: 4, chapters: "14/20"), watermarks: after
+        ) == 2)
+    }
+
     @Test func markingSeenClearsTheBadgeAtTheCurrentCount() {
         let seen = [1: SubscriptionWatermark(postedChapterCount: 12, seenAt: Date())]
         let grown = summary(id: 1, chapters: "14/20")

@@ -111,8 +111,8 @@ enum AO3SubscriptionsChapterRange {
     }
 
     /// Nil when this work has no watermark, or its `chapters` string does not
-    /// name a higher posted count. A subscriptions blurb often has an empty
-    /// chapters string. That is not a range, and this does not fetch one.
+    /// name a higher posted count. The subscriptions index leaves that string
+    /// empty. The caller passes the work-page summary once enrichment has one.
     @MainActor
     static func label(
         work: AO3WorkSummary,
@@ -123,6 +123,24 @@ enum AO3SubscriptionsChapterRange {
             seenPosted: seen.postedChapterCount,
             currentPosted: SavedWork.postedChapterCount(from: work.chapters)
         )
+    }
+}
+
+/// Which summary Updated and the chapter range should read.
+///
+/// The index row is what the list fetched. Its `chapters` is empty, so it
+/// never counts as updated. A work-page enrichment is preferred once it
+/// names a posted count. Anything else — a failed enrichment, a summary
+/// that still has no chapters — leaves the index row in place.
+enum AO3SubscriptionsChapterSource {
+    static func summary(
+        remote: AO3WorkSummary,
+        enrichedSummaries: [Int: AO3WorkSummary]
+    ) -> AO3WorkSummary {
+        guard let enriched = enrichedSummaries[remote.id],
+              SubscriptionWatermarks.hasKnownPostedChapterCount(enriched.chapters)
+        else { return remote }
+        return enriched
     }
 }
 
@@ -173,6 +191,9 @@ struct AO3SubscriptionsWorksBrowser: View {
     let entries: [CanonicalWork]
     let watermarks: [Int: SubscriptionWatermark]
     let unsubscribePaths: [Int: String]
+    /// Work-page summaries keyed by work id. Empty until a row's enrichment
+    /// reports one. Grouping reads these in preference to `entry.remote`.
+    let enrichedSummaries: [Int: AO3WorkSummary]
     let expandAll: Bool
     let palette: SubjectPalette
     let kicker: String
@@ -183,6 +204,7 @@ struct AO3SubscriptionsWorksBrowser: View {
     @Binding var filter: AO3SubscriptionsFilter
     let onPage: (Int) -> Void
     let onUnsubscribe: (CanonicalWork) -> Void
+    let onEnriched: (AO3WorkSummary) -> Void
 
     private var sections: [AO3SubscriptionsSection<CanonicalWork>] {
         AO3SubscriptionsGrouping.sections(entries, filter: filter, isUpdated: isUpdated(_:))
@@ -301,6 +323,12 @@ struct AO3SubscriptionsWorksBrowser: View {
                 AO3SubscriptionsChapterFootnote(text: label)
             }
         }
+        // A saved work renders `SensitiveWorkRow`, not `EnrichingAO3WorkRow`,
+        // so the shared row never reports a chapter count for it. The index
+        // blurb is still sparse. Ask for the work page the same way.
+        .task(id: savedRowEnrichmentID(entry)) {
+            await enrichSavedRow(entry)
+        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if canUnsubscribe(entry) {
                 Button(role: .destructive) {
@@ -318,20 +346,43 @@ struct AO3SubscriptionsWorksBrowser: View {
         if let work = entry.local {
             SensitiveWorkRow(work: work, expandAll: expandAll, presentation: .ledger)
         } else if let remote = entry.remote {
-            EnrichingAO3WorkRow(work: remote, expandAll: expandAll, presentation: .searchLedger)
+            EnrichingAO3WorkRow(
+                work: remote,
+                expandAll: expandAll,
+                presentation: .searchLedger,
+                onEnriched: onEnriched
+            )
         }
     }
 
-    private func isUpdated(_ entry: CanonicalWork) -> Bool {
-        guard let remote = entry.remote else { return false }
-        return AO3SubscriptionsClassification.isUpdated(work: remote, watermarks: watermarks)
+    /// Nil for a remote-only row: `EnrichingAO3WorkRow` already reports those.
+    /// A stable nil id means this task runs once and returns.
+    private func savedRowEnrichmentID(_ entry: CanonicalWork) -> Int? {
+        guard entry.local != nil else { return nil }
+        return entry.ao3WorkID
     }
 
-    /// The subscriptions index does not carry a chapter total. The range is
-    /// whatever that summary's `chapters` string already says. Empty stays empty.
+    private func enrichSavedRow(_ entry: CanonicalWork) async {
+        guard entry.local != nil, let remote = entry.remote else { return }
+        guard let enriched = await AO3SparseWorkEnricher.shared.enrich(remote) else { return }
+        onEnriched(enriched)
+    }
+
+    private func isUpdated(_ entry: CanonicalWork) -> Bool {
+        guard let work = classifyingWork(entry) else { return false }
+        return AO3SubscriptionsClassification.isUpdated(work: work, watermarks: watermarks)
+    }
+
     private func chapterLabel(for entry: CanonicalWork) -> String? {
+        guard let work = classifyingWork(entry) else { return nil }
+        return AO3SubscriptionsChapterRange.label(work: work, watermarks: watermarks)
+    }
+
+    private func classifyingWork(_ entry: CanonicalWork) -> AO3WorkSummary? {
         guard let remote = entry.remote else { return nil }
-        return AO3SubscriptionsChapterRange.label(work: remote, watermarks: watermarks)
+        return AO3SubscriptionsChapterSource.summary(
+            remote: remote, enrichedSummaries: enrichedSummaries
+        )
     }
 
     private func canUnsubscribe(_ entry: CanonicalWork) -> Bool {

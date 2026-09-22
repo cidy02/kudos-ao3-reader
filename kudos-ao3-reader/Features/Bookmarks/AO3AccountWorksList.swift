@@ -178,6 +178,14 @@ struct AO3AccountWorksList: View {
     /// Each subscription row's unsubscribe form action, keyed by work id the
     /// way `bookmarkDetails` is. Empty for every other list.
     @State private var unsubscribePaths: [Int: String] = [:]
+    /// Work-page summaries for subscription rows, same key. The index blurb's
+    /// `chapters` is empty, so Updated and the chapter range read this once
+    /// the row's enrichment has arrived.
+    @State private var enrichedSubscriptionSummaries: [Int: AO3WorkSummary] = [:]
+    /// Generation whose rows are on screen. Nil until the load task has bound
+    /// one. A later run with the same generation is a reappearance and must
+    /// not wipe a page that is already loaded.
+    @State private var loadedSessionGeneration: Int?
     /// Marked for Later's own "since you looked" clock. Not the subscriptions
     /// map: the same work can be on both lists, and one look must not clear both.
     @State private var markedForLaterWatermarks: [Int: SubscriptionWatermark] = [:]
@@ -311,14 +319,29 @@ struct AO3AccountWorksList: View {
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
-            .task(id: auth.isLoggedIn) {
-                // Load on first appearance and again right after a sign-in; skip the
-                // signed-out state so we don't fire an unauthenticated request.
+            .task(id: AO3AccountWorksLoadID(
+                sessionGeneration: auth.sessionGeneration,
+                isLoggedIn: auth.isLoggedIn
+            )) {
+                // Watermarks are a device clock, not this account's rows, so a
+                // generation change does not clear them. Load them before that
+                // clear so an empty check is not looking at a map the clear wiped.
                 if tracksNewChapters, subscriptionWatermarks.isEmpty {
                     subscriptionWatermarks = SubscriptionWatermarks.load()
                 }
                 if kind == .markedForLater, markedForLaterWatermarks.isEmpty {
                     markedForLaterWatermarks = SubscriptionWatermarks.load(namespace: .markedForLater)
+                }
+                // A new generation means these rows belong to the previous
+                // session. Drop them before the idle gate, or a sign-out and
+                // sign-in refires this task, sees `.loaded`, and keeps the
+                // previous account's works and unsubscribe paths.
+                if AO3AccountWorksSessionReload.shouldClear(
+                    boundGeneration: loadedSessionGeneration,
+                    sessionGeneration: auth.sessionGeneration
+                ) {
+                    clearLoadedAccount()
+                    loadedSessionGeneration = auth.sessionGeneration
                 }
                 if auth.isLoggedIn, phase == .idle { await load(page: 1) }
             }
@@ -532,6 +555,7 @@ struct AO3AccountWorksList: View {
                     entries: visibleEntries,
                     watermarks: subscriptionWatermarks,
                     unsubscribePaths: unsubscribePaths,
+                    enrichedSummaries: enrichedSubscriptionSummaries,
                     expandAll: expandAll,
                     palette: accountPalette,
                     kicker: originKicker,
@@ -541,7 +565,8 @@ struct AO3AccountWorksList: View {
                     isLoading: phase == .loading,
                     filter: $subscriptionsFilter,
                     onPage: { page in Task { await load(page: page) } },
-                    onUnsubscribe: { pendingUnsubscribe = $0 }
+                    onUnsubscribe: { pendingUnsubscribe = $0 },
+                    onEnriched: noteEnrichedSubscription
                 )
             } else if displayMode == .compact {
                 ScrollView {
@@ -649,7 +674,15 @@ struct AO3AccountWorksList: View {
     private func newChapterCount(for entry: CanonicalWork) -> Int {
         guard tracksNewChapters, let remote = entry.remote else { return 0 }
         return SubscriptionWatermarks.newChapterCount(
-            for: remote, watermarks: subscriptionWatermarks
+            for: resolvedSubscriptionWork(remote), watermarks: subscriptionWatermarks
+        )
+    }
+
+    /// The work-page summary when this row has one. The index blurb's
+    /// `chapters` is empty, so a badge computed from it is always zero.
+    private func resolvedSubscriptionWork(_ remote: AO3WorkSummary) -> AO3WorkSummary {
+        AO3SubscriptionsChapterSource.summary(
+            remote: remote, enrichedSummaries: enrichedSubscriptionSummaries
         )
     }
 
@@ -710,7 +743,7 @@ struct AO3AccountWorksList: View {
     /// technically true and collectively meaningless.
     private func baselineWatermarks() {
         guard tracksNewChapters else { return }
-        let remotes = visibleEntries.compactMap(\.remote)
+        let remotes = visibleEntries.compactMap(\.remote).map(resolvedSubscriptionWork)
         guard !remotes.isEmpty else { return }
         if let updated = SubscriptionWatermarks.baseline(remotes, into: subscriptionWatermarks) {
             subscriptionWatermarks = updated
@@ -722,7 +755,7 @@ struct AO3AccountWorksList: View {
     /// page load does: a list that marked itself read on sight would clear the badge
     /// before the reader had a chance to use it.
     private func markAllSeen() {
-        let remotes = visibleEntries.compactMap(\.remote)
+        let remotes = visibleEntries.compactMap(\.remote).map(resolvedSubscriptionWork)
         guard !remotes.isEmpty else { return }
         let updated = SubscriptionWatermarks.markSeen(remotes, in: subscriptionWatermarks)
         subscriptionWatermarks = updated
@@ -912,15 +945,14 @@ struct AO3AccountWorksList: View {
             unsubscribePaths = [:]
             phase = .idle // back to the signed-out prompt
         } catch is CancellationError {
-            // This view's own `.task(id: auth.isLoggedIn)` restarts (cancelling
-            // whatever load was in flight) on any transient flip of that flag —
-            // e.g. a background session check. That's not a failure the user
-            // caused or can fix with "Try Again": either the flag settles back
-            // and the restarted task's own `load` call replaces this one, or the
-            // view is already gone and nothing is watching `phase` anymore.
-            // Leaving `phase` alone (instead of surfacing the raw system error)
-            // avoids showing a permanent-looking "Swift.CancellationError" card
-            // for what is, from the user's side, nothing happening at all.
+            // This view's load task restarts (cancelling whatever load was in
+            // flight) when the session generation or the signed-in flag
+            // changes. That's not a failure the user caused or can fix with
+            // "Try Again": the restarted task loads again, or the view is
+            // already gone and nothing is watching `phase`. Leaving `phase`
+            // alone (instead of surfacing the raw system error) avoids a
+            // permanent-looking "Swift.CancellationError" card for what is,
+            // from the user's side, nothing happening at all.
         } catch let urlError as URLError where urlError.code == .cancelled {
             // Same reasoning as the CancellationError case above.
         } catch let error as AO3Error {
@@ -936,6 +968,7 @@ struct AO3AccountWorksList: View {
     /// local trash; this write is not that trash, and a swipe must not post.
     private func deleteHistoryEntry(_ entry: CanonicalWork) async {
         guard !historyWriteInFlight else { return }
+        let generation = auth.sessionGeneration
         guard let workID = entry.ao3WorkID, let readingID = readingEntries[workID]?.readingID else {
             historyWriteError = "AO3 didn't show a delete link for this row, so nothing was removed."
             return
@@ -944,6 +977,9 @@ struct AO3AccountWorksList: View {
         defer { historyWriteInFlight = false }
         do {
             _ = try await auth.deleteReading(readingID: readingID, page: currentPage)
+            // The POST is generation-fenced. This list may already be the next
+            // account's by the time that result comes back.
+            guard auth.sessionGeneration == generation else { return }
             works.removeAll { $0.id == workID }
             readingEntries[workID] = nil
         } catch is CancellationError {
@@ -958,6 +994,7 @@ struct AO3AccountWorksList: View {
     /// confirm is what calls this.
     private func unsubscribe(_ entry: CanonicalWork) async {
         guard !subscriptionWriteInFlight else { return }
+        let generation = auth.sessionGeneration
         guard let workID = entry.ao3WorkID,
               let path = unsubscribePaths[workID],
               !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -969,6 +1006,9 @@ struct AO3AccountWorksList: View {
         defer { subscriptionWriteInFlight = false }
         do {
             _ = try await auth.unsubscribe(path: path, page: currentPage)
+            // The path was this session's. A switch that lands while the POST
+            // is in flight must not drop that work id from the next account.
+            guard auth.sessionGeneration == generation else { return }
             works.removeAll { $0.id == workID }
             unsubscribePaths[workID] = nil
         } catch is CancellationError {
@@ -978,12 +1018,52 @@ struct AO3AccountWorksList: View {
         }
     }
 
+    /// Drops every row fetched for the previous session, then leaves `phase`
+    /// idle so the load gate below actually fetches. The pending confirms go
+    /// too: an Unsubscribe staged for account A must not post after B signs in.
+    private func clearLoadedAccount() {
+        let cleared = AO3AccountWorksSessionReload.cleared
+        works = cleared.works
+        currentPage = cleared.currentPage
+        totalPages = cleared.totalPages
+        phase = .idle
+        readingEntries = cleared.readingEntries
+        bookmarkDetails = cleared.bookmarkDetails
+        unsubscribePaths = cleared.unsubscribePaths
+        enrichedSubscriptionSummaries = cleared.enrichedSubscriptionSummaries
+        markedForLaterSeenThisVisit = cleared.markedForLaterSeenThisVisit
+        lastSyncedAt = cleared.lastSyncedAt
+        pendingHistoryDelete = nil
+        confirmClearHistory = cleared.confirmClearHistory
+        historyWriteError = cleared.historyWriteError
+        historyWriteInFlight = cleared.historyWriteInFlight
+        pendingUnsubscribe = nil
+        subscriptionWriteError = cleared.subscriptionWriteError
+        subscriptionWriteInFlight = cleared.subscriptionWriteInFlight
+    }
+
+    /// Stores a subscription row's work-page summary and, the first time that
+    /// summary names a posted count, baselines the watermark. An existing
+    /// watermark is left alone, which is what lets a later visit show Updated.
+    private func noteEnrichedSubscription(_ summary: AO3WorkSummary) {
+        if enrichedSubscriptionSummaries[summary.id] != summary {
+            enrichedSubscriptionSummaries[summary.id] = summary
+        }
+        guard let updated = SubscriptionWatermarks.baseline(
+            [summary], into: subscriptionWatermarks
+        ) else { return }
+        subscriptionWatermarks = updated
+        SubscriptionWatermarks.save(updated)
+    }
+
     private func clearHistory() async {
         guard !historyWriteInFlight else { return }
+        let generation = auth.sessionGeneration
         historyWriteInFlight = true
         defer { historyWriteInFlight = false }
         do {
             _ = try await auth.clearReadingHistory()
+            guard auth.sessionGeneration == generation else { return }
             works = []
             readingEntries = [:]
             currentPage = 1
@@ -1013,6 +1093,10 @@ struct EnrichingAO3WorkRow: View {
     let work: AO3WorkSummary
     let expandAll: Bool
     var presentation: AO3WorkRow.Presentation = .standard
+    /// Fired when enrichment produced a summary. Nil for every caller except
+    /// the subscriptions list, which needs the work page's chapter count for
+    /// grouping. The row's own card still uses `enriched` either way.
+    var onEnriched: ((AO3WorkSummary) -> Void)?
 
     @State private var enriched: AO3WorkSummary?
 
@@ -1024,7 +1108,11 @@ struct EnrichingAO3WorkRow: View {
             .task(id: work.id) {
                 // `.task(id:)` so recycling this row onto a different work cancels
                 // the previous fetch instead of writing its result into the new row.
-                enriched = await AO3SparseWorkEnricher.shared.enrich(work)
+                let result = await AO3SparseWorkEnricher.shared.enrich(work)
+                enriched = result
+                if let result {
+                    onEnriched?(result)
+                }
             }
     }
 }
