@@ -1473,6 +1473,10 @@ nonisolated struct AO3Collection: Identifiable, Hashable, Sendable {
     var summary: String = ""
     var updatedAtText: String = ""
     var challengeKind: AO3ChallengeKind?
+    /// AO3 adds the `own` class on a collection blurb only when the signed-in
+    /// user is an owner (`user_is_owner?`). A moderator who is not an owner
+    /// does not get it, and the index has no separate "awaiting approval" count.
+    var viewerIsOwner: Bool = false
     var id: String {
         name
     }
@@ -1480,6 +1484,13 @@ nonisolated struct AO3Collection: Identifiable, Hashable, Sendable {
     var url: URL {
         URL(string: "https://archiveofourown.org/collections/\(name)")!
     }
+}
+
+/// One page of `/users/:login/collections`, counts included.
+nonisolated struct AO3CollectionsIndexPage: Hashable, Sendable {
+    var collections: [AO3Collection]
+    var currentPage: Int
+    var totalPages: Int
 }
 
 /// One of AO3's media categories (e.g. "TV Shows") with its featured fandoms,

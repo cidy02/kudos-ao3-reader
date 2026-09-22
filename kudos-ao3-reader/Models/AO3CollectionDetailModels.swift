@@ -57,10 +57,10 @@ nonisolated struct AO3CollectionPeoplePage: Hashable, Sendable {
     var totalPages: Int
 }
 
-/// AO3 maintainer item tabs (`collection_items#index` `status:`). The five
-/// pills 1s draws map onto these, not a synthetic "all"/"unposted" pair —
-/// AO3's else-branch is unreviewed-by-collection, and unposted is a property
-/// of the item (`posted?`), not a status filter.
+/// AO3 item tabs (`collection_items#index` `status:`). The five pills 1s draws
+/// map onto these, not a synthetic "all"/"unposted" pair. Which tab AO3 shows
+/// when `status` is omitted depends on the page — see `statusQuery(scope:)`.
+/// Unposted is a property of the item (`posted?`), not a status filter.
 nonisolated enum AO3CollectionItemTab: String, Hashable, Sendable, CaseIterable {
     case unreviewed = "unreviewed_by_collection"
     case invited = "unreviewed_by_user"
@@ -69,9 +69,42 @@ nonisolated enum AO3CollectionItemTab: String, Hashable, Sendable, CaseIterable 
     case approved = "approved"
 
     var queryValue: String? {
-        // Default maintainer landing omits `status` and AO3 applies unreviewed.
+        // Default maintainer landing omits `status` and AO3 applies unreviewed
+        // by the collection. The signed-in user's page does the opposite — see
+        // `statusQuery(scope:)`.
         self == .unreviewed ? nil : rawValue
     }
+
+    /// The `status` query `collection_items#index` actually filters on.
+    ///
+    /// Collection pages (`/collections/:id/items`) omit `status` for
+    /// unreviewed-by-collection and use `unreviewed_by_user` for items awaiting
+    /// the creator. The user's own page (`/users/:id/collection_items`) omits
+    /// `status` for unreviewed-by-user, and `unreviewed_by_collection` there
+    /// means the creator already approved. Sending the collection default at
+    /// the account page loads the wrong tab.
+    func statusQuery(scope: AO3CollectionItemsScope) -> String? {
+        switch scope {
+        case .collection:
+            return queryValue
+        case .account:
+            switch self {
+            case .unreviewed:
+                return rawValue
+            case .invited:
+                return nil
+            case .rejected, .rejectedByUser, .approved:
+                return rawValue
+            }
+        }
+    }
+}
+
+/// Which `collection_items#index` a fetch is aimed at. The two pages share a
+/// template and do not share a default tab.
+nonisolated enum AO3CollectionItemsScope: Hashable, Sendable {
+    case collection
+    case account
 }
 
 nonisolated enum AO3CollectionItemApproval: String, Hashable, Sendable {
@@ -105,6 +138,17 @@ nonisolated struct AO3CollectionItem: Hashable, Sendable, Identifiable {
     var isPosted: Bool = true
     var recipient: String = ""
     var creatorByline: String = ""
+    /// `p.datetime` on the item blurb. Empty when AO3 did not print one.
+    var itemDateText: String = ""
+    /// AO3 disables each control the current page is not allowed to post.
+    /// A collection page locks creator approval; the account page locks
+    /// moderator approval, unrevealed, and anonymous. Absent markup stays
+    /// editable so a partial fixture does not silently freeze the row.
+    var creatorApprovalIsEditable: Bool = true
+    var moderatorApprovalIsEditable: Bool = true
+    var unrevealedIsEditable: Bool = true
+    var anonymousIsEditable: Bool = true
+    var removeIsEditable: Bool = true
     /// Tokens needed to stage then submit item updates (`collection_items[id][…]`).
     var userApprovalField: String
     var collectionApprovalField: String
@@ -436,18 +480,52 @@ nonisolated enum AO3CollectionURL {
     }
 
     static func items(slug: String, tab: AO3CollectionItemTab, page: Int = 1) -> URL {
-        var components = URLComponents(string: "\(host)/collections/\(slug)/items")!
-        var items: [URLQueryItem] = []
-        if let status = tab.queryValue {
-            items.append(URLQueryItem(name: "status", value: status))
-        }
-        if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
-        if !items.isEmpty { components.queryItems = items }
-        return components.url!
+        itemsURL(
+            path: "/collections/\(slug)/items",
+            status: tab.statusQuery(scope: .collection),
+            page: page
+        )!
+    }
+
+    /// `GET /users/:login/collection_items` — the signed-in user's items across
+    /// every collection. Same screen AO3 links as "Manage Collection Items" on
+    /// the user's collections index. Nil for a blank or slash-bearing login.
+    static func userItems(username: String, tab: AO3CollectionItemTab, page: Int = 1) -> URL? {
+        guard let name = login(username) else { return nil }
+        return itemsURL(
+            path: "/users/\(name)/collection_items",
+            status: tab.statusQuery(scope: .account),
+            page: page
+        )
     }
 
     static func itemsUpdateMultiple(slug: String) -> URL {
         URL(string: "\(host)/collections/\(slug)/items/update_multiple")!
+    }
+
+    /// `PATCH /users/:login/collection_items/update_multiple`.
+    static func userItemsUpdateMultiple(username: String) -> URL? {
+        guard let name = login(username) else { return nil }
+        return URL(string: "\(host)/users/\(name)/collection_items/update_multiple")
+    }
+
+    private static func login(_ username: String) -> String? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.contains("/") else { return nil }
+        return name
+    }
+
+    private static func itemsURL(path: String, status: String?, page: Int) -> URL? {
+        var components = URLComponents(string: "\(host)\(path)")
+        var items: [URLQueryItem] = []
+        if let status {
+            items.append(URLQueryItem(name: "status", value: status))
+        }
+        if page > 1 {
+            items.append(URLQueryItem(name: "page", value: String(page)))
+        }
+        if !items.isEmpty { components?.queryItems = items }
+        return components?.url
     }
 
     static func participants(slug: String) -> URL {

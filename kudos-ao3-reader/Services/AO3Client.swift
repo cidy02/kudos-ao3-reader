@@ -694,6 +694,23 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await Self.parseCollections(from: authenticatedHTML(for: request))
     }
 
+    /// The same index, with the blurb's counts and flags and AO3's page count.
+    /// `parseCollections` keeps the thin name/title/byline read for older callers.
+    func collectionsIndex(for request: URLRequest, page: Int) async throws -> AO3CollectionsIndexPage {
+        try await Self.parseCollectionsIndex(from: authenticatedHTML(for: request), page: page)
+    }
+
+    /// One page of a user's collections index. `currentPage` is the page that
+    /// was requested; `totalPages` is the largest number in AO3's pager.
+    static func parseCollectionsIndex(from html: String, page: Int) throws -> AO3CollectionsIndexPage {
+        let doc = try SwiftSoup.parse(html)
+        return AO3CollectionsIndexPage(
+            collections: try parseCollectionBlurbs(from: html),
+            currentPage: page,
+            totalPages: try paginationTotal(in: doc, currentPage: page)
+        )
+    }
+
     /// Parses a collections index (`li.collection.blurb`) into name/title/byline.
     static func parseCollections(from html: String) throws -> [AO3Collection] {
         let doc = try SwiftSoup.parse(html)
