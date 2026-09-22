@@ -107,6 +107,14 @@ nonisolated struct AO3CollectionItemStaging: Equatable, Sendable {
         drafts[item.id] = nil
     }
 
+    /// Drops the drafts that were just sent. A page change must not take the
+    /// other page's unsent edits with it — `clearAll` is the Discard button.
+    mutating func clear(itemIDs: some Sequence<Int>) {
+        for id in itemIDs {
+            drafts[id] = nil
+        }
+    }
+
     mutating func clearAll() {
         drafts.removeAll()
     }

@@ -165,6 +165,49 @@ extension AO3AuthService {
         }
     }
 
+    /// The account-wide items page (`PATCH /users/:login/collection_items/update_multiple`).
+    /// AO3 permits `user_approval_status` and `remove` here, and strips the
+    /// maintainer fields. Callers filter drafts with `draftAO3WillStore` first.
+    ///
+    /// Unexercised against a live AO3 session — a release gate, not a reason this
+    /// endpoint is unbuilt. Single-shot `submitWrite`; never retried or coalesced.
+    func updateUserCollectionItems(
+        username: String, drafts: [AO3CollectionItemDraft]
+    ) async throws {
+        guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
+        guard !drafts.isEmpty else { return }
+        guard let referer = AO3CollectionURL.userItems(username: username, tab: .invited, page: 1),
+              let fallbackAction = AO3CollectionURL.userItemsUpdateMultiple(username: username)
+        else {
+            throw AO3CollectionWriteError.rejected("AO3 didn't give a collection-items page for this account.")
+        }
+        let (html, token) = try await fetchCSRFPage(at: referer)
+        let parsed = try? AO3Client.parseCollectionItemsPage(
+            html, slug: "", tab: .invited, page: 1, fallbackAction: fallbackAction
+        )
+        let action = parsed?.actionURL ?? fallbackAction
+        let method = parsed?.httpMethodOverride ?? "patch"
+        for draft in drafts {
+            try Task.checkCancellation()
+            let params = AO3Client.collectionItemParameters(
+                draft, csrf: token, methodOverride: method
+            )
+            let request = try writeRequest(
+                to: action,
+                body: Self.formEncoded(params),
+                csrf: token,
+                referer: referer,
+                ajax: false
+            )
+            let (status, body) = try await AO3RequestCoordinator.shared.withSlot {
+                try await AO3Client.shared.submitWrite(request)
+            }
+            try throwIfCollectionWriteFailed(
+                status: status, body: body, fallback: "AO3 couldn't update that collection item."
+            )
+        }
+    }
+
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt. Single-shot `submitWrite`; never retried or coalesced.
     func acceptMember(slug: String, participantID: Int) async throws {

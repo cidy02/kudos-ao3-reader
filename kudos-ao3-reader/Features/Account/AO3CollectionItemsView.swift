@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// Navigation value for a collection's manage-items screen.
+/// `slug == nil` is the account-wide page, `GET /users/:login/collection_items`.
 struct AO3CollectionItemsDestination: Hashable {
-    let slug: String
-    let title: String
+    var slug: String?
+    var title: String
 }
 
 /// Artboard **1s** — AO3's manage-collection-items screen, one card per item
@@ -12,7 +13,8 @@ struct AO3CollectionItemsDestination: Hashable {
 /// The collection is the eyebrow with the item's role beside it, the work is the
 /// title, and the four settings AO3 stacks in a control strip become labelled rows:
 /// creator and moderator approval as chips you tap to change, Unrevealed and
-/// Anonymous as switches. Remove is destructive and explicit.
+/// Anonymous as switches. A control AO3 rendered `disabled` is a fact, not a
+/// control, and is left out of the POST. Remove is destructive and explicit.
 ///
 /// **Changes stage rather than apply.** AO3 takes the whole items form in one POST,
 /// so four settings across a dozen works would otherwise be a dozen round trips,
@@ -20,7 +22,8 @@ struct AO3CollectionItemsDestination: Hashable {
 /// checkmark submits. The rules for what counts as a change live in
 /// `AO3CollectionItemStaging`.
 struct AO3CollectionItemsView: View {
-    let slug: String
+    /// Nil opens every collection's items for the signed-in user.
+    let slug: String?
     let title: String
 
     @Environment(AO3AuthService.self) private var auth
@@ -28,8 +31,11 @@ struct AO3CollectionItemsView: View {
 
     @State private var tab: AO3CollectionItemTab = .unreviewed
     @State private var items: [AO3CollectionItem] = []
+    @State private var currentPage = 1
+    @State private var totalPages = 1
     @State private var staging = AO3CollectionItemStaging()
     @State private var phase: Phase = .idle
+    @State private var loadGeneration = 0
     @State private var submitError: String?
 
     private enum Phase: Equatable { case idle, loading, loaded, submitting, failed(String) }
@@ -41,7 +47,19 @@ struct AO3CollectionItemsView: View {
         .unreviewed, .invited, .rejected, .approved
     ]
 
-    private var pendingCount: Int { staging.pendingCount(for: items) }
+    /// Drafts AO3 will actually store. A field the page disables does not count,
+    /// and does not get cleared off another page when this one submits.
+    private var submittableDrafts: [AO3CollectionItemDraft] {
+        staging.pendingDrafts(for: items).compactMap { draft in
+            guard let item = items.first(where: { $0.id == draft.itemID }) else { return nil }
+            let stored = AO3CollectionItemSubmission.draftAO3WillStore(draft, item: item)
+            return AO3CollectionItemSubmission.isSubmittable(stored) ? stored : nil
+        }
+    }
+
+    private var pendingCount: Int { submittableDrafts.count }
+
+    private var showPagination: Bool { totalPages > 1 }
 
     var body: some View {
         List {
@@ -54,27 +72,53 @@ struct AO3CollectionItemsView: View {
             }
 
             switch phase {
-            case .idle, .loading:
+            case .idle, .loading where items.isEmpty:
                 Section { loadingRow.pageBodyRow(top: 20, gutter: SubjectMetrics.accountGutter) }
+            case let .failed(message) where items.isEmpty:
+                Section {
+                    errorCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                }
             case let .failed(message):
                 Section {
                     errorCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
                 }
+                itemSections
             default:
                 itemSections
+            }
+
+            if showPagination {
+                Section {
+                    paginationBar.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                }
             }
         }
         .cardList()
         .subjectScreenWash(palette: palette)
         .toolbar {
+            if pendingCount > 0 {
+                ToolbarItem(placement: .primaryAction) {
+                    Text("\(pendingCount) staged")
+                        .font(.system(size: 12, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(
+                            "\(pendingCount) staged change\(pendingCount == 1 ? "" : "s")"
+                        )
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await submit() }
                 } label: {
-                    Label("Submit \(pendingCount) staged change\(pendingCount == 1 ? "" : "s")",
-                          systemImage: "checkmark")
+                    Label("Submit staged changes", systemImage: "checkmark")
                 }
                 .disabled(pendingCount == 0 || phase == .submitting)
+                .accessibilityLabel(
+                    pendingCount == 0
+                        ? "Submit staged changes"
+                        : "Submit \(pendingCount) staged change\(pendingCount == 1 ? "" : "s")"
+                )
             }
             if pendingCount > 0 {
                 ToolbarItem(placement: .cancellationAction) {
@@ -82,8 +126,8 @@ struct AO3CollectionItemsView: View {
                 }
             }
         }
-        .task(id: tab) { await load() }
-        .refreshable { await load() }
+        .task(id: tab) { await load(page: 1, replacing: true) }
+        .refreshable { await load(page: currentPage, replacing: false) }
     }
 
     // MARK: Header
@@ -98,22 +142,69 @@ struct AO3CollectionItemsView: View {
         )
     }
 
-    /// Spec 1s: "Your works in AO3 collections · 3 need a decision". The second half
-    /// is the whole reason to open this screen, so it leads once anything is staged.
+    /// Spec 1s: "Your works in AO3 collections · 3 need a decision". The staged
+    /// count lives in the toolbar, not in this line.
     private var tallyLine: String {
-        if pendingCount > 0 {
-            return "\(title) · \(pendingCount) staged, not yet sent"
+        let scope = slug == nil ? "Your works in AO3 collections" : title
+        let decisions = AO3CollectionItemSubmission.decisionsNeeded(items)
+        if let phrase = AO3CollectionItemSubmission.decisionPhrase(for: decisions), !items.isEmpty {
+            return pageSuffix("\(scope) · \(phrase)")
         }
         let count = items.count
-        return "\(title) · \(count) item\(count == 1 ? "" : "s")"
+        return pageSuffix("\(scope) · \(count) item\(count == 1 ? "" : "s")")
+    }
+
+    private func pageSuffix(_ line: String) -> String {
+        guard totalPages > 1 else { return line }
+        return "\(line) · page \(currentPage) of \(totalPages)"
     }
 
     private var tabStrip: some View {
-        SubjectSegmentedControl(
-            options: Self.tabs,
-            title: { Self.tabTitle($0) },
-            selection: $tab
-        )
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Self.tabs, id: \.self) { option in
+                    Button {
+                        tab = option
+                    } label: {
+                        SubjectChip(
+                            text: Self.tabTitle(option),
+                            style: .pill(isSelected: tab == option),
+                            palette: palette
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .minimumHitTarget(28)
+                }
+                Button {
+                    if tab != .unreviewed {
+                        tab = .unreviewed
+                    }
+                } label: {
+                    SubjectChip(
+                        text: "Reset",
+                        style: .pill(isSelected: false),
+                        systemImage: "xmark"
+                    )
+                    .opacity(tab == .unreviewed ? 0.45 : 0.7)
+                }
+                .buttonStyle(.plain)
+                .minimumHitTarget(28)
+                .disabled(tab == .unreviewed)
+                .accessibilityLabel("Reset filters")
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private var paginationBar: some View {
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading,
+            palette: palette
+        ) { page in
+            Task { await load(page: page, replacing: false) }
+        }
     }
 
     private static func tabTitle(_ tab: AO3CollectionItemTab) -> String {
@@ -185,22 +276,66 @@ struct AO3CollectionItemsView: View {
 
     // MARK: Loading and submitting
 
-    private func load() async {
+    /// `replacing` clears the rows first. A tab change must not keep the previous
+    /// tab's works on screen. A page change keeps them until the next page arrives.
+    /// Staging is left alone either way: a draft for a row that is not on this
+    /// page is not submitted (`pendingDrafts` drops it) and is not discarded.
+    private func load(page requestedPage: Int, replacing: Bool) async {
         guard auth.isLoggedIn else {
             phase = .failed("Log in to AO3 to manage collection items.")
             return
         }
+        let expectedSessionGeneration = auth.sessionGeneration
+        let requestedTab = tab
+        loadGeneration += 1
+        let generation = loadGeneration
+        if replacing {
+            items = []
+            totalPages = 1
+        }
+        currentPage = requestedPage
         phase = .loading
         do {
-            let request = try auth.authenticatedRequest(for: AO3CollectionURL.edit(slug: slug))
-            let page = try await AO3Client.shared.collectionItems(
-                slug: slug, tab: tab, page: 1, request: request
-            )
-            items = page.items
+            let fetched: AO3CollectionItemsPage
+            if let slug {
+                let request = try auth.authenticatedRequest(
+                    for: AO3CollectionURL.items(slug: slug, tab: tab, page: requestedPage)
+                )
+                fetched = try await AO3Client.shared.collectionItems(
+                    slug: slug, tab: tab, page: requestedPage, request: request
+                )
+            } else if let username = auth.username,
+                      let url = AO3CollectionURL.userItems(
+                        username: username, tab: tab, page: requestedPage
+                      ) {
+                let request = try auth.authenticatedRequest(for: url)
+                fetched = try await AO3Client.shared.userCollectionItems(
+                    username: username, tab: tab, page: requestedPage, request: request
+                )
+            } else {
+                phase = .failed("Log in to AO3 to manage collection items.")
+                return
+            }
+            guard generation == loadGeneration, tab == requestedTab,
+                  auth.sessionGeneration == expectedSessionGeneration else { return }
+            items = fetched.items
+            currentPage = fetched.currentPage
+            totalPages = max(fetched.totalPages, 1)
             phase = .loaded
+        } catch AO3Error.authenticationRequired {
+            guard generation == loadGeneration else { return }
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
+            items = []
+            phase = .failed("Log in to AO3 to manage collection items.")
+        } catch is CancellationError {
+        } catch let urlError as URLError where urlError.code == .cancelled {
         } catch let error as AO3Error {
+            guard generation == loadGeneration,
+                  auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
+            guard generation == loadGeneration,
+                  auth.sessionGeneration == expectedSessionGeneration else { return }
             phase = .failed(error.localizedDescription)
         }
     }
@@ -211,14 +346,20 @@ struct AO3CollectionItemsView: View {
     /// discarded the edits would lose work the reader cannot see anywhere else, so
     /// a failed submit leaves every change exactly where it was and says why.
     private func submit() async {
-        let drafts = staging.pendingDrafts(for: items)
+        let drafts = submittableDrafts
         guard !drafts.isEmpty else { return }
         phase = .submitting
         submitError = nil
         do {
-            try await auth.updateCollectionItems(slug: slug, drafts: drafts)
-            staging.clearAll()
-            await load()
+            if let slug {
+                try await auth.updateCollectionItems(slug: slug, drafts: drafts)
+            } else if let username = auth.username {
+                try await auth.updateUserCollectionItems(username: username, drafts: drafts)
+            } else {
+                throw AO3CollectionWriteError.notSignedIn
+            }
+            staging.clear(itemIDs: drafts.map(\.itemID))
+            await load(page: currentPage, replacing: false)
         } catch let error as AO3CollectionWriteError {
             submitError = error.errorDescription ?? "Those changes could not be sent."
             phase = .loaded
@@ -286,42 +427,38 @@ struct AO3CollectionItemCard: View {
 
     private var settingsPanel: some View {
         VStack(spacing: 0) {
-            approvalRow(
-                "Approved by creator",
-                value: staging.creatorApproval(for: item),
-                set: { staging.setCreatorApproval($0, for: item) }
+            if item.creatorApprovalIsEditable {
+                approvalRow(
+                    "Approved by creator",
+                    value: staging.creatorApproval(for: item),
+                    set: { staging.setCreatorApproval($0, for: item) }
+                )
+            } else {
+                readOnlyApproval("Approved by creator", value: item.creatorApproval)
+            }
+            SubjectRowSeparator()
+            if item.moderatorApprovalIsEditable {
+                approvalRow(
+                    "Approved by moderators",
+                    value: staging.moderatorApproval(for: item),
+                    set: { staging.setModeratorApproval($0, for: item) }
+                )
+            } else {
+                readOnlyApproval("Approved by moderators", value: item.moderatorApproval)
+            }
+            SubjectRowSeparator()
+            flagRow(
+                "Unrevealed",
+                isOn: staging.isUnrevealed(for: item),
+                isEditable: item.unrevealedIsEditable,
+                set: { staging.setUnrevealed($0, for: item) }
             )
             SubjectRowSeparator()
-            approvalRow(
-                "Approved by moderators",
-                value: staging.moderatorApproval(for: item),
-                set: { staging.setModeratorApproval($0, for: item) }
-            )
-            SubjectRowSeparator()
-            SubjectFormRow(
-                label: "Unrevealed",
-                arrangement: .control,
-                trailing: {
-                    Toggle("", isOn: Binding(
-                        get: { staging.isUnrevealed(for: item) },
-                        set: { staging.setUnrevealed($0, for: item) }
-                    ))
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-            )
-            SubjectRowSeparator()
-            SubjectFormRow(
-                label: "Anonymous",
-                arrangement: .control,
-                trailing: {
-                    Toggle("", isOn: Binding(
-                        get: { staging.isAnonymous(for: item) },
-                        set: { staging.setAnonymous($0, for: item) }
-                    ))
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+            flagRow(
+                "Anonymous",
+                isOn: staging.isAnonymous(for: item),
+                isEditable: item.anonymousIsEditable,
+                set: { staging.setAnonymous($0, for: item) }
             )
         }
         .subjectPanel()
@@ -343,6 +480,46 @@ struct AO3CollectionItemCard: View {
                     title: { Self.approvalTitle($0) },
                     selection: Binding(get: { value }, set: set)
                 )
+            }
+        )
+    }
+
+    private func readOnlyApproval(
+        _ label: String,
+        value: AO3CollectionItemApproval
+    ) -> some View {
+        SubjectFormRow(
+            label: label,
+            arrangement: .control,
+            trailing: {
+                Text(Self.approvalTitle(value))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        )
+    }
+
+    private func flagRow(
+        _ label: String,
+        isOn: Bool,
+        isEditable: Bool,
+        set: @escaping (Bool) -> Void
+    ) -> some View {
+        SubjectFormRow(
+            label: label,
+            arrangement: .control,
+            trailing: {
+                if isEditable {
+                    Toggle("", isOn: Binding(get: { isOn }, set: set))
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                } else {
+                    Text(isOn ? "On" : "Off")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
         )
     }
@@ -371,15 +548,23 @@ struct AO3CollectionItemCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 6)
-            Button {
-                staging.setRemoved(!isRemoved, for: item)
-            } label: {
-                Text(isRemoved ? "Keep" : "Remove from collection")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(isRemoved ? Color.accentColor : .red)
+            if item.removeIsEditable || isRemoved {
+                Button {
+                    staging.setRemoved(!isRemoved, for: item)
+                } label: {
+                    Text(isRemoved ? "Keep" : "Remove from collection")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isRemoved ? Color.accentColor : .red)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            Spacer(minLength: 6)
+            if !item.itemDateText.isEmpty {
+                Text(item.itemDateText)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
     }
 }

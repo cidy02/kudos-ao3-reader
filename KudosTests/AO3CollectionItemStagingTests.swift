@@ -130,4 +130,19 @@ struct AO3CollectionItemStagingTests {
         staging.clearAll()
         #expect(staging.pendingCount(for: rows) == 0)
     }
+
+    @Test func clearingTheSubmittedPageLeavesTheOtherPagesDraft() {
+        let onThisPage = item(id: 2)
+        let onTheOtherPage = item(id: 9)
+        var staging = AO3CollectionItemStaging()
+        staging.setCreatorApproval(.approved, for: onThisPage)
+        staging.setAnonymous(true, for: onTheOtherPage)
+
+        let sent = staging.pendingDrafts(for: [onThisPage])
+        #expect(sent.map(\.itemID) == [2])
+        staging.clear(itemIDs: sent.map(\.itemID))
+
+        #expect(staging.pendingDrafts(for: [onThisPage]).isEmpty)
+        #expect(staging.pendingDrafts(for: [onTheOtherPage]).map(\.itemID) == [9])
+    }
 }

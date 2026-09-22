@@ -39,6 +39,8 @@ struct AO3CollectionParsingTests {
         #expect(collection.challengeKind == .giftExchange)
         #expect(collection.worksCount == 12)
         #expect(collection.bookmarksCount == 3)
+        #expect(!collection.viewerIsOwner)
+        #expect(collection.updatedAtText == "10 Jan 2026")
         // The four flags are independent — open + unmoderated is a different collection.
         let openFlags = AO3Client.parseCollectionFlags(
             fromTypeText: "(Open, Unmoderated, Prompt Meme Challenge)"
@@ -150,6 +152,120 @@ struct AO3CollectionParsingTests {
         #expect(page.csrfToken == "csrf-item")
         #expect(page.httpMethodOverride == "patch")
         #expect(page.actionURL.path.hasSuffix("/collections/fest/items/update_multiple"))
+        #expect(item.creatorApprovalIsEditable)
+        #expect(item.moderatorApprovalIsEditable)
+        #expect(item.itemDateText.isEmpty)
+    }
+
+    @Test func collectionsIndexReadsOwnerClassCountsAndPageCount() throws {
+        let html = """
+        <html><body>
+        <ol class="pagination actions">
+          <li><span class="current">1</span></li>
+          <li><a href="?page=2">2</a></li>
+          <li><a href="?page=3">3</a></li>
+        </ol>
+        <ul>
+          <li class="own collection picture blurb group">
+            <div class="header module group">
+              <h4 class="heading">
+                <a href="/collections/winter">Winter Exchange</a>
+                by <a class="owner" href="/users/ada">ada</a>
+              </h4>
+              <p class="datetime">6 Dec 2025</p>
+            </div>
+            <p class="type">(Open, Moderated, Anonymous)</p>
+            <dl class="stats">
+              <dt class="works">Works:</dt><dd class="works">124</dd>
+            </dl>
+          </li>
+        </ul>
+        </body></html>
+        """
+        let page = try AO3Client.parseCollectionsIndex(from: html, page: 1)
+        #expect(page.currentPage == 1)
+        #expect(page.totalPages == 3)
+        let collection = try #require(page.collections.first)
+        #expect(collection.viewerIsOwner)
+        #expect(collection.worksCount == 124)
+        #expect(collection.isModerated)
+        #expect(collection.isAnonymous)
+        #expect(!collection.isClosed)
+        #expect(collection.updatedAtText == "6 Dec 2025")
+        #expect(collection.maintainerNames == ["ada"])
+    }
+
+    @Test func accountItemsPageReadsEachRowsCollectionDateAndDisabledControls() throws {
+        let html = """
+        <html><body>
+        <h2 class="heading">Manage Collection Items</h2>
+        <ul class="navigation actions" role="navigation">
+          <li><a href="/users/ada/collection_items?status=unreviewed_by_collection">Awaiting collection</a></li>
+          <li><span class="current">Awaiting you</span></li>
+        </ul>
+        <form action="/users/ada/collection_items/update_multiple" method="post">
+          <input type="hidden" name="authenticity_token" value="csrf-user">
+          <input type="hidden" name="_method" value="patch">
+          <ul class="index group">
+            <li class="collection item picture blurb group">
+              <div class="header module">
+                <h4 class="heading" id="collection_item_42">
+                  <a href="/works/99">Queued Work</a>
+                </h4>
+                <h5 class="heading">
+                  in <span class="collection"><a href="/collections/fest">Winter Fest</a></span>
+                  (Member)
+                </h5>
+                <p class="datetime">7 Dec 2025</p>
+              </div>
+              <ul class="actions">
+                <li>
+                  <select name="collection_items[42][user_approval_status]">
+                    <option value="unreviewed" selected>Awaiting</option>
+                    <option value="approved">Approved</option>
+                  </select>
+                </li>
+                <li>
+                  <select name="collection_items[42][collection_approval_status]" disabled="disabled">
+                    <option value="approved" selected>Approved</option>
+                  </select>
+                </li>
+                <li>
+                  <input type="checkbox" name="collection_items[42][unrevealed]" value="1" disabled="disabled">
+                </li>
+                <li>
+                  <input type="checkbox" name="collection_items[42][anonymous]" value="1" disabled="disabled">
+                </li>
+                <li>
+                  <input type="checkbox" name="collection_items[42][remove]" value="1">
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </form>
+        <ol class="pagination"><li><a href="?page=2">2</a></li></ol>
+        </body></html>
+        """
+        let page = try AO3Client.parseCollectionItemsPage(
+            html,
+            slug: "",
+            tab: .invited,
+            page: 1,
+            fallbackAction: AO3CollectionURL.userItemsUpdateMultiple(username: "ada")
+        )
+        #expect(page.totalPages == 2)
+        #expect(page.actionURL.path == "/users/ada/collection_items/update_multiple")
+        let item = try #require(page.items.first)
+        #expect(item.collectionSlug == "fest")
+        #expect(item.collectionTitle == "Winter Fest")
+        #expect(item.itemDateText == "7 Dec 2025")
+        #expect(item.role == "Member")
+        #expect(item.creatorApprovalIsEditable)
+        #expect(!item.moderatorApprovalIsEditable)
+        #expect(!item.unrevealedIsEditable)
+        #expect(!item.anonymousIsEditable)
+        #expect(item.removeIsEditable)
+        #expect(item.moderatorApproval == .approved)
     }
 
     @Test func collectionFormParsesHeaderPreferencesProfileAndFourFlags() throws {

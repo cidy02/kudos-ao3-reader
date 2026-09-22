@@ -64,6 +64,29 @@ extension AO3Client {
         return try Self.parseCollectionItemsPage(body, slug: slug, tab: tab, page: page)
     }
 
+    /// `GET /users/:login/collection_items`. Each row names its own collection;
+    /// the passed slug on the parser is only a fallback when a row has none.
+    func userCollectionItems(
+        username: String,
+        tab: AO3CollectionItemTab,
+        page: Int,
+        request: URLRequest
+    ) async throws -> AO3CollectionItemsPage {
+        guard let url = AO3CollectionURL.userItems(username: username, tab: tab, page: page) else {
+            throw AO3Error.parse
+        }
+        var request = request
+        request.url = url
+        let body = try await authenticatedPageHTML(for: request)
+        return try Self.parseCollectionItemsPage(
+            body,
+            slug: "",
+            tab: tab,
+            page: page,
+            fallbackAction: AO3CollectionURL.userItemsUpdateMultiple(username: username)
+        )
+    }
+
     func collectionEditForm(slug: String, request: URLRequest) async throws -> AO3CollectionForm {
         var request = request
         request.url = AO3CollectionURL.edit(slug: slug)
@@ -297,6 +320,7 @@ extension AO3Client {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let updated = ((try? li.select("p.datetime").first()?.text()) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let viewerIsOwner = ((try? li.classNames()) ?? []).contains("own")
         return AO3Collection(
             name: slug,
             title: title,
@@ -312,7 +336,8 @@ extension AO3Client {
             iconURL: icon,
             summary: summary,
             updatedAtText: updated,
-            challengeKind: flags.kind
+            challengeKind: flags.kind,
+            viewerIsOwner: viewerIsOwner
         )
     }
 
@@ -391,11 +416,15 @@ extension AO3Client {
         _ html: String,
         slug: String,
         tab: AO3CollectionItemTab,
-        page: Int
+        page: Int,
+        fallbackAction: URL? = nil
     ) throws -> AO3CollectionItemsPage {
         let doc = try SwiftSoup.parse(html)
-        let form = try doc.select("form[action*='/items']").first()
-            ?? doc.select("#main form").first()
+        // The account page posts to `/users/:id/collection_items/update_multiple`,
+        // which does not contain the substring `/items` the collection form uses.
+        let form = try doc.select(
+            "form[action*='/items'], form[action*='collection_items']"
+        ).first() ?? doc.select("#main form").first()
         let items = try doc.select("li.collection.item, li.item.blurb").array()
             .compactMap { try? parseCollectionItem($0, slug: slug) }
         if items.isEmpty {
@@ -406,10 +435,14 @@ extension AO3Client {
             guard recognized else { throw AO3Error.parse }
         }
         let action: URL
-        if let raw = try? form?.attr("action"), let url = AO3URLResolver.resolve(raw) {
+        if let raw = try? form?.attr("action"), !raw.isEmpty, let url = AO3URLResolver.resolve(raw) {
             action = url
-        } else {
+        } else if let fallbackAction {
+            action = fallbackAction
+        } else if !slug.isEmpty {
             action = AO3CollectionURL.itemsUpdateMultiple(slug: slug)
+        } else {
+            throw AO3Error.parse
         }
         let csrf = parseCSRFToken(from: html)
             ?? ((try? form?.select("input[name=authenticity_token]").first()?.attr("value")) ?? "")
@@ -452,6 +485,12 @@ extension AO3Client {
         let collectionLink = try li.select("span.collection a, h5.heading a[href*='/collections/']").first()
         let collectionTitle = ((try? collectionLink?.text()) ?? slug)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let linkedSlug = collectionLink.flatMap { link -> String? in
+            Self.collectionSlug(from: (try? link.attr("href")) ?? "")
+        }
+        let resolvedSlug = linkedSlug ?? slug
+        let itemDateText = ((try? li.select("p.datetime").first()?.text()) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let h5 = ((try? li.select("h5.heading").first()?.text()) ?? "")
         var role = ""
         if h5.localizedCaseInsensitiveContains("(Member)") { role = "Member" }
@@ -470,15 +509,18 @@ extension AO3Client {
         })
         let userApproval = selectedApproval(userSelect) ?? .unreviewed
         let collectionApproval = selectedApproval(collectionSelect) ?? .unreviewed
-        let unrevealed = isChecked(li, nameSuffix: "[unrevealed]")
-        let anonymous = isChecked(li, nameSuffix: "[anonymous]")
+        let unrevealedBox = checkbox(li, nameSuffix: "[unrevealed]")
+        let anonymousBox = checkbox(li, nameSuffix: "[anonymous]")
+        let removeBox = checkbox(li, nameSuffix: "[remove]")
+        let unrevealed = unrevealedBox.map { isChecked($0) } ?? isChecked(li, nameSuffix: "[unrevealed]")
+        let anonymous = anonymousBox.map { isChecked($0) } ?? isChecked(li, nameSuffix: "[anonymous]")
         let posted = (try? li.select("p.message").first()?.text())?
             .localizedCaseInsensitiveContains("deleted") != true
 
         return AO3CollectionItem(
             id: itemID,
-            collectionSlug: slug,
-            collectionTitle: collectionTitle.isEmpty ? slug : collectionTitle,
+            collectionSlug: resolvedSlug,
+            collectionTitle: collectionTitle.isEmpty ? resolvedSlug : collectionTitle,
             workTitle: workTitle,
             workURL: workURL,
             workID: workID,
@@ -491,6 +533,12 @@ extension AO3Client {
             isPosted: posted,
             recipient: recipient,
             creatorByline: creatorByline,
+            itemDateText: itemDateText,
+            creatorApprovalIsEditable: isEditable(userSelect),
+            moderatorApprovalIsEditable: isEditable(collectionSelect),
+            unrevealedIsEditable: isEditable(unrevealedBox),
+            anonymousIsEditable: isEditable(anonymousBox),
+            removeIsEditable: isEditable(removeBox),
             userApprovalField: AO3CollectionParam.itemUserApproval(itemID),
             collectionApprovalField: AO3CollectionParam.itemCollectionApproval(itemID),
             unrevealedField: AO3CollectionParam.itemUnrevealed(itemID),
@@ -855,11 +903,32 @@ extension AO3Client {
     }
 
     static func isChecked(_ root: Element, nameSuffix: String) -> Bool {
+        guard let input = checkbox(root, nameSuffix: nameSuffix) else { return false }
+        return isChecked(input)
+    }
+
+    private static func checkbox(_ root: Element, nameSuffix: String) -> Element? {
         let nodes = (try? root.select("input[type=checkbox]").array()) ?? []
-        guard let input = nodes.first(where: { ((try? $0.attr("name")) ?? "").hasSuffix(nameSuffix) }) else {
-            return false
-        }
-        return (try? input.hasAttr("checked")) ?? false
+        return nodes.first { ((try? $0.attr("name")) ?? "").hasSuffix(nameSuffix) }
+    }
+
+    private static func isChecked(_ input: Element) -> Bool {
+        (try? input.hasAttr("checked")) ?? false
+    }
+
+    /// Absent markup stays editable. A present `disabled` attribute is AO3
+    /// saying this page's POST will ignore the field.
+    private static func isEditable(_ element: Element?) -> Bool {
+        guard let element else { return true }
+        return (try? element.hasAttr("disabled")) != true
+    }
+
+    private static func collectionSlug(from href: String) -> String? {
+        guard let range = href.range(of: "/collections/") else { return nil }
+        let segment = String(href[range.upperBound...]).split(separator: "/").first.map(String.init) ?? ""
+        let slug = segment.split(separator: "?").first.map(String.init) ?? ""
+        let cleaned = slug.split(separator: "#").first.map(String.init) ?? ""
+        return cleaned.isEmpty ? nil : cleaned
     }
 
     private static func selectedOptionValue(_ select: Element) -> String {
