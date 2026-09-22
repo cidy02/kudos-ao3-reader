@@ -93,6 +93,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private var autoPreserveSmallSeriesOnSaveForLater = false
     @AppStorage("autoPreserveSeriesWorkThreshold")
     private var autoPreserveSeriesWorkThreshold = 5
+    /// 1ab's Downloads toggle. Set in Settings; read here, the one place a
+    /// subscribe can turn into a download.
+    @AppStorage("downloadOnSubscribe") private var downloadOnSubscribe = false
 
     // MARK: - Source helpers
 
@@ -398,8 +401,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             AnyView(
                 Menu {
                     if let id = ao3WorkID {
-                        AO3WorkActionsMenu(workID: id, actions: workActions,
-                                           workContext: commentsWorkContext)
+                        AO3WorkActionsMenu(
+                            workID: id, actions: workActions,
+                            workContext: commentsWorkContext,
+                            onSubscribeSuccess: downloadIfSubscribedWithoutEPUB
+                        )
                     }
                 } label: {
                     Label("More actions", systemImage: "ellipsis")
@@ -988,6 +994,47 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 }
             }
         }
+    }
+
+    /// Subscribing to a work already in the library, but without its EPUB, reads
+    /// as "keep this and keep it updated" once the reader has opted in — so a
+    /// successful subscribe also queues the download, through the same
+    /// `DownloadQueue` a saved series uses.
+    ///
+    /// A work that was never saved here is left alone even if this fires:
+    /// subscribing on AO3 is not the same gesture as choosing to add
+    /// something to this library, and turning one into the other would be a
+    /// bigger surprise than a Settings toggle should cause. Nothing else
+    /// needs guarding — `DownloadQueue.enqueue` already skips a work that is
+    /// already in flight or already has its EPUB.
+    func downloadIfSubscribedWithoutEPUB() {
+        guard let work = localWork,
+              let item = Self.downloadItem(
+                  for: work, downloadOnSubscribe: downloadOnSubscribe
+              )
+        else { return }
+        downloadQueue.enqueue([item], into: context)
+    }
+
+    /// Pure decision seam for `downloadIfSubscribedWithoutEPUB`, split out
+    /// because that method's guards live behind `@Environment`/`@AppStorage`
+    /// values a test cannot construct — this is the part worth a test.
+    /// `DownloadQueue.Item.id` is the AO3 work id `AO3Client.downloadEPUB`
+    /// fetches by: `work.ao3WorkID` when parsed from the source URL, else a
+    /// fresh parse for an older or hand-edited record where that never ran.
+    static func downloadItem(
+        for work: SavedWork, downloadOnSubscribe: Bool
+    ) -> DownloadQueue.Item? {
+        guard downloadOnSubscribe, !work.hasEPUB,
+              let url = URL(string: work.sourceURL)
+        else { return nil }
+        return DownloadQueue.Item(
+            id: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) ?? 0,
+            title: work.title,
+            sourceURL: url,
+            isComplete: work.isComplete,
+            seriesURL: ""
+        )
     }
 
     /// Fetches every work in this work's series from AO3 and hands them to the download
