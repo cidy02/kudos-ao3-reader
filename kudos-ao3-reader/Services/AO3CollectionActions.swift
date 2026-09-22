@@ -176,12 +176,19 @@ extension AO3AuthService {
     ) async throws {
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         guard !drafts.isEmpty else { return }
+        // Captured once and rechecked at both the seams below: the CSRF token
+        // and the fetched form action belong to whoever was signed in at the
+        // GET, and this is the one collection write that loops — a sign-out or
+        // account switch mid-batch would otherwise let later items in the same
+        // call post under credentials the reader never approved for them.
+        let expectedSessionGeneration = sessionGeneration
         guard let referer = AO3CollectionURL.userItems(username: username, tab: .invited, page: 1),
               let fallbackAction = AO3CollectionURL.userItemsUpdateMultiple(username: username)
         else {
             throw AO3CollectionWriteError.rejected("AO3 didn't give a collection-items page for this account.")
         }
         let (html, token) = try await fetchCSRFPage(at: referer)
+        try requireSessionGeneration(expectedSessionGeneration)
         let parsed = try? AO3Client.parseCollectionItemsPage(
             html, slug: "", tab: .invited, page: 1, fallbackAction: fallbackAction
         )
@@ -189,6 +196,7 @@ extension AO3AuthService {
         let method = parsed?.httpMethodOverride ?? "patch"
         for draft in drafts {
             try Task.checkCancellation()
+            try requireSessionGeneration(expectedSessionGeneration)
             let params = AO3Client.collectionItemParameters(
                 draft, csrf: token, methodOverride: method
             )
@@ -383,12 +391,36 @@ extension AO3AuthService {
         throw AO3CollectionWriteError.unconfirmed
     }
 
+    /// Shared by every collection member/item write in this file except
+    /// `submitCollectionForm`, which already does this correctly — error flash
+    /// → success flash → bare redirect → `.unconfirmed`. This one used to
+    /// accept ANY 2xx/3xx with no recognized error as success, which is exactly
+    /// the gap the readings writes had (`AO3WriteActions.swift`, fixed
+    /// separately): `submitWrite` follows redirects and keeps the resulting
+    /// flash, so a final 200 with neither flash is genuinely ambiguous, not a
+    /// success by elimination. Matches `submitCollectionForm`'s own layering
+    /// so this file has one rule instead of two.
     private func throwIfCollectionWriteFailed(status: Int, body: String, fallback: String) throws {
+        if let error = Self.collectionWriteVerdict(status: status, body: body, fallback: fallback) {
+            throw error
+        }
+    }
+
+    /// Pure, static, and internal (not `private`) so it is unit-testable
+    /// without a network call — same seam this codebase used to fix the
+    /// identical gap in `AO3WriteActions.readingsWriteResult`. Returns the
+    /// error to throw, or nil for a confirmed success.
+    static func collectionWriteVerdict(
+        status: Int, body: String, fallback: String
+    ) -> AO3CollectionWriteError? {
         if let error = AO3Client.writeErrorMessage(in: body) {
-            throw AO3CollectionWriteError.rejected(error)
+            return .rejected(error)
         }
-        guard (200...399).contains(status) else {
-            throw AO3CollectionWriteError.rejected(fallback)
+        if AO3Client.writeSuccessMessage(in: body) != nil { return nil }
+        if (300...399).contains(status) { return nil }
+        guard (200...299).contains(status) else {
+            return .rejected(fallback)
         }
+        return .unconfirmed
     }
 }
