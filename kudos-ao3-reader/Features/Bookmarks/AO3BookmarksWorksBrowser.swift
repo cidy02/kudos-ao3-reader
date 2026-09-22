@@ -44,6 +44,25 @@ enum AO3BookmarksFilter: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Whether the bookmark footnote has to stay off the card.
+///
+/// `SensitiveWorkRow` blurs only its own body. The note, the bookmark tags,
+/// the date, and the private or rec mark are drawn beside that row, so they
+/// need the same predicate. A private note under "Tap to reveal" is the leak.
+/// A remote-only row has no local work. The view returns before calling
+/// this, and the footnote stays. That is the list's existing rule for
+/// remote rows.
+enum AO3BookmarksMatureBlur {
+    static func isBlurred(
+        isAdult: Bool,
+        hideMature: Bool,
+        mode: MaturePrivacyMode,
+        isRevealed: Bool
+    ) -> Bool {
+        hideMature && isAdult && mode == .obscure && !isRevealed
+    }
+}
+
 enum AO3BookmarksCopy {
     /// What this list is. Page numbers are the pagination bar's, clamped the
     /// way `AO3MarkedForLaterCopy.footer` clamps them.
@@ -82,6 +101,9 @@ struct AO3BookmarksWorksBrowser: View {
     let onPage: (Int) -> Void
 
     @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     private var shownEntries: [CanonicalWork] {
         entries.filter { entry in
@@ -227,7 +249,7 @@ struct AO3BookmarksWorksBrowser: View {
     private func rowStack(_ entry: CanonicalWork, ledger: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             rowBody(entry, ledger: ledger)
-            if let bookmark = bookmark(for: entry) {
+            if let bookmark = bookmark(for: entry), !isBlurred(entry) {
                 AO3BookmarkFootnote(bookmark: bookmark)
             }
         }
@@ -248,6 +270,18 @@ struct AO3BookmarksWorksBrowser: View {
                 presentation: ledger ? .searchLedger : .standard
             )
         }
+    }
+
+    /// Remote rows are not blurred on this screen. Only a saved local work
+    /// can be behind `SensitiveWorkRow`'s own gate.
+    private func isBlurred(_ entry: CanonicalWork) -> Bool {
+        guard let work = entry.local else { return false }
+        return AO3BookmarksMatureBlur.isBlurred(
+            isAdult: work.isAdult,
+            hideMature: hideMature,
+            mode: matureMode,
+            isRevealed: gate.isRevealed(work)
+        )
     }
 
     private func bookmark(for entry: CanonicalWork) -> AO3AuthorBookmark? {

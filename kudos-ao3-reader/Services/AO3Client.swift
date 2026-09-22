@@ -1126,7 +1126,52 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// Bookmarks tab; the Account hub's own list needs those fields too. This
     /// does not post.
     func accountBookmarksPage(for request: URLRequest, page: Int) async throws -> AO3AuthorBookmarksPage {
-        try await Self.parseAuthorBookmarksPage(authenticatedHTML(for: request), page: page)
+        let html = try await authenticatedHTML(for: request)
+        return try Self.accountBookmarksPage(from: html, page: page)
+    }
+
+    /// The account list's reading of one bookmarks page.
+    ///
+    /// `parseAuthorBookmarksPage` throws when blurbs are present and none of
+    /// them parse. A page of only series, external, and deleted bookmarks is
+    /// that case, and the author profile keeps the throw. The account list
+    /// used to show the page empty. It does again, and only for that page: a
+    /// heading that links `/works/<id>` is a work bookmark the parser missed,
+    /// and the throw stands. No rows at all is a different failure (the page
+    /// was not a bookmarks index) and still throws.
+    static func accountBookmarksPage(from html: String, page: Int) throws -> AO3AuthorBookmarksPage {
+        do {
+            return try parseAuthorBookmarksPage(html, page: page)
+        } catch {
+            guard (try? bookmarkBlurbsLackWorkHeading(html)) == true else { throw error }
+            return AO3AuthorBookmarksPage(
+                bookmarks: [],
+                currentPage: page,
+                totalPages: accountBookmarksTotalPages(in: html, page: page)
+            )
+        }
+    }
+
+    /// True when every `li.bookmark.blurb` lacks a `/works/<id>` heading link.
+    /// Zero blurbs is not this case.
+    private static func bookmarkBlurbsLackWorkHeading(_ html: String) throws -> Bool {
+        let doc = try SwiftSoup.parse(html)
+        let blurbs = try doc.select("li.bookmark.blurb").array()
+        guard !blurbs.isEmpty else { return false }
+        for element in blurbs {
+            guard let href = try element.select("h4.heading a[href*=/works/]").first()?.attr("href"),
+                  workID(fromPath: href) != nil else { continue }
+            return false
+        }
+        return true
+    }
+
+    /// The page's own pagination, or 1 when the markup has none we recognize.
+    private static func accountBookmarksTotalPages(in html: String, page: Int) -> Int {
+        guard let doc = try? SwiftSoup.parse(html) else { return 1 }
+        let selector = "ol.pagination li, nav.pagination a, .pagination li"
+        guard (try? doc.select(selector).first()) != nil else { return 1 }
+        return (try? paginationTotal(in: doc, currentPage: page)) ?? 1
     }
 
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
