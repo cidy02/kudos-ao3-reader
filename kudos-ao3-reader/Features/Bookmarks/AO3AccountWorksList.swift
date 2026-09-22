@@ -99,6 +99,9 @@ struct AO3AccountWorksList: View {
             case .collection:
                 try await AO3Client.shared.worksPage(for: request, page: page)
             case .bookmarks:
+                // The screen does not use this branch. `load` calls
+                // `accountBookmarksPage` so the note, tags, privacy, and date
+                // survive; folding that page into `AO3SearchPage` would drop them.
                 try await AO3Client.shared.bookmarksPage(for: request, page: page)
             case .subscriptions:
                 try await AO3Client.shared.subscriptionsPage(for: request, page: page)
@@ -149,6 +152,11 @@ struct AO3AccountWorksList: View {
     /// works AO3 has deleted carry no id and so are absent here — they also have
     /// no blurb to annotate.
     @State private var readingEntries: [Int: AO3ReadingEntry] = [:]
+    /// 1q's per-row bookmark, keyed by the work id (`AO3AuthorBookmark.work.id`),
+    /// the same way `readingEntries` is. The author's Bookmarks tab already
+    /// parses the note, tags, privacy flag, and date; this list used to ask for
+    /// an `AO3SearchPage` and throw them away.
+    @State private var bookmarkDetails: [Int: AO3AuthorBookmark] = [:]
     @State private var expandAll = false
     /// Matches Account tab's layout preference so Refine screens stay consistent.
     @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
@@ -161,6 +169,9 @@ struct AO3AccountWorksList: View {
     @State private var historyProgressFilter = AO3HistoryProgressFilter.everything
     /// 1o's All / Updated / Downloaded pills. Ignored by every other list kind.
     @State private var markedForLaterFilter = AO3MarkedForLaterFilter.all
+    /// 1q's All / Recs / Private / With notes pills. They narrow the loaded
+    /// page. Ignored by every other list kind.
+    @State private var bookmarksFilter = AO3BookmarksFilter.all
     /// Marked for Later's own "since you looked" clock. Not the subscriptions
     /// map: the same work can be on both lists, and one look must not clear both.
     @State private var markedForLaterWatermarks: [Int: SubscriptionWatermark] = [:]
@@ -462,6 +473,21 @@ struct AO3AccountWorksList: View {
                     onPage: { page in Task { await load(page: page) } }
                 )
                 .onDisappear { persistMarkedForLaterLook() }
+            } else if kind == .bookmarks {
+                AO3BookmarksWorksBrowser(
+                    entries: visibleEntries,
+                    bookmarks: bookmarkDetails,
+                    displayMode: displayMode,
+                    expandAll: expandAll,
+                    palette: accountPalette,
+                    kicker: originKicker,
+                    showPagination: showPagination,
+                    currentPage: currentPage,
+                    totalPages: totalPages,
+                    isLoading: phase == .loading,
+                    filter: $bookmarksFilter,
+                    onPage: { page in Task { await load(page: page) } }
+                )
             } else if displayMode == .compact {
                 ScrollView {
                     VStack(spacing: 12) {
@@ -757,7 +783,28 @@ struct AO3AccountWorksList: View {
         phase = .loading
         do {
             let request = try auth.authenticatedRequest(for: url)
-            let result = try await kind.fetch(for: request, page: page)
+            // 1q: a bookmark row is the work plus a note, tags, a privacy flag,
+            // and a date. `AO3SearchPage` has nowhere to put those, and a second
+            // fetch of the same URL would spend another paced request to recover
+            // them. One `accountBookmarksPage` feeds both the work list and
+            // `bookmarkDetails`. Every other kind still goes through `fetch`.
+            let result: AO3SearchPage
+            let details: [Int: AO3AuthorBookmark]
+            if kind == .bookmarks {
+                let parsed = try await AO3Client.shared.accountBookmarksPage(for: request, page: page)
+                result = AO3SearchPage(
+                    works: parsed.bookmarks.map(\.work),
+                    currentPage: parsed.currentPage,
+                    totalPages: parsed.totalPages
+                )
+                details = Dictionary(
+                    parsed.bookmarks.map { ($0.work.id, $0) },
+                    uniquingKeysWith: { first, _ in first }
+                )
+            } else {
+                result = try await kind.fetch(for: request, page: page)
+                details = [:]
+            }
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
             works = result.works
             readingEntries = Dictionary(
@@ -766,6 +813,7 @@ struct AO3AccountWorksList: View {
                 },
                 uniquingKeysWith: { first, _ in first }
             )
+            bookmarkDetails = details
             currentPage = result.currentPage
             totalPages = result.totalPages
             if kind == .markedForLater {
@@ -792,6 +840,7 @@ struct AO3AccountWorksList: View {
             guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             works = []
             readingEntries = [:]
+            bookmarkDetails = [:]
             phase = .idle // back to the signed-out prompt
         } catch is CancellationError {
             // This view's own `.task(id: auth.isLoggedIn)` restarts (cancelling
