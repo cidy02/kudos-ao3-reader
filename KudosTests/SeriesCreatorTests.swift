@@ -72,8 +72,10 @@ struct SeriesCreatorTests {
             summary: "",
             words: 118_600,
             workCount: 3,
+            bookmarkCount: nil,
             dateUpdated: "",
             isComplete: false,
+            isRestricted: false,
             url: URL(string: "https://archiveofourown.org/series/1")!
         )
     }

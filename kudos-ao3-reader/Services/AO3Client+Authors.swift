@@ -208,10 +208,28 @@ extension AO3Client {
             summary: try clean(element.select("blockquote.userstuff.summary").first()?.text()),
             words: statInt("words", in: element),
             workCount: statInt("works", in: element),
+            bookmarkCount: statInt("bookmarks", in: element),
             dateUpdated: try clean(element.select("p.datetime").first()?.text()),
             isComplete: seriesCompletion(from: status),
+            isRestricted: seriesIsRestricted(element),
             url: url
         )
+    }
+
+    /// The members-only lock. Scoped to the heading image AO3 actually draws:
+    /// a summary that happens to say "restricted" is not a lock, and the red
+    /// hidden-by-admin lock is a different image with a different title.
+    private static func seriesIsRestricted(_ element: Element) -> Bool {
+        let images = (try? element.select("h4.heading img").array()) ?? []
+        for image in images {
+            let src = (try? image.attr("src"))?.lowercased() ?? ""
+            let title = (try? image.attr("title")) ?? ""
+            let alt = (try? image.attr("alt")) ?? ""
+            if src.contains("lockblue") { return true }
+            if title.localizedCaseInsensitiveCompare("Restricted") == .orderedSame { return true }
+            if alt.localizedCaseInsensitiveContains("restricted") { return true }
+        }
+        return false
     }
 
     private static func parseAuthorBookmark(_ element: Element) throws -> AO3AuthorBookmark {
