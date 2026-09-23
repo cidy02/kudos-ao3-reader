@@ -157,7 +157,7 @@ extension AO3AuthService {
                 ajax: false
             )
             let (status, body) = try await AO3RequestCoordinator.shared.withSlot {
-                try await AO3Client.shared.submitWrite(request)
+                try await submitWrite(request)
             }
             try throwIfCollectionWriteFailed(
                 status: status, body: body, fallback: "AO3 couldn't update that collection item."
@@ -208,7 +208,7 @@ extension AO3AuthService {
                 ajax: false
             )
             let (status, body) = try await AO3RequestCoordinator.shared.withSlot {
-                try await AO3Client.shared.submitWrite(request)
+                try await submitWrite(request)
             }
             try throwIfCollectionWriteFailed(
                 status: status, body: body, fallback: "AO3 couldn't update that collection item."
@@ -233,7 +233,7 @@ extension AO3AuthService {
             to: AO3CollectionURL.participant(slug: slug, id: participantID),
             body: body, csrf: token, referer: referer, ajax: false
         )
-        let (status, response) = try await AO3Client.shared.submitWrite(request)
+        let (status, response) = try await submitWrite(request)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't decline that member."
         )
@@ -257,7 +257,7 @@ extension AO3AuthService {
             to: AO3CollectionURL.participantsAdd(slug: slug),
             body: Self.formEncoded(params), csrf: token, referer: referer, ajax: false
         )
-        let (status, response) = try await AO3Client.shared.submitWrite(request)
+        let (status, response) = try await submitWrite(request)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't invite that maintainer."
         )
@@ -276,7 +276,7 @@ extension AO3AuthService {
             body: Self.formEncoded([("authenticity_token", token)]),
             csrf: token, referer: showURL, ajax: false
         )
-        let (status, response) = try await AO3Client.shared.submitWrite(request)
+        let (status, response) = try await submitWrite(request)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't join that collection."
         )
@@ -295,7 +295,7 @@ extension AO3AuthService {
             body: Self.formEncoded([("_method", "delete"), ("authenticity_token", token)]),
             csrf: token, referer: showURL, ajax: false
         )
-        let (status, response) = try await AO3Client.shared.submitWrite(request)
+        let (status, response) = try await submitWrite(request)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't leave that collection."
         )
@@ -315,7 +315,7 @@ extension AO3AuthService {
             to: AO3CollectionURL.workCollectionItems(workID: workID),
             body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
         )
-        let (status, response) = try await AO3Client.shared.submitWrite(request)
+        let (status, response) = try await submitWrite(request)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't submit the work to that collection."
         )
@@ -347,7 +347,7 @@ extension AO3AuthService {
             to: AO3CollectionURL.participant(slug: slug, id: participantID),
             body: Self.formEncoded(params), csrf: token, referer: referer, ajax: false
         )
-        let (status, response) = try await AO3Client.shared.submitWrite(request)
+        let (status, response) = try await submitWrite(request)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't update that member."
         )
@@ -364,7 +364,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         if let error = AO3Client.writeErrorMessage(in: body) {
             var invalid = (try? AO3Client.parseCollectionForm(body, slug: form.collectionSlug)) ?? form
             invalid.generalErrors = [error] + invalid.generalErrors

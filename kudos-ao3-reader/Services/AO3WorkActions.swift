@@ -77,7 +77,7 @@ extension AO3AuthService {
             referer: url,
             ajax: false
         )
-        let (_, body) = try await AO3Client.shared.submitWrite(request)
+        let (_, body) = try await submitWrite(request)
         return try AO3Client.parseBulkEditForm(from: body)
     }
 
@@ -438,7 +438,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         if let error = AO3Client.writeErrorMessage(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
@@ -484,7 +484,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         if let error = AO3Client.writeErrorMessage(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }

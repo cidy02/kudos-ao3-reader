@@ -33,9 +33,22 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private let base = "https://archiveofourown.org"
     private let session: URLSession
     private let redirectCookieRelay = AO3RedirectCookieRelay()
+    /// Replaces `Task.sleep` in tests so a generation change can land inside the
+    /// pacing wait without waiting out the real interval. Production sleeps.
+    private let paceSleep: @Sendable (TimeInterval) async throws -> Void
 
-    init() {
-        session = URLSession(configuration: Self.makeAnonymousSessionConfiguration())
+    init(
+        session: URLSession? = nil,
+        nextAllowedRequestAt: Date = .distantPast,
+        paceSleep: (@Sendable (TimeInterval) async throws -> Void)? = nil
+    ) {
+        self.session = session ?? URLSession(
+            configuration: Self.makeAnonymousSessionConfiguration()
+        )
+        self.nextAllowedRequestAt = nextAllowedRequestAt
+        self.paceSleep = paceSleep ?? { wait in
+            try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        }
     }
 
     /// The configuration for this client's one session (T-100). Cookie handling is
@@ -196,7 +209,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let step = Self.paceStep(now: Date(), nextAllowed: nextAllowedRequestAt, minInterval: minRequestInterval)
         nextAllowedRequestAt = step.nextAllowed
         if step.wait > 0 {
-            try await Task.sleep(nanoseconds: UInt64(step.wait * 1_000_000_000))
+            try await paceSleep(step.wait)
         }
     }
 
@@ -843,14 +856,43 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await authenticatedHTML(for: request)
     }
 
+    /// Header `writeRequest` uses to remember which auth service and generation
+    /// attached the explicit Cookie. Stripped before `URLSession` sees the request.
+    static let preparedWriteSessionHeader = "X-Kudos-Prepared-Write-Session"
+
+    static func attachPreparedWriteSession(_ stamp: String, to request: inout URLRequest) {
+        request.setValue(stamp, forHTTPHeaderField: preparedWriteSessionHeader)
+    }
+
+    /// Reads and removes the preparing session. Absent when a caller built
+    /// the request without `writeRequest`.
+    static func takePreparedWriteSession(from request: inout URLRequest) -> String? {
+        defer { request.setValue(nil, forHTTPHeaderField: preparedWriteSessionHeader) }
+        return request.value(forHTTPHeaderField: preparedWriteSessionHeader)
+    }
+
     /// Submits a single authenticated POST and returns its status + body. **Never
     /// retried or coalesced** — replaying a write would double-post (kudos/comments).
     /// 429s are surfaced (not auto-retried) so the UI can ask the user to try later.
-    func submitWrite(_ request: URLRequest) async throws -> (status: Int, body: String) {
+    ///
+    /// The Cookie header belongs to the auth service and generation that built
+    /// the request. `pace()` suspends after claiming its slot, and logout, account
+    /// replacement, or an accepted cookie refresh during that wait must not send
+    /// the old cookie. A mismatch throws `CancellationError` and does not call
+    /// `URLSession`. Explicit-cookie and redirect handling are unchanged.
+    func submitWrite(
+        _ request: URLRequest,
+        isCurrentWriteSession: @escaping @MainActor @Sendable (String) -> Bool
+    ) async throws -> (status: Int, body: String) {
         var request = request
         request.httpShouldHandleCookies = false
-        Log.network.debug("POST (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
+        guard let prepared = Self.takePreparedWriteSession(from: &request) else {
+            throw CancellationError()
+        }
+        try await requireCurrentWriteSession(prepared, using: isCurrentWriteSession)
         try await pace()
+        try await requireCurrentWriteSession(prepared, using: isCurrentWriteSession)
+        Log.network.debug("POST (auth) \(request.url?.absoluteString ?? "?", privacy: .public)")
         let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
@@ -862,6 +904,18 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             throw AO3Error.rateLimited(retryAfter: Self.retryAfter(from: http))
         }
         return (http.statusCode, Self.htmlString(from: data))
+    }
+
+    /// Drops the POST when the session that built its Cookie is no longer current.
+    /// The caller supplies the exact auth service that prepared the request, so
+    /// another service with the same integer generation cannot satisfy the fence.
+    private func requireCurrentWriteSession(
+        _ prepared: String,
+        using isCurrentWriteSession: @escaping @MainActor @Sendable (String) -> Bool
+    ) async throws {
+        guard await isCurrentWriteSession(prepared) else {
+            throw CancellationError()
+        }
     }
 
     /// The Rails CSRF authenticity token from a page's `<meta name="csrf-token">`.

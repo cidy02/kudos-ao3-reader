@@ -8,6 +8,18 @@ import Foundation
 /// Endpoints/params mirror AO3's own forms. They can only be confirmed against a live
 /// signed-in session, so they're kept as named constants here for easy adjustment.
 extension AO3AuthService {
+    /// Binds the client-side dispatch fence to the same auth service that built
+    /// the explicit Cookie and generation stamp.
+    func submitWrite(
+        _ request: URLRequest, using client: AO3Client = .shared
+    ) async throws -> (status: Int, body: String) {
+        try await client.submitWrite(
+            request,
+            isCurrentWriteSession: { [weak self] prepared in
+                self?.writeSessionStamp == prepared
+            }
+        )
+    }
 
     /// Leaves kudos on a work. Returns a short user-facing message on success (incl.
     /// the benign "already left kudos" case); throws `AO3WriteError`/`AO3Error` on
@@ -25,7 +37,7 @@ extension AO3AuthService {
         let request = try writeRequest(
             to: Self.kudosEndpoint, body: body, csrf: token, referer: workURL, ajax: true
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         switch status {
         case 200 ... 299:
             return "Kudos left."
@@ -73,7 +85,7 @@ extension AO3AuthService {
             to: Self.commentsEndpoint(workID: workID),
             body: Self.formEncoded(params), csrf: token, referer: formURL, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         return try commentWriteResult(
             status: status, body: responseBody,
             onSuccess: "Comment posted.",
@@ -94,7 +106,7 @@ extension AO3AuthService {
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
             let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
-            let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+            let (status, responseBody) = try await submitWrite(request)
             if (200 ... 399).contains(status) { return "Unsubscribed." }
             throw AO3WriteError.rejected(
                 AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't unsubscribe."
@@ -110,7 +122,7 @@ extension AO3AuthService {
             to: Self.subscriptionsEndpoint(username: username),
             body: body, csrf: token, referer: workURL, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         if responseBody.localizedCaseInsensitiveContains("already subscribed") {
             return "You're already subscribed."
         }
@@ -154,7 +166,7 @@ extension AO3AuthService {
         let request = try writeRequest(
             to: endpoint, body: body, csrf: token, referer: referer, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         return try Self.readingsWriteResult(
             status: status, body: responseBody,
             success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
@@ -174,7 +186,7 @@ extension AO3AuthService {
             to: Self.markForLaterEndpoint(workID: workID),
             body: body, csrf: token, referer: workURL, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         if (200 ... 399).contains(status) { return "Marked for later." }
         throw AO3WriteError.rejected(
             AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't mark for later."
@@ -213,7 +225,7 @@ extension AO3AuthService {
         let request = try writeRequest(
             to: endpoint, body: body, csrf: token, referer: history, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         return try Self.readingsWriteResult(
             status: status, body: responseBody,
             success: "Removed from history.", rejectedFallback: "Couldn't remove that from history."
@@ -243,7 +255,7 @@ extension AO3AuthService {
         let request = try writeRequest(
             to: endpoint, body: body, csrf: token, referer: confirm, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         return try Self.readingsWriteResult(
             status: status, body: responseBody,
             success: "History cleared.", rejectedFallback: "Couldn't clear history."
@@ -335,7 +347,7 @@ extension AO3AuthService {
             to: endpoint,
             body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
             return existing == nil ? "Bookmarked." : "Bookmark updated."
         }
@@ -405,6 +417,9 @@ extension AO3AuthService {
             request.setValue("text/javascript, application/javascript, */*",
                              forHTTPHeaderField: "Accept")
         }
+        // Same turn as the Cookie header above. submitWrite strips this before
+        // URLSession and refuses the POST if this auth session has moved.
+        AO3Client.attachPreparedWriteSession(writeSessionStamp, to: &request)
         return request
     }
 

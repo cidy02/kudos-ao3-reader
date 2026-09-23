@@ -42,7 +42,7 @@ extension AO3AuthService {
             referer: snapshot.actionURL,
             ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
 
         if let error = AO3Client.writeErrorMessage(in: responseBody) {
             throw AO3WriteError.rejected(error)

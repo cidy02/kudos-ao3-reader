@@ -31,7 +31,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         // otwarchive's inbox update redirects with `flash[:notice]` on success and
         // sets `flash[:caution]` on its failure branch (`inbox_controller.rb`), so
         // the shared verdict reads both honestly; a page with neither is
