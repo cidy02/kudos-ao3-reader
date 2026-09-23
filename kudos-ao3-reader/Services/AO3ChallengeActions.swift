@@ -51,7 +51,7 @@ extension AO3AuthService {
             body: Self.formEncoded(AO3Client.challengeSignUpParameters(posted)),
             csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         if let parsed = try? AO3Client.parseChallengeSignUpForm(body, slug: form.collectionSlug),
            !parsed.generalErrors.isEmpty || !parsed.fieldErrors.isEmpty {
             return parsed
@@ -80,7 +80,7 @@ extension AO3AuthService {
             body: Self.formEncoded([("_method", "delete"), ("authenticity_token", token)]),
             csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         try throwIfChallengeWriteFailed(
             status: status, body: body, fallback: "AO3 couldn't withdraw that sign-up."
         )
@@ -106,7 +106,7 @@ extension AO3AuthService {
             body: Self.formEncoded([("_method", "patch"), ("authenticity_token", token)]),
             csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         try throwIfChallengeWriteFailed(
             status: status, body: body, fallback: "AO3 couldn't record the default."
         )
@@ -131,7 +131,7 @@ extension AO3AuthService {
             to: AO3ChallengeURL.assignmentUpdateMultiple(slug: slug),
             body: Self.formEncoded(params), csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         try throwIfChallengeWriteFailed(
             status: status, body: body, fallback: "AO3 couldn't claim that pinch hit."
         )
@@ -151,7 +151,7 @@ extension AO3AuthService {
             to: AO3ChallengeURL.claims(slug: slug),
             body: Self.formEncoded(params), csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         try throwIfChallengeWriteFailed(
             status: status, body: body, fallback: "AO3 couldn't claim that prompt."
         )
@@ -168,7 +168,7 @@ extension AO3AuthService {
             body: Self.formEncoded([("_method", "delete"), ("authenticity_token", token)]),
             csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         try throwIfChallengeWriteFailed(
             status: status, body: body, fallback: "AO3 couldn't release that prompt."
         )
@@ -189,7 +189,7 @@ extension AO3AuthService {
             body: Self.formEncoded(AO3Client.tagSetSaveParameters(tagSet, save: fields, csrf: token)),
             csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         try throwIfChallengeWriteFailed(
             status: status, body: body, fallback: "AO3 couldn't save that tag set."
         )
@@ -212,7 +212,7 @@ extension AO3AuthService {
             to: referer,
             body: Self.formEncoded(params), csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         try throwIfChallengeWriteFailed(
             status: status, body: body, fallback: "AO3 couldn't reject that tag."
         )
@@ -240,7 +240,7 @@ extension AO3AuthService {
             body: Self.formEncoded(AO3Client.challengeSettingsParameters(posted)),
             csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         if let error = AO3Client.writeErrorMessage(in: body) {
             var invalid = (try? AO3Client.parseChallengeSettingsForm(
                 body, slug: form.collectionSlug, kind: form.kind

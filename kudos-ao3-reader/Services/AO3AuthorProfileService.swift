@@ -968,7 +968,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, body) = try await AO3Client.shared.submitWrite(request)
+        let (status, body) = try await submitWrite(request)
         if let error = AO3Client.writeErrorMessage(in: body) {
             throw AO3WriteError.rejected(error)
         }

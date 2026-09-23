@@ -42,7 +42,7 @@ extension AO3AuthService {
             to: Self.commentReplyEndpoint(parentCommentID: parentCommentID),
             body: Self.formEncoded(params), csrf: token, referer: formURL, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         return try commentWriteResult(
             status: status, body: responseBody,
             onSuccess: "Reply posted.",
@@ -67,7 +67,7 @@ extension AO3AuthService {
         let request = try writeRequest(
             to: threadURL, body: body, csrf: token, referer: threadURL, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         return try commentWriteResult(
             status: status, body: responseBody,
             onSuccess: "Comment deleted.",
@@ -97,7 +97,7 @@ extension AO3AuthService {
             to: Self.commentThreadURL(commentID),
             body: body, csrf: token, referer: editURL, ajax: false
         )
-        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request)
         return try commentWriteResult(
             status: status, body: responseBody,
             onSuccess: "Comment updated.",

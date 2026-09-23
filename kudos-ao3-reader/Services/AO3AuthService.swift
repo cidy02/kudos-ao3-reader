@@ -303,8 +303,15 @@ final class AO3AuthService {
     /// feature model (e.g. the Inbox) tell apart two sessions that share the
     /// same `authenticationScope` string — same username, logged out and back
     /// in, or a same-user cookie rotation — so it never reuses private cache or
-    /// async results from an earlier credential set.
+    /// async results from an earlier credential set. Queued writes re-read this
+    /// value after `pace()` and will not send a Cookie built for an older value.
     private(set) var sessionGeneration = 0
+
+    /// Distinguishes two auth services that happen to be at the same generation.
+    private let writeSessionID = UUID()
+    var writeSessionStamp: String {
+        "\(writeSessionID.uuidString):\(sessionGeneration)"
+    }
 
     var isLoggedIn: Bool {
         if case .signedIn = status { true } else { false }
