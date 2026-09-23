@@ -141,11 +141,19 @@ extension AO3AuthService {
     func updateCollectionItems(slug: String, drafts: [AO3CollectionItemDraft]) async throws {
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         guard !drafts.isEmpty else { return }
+        // Captured once and rechecked after the CSRF GET and before each item.
+        // The token and the form action belong to whoever was signed in at the
+        // GET. This loops, so a sign-out or account switch between items must
+        // not prepare the next POST under the replacement session's cookie.
+        // Same seams as `updateUserCollectionItems`.
+        let expectedSessionGeneration = sessionGeneration
         let referer = AO3CollectionURL.items(slug: slug, tab: .unreviewed, page: 1)
         let (html, token) = try await fetchCSRFPage(at: referer)
+        try requireSessionGeneration(expectedSessionGeneration)
         let page = try AO3Client.parseCollectionItemsPage(html, slug: slug, tab: .unreviewed, page: 1)
         for draft in drafts {
             try Task.checkCancellation()
+            try requireSessionGeneration(expectedSessionGeneration)
             let params = AO3Client.collectionItemParameters(
                 draft, csrf: token, methodOverride: page.httpMethodOverride ?? "patch"
             )

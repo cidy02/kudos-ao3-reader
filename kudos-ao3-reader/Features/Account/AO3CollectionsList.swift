@@ -23,14 +23,31 @@ struct AO3CollectionsList: View {
     @State private var editingCollection: AO3CollectionFormDestination?
     @State private var yourItems: AO3CollectionItemsDestination?
     @State private var loadGeneration = 0
+    /// Generation whose rows are stored. Nil until the load task has bound
+    /// one. A later run with the same generation is a reappearance.
+    @State private var loadedSessionGeneration: Int?
 
     private enum Phase: Equatable { case idle, loading, loaded, failed(String) }
+
+    /// Stored rows are drawn only for the generation that loaded them. A new
+    /// generation renders empty in the same body pass that observes it,
+    /// before the load task has cleared the arrays.
+    private var sessionOwnsScreen: Bool {
+        AO3CollectionSessionReload.ownsScreen(
+            boundGeneration: loadedSessionGeneration,
+            sessionGeneration: auth.sessionGeneration
+        )
+    }
+
+    private var displayedCollections: [AO3Collection] {
+        sessionOwnsScreen ? collections : []
+    }
 
     /// What the list draws: AO3's rows, sorted and narrowed in memory. Spec 1bm's
     /// own note says why that is client-side — AO3 sorts collections by title and
     /// date only. The sort sees the page on screen, not every page of the index.
     private var visibleCollections: [AO3Collection] {
-        filters.apply(to: collections)
+        filters.apply(to: displayedCollections)
     }
 
     private var showPagination: Bool { totalPages > 1 }
@@ -48,7 +65,7 @@ struct AO3CollectionsList: View {
                     }
                 }
             }
-            if phase == .loaded, !collections.isEmpty {
+            if phase == .loaded, !displayedCollections.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     FilterButton(
                         filtersActive: filters.hasActiveFilters,
@@ -72,8 +89,23 @@ struct AO3CollectionsList: View {
         .navigationDestination(item: $yourItems) { destination in
             AO3CollectionItemsView(slug: destination.slug, title: destination.title)
         }
-        .task(id: auth.isLoggedIn) {
-            if auth.isLoggedIn, phase == .idle { await load(page: 1) }
+        .task(id: AO3AccountWorksLoadID(
+            sessionGeneration: auth.sessionGeneration,
+            isLoggedIn: auth.isLoggedIn
+        )) {
+            let decision = AO3CollectionSessionReload.listTask(
+                boundGeneration: loadedSessionGeneration,
+                phaseIsIdle: phase == .idle,
+                sessionGeneration: auth.sessionGeneration,
+                isLoggedIn: auth.isLoggedIn
+            )
+            if decision.clearAccountState {
+                clearLoadedAccount()
+                loadedSessionGeneration = auth.sessionGeneration
+            }
+            if decision.loadPageOne {
+                await load(page: 1)
+            }
         }
         .sheet(isPresented: $showLogin) { AO3LoginView() }
         // A failed page change (page 2+, say) while `collections` still holds
@@ -85,7 +117,7 @@ struct AO3CollectionsList: View {
             "Couldn't load that page",
             isPresented: Binding(
                 get: {
-                    if case .failed = phase, !collections.isEmpty { return true }
+                    if case .failed = phase, !displayedCollections.isEmpty { return true }
                     return false
                 },
                 set: { if !$0, case .failed = phase { phase = .loaded } }
@@ -99,8 +131,9 @@ struct AO3CollectionsList: View {
 
     @ViewBuilder
     private var signedInContent: some View {
-        switch phase {
-        case let .failed(message) where collections.isEmpty:
+        if !sessionOwnsScreen {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if case let .failed(message) = phase, displayedCollections.isEmpty {
             ContentUnavailableView {
                 Label("Couldn't load collections", systemImage: "exclamationmark.triangle")
             } description: {
@@ -108,9 +141,9 @@ struct AO3CollectionsList: View {
             } actions: {
                 Button("Try Again") { Task { await load(page: currentPage) } }
             }
-        case .loading where collections.isEmpty:
+        } else if phase == .loading, displayedCollections.isEmpty {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-        default:
+        } else {
             collectionsList
         }
     }
@@ -217,8 +250,8 @@ struct AO3CollectionsList: View {
     private var tallyLine: String {
         let shown = visibleCollections.count
         var line = "\(shown) collection\(shown == 1 ? "" : "s")"
-        if shown != collections.count {
-            line += " · \(collections.count) in all"
+        if shown != displayedCollections.count {
+            line += " · \(displayedCollections.count) in all"
         }
         if totalPages > 1 {
             line += " · page \(currentPage) of \(totalPages)"
@@ -273,13 +306,13 @@ struct AO3CollectionsList: View {
 
     private var emptyCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(collections.isEmpty ? "No collections" : "No collections match")
+            Text(displayedCollections.isEmpty ? "No collections" : "No collections match")
                 .font(.system(size: 15, weight: .semibold))
             Text(emptyDetail)
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if !collections.isEmpty {
+            if !displayedCollections.isEmpty {
                 Button("Clear Filters") { filters = AO3CollectionsFilter() }
                     .buttonStyle(.borderless)
                     .font(.system(size: 13, weight: .semibold))
@@ -292,10 +325,10 @@ struct AO3CollectionsList: View {
     }
 
     private var emptyDetail: String {
-        if collections.isEmpty {
+        if displayedCollections.isEmpty {
             return "Collections you create or maintain on AO3 show up here."
         }
-        let count = collections.count
+        let count = displayedCollections.count
         return "\(count) collection\(count == 1 ? "" : "s") are hidden by the current filters."
     }
 
@@ -313,18 +346,33 @@ struct AO3CollectionsList: View {
         }
     }
 
+    /// Drops the previous session's rows and retires its in-flight load.
+    /// Filters stay: they are this device's view of the page, not the account's.
+    private func clearLoadedAccount() {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let cleared = AO3CollectionSessionReload.clearedList
+        collections = cleared.collections
+        currentPage = cleared.currentPage
+        totalPages = cleared.totalPages
+        phase = .idle
+    }
+
     private func load(page: Int) async {
         let expectedSessionGeneration = auth.sessionGeneration
         guard auth.isLoggedIn, let username = auth.username,
               let url = AO3Client.collectionsURL(username: username, page: page) else { return }
-        loadGeneration += 1
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
         let generation = loadGeneration
         phase = .loading
         do {
             let request = try auth.authenticatedRequest(for: url)
             let result = try await AO3Client.shared.collectionsIndex(for: request, page: page)
-            guard generation == loadGeneration,
-                  auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
             collections = result.collections
             currentPage = result.currentPage
             totalPages = max(result.totalPages, 1)
@@ -345,12 +393,20 @@ struct AO3CollectionsList: View {
         } catch is CancellationError {
         } catch let urlError as URLError where urlError.code == .cancelled {
         } catch let error as AO3Error {
-            guard generation == loadGeneration,
-                  auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
-            guard generation == loadGeneration,
-                  auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
             phase = .failed(error.localizedDescription)
         }
     }
