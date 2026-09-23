@@ -36,6 +36,12 @@ struct AO3CollectionItemsView: View {
     @State private var staging = AO3CollectionItemStaging()
     @State private var phase: Phase = .idle
     @State private var loadGeneration = 0
+    /// Generation whose rows and drafts are stored. Nil until the load task
+    /// binds one. A tab change keeps this value; a new session does not.
+    @State private var loadedSessionGeneration: Int?
+    /// Tab whose page was last requested. Nil after a session clear, so the
+    /// next signed-in run cannot treat another account's tab as settled.
+    @State private var loadedTab: AO3CollectionItemTab?
     @State private var submitError: String?
 
     private enum Phase: Equatable { case idle, loading, loaded, submitting, failed(String) }
@@ -63,17 +69,39 @@ struct AO3CollectionItemsView: View {
         .unreviewed, .invited, .rejected, .approved
     ]
 
+    /// Stored rows and drafts belong to one generation. A newer session renders
+    /// neither, in the same body pass that observes the change.
+    private var sessionOwnsScreen: Bool {
+        AO3CollectionSessionReload.ownsScreen(
+            boundGeneration: loadedSessionGeneration,
+            sessionGeneration: auth.sessionGeneration
+        )
+    }
+
+    private var displayedItems: [AO3CollectionItem] {
+        sessionOwnsScreen ? items : []
+    }
+
     /// Drafts AO3 will actually store. A field the page disables does not count,
     /// and does not get cleared off another page when this one submits.
     private var submittableDrafts: [AO3CollectionItemDraft] {
-        staging.pendingDrafts(for: items).compactMap { draft in
-            guard let item = items.first(where: { $0.id == draft.itemID }) else { return nil }
+        staging.pendingDrafts(for: displayedItems).compactMap { draft in
+            guard let item = displayedItems.first(where: { $0.id == draft.itemID }) else { return nil }
             let stored = AO3CollectionItemSubmission.draftAO3WillStore(draft, item: item)
             return AO3CollectionItemSubmission.isSubmittable(stored) ? stored : nil
         }
     }
 
     private var pendingCount: Int { submittableDrafts.count }
+
+    private var itemsPhase: AO3CollectionSessionReload.ItemsPhase {
+        switch phase {
+        case .idle: .idle
+        case .loading: .loading
+        case .loaded, .submitting: .settled
+        case .failed: .settled
+        }
+    }
 
     private var showPagination: Bool { totalPages > 1 }
 
@@ -82,30 +110,39 @@ struct AO3CollectionItemsView: View {
             Section {
                 header.pageBodyRow(top: 20, gutter: 0)
                 tabStrip.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
-                if let submitError {
+                if sessionOwnsScreen, let submitError {
                     errorCard(submitError).pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
                 }
             }
 
-            switch phase {
-            case .idle, .loading where items.isEmpty:
+            if !auth.isLoggedIn {
+                Section {
+                    errorCard(AO3CollectionSessionReload.signedOutItemsMessage)
+                        .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                }
+            } else if !sessionOwnsScreen {
                 Section { loadingRow.pageBodyRow(top: 20, gutter: SubjectMetrics.accountGutter) }
-            case let .failed(message) where items.isEmpty:
-                Section {
-                    errorCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+            } else {
+                switch phase {
+                case .idle, .loading where displayedItems.isEmpty:
+                    Section { loadingRow.pageBodyRow(top: 20, gutter: SubjectMetrics.accountGutter) }
+                case let .failed(message) where displayedItems.isEmpty:
+                    Section {
+                        errorCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                    }
+                case let .failed(message):
+                    Section {
+                        errorCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                    }
+                    itemSections
+                default:
+                    itemSections
                 }
-            case let .failed(message):
-                Section {
-                    errorCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
-                }
-                itemSections
-            default:
-                itemSections
-            }
 
-            if showPagination {
-                Section {
-                    paginationBar.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                if showPagination {
+                    Section {
+                        paginationBar.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                    }
                 }
             }
         }
@@ -142,7 +179,30 @@ struct AO3CollectionItemsView: View {
                 }
             }
         }
-        .task(id: tab) { await load(page: 1, replacing: true) }
+        .task(id: AO3CollectionItemsLoadID(
+            sessionGeneration: auth.sessionGeneration,
+            isLoggedIn: auth.isLoggedIn,
+            tab: tab
+        )) {
+            let decision = AO3CollectionSessionReload.itemsTask(
+                boundGeneration: loadedSessionGeneration,
+                loadedTab: loadedTab,
+                phase: itemsPhase,
+                session: AO3AccountWorksLoadID(
+                    sessionGeneration: auth.sessionGeneration,
+                    isLoggedIn: auth.isLoggedIn
+                ),
+                tab: tab
+            )
+            if decision.clearAccountState {
+                clearLoadedAccount()
+                loadedSessionGeneration = auth.sessionGeneration
+            }
+            if decision.loadPageOne {
+                loadedTab = tab
+                await load(page: 1, replacing: true)
+            }
+        }
         .refreshable { await load(page: currentPage, replacing: false) }
     }
 
@@ -162,16 +222,16 @@ struct AO3CollectionItemsView: View {
     /// count lives in the toolbar, not in this line.
     private var tallyLine: String {
         let scope = slug == nil ? "Your works in AO3 collections" : title
-        let decisions = AO3CollectionItemSubmission.decisionsNeeded(items)
-        if let phrase = AO3CollectionItemSubmission.decisionPhrase(for: decisions), !items.isEmpty {
+        let decisions = AO3CollectionItemSubmission.decisionsNeeded(displayedItems)
+        if let phrase = AO3CollectionItemSubmission.decisionPhrase(for: decisions), !displayedItems.isEmpty {
             return pageSuffix("\(scope) · \(phrase)")
         }
-        let count = items.count
+        let count = displayedItems.count
         return pageSuffix("\(scope) · \(count) item\(count == 1 ? "" : "s")")
     }
 
     private func pageSuffix(_ line: String) -> String {
-        guard totalPages > 1 else { return line }
+        guard sessionOwnsScreen, totalPages > 1 else { return line }
         return "\(line) · page \(currentPage) of \(totalPages)"
     }
 
@@ -242,15 +302,15 @@ struct AO3CollectionItemsView: View {
 
     @ViewBuilder
     private var itemSections: some View {
-        if items.isEmpty {
+        if displayedItems.isEmpty {
             Section {
                 emptyCard.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
             }
         } else {
             Section {
-                SectionRuleHeader(title: Self.tabTitle(tab), count: items.count)
+                SectionRuleHeader(title: Self.tabTitle(tab), count: displayedItems.count)
                     .pageBodyRow(top: 18, gutter: 0)
-                ForEach(items) { item in
+                ForEach(displayedItems) { item in
                     AO3CollectionItemCard(
                         item: item,
                         staging: $staging,
@@ -293,13 +353,28 @@ struct AO3CollectionItemsView: View {
 
     // MARK: Loading and submitting
 
+    /// Drops the previous session's rows, paging, staged drafts, and submit
+    /// error, and retires its in-flight load. A tab or page change does not
+    /// call this: those keep drafts for rows that are not on the page.
+    private func clearLoadedAccount() {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let cleared = AO3CollectionSessionReload.clearedItems
+        items = cleared.items
+        currentPage = cleared.currentPage
+        totalPages = cleared.totalPages
+        staging = cleared.staging
+        submitError = cleared.submitError
+        loadedTab = nil
+        phase = .idle
+    }
+
     /// `replacing` clears the rows first. A tab change must not keep the previous
     /// tab's works on screen. A page change keeps them until the next page arrives.
     /// Staging is left alone either way: a draft for a row that is not on this
     /// page is not submitted (`pendingDrafts` drops it) and is not discarded.
     private func load(page requestedPage: Int, replacing: Bool) async {
         guard auth.isLoggedIn else {
-            phase = .failed("Log in to AO3 to manage collection items.")
+            phase = .failed(AO3CollectionSessionReload.signedOutItemsMessage)
             return
         }
         let expectedSessionGeneration = auth.sessionGeneration
@@ -310,7 +385,7 @@ struct AO3CollectionItemsView: View {
         // a page number the visible rows did not match on failure. Restored on
         // every failure branch below; only a success moves it for real.
         let displayedPage = currentPage
-        loadGeneration += 1
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
         let generation = loadGeneration
         if replacing {
             items = []
@@ -336,11 +411,15 @@ struct AO3CollectionItemsView: View {
                     username: username, tab: tab, page: requestedPage, request: request
                 )
             } else {
-                phase = .failed("Log in to AO3 to manage collection items.")
+                phase = .failed(AO3CollectionSessionReload.signedOutItemsMessage)
                 return
             }
-            guard generation == loadGeneration, tab == requestedTab,
-                  auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ), tab == requestedTab else { return }
             items = fetched.items
             currentPage = fetched.currentPage
             totalPages = max(fetched.totalPages, 1)
@@ -350,17 +429,25 @@ struct AO3CollectionItemsView: View {
             guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             items = []
             currentPage = displayedPage
-            phase = .failed("Log in to AO3 to manage collection items.")
+            phase = .failed(AO3CollectionSessionReload.signedOutItemsMessage)
         } catch is CancellationError {
         } catch let urlError as URLError where urlError.code == .cancelled {
         } catch let error as AO3Error {
-            guard generation == loadGeneration,
-                  auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
             currentPage = displayedPage
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
-            guard generation == loadGeneration,
-                  auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
             currentPage = displayedPage
             phase = .failed(error.localizedDescription)
         }
@@ -372,6 +459,14 @@ struct AO3CollectionItemsView: View {
     /// discarded the edits would lose work the reader cannot see anywhere else, so
     /// a failed submit leaves every change exactly where it was and says why.
     private func submit() async {
+        let generation = auth.sessionGeneration
+        // The rows and drafts on screen have to be this generation's before
+        // the POST is built. A tap in the gap before the load task rebinds
+        // would otherwise send the previous account's drafts with the new cookie.
+        guard AO3CollectionSessionReload.ownsScreen(
+            boundGeneration: loadedSessionGeneration,
+            sessionGeneration: generation
+        ) else { return }
         let drafts = submittableDrafts
         guard !drafts.isEmpty else { return }
         phase = .submitting
@@ -384,15 +479,28 @@ struct AO3CollectionItemsView: View {
             } else {
                 throw AO3CollectionWriteError.notSignedIn
             }
+            guard submitStillOwnsScreen(generation) else { return }
             staging.clear(itemIDs: drafts.map(\.itemID))
             await load(page: currentPage, replacing: false)
         } catch let error as AO3CollectionWriteError {
+            guard submitStillOwnsScreen(generation) else { return }
             submitError = error.errorDescription ?? "Those changes could not be sent."
             phase = .loaded
         } catch {
+            guard submitStillOwnsScreen(generation) else { return }
             submitError = error.localizedDescription
             phase = .loaded
         }
+    }
+
+    /// A submit that started under `generation` may change this screen only
+    /// while that generation is still current. The replacement account's
+    /// staging, error, phase, and rows are not this call's to clear.
+    private func submitStillOwnsScreen(_ generation: Int) -> Bool {
+        AO3AccountWorksSessionReload.shouldApplyCapturedGeneration(
+            generation,
+            sessionGeneration: auth.sessionGeneration
+        )
     }
 }
 
