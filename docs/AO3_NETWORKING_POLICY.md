@@ -15,7 +15,7 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 | Retry policy | `withRetry`: max 2 retries, exponential 0.5s→1s→2s; ONLY transient failures (5xx, 429, transport drop). 404/403/other-4xx/parse never retried. |
 | 403 | `AO3Error.forbidden`, never retried (hammering a CDN block prolongs it). |
 | 404 | `AO3Error.notFound` → callers mark `ao3Unavailable`, keep local data. |
-| Writes | `submitWrite` is single-shot: never retried, never coalesced (double-kudos/comment risk). CSRF via `authenticatedPageHTML`. |
+| Writes | `submitWrite` is single-shot: never retried, never coalesced (double-kudos/comment risk). CSRF via `authenticatedPageHTML`. `writeRequest` stamps the exact `AO3AuthService` UUID plus `sessionGeneration` that attached the explicit Cookie. `submitWrite` strips the stamp, then asks that service before `pace()` and again after it returns. A missing stamp or mismatch observed on either check — logout, account replacement, or an accepted cookie refresh while the write was queued or waiting out its slot — throws `CancellationError` and does not call `URLSession`. Once `session.data` has started, a later session change does not cancel that in-flight write. The POST stays explicit-cookie (`httpShouldHandleCookies = false`) and still uses `AO3RedirectCookieRelay`. |
 | Refresh throttles | Tag enrichment: `needsAO3Refresh` + 24h attempt cooldown (`lastTagRefreshAttemptAt`). Update checks: WIP-only, 6h per-work (`lastUpdateCheck`, stamped on failure too). Foreground folder-sync: 60s gate. |
 | Batch behavior | Strictly sequential: `DownloadQueue` one at a time; series preservation sleeps 2s/work (`preservationRequestPauseNanos`), cancellable; Browse bulk actions resolve one-by-one and cancel on view exit. |
 | Local-first | Every enrichment path checks local state first; the search index is built from local data only; `existingWork` pre-checks avoid re-downloads. |
@@ -41,6 +41,7 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 
 - No parallel request fan-out outside `AO3RequestCoordinator.withSlot`; no bypassing `AO3Client` with raw `URLSession` calls to AO3 (the auth validator's single launch request is the one sanctioned exception).
 - No retry loops around writes; no auto-retry UI for kudos/comments.
+- No queued write continues after its preparing auth service or `sessionGeneration` is observed stale. `AO3Client.submitWrite` checks before and after `pace()`, immediately before `URLSession`; this is not a per-screen guard or cancellation of a request that already started.
 - No background polling beyond the existing BGTask folder-sync refresh; no periodic full-library metadata sweeps.
 - No background or bulk scraping of logged-in pages. Authenticated reads are limited to the user's own account lists, pages opened through explicit profile/work navigation, the foreground/cancellable Favorites Authors newest-work prefetch above, and the bounded visible-page Inbox metadata hydration documented above. The subscriptions chapter-count walk above is an anonymous, page-bounded exception and stays inside `withSlot`. No crawling/archiving features.
 - No removal/weakening of: pacing, cooldowns, Retry-After honoring, or the contact UA.
