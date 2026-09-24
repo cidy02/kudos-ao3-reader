@@ -76,7 +76,7 @@ nonisolated enum LibraryHistoryGrouping: String, CaseIterable, Hashable, Sendabl
             // for a work whose file has already been freed, which cannot be
             // `.inProgress` and so can never be judged abandoned.
             return ordered(
-                ["In progress", "Abandoned", "Read, not finished", "Finished", "Not started"],
+                [inProgressTitle, abandonedTitle, "Read, not finished", "Finished", "Not started"],
                 bucketing: works
             ) { work in
                 switch work.readingState {
@@ -86,7 +86,7 @@ nonisolated enum LibraryHistoryGrouping: String, CaseIterable, Hashable, Sendabl
                 case .inProgress:
                     // Abandoned before in-progress: it is a *kind* of in-progress, and
                     // a work in both would be counted twice in the header tally.
-                    return isAbandoned(work) ? "Abandoned" : "In progress"
+                    return isAbandoned(work) ? abandonedTitle : inProgressTitle
                 }
             }
 
@@ -104,6 +104,34 @@ nonisolated enum LibraryHistoryGrouping: String, CaseIterable, Hashable, Sendabl
                     return lhs.key < rhs.key
                 }
                 .map { Bucket(title: $0.key, workIDs: $0.value) }
+        }
+    }
+
+    /// Named because the header tally counts these two buckets by title, and a
+    /// renamed kicker must not silently zero it.
+    static let inProgressTitle = "In progress"
+    static let abandonedTitle = "Abandoned"
+
+    /// The header's second line. 1ah: "6 works · most recently read first";
+    /// 1ai: "5 works · 2 in progress · 1 abandoned".
+    ///
+    /// A state count of zero is dropped rather than printed — "0 abandoned" is a
+    /// fact about nothing. Fandom says only the count: its sections are ranked by
+    /// size, so "most recently read first" would describe the rows, not the page.
+    static func tallyLine(workCount: Int, grouping: LibraryHistoryGrouping, buckets: [Bucket]) -> String {
+        let works = "\(workCount) \(workCount == 1 ? "work" : "works")"
+        switch grouping {
+        case .time, .flat:
+            return works + " · most recently read first"
+        case .fandom:
+            return works
+        case .state:
+            var parts = [works]
+            let inProgress = buckets.first { $0.title == inProgressTitle }?.workIDs.count ?? 0
+            let abandoned = buckets.first { $0.title == abandonedTitle }?.workIDs.count ?? 0
+            if inProgress > 0 { parts.append("\(inProgress) in progress") }
+            if abandoned > 0 { parts.append("\(abandoned) abandoned") }
+            return parts.joined(separator: " · ")
         }
     }
 

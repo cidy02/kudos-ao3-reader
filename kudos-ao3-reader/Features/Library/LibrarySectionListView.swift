@@ -56,6 +56,8 @@ struct LibrarySectionListView: View {
     /// author needs a fetched newest-work answer while a saved work does not.
     @AppStorage("library.favorites.authorQuickFilter")
     private var favoriteAuthorQuickFilter: FavoriteAuthorQuickFilter = .all
+    /// 1bd's Tags rail: All, or only tags with unread works in the library.
+    @AppStorage("library.favorites.tagsUnreadOnly") private var tagsUnreadOnly = false
     /// `nil` until a batch settles, so "not asked yet" stays tellable from "asked,
     /// and some author never answered" — the rail draws a different chip for each.
     @State private var authorNewestWorkComplete: Bool?
@@ -87,7 +89,7 @@ struct LibrarySectionListView: View {
     ) {
         self.kind = kind
         self.originKicker = originKicker
-        _displayMode = AppStorage(wrappedValue: .detailed, "library.\(kind.rawValue).displayMode")
+        _displayMode = AppStorage(wrappedValue: kind.defaultDisplayMode, "library.\(kind.rawValue).displayMode")
         _isSelecting = State(initialValue: initialSelecting)
         _selection = State(initialValue: initialSelection)
     }
@@ -293,6 +295,11 @@ struct LibrarySectionListView: View {
             return "\(count) \(count == 1 ? "work" : "works") · none match the current filters"
         }
         let workCount = visibleItems.count
+        if showsGroupingStrip {
+            return LibraryHistoryGrouping.tallyLine(
+                workCount: workCount, grouping: historyGrouping, buckets: groupedItems
+            )
+        }
         return "\(workCount) \(workCount == 1 ? "work" : "works")"
     }
 
@@ -349,25 +356,6 @@ struct LibrarySectionListView: View {
         }
     }
 
-    /// Favorites' four scopes. Works keeps the existing work list — with its swipe
-    /// actions, select mode and filters — and the other three are aggregates over the
-    /// reading log (see `ReadingAffinities`).
-    nonisolated enum FavoriteScope: String, CaseIterable, Hashable, Sendable {
-        case works
-        case authors
-        case fandoms
-        case tags
-
-        var title: String {
-            switch self {
-            case .works: "Works"
-            case .authors: "Authors"
-            case .fandoms: "Fandoms"
-            case .tags: "Tags"
-            }
-        }
-    }
-
     /// 1ak's Authors rows carry a fetched newest-work line; 1bc and 1bd do not, so
     /// only the Authors scope takes the wrapper that does the fetching.
     @ViewBuilder
@@ -375,12 +363,7 @@ struct LibrarySectionListView: View {
         if favoriteScope == .authors {
             FavoriteAuthorRow(row: row, palette: scopePalette, readWorkIDs: readAO3WorkIDs)
         } else {
-            FavoriteAffinityRow(
-                row: row,
-                palette: scopePalette,
-                usesHashTile: favoriteScope == .tags,
-                usesCircularTile: favoriteScope != .fandoms
-            )
+            FavoriteAffinityRow(row: row, palette: scopePalette, scope: favoriteScope)
         }
     }
 
@@ -435,43 +418,26 @@ struct LibrarySectionListView: View {
                     palette: scopePalette
                 )
             }
+            if favoriteScope == .tags {
+                // 1bd's All / Unread works. Local only — "unread" is library
+                // state, and the spec's Tags page makes no AO3 call.
+                SubjectPillRail(
+                    options: [false, true], title: { $0 ? "Unread works" : "All" },
+                    selection: $tagsUnreadOnly, palette: scopePalette
+                )
+            }
             if showsFavoriteWorks {
-                favoriteChipRow
+                // 1aj's All / Rereads / Offline / WIP. The artboard also pins a
+                // dashed **Sort** chip; not rebuilt, because `filterChipRail`'s
+                // dashed chip already opens the panel that owns the sort order, and
+                // a second sort control would be two ways to set one value.
+                SubjectPillRail(
+                    options: FavoriteQuickFilter.allCases, title: \.title,
+                    selection: $favoriteQuickFilter, palette: scopePalette
+                )
             }
         }
         .padding(.horizontal, SubjectMetrics.gutter)
-    }
-
-    /// 1aj's All / Rereads / Offline / WIP rail.
-    ///
-    /// The artboard also pins a dashed **Sort** chip at the rail's trailing edge.
-    /// That is not rebuilt here: this screen already carries `filterChipRail`, whose
-    /// pinned dashed chip opens the panel that owns both the filters and the sort
-    /// order, and a second sort control would be two ways to set one value.
-    private var favoriteChipRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                ForEach(FavoriteQuickFilter.allCases) { option in
-                    favoriteChip(option)
-                }
-            }
-        }
-    }
-
-    private func favoriteChip(_ option: FavoriteQuickFilter) -> some View {
-        let isSelected = favoriteQuickFilter == option
-        return Button {
-            favoriteQuickFilter = option
-        } label: {
-            SubjectChip(
-                text: option.title,
-                style: .pill(isSelected: isSelected),
-                palette: scopePalette
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(option.title)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     /// Every work the reader may see, not just the starred ones: the spec's rows say
@@ -545,6 +511,9 @@ struct LibrarySectionListView: View {
     private func displayedAffinityRows(
         from rows: [ReadingAffinities.Row], ready: Bool
     ) -> [ReadingAffinities.Row] {
+        if favoriteScope == .tags, tagsUnreadOnly {
+            return rows.filter { $0.unreadInLibrary > 0 }
+        }
         guard favoriteScope == .authors,
               favoriteAuthorQuickFilter == .withNewWork,
               ready
@@ -602,7 +571,7 @@ struct LibrarySectionListView: View {
 
             if rows.isEmpty {
                 Section {
-                    affinityEmptyCard(hiddenByFilter: !allRows.isEmpty)
+                    FavoriteAffinityEmptyCard(scope: favoriteScope, hiddenByFilter: !allRows.isEmpty)
                         .pageBodyRow(top: 14, gutter: SubjectMetrics.gutter)
                 }
             } else {
@@ -629,44 +598,9 @@ struct LibrarySectionListView: View {
         SubjectHeaderBlock(
             kicker: originKicker,
             title: kind.title,
-            subtitle: "\(count) \(count == 1 ? singularScopeNoun : favoriteScope.title.lowercased())",
+            subtitle: "\(count) \(count == 1 ? favoriteScope.singularNoun : favoriteScope.title.lowercased())",
             palette: scopePalette
         )
-    }
-
-    private var singularScopeNoun: String {
-        switch favoriteScope {
-        case .works: "work"
-        case .authors: "author"
-        case .fandoms: "fandom"
-        case .tags: "tag"
-        }
-    }
-
-    /// `hiddenByFilter` distinguishes "you have read nothing" from "the active chip
-    /// matched none of the rows you do have". Without it an active "With new work"
-    /// told a reader with a full history that nothing had been read yet — the empty
-    /// state described a different list than the one that produced it.
-    private func affinityEmptyCard(hiddenByFilter: Bool) -> some View {
-        let scopeNoun = favoriteScope.title.lowercased()
-        let title: String = hiddenByFilter ? "No new work" : "Nothing read yet"
-        let detail: String = hiddenByFilter
-            ? "None of these \(scopeNoun) has posted something you have not already read. "
-                + "Tap All to see them again."
-            : "These are the \(scopeNoun) behind the works you have "
-                + "actually read, ranked. They fill in as you read — there is nothing to star."
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-            Text(detail)
-                .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .subjectPanel()
     }
 
     /// Only History gets the grouping strip. The other six sections are already one
@@ -696,6 +630,19 @@ struct LibrarySectionListView: View {
             works: visibleItems,
             isAbandoned: { ReadingLogService.isAbandoned(work: $0) }
         )
+    }
+
+    /// 1ai's Abandoned section, and only there: under Time the same work sits
+    /// among the rest, and greying it — or offering an undo — would announce a
+    /// state that grouping does not show.
+    private func isAbandonedRow(_ work: SavedWork) -> Bool {
+        showsGroupingStrip && historyGrouping == .state && ReadingLogService.isAbandoned(work: work)
+    }
+
+    /// The fandom's hue, or none for an Abandoned row — 1ai drops those "to grey
+    /// rather than a fandom accent", and `nil` is the plain card surface.
+    private func rowTintHue(_ work: SavedWork) -> Double? {
+        isAbandonedRow(work) ? nil : CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
     }
 
     /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
@@ -752,9 +699,7 @@ struct LibrarySectionListView: View {
                             if let work = byID[id] {
                                 row(work, summary: summaries[id]).cardRow(
                                     isSelected: isSelecting && selection.contains(work.id),
-                                    tintHue: CoverArt.workHue(
-                                        fandoms: work.workFandoms, title: work.title
-                                    )
+                                    tintHue: rowTintHue(work)
                                 )
                             }
                         }
@@ -788,25 +733,46 @@ struct LibrarySectionListView: View {
 
     /// Apple Books-style two-up grid — the same cover cards every carousel already
     /// uses, wrapping down the page instead of scrolling horizontally.
+    ///
+    /// Carries the same strips the list does — Favorites' scope control and
+    /// History's Time / State / Fandom / Flat — and draws History's buckets as one
+    /// grid each. Without them, choosing Compact stranded the reader: Favorites
+    /// could not leave the Works scope, and History's grouping had nowhere to show.
     private var compactGrid: some View {
-        ScrollView {
+        let items = visibleItems
+        return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 subjectHeader.padding(.top, 20)
                 filterChipRail
-                SectionRuleHeader(title: kind.title, count: visibleItems.count)
-                if visibleItems.isEmpty, filters.hasActiveFilters {
+                if showsFavoriteScopes {
+                    favoriteScopeStrip(authorsReady: false)
+                }
+                if showsGroupingStrip {
+                    groupingStrip
+                }
+                if items.isEmpty, filters.hasActiveFilters {
                     filterCollisionCard.padding(.horizontal, 16)
                 } else {
-                    workGrid
+                    ForEach(groupedItems) { group in
+                        SectionRuleHeader(title: group.title, count: group.workIDs.count)
+                        workGrid(Self.works(in: group, from: items))
+                    }
                 }
             }
         }
         .subjectScreenWash(palette: scopePalette)
     }
 
-    private var workGrid: some View {
+    /// A bucket's works in list order. Buckets keep the incoming order, so
+    /// filtering `items` by membership reproduces it without a re-sort.
+    private static func works(in group: LibraryHistoryGrouping.Bucket, from items: [SavedWork]) -> [SavedWork] {
+        let ids = Set(group.workIDs)
+        return items.filter { ids.contains($0.id) }
+    }
+
+    private func workGrid(_ works: [SavedWork]) -> some View {
         LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
-            ForEach(visibleItems) { work in
+            ForEach(works) { work in
                 if isSelecting {
                     SensitiveWorkCoverCard(
                         work: work,
@@ -848,6 +814,7 @@ struct LibrarySectionListView: View {
                     presentation: rowPresentation,
                     showsFavoriteStar: showsFavoriteWorks
                 )
+                .environment(\.ledgerKickerMuted, isAbandonedRow(work))
                 factsStrip(work, summary: summary)
             }
         } else {
@@ -881,7 +848,11 @@ struct LibrarySectionListView: View {
                 presentation: rowPresentation,
                 showsFavoriteStar: showsFavoriteWorks
             )
+            .environment(\.ledgerKickerMuted, isAbandonedRow(work))
             factsStrip(work, summary: summary)
+            if isAbandonedRow(work) {
+                MoveBackToInProgressButton(work: work)
+            }
         }
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
@@ -894,18 +865,35 @@ struct LibrarySectionListView: View {
                 }
                 .tint(.blue)
 
-                Button {
-                    work.isFavorite.toggle()
-                    work.markModified()
-                    try? context.save()
-                } label: {
-                    let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
-                    Label(labels.title, systemImage: labels.systemImage)
+                // Favorites carries Unstar on the trailing edge instead (1aj), and
+                // one row offering the same toggle on both edges is two answers to
+                // one question.
+                if !showsFavoriteWorks {
+                    Button {
+                        work.isFavorite.toggle()
+                        work.markModified()
+                        try? context.save()
+                    } label: {
+                        let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
+                        Label(labels.title, systemImage: labels.systemImage)
+                    }
+                    .tint(.yellow)
                 }
-                .tint(.yellow)
             }
             .swipeActions(edge: .trailing) {
-                if work.isQueueOnlyWork {
+                if showsFavoriteWorks {
+                    // 1aj draws Unstar where every other section has Delete: on the
+                    // page that is *about* the star, taking it off is the removal,
+                    // and soft-deleting the whole work from here was out of scale.
+                    Button {
+                        work.isFavorite = false
+                        work.markModified()
+                        try? context.save()
+                    } label: {
+                        Label("Unstar", systemImage: "star.slash")
+                    }
+                    .tint(.subjectFavoriteGold)
+                } else if work.isQueueOnlyWork {
                     // Queue-only works keep a preserved EPUB and must never be hard-deleted
                     // by a generic Library swipe. Removing the queue membership is
                     // non-destructive (the record and EPUB survive); explicit deletion of a

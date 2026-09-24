@@ -81,6 +81,15 @@ struct LibrarySectionKindTests {
         )
     }
 
+    /// 1ah/1ai/1aj draw ledger rows; the other five sections keep the card they
+    /// had. This is only the default — the stored choice is per section.
+    @Test func historyAndFavoritesDefaultToLedgerRows() {
+        for kind in LibrarySectionKind.allCases {
+            let expected: WorkListDisplayMode = kind == .history || kind == .favorites ? .ledger : .detailed
+            #expect(kind.defaultDisplayMode == expected, "\(kind)")
+        }
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,

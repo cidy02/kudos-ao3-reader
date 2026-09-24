@@ -10,22 +10,20 @@ import SwiftUI
 /// every queue, then one reorderable row per queue with its own tally and
 /// storage line.
 ///
+/// **Built since this note was first written** (corrected 2026-09-24): the
+/// "Search queues, tags and works" field (`queueSearchField`, filtering through
+/// `matchesSearch` over names, tags and member works), the **Pinned** section
+/// (`pinnedQueues`, on `ReadingQueue.isPinned`), and the tag filter pills over
+/// `ReadingQueue.tags`, with an Untagged option.
+///
 /// **What 1i draws that this does not build, and why:**
-/// - The "Search queues, tags and works" search field. There is no
-///   cross-queue/tag/work search anywhere in the app to back it — building the
-///   field without the search behind it would be decoration, not a control.
-/// - The tag filter pills are **built now**: `ReadingQueue.tags` exists, so the
-///   rail filters on the real relationship. Their "Edit tags" chip is not — tags
-///   are edited per queue in Queue Details (1h), not from a rail that filters by
-///   them, and a second editor here would be two ways to write one list.
-/// - The "Pinned" section. There is no per-queue pin/favorite flag — Saved for
-///   Later is the only queue this app treats specially, and it already gets
-///   its own un-reorderable row at the top of "All Queues" here, which is what
-///   the mock's "Pinned" section is standing in for.
-/// - The "Name it, colour it, tag it" copy on the New Queue row. Creating a
-///   queue only takes a name — colour is derived from that name
-///   (`CoverArt.hue`) and there is no tag step — so this keeps the existing,
-///   accurate "Tap to create" line instead.
+/// - The tag rail's "Edit tags" chip — tags are edited per queue in Queue
+///   Details (1h), not from a rail that filters by them, and a second editor here
+///   would be two ways to write one list.
+/// - The "Name it, colour it, tag it" copy on the New Queue row. The sheet now
+///   takes a name and a stored colour (`NewReadingQueueSheet`'s swatch row) but
+///   has no tag step, so the existing "Tap to create" line stays rather than
+///   promise one.
 /// - The mini 2×2 "tab group" preview tile `ReadingQueueCard` draws on Home's
 ///   carousel. Reusing it here would mean either building a second copy of its
 ///   (currently `private`, single-type-scoped) tile logic or reaching across a

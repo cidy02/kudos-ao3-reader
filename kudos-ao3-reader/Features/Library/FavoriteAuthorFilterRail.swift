@@ -1,5 +1,37 @@
 import SwiftUI
 
+/// A single-select rail of pill chips, the selected one filled — 1aj's
+/// All / Rereads / Offline / WIP and 1bd's All / Unread works. The Authors rail
+/// below stays its own view because its chips can be unavailable.
+struct SubjectPillRail<Option: Hashable>: View {
+    let options: [Option]
+    let title: (Option) -> String
+    @Binding var selection: Option
+    let palette: SubjectPalette
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                ForEach(options, id: \.self) { option in
+                    chip(option)
+                }
+            }
+        }
+    }
+
+    private func chip(_ option: Option) -> some View {
+        let isSelected = selection == option
+        return Button {
+            selection = option
+        } label: {
+            SubjectChip(text: title(option), style: .pill(isSelected: isSelected), palette: palette)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title(option))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
 /// 1ak's Authors-only quick filter. Its parent keeps the cache/prefetch policy;
 /// this view only renders the current honest state of that policy.
 struct FavoriteAuthorFilterRail: View {

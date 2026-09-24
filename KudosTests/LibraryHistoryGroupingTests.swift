@@ -99,6 +99,34 @@ struct LibraryHistoryGroupingTests {
         #expect(Set(buckets.flatMap(\.workIDs)).count == 2)
     }
 
+    // MARK: Header tally
+
+    @Test func stateTallyCountsInProgressAndAbandonedAndDropsZeros() {
+        let stalled = work("Stalled", lastRead: now, started: true)
+        let active1 = work("Active1", lastRead: now, started: true)
+        let active2 = work("Active2", lastRead: now, started: true)
+        let done = work("Done", lastRead: now, finished: true)
+        let buckets = LibraryHistoryGrouping.groups(
+            .state, works: [stalled, active1, active2, done], now: now, calendar: calendar,
+            isAbandoned: { $0.title == "Stalled" }
+        )
+        #expect(LibraryHistoryGrouping.tallyLine(workCount: 4, grouping: .state, buckets: buckets)
+            == "4 works · 2 in progress · 1 abandoned")
+
+        let noneAbandoned = LibraryHistoryGrouping.groups(
+            .state, works: [active1, done], now: now, calendar: calendar, isAbandoned: { _ in false }
+        )
+        #expect(LibraryHistoryGrouping.tallyLine(workCount: 2, grouping: .state, buckets: noneAbandoned)
+            == "2 works · 1 in progress")
+    }
+
+    @Test func timeTallySaysTheOrderAndFandomSaysOnlyTheCount() {
+        #expect(LibraryHistoryGrouping.tallyLine(workCount: 1, grouping: .time, buckets: [])
+            == "1 work · most recently read first")
+        #expect(LibraryHistoryGrouping.tallyLine(workCount: 6, grouping: .fandom, buckets: [])
+            == "6 works")
+    }
+
     @Test func finishedWinsOverEverythingIncludingAFreedFile() {
         let finishedAndFreed = work("Done", lastRead: now, finished: true, hasEPUB: false)
         #expect(titles(.state, [finishedAndFreed]) == ["Finished"])

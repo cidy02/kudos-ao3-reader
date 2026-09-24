@@ -1,4 +1,31 @@
+import SwiftData
 import SwiftUI
+
+/// 1ai: an Abandoned row's "one-tap way back to In progress". Writes the stored
+/// override (`WorkLifecycle.keepInProgress`) so the threshold cannot re-abandon it.
+struct MoveBackToInProgressButton: View {
+    let work: SavedWork
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        Button {
+            WorkLifecycle.keepInProgress(work, in: context)
+        } label: {
+            Label("Move back to In progress", systemImage: "arrow.uturn.backward")
+                .font(.system(size: 12.5, weight: .medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.primary.opacity(0.08))
+                        .strokeBorder(Color.primary.opacity(0.16), lineWidth: 0.5)
+                )
+        }
+        // Borderless so the row's own navigation link does not take the tap.
+        .buttonStyle(.borderless)
+        .foregroundStyle(.primary)
+    }
+}
 
 /// The three facts spec **1ah** puts under a history row: how long this work has
 /// been read for, how many times it has been finished, and whether AO3 has posted

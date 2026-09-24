@@ -177,9 +177,10 @@ struct ReadingQueueBrowserView: View {
         return "\(finished) finished · \(inProgress) in progress · \(unread) unread · \(offline)"
     }
 
-    /// The active-filters rail under the header (spec 1h's own dashed "+ Tag"
-    /// chip is a queue-tag affordance this app has no data for — see the
-    /// `ReadingQueueSettingsView` file note — so this reuses the Library's own
+    /// The active-filters rail under the header. Spec 1h's own dashed "+ Tag"
+    /// chip is not drawn: queue tags exist (`ReadingQueue.tags`), but they are
+    /// edited in Queue details (`QueueTagSheet`), and a second tag editor here
+    /// would be two ways to write one list. So this reuses the Library's own
     /// filter rail/chip vocabulary instead of inventing a second, parallel
     /// quick-filter scheme next to the `LibraryFilters` this screen already has.
     private var filterChipRail: some View {

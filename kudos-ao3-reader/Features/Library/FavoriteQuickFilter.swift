@@ -1,5 +1,36 @@
 import Foundation
 
+extension LibrarySectionListView {
+    /// Favorites' four scopes. Works keeps the existing work list — with its swipe
+    /// actions, select mode and filters — and the other three are aggregates over the
+    /// reading log (see `ReadingAffinities`).
+    nonisolated enum FavoriteScope: String, CaseIterable, Hashable, Sendable {
+        case works
+        case authors
+        case fandoms
+        case tags
+
+        var title: String {
+            switch self {
+            case .works: "Works"
+            case .authors: "Authors"
+            case .fandoms: "Fandoms"
+            case .tags: "Tags"
+            }
+        }
+
+        /// The header's count noun when there is one — "1 tag", not "1 tags".
+        var singularNoun: String {
+            switch self {
+            case .works: "work"
+            case .authors: "author"
+            case .fandoms: "fandom"
+            case .tags: "tag"
+            }
+        }
+    }
+}
+
 /// Artboard **1aj**'s quick-filter rail over Favorites' Works scope: All, Rereads,
 /// Offline, WIP, single-select with All as the drawn default.
 ///

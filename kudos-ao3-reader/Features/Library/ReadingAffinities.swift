@@ -40,6 +40,9 @@ enum ReadingAffinities {
         var downloadedInLibrary: Int
         /// Of those, how many sit in the permanent Saved for Later queue.
         var savedForLater: Int
+        /// Starred works carrying this name, read or not — 1bc's "6 favorited".
+        /// Counted on every scope because it is the same pass; only Fandoms draws it.
+        var favorited: Int = 0
 
         var id: String { name }
     }
@@ -157,6 +160,7 @@ enum ReadingAffinities {
                     // `SavedWork.isOnSavedForLaterShelf`.
                     if work.isOnSavedForLaterShelf { row.savedForLater += 1 }
                 }
+                if work.isFavorite { row.favorited += 1 }
                 byName[name] = row
             }
         }

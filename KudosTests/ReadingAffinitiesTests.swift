@@ -73,6 +73,27 @@ struct ReadingAffinitiesTests {
         #expect(rows.first?.savedForLater == 1)
     }
 
+    /// 1bc's "6 favorited": starred works carrying the name, read or not — a
+    /// starred work still on the shelf is still a favourite in that fandom.
+    @Test func favoritedCountsStarredWorksCarryingTheName() {
+        let readStarred = work("A", fandoms: ["Good Omens"], started: true)
+        readStarred.isFavorite = true
+        let unreadStarred = work("B", fandoms: ["Good Omens"])
+        unreadStarred.isFavorite = true
+        let readPlain = work("C", fandoms: ["Good Omens"], started: true)
+        let otherFandom = work("D", fandoms: ["Star Wars"], started: true)
+        otherFandom.isFavorite = true
+
+        let rows = ReadingAffinities.fandoms(
+            works: [readStarred, unreadStarred, readPlain, otherFandom], summaries: [:]
+        )
+        let byName = Dictionary(uniqueKeysWithValues: rows.map { ($0.name, $0) })
+
+        #expect(byName["Good Omens"]?.favorited == 2)
+        #expect(byName["Good Omens"]?.worksRead == 2)
+        #expect(byName["Star Wars"]?.favorited == 1)
+    }
+
     // MARK: Ordering
 
     @Test func mostReadAndMostTimeAreDifferentAnswers() {
