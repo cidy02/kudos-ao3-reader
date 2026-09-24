@@ -11,6 +11,9 @@ struct ReadingQueueBrowserView: View {
     /// Which queue to land on. `nil` falls back to the last-selected queue, or the
     /// first queue (Saved for Later) if there's no prior selection.
     var initialQueueID: UUID?
+    /// The tab this was opened from, for the kicker: Home's stack passes "Home",
+    /// the way `LibrarySectionRoute` carries its origin.
+    var originKicker = "Library"
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -43,7 +46,12 @@ struct ReadingQueueBrowserView: View {
     @State private var showingQueueDetails = false
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
-    /// Cover grid matches the prior browser default; switch to detailed via the menu.
+    /// 1h's All · Unread · Offline · WIP, applied before `filters`.
+    @State private var quickFilter: QueueQuickFilter = .all
+    @State private var showingQueueTags = false
+    /// Cover grid stays the default. 1h's In line switch sets it per queue;
+    /// `ReadingQueue` has no field for it, so it lives in UserDefaults under
+    /// the queue's id (`displayModeKey`), loaded when the selected queue changes.
     @State private var displayMode: WorkListDisplayMode = .compact
 
     /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
@@ -93,7 +101,13 @@ struct ReadingQueueBrowserView: View {
     }
 
     private var visibleWorks: [SavedWork] {
-        filters.hasActiveFilters ? filters.apply(to: works) : works
+        let quick = quickFilter.apply(to: works, preservedIDs: Set(preservedWorks.map(\.id)))
+        return filters.hasActiveFilters ? filters.apply(to: quick) : quick
+    }
+
+    /// Reorder needs the whole queue in order, so any narrowing blocks it.
+    private var isNarrowed: Bool {
+        filters.hasActiveFilters || quickFilter != .all
     }
 
     private var isReordering: Bool {
@@ -161,28 +175,9 @@ struct ReadingQueueBrowserView: View {
         return "\(base) · \(offline) · \(queueByteCountString(preservedByteCount))"
     }
 
-    /// The finer breakdown under the header — spec 1h: "2 finished · 1 in
-    /// progress · 9 unread · 9 of 12 kept offline". `SavedWork.readingState` is
-    /// the app's one canonical reading-lifecycle partition (see its own doc
-    /// comment), so this reads it rather than re-deriving finished/unread from
-    /// `isFinished`/`hasEPUB` a second time.
-    private var queueMetaLine: String? {
-        guard !works.isEmpty else { return nil }
-        let finished = works.filter { $0.readingState == .finished }.count
-        let inProgress = works.filter { $0.readingState == .inProgress }.count
-        let unread = works.filter { $0.readingState == .unread }.count
-        let offline = preservedWorks.count == works.count
-            ? "all \(works.count) kept offline"
-            : "\(preservedWorks.count) of \(works.count) kept offline"
-        return "\(finished) finished · \(inProgress) in progress · \(unread) unread · \(offline)"
-    }
-
-    /// The active-filters rail under the header. Spec 1h's own dashed "+ Tag"
-    /// chip is not drawn: queue tags exist (`ReadingQueue.tags`), but they are
-    /// edited in Queue details (`QueueTagSheet`), and a second tag editor here
-    /// would be two ways to write one list. So this reuses the Library's own
-    /// filter rail/chip vocabulary instead of inventing a second, parallel
-    /// quick-filter scheme next to the `LibraryFilters` this screen already has.
+    /// The Library's active-filter labels, drawn only while `LibraryFilters` is
+    /// narrowing the queue — 1h's own quick filters (`QueueQuickFilter`) are
+    /// the everyday rail, and the toolbar's Filter button opens the panel.
     private var filterChipRail: some View {
         SubjectFilterRail(
             onOpenFilters: { showingFilters = true },
@@ -201,7 +196,7 @@ struct ReadingQueueBrowserView: View {
 
     private var subjectHeader: some View {
         SubjectHeaderBlock(
-            kicker: "Library › Queues",
+            kicker: ReadingQueueFacts.kicker(origin: originKicker),
             title: selectedQueue?.displayName ?? "Reading Queues",
             subtitle: queueSubtitle,
             palette: subjectPalette
@@ -216,6 +211,12 @@ struct ReadingQueueBrowserView: View {
     private var upNextWork: SavedWork? { visibleWorks.first }
 
     private var inLineWorks: [SavedWork] { Array(visibleWorks.dropFirst()) }
+
+    /// 1h's numbered In line rows: the work's place in the whole queue, so a
+    /// filter narrows the list without renumbering it.
+    private func queuePosition(of work: SavedWork) -> Int? {
+        works.firstIndex { $0.id == work.id }.map { $0 + 1 }
+    }
 
     private func ledgerRow(_ work: SavedWork) -> some View {
         SensitiveWorkRow(
@@ -243,6 +244,22 @@ struct ReadingQueueBrowserView: View {
         )
     }
 
+    /// 1bg: "The title bar takes the count" while selecting. Otherwise empty on
+    /// iOS, where `.subjectScreenWash` hides the title and `SubjectHeaderBlock`
+    /// names the page; macOS has no wash and needs a real title for its window.
+    private var screenTitle: String {
+        if isSelecting { return "\(selection.count) selected" }
+        #if os(macOS)
+        return horizontalSizeClass == .regular ? "Reading Queues" : (selectedQueue?.displayName ?? "Reading Queues")
+        #else
+        return ""
+        #endif
+    }
+
+    private static func displayModeKey(_ queueID: UUID) -> String {
+        "library.readingQueueBrowser.displayMode.\(queueID.uuidString)"
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -254,23 +271,27 @@ struct ReadingQueueBrowserView: View {
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
-        // `.subjectScreenWash` (applied inside `detailedList`/`compactGrid`) already
-        // empties the navigation title and its background on iOS — the page states
-        // its own name via `SubjectHeaderBlock` instead. macOS has no such wash
-        // (`hidesNavigationBarChrome` is a no-op there) and still needs a real title
-        // for its sidebar-detail window chrome.
-        #if os(macOS)
-            .navigationTitle(
-                horizontalSizeClass == .regular
-                    ? "Reading Queues"
-                    : (selectedQueue?.displayName ?? "Reading Queues")
-            )
-        #endif
+        .navigationTitle(screenTitle)
             .onAppear(perform: resolveInitialSelection)
+            // Per-queue layout (1h): load the queue's own choice when the queue
+            // changes, store it when the reader changes it. No stored choice
+            // keeps the default grid.
+            .onChange(of: selectedQueue?.id, initial: true) { _, id in
+                guard let id else { return }
+                let raw = UserDefaults.standard.string(forKey: Self.displayModeKey(id)) ?? ""
+                displayMode = WorkListDisplayMode(rawValue: raw) ?? .compact
+            }
+            .onChange(of: displayMode) { _, mode in
+                guard let id = selectedQueue?.id else { return }
+                UserDefaults.standard.set(mode.rawValue, forKey: Self.displayModeKey(id))
+            }
             .sheet(isPresented: $showingNewQueue) { newQueueSheet }
+            .sheet(isPresented: $showingQueueTags) {
+                if let selectedQueue { QueueTagSheet(queue: selectedQueue) }
+            }
             .navigationDestination(isPresented: $showingQueueDetails) {
                 if let selectedQueue {
-                    ReadingQueueSettingsView(queue: selectedQueue)
+                    ReadingQueueSettingsView(queue: selectedQueue, originKicker: originKicker)
                 }
             }
             .inspector(isPresented: $showingFilters) {
@@ -404,7 +425,10 @@ extension ReadingQueueBrowserView {
                     } description: {
                         Text("No works in this queue match the current filters.")
                     } actions: {
-                        Button("Clear Filters") { filters = LibraryFilters() }
+                        Button("Clear Filters") {
+                            filters = LibraryFilters()
+                            quickFilter = .all
+                        }
                     }
                 }
             }
@@ -448,10 +472,11 @@ extension ReadingQueueBrowserView {
                 }
                 if !inLineWorks.isEmpty {
                     Section {
-                        SectionRuleHeader(title: "In Line", count: inLineWorks.count)
+                        inLineHeader
                             .pageBodyRow(top: 18, gutter: 0)
                         ForEach(inLineWorks) { work in
                             ledgerRow(work)
+                                .environment(\.ledgerPositionNumber, queuePosition(of: work))
                         }
                     }
                 }
@@ -464,11 +489,9 @@ extension ReadingQueueBrowserView {
         #endif
     }
 
-    /// The header block, its finer tally line and the filter rail — the same
-    /// three rows in both `detailedList` and `compactGrid`, each its own copy
-    /// rather than a shared container, matching `LibrarySectionListView`'s own
-    /// `subjectHeaderSection`/`compactGrid` split (a `List` and a `ScrollView`
-    /// can't share one parent view without one of them losing what it needs —
+    /// The header block and `headerDetails` as `detailedList`'s first rows;
+    /// `compactGrid` stacks the same two views in its `ScrollView` (a `List` and
+    /// a `ScrollView` can't share one parent without one losing what it needs —
     /// swipe actions here, a `LazyVGrid` there).
     private var subjectHeaderSection: some View {
         Section {
@@ -482,49 +505,42 @@ extension ReadingQueueBrowserView {
                 selectionStatusRow
                     .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
             } else {
-                if let queueMetaLine {
-                    Text(queueMetaLine)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .pageBodyRow(top: 2, gutter: SubjectMetrics.gutter)
-                }
-                filterChipRail
+                headerDetails
                     .pageBodyRow(top: 8, gutter: 0)
             }
         }
     }
 
-    /// Spec 1bg: the queue's own name, a hairline, then "N / total" in the
-    /// same tabular-monospace figure the rest of this file's counts use.
-    private var selectionStatusRow: some View {
-        HStack(spacing: 8) {
-            Text((selectedQueue?.displayName ?? "").uppercased())
-                .font(.system(size: 11, weight: .bold))
-                .tracking(11 * 0.13)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Rectangle()
-                .fill(Color.primary.opacity(0.14))
-                .frame(height: 0.5)
-            Text("\(selection.count) / \(works.count)")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
+    /// One `QueueHeaderDetails` shared by `detailedList` and `compactGrid`.
+    private var headerDetails: some View {
+        QueueHeaderDetails(
+            works: works,
+            preservedIDs: Set(preservedWorks.map(\.id)),
+            tags: selectedQueue?.tags ?? [],
+            palette: subjectPalette,
+            quickFilter: $quickFilter,
+            onAddTag: { showingQueueTags = true }
+        ) {
+            if filters.hasActiveFilters { filterChipRail }
         }
-        .combinedAccessibilityRow(
-            "\(selectedQueue?.displayName ?? "Queue"), \(selection.count) of \(works.count) selected"
+    }
+
+    private var inLineHeader: some View {
+        QueueInLineHeader(count: inLineWorks.count, mode: $displayMode)
+    }
+
+    private var selectionStatusRow: some View {
+        QueueSelectionStatusRow(
+            queueName: selectedQueue?.displayName ?? "Queue",
+            selectedCount: selection.count,
+            total: works.count
         )
     }
 
-    // Kept as ONE grid rather than splitting an "Up next" row out above it the
-    // way `detailedList` does: spec 1h's grid variant draws that row in the
-    // full-width ledger shape, and that shape (`WorkLedgerRow`) only paints its
-    // own card when told to draw standalone — `WorkRow(.ledger)` always says no,
-    // because every other caller sits inside a `List` row whose own `.cardRow`
-    // already paints it (see `WorkRow.ledgerRow`'s doc comment). Building a
-    // second, parallel ledger-row assembly just for this one standalone row
-    // wasn't worth it for what is otherwise a purely visual distinction — the
-    // list variant already gives Up Next/In Line their real split, where
-    // `List`'s own row background makes it free.
+    /// 1h's grid: "Up next stays a ringed row either way", so the front of the
+    /// queue is a standalone ledger row on `WorkLedgerCardBackground` (the
+    /// card `.cardRow` paints inside a `List`) and In line is the cover grid.
+    /// Reordering drops the split: a drag has to reach every work, Up next too.
     private var compactGrid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -533,26 +549,46 @@ extension ReadingQueueBrowserView {
                     selectionStatusRow
                         .padding(.horizontal, SubjectMetrics.gutter)
                 } else {
-                    if let queueMetaLine {
-                        Text(queueMetaLine)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, SubjectMetrics.headerGutter)
-                    }
-                    filterChipRail
+                    headerDetails
                 }
-                SectionRuleHeader(title: "Works", count: visibleWorks.count)
-                LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
-                    ForEach(compactDisplayedWorks) { work in
-                        compactCard(work)
+                if isReordering {
+                    SectionRuleHeader(title: "Works", count: works.count)
+                    coverGrid(compactDisplayedWorks)
+                } else {
+                    if let upNextWork {
+                        SectionRuleHeader(title: "Up Next")
+                        SensitiveWorkRow(
+                            work: upNextWork,
+                            openMode: .reader,
+                            isSelecting: isSelecting,
+                            isSelected: selection.contains(upNextWork.id),
+                            onToggleSelection: { toggleSelection(upNextWork) },
+                            presentation: .ledger,
+                            usesInlineNavigation: true,
+                            contentInsets: EdgeInsets(top: 15, leading: 16, bottom: 15, trailing: 16)
+                        )
+                        .background(WorkLedgerCardBackground(work: upNextWork))
+                        .padding(.horizontal, 16)
+                    }
+                    if !inLineWorks.isEmpty {
+                        inLineHeader
+                        coverGrid(inLineWorks)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
             }
             .padding(.bottom, 16)
         }
         .subjectScreenWash(palette: subjectPalette)
+    }
+
+    private func coverGrid(_ gridWorks: [SavedWork]) -> some View {
+        LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
+            ForEach(gridWorks) { work in
+                compactCard(work)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
     }
 
     @ViewBuilder
@@ -619,25 +655,9 @@ extension ReadingQueueBrowserView {
                     SelectAllButton(allSelected: allSelected, action: toggleSelectAll)
                 }
                 #if os(iOS)
-                ToolbarItemGroup(placement: .bottomBar) {
-                    ScopedRemovalBulkActionBar(
-                        selectedWorks: selectedWorks,
-                        removeLabel: "Remove from Queue",
-                        scopeName: "queue",
-                        onRemove: bulkRemove,
-                        onDone: exitSelectMode
-                    )
-                }
+                ToolbarItemGroup(placement: .bottomBar) { bulkActionBar }
                 #else
-                ToolbarItemGroup(placement: .primaryAction) {
-                    ScopedRemovalBulkActionBar(
-                        selectedWorks: selectedWorks,
-                        removeLabel: "Remove from Queue",
-                        scopeName: "queue",
-                        onRemove: bulkRemove,
-                        onDone: exitSelectMode
-                    )
-                }
+                ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
                 #endif
             } else {
                 ActionToolbar(items: [
@@ -653,8 +673,8 @@ extension ReadingQueueBrowserView {
                         } label: {
                             Label("Reorder", systemImage: "arrow.up.arrow.down")
                         }
-                        .disabled(filters.hasActiveFilters)
-                        .help(filters.hasActiveFilters
+                        .disabled(isNarrowed)
+                        .help(isNarrowed
                             ? "Clear filters to reorder"
                             : "Reorder works in this queue")
                         Button {
@@ -664,51 +684,15 @@ extension ReadingQueueBrowserView {
                         }
                         DisplayModeMenuPicker(mode: $displayMode)
                         Divider()
-                        Button {
-                            showingQueueDetails = true
-                        } label: {
-                            Label("Queue Details", systemImage: "info.circle")
-                        }
-                        if let queue = selectedQueue, queue.kind == .custom {
-                            Button {
-                                renameText = queue.name
-                                showingRename = true
-                            } label: {
-                                Label("Rename", systemImage: "pencil")
-                            }
-                            Button(role: .destructive) {
-                                confirmDelete = true
-                            } label: {
-                                Label("Delete Queue", systemImage: "trash")
-                            }
-                        }
+                        queueMenuItems
                     })
                 ])
             }
-        } else if let queue = selectedQueue {
+        } else if selectedQueue != nil {
             // Empty queue: still allow seeing its details, and (custom only)
             // renaming/deleting it, from the toolbar.
             ToolbarItem(placement: .primaryAction) {
-                WorkListMoreMenu {
-                    Button {
-                        showingQueueDetails = true
-                    } label: {
-                        Label("Queue Details", systemImage: "info.circle")
-                    }
-                    if queue.kind == .custom {
-                        Button {
-                            renameText = queue.name
-                            showingRename = true
-                        } label: {
-                            Label("Rename", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) {
-                            confirmDelete = true
-                        } label: {
-                            Label("Delete Queue", systemImage: "trash")
-                        }
-                    }
-                }
+                WorkListMoreMenu { queueMenuItems }
             }
         }
 
@@ -722,6 +706,41 @@ extension ReadingQueueBrowserView {
             }
         }
         #endif
+    }
+
+    private var bulkActionBar: some View {
+        ScopedRemovalBulkActionBar(
+            selectedWorks: selectedWorks,
+            removeLabel: "Remove from Queue",
+            scopeName: "queue",
+            onRemove: bulkRemove,
+            onDone: exitSelectMode,
+            showsQueueActions: true
+        )
+    }
+
+    /// Queue Details, and Rename / Delete for a custom queue — the same items
+    /// whether or not the queue has works.
+    @ViewBuilder
+    private var queueMenuItems: some View {
+        Button {
+            showingQueueDetails = true
+        } label: {
+            Label("Queue Details", systemImage: "info.circle")
+        }
+        if let queue = selectedQueue, queue.kind == .custom {
+            Button {
+                renameText = queue.name
+                showingRename = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                confirmDelete = true
+            } label: {
+                Label("Delete Queue", systemImage: "trash")
+            }
+        }
     }
 
     // MARK: - Actions
@@ -745,6 +764,7 @@ extension ReadingQueueBrowserView {
         exitSelectMode()
         setReordering(false)
         filters = LibraryFilters()
+        quickFilter = .all
         selectedQueueID = queue.id
         lastSelectedIDRaw = queue.id.uuidString
         showingSwitcher = false
@@ -762,6 +782,7 @@ extension ReadingQueueBrowserView {
             hue: hue,
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
+            tagNames: options.tagNames,
             in: context
         )
         select(queue)

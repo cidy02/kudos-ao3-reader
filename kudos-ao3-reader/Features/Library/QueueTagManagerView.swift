@@ -175,18 +175,7 @@ struct QueueTagManagerView: View {
     /// Looked up by name before being created: `Tag.name` is
     /// `@Attribute(.unique)`, so inserting a second one by the same name throws.
     private func addTypedTag() {
-        let name = trimmedNewTag
-        guard !name.isEmpty else { return }
-        let tag = allTags.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
-            ?? {
-                let created = Tag(name: name)
-                context.insert(created)
-                return created
-            }()
-        if !queue.tags.contains(where: { $0.persistentModelID == tag.persistentModelID }) {
-            queue.tags.append(tag)
-            queue.markModified()
-        }
+        guard queue.addTag(named: trimmedNewTag, among: allTags, in: context) != nil else { return }
         context.saveBestEffort(reason: "Adding queue tag failed")
         newTagName = ""
     }

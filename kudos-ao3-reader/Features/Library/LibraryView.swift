@@ -736,18 +736,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             usesInlineNavigation: true,
             contentInsets: EdgeInsets(top: 15, leading: 16, bottom: 15, trailing: 16)
         )
-        .background(ledgerRowBackground(for: work))
-    }
-
-    private func ledgerRowBackground(for work: SavedWork) -> some View {
-        let palette = themeManager.appTheme.subjectPalette(
-            hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        )
-        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
-        return rowShape
-            .fill(themeManager.appTheme.cardSurface)
-            .overlay(rowShape.fill(palette.rowWash))
-            .overlay(rowShape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
+        .background(WorkLedgerCardBackground(work: work))
     }
 
     private func toggleSelection(_ work: SavedWork) {

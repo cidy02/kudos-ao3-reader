@@ -134,11 +134,11 @@ struct QueueTagSheet: View {
 
     private func toggle(_ tag: Tag, isOn: Bool) {
         if isOn {
-            queue.tags.removeAll { $0.persistentModelID == tag.persistentModelID }
+            queue.removeTag(tag)
         } else {
             queue.tags.append(tag)
+            queue.markModified()
         }
-        queue.markModified()
         context.saveBestEffort(reason: "Saving queue tags failed")
     }
 
@@ -147,21 +147,39 @@ struct QueueTagSheet: View {
     }
 
     private func addTypedTag() {
-        let name = trimmedNewTag
-        guard !name.isEmpty else { return }
-        // Reuse an existing tag rather than inserting a second one by the same
-        // name — `Tag.name` is unique, and a duplicate throws.
-        let tag = allTags.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
+        guard queue.addTag(named: trimmedNewTag, among: allTags, in: context) != nil else { return }
+        context.saveBestEffort(reason: "Saving new queue tag failed")
+        newTagName = ""
+    }
+}
+
+extension ReadingQueue {
+    /// Puts the tag called `name` on this queue: the existing one when there is
+    /// one (matched ignoring case), else a new one. Looked up before it is created
+    /// because `Tag.name` is `@Attribute(.unique)`, and a duplicate throws. The
+    /// one way in for this sheet, `QueueTagManagerView` and 1j's New queue sheet.
+    /// The caller saves. Returns nil for a blank name.
+    @discardableResult
+    func addTag(named rawName: String, among known: [Tag], in context: ModelContext) -> Tag? {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        let tag = known.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
             ?? {
                 let created = Tag(name: name)
                 context.insert(created)
                 return created
             }()
-        if !queue.tags.contains(where: { $0.persistentModelID == tag.persistentModelID }) {
-            queue.tags.append(tag)
-            queue.markModified()
+        if !tags.contains(where: { $0.persistentModelID == tag.persistentModelID }) {
+            tags.append(tag)
+            markModified()
         }
-        context.saveBestEffort(reason: "Saving new queue tag failed")
-        newTagName = ""
+        return tag
+    }
+
+    /// Takes `tag` off this queue only; the tag stays in the vocabulary and on
+    /// its works. The caller saves.
+    func removeTag(_ tag: Tag) {
+        tags.removeAll { $0.persistentModelID == tag.persistentModelID }
+        markModified()
     }
 }

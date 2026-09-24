@@ -168,6 +168,7 @@ enum ReadingQueueService {
         hue: Double? = nil,
         keepsWorksOffline: Bool? = nil,
         seededFrom seed: NewQueueSeed = .empty,
+        tagNames: [String] = [],
         in context: ModelContext
     ) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -179,6 +180,12 @@ enum ReadingQueueService {
         queue.hue = hue
         queue.keepsWorksOffline = keepsWorksOffline
         context.insert(queue)
+        // 1j's tags, through the same lookup-before-create `QueueTagSheet` uses.
+        // A tag made for an earlier name joins `known`, so a later one finds it.
+        var known = tagNames.isEmpty ? [] : (try? context.fetch(FetchDescriptor<Tag>())) ?? []
+        for name in tagNames {
+            if let tag = queue.addTag(named: name, among: known, in: context) { known.append(tag) }
+        }
         if seed == .savedForLater {
             seedFromSavedForLater(into: queue, in: context)
         }

@@ -290,6 +290,10 @@ extension EnvironmentValues {
     /// environment value because the row is built three views down
     /// (`SensitiveWorkRow` → `WorkRow` → here) and only one screen sets it.
     @Entry var ledgerKickerMuted = false
+    /// A queue position that replaces a `WorkLedgerRow`'s progress ring — 1h's
+    /// numbered In line rows. Set by the one screen that numbers its rows, for
+    /// the same three-views-down reason as `ledgerKickerMuted`.
+    @Entry var ledgerPositionNumber: Int?
 }
 
 /// The redesign's full-width work row — the "ledger row" the spec names on

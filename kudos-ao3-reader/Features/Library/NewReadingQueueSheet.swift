@@ -25,12 +25,14 @@ import SwiftUI
 /// would silently produce an empty queue — the same call `NewQueueSeed` already
 /// made about seeding from a fandom.
 ///
-/// **What 1j still draws that this does not build:** the Tags field. Queues do
-/// have tags now, but adding them here would be a second tag-entry surface
-/// beside `QueueTagSheet`, which already edits exactly this relationship from
-/// Queue Details — so it is left to that one rather than duplicated. Its colour
-/// row also ends in a dashed "+" for a custom hue; `SubjectHueSwatchRow` is the
-/// app's swatch grammar and offers the palette only.
+/// **Tags and the swatch-following wash are built.** Tags are chosen here as
+/// names and written by `ReadingQueueService.createQueue` through
+/// `ReadingQueue.addTag`, the same lookup-before-create `QueueTagSheet` uses, so
+/// nothing is created until Create. The wash, the Create tint, the radio and the
+/// selected tag chips take the tapped swatch's hue.
+///
+/// **Not built:** the colour row's dashed "+" for a custom hue;
+/// `SubjectHueSwatchRow` is the app's swatch grammar and offers the palette only.
 ///
 /// Chrome is `NewCollectionSheet`'s — text Cancel/Create in the navigation bar
 /// rather than 1j's 34pt circle pair. The two sheets do the same job minutes
@@ -50,8 +52,11 @@ struct NewReadingQueueSheet: View {
 
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
+    @Query(sort: \Tag.name) private var allTags: [Tag]
 
     @State private var options = NewQueueOptions()
+    @State private var showingNewTag = false
+    @State private var newTagName = ""
     /// Read once when the sheet appears rather than in `body`: the sheet is
     /// modal, so nothing can change the count while it is open, and counting
     /// memberships on every body evaluation would walk the whole shelf.
@@ -61,6 +66,12 @@ struct NewReadingQueueSheet: View {
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 1j: "The sheet takes a wash in whichever swatch you tap". Untapped, it
+    /// keeps the app's own accent.
+    private var palette: SubjectPalette {
+        hue.map { theme.appTheme.subjectPalette(hue: $0) } ?? theme.scopePalette
     }
 
     var body: some View {
@@ -85,6 +96,13 @@ struct NewReadingQueueSheet: View {
                 }
 
                 Section {
+                    groupLabel("Tags")
+                    tagsPanel.pageBodyRow(top: 10, gutter: gutter)
+                    footnote("Tags are shared with the ones already on works, so one word "
+                        + "means the same thing in both places.")
+                }
+
+                Section {
                     groupLabel("Offline")
                     offlinePanel.pageBodyRow(top: 8, gutter: gutter)
                     footnote(offlineFootnote)
@@ -100,7 +118,7 @@ struct NewReadingQueueSheet: View {
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
-                .subjectScreenWash(palette: theme.scopePalette)
+                .subjectScreenWash(palette: palette)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel", action: onCancel)
@@ -111,6 +129,9 @@ struct NewReadingQueueSheet: View {
                     }
                 }
         }
+        // Outside the stack so the Create button, the toggle and the caret all
+        // take the swatch too, not just the rows.
+        .tint(palette.accent)
         #if os(iOS)
         // Taller than .medium now: 1j's sheet carries four groups, and a medium
         // detent hid the seed step below the fold — the one decision the board
@@ -119,6 +140,52 @@ struct NewReadingQueueSheet: View {
         .presentationDragIndicator(.visible)
         #endif
         .task { seedCount = ReadingQueueService.savedForLaterSeedCount(in: context) }
+        .alert("New tag", isPresented: $showingNewTag) {
+            TextField("Tag", text: $newTagName)
+            Button("Add", action: addNewTag)
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    /// Every existing tag, then any new names typed here that are not one yet.
+    private var tagChoices: [String] {
+        allTags.map(\.name) + options.tagNames.filter { !allTags.map(\.name).contains($0) }
+    }
+
+    private var tagsPanel: some View {
+        FlowLayout(spacing: 7, rowSpacing: 7) {
+            ForEach(tagChoices, id: \.self) { tagName in
+                let isOn = options.tagNames.contains(tagName)
+                Button {
+                    if isOn {
+                        options.tagNames.removeAll { $0 == tagName }
+                    } else {
+                        options.tagNames.append(tagName)
+                    }
+                } label: {
+                    SubjectChip(text: tagName, style: isOn ? .tinted : .neutral, palette: palette)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+            }
+            Button {
+                newTagName = ""
+                showingNewTag = true
+            } label: {
+                SubjectChip(text: "+ New tag", style: .dashed)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A name matching an existing tag or one already picked, ignoring case,
+    /// selects that one instead — the same rule `ReadingQueue.addTag` applies.
+    private func addNewTag() {
+        let typed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return }
+        let name = tagChoices.first { $0.localizedCaseInsensitiveCompare(typed) == .orderedSame } ?? typed
+        if !options.tagNames.contains(name) { options.tagNames.append(name) }
     }
 
     private func groupLabel(_ text: String) -> some View {
@@ -230,14 +297,14 @@ struct NewReadingQueueSheet: View {
     private func radioMark(isSelected: Bool) -> some View {
         Circle()
             .strokeBorder(
-                isSelected ? theme.scopePalette.accent : Color.secondary.opacity(0.4),
+                isSelected ? palette.accent : Color.secondary.opacity(0.4),
                 lineWidth: 1.6
             )
             .frame(width: 19, height: 19)
             .overlay {
                 if isSelected {
                     Circle()
-                        .fill(theme.scopePalette.accent)
+                        .fill(palette.accent)
                         .frame(width: 9, height: 9)
                 }
             }
@@ -297,4 +364,6 @@ nonisolated enum NewQueueSeed: String, CaseIterable, Identifiable, Sendable {
 nonisolated struct NewQueueOptions: Equatable, Sendable {
     var keepsWorksOffline = false
     var seed: NewQueueSeed = .empty
+    /// Tag names, resolved to `Tag`s only when the queue is created.
+    var tagNames: [String] = []
 }
