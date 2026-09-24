@@ -419,6 +419,14 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
     var gifts: [AO3GiftRecipient] = []
     var series: [AO3SeriesMembership] = []
     var newSeriesTitle: String = ""
+
+    /// The typed new-series title as it will be posted, or nil when it is only
+    /// whitespace — which must neither create a series nor un-pick one.
+    static func newSeriesTitle(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     var parentWork: AO3ParentWorkDraft = AO3ParentWorkDraft()
     var existingParentTitles: [String] = []
 
@@ -530,8 +538,8 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
         )
         if let selected = series.first(where: \.isSelected) {
             pairs.append((AO3WorkFormField.seriesID, String(selected.seriesID)))
-        } else if !newSeriesTitle.isEmpty {
-            pairs.append((AO3WorkFormField.seriesTitle, newSeriesTitle))
+        } else if let title = Self.newSeriesTitle(newSeriesTitle) {
+            pairs.append((AO3WorkFormField.seriesTitle, title))
         } else {
             pairs.append((AO3WorkFormField.seriesID, ""))
             pairs.append((AO3WorkFormField.seriesTitle, ""))

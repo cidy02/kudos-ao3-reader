@@ -264,8 +264,11 @@ struct WorkEditView: View {
         // These three rows drew a chevron and opened nothing until 1bw; the form
         // already carries every option they need, so the pickers edit what it
         // will post back rather than fetching anything.
-        SubjectFormRow(label: "Series", value: seriesValue, showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "Series") {
+        // "Add to series", not "Series": the form reads only AO3's pending-add
+        // select, not the work's Current Series list, so a work already in a
+        // series would otherwise read "Series: None".
+        SubjectFormRow(label: "Add to series", value: seriesValue, showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Add to series") {
                 WorkSeriesPickerView(
                     series: $form.series, newSeriesTitle: $form.newSeriesTitle, workTitle: form.title
                 )
@@ -353,7 +356,8 @@ struct WorkEditView: View {
     /// `WorkSeriesPickerView`), so a name rather than a count.
     private var seriesValue: String {
         form.series.first(where: \.isSelected)?.title
-            ?? (form.newSeriesTitle.isEmpty ? "None" : form.newSeriesTitle)
+            ?? AO3WorkForm.newSeriesTitle(form.newSeriesTitle)
+            ?? "No addition"
     }
 
     private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }

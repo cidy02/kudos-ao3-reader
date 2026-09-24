@@ -594,9 +594,9 @@ struct AO3CommentsParseTests {
         }
         #expect(hidden == 25)
         #expect(showsVerb == false)
-        // Only the root carries the caret, even though the control row also sits
-        // at depth 0.
-        #expect(folded[0].collapse != nil)
+        // No caret yet: only the initial "Show 25 replies" row is showing, so
+        // there is nothing to hide (a "Hide" here contradicted the row below).
+        #expect(folded[0].collapse == nil)
         #expect(folded[1].collapse == nil)
 
         // Expanded: one chunk, then "Show 5 more".
@@ -608,6 +608,8 @@ struct AO3CommentsParseTests {
         }
         #expect(remaining == 5)
         #expect(more)
+        // Replies are showing now, so the root offers the caret.
+        #expect(chunked.first?.collapse != nil)
 
         // Folded by the caret: the root and nothing else.
         let collapsed = rows(expanded: [root.id], collapsed: [root.id])

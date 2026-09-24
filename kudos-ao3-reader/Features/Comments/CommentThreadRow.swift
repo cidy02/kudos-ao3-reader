@@ -592,7 +592,12 @@ enum CommentConversationBuilder {
         maxDepth: Int = .max
     ) -> [CommentConversationItem] {
         let inline = replies.filter { $0.depth <= maxDepth }
-        let deeper = replies.count - inline.count
+        // A dropped node can be AO3's own cutoff placeholder ("7 more comments"),
+        // which stands for `cutoffCount` replies, not one — counting it as one made
+        // the list say "1 deeper reply" while the thread screen said 7.
+        let deeper = replies.lazy.filter { $0.depth > maxDepth }.reduce(0) { total, reply in
+            total + (reply.comment.isThreadCutoff ? max(1, reply.comment.cutoffCount ?? 1) : 1)
+        }
         // Gated on every reply the list would draw, because expanding renders
         // every inline descendant, not just the root's direct children.
         let showsReplies = isExpanded
@@ -672,6 +677,15 @@ enum CommentConversationBuilder {
                     maxDepth: maxDepth
                 )
             }
+            // The caret hides replies, so it only belongs where replies show — or
+            // where the reader already folded them. A root still showing only its
+            // initial "Show N replies" row has nothing to hide, and a "Hide" there
+            // contradicted the row beneath it.
+            let showsReplyPosts = items.contains { item in
+                if case let .post(_, _, depth, _) = item { return depth > 0 }
+                return false
+            }
+            let offersCollapse = !replies.isEmpty && (isCollapsed || showsReplyPosts)
             // Depth-first order, so a node's siblings and descendants are all
             // ahead of it — one forward scan per row answers both questions the
             // thread lines need.
@@ -698,7 +712,7 @@ enum CommentConversationBuilder {
                     // 0 too. A reply's own caret would compete with its parent's for
                     // the same gesture on overlapping content, and closing a
                     // mid-thread reply leaves a hole rather than a tidier list.
-                    collapse: index == 0 && !replies.isEmpty
+                    collapse: index == 0 && offersCollapse
                         ? CommentCollapseState(isCollapsed: isCollapsed, replyCount: replies.count)
                         : nil
                 ))
