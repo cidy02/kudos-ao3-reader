@@ -168,6 +168,19 @@ struct AO3WorkFormParsingTests {
         #expect(form.series.filter(\.isSelected).isEmpty)
     }
 
+    /// A title of only spaces must post neither a series title nor a pick —
+    /// AO3 would reject or ignore it (Codex review, 2026-09-24).
+    @MainActor @Test func aWhitespaceOnlySeriesTitleIsNotPosted() throws {
+        var form = try AO3Client.parseWorkForm(from: try fixture("ao3_work_edit"))
+        form.series = form.series.map { var row = $0; row.isSelected = false; return row }
+        form.newSeriesTitle = "   "
+        let titles = form.parameters(submit: .update).filter { $0.0 == AO3WorkFormField.seriesTitle }.map(\.1)
+        #expect(titles == [""])
+        form.newSeriesTitle = "  Water  "
+        let trimmed = form.parameters(submit: .update).filter { $0.0 == AO3WorkFormField.seriesTitle }.map(\.1)
+        #expect(trimmed == ["Water"])
+    }
+
     @Test func tagRemovalIsADiffNotADeleteAPI() {
         let current = AO3WorkTagSet(
             rating: "Teen And Up Audiences",

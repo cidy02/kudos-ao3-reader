@@ -252,7 +252,9 @@ struct WorkSeriesPickerView: View {
 
     private var subtitle: String {
         if let selected { return "Saving adds \(workTitle) to \(selected.title)" }
-        if !newSeriesTitle.isEmpty { return "Saving creates \(newSeriesTitle) with \(workTitle) in it" }
+        if let title = AO3WorkForm.newSeriesTitle(newSeriesTitle) {
+            return "Saving creates \(title) with \(workTitle) in it"
+        }
         return "Choose a series to add \(workTitle) to"
     }
 
@@ -315,7 +317,7 @@ struct WorkSeriesPickerView: View {
                         // The form posts the picked id over a title, so typing
                         // a title un-picks rather than being silently ignored.
                         .onChange(of: newSeriesTitle) { _, title in
-                            if !title.isEmpty, selected != nil {
+                            if AO3WorkForm.newSeriesTitle(title) != nil, selected != nil {
                                 series = series.map { var row = $0; row.isSelected = false; return row }
                             }
                         }

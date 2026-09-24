@@ -711,6 +711,10 @@ final class CommentsModel {
     func toggleCollapsed(rootID: Int) {
         if collapsedRootIDs.contains(rootID) {
             collapsedRootIDs.remove(rootID)
+            // Reopening means "show me the replies": expand at the first chunk.
+            // Collapsing dropped `expandedRootIDs`, so without this a long thread
+            // came back as only its "Show N replies" row.
+            expandedRootIDs.insert(rootID)
         } else {
             collapsedRootIDs.insert(rootID)
             expandedRootIDs.remove(rootID)
