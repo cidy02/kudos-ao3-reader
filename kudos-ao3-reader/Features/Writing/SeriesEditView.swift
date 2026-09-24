@@ -135,7 +135,7 @@ struct SeriesEditView: View {
 
     private var seriesPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Title", arrangement: .control) {
+            SubjectFormRow(label: "Title", arrangement: .control, isRequired: true) {
                 TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
             }
             SubjectRowSeparator()

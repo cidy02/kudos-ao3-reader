@@ -442,7 +442,7 @@ struct AO3AuthorSeriesSection: View {
                 SeriesEditDestination(series: series)
             }
             .navigationDestination(item: $reorderingSeries) { series in
-                SeriesReorderDestination(series: series)
+                SeriesReorderDestination(seriesID: series.id, seriesTitle: series.title)
             }
     }
 

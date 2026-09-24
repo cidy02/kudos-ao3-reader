@@ -8,7 +8,10 @@ import SwiftUI
 /// while loading the edit form. Saving stays inside `SeriesReorderView`.
 struct SeriesReorderDestination: View {
     @Environment(AO3AuthService.self) private var auth
-    let series: AO3SeriesSummary
+    /// An id and title rather than an `AO3SeriesSummary`: 1bw's series picker
+    /// opens this from a work form's series option, which carries only those.
+    let seriesID: Int
+    let seriesTitle: String
 
     @State private var rows: [AO3SeriesWorkRow]?
     @State private var loadedGeneration: Int?
@@ -19,8 +22,8 @@ struct SeriesReorderDestination: View {
         Group {
             if let rows, loadedGeneration == auth.sessionGeneration {
                 SeriesReorderView(
-                    seriesID: series.id,
-                    seriesTitle: series.title,
+                    seriesID: seriesID,
+                    seriesTitle: seriesTitle,
                     rows: rows
                 )
                 .id(auth.sessionGeneration)
@@ -40,7 +43,7 @@ struct SeriesReorderDestination: View {
             errorMessage = nil
             let generation = auth.sessionGeneration
             do {
-                let loaded = try await auth.loadSeriesManagePage(seriesID: series.id)
+                let loaded = try await auth.loadSeriesManagePage(seriesID: seriesID)
                 guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
                 loadedGeneration = generation
                 rows = loaded

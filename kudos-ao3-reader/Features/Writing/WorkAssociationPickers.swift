@@ -227,10 +227,20 @@ struct WorkCollectionsGiftsView: View {
 
 /// 1bw's series picker. Places this work in a series and nothing more: the board
 /// "separates placing this work from reordering the series, since the first
-/// writes one work and the second writes all of them" — reordering is 1br's own
-/// screen, reached from the series rather than from here.
+/// writes one work and the second writes all of them" — so "Reorder the series"
+/// pushes 1br's own screen, which saves on its own.
+///
+/// **One series per save, and adding only.** otwarchive's work form has one
+/// `work[series_attributes][id]` select and one `[title]` field, and
+/// `Work#series_attributes=` adds the chosen series (or creates the titled one,
+/// the id winning) and removes nothing; `work_series_value` preselects only on
+/// a re-rendered failed save. Taking a work out of a series is a separate
+/// "Remove Work From Series" link (`DELETE /serial_works/:id`) this app does not
+/// send. So the list is single-select and a tick means "add on save" — it was
+/// multi-select, and every tick past the first was silently dropped.
 struct WorkSeriesPickerView: View {
     @Binding var series: [AO3SeriesMembership]
+    @Binding var newSeriesTitle: String
     let workTitle: String
 
     @Environment(ThemeManager.self) private var theme
@@ -238,13 +248,21 @@ struct WorkSeriesPickerView: View {
     private var palette: SubjectPalette { theme.scopePalette }
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
-    private var selectedCount: Int { series.filter(\.isSelected).count }
+    private var selected: AO3SeriesMembership? { series.first(where: \.isSelected) }
 
     private var subtitle: String {
-        switch selectedCount {
-        case 0: "\(workTitle) is not in a series"
-        case 1: "\(workTitle) is part of one series"
-        default: "\(workTitle) is part of \(selectedCount) series"
+        if let selected { return "Saving adds \(workTitle) to \(selected.title)" }
+        if !newSeriesTitle.isEmpty { return "Saving creates \(newSeriesTitle) with \(workTitle) in it" }
+        return "Choose a series to add \(workTitle) to"
+    }
+
+    /// Ticking a row picks it alone; ticking the picked row clears it.
+    static func selecting(_ id: Int, in series: [AO3SeriesMembership]) -> [AO3SeriesMembership] {
+        let pick = series.first { $0.id == id }?.isSelected == false
+        return series.map { row in
+            var row = row
+            row.isSelected = pick && row.id == id
+            return row
         }
     }
 
@@ -265,15 +283,47 @@ struct WorkSeriesPickerView: View {
                 SectionRuleHeader(title: "Your series", count: series.count)
                     .pageBodyRow(top: 18, gutter: 0)
                 seriesPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("Placing a work in a series writes to this work. Changing the reading "
-                    + "order writes to every work in the series, so it lives on the series "
-                    + "itself rather than here.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary.opacity(0.7))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
+                footnote("AO3 adds a work to one series per save, and saving never takes it out "
+                    + "of a series it is already in.")
+            }
+
+            if let selected {
+                Section {
+                    SectionRuleHeader(title: "Position in \(selected.title)")
+                        .pageBodyRow(top: 18, gutter: 0)
+                    SubjectFormRow(
+                        label: "Reorder the series",
+                        value: selected.workCount.map { "\($0) work\($0 == 1 ? "" : "s")" } ?? "",
+                        showsDisclosure: true
+                    )
+                    .subjectRowNavigation(accessibilityLabel: "Reorder the series") {
+                        SeriesReorderDestination(seriesID: selected.seriesID, seriesTitle: selected.title)
+                    }
+                    .subjectPanel()
                     .pageBodyRow(top: 8, gutter: gutter)
+                    footnote("Changing the reading order writes every work in the series, so it "
+                        + "saves on its own screen rather than with this work.")
+                }
+            }
+
+            Section {
+                SectionRuleHeader(title: "New series")
+                    .pageBodyRow(top: 18, gutter: 0)
+                SubjectFormRow(label: "Create a series from this work", arrangement: .control) {
+                    TextField("Title", text: $newSeriesTitle)
+                        .multilineTextAlignment(.trailing)
+                        // The form posts the picked id over a title, so typing
+                        // a title un-picks rather than being silently ignored.
+                        .onChange(of: newSeriesTitle) { _, title in
+                            if !title.isEmpty, selected != nil {
+                                series = series.map { var row = $0; row.isSelected = false; return row }
+                            }
+                        }
+                }
+                .subjectPanel()
+                .pageBodyRow(top: 8, gutter: gutter)
+                footnote("AO3 creates the series with this work as its first; its summary and "
+                    + "notes are set on the series afterwards.")
             }
         }
         .cardList()
@@ -298,8 +348,8 @@ struct WorkSeriesPickerView: View {
 
     private func seriesRow(_ membership: AO3SeriesMembership) -> some View {
         Button {
-            guard let index = series.firstIndex(where: { $0.id == membership.id }) else { return }
-            series[index].isSelected.toggle()
+            series = Self.selecting(membership.id, in: series)
+            if series.contains(where: \.isSelected) { newSeriesTitle = "" }
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: membership.isSelected ? "checkmark.circle.fill" : "circle")
@@ -322,7 +372,18 @@ struct WorkSeriesPickerView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(membership.title)
-        .accessibilityValue(membership.isSelected ? "In this series" : "Not in this series")
+        .accessibilityValue(membership.isSelected ? "Added on save" : "Not selected")
+        .accessibilityAddTraits(membership.isSelected ? .isSelected : [])
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .pageBodyRow(top: 8, gutter: gutter)
     }
 
     /// "3 works · this work is 2nd". Each half is dropped rather than guessed when

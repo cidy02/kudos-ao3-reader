@@ -79,6 +79,95 @@ struct AO3WorkFormParsingTests {
         #expect(missing.contains("Work Text"))
     }
 
+    // MARK: 1bo backdate
+
+    /// The new-draft fixture with AO3's `date_select` added, as otwarchive's
+    /// `_standard_form` draws it (`c.date_select("published_at", ...)` under
+    /// `work[chapter_attributes]`): unpadded option values, one `selected`.
+    private func draftWithPublishedDate() throws -> AO3WorkForm {
+        let selects = """
+            <select name="work[chapter_attributes][published_at(3i)]">
+              <option value="6">6</option><option value="7" selected="selected">7</option>
+            </select>
+            <select name="work[chapter_attributes][published_at(2i)]">
+              <option value="2">February</option><option value="3" selected="selected">March</option>
+            </select>
+            <select name="work[chapter_attributes][published_at(1i)]">
+              <option value="2025">2025</option><option value="2024" selected="selected">2024</option>
+            </select>
+          </form>
+        """
+        let html = try fixture("ao3_work_new_draft").replacingOccurrences(of: "</form>", with: selects)
+        return try AO3Client.parseWorkForm(from: html)
+    }
+
+    private func value(_ key: String, in pairs: [(String, String)]) -> String? {
+        pairs.first { $0.0 == key }?.1
+    }
+
+    @Test func publicationDateKeepsAO3sUnpaddedFormat() throws {
+        let form = try draftWithPublishedDate()
+        let chapter = try #require(form.chapter)
+        #expect((chapter.publishedYear, chapter.publishedMonth, chapter.publishedDay) == ("2024", "3", "7"))
+
+        let date = try #require(AO3PublicationDate.date(year: "2024", month: "3", day: "7"))
+        #expect(AO3PublicationDate.fields(for: date) == .init(year: "2024", month: "3", day: "7"))
+        #expect(AO3PublicationDate.date(year: "", month: "3", day: "7") == nil)
+    }
+
+    @Test func backdateOnPostsTheChosenDate() throws {
+        var form = try draftWithPublishedDate()
+        form.backdate = true
+        let chosen = try #require(
+            Calendar(identifier: .gregorian).date(from: DateComponents(year: 2019, month: 11, day: 5))
+        )
+        let fields = AO3PublicationDate.fields(for: chosen)
+        form.chapter?.publishedYear = fields.year
+        form.chapter?.publishedMonth = fields.month
+        form.chapter?.publishedDay = fields.day
+
+        let pairs = form.parameters(submit: .saveDraft)
+        #expect(value(AO3WorkFormField.backdate, in: pairs) == "1")
+        #expect(value(AO3WorkFormField.chapterPublishedYear, in: pairs) == "2019")
+        #expect(value(AO3WorkFormField.chapterPublishedMonth, in: pairs) == "11")
+        #expect(value(AO3WorkFormField.chapterPublishedDay, in: pairs) == "5")
+    }
+
+    @Test func backdateOffLeavesTheDateFieldsUntouched() throws {
+        let form = try draftWithPublishedDate()
+        #expect(!form.backdate)
+        let pairs = form.parameters(submit: .saveDraft)
+        #expect(value(AO3WorkFormField.backdate, in: pairs) == "0")
+        #expect(value(AO3WorkFormField.chapterPublishedYear, in: pairs) == "2024")
+        #expect(value(AO3WorkFormField.chapterPublishedMonth, in: pairs) == "3")
+        #expect(value(AO3WorkFormField.chapterPublishedDay, in: pairs) == "7")
+    }
+
+    // MARK: 1bs post confirmation
+
+    @MainActor @Test func postConfirmationNamesWhatIsMissing() {
+        let two = WorkEditView.postConfirmationMessage(missing: ["Title", "Archive Warning"])
+        #expect(two.hasPrefix("Two things are missing: a title"))
+        #expect(two.contains("an archive warning. AO3 requires both."))
+        #expect(two.contains("cannot be undone"))
+
+        let none = WorkEditView.postConfirmationMessage(missing: [])
+        #expect(none.hasPrefix("Posting notifies your subscribers and cannot be undone"))
+    }
+
+    // MARK: 1bw series — one per save
+
+    @MainActor @Test func pickingASeriesPostsOnlyThatSeries() throws {
+        var form = try AO3Client.parseWorkForm(from: try fixture("ao3_work_edit"))
+        form.series = WorkSeriesPickerView.selecting(88, in: form.series)
+        #expect(form.series.filter(\.isSelected).map(\.seriesID) == [88])
+        let ids = form.parameters(submit: .update).filter { $0.0 == AO3WorkFormField.seriesID }.map(\.1)
+        #expect(ids == ["88"])
+
+        form.series = WorkSeriesPickerView.selecting(88, in: form.series)
+        #expect(form.series.filter(\.isSelected).isEmpty)
+    }
+
     @Test func tagRemovalIsADiffNotADeleteAPI() {
         let current = AO3WorkTagSet(
             rating: "Teen And Up Audiences",
