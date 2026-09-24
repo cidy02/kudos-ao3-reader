@@ -219,6 +219,10 @@ struct SubjectFormRow<Trailing: View>: View {
     /// colour internally and would win: a caller tinting the row from outside
     /// gets a red chevron and a black label, which is worse than no red at all.
     var isDestructive: Bool = false
+    /// The spec's accent asterisk after a field AO3 will not post without
+    /// (1bo/1bs Title, Archive warnings, Fandoms; 1br Title). VoiceOver reads
+    /// "required" rather than the glyph.
+    var isRequired: Bool = false
     var action: (() -> Void)?
     @ViewBuilder var trailing: () -> Trailing
 
@@ -253,9 +257,10 @@ struct SubjectFormRow<Trailing: View>: View {
         }
         let labelHugs: Bool = arrangement == .control
         return HStack(spacing: arrangement.horizontalGap) {
-            Text(label)
+            (isRequired ? Text("\(label) \(Text("∗").foregroundStyle(.tint))") : Text(label))
                 .font(.system(size: 15))
                 .foregroundStyle(isDestructive ? Color.red : .primary)
+                .accessibilityLabel(isRequired ? "\(label), required" : label)
                 .frame(maxWidth: labelWidth, alignment: .leading)
                 .fixedSize(horizontal: labelHugs, vertical: false)
 
@@ -297,6 +302,7 @@ extension SubjectFormRow where Trailing == SubjectFormValue {
         showsDisclosure: Bool = false,
         isDisabled: Bool = false,
         isDestructive: Bool = false,
+        isRequired: Bool = false,
         isMonospaced: Bool = false,
         action: (() -> Void)? = nil
     ) {
@@ -306,6 +312,7 @@ extension SubjectFormRow where Trailing == SubjectFormValue {
             showsDisclosure: showsDisclosure,
             isDisabled: isDisabled,
             isDestructive: isDestructive,
+            isRequired: isRequired,
             action: action,
             trailing: { SubjectFormValue(text: value, isMonospaced: isMonospaced) }
         )

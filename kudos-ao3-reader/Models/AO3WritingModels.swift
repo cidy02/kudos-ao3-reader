@@ -335,6 +335,43 @@ nonisolated struct AO3WorkChapterDraft: Equatable, Sendable {
     var publishedDay: String = ""
 }
 
+/// `published_at(1i/2i/3i)` ↔ `Date`, for the work and chapter forms' backdate.
+/// otwarchive draws the field with Rails' `date_select` (`start_year:
+/// Date.current.year, end_year: 1950`), whose option values are unpadded
+/// numbers — "2024", "3", "7" — so that is what is read and written back.
+nonisolated enum AO3PublicationDate {
+    /// The oldest year AO3's own year select offers.
+    static let earliestYear = 1950
+
+    /// AO3's select runs 1950 to this year; a backdate is never in the future.
+    static var allowedRange: ClosedRange<Date> {
+        (date(year: String(earliestYear), month: "1", day: "1") ?? .distantPast) ... Date()
+    }
+
+    static func date(
+        year: String, month: String, day: String,
+        calendar: Calendar = Calendar(identifier: .gregorian)
+    ) -> Date? {
+        guard let year = Int(year), let month = Int(month), let day = Int(day) else { return nil }
+        return calendar.date(from: DateComponents(year: year, month: month, day: day))
+    }
+
+    struct Fields: Equatable {
+        var year: String
+        var month: String
+        var day: String
+    }
+
+    static func fields(for date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> Fields {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return Fields(
+            year: String(parts.year ?? earliestYear),
+            month: String(parts.month ?? 1),
+            day: String(parts.day ?? 1)
+        )
+    }
+}
+
 nonisolated struct AO3CreatorDraft: Equatable, Sendable {
     var selectedPseudIDs: [String] = []
     var availablePseuds: [AO3FormOption] = []

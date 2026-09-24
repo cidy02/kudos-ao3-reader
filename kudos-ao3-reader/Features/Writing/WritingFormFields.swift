@@ -50,11 +50,17 @@ struct WritingTagsRow: View {
     @Binding var values: [String]
     var options: [AO3FormOption] = []
     var kind: AO3TagKind?
+    var isRequired = false
 
     var body: some View {
-        SubjectFormRow(label: title, value: values.isEmpty ? "None" : "\(values.count)", showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: title) {
-                WritingTagsEditor(title: title, values: $values, options: options, kind: kind)
-            }
+        SubjectFormRow(
+            label: title,
+            value: values.isEmpty ? "None" : "\(values.count)",
+            showsDisclosure: true,
+            isRequired: isRequired
+        )
+        .subjectRowNavigation(accessibilityLabel: isRequired ? "\(title), required" : title) {
+            WritingTagsEditor(title: title, values: $values, options: options, kind: kind)
+        }
     }
 }

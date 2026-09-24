@@ -146,18 +146,17 @@ struct AddChapterView: View {
     }
 
     private var publicationDate: Binding<Date> {
-        let calendar = Calendar(identifier: .gregorian)
-        return Binding(
+        Binding(
             get: {
-                calendar.date(from: DateComponents(
-                    year: Int(form.publishedYear), month: Int(form.publishedMonth), day: Int(form.publishedDay)
-                )) ?? Date()
+                AO3PublicationDate.date(
+                    year: form.publishedYear, month: form.publishedMonth, day: form.publishedDay
+                ) ?? Date()
             },
             set: { date in
-                let parts = calendar.dateComponents([.year, .month, .day], from: date)
-                form.publishedYear = String(parts.year ?? 2000)
-                form.publishedMonth = String(parts.month ?? 1)
-                form.publishedDay = String(parts.day ?? 1)
+                let fields = AO3PublicationDate.fields(for: date)
+                form.publishedYear = fields.year
+                form.publishedMonth = fields.month
+                form.publishedDay = fields.day
             }
         )
     }

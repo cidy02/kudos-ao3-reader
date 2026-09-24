@@ -12,6 +12,7 @@ struct WorkEditView: View {
     @State private var isPosting = false
     @State private var errorMessage: String?
     @State private var showDeleteConfirmation = false
+    @State private var showPostConfirmation = false
     @State private var deleteImplications: AO3DeleteImplications?
     @State private var isCheckingDelete = false
     @State private var needsPublicationRefresh = false
@@ -41,18 +42,25 @@ struct WorkEditView: View {
             Section {
                 SubjectHeaderBlock(
                     kicker: "AO3 Account",
-                    title: form.kind == .new ? "New work" : "Edit work",
-                    subtitle: form.title.isEmpty ? "Untitled" : form.title,
+                    title: screenTitle,
+                    // 1bs's "saved 2 minutes ago" is dropped: the form carries
+                    // no saved time, and a guessed one would be wrong.
+                    subtitle: (form.title.isEmpty ? "Untitled" : form.title)
+                        + (form.isDraft ? " · never posted" : ""),
                     palette: accountPalette,
                     gutter: gutter
                 )
                 .pageBodyRow(top: 20, gutter: selfGuttered)
+                if form.isDraft {
+                    footnote("A draft is an unposted work, so this is the same form as Edit work "
+                        + "with the posted-only fields absent until it exists publicly.")
+                }
             }
 
             Section {
                 // The bottom padding is the 8pt a `.pageBodyRow(top: 8)` card
                 // below gets; segment rows sit flush and cannot carry it.
-                SectionRuleHeader(title: "Required")
+                SectionRuleHeader(title: form.isDraft ? "Required before posting" : "Required")
                     .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
             }
@@ -93,7 +101,7 @@ struct WorkEditView: View {
             Section { textRows }
 
             Section {
-                SectionRuleHeader(title: "Publication")
+                SectionRuleHeader(title: form.isDraft ? "When posted" : "Publication")
                     .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
             }
@@ -105,18 +113,24 @@ struct WorkEditView: View {
                     Button("Reload chapter totals") { publicationRetry += 1 }
                         .pageBodyRow(top: 8, gutter: gutter)
                 }
-                Text("Chapters posted of total is AO3’s own field — setting a total above what is "
-                    + "posted is what marks a work in progress, and Complete writes the same value.")
-
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary.opacity(0.7))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .pageBodyRow(top: 8, gutter: gutter)
+                if form.isPosted {
+                    footnote("Chapters posted of total is AO3’s own field — setting a total above what is "
+                        + "posted is what marks a work in progress, and Complete writes the same value.")
+                }
             }
 
-            if form.workID != nil {
+            // 1bs: an unposted work posts and deletes from its own group, and
+            // the toolbar keeps only Save, as the board draws it.
+            if !form.isPosted {
+                Section {
+                    SectionRuleHeader(title: "Post")
+                        .pageBodyRow(top: 18, gutter: selfGuttered)
+                    postPanel.pageBodyRow(top: 8, gutter: gutter)
+                    if form.workID != nil {
+                        footnote("AO3 deletes an unposted draft 30 days after it is created.")
+                    }
+                }
+            } else if form.workID != nil {
                 Section {
                     SectionRuleHeader(title: "Delete")
                         .pageBodyRow(top: 18, gutter: selfGuttered)
@@ -128,7 +142,7 @@ struct WorkEditView: View {
         .disabled(isSaving || isPosting)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         #if os(macOS)
-        .navigationTitle(form.kind == .new ? "New work" : "Edit work")
+        .navigationTitle(screenTitle)
         #endif
         .subjectScreenWash(palette: accountPalette)
         .task(id: "\(needsPublicationRefresh):\(publicationRetry)") {
@@ -172,26 +186,31 @@ struct WorkEditView: View {
                 }
                 .disabled(isSaving || isPosting || needsPublicationRefresh || needsTagRefresh)
             }
-            if !form.isPosted {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Post") {
-                        save(submit: .postWithoutPreview)
-                    }
-                    .disabled(isSaving || isPosting)
-                }
-            }
         }
         .alert("AO3 could not save the change", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
             Button("OK", role: .cancel) {}
         } message: { Text(errorMessage ?? "") }
+        // 1bs's post confirmation. Posting is the one write here that cannot
+        // be taken back, so it is asked first; when AO3 would reject the post,
+        // the confirm button is replaced by the board's "Fill in what is missing".
+        .alert("Post this work?", isPresented: $showPostConfirmation) {
+            if form.missingRequiredFields().isEmpty {
+                Button("Post work") { save(submit: .postWithoutPreview) }
+            } else {
+                Button("Fill in what is missing") {}
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(Self.postConfirmationMessage(missing: form.missingRequiredFields()))
+        }
         .confirmationDialog(
-            "Delete Work?",
+            form.isDraft ? "Delete this draft?" : "Delete Work?",
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Delete work on AO3", role: .destructive) {
+            Button(form.isDraft ? "Delete draft" : "Delete work on AO3", role: .destructive) {
                 deleteWork()
             }
             Button("Cancel", role: .cancel) {}
@@ -209,15 +228,17 @@ struct WorkEditView: View {
     /// simulator). A row holding one link fires only that one.
     @ViewBuilder
     private var requiredRows: some View {
-        SubjectFormRow(label: "Title", arrangement: .control) {
+        SubjectFormRow(label: "Title", arrangement: .control, isRequired: true) {
             TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
         }
         .panelSegment(0, of: 5, gutter: gutter)
         WritingChoiceRow(title: "Rating", value: $form.rating, options: form.ratingOptions)
             .panelSegment(1, of: 5, gutter: gutter)
-        WritingTagsRow(title: "Archive warnings", values: $form.warnings, options: form.warningOptions)
-            .panelSegment(2, of: 5, gutter: gutter)
-        WritingTagsRow(title: "Fandoms", values: $form.fandoms, kind: .fandom)
+        WritingTagsRow(
+            title: "Archive warnings", values: $form.warnings, options: form.warningOptions, isRequired: true
+        )
+        .panelSegment(2, of: 5, gutter: gutter)
+        WritingTagsRow(title: "Fandoms", values: $form.fandoms, kind: .fandom, isRequired: true)
             .panelSegment(3, of: 5, gutter: gutter)
         WritingChoiceRow(title: "Language", value: $form.languageID, options: form.languageOptions)
             .panelSegment(4, of: 5, gutter: gutter)
@@ -246,7 +267,9 @@ struct WorkEditView: View {
         // will post back rather than fetching anything.
         SubjectFormRow(label: "Series", value: seriesValue, showsDisclosure: true)
             .subjectRowNavigation(accessibilityLabel: "Series") {
-                WorkSeriesPickerView(series: $form.series, workTitle: form.title)
+                WorkSeriesPickerView(
+                    series: $form.series, newSeriesTitle: $form.newSeriesTitle, workTitle: form.title
+                )
             }
             .panelSegment(0, of: 5, gutter: gutter)
         SubjectFormRow(label: "Add to collections", value: collectionsValue, showsDisclosure: true)
@@ -327,9 +350,11 @@ struct WorkEditView: View {
         return named
     }
 
+    /// What this save will add — AO3's form adds one series per save (see
+    /// `WorkSeriesPickerView`), so a name rather than a count.
     private var seriesValue: String {
-        let count = form.series.filter(\.isSelected).count
-        return count == 0 ? "None" : "\(count)"
+        form.series.first(where: \.isSelected)?.title
+            ?? (form.newSeriesTitle.isEmpty ? "None" : form.newSeriesTitle)
     }
 
     private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }
@@ -388,70 +413,55 @@ struct WorkEditView: View {
     /// Segments, for one card style across the screen. The toggles are titled
     /// even though the titles are hidden: `labelsHidden` hides a title from the
     /// eye, not from VoiceOver, and these four announced as a bare "switch".
+    /// 1bs: a draft has no posted chapters to count, so those two rows are
+    /// posted-only. The date row appears with the backdate switch, and only
+    /// when AO3's form carried the chapter fields its `published_at` belongs to.
     @ViewBuilder
     private var publicationRows: some View {
-        // 1bo: "setting a total above what is posted is what marks a work in
-        // progress". The posted count is AO3's to report, the total is the
-        // writer's to set — so only one half of this row is editable.
-        SubjectFormRow(label: "Chapters posted", arrangement: .control) {
-            HStack(spacing: 6) {
-                Text("\(form.chaptersPosted ?? 1) of")
-                    .foregroundStyle(.secondary)
-                TextField("?", text: $form.chapterTotal)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 64)
-                    #if os(iOS)
-                        .keyboardType(.numberPad)
-                    #endif
-            }
-        }
-        .panelSegment(0, of: 6, gutter: gutter)
-        SubjectFormRow(label: "Work is complete", arrangement: .control) {
-            Toggle("Work is complete", isOn: Binding(
-                get: { form.chapterTotal == "\(form.chaptersPosted ?? 1)" },
-                set: { form.chapterTotal = $0 ? "\(form.chaptersPosted ?? 1)" : "" }
-            ))
-            .labelsHidden()
-        }
-        .panelSegment(1, of: 6, gutter: gutter)
+        let first = form.isPosted ? 2 : 0
+        let showsDate = form.backdate && form.chapter != nil
+        let afterDate = first + (showsDate ? 2 : 1)
+        let count = afterDate + 3
+        if form.isPosted { chapterTotalRows(of: count) }
         SubjectFormRow(label: "Set a different publication date", arrangement: .control) {
-            Toggle("Set a different publication date", isOn: $form.backdate)
+            Toggle("Set a different publication date", isOn: backdate)
                 .labelsHidden()
         }
-        .panelSegment(2, of: 6, gutter: gutter)
+        .panelSegment(first, of: count, gutter: gutter)
+        if showsDate {
+            SubjectFormRow(label: "Publication date", arrangement: .control) {
+                DatePicker(
+                    "Publication date",
+                    selection: publicationDate,
+                    in: AO3PublicationDate.allowedRange,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .panelSegment(first + 1, of: count, gutter: gutter)
+        }
         SubjectFormRow(label: "Only show to registered users", arrangement: .control) {
             Toggle("Only show to registered users", isOn: $form.restricted)
                 .labelsHidden()
         }
-        .panelSegment(3, of: 6, gutter: gutter)
+        .panelSegment(afterDate, of: count, gutter: gutter)
         SubjectFormRow(label: "Enable comment moderation", arrangement: .control) {
             Toggle("Enable comment moderation", isOn: $form.moderatedCommenting)
                 .labelsHidden()
         }
-        .panelSegment(4, of: 6, gutter: gutter)
+        .panelSegment(afterDate + 1, of: count, gutter: gutter)
         WritingChoiceRow(
             title: "Who can comment",
             value: $form.commentPermissions,
             options: form.commentPermissionOptions
         )
-        .panelSegment(5, of: 6, gutter: gutter)
+        .panelSegment(afterDate + 2, of: count, gutter: gutter)
     }
 
     private var deletePanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Delete work on AO3", value: "", isDestructive: true) {
-                Task {
-                    guard let workID = form.workID else { return }
-                    isCheckingDelete = true
-                    do {
-                        deleteImplications = try await auth.loadDeleteImplications(workID: workID)
-                        showDeleteConfirmation = true
-                    } catch {
-                        errorMessage = error.localizedDescription
-                    }
-                    isCheckingDelete = false
-                }
-            }
+            SubjectFormRow(label: "Delete work on AO3", value: "", isDestructive: true) { confirmDelete() }
         }
         .subjectPanel()
     }
@@ -491,6 +501,161 @@ struct WorkEditView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+}
+
+// MARK: - 1bo backdate and 1bs draft posting
+
+extension WorkEditView {
+    /// The backdate switch used to bind `form.backdate` alone, so a backdate
+    /// posted whatever date AO3 had prefilled. Turning it on now also fills
+    /// an empty date with today — what AO3's own `date_select` defaults to.
+    private var backdate: Binding<Bool> {
+        Binding(
+            get: { form.backdate },
+            set: { isOn in
+                form.backdate = isOn
+                if isOn, form.chapter?.publishedYear.isEmpty == true { publicationDate.wrappedValue = Date() }
+            }
+        )
+    }
+
+    /// Reads and writes the chapter's `published_at` strings in AO3's own
+    /// format (`AO3PublicationDate`), which the payload already posts.
+    private var publicationDate: Binding<Date> {
+        Binding(
+            get: {
+                form.chapter.flatMap {
+                    AO3PublicationDate.date(year: $0.publishedYear, month: $0.publishedMonth, day: $0.publishedDay)
+                } ?? Date()
+            },
+            set: { date in
+                let fields = AO3PublicationDate.fields(for: date)
+                form.chapter?.publishedYear = fields.year
+                form.chapter?.publishedMonth = fields.month
+                form.chapter?.publishedDay = fields.day
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func chapterTotalRows(of count: Int) -> some View {
+        // 1bo: "setting a total above what is posted is what marks a work in
+        // progress". The posted count is AO3's to report, the total is the
+        // writer's to set — so only one half of this row is editable.
+        SubjectFormRow(label: "Chapters posted", arrangement: .control) {
+            HStack(spacing: 6) {
+                Text("\(form.chaptersPosted ?? 1) of")
+                    .foregroundStyle(.secondary)
+                TextField("?", text: $form.chapterTotal)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 64)
+                    #if os(iOS)
+                        .keyboardType(.numberPad)
+                    #endif
+            }
+        }
+        .panelSegment(0, of: count, gutter: gutter)
+        SubjectFormRow(label: "Work is complete", arrangement: .control) {
+            Toggle("Work is complete", isOn: Binding(
+                get: { form.chapterTotal == "\(form.chaptersPosted ?? 1)" },
+                set: { form.chapterTotal = $0 ? "\(form.chaptersPosted ?? 1)" : "" }
+            ))
+            .labelsHidden()
+        }
+        .panelSegment(1, of: count, gutter: gutter)
+    }
+
+    /// 1bs's Post group: "Post work", then "Delete draft" once AO3 has the
+    /// draft. Post asks first (`showPostConfirmation`); the write itself is
+    /// the same `save(submit: .postWithoutPreview)` the toolbar used to send.
+    private var postPanel: some View {
+        VStack(spacing: 0) {
+            postPanelRow("Post work", icon: "arrow.up.circle.fill", color: theme.appTheme.statusSuccessColor) {
+                showPostConfirmation = true
+            }
+            if form.workID != nil {
+                SubjectRowSeparator()
+                postPanelRow("Delete draft", icon: "trash.fill", color: .red) { confirmDelete() }
+            }
+        }
+        .subjectPanel()
+    }
+
+    /// `AddChapterView.postPanel`'s row shape.
+    private func postPanelRow(
+        _ title: String, icon: String, color: Color, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .frame(width: 20)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.system(size: 15))
+                Spacer()
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isSaving || isPosting || isCheckingDelete)
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .pageBodyRow(top: 8, gutter: gutter)
+    }
+
+    private var screenTitle: String {
+        switch form.kind {
+        case .new: "New work"
+        case .draft: "Draft"
+        case .edit, .editTags: "Edit work"
+        }
+    }
+
+    /// 1bs's confirmation copy. The board's "your 412 subscribers" is dropped:
+    /// the form does not carry a subscriber count.
+    static func postConfirmationMessage(missing: [String]) -> String {
+        let consequence = "notifies your subscribers and cannot be undone — a posted work can be "
+            + "edited, but not returned to draft."
+        guard !missing.isEmpty else { return "Posting " + consequence }
+        let things = missing.map { requirementPhrases[$0] ?? $0.lowercased() }
+        let list = ListFormatter.localizedString(byJoining: things)
+        let (lead, requires) = switch missing.count {
+        case 1: ("One thing is missing", "it")
+        case 2: ("Two things are missing", "both")
+        default: ("\(missing.count) things are missing", "all of them")
+        }
+        return "\(lead): \(list). AO3 requires \(requires). Posting also " + consequence
+    }
+
+    /// `AO3WorkForm.missingRequiredFields()`'s names, as the board phrases them.
+    private static let requirementPhrases = [
+        "Title": "a title", "Rating": "a rating", "Archive Warning": "an archive warning",
+        "Fandoms": "a fandom", "Language": "a language", "Work Text": "the work text"
+    ]
+
+    private func confirmDelete() {
+        Task {
+            guard let workID = form.workID else { return }
+            isCheckingDelete = true
+            do {
+                deleteImplications = try await auth.loadDeleteImplications(workID: workID)
+                showDeleteConfirmation = true
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isCheckingDelete = false
         }
     }
 }
