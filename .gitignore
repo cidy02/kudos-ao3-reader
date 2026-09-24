@@ -69,3 +69,8 @@ Scripts/fandom-audit/runner.log
 
 # graphify knowledge-graph output (generated; rebuild with /graphify)
 graphify-out/
+
+# Python bytecode from Scripts/*.py
+__pycache__/
+# Agent loop scratch state (not project content)
+.claude-overnight/
