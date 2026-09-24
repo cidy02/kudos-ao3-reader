@@ -14,6 +14,17 @@
 | [`docs/AO3_NETWORKING_POLICY.md`](docs/AO3_NETWORKING_POLICY.md) | Anything that talks to AO3 |
 | [`docs/REGRESSION_TEST_MATRIX.md`](docs/REGRESSION_TEST_MATRIX.md) | Before claiming "done"; where new tests go |
 
+**Codebase map (optional, local):** if this worktree has `graphify-out/graph.json`
+(gitignored, per worktree; scope in [`.graphifyignore`](.graphifyignore)), ask it
+before grepping for where something lives or what touches it. Run from the worktree
+root: `graphify query "<question>"`, `graphify explain "<Symbol>"`,
+`graphify path "<A>" "<B>"` (add `--undirected` if no path is found). No graph? Search
+normally — don't build one for a single task (`/graphify` is a Claude Code skill that
+runs LLM extraction). Never read `graph.json` directly (~23 MB), and still read the
+code you change. `.githooks/` refreshes the code graph after commits, merges, rebases
+and branch switches in worktrees that opted in (`git config --worktree core.hooksPath
+.githooks`); doc edits need `/graphify --update`. Don't run `graphify hook install`.
+
 ## Project in one paragraph
 
 Kudos is a native **SwiftUI + SwiftData** reader for Archive of Our Own, targeting

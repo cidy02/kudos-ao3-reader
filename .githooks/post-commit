@@ -1,0 +1,42 @@
+#!/bin/sh
+# Refresh this worktree's graphify knowledge graph after each commit (code files
+# only, no LLM). post-merge, post-rewrite and post-checkout call this too.
+# Enable per worktree, once /graphify has built its graph there:
+#   git config --worktree core.hooksPath .githooks
+# (That runs whatever .githooks/ the checked-out branch has - review .githooks/
+# diffs before checking out someone else's branch in that worktree.)
+#
+# Do not run `graphify hook install`: its worktree guard skips linked worktrees,
+# where this repo's work and graph live, and with core.hooksPath set it appends
+# to these tracked files. Final commit before `git worktree remove`? Use
+# GRAPHIFY_SKIP_HOOK=1 so no rebuild outlives the directory.
+[ -f graphify-out/graph.json ] || exit 0
+[ "${GRAPHIFY_SKIP_HOOK:-0}" = 1 ] && exit 0
+
+# A rebase replays commits in a burst: skip each one; post-rewrite calls us once
+# with "rebase" when it finishes. Merges and cherry-picks refresh per commit.
+if [ "$1" != rebase ]; then
+    git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+    [ -e "$git_dir/rebase-merge" ] || [ -e "$git_dir/rebase-apply" ] && exit 0
+fi
+
+# Prefer the interpreter /graphify recorded: GUI git clients often lack ~/.local/bin on PATH.
+py=$(cat graphify-out/.graphify_python 2>/dev/null)
+if [ -x "$py" ]; then
+    set -- "$py" -m graphify
+elif command -v graphify >/dev/null 2>&1; then
+    set -- graphify
+else
+    exit 0
+fi
+
+log="$HOME/.cache/graphify-rebuild.log"
+mkdir -p "${log%/*}"
+printf '== %s %s\n' "$(date '+%F %T')" "$PWD" >>"$log"
+# Background so git returns at once; graphify's lock makes overlapping runs wait
+# their turn, and each then does its own rebuild.
+# ponytail: no timeout - a hung rebuild blocks later ones; kill the PID in graphify-out/.rebuild.lock.
+# ponytail: any code-topology change re-clusters, and most communities get hub-based
+# names (measured 260 of 434 after one new file); re-run /graphify to relabel.
+PYTHONHASHSEED=0 nohup nice -n 10 "$@" update . >>"$log" 2>&1 &
+exit 0

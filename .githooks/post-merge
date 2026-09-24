@@ -1,0 +1,4 @@
+#!/bin/sh
+# `git merge` / `git pull` create their commit without running post-commit:
+# refresh this worktree's graphify graph here (see post-commit).
+exec "$(dirname "$0")/post-commit"

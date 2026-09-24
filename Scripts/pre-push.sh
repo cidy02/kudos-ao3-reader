@@ -6,6 +6,8 @@
 #
 # Install (once per clone — git does not version-control hooks):
 #   ln -sf ../../Scripts/pre-push.sh "$(git rev-parse --git-common-dir)/hooks/pre-push"
+# A worktree with core.hooksPath set (the graphify refresh, see AGENTS.md) ignores
+# .git/hooks, so this install does not run there.
 set -eu
 
 # Not `dirname "$0"`: this script is invoked through a symlink from

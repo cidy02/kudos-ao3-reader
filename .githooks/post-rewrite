@@ -1,0 +1,5 @@
+#!/bin/sh
+# A rebase finished (post-commit skipped each replayed commit): refresh once.
+# `commit --amend` also lands here as "amend"; post-commit already covered it.
+[ "$1" = rebase ] || exit 0
+exec "$(dirname "$0")/post-commit" rebase
