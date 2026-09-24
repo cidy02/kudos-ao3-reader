@@ -284,6 +284,14 @@ extension Color {
     static let subjectFavoriteGold = Color(red: 0.949, green: 0.784, blue: 0.475)
 }
 
+extension EnvironmentValues {
+    /// True greys a `WorkLedgerRow`'s fandom kicker — 1ai's Abandoned rows, which
+    /// the spec draws "dropped to grey rather than a fandom accent". An
+    /// environment value because the row is built three views down
+    /// (`SensitiveWorkRow` → `WorkRow` → here) and only one screen sets it.
+    @Entry var ledgerKickerMuted = false
+}
+
 /// The redesign's full-width work row — the "ledger row" the spec names on
 /// artboards 1c/1d, 1k, 1o, 1t, 1u, 1x, 1ad, 1ah, 1ai and 1aj.
 ///
@@ -328,6 +336,7 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     var drawsBackground: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.ledgerKickerMuted) private var kickerMuted
 
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
     @ScaledMetric(relativeTo: .caption) private var metadataSize: CGFloat = 11.5
@@ -395,6 +404,10 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
             size: 9,
             ruleSpacing: 5
         )
+        // 1ai drops an Abandoned row's kicker and rule to grey. Desaturating the
+        // one view keeps the palette's per-theme contrast, which a hand-picked
+        // grey would have to re-solve for all four themes.
+        .saturation(kickerMuted ? 0 : 1)
         .opacity(kicker == nil ? 0 : 1)
         .accessibilityHidden(kicker == nil)
     }

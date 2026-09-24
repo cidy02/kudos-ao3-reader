@@ -32,9 +32,10 @@ struct RecentlyDeletedView: View {
     /// before permanent deletion, so "it looked like it worked" is the one
     /// outcome this screen must never produce.
     @State private var restoreFailure: String?
-    @State private var pendingPermanentWork: SavedWork?
-    @State private var pendingPermanentCollection: WorkCollection?
-    @State private var pendingPermanentQueue: ReadingQueue?
+    /// The row whose Delete Permanently is waiting on its alert. One slot for all
+    /// three kinds: each entry carries its own message and its own delete.
+    @State private var pendingPermanent: DeletedEntry?
+    @State private var confirmingDeleteAll = false
 
     /// Spec 1bj splits at a threshold rather than showing a continuous countdown.
     /// Two weeks: long enough that the Expiring soon group is not everything on the
@@ -58,79 +59,41 @@ struct RecentlyDeletedView: View {
             }
         }
         .subjectScreenWash(palette: palette)
-        .confirmationDialog(
-            "Delete Permanently?",
+        // 1bj draws an alert, not a sheet, and "repeats it per item with the real
+        // numbers" — the title names the record and the message says what goes.
+        .alert(
+            pendingPermanent.map { "Delete “\($0.title)” permanently?" } ?? "",
             isPresented: Binding(
-                get: { pendingPermanentWork != nil },
-                set: { if !$0 { pendingPermanentWork = nil } }
+                get: { pendingPermanent != nil },
+                set: { if !$0 { pendingPermanent = nil } }
             ),
-            titleVisibility: .visible,
             // `presenting:` hands the value INTO the action. Without it the
-            // action re-read `pendingPermanentWork`, which the binding's own
-            // setter clears on dismissal — and on iOS 27 dismissal lands first,
-            // so "Delete Permanently" could silently do nothing. Same defect as
-            // the restore that no-opped on a new phone; this one at least fails
-            // in the safe direction, but a destructive control that quietly does
-            // nothing still teaches people not to trust the button.
-            presenting: pendingPermanentWork
-        ) { work in
+            // action re-read the pending state, which the binding's own setter
+            // clears on dismissal — and on iOS 27 dismissal lands first, so
+            // "Delete Permanently" could silently do nothing. A destructive
+            // control that quietly does nothing teaches people not to trust it.
+            presenting: pendingPermanent
+        ) { entry in
             Button("Delete Permanently", role: .destructive) {
-                WorkLifecycle.hardDelete(work, in: context)
-                pendingPermanentWork = nil
+                entry.deletePermanently()
+                pendingPermanent = nil
             }
-            Button("Cancel", role: .cancel) { pendingPermanentWork = nil }
-        } message: { _ in
-            Text("This work is gone for good — it can't be restored afterward.")
+            Button("Cancel", role: .cancel) { pendingPermanent = nil }
+        } message: { entry in
+            Text(entry.deletionMessage())
         }
-        .confirmationDialog(
-            "Delete Permanently?",
-            isPresented: Binding(
-                get: { pendingPermanentCollection != nil },
-                set: { if !$0 { pendingPermanentCollection = nil } }
-            ),
-            titleVisibility: .visible,
-            // `presenting:` hands the value INTO the action. Without it the
-            // action re-read `pendingPermanentCollection`, which the binding's own
-            // setter clears on dismissal — and on iOS 27 dismissal lands first,
-            // so "Delete Permanently" could silently do nothing. Same defect as
-            // the restore that no-opped on a new phone; this one at least fails
-            // in the safe direction, but a destructive control that quietly does
-            // nothing still teaches people not to trust the button.
-            presenting: pendingPermanentCollection
-        ) { collection in
-            Button("Delete Permanently", role: .destructive) {
-                PreservedWorkService.hardDelete(collection, in: context)
-                pendingPermanentCollection = nil
+        .alert(
+            entries.count == 1 ? "Delete 1 item permanently?" : "Delete all \(entries.count) items permanently?",
+            isPresented: $confirmingDeleteAll
+        ) {
+            Button("Delete All Permanently", role: .destructive) {
+                PreservedWorkService.hardDeleteAllPending(in: context)
             }
-            Button("Cancel", role: .cancel) { pendingPermanentCollection = nil }
-        } message: { _ in
-            Text("This collection is gone for good — it can't be restored afterward. "
-                + "The works themselves stay in your Library.")
-        }
-        .confirmationDialog(
-            "Delete Permanently?",
-            isPresented: Binding(
-                get: { pendingPermanentQueue != nil },
-                set: { if !$0 { pendingPermanentQueue = nil } }
-            ),
-            titleVisibility: .visible,
-            // `presenting:` hands the value INTO the action. Without it the
-            // action re-read `pendingPermanentQueue`, which the binding's own
-            // setter clears on dismissal — and on iOS 27 dismissal lands first,
-            // so "Delete Permanently" could silently do nothing. Same defect as
-            // the restore that no-opped on a new phone; this one at least fails
-            // in the safe direction, but a destructive control that quietly does
-            // nothing still teaches people not to trust the button.
-            presenting: pendingPermanentQueue
-        ) { queue in
-            Button("Delete Permanently", role: .destructive) {
-                PreservedWorkService.hardDelete(queue, in: context)
-                pendingPermanentQueue = nil
-            }
-            Button("Cancel", role: .cancel) { pendingPermanentQueue = nil }
-        } message: { _ in
-            Text("This queue is gone for good — it can't be restored afterward. "
-                + "The works themselves stay in your Library.")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every work, collection and reading queue here is removed from this device, "
+                + "with its download, progress and notes. The works stay on AO3. "
+                + "This cannot be undone.")
         }
     }
 
@@ -148,8 +111,7 @@ struct RecentlyDeletedView: View {
                     SectionRuleHeader(title: "Expiring soon", count: soon.count)
                         .pageBodyRow(top: 18, gutter: 0)
                     ForEach(soon) { entry in
-                        RecentlyDeletedRow(entry: entry, palette: palette)
-                            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                        row(entry)
                     }
                 }
             }
@@ -159,10 +121,13 @@ struct RecentlyDeletedView: View {
                     SectionRuleHeader(title: "Later", count: later.count)
                         .pageBodyRow(top: 18, gutter: 0)
                     ForEach(later) { entry in
-                        RecentlyDeletedRow(entry: entry, palette: palette)
-                            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                        row(entry)
                     }
                 }
+            }
+
+            Section {
+                deleteAllButton.pageBodyRow(top: 24, gutter: SubjectMetrics.accountGutter)
             }
         }
         .cardList()
@@ -178,6 +143,26 @@ struct RecentlyDeletedView: View {
         } message: { message in
             Text(message)
         }
+    }
+
+    private func row(_ entry: DeletedEntry) -> some View {
+        RecentlyDeletedRow(entry: entry, palette: palette) { pendingPermanent = entry }
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+    }
+
+    /// 1bj's footer: an outlined red capsule, behind its own confirmation.
+    private var deleteAllButton: some View {
+        Button {
+            confirmingDeleteAll = true
+        } label: {
+            Label("Delete All Permanently", systemImage: "trash")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .overlay(Capsule().strokeBorder(Color.red.opacity(0.42), lineWidth: 0.5))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private func header(count: Int) -> some View {
@@ -241,15 +226,17 @@ struct RecentlyDeletedView: View {
                             + "It is still scheduled for permanent deletion, so try again."
                     }
                 },
-                onDeletePermanently: { pendingPermanentWork = work }
+                deletionMessage: { workDeletionMessage(work) },
+                deletePermanently: { WorkLifecycle.hardDelete(work, in: context) }
             ))
         }
         for collection in deletedCollections {
             all.append(DeletedEntry(
                 id: collection.id,
-                kicker: "Collection",
+                // "Local" because AO3 has collections too, and those are never here.
+                kicker: "Local collection",
                 title: collection.name,
-                detail: countPhrase(collection.works.count, "work"),
+                detail: containerDetail(collection.works.count, deletedAt: collection.deletedAt),
                 daysRemaining: Self.daysRemaining(collection.permanentDeletionScheduledAt),
                 onRestore: {
                     if !PreservedWorkService.restore(collection, in: context) {
@@ -257,7 +244,8 @@ struct RecentlyDeletedView: View {
                             + "It is still scheduled for permanent deletion, so try again."
                     }
                 },
-                onDeletePermanently: { pendingPermanentCollection = collection }
+                deletionMessage: { Self.containerDeletionMessage(workCount: collection.works.count) },
+                deletePermanently: { PreservedWorkService.hardDelete(collection, in: context) }
             ))
         }
         for queue in deletedQueues {
@@ -265,7 +253,7 @@ struct RecentlyDeletedView: View {
                 id: queue.id,
                 kicker: "Reading queue",
                 title: queue.displayName,
-                detail: countPhrase(queue.memberships.count, "work"),
+                detail: containerDetail(queue.memberships.count, deletedAt: queue.deletedAt),
                 daysRemaining: Self.daysRemaining(queue.permanentDeletionScheduledAt),
                 onRestore: {
                     if !PreservedWorkService.restore(queue, in: context) {
@@ -273,10 +261,66 @@ struct RecentlyDeletedView: View {
                             + "It is still scheduled for permanent deletion, so try again."
                     }
                 },
-                onDeletePermanently: { pendingPermanentQueue = queue }
+                deletionMessage: { Self.containerDeletionMessage(workCount: queue.memberships.count) },
+                deletePermanently: { PreservedWorkService.hardDelete(queue, in: context) }
             ))
         }
         return all.sorted { $0.daysRemaining < $1.daysRemaining }
+    }
+
+    /// Spec 1bj: "8 works · deleted 30 Aug".
+    private func containerDetail(_ count: Int, deletedAt: Date?) -> String {
+        let works = countPhrase(count, "work")
+        guard let deletedAt else { return works }
+        return works + " · deleted " + deletedAt.formatted(.dateTime.day().month(.abbreviated))
+    }
+
+    /// The per-item alert's real numbers for a work. Read only when the alert is
+    /// up, so the annotation fetch is not paid for every row on every render —
+    /// fetched the same way `WorkLifecycle.hardDelete` finds what it deletes.
+    private func workDeletionMessage(_ work: SavedWork) -> String {
+        let workID = work.id
+        let marks = ((try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? [])
+            .filter { $0.work?.id == workID && !$0.isPendingDeletion }
+        return Self.workDeletionMessage(
+            hasDownload: work.hasEPUB,
+            place: work.isFinished ? nil : work.readingProgressLabel,
+            highlights: marks.filter { $0.kind == .highlight }.count,
+            bookmarks: marks.filter { $0.kind == .bookmark }.count
+        )
+    }
+
+    /// 1bj's per-item message: "The download, your place at chapter 4 and your
+    /// two notes are removed from this device. This cannot be undone." Built from
+    /// what this work actually has, so a work with none of it says so plainly
+    /// rather than listing things that are not there.
+    ///
+    /// `place` is `SavedWork.readingProgressLabel` ("Ch 4" or "42%"), nil when
+    /// there is no place worth naming.
+    static func workDeletionMessage(hasDownload: Bool, place: String?, highlights: Int, bookmarks: Int) -> String {
+        var parts: [String] = []
+        if hasDownload { parts.append("the download") }
+        if let place {
+            parts.append("your place at " + (place.hasPrefix("Ch ") ? "chapter " + place.dropFirst(3) : place))
+        }
+        if highlights > 0 { parts.append("your \(highlights) highlight\(highlights == 1 ? "" : "s")") }
+        if bookmarks > 0 { parts.append("your \(bookmarks) bookmark\(bookmarks == 1 ? "" : "s")") }
+        guard let last = parts.popLast() else {
+            return "Its record is removed from this device. This cannot be undone."
+        }
+        let list = parts.isEmpty ? last : parts.joined(separator: ", ") + " and " + last
+        return "This removes " + list + " from this device. This cannot be undone."
+    }
+
+    /// A collection or queue is a list of works, not the works: deleting it
+    /// leaves every one of them in the Library, and the count says how many.
+    static func containerDeletionMessage(workCount: Int) -> String {
+        let works = switch workCount {
+        case 0: "It holds no works."
+        case 1: "The 1 work in it stays in your Library."
+        default: "The \(workCount) works in it stay in your Library."
+        }
+        return works + " This cannot be undone."
     }
 
     /// Spec 1bj: "sprawl_ghost · 66,410 words · unread". The last fact is the state
@@ -303,6 +347,12 @@ struct RecentlyDeletedView: View {
         "\(count) \(noun)\(count == 1 ? "" : "s")"
     }
 
+    /// 1bj: "amber under a week". Amber, not red — red is the destructive
+    /// action's colour on this screen, and a countdown is a warning, not an act.
+    static func isUrgent(daysRemaining: Int) -> Bool {
+        daysRemaining < 7
+    }
+
     static func daysRemaining(_ date: Date?) -> Int {
         guard let date else { return 0 }
         // Round up: an hour after deleting, the honest answer is still the full
@@ -323,16 +373,22 @@ private struct DeletedEntry: Identifiable {
     var authorIdentities: [AO3AuthorIdentity] = []
     let daysRemaining: Int
     let onRestore: () -> Void
-    let onDeletePermanently: () -> Void
+    /// The per-item alert's message — a closure so a work's annotation count is
+    /// fetched only once its alert is up.
+    let deletionMessage: () -> String
+    /// The existing per-kind permanent delete; runs only from the alert.
+    let deletePermanently: () -> Void
 }
 
-/// A single Recently Deleted row on the subject card, with Restore (leading swipe)
-/// and Delete Permanently (trailing swipe). The same two actions live in a context
-/// menu — swipes are invisible until tried, and on macOS they only exist for
-/// trackpad users, so the menu is the discoverable path.
+/// A single Recently Deleted row on the subject card. Spec 1bj: "Swipe gives
+/// Restore and Delete in that order", both on the trailing edge. The same two
+/// actions live in a context menu — swipes are invisible until tried, and on
+/// macOS they only exist for trackpad users, so the menu is the discoverable path.
 private struct RecentlyDeletedRow: View {
     let entry: DeletedEntry
     let palette: SubjectPalette
+    /// Asks for the alert; never deletes by itself.
+    let onDeletePermanently: () -> Void
 
     var body: some View {
         // authorIdentities.isEmpty: the detail line is a plain, non-interactive Text,
@@ -349,12 +405,13 @@ private struct RecentlyDeletedRow: View {
             }
         }
         .contentShape(Rectangle())
+        // Trailing actions lay out from the edge inward, so Delete is declared
+        // first to sit outermost with Restore to its left — the artboard's order.
+        // A full swipe lands on Delete, which only opens the alert.
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive, action: entry.onDeletePermanently) {
-                Label("Delete Permanently", systemImage: "trash.fill")
+            Button(role: .destructive, action: onDeletePermanently) {
+                Label("Delete", systemImage: "trash.fill")
             }
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button(action: entry.onRestore) {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
@@ -364,7 +421,7 @@ private struct RecentlyDeletedRow: View {
             Button(action: entry.onRestore) {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
-            Button(role: .destructive, action: entry.onDeletePermanently) {
+            Button(role: .destructive, action: onDeletePermanently) {
                 Label("Delete Permanently", systemImage: "trash.fill")
             }
         }
@@ -419,7 +476,9 @@ private struct RecentlyDeletedRow: View {
         VStack(spacing: 1) {
             Text("\(entry.daysRemaining)d")
                 .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                .foregroundStyle(entry.daysRemaining <= 7 ? Color.red : Color.primary)
+                .foregroundStyle(
+                    RecentlyDeletedView.isUrgent(daysRemaining: entry.daysRemaining) ? Color.orange : Color.primary
+                )
             Text("left")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)

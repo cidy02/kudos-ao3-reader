@@ -9,21 +9,18 @@ import SwiftUI
 /// what that toolbar already offers (rename, delete, a look at what's
 /// preserved), not a new feature.
 ///
+/// **Built since this note was first written** (corrected 2026-09-24): the
+/// TAGS row and chips over `ReadingQueue.tags` (`tagsPanel`, editing through
+/// `QueueTagSheet`) with its "Manage tags" row into `QueueTagManagerView`, and
+/// a "Keep downloaded" toggle storing `ReadingQueue.keepsWorksOffline`
+/// (`offlinePanel`). The toggle records the choice only — nothing reads it yet,
+/// as the footnote under it says; its effect is an open owner item.
+///
 /// **What 1h draws that this does not build, and why:**
-/// - A DESCRIPTION field and a TAGS chip row (plus their "Manage all tags" row
-///   into artboard 1bh). `ReadingQueue` has no description or tag property, and
-///   1bh itself — a "shared queue" tag manager with collaborators and
-///   per-person edit rights — has no backing *at all*: this app has no
-///   multi-user/collaboration model anywhere, so 1bh was not attempted in any
-///   form, not even a stub.
-/// - A "Keep works offline" toggle. Every work added to a queue is preserved
-///   automatically (`ReadingQueueService.addAndPreserve`) — there is no opt-out
-///   to show a switch for, so drawing one here would offer a choice the app
-///   does not have.
-/// - A "Last read" row. The queue only records when its *membership* last
-///   changed (`lastMembershipChangedAt`) — not when a work inside it was last
-///   opened — so a "Last read" label would print a true-looking date for a
-///   fact the app does not actually track.
+/// - A DESCRIPTION field. `ReadingQueue` has no description property, and
+///   adding one is a schema change.
+/// - A "Last read" row. Not blocked on data any more — each member work has its
+///   own `lastReadDate`, so the queue's is the latest of those — just not drawn.
 ///
 /// **The colour is editable now.** It used to be derived from the queue's name,
 /// so there was nothing an edit affordance could open; `ReadingQueue.hue` is a

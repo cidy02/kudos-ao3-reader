@@ -25,6 +25,18 @@ enum WorkLifecycle {
         context.saveBestEffort(reason: "Saving still-reading state failed")
     }
 
+    /// 1ai's "Move back to In progress". Abandoned is derived from a threshold
+    /// (`ReadingLogService.isAbandoned`), so undoing it has to be stored — the
+    /// spec: "the undo writes a manual override so the threshold cannot
+    /// re-abandon it". Rides the existing `keepInProgressOverride`, which the
+    /// backup manifest and its merge already carry (`KudosBackup`).
+    @MainActor
+    static func keepInProgress(_ work: SavedWork, in context: ModelContext) {
+        work.keepInProgressOverride = true
+        work.markModified()
+        context.saveBestEffort(reason: "Saving keep-in-progress override failed")
+    }
+
     /// Frees a finished, unprotected work's EPUB if it still has one. Safe to call
     /// repeatedly (e.g. when leaving the reader). Saves only if something changed.
     @MainActor

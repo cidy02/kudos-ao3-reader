@@ -248,6 +248,35 @@ struct ReadingLogTests {
         #expect(!ReadingLogService.isAbandoned(work: work, now: now))
     }
 
+    /// 1ai's "Move back to In progress": the undo must be *stored*, so the same
+    /// 21-day rule that abandoned the work cannot abandon it again, and the work
+    /// must land in the In progress bucket rather than vanish from both.
+    @Test func moveBackToInProgressStoresTheOverrideAndRebuckets() throws {
+        let context = try context()
+        let now = Date()
+        let work = SavedWork(title: "Dusty", author: "A")
+        work.hasEPUB = true
+        work.readiumLocator = locator(progress: 0.4)
+        work.lastReadDate = now.addingTimeInterval(-30 * 24 * 3600)
+        context.insert(work)
+        try context.save()
+        let before = work.lastModifiedAt
+        #expect(ReadingLogService.isAbandoned(work: work, now: now))
+
+        WorkLifecycle.keepInProgress(work, in: context)
+
+        #expect(work.keepInProgressOverride)
+        #expect(work.lastModifiedAt >= before)
+        #expect(!ReadingLogService.isAbandoned(work: work, now: now))
+        // Still stale by the threshold — only the override keeps it out.
+        #expect(!ReadingLogService.isAbandoned(work: work, now: now.addingTimeInterval(365 * 24 * 3600)))
+        let buckets = LibraryHistoryGrouping.groups(
+            .state, works: [work], now: now,
+            isAbandoned: { ReadingLogService.isAbandoned(work: $0, now: now) }
+        )
+        #expect(buckets.map(\.title) == [LibraryHistoryGrouping.inProgressTitle])
+    }
+
     @Test func wordsPerHourUsesStoredWordCount() throws {
         let slow = ReadingSession(
             workID: UUID(),

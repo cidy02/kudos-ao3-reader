@@ -140,6 +140,69 @@ struct PreservedWorkTests {
         )
     }
 
+    /// 1bj's "Delete All Permanently": every pending record of all three kinds,
+    /// however much window it has left, and nothing that is not pending.
+    @Test func hardDeleteAllPendingTakesEveryPendingKindAndNothingLive() throws {
+        let container = try container()
+        let context = container.mainContext
+        let live = SavedWork(title: "Still Here", author: "Writer")
+        let pendingWork = SavedWork(title: "Just Deleted", author: "Writer")
+        let collection = WorkCollection(name: "Comfort reads")
+        let queue = ReadingQueue(name: "Winter backlog")
+        context.insert(live)
+        context.insert(pendingWork)
+        context.insert(collection)
+        context.insert(queue)
+        try context.save()
+        PreservedWorkService.softDelete(pendingWork, in: context)
+        PreservedWorkService.softDelete(collection, in: context)
+        PreservedWorkService.softDelete(queue, in: context)
+
+        let removed = PreservedWorkService.hardDeleteAllPending(in: context)
+
+        #expect(removed == 3)
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).map(\.title) == ["Still Here"])
+        #expect(try context.fetch(FetchDescriptor<WorkCollection>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<ReadingQueue>()).isEmpty)
+    }
+
+    /// The sweep shares the pass with Delete All; it must still spare records
+    /// inside their window.
+    @Test func sweepStillSparesRecordsInsideTheirWindowAfterSharingThePass() throws {
+        let container = try container()
+        let context = container.mainContext
+        let collection = WorkCollection(name: "Fresh")
+        context.insert(collection)
+        try context.save()
+        PreservedWorkService.softDelete(collection, in: context)
+
+        #expect(PreservedWorkService.sweepExpired(in: context) == 0)
+        #expect(try context.fetch(FetchDescriptor<WorkCollection>()).count == 1)
+    }
+
+    @Test func recentlyDeletedTurnsAmberUnderAWeek() {
+        #expect(RecentlyDeletedView.isUrgent(daysRemaining: 0))
+        #expect(RecentlyDeletedView.isUrgent(daysRemaining: 6))
+        #expect(!RecentlyDeletedView.isUrgent(daysRemaining: 7))
+        #expect(!RecentlyDeletedView.isUrgent(daysRemaining: 30))
+    }
+
+    /// 1bj's per-item alert names only what this work actually has.
+    @Test func permanentDeleteMessageListsTheRealNumbers() {
+        #expect(RecentlyDeletedView.workDeletionMessage(
+            hasDownload: true, place: "Ch 4", highlights: 2, bookmarks: 1
+        ) == "This removes the download, your place at chapter 4, your 2 highlights and your 1 bookmark "
+            + "from this device. This cannot be undone.")
+        #expect(RecentlyDeletedView.workDeletionMessage(
+            hasDownload: false, place: "42%", highlights: 0, bookmarks: 0
+        ) == "This removes your place at 42% from this device. This cannot be undone.")
+        #expect(RecentlyDeletedView.workDeletionMessage(
+            hasDownload: false, place: nil, highlights: 0, bookmarks: 0
+        ) == "Its record is removed from this device. This cannot be undone.")
+        #expect(RecentlyDeletedView.containerDeletionMessage(workCount: 8)
+            == "The 8 works in it stay in your Library. This cannot be undone.")
+    }
+
     @Test func deleteConfirmationMessageEscalatesWhenAO3Unavailable() {
         let available = SavedWork(title: "Available Work", author: "Writer")
         let unavailable = SavedWork(title: "Gone Work", author: "Writer")

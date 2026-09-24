@@ -174,39 +174,45 @@ enum PreservedWorkService {
     static func sweepExpired(in context: ModelContext) -> Int {
         guard PersistenceOperationGate.active == nil else { return 0 }
         let now = Date()
-        var count = 0
+        let count = hardDeletePending(in: context) { scheduledAt in
+            scheduledAt.map { $0 <= now } ?? false
+        }
+        if count > 0 {
+            Log.library.info("Recently Deleted sweep permanently removed \(count, privacy: .public) record(s)")
+        }
+        return count
+    }
 
+    /// Recently Deleted's "Delete All Permanently" (1bj): every pending record,
+    /// whatever is left of its window, through the same per-kind `hardDelete`s the
+    /// per-item action and the sweep use — not a second way to delete.
+    @discardableResult
+    static func hardDeleteAllPending(in context: ModelContext) -> Int {
+        hardDeletePending(in: context) { _ in true }
+    }
+
+    /// The shared pass: permanently deletes each pending work, collection and
+    /// queue whose scheduled deletion date `isDue` accepts.
+    private static func hardDeletePending(in context: ModelContext, isDue: (Date?) -> Bool) -> Int {
+        var count = 0
         if let works = try? context.fetch(FetchDescriptor<SavedWork>()) {
-            for work in works {
-                guard work.isPendingDeletion, let scheduledAt = work.permanentDeletionScheduledAt, scheduledAt <= now
-                else { continue }
+            for work in works where work.isPendingDeletion && isDue(work.permanentDeletionScheduledAt) {
                 WorkLifecycle.hardDelete(work, in: context)
                 count += 1
             }
         }
-
         if let collections = try? context.fetch(FetchDescriptor<WorkCollection>()) {
-            for collection in collections {
-                guard collection.isPendingDeletion,
-                      let scheduledAt = collection.permanentDeletionScheduledAt,
-                      scheduledAt <= now
-                else { continue }
+            for collection in collections
+            where collection.isPendingDeletion && isDue(collection.permanentDeletionScheduledAt) {
                 hardDelete(collection, in: context)
                 count += 1
             }
         }
-
         if let queues = try? context.fetch(FetchDescriptor<ReadingQueue>()) {
-            for queue in queues {
-                guard queue.isPendingDeletion, let scheduledAt = queue.permanentDeletionScheduledAt, scheduledAt <= now
-                else { continue }
+            for queue in queues where queue.isPendingDeletion && isDue(queue.permanentDeletionScheduledAt) {
                 hardDelete(queue, in: context)
                 count += 1
             }
-        }
-
-        if count > 0 {
-            Log.library.info("Recently Deleted sweep permanently removed \(count, privacy: .public) record(s)")
         }
         return count
     }

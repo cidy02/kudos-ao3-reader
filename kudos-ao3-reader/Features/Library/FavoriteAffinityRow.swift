@@ -11,23 +11,43 @@ import SwiftUI
 struct FavoriteAffinityRow: View {
     let row: ReadingAffinities.Row
     let palette: SubjectPalette
-    /// `#` for tags, the name's first letter for authors and fandoms — the spec's
-    /// own distinction, and it is doing work: a tag's first letter is not a thing
-    /// anyone sorts or scans by.
-    var usesHashTile = false
-    /// Authors (1ak) and tags (1bd) draw a circular tile; fandoms (1bc) draw a
-    /// rounded square. Not derivable from `usesHashTile` — tags are circles *and*
-    /// hashed, authors are circles and lettered, fandoms are squares and lettered.
-    var usesCircularTile = true
+    /// Which of 1ak / 1bc / 1bd this row is drawn for. The three share the row
+    /// but not every line on it — the tile shape, the log line's wording, and
+    /// where the library facts sit all follow the scope's own artboard.
+    let scope: LibrarySectionListView.FavoriteScope
     /// 1ak's "Newest work" block. Only the Authors scope has one: 1bc and 1bd draw
     /// no such block, and there is no per-fandom or per-tag equivalent to fetch.
     var newestWork: AO3WorkSummary?
     /// Whether `newestWork` is absent from what you have opened — 1ak's UNREAD tag.
     var isNewestWorkUnread = false
 
+    @Environment(AppRouter.self) private var router
+
+    /// `#` for tags, the name's first letter for authors and fandoms — the spec's
+    /// own distinction, and it is doing work: a tag's first letter is not a thing
+    /// anyone sorts or scans by.
+    private var usesHashTile: Bool { scope == .tags }
+    /// Authors (1ak) and tags (1bd) draw a circular tile; fandoms (1bc) draw a
+    /// rounded square.
+    private var usesCircularTile: Bool { scope != .fandoms }
+
+    /// 1ak's trailing chevron: "Counts, signal mix and the rest live in the
+    /// author's own page". Nil for a byline with no registered account — an
+    /// orphaned or anonymous work has no page to open, and a guessed URL is not one.
+    private var authorRoute: AO3AuthorRoute? {
+        guard scope == .authors, let username = row.username else { return nil }
+        return AO3AuthorRoute(username: username)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             identityLine
+            // 1bd puts the library facts in their own labelled block under a
+            // hairline, the slot 1ak gives the newest work.
+            if scope == .tags {
+                SubjectRowSeparator(inset: 0)
+                libraryBlock
+            }
             if let newestWork {
                 SubjectRowSeparator(inset: 0)
                 newestWorkBlock(newestWork)
@@ -37,6 +57,13 @@ struct FavoriteAffinityRow: View {
         .padding(.vertical, 12)
         .subjectCard(palette: palette)
         .combinedAccessibilityRow(accessibilityText)
+        // The row is one VoiceOver element, which hides the chevron's button;
+        // this puts the same destination in the rotor.
+        .accessibilityActions {
+            if let authorRoute {
+                Button("Open author page") { router.openAuthorProfile(authorRoute) }
+            }
+        }
     }
 
     private var identityLine: some View {
@@ -66,11 +93,58 @@ struct FavoriteAffinityRow: View {
                 // whenever the newest-work block appeared. The owner overrode
                 // that on 2026-09-15: Fandoms and Tags both keep the line, and
                 // an Authors row that silently drops it reads as a different
-                // kind of row rather than the same row with more on it.
-                libraryLine
+                // kind of row rather than the same row with more on it. Tags now
+                // carry it as 1bd's labelled block below instead.
+                if scope != .tags {
+                    libraryLine
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if let authorRoute {
+                // A borderless button, not a link: the newest-work block below
+                // already owns this row's background link, and a List row with
+                // two would open whichever SwiftUI picked.
+                Button {
+                    router.openAuthorProfile(authorRoute)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.borderless)
+                .minimumHitTarget()
+                .accessibilityLabel("Open author page")
+            }
         }
+    }
+
+    /// 1bd: "In your library", then the unread count, then what of it is
+    /// downloaded or waiting in Saved for Later.
+    private var libraryBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("In your library")
+                .font(.system(size: 8.5, weight: .bold))
+                .kerning(0.85)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+            let unread = row.unreadInLibrary
+            Text(unread > 0 ? "\(unread) unread work\(unread == 1 ? "" : "s")" : "No unread works")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(unread > 0 ? palette.accent : Color.primary)
+            if let libraryDetail {
+                Text(libraryDetail)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// The spec's empty line reads "Everything tagged this way is finished", but
+    /// no unread works only means every one has been *opened* — some may be
+    /// mid-way — so this says the part the count can stand behind.
+    private var libraryDetail: String? {
+        row.unreadInLibrary > 0 ? libraryExtras : "Everything tagged this way has been opened"
     }
 
     /// 1ak's second half: what this author posted most recently, and whether you
@@ -168,11 +242,20 @@ struct FavoriteAffinityRow: View {
             .accessibilityHidden(true)
     }
 
-    /// Spec 1ak: "6 works read · 31h 12m · last read 4 Sep 2026". Each fact is
-    /// dropped rather than zeroed when it has nothing to say — "0h 00m" on a row
-    /// whose sessions predate the log is a wrong number, not a small one.
+    /// Spec 1ak: "6 works read · 31h 12m · last read 4 Sep 2026"; 1bc adds
+    /// "6 favorited" after the count, and 1bd reads "41 works read carry this
+    /// tag". Each fact is dropped rather than zeroed when it has nothing to say —
+    /// "0h 00m" on a row whose sessions predate the log is a wrong number, not a
+    /// small one.
     private var logLine: String {
-        var parts = ["\(row.worksRead) work\(row.worksRead == 1 ? "" : "s") read"]
+        var worksRead = "\(row.worksRead) work\(row.worksRead == 1 ? "" : "s") read"
+        if scope == .tags {
+            worksRead += row.worksRead == 1 ? " carries this tag" : " carry this tag"
+        }
+        var parts = [worksRead]
+        if scope == .fandoms, row.favorited > 0 {
+            parts.append("\(row.favorited) favorited")
+        }
         if row.totalSeconds > 0 {
             parts.append(ReadingInsights.durationLabel(row.totalSeconds))
         }
@@ -190,19 +273,70 @@ struct FavoriteAffinityRow: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Spec 1bd's second line, including its wording for the empty case: "No unread
-    /// works · Everything tagged this way is finished". That sentence is the reason
-    /// the line exists — it is the one that tells you there is nothing left here.
+    /// The Authors and Fandoms rows' one-line form of 1bd's library facts, and
+    /// every row's VoiceOver text. It says "no unread works" outright because that
+    /// is the line that tells you there is nothing left here.
     private var libraryText: String {
         guard row.unreadInLibrary > 0 else {
             return "No unread works in your library"
         }
-        var text = "\(row.unreadInLibrary) unread work\(row.unreadInLibrary == 1 ? "" : "s")"
+        let text = "\(row.unreadInLibrary) unread work\(row.unreadInLibrary == 1 ? "" : "s")"
+        return libraryExtras.map { text + " · " + $0 } ?? text
+    }
+
+    /// "8 downloaded · 3 in Saved for Later", or nil when neither applies.
+    private var libraryExtras: String? {
         var extras: [String] = []
         if row.downloadedInLibrary > 0 { extras.append("\(row.downloadedInLibrary) downloaded") }
         if row.savedForLater > 0 { extras.append("\(row.savedForLater) in Saved for Later") }
-        if !extras.isEmpty { text += " · " + extras.joined(separator: " · ") }
-        return text
+        return extras.isEmpty ? nil : extras.joined(separator: " · ")
+    }
+}
+
+/// The Authors / Fandoms / Tags scopes' empty state.
+///
+/// `hiddenByFilter` distinguishes "you have read nothing" from "the active chip
+/// matched none of the rows you do have". Without it an active "With new work"
+/// told a reader with a full history that nothing had been read yet — the empty
+/// state described a different list than the one that produced it.
+struct FavoriteAffinityEmptyCard: View {
+    let scope: LibrarySectionListView.FavoriteScope
+    let hiddenByFilter: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+            Text(detail)
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .subjectPanel()
+    }
+
+    /// Two chips can hide rows — Authors' "With new work" and Tags' "Unread
+    /// works" — and each needs its own sentence about what it hid.
+    private var hiddenByUnread: Bool { hiddenByFilter && scope == .tags }
+
+    private var title: String {
+        hiddenByUnread ? "No unread works" : hiddenByFilter ? "No new work" : "Nothing read yet"
+    }
+
+    private var detail: String {
+        let noun = scope.title.lowercased()
+        if hiddenByUnread {
+            return "Every work in your library under these tags has been opened. Tap All to see them again."
+        }
+        if hiddenByFilter {
+            return "None of these \(noun) has posted something you have not already read. "
+                + "Tap All to see them again."
+        }
+        return "These are the \(noun) behind the works you have "
+            + "actually read, ranked. They fill in as you read — there is nothing to star."
     }
 }
 
@@ -229,6 +363,7 @@ struct FavoriteAuthorRow: View {
         FavoriteAffinityRow(
             row: row,
             palette: palette,
+            scope: .authors,
             newestWork: newestWork,
             isNewestWorkUnread: newestWork.map { !readWorkIDs.contains($0.id) } ?? false
         )
