@@ -9,18 +9,18 @@ import SwiftUI
 /// what that toolbar already offers (rename, delete, a look at what's
 /// preserved), not a new feature.
 ///
-/// **Built since this note was first written** (corrected 2026-09-24): the
-/// TAGS row and chips over `ReadingQueue.tags` (`tagsPanel`, editing through
-/// `QueueTagSheet`) with its "Manage tags" row into `QueueTagManagerView`, and
-/// a "Keep downloaded" toggle storing `ReadingQueue.keepsWorksOffline`
-/// (`offlinePanel`). The toggle records the choice only — nothing reads it yet,
-/// as the footnote under it says; its effect is an open owner item.
+/// **Built:** the bare progress strip under the header (`QueueProgressStrip`);
+/// "Last read", the latest of the member works' `lastReadDate`s
+/// (`ReadingQueueFacts.lastRead`); TAGS as removable chips with an "Add tag"
+/// chip into `QueueTagSheet` and "Manage all tags N" into `QueueTagManagerView`,
+/// always shown; and a "Keep downloaded" toggle storing
+/// `ReadingQueue.keepsWorksOffline` (`offlinePanel`). The toggle records the
+/// choice only — nothing reads it yet, as the footnote under it says; its
+/// effect is an open owner item.
 ///
-/// **What 1h draws that this does not build, and why:**
-/// - A DESCRIPTION field. `ReadingQueue` has no description property, and
-///   adding one is a schema change.
-/// - A "Last read" row. Not blocked on data any more — each member work has its
-///   own `lastReadDate`, so the queue's is the latest of those — just not drawn.
+/// **What 1h draws that this does not build, and why:** a DESCRIPTION field.
+/// `ReadingQueue` has no description property, and adding one is a schema
+/// change.
 ///
 /// **The colour is editable now.** It used to be derived from the queue's name,
 /// so there was nothing an edit affordance could open; `ReadingQueue.hue` is a
@@ -28,10 +28,14 @@ import SwiftUI
 /// one still falls back to the name hash, so nothing changed appearance.
 struct ReadingQueueSettingsView: View {
     let queue: ReadingQueue
+    /// "Home" or "Library" — the queue page's own origin, for the kicker.
+    var originKicker = "Library"
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    /// The shared vocabulary "Manage all tags" counts.
+    @Query private var allTags: [Tag]
     @State private var showingRename = false
     @State private var renameText = ""
     @State private var confirmDelete = false
@@ -95,37 +99,37 @@ struct ReadingQueueSettingsView: View {
         .subjectPanel()
     }
 
-    /// 1h's queue tags. The row states the count and opens the shared-vocabulary
-    /// editor; 1i's organizer rail filters on the same relationship.
+    /// 1h's queue tags: "the tags as removable chips ... with Manage all tags as
+    /// the way out to the shared vocabulary". × takes a tag off this queue only
+    /// (`ReadingQueue.removeTag`, `QueueTagSheet`'s own path); "Add tag" opens
+    /// that sheet. 1i's organizer rail filters on the same relationship.
     private var tagsPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SubjectFormRow(
-                label: "Tags",
-                value: queue.tags.isEmpty ? "None" : "\(queue.tags.count)",
-                showsDisclosure: true
-            ) {
-                showingTags = true
-            }
-            .accessibilityAddTraits(.isButton)
-            // 1h: "Manage all tags as the way out to the shared vocabulary" —
-            // 1bh's screen. Offered only once there is something to manage; on a
-            // queue with no tags the sheet above is the whole story.
-            if !queue.tags.isEmpty {
-                SubjectRowSeparator()
-                SubjectFormRow(label: "Manage tags", value: "", showsDisclosure: true)
-                    .subjectRowNavigation(accessibilityLabel: "Manage tags") {
-                        QueueTagManagerView(queue: queue)
+        VStack(alignment: .leading, spacing: 0) {
+            FlowLayout(spacing: 6, rowSpacing: 6) {
+                ForEach(queue.tags.sorted { $0.name < $1.name }) { tag in
+                    Button {
+                        queue.removeTag(tag)
+                        context.saveBestEffort(reason: "Removing queue tag failed")
+                    } label: {
+                        SubjectChip(text: tag.name, style: .tinted, trailingImage: "xmark", palette: palette)
                     }
-            }
-            if !queue.tags.isEmpty {
-                FlowLayout(spacing: 6, rowSpacing: 6) {
-                    ForEach(queue.tags.sorted { $0.name < $1.name }) { tag in
-                        SubjectChip(text: tag.name, style: .tinted, palette: palette)
-                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove \(tag.name)")
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+                Button {
+                    showingTags = true
+                } label: {
+                    SubjectChip(text: "Add tag", style: .dashed, systemImage: "plus")
+                }
+                .buttonStyle(.plain)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Manage all tags", value: "\(allTags.count)", showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Manage all tags") {
+                    QueueTagManagerView(queue: queue)
+                }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .subjectPanel()
@@ -135,12 +139,19 @@ struct ReadingQueueSettingsView: View {
         List {
             Section {
                 SubjectHeaderBlock(
-                    kicker: "Library › Queues",
+                    kicker: ReadingQueueFacts.kicker(origin: originKicker, isDetails: true),
                     title: queue.displayName,
                     subtitle: subtitle,
                     palette: palette
                 )
                 .pageBodyRow(top: 20, gutter: 0)
+                if !works.isEmpty {
+                    QueueProgressStrip(
+                        progress: ReadingQueueFacts.progress(of: works.map(\.readingState)),
+                        palette: palette
+                    )
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.headerGutter)
+                }
             }
 
             Section {
@@ -275,6 +286,11 @@ struct ReadingQueueSettingsView: View {
             SubjectFormRow(label: "Order", value: "Manual")
             SubjectRowSeparator()
             SubjectFormRow(label: "Preserved", value: preservedValue)
+            // 1h: "Last read · 2 hours ago". Omitted for a queue nobody has read in.
+            if let lastRead = ReadingQueueFacts.lastRead(works.map(\.lastReadDate)) {
+                SubjectRowSeparator()
+                SubjectFormRow(label: "Last read", value: lastRead.formatted(.relative(presentation: .named)))
+            }
         }
         .subjectPanel()
     }

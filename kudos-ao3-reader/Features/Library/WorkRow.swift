@@ -47,6 +47,7 @@ struct WorkRow: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.ledgerPositionNumber) private var positionNumber
     @State private var internalExpanded = false
 
     private var expandedBinding: Binding<Bool> {
@@ -139,16 +140,24 @@ struct WorkRow: View {
             titleSymbolTint: .subjectFavoriteGold,
             metadataSegments: ledgerMetadataSegments,
             leading: {
-                WorkProgressRing(
-                    progress: work.readingProgress ?? 0,
-                    state: ledgerProgressState,
-                    // Sized to the signal tray facing it across the card. Spec 1ad
-                    // draws this ring at 44 and the tray's tiles at 22, which makes
-                    // the tray ~59 tall — a third bigger than the ring, and it reads
-                    // that way. Both now come from the tray's own constants, so a
-                    // change to tile size keeps them the same size.
-                    diameter: WorkStatusIconGrid.trayHeight(tileSize: Self.ledgerTileSize)
-                )
+                if let positionNumber {
+                    Text("\(positionNumber)")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .frame(minWidth: 17, alignment: .leading)
+                        .accessibilityLabel("Position \(positionNumber)")
+                } else {
+                    WorkProgressRing(
+                        progress: work.readingProgress ?? 0,
+                        state: ledgerProgressState,
+                        // Sized to the signal tray facing it across the card. Spec 1ad
+                        // draws this ring at 44 and the tray's tiles at 22, which makes
+                        // the tray ~59 tall — a third bigger than the ring, and it reads
+                        // that way. Both now come from the tray's own constants, so a
+                        // change to tile size keeps them the same size.
+                        diameter: WorkStatusIconGrid.trayHeight(tileSize: Self.ledgerTileSize)
+                    )
+                }
             },
             trailing: {
                 VStack(alignment: .trailing, spacing: 4) {

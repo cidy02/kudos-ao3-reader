@@ -3,27 +3,27 @@ import SwiftData
 import SwiftUI
 
 /// Artboard **1i**'s "Queues — organizer": the full list of every queue behind
-/// the Library carousel's "See all" chevron. Was a `LibraryEntityGridView`
+/// Home's Queues carousel chevron. Was a `LibraryEntityGridView`
 /// wrapping the carousel's own `ReadingQueueCard` — a 2-column grid with no
 /// swipe actions, no reorder, and no per-queue detail beyond the title and a
 /// work count. This restyles it into 1i's shape: a header stat strip across
 /// every queue, then one reorderable row per queue with its own tally and
 /// storage line.
 ///
-/// **Built since this note was first written** (corrected 2026-09-24): the
-/// "Search queues, tags and works" field (`queueSearchField`, filtering through
-/// `matchesSearch` over names, tags and member works), the **Pinned** section
-/// (`pinnedQueues`, on `ReadingQueue.isPinned`), and the tag filter pills over
-/// `ReadingQueue.tags`, with an Untagged option.
+/// **Built:** the "Search queues, tags and works" field (`queueSearchField`,
+/// filtering through `matchesSearch` over names, tags and member works), the
+/// **Pinned** section (`pinnedQueues`, on `ReadingQueue.isPinned`), the tag
+/// filter pills over `ReadingQueue.tags` with an Untagged option, each row's
+/// tags, and the New Queue row's "Name it, colour it, tag it" — true now that
+/// `NewReadingQueueSheet` takes a colour and tags. The kicker is "Home": this
+/// screen is only reachable from Home's Queues chevron.
 ///
 /// **What 1i draws that this does not build, and why:**
+/// - The header's select mode (bulk pin / tag / delete) and always-live drag;
+///   drag still waits for Reorder.
 /// - The tag rail's "Edit tags" chip — tags are edited per queue in Queue
 ///   Details (1h), not from a rail that filters by them, and a second editor here
 ///   would be two ways to write one list.
-/// - The "Name it, colour it, tag it" copy on the New Queue row. The sheet now
-///   takes a name and a stored colour (`NewReadingQueueSheet`'s swatch row) but
-///   has no tag step, so the existing "Tap to create" line stays rather than
-///   promise one.
 /// - The mini 2×2 "tab group" preview tile `ReadingQueueCard` draws on Home's
 ///   carousel. Reusing it here would mean either building a second copy of its
 ///   (currently `private`, single-type-scoped) tile logic or reaching across a
@@ -221,7 +221,7 @@ struct AllReadingQueuesGridView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(kicker: "Library", title: "Queues", palette: organizerPalette)
+                SubjectHeaderBlock(kicker: "Home", title: "Queues", palette: organizerPalette)
                     .pageBodyRow(top: 20, gutter: 0)
                 // 1i's tree puts the search between the title and the signal
                 // strip, in the content — not in the navigation bar, where a
@@ -371,7 +371,7 @@ struct AllReadingQueuesGridView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("New Queue")
                         .font(.system(size: 15, weight: .semibold))
-                    Text("Tap to create")
+                    Text("Name it, colour it, tag it")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
@@ -399,6 +399,8 @@ struct AllReadingQueuesGridView: View {
         let storageLine = preserved.isEmpty
             ? "nothing kept yet"
             : "\(preserved.count) offline · \(queueByteCountString(byteCount))"
+        // 1i: "count, tags and offline size on every row" — "Rereads · Long fic".
+        let tagLine = queue.tags.map(\.name).sorted().joined(separator: " · ")
 
         NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
             HStack(spacing: 12) {
@@ -422,6 +424,12 @@ struct AllReadingQueuesGridView: View {
                             .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
+                    if !tagLine.isEmpty {
+                        Text(tagLine)
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     Text(storageLine)
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
@@ -436,7 +444,7 @@ struct AllReadingQueuesGridView: View {
         .moveDisabled(!isReorderable)
         .accessibilityElement(children: .combine)
         .accessibilityValue(
-            "\(works.count) work\(works.count == 1 ? "" : "s"), \(storageLine)"
+            "\(works.count) work\(works.count == 1 ? "" : "s"), \(tagLine.isEmpty ? "" : "\(tagLine), ")\(storageLine)"
         )
     }
 
@@ -466,6 +474,7 @@ struct AllReadingQueuesGridView: View {
             hue: hue,
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
+            tagNames: options.tagNames,
             in: context
         )
     }

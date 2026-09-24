@@ -19,6 +19,10 @@ struct ScopedRemovalBulkActionBar: View {
     /// Called after a confirmed removal, and when the checkmark exits selection
     /// mode without removing anything.
     var onDone: () -> Void = {}
+    /// 1bg: a queue's bar puts "the four things a queue can do to a selection" —
+    /// Download · Move to · Tag · Remove — up front, with the rest in a "…" menu.
+    /// Collections keep the Remove + Actions menu layout.
+    var showsQueueActions = false
 
     @Environment(\.modelContext) private var context
     @State private var confirmRemove = false
@@ -52,89 +56,50 @@ struct ScopedRemovalBulkActionBar: View {
     }
 
     var body: some View {
-        Button(role: .destructive) {
-            confirmRemove = true
-        } label: {
-            Label(removeLabel, systemImage: "minus.circle")
-        }
-        .disabled(selectedWorks.isEmpty)
+        if showsQueueActions {
+            queueActions
+        } else {
+            removeButton
 
-        Spacer()
+            Spacer()
 
-        Menu {
-            Button {
-                bulkSave()
+            Menu {
+                libraryActions
+                // 1bg's Move to. Its own note calls this two verbs — add AND remove —
+                // which is why it reuses the destination picker and then runs the
+                // scoped removal this bar already owns, rather than being a variant
+                // of Add to Queue that quietly leaves the work in both places.
+                Button(action: startMove) {
+                    Label("Move to Queue", systemImage: "arrow.right.square")
+                }
+                // 1bg names Tag as one of the four things a queue can do to a
+                // selection. The sheet already existed for 1af and is already wired
+                // into Library's own bar; both surfaces that mount this bar — a queue
+                // and a collection — hold local works, so it applies to each.
+                Button {
+                    showingTagSheet = true
+                } label: {
+                    Label("Tag", systemImage: "tag")
+                }
+                // 1bg's Download. The "Download" item above it sets `isSaved`, which
+                // only stops an EPUB being freed — for a work whose copy is already
+                // gone it changes a flag and downloads nothing. This fetches.
+                Button {
+                    Task { await bulkDownload() }
+                } label: {
+                    Label("Download missing copies", systemImage: WorkActionLabels.downloadEmptySymbol)
+                }
+                .disabled(isDownloading || missingCopies.isEmpty)
+                finishedAction
             } label: {
-                Label(
-                    WorkActionLabels.saved(isSaved: allSaved).title,
-                    systemImage: WorkActionLabels.saved(isSaved: allSaved).systemImage
-                )
+                Text("Actions")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
             }
-            Button {
-                bulkFavorite()
-            } label: {
-                Label(allFavorited ? "Favorited" : "Favorite", systemImage: allFavorited ? "star.fill" : "star")
-            }
-            Button {
-                bulkToggleSavedForLater()
-            } label: {
-                Label(
-                    WorkActionLabels.savedForLater(isQueued: allSavedForLater).title,
-                    systemImage: WorkActionLabels.savedForLater(isQueued: allSavedForLater).systemImage
-                )
-            }
-            Button {
-                showingAddToQueue = true
-            } label: {
-                Label("Add to Queue", systemImage: "list.bullet.rectangle")
-            }
-            Button {
-                showingAddToCollection = true
-            } label: {
-                Label("Add to Collection", systemImage: "square.stack")
-            }
-            // 1bg's Move to. Its own note calls this two verbs — add AND remove —
-            // which is why it reuses the destination picker and then runs the
-            // scoped removal this bar already owns, rather than being a variant
-            // of Add to Queue that quietly leaves the work in both places.
-            Button {
-                membershipBeforeMove = totalQueueMemberships
-                showingMoveToQueue = true
-            } label: {
-                Label("Move to Queue", systemImage: "arrow.right.square")
-            }
-            // 1bg names Tag as one of the four things a queue can do to a
-            // selection. The sheet already existed for 1af and is already wired
-            // into Library's own bar; both surfaces that mount this bar — a queue
-            // and a collection — hold local works, so it applies to each.
-            Button {
-                showingTagSheet = true
-            } label: {
-                Label("Tag", systemImage: "tag")
-            }
-            // 1bg's Download. The "Download" item above it sets `isSaved`, which
-            // only stops an EPUB being freed — for a work whose copy is already
-            // gone it changes a flag and downloads nothing. This fetches.
-            Button {
-                Task { await bulkDownload() }
-            } label: {
-                Label("Download missing copies", systemImage: WorkActionLabels.downloadEmptySymbol)
-            }
-            .disabled(isDownloading || missingCopies.isEmpty)
-            Button {
-                bulkToggleFinished()
-            } label: {
-                let labels = WorkActionLabels.finished(isFinished: allFinished)
-                Label(labels.title, systemImage: labels.systemImage)
-            }
-        } label: {
-            Text("Actions")
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(.regularMaterial, in: Capsule())
+            .disabled(selectedWorks.isEmpty)
         }
-        .disabled(selectedWorks.isEmpty)
 
         Spacer()
 
@@ -177,6 +142,100 @@ struct ScopedRemovalBulkActionBar: View {
             Text("The selected works will no longer be in this \(scopeName). "
                 + "They stay in your Library either way.")
         }
+    }
+
+    /// 1bg's four, then "…" holding everything the Actions menu has that they
+    /// don't — nothing the Collections layout offers is lost here.
+    @ViewBuilder
+    private var queueActions: some View {
+        Button {
+            Task { await bulkDownload() }
+        } label: {
+            Label("Download", systemImage: WorkActionLabels.downloadEmptySymbol)
+        }
+        .disabled(isDownloading || missingCopies.isEmpty)
+        Spacer()
+        Button(action: startMove) {
+            Label("Move to", systemImage: "arrow.right.square")
+        }
+        .disabled(selectedWorks.isEmpty)
+        Spacer()
+        Button {
+            showingTagSheet = true
+        } label: {
+            Label("Tag", systemImage: "tag")
+        }
+        .disabled(selectedWorks.isEmpty)
+        Spacer()
+        removeButton
+        Spacer()
+        Menu {
+            libraryActions
+            finishedAction
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+        }
+        .disabled(selectedWorks.isEmpty)
+    }
+
+    private var removeButton: some View {
+        Button(role: .destructive) {
+            confirmRemove = true
+        } label: {
+            Label(removeLabel, systemImage: "minus.circle")
+        }
+        .disabled(selectedWorks.isEmpty)
+    }
+
+    /// Save, Favorite, Saved for Later, Add to Queue, Add to Collection — the
+    /// same five, in the same order, in both layouts' menus.
+    @ViewBuilder
+    private var libraryActions: some View {
+        Button {
+            bulkSave()
+        } label: {
+            Label(
+                WorkActionLabels.saved(isSaved: allSaved).title,
+                systemImage: WorkActionLabels.saved(isSaved: allSaved).systemImage
+            )
+        }
+        Button {
+            bulkFavorite()
+        } label: {
+            Label(allFavorited ? "Favorited" : "Favorite", systemImage: allFavorited ? "star.fill" : "star")
+        }
+        Button {
+            bulkToggleSavedForLater()
+        } label: {
+            Label(
+                WorkActionLabels.savedForLater(isQueued: allSavedForLater).title,
+                systemImage: WorkActionLabels.savedForLater(isQueued: allSavedForLater).systemImage
+            )
+        }
+        Button {
+            showingAddToQueue = true
+        } label: {
+            Label("Add to Queue", systemImage: "list.bullet.rectangle")
+        }
+        Button {
+            showingAddToCollection = true
+        } label: {
+            Label("Add to Collection", systemImage: "square.stack")
+        }
+    }
+
+    private var finishedAction: some View {
+        Button {
+            bulkToggleFinished()
+        } label: {
+            let labels = WorkActionLabels.finished(isFinished: allFinished)
+            Label(labels.title, systemImage: labels.systemImage)
+        }
+    }
+
+    private func startMove() {
+        membershipBeforeMove = totalQueueMemberships
+        showingMoveToQueue = true
     }
 
     private var totalQueueMemberships: Int {

@@ -186,7 +186,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     if destination.initialQueueID == nil {
                         AllReadingQueuesGridView()
                     } else {
-                        ReadingQueueBrowserView(initialQueueID: destination.initialQueueID)
+                        ReadingQueueBrowserView(initialQueueID: destination.initialQueueID, originKicker: "Home")
                     }
                 }
                 .ao3AuthorNavigation(path: $path, tab: .home)
@@ -564,6 +564,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             hue: hue,
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
+            tagNames: options.tagNames,
             in: context
         )
     }
