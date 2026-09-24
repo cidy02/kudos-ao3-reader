@@ -362,10 +362,6 @@ struct AO3CommentsParseTests {
         #expect(displayed[0].flattened.map(\.id) == [1, 2, 3, 4, 5])
     }
 
-    /// Depth has to be *visible*. The previous card-based layout computed a
-    /// `depth` for every reply and then never used it for layout, so a
-    /// reply-to-a-reply rendered identically to a direct reply. Indent and rail
-    /// colour are now the only things carrying that information.
     /// The indent depends on the container width and the text size, so a test has
     /// to pin both. 390pt is the canonical iPhone width the simulator gate uses.
     private func indent(
@@ -378,61 +374,59 @@ struct AO3CommentsParseTests {
         )
     }
 
-    /// Width the indent may never eat into, for the pinned defaults above.
-    private var indentBudget: CGFloat {
-        390 - CommentThreadGeometry.sideMargin * 2
-            - CommentThreadGeometry.minimumContentWidth(for: .large)
+    /// What is left for a reply's prose once the margins, its indent, its avatar
+    /// and the gap beside it are taken — the column `minimumContentWidth` guards.
+    private func contentColumn(
+        _ depth: Int, width: CGFloat, typeSize: DynamicTypeSize
+    ) -> CGFloat {
+        width - CommentThreadGeometry.sideMargin * 2
+            - indent(depth, width: width, typeSize: typeSize)
+            - CommentThreadGeometry.avatarSize(forDepth: depth)
+            - CommentThreadGeometry.avatarContentSpacing(forDepth: depth)
     }
 
-    @Test func nestingDepthIsVisuallyDistinct() {
-        // Indent grows per level...
-        #expect(indent(0) == 0)
-        #expect(indent(1) > indent(0))
-        #expect(indent(2) > indent(1))
+    /// Artboard 1f's own numbers: avatars 30 / 26 / 22, and each reply's avatar
+    /// under its parent's text — 41, then 77, then 32 a level. With room to spare
+    /// the list draws exactly that; on a phone the indent stops growing rather than
+    /// letting a depth-5 reply's prose drop under `minimumContentWidth`.
+    @Test func threadGeometryFollowsArtboard1fAndClampsForTheProse() {
+        #expect((0 ... 3).map(CommentThreadGeometry.avatarSize(forDepth:)) == [30, 26, 22, 22])
 
-        // ...and then holds. AO3 does not cap reply nesting, so a deep chain would
-        // otherwise indent itself off-screen — this must hold for absurd depths.
-        #expect(indent(400) == indent(CommentThreadGeometry.threadsMaxIndentedDepth))
+        // Wide enough that the clamp never binds (iPad, landscape).
+        let wide = (0 ... CommentThreadGeometry.maxInlineDepth).map { indent($0, width: 1024) }
+        #expect(wide == [0, 41, 77, 109, 141, 173])
+        // Held past AO3's own depth — only the thread screen goes deeper.
+        #expect(indent(12, width: 1024) == 173)
 
-        // The content column survives that cap at any depth. Only the leading edge
-        // is indented — cards sit beside each other rather than inside each other,
-        // so nothing comes off the trailing edge to compound it.
-        let content = 390 - CommentThreadGeometry.sideMargin * 2 - indent(400)
-        #expect(content >= CommentThreadGeometry.minimumContentWidth(for: .large))
-
-        // Adjacent levels must never share a rail colour, at any depth — that
-        // colour is the only cue distinguishing two neighbouring levels once the
-        // indent has been clamped.
-        for depth in 0 ..< 40 {
-            #expect(
-                CommentThreadGeometry.railColor(forDepth: depth)
-                    != CommentThreadGeometry.railColor(forDepth: depth + 1)
-            )
+        // Every elbow runs *forward* into its reply: the reply's avatar starts right
+        // of its parent's rail by at least the elbow's corner.
+        for depth in 1 ... CommentThreadGeometry.maxInlineDepth {
+            let parentRail = wide[depth - 1] + CommentThreadGeometry.avatarSize(forDepth: depth - 1) / 2
+            #expect(wide[depth] - parentRail >= CommentThreadGeometry.elbowRadius(forDepth: depth))
         }
-    }
 
-    /// The connector drops from the parent's avatar centre and has to run *forward*
-    /// into the reply's card. If the indent were ever narrower than that column, the
-    /// elbow would double back on itself to reach the card it points at — which is
-    /// exactly what a 30pt step did, and why this one is 48.
-    @Test func indentClearsTheColumnTheConnectorDropsFrom() {
-        let trunkOffsetInCard = CommentThreadGeometry.cardPadding
-            + CommentThreadGeometry.avatarSize(forDepth: 0) / 2
-        #expect(CommentThreadGeometry.threadsIndentStep > trunkOffsetInCard)
-
-        // Restated end to end: a reply's leading edge sits right of its parent's
-        // trunk at every level the indent actually steps.
-        for depth in 1 ... CommentThreadGeometry.threadsMaxIndentedDepth {
-            let trunk = indent(depth - 1) + CommentThreadGeometry.cardPadding
-                + CommentThreadGeometry.avatarSize(forDepth: depth - 1) / 2
-            #expect(indent(depth) > trunk)
+        // On a phone, at the default size and at an accessibility size, the indent
+        // never shrinks with depth and the prose column never drops under its floor.
+        let cases: [(CGFloat, DynamicTypeSize)] = [(390, .large), (390, .xxxLarge), (390, .accessibility3)]
+        for (width, typeSize) in cases {
+            let indents = (0 ... 12).map { indent($0, width: width, typeSize: typeSize) }
+            #expect(zip(indents, indents.dropFirst()).allSatisfy { $0 <= $1 })
+            for depth in 0 ... 12 {
+                #expect(
+                    contentColumn(depth, width: width, typeSize: typeSize)
+                        >= CommentThreadGeometry.minimumContentWidth(for: typeSize)
+                )
+            }
         }
+        // And the clamp is what holds it: a depth-5 reply at 390pt would otherwise
+        // leave its prose ~150pt.
+        #expect(indent(5) < indent(5, width: 1024))
     }
 
     /// A thread line has to reach a reply whose parent is *not* the row directly
     /// above — separated from it by an earlier sibling's whole subtree. Every row
     /// in between has to be told to keep that ancestor's line running, or the line
-    /// stops at the first nested card and the later sibling reads as unparented.
+    /// stops at the first nested reply and the later sibling reads as unparented.
     ///
     /// Depth-first row order for root(A) with replies B and D, where B has a child
     /// C, is A, B, C, D — so D's connector has to survive two intervening rows.
@@ -454,8 +448,8 @@ struct AO3CommentsParseTests {
         #expect(rows.map(\.depth) == [0, 1, 2, 1])
         #expect(rows.map(\.item.id) == ["post-1", "post-2", "post-3", "post-4"])
 
-        // B has a peer still to come, so its own row runs the line past its card
-        // rather than ending at it; D is last, so its row ends the line there.
+        // B has a peer still to come, so its own row runs the line past it rather
+        // than ending at it; D is last, so its row ends the line there.
         #expect(rows[1].isLastSibling == false)
         #expect(rows[3].isLastSibling == true)
 
@@ -467,8 +461,7 @@ struct AO3CommentsParseTests {
         #expect(rows[1].ancestorLines.isEmpty)
         #expect(rows[3].ancestorLines.isEmpty)
 
-        // `nextDepth` drives where each enclosing card closes; a row's own card
-        // closes exactly when nothing deeper follows it.
+        // `nextDepth == depth + 1` is where a comment starts its own rail.
         #expect(rows.map(\.nextDepth) == [1, 2, 1, nil])
 
         // D is the one reply no connector reaches — C sits between it and its
@@ -477,42 +470,149 @@ struct AO3CommentsParseTests {
         #expect(rows.map(\.showsParentAttribution) == [false, false, false, true])
     }
 
-    /// A root with few *direct* replies but a deep subtree under them is the case
-    /// the concept's own mock gets wrong: it gates "Continue thread" on
-    /// `kids.length > 2`, so two replies carrying eight grandchildren show no
-    /// affordance and the grandchildren vanish. The count has to be descendants.
-    @Test func boundedListCountsDescendantsNotDirectChildren() {
-        // Two direct replies; the first carries a chain of three more.
-        var deep = AO3Comment(id: 5, author: "E", isGuest: false)
-        for id in [4, 3] {
-            var parent = AO3Comment(id: id, author: "N\(id)", isGuest: false)
-            parent.replies = [deep]
-            deep = parent
-        }
-        var firstReply = AO3Comment(id: 2, author: "B", isGuest: false)
-        firstReply.replies = [deep]
-        let secondReply = AO3Comment(id: 6, author: "F", isGuest: false)
+    /// The same carry, three levels down in the inline list: while a depth-3 reply
+    /// is drawn, the root's rail must keep running past it to a later depth-1
+    /// sibling, while the depth-1 parent's rail — which has nothing more to reach
+    /// — must not.
+    @Test func rootRailRunsPastADepthThreeReplyToALaterSibling() throws {
+        let d3 = AO3Comment(id: 4, author: "D", isGuest: false)
+        var d2 = AO3Comment(id: 3, author: "C", isGuest: false)
+        d2.replies = [d3]
+        var d1 = AO3Comment(id: 2, author: "B", isGuest: false)
+        d1.replies = [d2]
+        let laterSibling = AO3Comment(id: 5, author: "E", isGuest: false)
         var root = AO3Comment(id: 1, author: "A", isGuest: false)
-        root.replies = [firstReply, secondReply]
+        root.replies = [d1, laterSibling]
 
+        let rows = CommentConversationBuilder.rows(
+            roots: [root],
+            repliesByRoot: [root.id: CommentThreadGeometry.flattenedReplies(from: root)],
+            expandedRootIDs: [], visibleReplyCounts: [:],
+            maxDepth: CommentThreadGeometry.maxInlineDepth
+        )
+
+        #expect(rows.map(\.item.id) == ["post-1", "post-2", "post-3", "post-4", "post-5"])
+        try #require(rows.count == 5)
+        #expect(rows.map(\.depth) == [0, 1, 2, 3, 1])
+        // Level 0 (the root's rail) is still running to E; level 1 (B's) is not.
+        #expect(rows[3].ancestorLines == [true, false])
+        #expect(rows[2].ancestorLines == [true])
+        // B's rail carries on to E; C and D are each their parent's only reply.
+        #expect(rows.map(\.isLastSibling) == [true, false, true, true, true])
+        #expect(rows.map(\.nextDepth) == [1, 2, 3, 1, nil])
+    }
+
+    /// 1f's inline list, down to AO3's own nesting limit. A chain seven replies
+    /// deep draws depths 0…5 in place and sends exactly the two replies below that
+    /// behind one "Continue thread" row — and siblings at depth 1 and 3 still land
+    /// in depth-first order around the chain rather than after the cut.
+    @Test func inlineListDrawsToDepthFiveThenContinuesTheThread() throws {
+        #expect(CommentThreadGeometry.maxInlineDepth == 5)
+
+        // root(1) → 2 → 3 → 4 → 5 → 6 → 7 → 8, i.e. replies at depths 1…7.
+        var node = AO3Comment(id: 8, author: "D7", isGuest: false)
+        for id in stride(from: 7, through: 4, by: -1) {
+            var parent = AO3Comment(id: id, author: "D\(id - 1)", isGuest: false)
+            parent.replies = [node]
+            node = parent
+        }
+        // 3 (depth 2) also has a later depth-3 reply, 10.
+        var depth2 = AO3Comment(id: 3, author: "D2", isGuest: false)
+        depth2.replies = [node, AO3Comment(id: 10, author: "Sib3", isGuest: false)]
+        var depth1 = AO3Comment(id: 2, author: "D1", isGuest: false)
+        depth1.replies = [depth2]
+        // …and the root a later depth-1 reply, 9.
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        root.replies = [depth1, AO3Comment(id: 9, author: "Sib1", isGuest: false)]
         let replies = CommentThreadGeometry.flattenedReplies(from: root)
-        #expect(replies.count == 5)
-        #expect(root.replies.count == 2)
+        #expect(replies.count == 9)
 
-        let items = CommentConversationBuilder.boundedItems(root: root, replies: replies)
+        let rows = CommentConversationBuilder.rows(
+            roots: [root], repliesByRoot: [root.id: replies],
+            expandedRootIDs: [], visibleReplyCounts: [:],
+            maxDepth: CommentThreadGeometry.maxInlineDepth
+        )
 
-        // Root + both direct replies + the continue row. Nothing deeper is drawn.
-        #expect(items.count == 4)
-        #expect(items.compactMap(\.actionableComment).map(\.id) == [1, 2, 6])
+        #expect(rows.map(\.item.id) == [
+            "post-1", "post-2", "post-3", "post-4", "post-5", "post-6",
+            "post-10", "post-9", "continue-1",
+        ])
+        try #require(rows.count == 9)
+        let postDepths = rows.compactMap { row -> Int? in
+            guard case let .post(_, _, depth, _) = row.item else { return nil }
+            return depth
+        }
+        #expect(postDepths == [0, 1, 2, 3, 4, 5, 3, 1])
 
-        guard case let .continueThread(rootID, hiddenCount) = items[3] else {
-            Issue.record("expected a Continue thread row, got \(items[3])")
+        guard case let .continueThread(rootID, hiddenCount) = rows.last?.item else {
+            Issue.record("expected a Continue thread row, got \(String(describing: rows.last?.item))")
             return
         }
         #expect(rootID == 1)
-        // Five descendants, two shown — three hidden. Counting direct children
-        // would have given zero and dropped the row entirely.
-        #expect(hiddenCount == 3)
+        // Only the two replies below depth 5 — not the later direct reply, which
+        // is drawn — so "2 deeper replies" says exactly what is behind it.
+        #expect(hiddenCount == 2)
+        // The control sits at the conversation's edge, outside the rails, so the
+        // last real reply still ends its parent's rail.
+        #expect(rows.last?.depth == 0)
+        #expect(rows.last?.collapse == nil)
+        #expect(rows[7].isLastSibling)
+
+        // The thread screen leaves the depth unbounded and draws the whole tree.
+        let full = CommentConversationBuilder.rows(
+            roots: [root], repliesByRoot: [root.id: replies],
+            expandedRootIDs: [root.id], visibleReplyCounts: [root.id: .max]
+        )
+        #expect(full.count == 10)
+        #expect(!full.contains { $0.item.id == "continue-1" })
+    }
+
+    /// Inline rendering keeps T-183's cost controls: a long conversation still
+    /// opens folded behind the expander, reveals one chunk at a time, and the root
+    /// caret still folds it to a single row.
+    @Test func inlineListStillFoldsAndChunks() throws {
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        root.replies = (2 ... 26).map { AO3Comment(id: $0, author: "R\($0)", isGuest: false) }
+        let repliesByRoot = [root.id: CommentThreadGeometry.flattenedReplies(from: root)]
+        func rows(
+            expanded: Set<Int> = [], visible: [Int: Int] = [:], collapsed: Set<Int> = []
+        ) -> [CommentConversationRowItem] {
+            CommentConversationBuilder.rows(
+                roots: [root], repliesByRoot: repliesByRoot,
+                expandedRootIDs: expanded, visibleReplyCounts: visible, collapsedRootIDs: collapsed,
+                maxDepth: CommentThreadGeometry.maxInlineDepth
+            )
+        }
+
+        // 25 replies is past `autoExpandedMaxReplies`: root plus the expander.
+        let folded = rows()
+        #expect(folded.map(\.item.id) == ["post-1", "expander-1"])
+        try #require(folded.count == 2)
+        guard case let .expander(_, hidden, showsVerb) = folded[1].item else {
+            Issue.record("expected an expander row, got \(folded[1].item)")
+            return
+        }
+        #expect(hidden == 25)
+        #expect(showsVerb == false)
+        // Only the root carries the caret, even though the control row also sits
+        // at depth 0.
+        #expect(folded[0].collapse != nil)
+        #expect(folded[1].collapse == nil)
+
+        // Expanded: one chunk, then "Show 5 more".
+        let chunked = rows(expanded: [root.id], visible: [root.id: CommentThreadGeometry.repliesChunkSize])
+        #expect(chunked.count == 1 + CommentThreadGeometry.repliesChunkSize + 1)
+        guard case let .expander(_, remaining, more) = chunked.last?.item else {
+            Issue.record("expected a trailing expander, got \(String(describing: chunked.last?.item))")
+            return
+        }
+        #expect(remaining == 5)
+        #expect(more)
+
+        // Folded by the caret: the root and nothing else.
+        let collapsed = rows(expanded: [root.id], collapsed: [root.id])
+        #expect(collapsed.map(\.item.id) == ["post-1"])
+        #expect(collapsed.first?.collapse?.label == "Show 25")
     }
 
     /// Only a root that has replies gets a caret, and it must report every
@@ -550,10 +650,10 @@ struct AO3CommentsParseTests {
     }
 
     /// A negative depth can only come from a bug upstream, but it must not crash
-    /// the palette lookup or produce a negative indent.
+    /// the avatar lookup or produce a negative indent.
     @Test func negativeDepthIsClamped() {
         #expect(indent(-3) == 0)
-        #expect(CommentThreadGeometry.railColor(forDepth: -3) == CommentThreadGeometry.railColor(forDepth: 0))
+        #expect(CommentThreadGeometry.avatarSize(forDepth: -3) == CommentThreadGeometry.avatarSize(forDepth: 0))
     }
 
     @Test func commentBodyStaysClampedToFiveLines() {
