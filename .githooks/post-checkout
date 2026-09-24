@@ -1,0 +1,9 @@
+#!/bin/sh
+# After a branch switch, refresh this worktree's graphify graph (see post-commit).
+# $3 is 1 for a branch checkout, 0 for a file checkout; $1 = $2 means no move
+# (e.g. `git switch -c`). git reports this hook's status as the checkout's, so
+# never fail it.
+[ "$3" = 1 ] || exit 0
+[ "$1" = "$2" ] && exit 0
+"$(dirname "$0")/post-commit"
+exit 0
