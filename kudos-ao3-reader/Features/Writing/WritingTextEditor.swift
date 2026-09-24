@@ -5,9 +5,11 @@ import SwiftUI
 struct WritingTextEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
-    @ScaledMetric(relativeTo: .body) private var editorFontSize = 17.0
+    /// 1bv's serif at 15.5, scaled with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var editorFontSize = 15.5
     @Binding var text: String
     let title: String
+    let ruleTitle: String?
     let account: String
     let target: String
     let field: String
@@ -22,9 +24,13 @@ struct WritingTextEditor: View {
     @State private var link = "https://"
     private let store = WritingTextRecovery()
 
-    init(text: Binding<String>, title: String, account: String, target: String, field: String) {
+    init(
+        text: Binding<String>, title: String, ruleTitle: String? = nil,
+        account: String, target: String, field: String
+    ) {
         _text = text
         self.title = title
+        self.ruleTitle = ruleTitle
         self.account = account
         self.target = target
         self.field = field
@@ -43,16 +49,21 @@ struct WritingTextEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // 1bv's rule: the chapter's name, then a live word count.
+            SectionRuleHeader(
+                title: ruleTitle ?? title,
+                countText: "\(wordCount.formatted()) \(wordCount == 1 ? "word" : "words")"
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
             if let controller {
                 WritingNativeTextView(controller: controller)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else { ProgressView() }
-            HStack {
-                Text("\(wordCount) words")
-                Spacer()
-                Text("Local recovery · Save on the work form")
-            }
-            .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
+            Text("Local recovery · Save on the work form")
+                .font(.caption).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.horizontal)
             ScrollView(.horizontal) {
                 HStack(spacing: 16) {
                     ForEach(AO3MarkupTag.Group.allCases) { group in
@@ -180,13 +191,49 @@ struct WritingTextEditorRow: View {
     @Binding var text: String
     let target: String
     let field: String
+    /// 1bo/1br: the text itself under the label, in place of "Set".
+    var previewsText = false
+    /// 1bq: what an empty row opens, read as "Empty — <hint>" under the label.
+    var emptyHint: String?
+    /// The editor's section rule — 1bv's "Chapter 13". Defaults to `title`.
+    var ruleTitle: String?
 
     var body: some View {
-        SubjectFormRow(label: title, value: text.isEmpty ? "Empty" : "Set", showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: title) {
-                WritingTextEditor(
-                    text: $text, title: title, account: auth.username ?? "", target: target, field: field
-                )
+        Group {
+            if let detail = Self.detail(text: text, previewsText: previewsText, emptyHint: emptyHint) {
+                // The spec's two-line row: label and chevron, then the detail
+                // 4pt under it. The row's own 12pt bottom padding is taken back
+                // so the pair reads as one row, not a row and a caption.
+                VStack(alignment: .leading, spacing: 0) {
+                    SubjectFormRow(label: title, showsDisclosure: true) { EmptyView() }
+                    Text(detail)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.top, -8)
+                        .padding(.bottom, 11)
+                }
+            } else {
+                SubjectFormRow(label: title, value: text.isEmpty ? "Empty" : "Set", showsDisclosure: true)
             }
+        }
+        .subjectRowNavigation(accessibilityLabel: title) {
+            WritingTextEditor(
+                text: $text, title: title, ruleTitle: ruleTitle,
+                account: auth.username ?? "", target: target, field: field
+            )
+        }
+    }
+
+    /// The second line, or nil for the one-line "Empty"/"Set" row. A preview is
+    /// the text with its markup stripped; markup with no words falls back to
+    /// "Set" rather than previewing an empty line.
+    static func detail(text: String, previewsText: Bool, emptyHint: String?) -> String? {
+        if text.isEmpty { return emptyHint.map { "Empty — \($0)" } }
+        guard previewsText else { return nil }
+        let plain = text.strippingHTML().trimmingCharacters(in: .whitespacesAndNewlines)
+        return plain.isEmpty ? nil : plain
     }
 }

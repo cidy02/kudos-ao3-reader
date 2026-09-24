@@ -203,10 +203,10 @@ struct AO3SeriesRow: View {
                             .foregroundStyle(fandomColor)
                             .lineLimit(1)
                         if series.isComplete == true {
-                            seriesStateBadge("Complete", color: .green)
+                            LedgerStateBadge(title: "Complete", color: .green)
                         }
                         if series.isRestricted {
-                            seriesStateBadge("Restricted", color: restrictedColor)
+                            LedgerStateBadge(title: "Restricted", color: restrictedColor)
                         }
                     }
 
@@ -277,22 +277,6 @@ struct AO3SeriesRow: View {
     /// 1w's restricted chip. Orange is the board's own, the way Complete is green.
     private var restrictedColor: Color {
         Color(red: 1, green: 159.0 / 255, blue: 10.0 / 255)
-    }
-
-    private func seriesStateBadge(_ title: String, color: Color) -> some View {
-        Text(title.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
-            .tracking(0.5)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
-            )
-            .accessibilityLabel(title)
     }
 
     private var standardBody: some View {
@@ -545,5 +529,53 @@ struct AO3ProfileMessageRow: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
+    }
+}
+
+/// The small tinted state badge beside a ledger row's kicker: 1w's Complete and
+/// Restricted, 1u's Series.
+struct LedgerStateBadge: View {
+    let title: String
+    let color: Color
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 9.5, weight: .semibold))
+            .tracking(0.5)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.15))
+            .foregroundStyle(color)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
+            )
+            .accessibilityLabel(title)
+    }
+}
+
+/// The hero's arithmetic, kept beside the rows it sums: `AuthorProfileView`
+/// sits at the file-length limit.
+extension AuthorProfileView {
+    /// 1w's "3 series · 9 works · 219,300 words", after the series count. Summed
+    /// from the loaded blurbs, so a paged index says so rather than passing a
+    /// partial sum off as the account's total. A figure AO3 printed for no
+    /// series is dropped, not shown as zero.
+    static func seriesTallyParts(_ series: [AO3SeriesSummary], isPaged: Bool) -> [String] {
+        var parts: [String] = []
+        let works = series.compactMap(\.workCount)
+        if !works.isEmpty {
+            let total = works.reduce(0, +)
+            parts.append("\(total.formatted()) \(total == 1 ? "work" : "works")")
+        }
+        let words = series.compactMap(\.words)
+        if !words.isEmpty {
+            parts.append("\(words.reduce(0, +).formatted()) words")
+        }
+        if isPaged, !parts.isEmpty {
+            parts[parts.count - 1] += " on this page"
+        }
+        return parts
     }
 }

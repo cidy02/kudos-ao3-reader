@@ -59,16 +59,35 @@ final class WritingTextController: NSObject {
         #endif
     }
 
+    /// 1bv's body: serif at 15.5 with a 1.62 line height. The buffer is still
+    /// the raw markup — this is its typeface, not a formatted view.
     func setAppearance(_ theme: ReaderTheme, fontSize: Double) {
+        let style = NSMutableParagraphStyle()
+        // 1.62 of the point size over the serif's own ~1.2 natural line height.
+        style.lineHeightMultiple = 1.35
         #if os(iOS)
-        textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        textView.textColor = UIColor(theme.textColor)
-        textView.tintColor = UIColor(theme.textColor)
+        let base = UIFont.systemFont(ofSize: fontSize)
+        let font = base.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: fontSize) } ?? base
+        let color = UIColor(theme.textColor)
+        textView.font = font
+        textView.textColor = color
+        textView.tintColor = color
+        textView.typingAttributes = [.font: font, .foregroundColor: color, .paragraphStyle: style]
+        let storage = textView.textStorage
         #else
-        textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        textView.textColor = NSColor(theme.textColor)
-        textView.insertionPointColor = NSColor(theme.textColor)
+        let base = NSFont.systemFont(ofSize: fontSize)
+        let font = base.fontDescriptor.withDesign(.serif).flatMap { NSFont(descriptor: $0, size: fontSize) } ?? base
+        let color = NSColor(theme.textColor)
+        textView.font = font
+        textView.textColor = color
+        textView.insertionPointColor = color
+        textView.defaultParagraphStyle = style
+        textView.typingAttributes = [.font: font, .foregroundColor: color, .paragraphStyle: style]
+        guard let storage = textView.textStorage else { return }
         #endif
+        // Plain text has one run, so the whole buffer takes the style; typing
+        // attributes carry it to what is typed or inserted next.
+        storage.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: storage.length))
     }
 
     func command(_ tag: String, link: String = "") {

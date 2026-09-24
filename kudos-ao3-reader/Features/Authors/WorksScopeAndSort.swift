@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Artboard **1u**'s segment control: Works, In collections, Gifts.
+/// Artboard **1u**'s scope pills: Works, In collections, Gifts.
 ///
 /// "In collections" is AO3's own wording — its subnav on `/works/collected`
 /// reads "Works in Collections" — rather than a name invented here. Gifts are
@@ -15,14 +15,31 @@ struct WorksScopeSegments: View {
         (.gifts, "Gifts")
     ]
 
+    @Environment(ThemeManager.self) private var theme
+
+    /// 1u draws three pills, the selected one filled in the scope accent — the
+    /// same grammar as 1v's completion chips. Scrolls rather than clipping when
+    /// Refine and Sort beside it leave too little width (large text, iPhone SE).
     var body: some View {
-        Picker("Works scope", selection: $scope) {
-            ForEach(Self.scopes, id: \.0) { scope, title in
-                Text(title).tag(scope)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Self.scopes, id: \.0) { option, title in
+                    Button {
+                        // A re-tap would refetch and drop select mode for nothing.
+                        if scope != option { scope = option }
+                    } label: {
+                        SubjectChip(
+                            text: title,
+                            style: .pill(isSelected: scope == option),
+                            palette: theme.scopePalette
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(title)
+                    .accessibilityAddTraits(scope == option ? [.isSelected] : [])
+                }
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
     }
 }
 

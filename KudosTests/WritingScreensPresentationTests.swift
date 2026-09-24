@@ -1,0 +1,139 @@
+import Foundation
+import Testing
+@testable import Kudos
+
+/// The decisions behind the 1u / 1w / 1bn / 1bq / 1bo / 1br text on the writing
+/// screens. Presentation only — none of these change what is posted to AO3.
+@MainActor
+struct WritingScreensPresentationTests {
+    // MARK: 1u — Add Chapter only on a work in progress
+
+    @Test func addChapterSwipeIsOfferedOnlyOnAWorkInProgress() {
+        #expect(!AO3AuthorWorksSection.offersAddChapter(work(1, isComplete: true)))
+        #expect(AO3AuthorWorksSection.offersAddChapter(work(2, isComplete: false)))
+        // AO3 printing no completion is not proof the work is finished.
+        #expect(AO3AuthorWorksSection.offersAddChapter(work(3, isComplete: nil)))
+    }
+
+    // MARK: 1w — hero tally
+
+    @Test func seriesTallySumsTheLoadedSeries() {
+        let parts = AuthorProfileView.seriesTallyParts(
+            [series(1, works: 3, words: 118_600), series(2, works: 6, words: 100_700)],
+            isPaged: false
+        )
+        #expect(parts == ["9 works", "219,300 words"])
+    }
+
+    @Test func pagedSeriesTallyDoesNotClaimTheAccountTotal() {
+        let parts = AuthorProfileView.seriesTallyParts([series(1, works: 1, words: 500)], isPaged: true)
+        #expect(parts == ["1 work", "500 words on this page"])
+    }
+
+    @Test func seriesTallyDropsAFigureAO3PrintedForNoSeries() {
+        #expect(AuthorProfileView.seriesTallyParts([series(1, works: nil, words: nil)], isPaged: false).isEmpty)
+        #expect(AuthorProfileView.seriesTallyParts([], isPaged: true).isEmpty)
+        #expect(AuthorProfileView.seriesTallyParts([series(1, works: 2, words: nil)], isPaged: false)
+            == ["2 works"])
+    }
+
+    // MARK: 1bn — select-mode chrome
+
+    @Test func selectionCountIsChosenOfLoaded() {
+        let works = [work(1), work(2), work(3)]
+        #expect(AO3AuthorWorksSection.selectionCountText(selection: [1, 3], works: works) == "2 / 3")
+        // A leftover id from before a refetch is not on screen and not counted.
+        #expect(AO3AuthorWorksSection.selectionCountText(selection: [1, 99], works: works) == "1 / 3")
+        #expect(AO3AuthorWorksSection.selectionCountText(selection: [], works: []) == "0 / 0")
+    }
+
+    @Test func selectAllTogglesOverTheLoadedWorksOnly() {
+        let controller = RemoteWorkSelectionController()
+        let works = [work(1), work(2)]
+        controller.selection = [2, 99]
+        #expect(!controller.allSelected(in: works))
+
+        controller.toggleSelectAll(in: works)
+        #expect(controller.selection == [1, 2, 99])
+        #expect(controller.allSelected(in: works))
+
+        controller.toggleSelectAll(in: works)
+        #expect(controller.selection == [99])
+        #expect(!controller.allSelected(in: []))
+    }
+
+    // MARK: 1bq — Add Chapter
+
+    @Test func chapterHeaderNamesThePosition() {
+        #expect(AddChapterView.subtitle(workTitle: "Water", chapterTitle: "Tide", position: "13")
+            == "Water · chapter 13")
+        #expect(AddChapterView.subtitle(workTitle: "Water", chapterTitle: "Tide", position: "")
+            == "Water · Tide")
+        #expect(AddChapterView.subtitle(workTitle: "Water", chapterTitle: "", position: "x")
+            == "Water · chapter")
+    }
+
+    @Test func positionReadsAsAfterChapterAndPostsTheSameValue() {
+        #expect(AddChapterView.afterChapterText(position: "13") == "12")
+        #expect(AddChapterView.position(afterChapterText: "12") == "13")
+        #expect(AddChapterView.position(afterChapterText: "0") == "1")
+        // Untouched round trips: a number, and whatever is not a positive number.
+        for raw in ["13", "1", "", "abc", "-2"] {
+            #expect(AddChapterView.position(afterChapterText: AddChapterView.afterChapterText(position: raw))
+                == raw)
+        }
+        #expect(AddChapterView.chapterNumber(" 7 ") == 7)
+        #expect(AddChapterView.chapterNumber("0") == nil)
+    }
+
+    // MARK: 1bo / 1br / 1bq — editor rows
+
+    @Test func editorRowDetailLine() {
+        #expect(WritingTextEditorRow.detail(text: "", previewsText: true, emptyHint: "opens the editor.")
+            == "Empty — opens the editor.")
+        #expect(WritingTextEditorRow.detail(text: "", previewsText: true, emptyHint: nil) == nil)
+        #expect(WritingTextEditorRow.detail(text: "<p>Gojo &amp; Nanami</p>", previewsText: true, emptyHint: nil)
+            == "Gojo & Nanami")
+        #expect(WritingTextEditorRow.detail(text: "Set text", previewsText: false, emptyHint: "x") == nil)
+        // Markup with no words keeps the one-line "Set" row.
+        #expect(WritingTextEditorRow.detail(text: "<p> </p>", previewsText: true, emptyHint: nil) == nil)
+        #expect(WritingTextEditorRow.detail(text: "  ", previewsText: true, emptyHint: nil) == nil)
+    }
+
+    @Test func workEditSubtitleCarriesThePostedChapterCount() throws {
+        let url = try #require(URL(string: "https://archiveofourown.org/works/1"))
+        var form = AO3WorkForm(
+            kind: .edit, actionURL: url, csrfToken: "", isDraft: false, isPosted: true,
+            title: "The Weight of Water", chaptersPosted: 12
+        )
+        #expect(WorkEditView.subtitle(for: form) == "The Weight of Water · 12 chapters")
+        form.chaptersPosted = 1
+        #expect(WorkEditView.subtitle(for: form) == "The Weight of Water · 1 chapter")
+        form.chaptersPosted = nil
+        #expect(WorkEditView.subtitle(for: form) == "The Weight of Water")
+
+        let draft = AO3WorkForm(
+            kind: .draft, actionURL: url, csrfToken: "", isDraft: true, isPosted: false, chaptersPosted: 3
+        )
+        #expect(WorkEditView.subtitle(for: draft) == "Untitled · never posted")
+    }
+
+    // MARK: Fixtures
+
+    private func work(_ id: Int, isComplete: Bool? = nil) -> AO3WorkSummary {
+        AO3WorkSummary(
+            id: id, title: "Work \(id)", authors: [], fandoms: [], rating: "", warnings: [],
+            categories: [], isComplete: isComplete, dateUpdated: "", tags: [], summary: "",
+            language: "", chapters: ""
+        )
+    }
+
+    private func series(_ id: Int, works: Int?, words: Int?) -> AO3SeriesSummary {
+        AO3SeriesSummary(
+            id: id, title: "Series \(id)", creatorNames: [], creatorIdentities: [], fandoms: [],
+            summary: "", words: words, workCount: works, bookmarkCount: nil, dateUpdated: "",
+            isComplete: nil, isRestricted: false,
+            url: URL(string: "https://archiveofourown.org/series/\(id)")!
+        )
+    }
+}
