@@ -36,7 +36,7 @@ struct AddChapterView: View {
                 SubjectHeaderBlock(
                     kicker: "AO3 Account",
                     title: form.chapterID == nil ? "Add chapter" : "Edit chapter",
-                    subtitle: "\(workTitle) · \(form.title.isEmpty ? "chapter" : form.title)",
+                    subtitle: Self.subtitle(workTitle: workTitle, chapterTitle: form.title, position: form.position),
                     palette: accountPalette,
                     gutter: gutter
                 )
@@ -119,24 +119,81 @@ struct AddChapterView: View {
             TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
         }
         .panelSegment(0, of: count, gutter: gutter)
-        SubjectFormRow(label: "Expected chapter total", arrangement: .control) {
-            TextField("Unknown", text: $form.wipLength).multilineTextAlignment(.trailing)
+        // 1bq's "13 of 13", the way Edit work's "Chapters posted" row reads:
+        // the number is the position, the total stays the writer's to type.
+        let number = form.includePosition ? Self.chapterNumber(form.position) : nil
+        SubjectFormRow(label: number == nil ? "Expected chapter total" : "Chapter number", arrangement: .control) {
+            HStack(spacing: 6) {
+                if let number {
+                    Text("\(number) of").foregroundStyle(.secondary)
+                }
+                TextField(number == nil ? "Unknown" : "?", text: $form.wipLength)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: number == nil ? .infinity : 64)
+                    .accessibilityLabel("Expected chapter total")
+                    #if os(iOS)
+                    .keyboardType(.numberPad)
+                    #endif
+            }
         }
         .panelSegment(1, of: count, gutter: gutter)
         if form.includePosition {
+            // 1bq's "After chapter 12". Only the words around the field change:
+            // it still edits, and posts, the same position value.
             SubjectFormRow(label: "Position", arrangement: .control) {
-                TextField("Position", text: $form.position).multilineTextAlignment(.trailing)
+                HStack(spacing: 6) {
+                    Text("After chapter").foregroundStyle(.secondary)
+                    TextField("?", text: Binding(
+                        get: { Self.afterChapterText(position: form.position) },
+                        set: { form.position = Self.position(afterChapterText: $0) }
+                    ))
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 64)
+                    .accessibilityLabel("Position, after chapter")
+                    #if os(iOS)
+                    .keyboardType(.numberPad)
+                    #endif
+                }
             }
             .panelSegment(2, of: count, gutter: gutter)
         }
+    }
+
+    /// The chapter's own number, when AO3's form gave it a numeric position.
+    static func chapterNumber(_ position: String) -> Int? {
+        Int(position.trimmingCharacters(in: .whitespaces)).flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// 1bq's header: "The Weight of Water · chapter 13". Falls back to the
+    /// chapter's title, then to "chapter", when there is no position to name.
+    static func subtitle(workTitle: String, chapterTitle: String, position: String) -> String {
+        if let number = chapterNumber(position) { return "\(workTitle) · chapter \(number)" }
+        return "\(workTitle) · \(chapterTitle.isEmpty ? "chapter" : chapterTitle)"
+    }
+
+    /// Position 13 reads "12" after "After chapter". Anything that is not a
+    /// positive number is shown as typed, so nothing the writer entered is hidden.
+    static func afterChapterText(position: String) -> String {
+        chapterNumber(position).map { String($0 - 1) } ?? position
+    }
+
+    /// The inverse: "12" after "After chapter" is position 13. Non-numbers pass
+    /// through untouched, which is what the plain Position field posted.
+    static func position(afterChapterText text: String) -> String {
+        guard let after = Int(text.trimmingCharacters(in: .whitespaces)), after >= 0 else { return text }
+        return String(after + 1)
     }
 
     private var recoveryTarget: String { "work:\(form.workID):chapter:\(form.chapterID.map(String.init) ?? "new")" }
 
     @ViewBuilder
     private var textRows: some View {
-        WritingTextEditorRow(title: "Chapter text", text: $form.content, target: recoveryTarget, field: "content")
-            .panelSegment(0, of: 4, gutter: gutter)
+        WritingTextEditorRow(
+            title: "Chapter text", text: $form.content, target: recoveryTarget, field: "content",
+            emptyHint: "opens the editor with plain text, AO3’s HTML tags, or a paste from elsewhere.",
+            ruleTitle: Self.chapterNumber(form.position).map { "Chapter \($0)" }
+        )
+        .panelSegment(0, of: 4, gutter: gutter)
         WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
             .panelSegment(1, of: 4, gutter: gutter)
         WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")

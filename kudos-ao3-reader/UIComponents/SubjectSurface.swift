@@ -542,6 +542,9 @@ extension SubjectHeaderBlock where Trailing == EmptyView {
 struct SectionRuleHeader: View {
     let title: String
     var count: Int?
+    /// A count that is not a bare number: 1bn's "3 / 12", 1bv's "2,140 words".
+    /// Wins over `count` when both are set.
+    var countText: String?
     var isCollapsed: Bool = false
     var onToggleCollapse: (() -> Void)?
     var onSeeAll: (() -> Void)?
@@ -558,7 +561,11 @@ struct SectionRuleHeader: View {
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let count {
+            if let countText {
+                Text(countText)
+                    .font(.system(size: labelSize, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            } else if let count {
                 Text("\(count)")
                     .font(.system(size: labelSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary)

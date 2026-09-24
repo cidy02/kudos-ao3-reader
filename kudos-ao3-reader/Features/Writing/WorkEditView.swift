@@ -45,8 +45,7 @@ struct WorkEditView: View {
                     title: screenTitle,
                     // 1bs's "saved 2 minutes ago" is dropped: the form carries
                     // no saved time, and a guessed one would be wrong.
-                    subtitle: (form.title.isEmpty ? "Untitled" : form.title)
-                        + (form.isDraft ? " · never posted" : ""),
+                    subtitle: Self.subtitle(for: form),
                     palette: accountPalette,
                     gutter: gutter
                 )
@@ -359,6 +358,18 @@ struct WorkEditView: View {
 
     private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }
 
+    /// 1bo's "The Weight of Water · 12 chapters · posted 4 Mar 2024", less the
+    /// date: the edit form's only dates are the backdate inputs, which are not
+    /// when the work was posted.
+    static func subtitle(for form: AO3WorkForm) -> String {
+        var parts = [form.title.isEmpty ? "Untitled" : form.title]
+        if form.isDraft { parts.append("never posted") }
+        if form.isPosted, let posted = form.chaptersPosted {
+            parts.append("\(posted) \(posted == 1 ? "chapter" : "chapters")")
+        }
+        return parts.joined(separator: " · ")
+    }
+
     /// One `List` row per editor — see `associationRows`. The rows are
     /// conditional (Work text only before posting; Add chapter and Edit tags
     /// only after), so the segment positions are counted, not fixed.
@@ -368,8 +379,10 @@ struct WorkEditView: View {
         let postedWorkID: Int? = form.isPosted ? form.workID : nil
         let count = 4 + (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 2)
         let afterNotes = showsWorkText ? 4 : 3
-        WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
-            .panelSegment(0, of: count, gutter: gutter)
+        WritingTextEditorRow(
+            title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary", previewsText: true
+        )
+        .panelSegment(0, of: count, gutter: gutter)
         WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
             .panelSegment(1, of: count, gutter: gutter)
         WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")

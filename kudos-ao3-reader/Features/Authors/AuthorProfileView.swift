@@ -61,7 +61,7 @@ struct AuthorProfileView: View {
                 profileList
             }
         }
-        .navigationTitle(navigationTitle)
+        .navigationTitle(screenTitle)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -309,6 +309,9 @@ private extension AuthorProfileView {
         // so on anyone else's page — and before the fetch lands — this stays the
         // count and the name it has always been rather than showing blanks.
         var parts = ["\(count) \(scopeNoun(stored.exact))"]
+        if model.selectedTab == .series {
+            parts += Self.seriesTallyParts(model.series, isPaged: model.totalPages > 1)
+        }
         if model.selectedTab == .works, let stats = model.stats {
             if let words = stats.wordCount {
                 parts.append("\(words.formatted()) words")
@@ -704,8 +707,11 @@ private extension AuthorProfileView {
             // than inside it: `RemoteWorkBulkActionBar` is also Search's and
             // Browse's, where the selected works belong to other people and AO3's
             // bulk editor would 404. This one is gated on the works being yours.
+            //
+            // Trailing rather than `.principal`, which on iOS replaces the title
+            // — and the title is now 1bn's "3 selected".
             if showsBulkEdit {
-                ToolbarItem(placement: .principal) {
+                ToolbarItem(placement: .primaryAction) {
                     Button { isBulkEditing = true } label: {
                         Label("Edit Multiple", systemImage: "square.and.pencil")
                     }
@@ -713,11 +719,38 @@ private extension AuthorProfileView {
                     .accessibilityLabel("Edit selected works on AO3")
                 }
             }
+            // 1bn's Select All, over the works loaded so far — AO3's later pages
+            // are not on screen, so they are not selectable.
+            ToolbarItem(placement: .primaryAction) {
+                Button(bulkSelection.allSelected(in: model.works) ? "Deselect All" : "Select All") {
+                    bulkSelection.toggleSelectAll(in: model.works)
+                }
+                .disabled(model.works.isEmpty)
+            }
             RemoteWorkSelectionToolbar(controller: bulkSelection) {
                 bulkSelection.selected(in: model.works)
             }
+        } else if showsSelectButton {
+            ActionToolbar(items: [AnyView(selectButton), AnyView(profileMenu)])
         } else {
             ActionToolbar(items: [AnyView(profileMenu)])
+        }
+    }
+
+    private var screenTitle: String {
+        guard bulkSelection.isSelecting else { return navigationTitle }
+        return "\(bulkSelection.selected(in: model.works).count) selected"
+    }
+
+    /// 1u draws Select as its own glass button beside the overflow menu. Only
+    /// where Edit Multiple waits behind it; elsewhere it stays in the menu.
+    private var showsSelectButton: Bool {
+        showsBulkEdit && !showsDashboard && !model.works.isEmpty
+    }
+
+    private var selectButton: some View {
+        Button { bulkSelection.isSelecting = true } label: {
+            Label("Select Works", systemImage: "checklist")
         }
     }
 
@@ -736,7 +769,7 @@ private extension AuthorProfileView {
                 }
             }
 
-            if !showsDashboard, model.selectedTab == .works, !model.works.isEmpty {
+            if !showsDashboard, !showsSelectButton, model.selectedTab == .works, !model.works.isEmpty {
                 Divider()
                 Button { bulkSelection.isSelecting = true } label: {
                     Label("Select Works", systemImage: "checklist")

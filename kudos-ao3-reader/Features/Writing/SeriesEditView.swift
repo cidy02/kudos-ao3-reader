@@ -73,10 +73,16 @@ struct SeriesEditView: View {
                 .pageBodyRow(top: 20, gutter: selfGuttered)
             }
 
+            // One `List` row per field, as AddChapterView does: summary and
+            // notes each push an editor, and a `List` row fires every
+            // `NavigationLink` inside it.
             Section {
                 SectionRuleHeader(title: "Series")
+                    .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                seriesPanel.disabled(isSaving).pageBodyRow(top: 8, gutter: gutter)
+            }
+            Section {
+                Group { seriesRows }.disabled(isSaving)
             }
 
             Section {
@@ -133,34 +139,32 @@ struct SeriesEditView: View {
 
     // MARK: Panels
 
-    private var seriesPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Title", arrangement: .control, isRequired: true) {
-                TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Creators", arrangement: .control) {
-                TextField("Add a co-creator byline", text: $form.creators.coauthorByline)
-                    .multilineTextAlignment(.trailing)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    #endif
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Series summary", arrangement: .control) {
-                TextField("Summary", text: $form.summary, axis: .vertical)
-                    .lineLimit(2 ... 6)
-                    .multilineTextAlignment(.leading)
-            }
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Series notes", arrangement: .control) {
-                TextField("Notes", text: $form.notes, axis: .vertical)
-                    .lineLimit(2 ... 6)
-                    .multilineTextAlignment(.leading)
-            }
+    private var recoveryTarget: String { "series:\(form.seriesID ?? series.id)" }
+
+    /// 1br: summary as a preview row, notes as "Set" + push — the same editor
+    /// rows the work and chapter forms use (AO3 takes HTML in both fields).
+    @ViewBuilder
+    private var seriesRows: some View {
+        SubjectFormRow(label: "Title", arrangement: .control, isRequired: true) {
+            TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
         }
-        .subjectPanel()
+        .panelSegment(0, of: 4, gutter: gutter)
+        SubjectFormRow(label: "Creators", arrangement: .control) {
+            TextField("Add a co-creator byline", text: $form.creators.coauthorByline)
+                .multilineTextAlignment(.trailing)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                #endif
+        }
+        .panelSegment(1, of: 4, gutter: gutter)
+        WritingTextEditorRow(
+            title: "Series summary", text: $form.summary, target: recoveryTarget, field: "summary",
+            previewsText: true
+        )
+        .panelSegment(2, of: 4, gutter: gutter)
+        WritingTextEditorRow(title: "Series notes", text: $form.notes, target: recoveryTarget, field: "notes")
+            .panelSegment(3, of: 4, gutter: gutter)
     }
 
     private var statePanel: some View {

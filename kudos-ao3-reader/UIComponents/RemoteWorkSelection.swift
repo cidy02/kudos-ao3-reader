@@ -38,6 +38,21 @@ final class RemoteWorkSelectionController {
         }
     }
 
+    func allSelected(in results: [AO3WorkSummary]) -> Bool {
+        !results.isEmpty && results.allSatisfy { selection.contains($0.id) }
+    }
+
+    /// Select All, or Deselect All once everything in `results` is chosen.
+    /// Only ever touches `results`' ids.
+    func toggleSelectAll(in results: [AO3WorkSummary]) {
+        let ids = results.map(\.id)
+        if allSelected(in: results) {
+            selection.subtract(ids)
+        } else {
+            selection.formUnion(ids)
+        }
+    }
+
     func exitSelectMode() {
         isSelecting = false
         selection = []

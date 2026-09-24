@@ -302,7 +302,7 @@ struct AO3AuthorWorksSection: View {
     }
 
     private var listBody: some View {
-        Section("Works") {
+        Section {
             if model.contentPhase == .loading, model.works.isEmpty {
                 AO3AuthorLoadingRows()
             } else if model.works.isEmpty {
@@ -336,7 +336,24 @@ struct AO3AuthorWorksSection: View {
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
+        } header: {
+            if isSelecting {
+                // 1bn: "Your works 3 / 12". "Your" only where these are.
+                HStack(spacing: 8) {
+                    Text(onOwnWorkAction == nil ? "Works" : "Your works")
+                    Text(Self.selectionCountText(selection: selection, works: model.works))
+                        .monospaced()
+                }
+            } else {
+                Text("Works")
+            }
         }
+    }
+
+    /// 1bn's "3 / 12": chosen of loaded. Counted against the loaded works, so a
+    /// selection left over from a refetch cannot claim more than is listed.
+    static func selectionCountText(selection: Set<Int>, works: [AO3WorkSummary]) -> String {
+        "\(works.filter { selection.contains($0.id) }.count) / \(works.count)"
     }
 
     private var workEntries: [CanonicalWork] {
@@ -359,6 +376,12 @@ struct AO3AuthorWorksSection: View {
         )
     }
 
+    /// 1u: "Add Chapter on a work in progress". Unknown completion still offers
+    /// it — AO3 printing no chapter total is not proof the work is finished.
+    static func offersAddChapter(_ work: AO3WorkSummary) -> Bool {
+        work.isComplete != true
+    }
+
     /// 1u's four. Empty when these are not your works, which leaves the row with
     /// no trailing swipe at all.
     @ViewBuilder
@@ -371,12 +394,14 @@ struct AO3AuthorWorksSection: View {
             }
             .tint(.red)
 
-            Button {
-                onOwnWorkAction(.chapter(workID: remote.id, title: remote.title))
-            } label: {
-                Label("Chapter", systemImage: "text.append")
+            if Self.offersAddChapter(remote) {
+                Button {
+                    onOwnWorkAction(.chapter(workID: remote.id, title: remote.title))
+                } label: {
+                    Label("Chapter", systemImage: "text.append")
+                }
+                .tint(.indigo)
             }
-            .tint(.indigo)
 
             Button {
                 onOwnWorkAction(.tags(workID: remote.id))
