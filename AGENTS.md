@@ -17,11 +17,13 @@
 **Codebase map (optional, local):** if this worktree has `graphify-out/graph.json`
 (gitignored, per worktree; scope in [`.graphifyignore`](.graphifyignore)), ask it
 before grepping for where something lives or what touches it. Run from the worktree
-root: `graphify query "<question>"`, `graphify explain "<Symbol>"`,
-`graphify path "<A>" "<B>"` (add `--undirected` if no path is found). No graph? Search
-normally — don't build one for a single task (`/graphify` is a Claude Code skill that
-runs LLM extraction). Never read `graph.json` directly (~23 MB), and still read the
-code you change. `.githooks/` refreshes the code graph after commits, merges, rebases
+root and lead with symbol names: `graphify explain "<Symbol>"` (`"<path>::<Symbol>"`
+when ambiguous), `graphify path "<A>" "<B>"` (add `--undirected` if no path is found);
+`graphify query "<question>" --budget 2000` seeds on keywords, so vague wording returns
+noise. Cross-file call edges are best-effort — confirm before relying on them. No
+graph? Search normally — don't build one for a single task (`/graphify` is a Claude
+Code skill that runs LLM extraction). Never read `graph.json` directly (~23 MB), and
+still read the code you change. `.githooks/` refreshes the code graph after commits, merges, rebases
 and branch switches in worktrees that opted in (`git config --worktree core.hooksPath
 .githooks`); doc edits need `/graphify --update`. Don't run `graphify hook install`.
 
