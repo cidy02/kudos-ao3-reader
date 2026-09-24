@@ -640,9 +640,18 @@ struct CommentsView: View {
         switch model.phase {
         case .idle, .loading:
             Section {
-                ForEach(0..<4, id: \.self) { _ in CommentSkeletonRow() }
+                ForEach(0..<4, id: \.self) { _ in
+                    CommentSkeletonRow()
+                        .listRowInsets(EdgeInsets(
+                            top: CommentThreadGeometry.rowTopPadding,
+                            leading: CommentThreadGeometry.sideMargin,
+                            bottom: 0,
+                            trailing: CommentThreadGeometry.sideMargin
+                        ))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
-            .cardRow()
         case let .failed(message):
             Section {
                 ContentUnavailableView {
@@ -1483,20 +1492,26 @@ struct CommentComposerSheet: View {
 
 // MARK: - Skeleton
 
-/// Wireframe for a loading comment card.
+/// Wireframe for a loading root comment, in 1f's shape: an avatar column and
+/// a content column on the page, no card — so the list does not change
+/// vocabulary the moment the real rows arrive.
 struct CommentSkeletonRow: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                SkeletonBlock(height: 12, width: 110)
-                Spacer()
-                SkeletonBlock(height: 10, width: 60)
+        let avatar = CommentThreadGeometry.avatarSize(forDepth: 0)
+        HStack(alignment: .top, spacing: 11) {
+            SkeletonBlock(height: avatar, width: avatar, cornerRadius: avatar / 2)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    SkeletonBlock(height: 12, width: 110)
+                    Spacer()
+                    SkeletonBlock(height: 10, width: 60)
+                }
+                SkeletonTextLine()
+                SkeletonTextLine()
+                SkeletonTextLine(width: 140)
             }
-            SkeletonTextLine()
-            SkeletonTextLine()
-            SkeletonTextLine(width: 140)
         }
-        .padding(.vertical, 4)
+        .padding(.bottom, CommentThreadGeometry.conversationGap)
         .skeletonShimmer()
         .accessibilityHidden(true)
     }
