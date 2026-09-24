@@ -696,9 +696,10 @@ final class CommentsModel {
             expandedRootIDs: expandedRootIDs,
             visibleReplyCounts: visibleReplyCounts,
             collapsedRootIDs: collapsedRootIDs,
-            // The list always stops at a conversation's first replies; the thread
-            // screen is the only caller that renders a subtree in full.
-            bounded: true
+            // Inline down to AO3's own nesting limit; anything deeper goes behind
+            // "Continue thread". The thread screen is the only caller that renders
+            // a subtree in full.
+            maxDepth: CommentThreadGeometry.maxInlineDepth
         )
     }
 
