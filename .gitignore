@@ -66,3 +66,6 @@ Packages/
 Scripts/fandom-audit/fandom-audit.sqlite
 Scripts/fandom-audit/watchdog.log
 Scripts/fandom-audit/runner.log
+
+# graphify knowledge-graph output (generated; rebuild with /graphify)
+graphify-out/
