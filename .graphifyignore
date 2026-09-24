@@ -1,0 +1,41 @@
+# Scope for the iOS knowledge graph (/graphify): the app, its tests, its
+# tooling, and the docs that describe how the code works *now*.
+# Point-in-time material (task ledger, plans, audits, reports, transcripts)
+# and pictures stay out; Android gets its own graph from an Android line,
+# because the android/ copy on this branch is stale.
+
+android/
+discussions/
+Design/
+site/
+kudos-ao3-reader/Legal/
+
+# Root docs: only the agent contract and README.
+/*.md
+!/AGENTS.md
+!/README.md
+
+# docs/: only the living architecture and policy docs.
+docs/*
+!docs/ARCHITECTURE_MAP.md
+!docs/DATA_AND_PERSISTENCE_INVARIANTS.md
+!docs/AO3_NETWORKING_POLICY.md
+!docs/REGRESSION_TEST_MATRIX.md
+!docs/AGENT_ONBOARDING.md
+!docs/PROJECT_PHILOSOPHY.md
+!docs/contracts/
+docs/contracts/ANDROID_MATERIAL_HIG_TRANSLATION.md
+docs/contracts/KUDOS_ANDROID_INTERFACE_GUIDELINES.md
+
+# Agent scratch output from past sessions.
+.artifacts/
+
+# Test fixtures are captured AO3 pages, not documentation.
+KudosTests/**/*.html
+
+# Images (icons, screenshots) add no code structure.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
