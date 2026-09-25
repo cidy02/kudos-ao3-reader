@@ -75,8 +75,12 @@ struct DraftExpiryTests {
         let created = DraftExpiry.createdDate(
             fromDeletion: DateComponents(year: 2026, month: 10, day: 5), calendar: calendar
         )
-        #expect(created.map { calendar.dateComponents([.year, .month, .day], from: $0) }
-            == DateComponents(year: 2026, month: 9, day: 6))
+        // Field by field: `dateComponents(_:from:)` also sets `isLeapMonth`, so a
+        // whole-value comparison with a literal would fail on a matching date.
+        let parts = created.map { calendar.dateComponents([.year, .month, .day], from: $0) }
+        #expect(parts?.year == 2026)
+        #expect(parts?.month == 9)
+        #expect(parts?.day == 6)
     }
 
     @Test func expiringThisWeekCountsSevenDaysOrFewer() {
