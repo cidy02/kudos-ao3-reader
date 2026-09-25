@@ -626,7 +626,7 @@ struct MediaBrowserView: View {
     private static let recentFandomsLimit = 5
 
     /// How many Jump Back In cards 1g draws.
-    private static let jumpBackInLimit = 3
+    private nonisolated static let jumpBackInLimit = 3
 
     /// Jump Back In, ranked across every category (1g.6): read works newest-read
     /// first, the first `limit` distinct fandoms that belong to a category, each
