@@ -2,8 +2,16 @@ import SwiftUI
 
 /// Shared chapter/summary/notes editor. Done updates the parent form; only that
 /// form's explicit Save/Post action writes to AO3.
+///
+/// Typing costs nothing proportional to the chapter
+/// (docs/WRITING_EDITOR_ARCHITECTURE.md D8). The form binding, the recovery copy
+/// and the word count change only at checkpoints (§8.1): 1.5 s after typing
+/// stops, at least every 20 s while it doesn't, and on Done, leaving the screen,
+/// restoring a copy, a scene change or a memory warning. Disk work and counting
+/// run off the main thread.
 struct WritingTextEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(ThemeManager.self) private var theme
     @ScaledMetric(relativeTo: .body) private var editorFontSize = 17.0
     @Binding var text: String
@@ -13,6 +21,13 @@ struct WritingTextEditor: View {
     let field: String
 
     @State private var controller: WritingTextController?
+    @State private var checkpoints: WritingCheckpointScheduler?
+    @State private var recoveryWriter: WritingRecoveryWriter?
+    /// Nil until the first count, made off the main thread, lands.
+    @State private var wordCount: Int?
+    /// Which checkpoint the shown count belongs to. A count that finishes after
+    /// a newer one started is dropped.
+    @State private var countedCheckpoint = 0
     @State private var original: String
     @State private var recoveries: [WritingTextRecovery.Copy] = []
     @State private var selectedRecovery: URL?
@@ -39,8 +54,6 @@ struct WritingTextEditor: View {
         recoveries.first { $0.id == selectedRecovery } ?? recoveries.first
     }
 
-    private var wordCount: Int { text.strippingHTML().split(whereSeparator: \.isWhitespace).count }
-
     var body: some View {
         VStack(spacing: 0) {
             if let controller {
@@ -48,7 +61,7 @@ struct WritingTextEditor: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else { ProgressView() }
             HStack {
-                Text("\(wordCount) words")
+                if let wordCount { Text("\(wordCount) words") } else { Text(verbatim: " ") }
                 Spacer()
                 Text("Local recovery · Save on the work form")
             }
@@ -77,7 +90,8 @@ struct WritingTextEditor: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") {
-                    controller?.flush()
+                    controller?.commitComposition()
+                    checkpoints?.fireNow()
                     dismiss()
                 }
             }
@@ -85,11 +99,17 @@ struct WritingTextEditor: View {
         .onAppear(perform: start)
         .onChange(of: editorFontSize) { _, value in controller?.setAppearance(theme.appTheme, fontSize: value) }
         .onChange(of: theme.appTheme) { _, value in controller?.setAppearance(value, fontSize: editorFontSize) }
-        .onDisappear {
-            controller?.flush()
-            controller?.onChange = nil
-            controller = nil
+        // Going inactive or to the background checkpoints without touching an
+        // IME composition (§7.6): the app may not come back.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { checkpoints?.fireNow() }
         }
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            checkpoints?.fireNow()
+        }
+        #endif
+        .onDisappear(perform: finish)
         .alert("Editor error", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
@@ -144,6 +164,9 @@ struct WritingTextEditor: View {
                 ScrollView { Text(recovery.text).font(.body.monospaced()).textSelection(.enabled) }
                 Button("Restore local copy") {
                     controller?.restore(recovery.text)
+                    // Straight into the form and a fresh recovery copy, rather
+                    // than waiting for the idle timer.
+                    checkpoints?.fireNow()
                     self.recoveries = []
                 }
                 Button("Keep form text", role: .cancel) { self.recoveries = [] }
@@ -164,13 +187,75 @@ struct WritingTextEditor: View {
         let editor = WritingTextController(text: text)
         controller = editor
         editor.setAppearance(theme.appTheme, fontSize: editorFontSize)
-        editor.onChange = { value in
-            text = value
-            do { try store.save(text: value, original: original, to: recoveryURL) } catch { errorMessage = "Local recovery could not be saved: \(error.localizedDescription)" }
+        recoveryWriter = WritingRecoveryWriter(store: store, url: recoveryURL, original: original)
+        let scheduler = WritingCheckpointScheduler { checkpoint() }
+        checkpoints = scheduler
+        editor.onEdit = { [weak scheduler] in scheduler?.noteEdit() }
+        recount(text, checkpoint: 0)
+        loadRecoveries()
+    }
+
+    /// One checkpoint (docs/WRITING_EDITOR_ARCHITECTURE.md §8.2): the text,
+    /// read once, goes to the form binding, then to the recovery copy and the
+    /// word count off the main thread. Nothing happens if it didn't change.
+    private func checkpoint() {
+        guard let controller, let scheduler = checkpoints,
+              let value = controller.takeCheckpoint() else { return }
+        text = value
+        let sequence = scheduler.checkpointCount
+        if let recoveryWriter {
+            Task {
+                do {
+                    try await recoveryWriter.write(value, sequence: sequence)
+                } catch {
+                    errorMessage = "Local recovery could not be saved: \(error.localizedDescription)"
+                }
+            }
         }
-        do {
-            recoveries = try store.copies(for: recoveryKey).filter { $0.entry.text != text }
-        } catch { errorMessage = "The local recovery copy could not be read: \(error.localizedDescription)" }
+        recount(value, checkpoint: sequence)
+    }
+
+    private func recount(_ value: String, checkpoint: Int) {
+        countedCheckpoint = checkpoint
+        Task {
+            let count = await Task.detached(priority: .userInitiated) {
+                WritingWordCount.count(value)
+            }.value
+            guard countedCheckpoint == checkpoint else { return }
+            wordCount = count
+        }
+    }
+
+    /// Earlier sessions' copies, read and decoded off the main thread (§8.5).
+    /// This session's own file is left out: it may exist by the time the read
+    /// finishes.
+    private func loadRecoveries() {
+        let store = store
+        let key = recoveryKey
+        let ownFile = recoveryURL.lastPathComponent
+        let formText = text
+        Task {
+            do {
+                recoveries = try await Task.detached(priority: .userInitiated) {
+                    try store.copies(for: key).filter {
+                        $0.url.lastPathComponent != ownFile && $0.entry.text != formText
+                    }
+                }.value
+            } catch {
+                errorMessage = "The local recovery copy could not be read: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Leaving the screen: commit any composition, checkpoint, then break the
+    /// editor ↔ controller ↔ scheduler cycle.
+    private func finish() {
+        controller?.commitComposition()
+        checkpoints?.fireNow()
+        checkpoints?.cancel()
+        checkpoints = nil
+        controller?.onEdit = nil
+        controller = nil
     }
 }
 

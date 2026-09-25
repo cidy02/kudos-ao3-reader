@@ -36,6 +36,14 @@ selection/undo/redo/recovery without rewriting untouched source. `AO3WorkFormPar
 continues to cover required fields and AO3 payload construction. Live draft/post
 writes, chapter-total partial failures and authenticated navigation remain manual.
 
+`WritingCheckpointTests` (T-262, E1 of `docs/WRITING_EDITOR_ARCHITECTURE.md`) covers
+the checkpoint policy (1.5 s idle, 20 s under continuous typing), the scheduler
+(fires once, `fireNow`, `cancel`), the off-main word count, ordered recovery writes
+(an older checkpoint never replaces a newer one), and pruning by file date that
+never reads a copy (an unreadable copy is pruned, and skipped rather than fatal when
+listing). Typing latency and main-thread cost at 510,000 characters (budgets B1, B3,
+B5, B6) are measured by hand with `Scripts/make-writing-fixture.py`.
+
 ## Known coverage gaps (acknowledged, not licenses to skip)
 
 1. ~~`LibraryFilters.matches` has no dedicated unit suite~~ — closed by `LibraryFiltersTests` (T-74).
