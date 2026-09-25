@@ -175,12 +175,12 @@
             "kudos-ao3-reader/Features/Library/LibraryView.swift:515",
             "kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:471",
             "kudos-ao3-reader/Features/Reader/ReaderView.swift:533",
-            "kudos-ao3-reader/Services/PersistenceSync.swift:631"
+            "kudos-ao3-reader/Services/PersistenceSync.swift:631",
+            "kudos-ao3-reader/Features/Reader/ReaderView.swift:263-297"
           ],
           "failure_scenario": "readingProgressLabel prints 'Ch \\(lastSpineIndex + 1)'. lastSpineIndex is the legacy macOS reader's spine position (front matter included) and syncs to iOS. A reader in chapter 1 of an AO3 EPUB whose spine starts with its preface sees 'Ch 2'. docs/ARCHITECTURE_MAP.md and WorkReadingPosition both forbid inferring a chapter from a spine index.",
-          "fix": "Prefer WorkReadingPosition.title(from: readiumLocator); else the Readium percent; else nil. Drop the spine-derived 'Ch N' (macOS keeps the ring).",
-          "test": "SavedWork with lastSpineIndex=1 and no locator -> readingProgressLabel must not be 'Ch 2'.",
-          "confidence": "PLAUSIBLE"
+          "fix": "Prefer WorkReadingPosition.title(from: readiumLocator); else the Readium percent; else nil. Drop the spine-derived 'Ch N': the legacy reader itself normalizes past Preface/Summary (ReaderView.swift:263-297, sections.storyChapterIndex) and the model has no story-chapter index to do the same. Leave readingProgress alone - KudosTests/SavedWorkProgressTests.swift:49-54 pins its spine-as-chapter fraction, and changing that is a separate call.",
+          "test": "SavedWork with lastSpineIndex=1 and no locator -> readingProgressLabel must not be 'Ch 2'."
         }
       ]
     },
