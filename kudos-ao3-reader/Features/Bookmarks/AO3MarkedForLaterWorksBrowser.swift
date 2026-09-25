@@ -146,11 +146,24 @@ enum AO3MarkedForLaterGrouping {
 
 enum AO3MarkedForLaterCopy {
     /// "12 works · synced 2 min ago". No sync stamp yet — the first fetch has
-    /// not landed — so the line is the count alone.
-    static func subtitle(workCount: Int, syncedAt: Date?, now: Date = Date()) -> String {
-        let works = workCount == 1 ? "1 work" : "\(workCount) works"
-        guard let syncedAt else { return works }
-        return "\(works) · synced \(relativeSyncPhrase(from: syncedAt, to: now))"
+    /// not landed — so the line is the count alone. With more than one page it
+    /// ends " · page X of Y", as every other account list's tally does: the count
+    /// is this page's, and without the clause page 1 of 9 read as the whole list.
+    static func subtitle(
+        workCount: Int,
+        syncedAt: Date?,
+        now: Date = Date(),
+        currentPage: Int = 1,
+        totalPages: Int = 1
+    ) -> String {
+        var line = workCount == 1 ? "1 work" : "\(workCount) works"
+        if let syncedAt {
+            line += " · synced \(relativeSyncPhrase(from: syncedAt, to: now))"
+        }
+        if totalPages > 1 {
+            line += " · page \(currentPage) of \(totalPages)"
+        }
+        return line
     }
 
     /// Short, stable, and independent of the device locale. Foundation's
@@ -174,11 +187,16 @@ enum AO3MarkedForLaterCopy {
 
     /// The artboard's "12 of 4 pages" is its own illustration. The numbers here
     /// are the page the pagination bar is already on.
+    ///
+    /// The artboard's "unmarking here unmarks there" is left out: this screen has
+    /// no unmark, and the app has no unmark write (AO3's is `PATCH
+    /// /works/:id/mark_as_read`). It comes back with that action, if the owner
+    /// approves one (1o.4).
     static func footer(currentPage: Int, totalPages: Int) -> String {
         let pages = max(totalPages, 1)
         let page = min(max(currentPage, 1), pages)
         let noun = pages == 1 ? "page" : "pages"
-        return "Marked for Later lives on AO3 — unmarking here unmarks there. "
+        return "Marked for Later lives on AO3. "
             + "Pagination follows the ledger: \(page) of \(pages) \(noun)."
     }
 }
@@ -261,7 +279,11 @@ struct AO3MarkedForLaterWorksBrowser: View {
                 kicker: kicker,
                 title: "Marked for Later",
                 subtitle: AO3MarkedForLaterCopy.subtitle(
-                    workCount: shownCount, syncedAt: syncedAt, now: context.date
+                    workCount: shownCount,
+                    syncedAt: syncedAt,
+                    now: context.date,
+                    currentPage: currentPage,
+                    totalPages: totalPages
                 ),
                 palette: palette,
                 gutter: SubjectMetrics.accountGutter

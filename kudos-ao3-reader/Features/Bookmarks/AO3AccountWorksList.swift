@@ -215,9 +215,16 @@ struct AO3AccountWorksList: View {
         case idle, loading, loaded, failed(String)
     }
 
-    /// The loaded page narrowed by the active refine filters.
+    /// The loaded page narrowed by the active refine filters. Subscriptions judges
+    /// each row on its work-page summary once fetched, and keeps a row nothing is
+    /// known about yet — see `AO3SubscriptionsRefine`.
     private var visibleWorks: [AO3WorkSummary] {
-        filters.apply(to: works)
+        guard kind == .subscriptions else { return filters.apply(to: works) }
+        return AO3SubscriptionsRefine.visible(
+            works: works,
+            enriched: enrichedSubscriptionSummaries,
+            filters: filters
+        )
     }
 
     /// History's progress pills, applied after the refine facets. Other lists
@@ -317,9 +324,11 @@ struct AO3AccountWorksList: View {
                     canReset: filters.hasActiveFilters,
                     onApply: { showingFilters = false },
                     onReset: { filters = AO3SearchFilters() },
-                    // The same array `visibleWorks` narrows, so 1au's line and the
-                    // list behind it can never disagree.
-                    refineSource: works
+                    // The same array `visibleWorks` narrows, and the count it
+                    // leaves, so 1au's line and the list behind it can never
+                    // disagree — Subscriptions' rule is not the panel's own.
+                    refineSource: works,
+                    refineMatchCount: visibleWorks.count
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
@@ -946,8 +955,14 @@ struct AO3AccountWorksList: View {
             // chapter counts arrive. No-op for every kind but subscriptions.
             enrichLoadedSubscriptionPage(result.works, generation: expectedSessionGeneration)
             if let countsKind = kind.countsKind {
+                // Bookmarks' rows are only the bookmarks that parse as works, so
+                // its page is a floor under AO3's count (1m.3; see the init).
                 AO3AccountListCountsCache.shared.record(
-                    page: result,
+                    AO3AccountListCount(
+                        itemsOnPage: result.works.count,
+                        totalPages: result.totalPages,
+                        mayOmitRows: kind == .bookmarks
+                    ),
                     kind: countsKind,
                     authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
                 )

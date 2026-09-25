@@ -1,13 +1,19 @@
 import SwiftData
 import SwiftUI
 
-/// The Account tab: signed-in user's native AO3 profile hub with
-/// Overview / Reading / Writing / Activity.
+/// The Account tab: the signed-in user's native AO3 profile hub, one flat page
+/// with no segmented control (flattened per the owner — see `tabSections`):
 ///
-/// - **Overview** — AO3 dashboard shortcuts, Preferences, More on AO3
-/// - **Reading** — Later / Subscriptions / Bookmarks / Collections
+/// - **Shortcuts** — the reader's chosen dashboard tiles
+/// - **Reading** — Marked for Later / Bookmarks / Collections / Subscriptions
 /// - **Writing** — Works / Series / Drafts (native draft forms)
 /// - **Activity** — History / Inbox
+/// - **Account** — Preferences, More on AO3
+///
+/// Each row opens its own screen. The row orders are `readingRowOrder`,
+/// `writingRowOrder` and `activityRowOrder`, which the signed-out preview (1n)
+/// lists too. `libraryStyleCompactRoot` is unreachable while
+/// `showsWorkListControls` is false for every scope; it is kept, not deleted.
 ///
 /// App settings stay behind the toolbar gear.
 struct AccountView: View {
@@ -123,6 +129,15 @@ struct AccountView: View {
             }
         }
     }
+
+    /// The hub's rows per scope, in the order the signed-in groups draw them and
+    /// the signed-out preview lists them. One list each, so the preview cannot
+    /// leave out a row the hub has (1n; it once lacked Subscriptions, Drafts and
+    /// History). Reading keeps 1bt's order: the three saved shelves, then the
+    /// followed one.
+    static let readingRowOrder: [AccountReadingTab] = [.later, .bookmarks, .collections, .subscriptions]
+    static let writingRowOrder: [AccountWritingTab] = [.works, .series, .drafts]
+    static let activityRowOrder: [AccountActivityTab] = [.history, .inbox]
 
     /// Compact work lists use Library/Home's root `ScrollView` + `NavigationLink`
     /// pattern. Stacking many links inside one List row breaks tap targets.
@@ -931,8 +946,9 @@ private extension AccountView {
     /// A preview of the signed-in tab rather than a description of it: the real
     /// scope headings and the real destination rows, with every value withheld,
     /// faded out at the bottom. Built from `scopeDestinationRow` — the same row
-    /// the hub itself draws — so it cannot drift from the thing it previews, and
-    /// inert because there is nothing behind it to open yet.
+    /// the hub itself draws — and from the same row orders (`readingRowOrder`
+    /// and its siblings), titles and symbols, so it cannot drift from the thing
+    /// it previews; inert because there is nothing behind it to open yet.
     /// The preview's own opening row: what `signedOutCard` looks like once an
     /// account fills it in, faded the same way every row under it is. Avatar
     /// and name only — no bio, no join date — because this is a glimpse of the
@@ -962,9 +978,9 @@ private extension AccountView {
                 identitySkeletonRow
                     .padding(.bottom, 16)
 
-                previewGroup("Reading", ["Marked for Later", "Bookmarks", "Collections"])
-                previewGroup("Writing", ["Works", "Series"])
-                previewGroup("Activity", ["Inbox"])
+                previewGroup("Reading", Self.readingRowOrder.map { ($0.rawValue, $0.systemImage) })
+                previewGroup("Writing", Self.writingRowOrder.map { ($0.rawValue, $0.systemImage) })
+                previewGroup("Activity", Self.activityRowOrder.map { ($0.rawValue, $0.systemImage) })
             }
             .allowsHitTesting(false)
             // The spec fades the preview out rather than ending it on a hard
@@ -994,7 +1010,7 @@ private extension AccountView {
     /// One previewed scope: its heading, then its rows with no counts and no
     /// selection, because signed out there is no figure to state and nothing is
     /// chosen.
-    func previewGroup(_ title: String, _ rows: [String]) -> some View {
+    func previewGroup(_ title: String, _ rows: [(title: String, systemImage: String)]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             SubjectFieldLabel(text: title, style: .formGroup)
                 .padding(.bottom, 7)
@@ -1004,9 +1020,9 @@ private extension AccountView {
                     if index > 0 { SubjectRowSeparator() }
                     scopeDestinationRow(
                         AccountScopeDestination(
-                            id: row,
-                            title: row,
-                            systemImage: previewSymbol(for: row),
+                            id: row.title,
+                            title: row.title,
+                            systemImage: row.systemImage,
                             open: {}
                         )
                     )
@@ -1014,17 +1030,6 @@ private extension AccountView {
             }
             .subjectPanel()
             .padding(.bottom, 16)
-        }
-    }
-
-    func previewSymbol(for row: String) -> String {
-        switch row {
-        case "Marked for Later": AccountReadingTab.later.systemImage
-        case "Bookmarks": AccountReadingTab.bookmarks.systemImage
-        case "Collections": AccountReadingTab.collections.systemImage
-        case "Works": AccountWritingTab.works.systemImage
-        case "Series": AccountWritingTab.series.systemImage
-        default: AccountActivityTab.inbox.systemImage
         }
     }
 
@@ -1121,12 +1126,14 @@ private extension AccountView {
         // `SubscriptionWatermarks.newChapterCount(for:watermarks:)` needs loaded
         // subscription works, and AO3AccountListCountsCache holds sizes only, so
         // "N with new chapters" cannot be had without loading them.
-        scopeGroup("Reading", [
-            readingDestination(.later, count: .markedForLater),
-            readingDestination(.bookmarks, count: .bookmarks),
-            readingDestination(.collections, count: .collections),
-            readingDestination(.subscriptions, count: .subscriptions)
-        ])
+        scopeGroup("Reading", Self.readingRowOrder.map { tab -> AccountScopeDestination in
+            switch tab {
+            case .later: return readingDestination(.later, count: .markedForLater)
+            case .bookmarks: return readingDestination(.bookmarks, count: .bookmarks)
+            case .collections: return readingDestination(.collections, count: .collections)
+            case .subscriptions: return readingDestination(.subscriptions, count: .subscriptions)
+            }
+        })
     }
 
     @ViewBuilder
@@ -1135,27 +1142,33 @@ private extension AccountView {
         // carried the distinction, so nothing the split said is lost —
         // otwarchive's work_drafts.feature keeps 29-day drafts and purges 31-day
         // ones, and WritingDraftsView records the same 30-day rule.
-        scopeGroup("Writing", [
-            writingDestination(.works, count: .myWorks),
-            writingDestination(.series, count: .series),
-            writingDestination(.drafts, count: nil, subtitle: "Deleted by AO3 after 30 days")
-        ])
+        scopeGroup("Writing", Self.writingRowOrder.map { tab -> AccountScopeDestination in
+            switch tab {
+            case .works: return writingDestination(.works, count: .myWorks)
+            case .series: return writingDestination(.series, count: .series)
+            case .drafts: return writingDestination(.drafts, count: nil, subtitle: "Deleted by AO3 after 30 days")
+            }
+        })
     }
 
     @ViewBuilder
     var activityScopeGroups: some View {
         // Was "Read on AO3" / "Arrives". Both rows keep the subtitles that said
         // which was which, so the flattening costs no meaning.
-        scopeGroup("Activity", [
-            activityDestination(
-                .history, count: .history, subtitle: "AO3’s own history, not the local reading log"
-            ),
-            activityDestination(
-                .inbox,
-                count: nil,
-                subtitle: inboxModel.unreadCount.map { "\($0) unread" }
-            )
-        ])
+        scopeGroup("Activity", Self.activityRowOrder.map { tab -> AccountScopeDestination in
+            switch tab {
+            case .history:
+                return activityDestination(
+                    .history, count: .history, subtitle: "AO3’s own history, not the local reading log"
+                )
+            case .inbox:
+                return activityDestination(
+                    .inbox,
+                    count: nil,
+                    subtitle: inboxModel.unreadCount.map { "\($0) unread" }
+                )
+            }
+        })
     }
 
     /// One destination inside a scope.

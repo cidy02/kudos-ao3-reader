@@ -109,18 +109,15 @@ struct AccountInboxScreen: View {
 
     /// 1l heads the page with what is waiting rather than only what it is.
     /// Awaiting reply counts the loaded page. The heading has no such total —
-    /// see `AO3InboxTally`.
+    /// see `AO3InboxTally.headerLine`.
     private var tally: String? {
         guard let total = model.totalComments else { return nil }
-        var line = total == 1 ? "1 comment" : "\(total.formatted()) comments"
-        if let unread = model.unreadCount, unread > 0 {
-            line += " · \(unread.formatted()) unread"
-        }
-        let awaiting = AO3InboxTally.awaitingReplyCount(model.items)
-        if awaiting > 0 {
-            line += " · \(awaiting.formatted()) awaiting your reply"
-        }
-        return line
+        return AO3InboxTally.headerLine(
+            total: total,
+            unread: model.unreadCount,
+            awaitingOnPage: AO3InboxTally.awaitingReplyCount(model.items),
+            totalPages: model.totalPages
+        )
     }
 
     /// Comments stay on screen through a failed page turn. An empty first load
