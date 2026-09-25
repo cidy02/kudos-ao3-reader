@@ -304,6 +304,9 @@ private extension AuthorProfileView {
                   authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
               ),
               let count = stored.displayText else { return model.route.displayName }
+        // 1az's hero line for an account with none: "No series yet", where a
+        // count would read "0 series · <name>".
+        if model.selectedTab == .series, stored.exact == 0 { return "No series yet" }
         // 1u's hero is "12 works · 248,400 words · 3,812 kudos". Words and kudos
         // come from /users/:id/stats and exist only for the signed-in account,
         // so on anyone else's page — and before the fetch lands — this stays the

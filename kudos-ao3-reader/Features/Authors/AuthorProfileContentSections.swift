@@ -461,7 +461,7 @@ struct AO3AuthorSeriesSection: View {
                 } else if showsNewSeriesOnAO3 {
                     // 1az's own copy, verbatim. The generic empty message said
                     // nothing about what a series is FOR, which is the half that
-                    // earns the trip to Safari underneath it.
+                    // earns the trip to AO3 underneath it.
                     VStack(alignment: .leading, spacing: 6) {
                         Text("You have not made a series.")
                             .font(.system(size: 14, weight: .semibold))
@@ -474,10 +474,14 @@ struct AO3AuthorSeriesSection: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .cardRow()
+                    // 1az says "in Safari" and "Posting is not something the app
+                    // does". Neither holds here: AO3 links open in Browse, and the
+                    // app does post works. What stays true is where series are made.
                     AccountExternalNavCard(
                         title: "New series on AO3",
                         systemImage: "square.stack.badge.plus",
-                        pathSuffix: "series/new"
+                        pathSuffix: "series/new",
+                        footnote: "Opens archiveofourown.org in Browse. Series are made there, not in the app."
                     )
                 } else {
                     AO3AuthorContentMessage(

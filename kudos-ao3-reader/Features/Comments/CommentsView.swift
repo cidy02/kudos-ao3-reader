@@ -1163,13 +1163,18 @@ struct CommentComposerSheet: View {
     /// AO3's comment field is 10,000 characters and rejects the whole POST past
     /// it, which is why the budget is a real gate here and not just a readout —
     /// a request that can only come back as an error is not worth spending.
-    ///
-    /// Counted in `Character`s, which is never more than the codepoints AO3
-    /// counts, so this can refuse only what AO3 would also refuse.
     private static let characterLimit = 10_000
 
+    /// Counted in code points, as AO3 counts: its `validates_length_of` measures
+    /// Ruby's `String#length`. Counting `Character`s instead let a comment with a
+    /// few family or flag emoji (one `Character`, several code points each) read
+    /// "5 left" and then be refused by AO3 (1ba.2).
+    static func remainingCharacters(for text: String) -> Int {
+        characterLimit - text.unicodeScalars.count
+    }
+
     private var remainingCharacters: Int {
-        Self.characterLimit - model.composerText.count
+        Self.remainingCharacters(for: model.composerText)
     }
 
     /// Spec 1ba's header title. "Reply to <name>" rather than a bare "Reply":
