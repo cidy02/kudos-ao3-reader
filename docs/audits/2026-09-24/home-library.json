@@ -1,0 +1,641 @@
+{
+  "area": "home-library",
+  "wave": "3 (cloud)",
+  "auditor": "Claude (cloud session, no Xcode)",
+  "date": "2026-09-25",
+  "base_commit": "c4ce1e2",
+  "method": "docs/audits/2026-09-24/CLOUD_WAVE3_README.md (AUDIT_METHOD.md was not pushed; method reconstructed from the handoff + docs/REDESIGN_PLAN.md)",
+  "status_vocabulary": {
+    "DONE": "built as the board draws it; evidence cites the code",
+    "BUG": "wrong or dishonest output today; failure_scenario says how",
+    "GAP": "board element missing; no owner decision needed; size S/M/L",
+    "DEVIATION": "built differently on purpose; the reasoning is recorded in code or docs (cited)",
+    "DECIDED": "the owner already ruled; cited",
+    "OWNER": "needs an owner decision (policy, schema, or spec vs settled evidence)",
+    "NOT_BUILDABLE": "the data does not exist (AO3 or app); cited",
+    "SUPERSEDED": "board replaced by another board"
+  },
+  "caveats": [
+    "Audited at origin/review/codex-item12 = c4ce1e2. The handoff's T-246..T-255 commits (Mac) were not on origin when this ran; none of them is listed as touching Home or Library, but queue cards (1b.5) overlap T-252.",
+    "No Xcode here: nothing was built, run or seen. Every DONE is a source-reading claim."
+  ],
+  "counts": {
+    "BUG": 5,
+    "DECIDED": 3,
+    "DEVIATION": 1,
+    "DONE": 29,
+    "GAP": 8,
+    "SUPERSEDED": 1
+  },
+  "boards": [
+    {
+      "board": "1b",
+      "title": "Home tab",
+      "spec_label": "Continue Reading is the hero plus the next four as the same 164x232 card, then Reading Queues (New queue card first), Recently Updated with its '+N new' footer, and Subscriptions with AO3-sourced cards. Home has no chip row and no Filters button - only the '...' with Mature reveal and Select.",
+      "entry_points": [
+        "kudos-ao3-reader/App/ContentView.swift (Home tab root)"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Home/HomeView.swift",
+        "kudos-ao3-reader/Features/Home/HomeResumeHero.swift",
+        "kudos-ao3-reader/Features/Home/HomeCards.swift",
+        "kudos-ao3-reader/Features/Home/CanonicalWorkCoverCard.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1b.1",
+          "what": "Section order: Continue Reading, Reading Queues, Recently Updated, Subscriptions",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:141-146"
+          ]
+        },
+        {
+          "id": "1b.2",
+          "what": "Hero (kicker, rule, 31pt title, byline/words/chapters, 68pt ring + state word, locator chapter title, Resume, signal tray) plus next four 164x232 cards with -8pt overlap",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:319-395",
+            "kudos-ao3-reader/Features/Home/HomeResumeHero.swift:250-283"
+          ],
+          "note": "Chapter line reads the persisted Readium locator title (WorkReadingPosition), never a spine index."
+        },
+        {
+          "id": "1b.3",
+          "what": "Toolbar: no chip row, no Filters; '...' holds Mature reveal and Select",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:231-256"
+          ]
+        },
+        {
+          "id": "1b.4",
+          "what": "Reading Queues carousel with the New queue card first",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:405-435"
+          ],
+          "note": "Card copy is 'New Queue / Tap to create' (ReadingQueues.swift:233-237); the board says 'New queue / Plan what to read next'. Cosmetic."
+        },
+        {
+          "id": "1b.5",
+          "what": "Queue card face: next-up work's fandom + title, footer 'N works - next up K'",
+          "spec": "Naruto / Burn my heart, heed... / Test-Naruto / 7 works - next up 3",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/ReadingQueues.swift:50-57"
+          ],
+          "note": "The card draws a 2x2 grid of the first four works and 'N works' only. Overlaps the queue boards (1i 2x2 peek tile) that T-252 owns on the Mac branch - coordinate before touching ReadingQueueCard."
+        },
+        {
+          "id": "1b.6",
+          "what": "Recently Updated cards carry '+N new'",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:573-581"
+          ]
+        },
+        {
+          "id": "1b.7",
+          "what": "Subscriptions header count",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:485-492",
+            "kudos-ao3-reader/Services/AO3AuthService.swift:790-802",
+            "kudos-ao3-reader/UIComponents/WorkCarouselSection.swift:44-47",
+            "kudos-ao3-reader/Services/AO3AccountListCountsCache.swift:24-38"
+          ],
+          "failure_scenario": "A reader with 45 work subscriptions: AO3 pages /users/:u/subscriptions?type=works 20 at a time (otwarchive subscriptions_controller#index, ITEMS_PER_PAGE). Home fetches page 1 only and prints 'SUBSCRIPTIONS 20' as if it were the total. WorkCarouselSection's own doc says an AO3-paged list showing one page of many must not print a count.",
+          "fix": "Pass itemCount only when the recorded AO3AccountListCount is exact (accountSubscriptions already records it); otherwise nil. Or extend SectionRuleHeader to take the count's displayText ('40+').",
+          "test": "Pure helper, e.g. HomeSubscriptionsCount.itemCount(merged:count:) -> Int?: exact 12 on one page -> 12; lowerBound 20 (2 pages) -> nil."
+        },
+        {
+          "id": "1b.8",
+          "what": "Subscriptions failure state",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:511-530",
+            "kudos-ao3-reader/Features/Home/HomeView.swift:501-507"
+          ],
+          "failure_scenario": "Signed in, first launch offline (or AO3 rate-limits the page): loadSubscriptions catches the error, subscriptions stays [], and the section says 'You're not subscribed to anything yet.' A failure is shown as an empty list.",
+          "fix": "Keep a loadFailed flag set only when the fetch throws and nothing is loaded; the empty state then says the list could not be loaded (with the pull-to-refresh hint) instead of claiming there are no subscriptions.",
+          "test": "Pure copy helper keyed on (isLoggedIn, loadFailed, isEmpty) -> message; failure + empty must not return the 'not subscribed' copy."
+        },
+        {
+          "id": "1b.9",
+          "what": "Recently Updated empty-state copy",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSections.swift:40-42",
+            "kudos-ao3-reader/Features/Home/HomeSections.swift:73-77",
+            "kudos-ao3-reader/Features/Home/HomeView.swift:201-206"
+          ],
+          "failure_scenario": "Copy says 'No recent updates from your subscriptions yet.' The section is saved library works with hasUpdate (WorkUpdateChecker over the local library), not AO3 subscriptions; a reader with no saved WIPs but many subscriptions is told the wrong source.",
+          "fix": "Say what the section is: e.g. 'No new chapters on works in your library yet. Kudos checks works in progress for new chapters.'",
+          "test": "none needed beyond a string check; optional snapshot of HomeSectionKind.recentlyUpdated.emptyMessage not mentioning subscriptions."
+        },
+        {
+          "id": "1b.10",
+          "what": "Subscription cards: 'SUBSCRIBED' centre badge",
+          "status": "DEVIATION",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeCards.swift:164-172",
+            "kudos-ao3-reader/Features/Home/HomeCards.swift:189-193"
+          ],
+          "note": "The centre slot prints the work's AO3 update date instead of the word SUBSCRIBED; reasoning recorded in the doc comment (same slot as a local card's '+N new'). Denser than the board."
+        },
+        {
+          "id": "1b.11",
+          "what": "Small 'AO3' provenance badge on remote cards",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:2663-2671",
+            "kudos-ao3-reader/Features/Home/HomeCards.swift:157-213"
+          ],
+          "note": "REDESIGN_PLAN measures the badge (radius 5, black 40%, 700 8px, .08em, white 80%) and records that no provenance badge exists anywhere in the app."
+        },
+        {
+          "id": "1b.12",
+          "what": "Card footer 'Ch N' on Reading Now cards",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Models/Models.swift:565-571",
+            "kudos-ao3-reader/Utilities/WorkReadingPosition.swift:5-6",
+            "kudos-ao3-reader/Features/Home/HomeView.swift:575-576",
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:515",
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:471",
+            "kudos-ao3-reader/Features/Reader/ReaderView.swift:533",
+            "kudos-ao3-reader/Services/PersistenceSync.swift:631"
+          ],
+          "failure_scenario": "readingProgressLabel prints 'Ch \\(lastSpineIndex + 1)'. lastSpineIndex is the legacy macOS reader's spine position (front matter included) and syncs to iOS. A reader in chapter 1 of an AO3 EPUB whose spine starts with its preface sees 'Ch 2'. docs/ARCHITECTURE_MAP.md and WorkReadingPosition both forbid inferring a chapter from a spine index.",
+          "fix": "Prefer WorkReadingPosition.title(from: readiumLocator); else the Readium percent; else nil. Drop the spine-derived 'Ch N' (macOS keeps the ring).",
+          "test": "SavedWork with lastSpineIndex=1 and no locator -> readingProgressLabel must not be 'Ch 2'.",
+          "confidence": "PLAUSIBLE"
+        }
+      ]
+    },
+    {
+      "board": "1ad",
+      "title": "Reading Now (list)",
+      "spec_label": "isInProgress, most recently read first, so every row carries the progress ring. Rows are the locked ledger row, unchanged. View choice lives in the overflow menu and persists per screen. Filters and sort are local.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Home/HomeView.swift:338-343 (See all -> router.showLibrarySection(.readingNow, from: 'Home'))",
+        "kudos-ao3-reader/App/AppRouter.swift:344-348",
+        "kudos-ao3-reader/Features/Library/LibraryView.swift:241-247"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1ad.1",
+          "what": "Lives on Home's stack (kicker HOME, back returns to Home)",
+          "status": "DECIDED",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:1504-1514",
+            "TASKS.md T-220 row",
+            "kudos-ao3-reader/Features/Home/HomeView.swift:168-173"
+          ],
+          "note": "Recorded 'Phase A contract': Home deep-links into Library's stack. The kicker now reads 'Home' (LibrarySectionRoute.originKicker) but Back goes to Library's root and the Library stack is reset. Owner's call, not re-opened here."
+        },
+        {
+          "id": "1ad.2",
+          "what": "Header: kicker, rule, 32pt title, tally '4 works - most recently read first'",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:290-297",
+            "kudos-ao3-reader/Features/Home/HomeSections.swift:28-33"
+          ],
+          "note": "The tally has no order clause. HomeSectionKind.orderDescription carries it but HomeSectionListView is never reached for .readingNow; LibrarySectionKind has no equivalent.",
+          "fix": "Add LibrarySectionKind.orderDescription (readingNow 'most recently read first', savedForLater 'most recently read first', finished 'last finished first', downloaded 'newest first', history 'most recently read first', favorites 'newest first') and append it when no filter is active - the strings must describe the sort in works(from:visible:).",
+          "test": "orderDescription for every kind matches the sort in works(from:) - a table test over fixed dates."
+        },
+        {
+          "id": "1ad.3",
+          "what": "Quick pills 'All N / Offline N / WIP N' beside the dashed Filter chip",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:336-350",
+            "kudos-ao3-reader/Models/Models.swift:540-544"
+          ],
+          "note": "Not built; the rail shows only active-filter chips. 'Offline' is vacuous here: readingState == .inProgress already requires hasEPUB, so Offline would always equal All. Only All/WIP carry information.",
+          "fix": "All N / WIP N pills (WIP = isComplete == false) over items, counts from the in-memory list; drop Offline with a one-line comment."
+        },
+        {
+          "id": "1ad.4",
+          "what": "Row group headed 'IN PROGRESS'",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:688-693",
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:761-765",
+            "kudos-ao3-reader/Features/Home/HomeSections.swift:50-55"
+          ],
+          "note": "The non-history sections head their rows with kind.title ('READING NOW'), repeating the page title; HomeSectionKind.groupTitle already says 'In progress'.",
+          "fix": "LibrarySectionKind.groupTitle (readingNow 'In progress', others keep title) used by groupedItems' single bucket."
+        },
+        {
+          "id": "1ad.5",
+          "what": "Rows are the ledger row",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:90",
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:704-706"
+          ],
+          "note": "Default display mode is .detailed, which draws the standard full card; ledger is one menu choice away. Default-only change; per-screen persistence is already there.",
+          "fix": "Default .ledger for readingNow (keep the stored choice when one exists)."
+        },
+        {
+          "id": "1ad.6",
+          "what": "View choice in the overflow menu, persisted per screen",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:206-218",
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:90"
+          ]
+        },
+        {
+          "id": "1ad.7",
+          "what": "Filters and sort local over the loaded list",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:107-110",
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:230-236"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1ae",
+      "title": "Recently Updated (grid)",
+      "spec_label": "hasUpdate, newest check first, and how many chapters arrived as a badge on each cover. The filter button carries its active count. Grid falls back to the fandom-tinted plate.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Home/HomeView.swift:437-444 (See all -> path.append(kind))",
+        "kudos-ao3-reader/Features/Home/HomeView.swift:174-176"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Home/HomeSectionListView.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1ae.1",
+          "what": "hasUpdate, newest check first, tally says so",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSections.swift:73-77",
+            "kudos-ao3-reader/Features/Home/HomeSections.swift:28-33",
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:63-71"
+          ]
+        },
+        {
+          "id": "1ae.2",
+          "what": "'+N CH' badge per cover in the grid",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:385-394"
+          ]
+        },
+        {
+          "id": "1ae.3",
+          "what": "Filter button carries its active count",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:169-173"
+          ]
+        },
+        {
+          "id": "1ae.4",
+          "what": "Grid/list choice in the overflow menu, persisted per section",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:41",
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:185"
+          ]
+        },
+        {
+          "id": "1ae.5",
+          "what": "Group rule 'NEW CHAPTERS'",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSections.swift:50-55",
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:347"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1af",
+      "title": "Select mode + filters-hide-everything",
+      "spec_label": "Select mode takes the title bar for a count and Select All, outlines the picked rows, and drops the bulk-action bar over the hidden tab bar. Filters hide everything keeps the header and chips visible, with Clear Filters as the action.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Home/HomeSectionListView.swift",
+        "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/UIComponents/WorkBulkActionBar.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1af.1",
+          "what": "Title bar shows '2 selected' while selecting",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:137",
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:169",
+            "kudos-ao3-reader/UIComponents/SubjectScreen.swift:109-139"
+          ],
+          "note": "Both section lists sit under subjectScreenWash, which empties the navigation title; nothing shows the count while selecting. LibraryView's dashboard already does it ('N Selected', LibraryView.swift:130-132).",
+          "fix": "While isSelecting, a .principal ToolbarItem Text('\\(n) selected') (or 'Select Works' at zero) on both lists.",
+          "test": "Pure title helper shared with LibraryView: 0 -> 'Select Works', 2 -> '2 Selected'."
+        },
+        {
+          "id": "1af.2",
+          "what": "Select All, outlined rows, bulk bar over the hidden tab bar",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:142-154",
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:234-237",
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:197"
+          ]
+        },
+        {
+          "id": "1af.3",
+          "what": "Bulk actions Download / Queue / Tag / Delete accept a set",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/UIComponents/WorkBulkActionBar.swift:47-111"
+          ],
+          "note": "Delete is a button; Save/Download, Queue, Collection, Tag, Finished sit in one 'Actions' menu rather than four bar buttons."
+        },
+        {
+          "id": "1af.4",
+          "what": "Filters hide everything: header and chips stay, actionable card",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:270-277",
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:768-775"
+          ],
+          "note": "Superseded by 1ay's collision card rather than ContentUnavailableView."
+        }
+      ]
+    },
+    {
+      "board": "1ag",
+      "title": "Subscriptions from Home",
+      "spec_label": "The account list, not the library: remote rows with the summary and AO3's own counts, and the page switcher from 1k. Home's chevron opens the Account tab's Subscriptions; back returns to wherever you came from; the path anchor reads Home or AO3 Account.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Home/HomeView.swift:492",
+        "kudos-ao3-reader/Features/Home/HomeView.swift:178-182"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift",
+        "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1ag.1",
+          "what": "Same screen as Account's Subscriptions, pushed on Home's own stack, kicker 'Home'",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Home/HomeView.swift:178-182",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:128-135"
+          ]
+        },
+        {
+          "id": "1ag.2",
+          "what": "Page switcher at the bottom",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:836-858"
+          ]
+        },
+        {
+          "id": "1ag.3",
+          "what": "Board details (groups, pills, refine)",
+          "status": "DONE",
+          "evidence": [
+            "see account-hub-reading.json board 1p"
+          ],
+          "note": "Everything else on this screen is 1p's; the refine-over-sparse-rows bug is filed there (1p.6)."
+        }
+      ]
+    },
+    {
+      "board": "1c",
+      "title": "Library, shelves",
+      "spec_label": "Sections in source order: Reading Now, Saved for Later (local + the AO3 Marked for Later card, plus a Mature work behind Tap to reveal), Finished, Collections (New collection card), Downloaded, Reading History, Favorites (empty state), Recently Deleted row. Chip row gains Reset when a filter is on; headers carry caret and see-all. Filters in the toolbar; '...' holds Mature reveal, Reading Insights, Select and Shelves/Ledger.",
+      "entry_points": [
+        "kudos-ao3-reader/App/ContentView.swift (Library tab root)"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Library/LibraryView.swift",
+        "kudos-ao3-reader/Features/Library/LibrarySectionKind.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1c.1",
+          "what": "Section order and Recently Deleted row",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:326-344"
+          ]
+        },
+        {
+          "id": "1c.2",
+          "what": "AO3 'Marked for Later' card inside Saved for Later",
+          "status": "DECIDED",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:2659-2671",
+            "kudos-ao3-reader/Features/Library/LibrarySectionKind.swift:3-9"
+          ],
+          "note": "Owner kept Saved for Later local-only (T-213). The plan notes that if the shelf ever merges again it needs the AO3 provenance badge first."
+        },
+        {
+          "id": "1c.3",
+          "what": "Mature work behind 'Tap to reveal'",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:700-718"
+          ]
+        },
+        {
+          "id": "1c.4",
+          "what": "Fandom chip row with a quieter Reset chip when any filter is on",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:461-495"
+          ]
+        },
+        {
+          "id": "1c.5",
+          "what": "Headers carry collapse caret and see-all chevron",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/UIComponents/WorkCarouselSection.swift:111-125"
+          ]
+        },
+        {
+          "id": "1c.6",
+          "what": "Toolbar: Filters visible; '...' = Mature reveal, Reading Insights, Select, Layout",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:569-609"
+          ]
+        },
+        {
+          "id": "1c.7",
+          "what": "Section cache follows every filter change",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:254-280",
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:178-183",
+            "kudos-ao3-reader/Features/Library/LibraryFilters.swift:7-26"
+          ],
+          "failure_scenario": "With any filter already active, change a character, relationship, additional tag, exclude tag, warning or category in the inspector (or swap one user tag for another): none of those fields is in sectionsRevision (userTags contributes only its count), hasActiveFilters stays true, the .task(id:) does not refire, and every dashboard carousel keeps showing the previous filter's works and counts.",
+          "fix": "Key the rebuild on the whole filter value - LibraryFilters is Equatable; add Hashable (all members are Hashable) and include it in the task id, or append a filters description to the revision string.",
+          "test": "Two LibraryFilters differing only in characters (or one warning) must yield different revision keys; one differing only in userTags names with equal count likewise."
+        },
+        {
+          "id": "1c.8",
+          "what": "Favorites empty state",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:375-393",
+            "kudos-ao3-reader/Features/Library/LibrarySectionKind.swift:56-57"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1d",
+      "title": "Library, ledger",
+      "spec_label": "Same seven sections, same chips with Reset, carets and see-all, Marked for Later row, Mature row behind Tap to reveal, Favorites empty state, Recently Deleted row. Rows carry the progress ring, fandom rule and 2x2 glyph block; Collections previews its first four works as miniature cards.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Library/LibraryView.swift:597-605 (Layout picker)"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Library/LibraryView.swift",
+        "kudos-ao3-reader/Features/Library/CollectionLedgerRow.swift",
+        "kudos-ao3-reader/Features/Library/WorkRow.swift"
+      ],
+      "verdict": "PARTIAL",
+      "note": "The stale-cache bug 1c.7 applies to this layout too (one cache feeds both).",
+      "items": [
+        {
+          "id": "1d.1",
+          "what": "Ledger rows with ring, fandom rule, 2x2 tray",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:720-751"
+          ],
+          "note": "Ring is the tray's height and prints '42% / READING' by owner decision (REDESIGN_PLAN.md:3251-3273); ring and tray pinned top by owner decision (3234-3249)."
+        },
+        {
+          "id": "1d.2",
+          "what": "Collections ledger row previews first four works, privacy-filtered",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:420-450"
+          ]
+        },
+        {
+          "id": "1d.3",
+          "what": "AO3 Marked for Later row",
+          "status": "DECIDED",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:2659-2671"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1e",
+      "title": "Search results (old)",
+      "spec_label": "Superseded by 1k.",
+      "entry_points": [],
+      "implementation": [],
+      "verdict": "SUPERSEDED",
+      "items": [
+        {
+          "id": "1e.1",
+          "what": "Board superseded",
+          "status": "SUPERSEDED",
+          "evidence": [
+            "spec 1e label"
+          ],
+          "note": "Audited under 1k (search-filters.json)."
+        }
+      ]
+    },
+    {
+      "board": "1ay",
+      "title": "Reading Now, zero results",
+      "spec_label": "Three filters that cannot all hold. The card states the hidden count, names the two filters that collide, and offers the two single-filter drops with their real counts before the blunt clear. The funnel keeps a badge.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:768-775",
+        "kudos-ao3-reader/Features/Home/HomeSectionListView.swift:270-277"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift",
+        "kudos-ao3-reader/Features/Library/LibraryFilters.swift:101-160"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1ay.1",
+          "what": "Tally '12 works - none match the current filters'",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:290-294"
+          ]
+        },
+        {
+          "id": "1ay.2",
+          "what": "Hidden count, single-filter drops with real counts, Clear all, Edit",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:41-116",
+            "kudos-ao3-reader/Features/Library/LibraryFilters.swift:107-121"
+          ]
+        },
+        {
+          "id": "1ay.3",
+          "what": "Names the two filters that collide",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibraryFilterEmptyState.swift:134-140"
+          ],
+          "note": "The detail names every active filter ('Unread, Downloaded, and 50k+ words have no works in common'); the board names the minimal colliding pair. True as written, less precise.",
+          "fix": "Find the smallest subset (pairs first) whose intersection over works is empty and name that; fall back to all.",
+          "test": "Three filters where only B and C are disjoint -> names 'B and C'."
+        },
+        {
+          "id": "1ay.4",
+          "what": "Funnel keeps its badge",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:200-204"
+          ]
+        }
+      ]
+    }
+  ]
+}
