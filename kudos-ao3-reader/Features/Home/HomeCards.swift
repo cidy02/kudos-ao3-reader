@@ -156,6 +156,8 @@ struct WorkCoverCard: View {
 /// the same self-contained summary shape as local Library/Home work cards.
 struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
+    /// Draws `AO3ProvenanceBadge`. Only where remote and local cards share a row.
+    var showsProvenanceBadge = false
 
     @Environment(ThemeManager.self) private var themeManager
     /// See `WorkCoverCard.zoomNamespace`.
@@ -175,6 +177,7 @@ struct AO3WorkCoverCard: View {
             VStack(alignment: .leading, spacing: 5) {
                 if let primaryFandom {
                     SubjectKicker(text: primaryFandom, palette: palette, size: 9)
+                        .padding(.trailing, badgeClearance)
                         .padding(.bottom, 2)
                 }
 
@@ -183,6 +186,8 @@ struct AO3WorkCoverCard: View {
                     .lineLimit(2, reservesSpace: true)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
+                    // Only when there is no kicker above it to clear the badge.
+                    .padding(.trailing, primaryFandom == nil ? badgeClearance : 0)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 0)
@@ -208,8 +213,20 @@ struct AO3WorkCoverCard: View {
                     .padding(.top, 6)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if showsProvenanceBadge {
+                AO3ProvenanceBadge()
+                    .padding(AO3ProvenanceBadge.edgeInset)
+            }
+        }
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
         .remoteWorkContextMenu(work: work)
+    }
+
+    /// Room the first line keeps free at its trailing edge, so a long fandom
+    /// name ends before the badge instead of running under it.
+    private var badgeClearance: CGFloat {
+        showsProvenanceBadge ? AO3ProvenanceBadge.clearance : 0
     }
 
     private var cardStats: some View {
@@ -235,6 +252,30 @@ struct AO3WorkCoverCard: View {
         themeManager.appTheme.subjectPalette(
             hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
         )
+    }
+}
+
+/// The small "AO3" tag in a remote card's top-right corner — board 1b draws it on
+/// Home's Subscriptions cards, measured in `docs/REDESIGN_PLAN.md` (radius 5,
+/// black 40 %, `700 8px`, `.08em`, white 80 %; 3×6 padding, 10pt from the
+/// edges). It exists because that row mixes the two kinds: a subscribed work
+/// the reader has saved renders as its local card, the rest are on AO3 only,
+/// and the cards are otherwise drawn alike on purpose. Fixed 8pt, as measured.
+struct AO3ProvenanceBadge: View {
+    static let edgeInset: CGFloat = 10
+    /// About 30pt of badge ("AO3" at 8pt, plus 6pt each side) and its 10pt inset,
+    /// less the card's 12pt content padding, plus 4pt of air.
+    static let clearance: CGFloat = 32
+
+    var body: some View {
+        Text("AO3")
+            .font(.system(size: 8, weight: .bold))
+            .tracking(8 * 0.08)
+            .foregroundStyle(Color.white.opacity(0.8))
+            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .accessibilityLabel("From AO3")
     }
 }
 

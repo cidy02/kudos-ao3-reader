@@ -15,4 +15,11 @@ struct WorkReadingPositionTests {
     func missingOrInvalidLocatorLabelUsesTheFallback(locatorJSON: String) {
         #expect(WorkReadingPosition.title(from: locatorJSON) == nil)
     }
+
+    /// Cards print Readium's percent or nothing — never "Ch N" from a spine index.
+    @Test func cardProgressLabelIsReadiumPercentOrNothing() {
+        #expect(WorkReadingPosition.cardProgressLabel(readiumProgress: nil) == nil)
+        #expect(WorkReadingPosition.cardProgressLabel(readiumProgress: 0.42) == "42%")
+        #expect(WorkReadingPosition.cardProgressLabel(readiumProgress: 0) == "0%")
+    }
 }

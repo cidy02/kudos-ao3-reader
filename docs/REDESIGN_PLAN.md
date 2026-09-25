@@ -2665,8 +2665,10 @@ lists *"Saved for Later (local + the AO3 'Marked for Later' card …)"*, 1d list
 card/row carrying a small **"AO3" badge** at the top-right (radius 5, black 40 %,
 `700 8px`, `.08em`, white 80 %). What the spec does support is the framing —
 its own build note calls Saved for Later "a permanent queue that happens to be
-reachable here". No AO3 provenance badge exists anywhere in the app, which may be
-why the merge read as confusing enough to remove. **Open work:** if the shelf ever
+reachable here". No AO3 provenance badge existed anywhere in the app, which may be
+why the merge read as confusing enough to remove. *(2026-09-25, T-257: it now
+exists as `AO3ProvenanceBadge`, drawn on Home's Subscriptions row only, where
+board 1b puts it.)* **Open work:** if the shelf ever
 merges again, it needs that badge first.
 
 **What T-213 said it would verify and did not:** the iOS suite, SwiftLint, the

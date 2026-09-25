@@ -140,6 +140,12 @@ struct HomeSectionListView: View {
         #endif
             .toolbar {
                 if isSelecting {
+                    // The wash empties the navigation title, so the count takes the
+                    // principal slot instead (1af).
+                    ToolbarItem(placement: .principal) {
+                        Text(WorkSelectionTitle.text(selectedCount: selectedWorks.count))
+                            .font(.headline)
+                    }
                     ToolbarItem(placement: .confirmationAction) {
                         SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
                     }
