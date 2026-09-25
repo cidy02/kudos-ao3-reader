@@ -256,10 +256,84 @@ struct AO3ClientPolicyTests {
         #expect(cache.cachedResponse(for: request) == nil)
     }
 
+    /// T-255: a cancelled sweep used to walk the library, and every pass booked a
+    /// 0.6 s pacer slot it never used — the next real request (Browse, any screen)
+    /// then waited out the whole debt. Cancelled callers must book nothing.
+    @Test func cancelledCallersDoNotBorrowPacerTime() async throws {
+        let waits = PaceRecorder()
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        config.protocolClasses = [PolicyStubProtocol.self]
+        let client = AO3Client(
+            session: URLSession(configuration: config),
+            paceSleep: { await waits.add($0) }
+        )
+
+        await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            for id in 0..<50 {
+                _ = try? await client.getHTML(URL(string: "https://archiveofourown.org/works/\(id)")!)
+            }
+        }.value
+        await waits.reset()
+
+        _ = try await client.getHTML(URL(string: "https://archiveofourown.org/media")!)
+        let worstWait = await waits.all.max() ?? 0
+        #expect(worstWait <= 0.6)
+    }
+
+    /// Same debt through an uncoalesced path: `getHTML` above is stopped by the
+    /// coalescer first, so only this one proves `pace()` itself refuses a
+    /// cancelled caller (EPUB downloads and write POSTs run in the caller's task).
+    @Test func cancelledDownloadsDoNotBorrowPacerTime() async throws {
+        let waits = PaceRecorder()
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        config.protocolClasses = [PolicyStubProtocol.self]
+        let client = AO3Client(
+            session: URLSession(configuration: config),
+            paceSleep: { await waits.add($0) }
+        )
+
+        await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            for id in 0..<50 {
+                _ = try? await client.downloadEPUB(workID: id)
+            }
+        }.value
+        await waits.reset()
+
+        _ = try await client.getHTML(URL(string: "https://archiveofourown.org/media")!)
+        let worstWait = await waits.all.max() ?? 0
+        #expect(worstWait <= 0.6)
+    }
+
     @Test func aCancelledLoadIsNeverRetried() {
         // URLSession reports a cancelled load as URLError.cancelled. It must not
         // be in the transient set, or cancelling a search would spend two extra
         // paced request slots retrying work nobody is waiting for.
         #expect(AO3Client.retryDelay(for: URLError(.cancelled), attempt: 1) == nil)
     }
+}
+
+private actor PaceRecorder {
+    private(set) var all: [TimeInterval] = []
+    func add(_ wait: TimeInterval) { all.append(wait) }
+    func reset() { all = [] }
+}
+
+/// Answers every load locally with a 200, so no test request leaves the process.
+private final class PolicyStubProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("<html></html>".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

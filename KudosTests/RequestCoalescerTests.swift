@@ -88,6 +88,23 @@ struct RequestCoalescerTests {
         #expect(await counter.count == 1)
     }
 
+    @Test func anAlreadyCancelledCallerThrowsWithoutRunningTheOperation() async throws {
+        // T-255: the shared work runs in an unstructured Task that `onCancel`
+        // only cancels an actor hop later, so its body still ran — and in
+        // AO3Client that body books a pacer slot nobody gives back.
+        let coalescer = RequestCoalescer<String, Int>()
+        let counter = Counter()
+
+        let doomed = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await coalescer.shared("page-1") { await counter.increment(); return 1 }
+        }
+
+        await #expect(throws: CancellationError.self) { try await doomed.value }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(await counter.count == 0)
+    }
+
     @Test func coalescingSurvivesAMidFlightCancellationByAnotherWaiter() async throws {
         // A cancelled waiter reaches `release` twice — once from `onCancel`,
         // once from its own `defer` as the await unwinds — which is why release

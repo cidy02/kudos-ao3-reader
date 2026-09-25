@@ -14,15 +14,26 @@ enum WorkUpdateChecker {
     /// Re-checks the live AO3 chapter count for each eligible work, updating its
     /// stored `chapters` (so `hasUpdate` reflects reality) and baselining
     /// `knownChapterCount` on first sight. Failures are kept silent and retried.
-    static func checkForUpdates(among works: [SavedWork], in context: ModelContext) async {
+    ///
+    /// `fetchTags` is a test seam; production reads AO3.
+    static func checkForUpdates(
+        among works: [SavedWork],
+        in context: ModelContext,
+        fetchTags: @Sendable (Int) async throws -> AO3WorkTagGroups = {
+            try await AO3Client.shared.workTags(workID: $0)
+        }
+    ) async {
         let due = works.filter(shouldCheck)
         guard !due.isEmpty else { return }
         Log.network.info("Checking \(due.count) work(s) for AO3 updates")
 
         for work in due {
+            // Home's `.task` is cancelled on a tab switch; stop rather than stamp
+            // every remaining work as checked (T-255, WorkMetadataRefresh pattern).
+            if Task.isCancelled { break }
             guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else { continue }
             do {
-                let groups = try await AO3Client.shared.workTags(workID: id)
+                let groups = try await fetchTags(id)
                 guard !groups.isEmpty, !groups.chapters.isEmpty else { continue }
                 work.chapters = groups.chapters
                 // Baseline on first sight (native imports seed this at download time).
@@ -31,6 +42,8 @@ enum WorkUpdateChecker {
                 }
                 work.lastUpdateCheck = Date()
                 try? context.save()
+            } catch is CancellationError {
+                break
             } catch {
                 // Network / parse / locked page — keep what we have, but still stamp
                 // the check so a failing work waits out `minInterval` instead of

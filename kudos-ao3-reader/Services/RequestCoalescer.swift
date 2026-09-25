@@ -46,6 +46,11 @@ actor RequestCoalescer<Key: Hashable & Sendable, Value: Sendable> {
     /// task is cancelled; the underlying work is cancelled too, but only once no
     /// other caller is still waiting on it.
     func shared(_ key: Key, _ operation: @Sendable @escaping () async throws -> Value) async throws -> Value {
+        // Checked here, in the caller's own task, because nothing downstream can:
+        // the unstructured Task below runs its body even if `onCancel` cancels it
+        // an actor hop later, and that body claims a pacer slot it never returns
+        // (T-255 — a cancelled sweep spun through the whole library that way).
+        try Task.checkCancellation()
         let id = UUID()
         let task: Task<Value, Error>
         if var existing = inFlight[key] {
