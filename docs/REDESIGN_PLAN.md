@@ -1003,7 +1003,9 @@ that drops it once a family has been opened and AO3 has answered with a
 deduplicated total. `1g` is `MediaBrowserView`, whose own doc comment already
 answers that board's build note: AO3's featured subset is not parsed, but the app
 caches the whole per-category list with a work count on each, so the cluster shows
-the largest fandoms — no new request, and a better list than a hand-curated one.
+the largest fandoms — no new request. (AO3's featured set is not hand-curated
+either: `/media` shows each category's five most-used fandoms, so the cluster is
+AO3's own rule at twelve; otwarchive-facts-wave3 Q23.)
 `1am`'s "the same fix applies a level up" is done too: the category header prints
 `~3.6M works` with the tilde, via `isApproximateWorkCount`.
 
@@ -2941,8 +2943,10 @@ the full list."* True as far as it goes, and it points at the wrong fix.
 The app already caches the **whole** per-category fandom list, each entry
 carrying a work count (`FandomCatalog`, feeding `MediaBrowserView`'s stats
 pass). So the cluster shows the category's **largest** fandoms — no new
-request, no new parse, and arguably a better list than AO3's own featured set,
-which is hand-curated and often stale. The sort happens in the existing
+request, no new parse. *(Correction, 2026-09-24: AO3's featured set is not
+hand-curated. `/media` lists each category's five most-used canonical fandoms,
+ranked by count, so the cluster is AO3's own rule at twelve instead of five —
+otwarchive-facts-wave3 Q23.)* The sort happens in the existing
 off-actor `computeStats`, never in the view: a category can hold nine thousand
 fandoms.
 
