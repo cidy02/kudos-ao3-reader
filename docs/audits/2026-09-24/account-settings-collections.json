@@ -1,0 +1,272 @@
+{
+  "area": "account-settings-collections",
+  "boards": [
+    {
+      "id": "1ab",
+      "title": "Settings",
+      "liveViews": [
+        "kudos-ao3-reader/Settings/SettingsView.swift:184 (ReaderOptionsForm(includeAppSettings: true))",
+        "kudos-ao3-reader/Settings/SettingsHeaderBlock.swift:20",
+        "kudos-ao3-reader/Settings/StorageUsedRow.swift:12",
+        "kudos-ao3-reader/Settings/SettingsView.swift:1920 (AboutSettingsSection)",
+        "kudos-ao3-reader/Settings/SettingsView.swift:1964 (AO3AccountSettingsSection)"
+      ],
+      "reachable": "Account tab floating chrome gear: AccountInboxViews.swift:122 NavigationLink(value: AccountView.Route.settings) -> AccountView.swift:450 destination",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Page composition: SectionRuleHeader groups + subjectPanel/SubjectFormRow rows",
+          "current": "Native grouped Form with plain Section headers (\"Theme\", \"Reading\", \"Font\"...) under .appThemedRows; no SectionRuleHeader, subjectPanel or SubjectFormRow anywhere in Settings/ (grep empty). Board draws uppercase rule headers 'Reading', 'Downloads', 'Notifications', 'About' with hairline rule and panel rows.",
+          "where": "kudos-ao3-reader/Settings/SettingsView.swift:185",
+          "effort": "L",
+          "needs": "Convert the includeAppSettings branch to cardList + SectionRuleHeader + subjectPanel rows. ReaderOptionsForm is shared with the in-reader options (includeAppSettings: false), so either split the app-settings body out or gate the redesign on includeAppSettings. Keep every existing extra section (Library, Backup, Tombstone, Folder sync, EPUB import, Preservation, Reading Queues, Privacy, TTS) per plan note.",
+          "aoWrite": false
+        },
+        {
+          "element": "Reading group as value rows: 'Theme · Dark ›', 'Accent colour · Crimson ›', 'Font · New York ›', 'Text size · 17pt ›', 'Keep screen awake' switch",
+          "current": "Theme is its own section of segmented App/Reader theme pickers + Match toggle + ColorPicker 'Accent Color' + Reset + Customize + inline TextSizeSlider (SettingsView.swift:208-233); Keep screen awake sits in a separate 'Reading' section with Layout/Two-page (SettingsView.swift:267-295); Font is a separate inline list of every font (SettingsView.swift:301-328). No single Reading group, no value+disclosure rows, 'Accent Color' spelling vs board 'Accent colour'.",
+          "where": "kudos-ao3-reader/Settings/SettingsView.swift:208",
+          "effort": "M",
+          "needs": "One Reading group of SubjectFormRow value rows with showsDisclosure pushing to theme / accent / font / text-size pickers (reuse existing controls on the pushed screens), Keep screen awake toggle last.",
+          "aoWrite": false
+        },
+        {
+          "element": "Downloads group second on the page, with 'Keep downloads for · 30 days ›'",
+          "current": "Downloads section (Download on subscribe + StorageUsedRow) is emitted after Library, Backup, Sync, EPUB import, Preservation, Reading Queues and Privacy (SettingsView.swift:471). 'Keep downloads for' is absent; StorageUsedRow.swift:6-9 records there is no retention sweep in the project.",
+          "where": "kudos-ao3-reader/Settings/SettingsView.swift:471",
+          "effort": "M",
+          "needs": "Move Downloads directly after Reading. 'Keep downloads for' needs a real retention sweep (delete EPUBs of non-preserved works older than N days) before a row is drawn; storing an unread value would repeat the 1bk pattern — owner call.",
+          "aoWrite": false
+        },
+        {
+          "element": "Notifications group: 'New chapters', 'Replies to your comments', 'Weekly digest' switches",
+          "current": "Absent. No UserNotifications import anywhere in the app; only BGTask is FolderSyncBackgroundTask. docs/AO3_NETWORKING_POLICY.md:45 forbids background polling beyond the folder-sync BGTask, so these switches cannot be backed today.",
+          "where": "kudos-ao3-reader/Settings/SettingsView.swift:471",
+          "effort": "L",
+          "needs": "BLOCKED on capability + policy: local notification scheduling plus a background subscriptions/inbox check, which the networking policy currently prohibits. Needs an owner decision before any build.",
+          "aoWrite": false
+        },
+        {
+          "element": "About group: 'Version · 1.4.0', 'AO3 account · <username> ›', 'Privacy and local data ›', 'Sign out'",
+          "current": "About has Version, Privacy and local data, About Kudos, Report a Bug, Source on GitHub (SettingsView.swift:1925-1946). AO3 account is a separate 'AO3 Account' section above it with a 'Signed In' label row and a destructive 'Log Out' button (SettingsView.swift:1970-1994). A duplicate 'Privacy & Local Data' link also sits in the Privacy section (SettingsView.swift:452).",
+          "where": "kudos-ao3-reader/Settings/SettingsView.swift:1964",
+          "effort": "S",
+          "needs": "Fold the account rows into About as 'AO3 account' (value = username) and 'Sign out' (SubjectFormRow isDestructive, SubjectForm.swift:221); keep the signed-out 'Log In to AO3…' state.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built since the plan row was written: SettingsHeaderBlock (kicker 'AO3 Account', title 'Settings', subtitle 'App only · nothing here reaches AO3', SettingsHeaderBlock.swift:20-26); Keep screen awake (SettingsView.swift:285, wired in Reading/KeepScreenAwake.swift); Download on subscribe (SettingsView.swift:472, read at WorkDetailView.swift:1028 — note StorageUsedRow.swift:6-9 comment is now stale, it still says this row does not exist); Storage used (StorageUsedRow.swift); Version row (SettingsView.swift:1929); the board's closing footnote verbatim (SettingsView.swift:1953). docs/REDESIGN_PLAN.md:591 'Not built' is therefore stale."
+    },
+    {
+      "id": "1bl",
+      "title": "AO3 collection — new / edit / delete confirmation",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:19"
+      ],
+      "reachable": "Collections list toolbar '+' (AO3CollectionsList.swift:63) -> New; card swipe/context 'Edit' (AO3CollectionsList.swift:194,210); Collection detail 'Collection Settings' (AO3CollectionDetailView.swift:270); ChallengeSettingsEditView.swift:250",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Presentation as a sheet: grabber, '✕  New collection / Edit collection  ✓' header over the dimmed Collections page",
+          "current": "Pushed full page (navigationDestination for AO3CollectionFormDestination) with a SubjectHeaderBlock (kicker 'AO3 Account › Collections', title 'New collection'/'Edit collection') and a bottom borderedProminent 'Create Collection'/'Save Changes' button.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:143",
+          "effort": "M",
+          "needs": "Present as a .sheet with inline title and xmark/checkmark toolbar (same grammar as WorksScopeAndSort.swift:125-148), checkmark disabled until canSave.",
+          "aoWrite": true
+        },
+        {
+          "element": "Header rows 'Byline · Your username' and 'Parent collection · None ›' (picker row)",
+          "current": "No Byline row although AO3CollectionForm.ownerPseudIDs is parsed and posted (AO3Client+Collections.swift:606,725). Parent collection is a free-text field with placeholder 'None' (AO3CollectionFormView.swift:89), not a chooser.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:83",
+          "effort": "M",
+          "needs": "Byline row bound to ownerPseudIDs (pseud picker; the parse gives ids, check it also yields names). Parent collection can stay text (acceptable) or become a disclosure row.",
+          "aoWrite": true
+        },
+        {
+          "element": "Images 'Collection icon · Choose ›' (edit: 'Replace')",
+          "current": "Missing. Icon alt text and Icon comment rows exist (AO3CollectionFormView.swift:103-107) but nothing picks or uploads an icon; no multipart/form-data upload exists anywhere in the app (grep 'form-data'/'boundary=' empty).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:96",
+          "effort": "L",
+          "needs": "BLOCKED_CAPABILITY: multipart file upload for collection[icon] in AO3CollectionActions, plus a PhotosPicker row. deleteIcon is already modelled/posted.",
+          "aoWrite": true
+        },
+        {
+          "element": "Challenge section: 'Set up a challenge · None ›' with note 'Gift Exchange or Prompt Meme…'",
+          "current": "No Challenge group in the view, although the doc comment at AO3CollectionFormView.swift:10 lists it and AO3CollectionForm.challengeType is parsed (AO3Client+Collections.swift:658) and posted (AO3Client+Collections.swift:703).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:110",
+          "effort": "S",
+          "needs": "Add group(\"Challenge\") between Preferences and Profile with a None / Gift Exchange / Prompt Meme menu bound to challengeType, plus the board's note.",
+          "aoWrite": true
+        },
+        {
+          "element": "Edit only — 'Maintainers and items': Owners and moderators · 3, Moderated items · 4 waiting, Works and bookmarks · 31, Challenge settings · Gift Exchange",
+          "current": "Absent from the edit form. The destination screens exist but are only linked from the collection detail (AO3CollectionDetailView.swift:264-305: CollectionMaintainersView, CollectionModerationView, ChallengeSettingsEditView).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:130",
+          "effort": "S",
+          "needs": "When !isNew, add a group of SubjectFormRow disclosure rows pushing the existing screens; counts only where already loaded (no new fetch for counts).",
+          "aoWrite": false
+        },
+        {
+          "element": "Edit only — 'Reveal': 'Reveal all 31 works', 'Un-anon all creators', note 'Both are one-way on AO3 and confirmed separately — they are not part of a save.'",
+          "current": "Absent from the form. The writes exist (AO3CollectionActions.swift:82 revealCollection, :96 unanonCollection) and are used in CollectionModerationView.swift:692,704.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:130",
+          "effort": "S",
+          "needs": "Two confirmed action rows reusing the existing actions (or linking to the moderation screen's controls).",
+          "aoWrite": true
+        },
+        {
+          "element": "Edit only — 'Delete collection on AO3' row + screen 3 alert 'Delete “Slow Burn Exchange 2026”?' … 'Delete on AO3' / 'Cancel'",
+          "current": "No in-app delete. Form shows a 'Closing and deleting stay on AO3' card that opens the AO3 edit page (AO3CollectionFormView.swift:332-352); list swipe Delete opens AO3's confirm-delete page in the browser (AO3CollectionsList.swift:232-234). No delete write exists in AO3CollectionActions (grep deleteCollection/destroyCollection empty). The code comment claims the spec agrees; the current board draws an in-app destructive alert. Not recorded as an owner decision.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:332",
+          "effort": "M",
+          "needs": "Owner confirmation first (irreversible AO3 write). If approved: DELETE /collections/:slug write in AO3CollectionActions + destructive row + alert with the board's consequence copy. Also the card's 'Closing … stays on AO3' copy is wrong — 'Closed to new items' is already a toggle in this form (line 111).",
+          "aoWrite": true
+        },
+        {
+          "element": "Profile rows as disclosure rows ('Introduction · Empty ›', 'FAQ', 'Rules')",
+          "current": "Inline multiline TextFields (AO3CollectionFormView.swift:120-127).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionFormView.swift:120",
+          "effort": "S",
+          "needs": "Optional: push a full-height editor per field; inline is functionally fine.",
+          "aoWrite": true
+        }
+      ],
+      "notes": "Built: fetched New/Edit forms, Header/Images/Preferences/Profile groups with SubjectFieldLabel .formGroup + subjectPanel + SubjectFormRow, name lock on edit, availability check, field errors, both notes (name, four switches) verbatim. Save/create are AO3 writes (built, never live-verified). Plan (REDESIGN_PLAN.md:287, :1386) calls 1bl built — it omits the missing Byline/icon/Challenge/edit-only sections and the delete screen."
+    },
+    {
+      "id": "1bm",
+      "title": "AO3 collections — sort and filter",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Account/AO3CollectionsFilterPanel.swift:16",
+        "kudos-ao3-reader/Features/Account/AO3CollectionsFilter.swift:10"
+      ],
+      "reachable": "Collections list toolbar FilterButton (AO3CollectionsList.swift:68) -> filterPanelPresentation sheet on iPhone / inspector on iPad (AO3CollectionsList.swift:78)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Sheet header '✕  Sort and filter  ✓' (board: 'same sheet grammar as Works at 1v')",
+          "current": "No navigation title or top toolbar; a bottom safeAreaInset bar with bordered 'Reset' + prominent 'Done' (AO3CollectionsFilterPanel.swift:33,129-141). Filters bind live rather than applying on ✓. 1v's panel uses navigationTitle + xmark/checkmark (WorksScopeAndSort.swift:125-148).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionsFilterPanel.swift:129",
+          "effort": "S",
+          "needs": "Wrap in NavigationStack with inline 'Sort and filter' title and xmark/checkmark toolbar matching WorksScopeAndSort; keep Reset reachable.",
+          "aoWrite": false
+        },
+        {
+          "element": "'My role' group: Maintainer / Member / Invited",
+          "current": "Omitted with an on-screen explanation (AO3CollectionsFilterPanel.swift:115-119); AO3Collection carries no role. Note: viewerIsOwner is parsed from the blurb's 'own' class (AO3Client+Collections.swift:323), so a partial Maintainer signal exists.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionsFilterPanel.swift:115",
+          "effort": "M",
+          "needs": "BLOCKED_CAPABILITY for Member/Invited (needs per-collection participants fetch or a source listing memberships). Maintainer could be offered from viewerIsOwner if the owner accepts a one-of-three group.",
+          "aoWrite": false
+        },
+        {
+          "element": "Show only 'Has works of mine'",
+          "current": "Replaced by 'Has works' (any works count > 0) plus an extra 'Moderated' switch (AO3CollectionsFilterPanel.swift:87-92).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionsFilterPanel.swift:89",
+          "effort": "M",
+          "needs": "BLOCKED_CAPABILITY: own-works-per-collection is not on the collections blurb; would need the account-wide collection_items join. Keep 'Has works' until then.",
+          "aoWrite": false
+        },
+        {
+          "element": "Client-side sorts over the whole list (board BUILD: 'need the full collection list in memory first — several paged fetches before the first sort'); footer 'AO3 sorts collections by title and date only…'",
+          "current": "Sort/filter applies to the current page only (AO3CollectionsList.swift:45-50 'The sort sees the page on screen, not every page of the index'). Footer copy differs: a Recently-updated-only note (AO3CollectionsFilterPanel.swift:70-74) plus the My-role note.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:48",
+          "effort": "M",
+          "needs": "When a computed sort is chosen and totalPages > 1, fetch remaining pages sequentially through the paced client (own account list — allowed by the networking policy), then sort; show the board's footer line always.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: Sort menu (AO3 order/Title/Works/Bookmarks/Recently updated) + SubjectSegmentedControl direction, Show only switches, unknown-is-not-zero ranking, iPad inspector. Plan (REDESIGN_PLAN.md:2232) records the My role gap but calls the board built without the chrome/whole-list gaps."
+    },
+    {
+      "id": "1r",
+      "title": "Collections — items as a scope",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:11",
+        "kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:418 (AO3CollectionCard)",
+        "kudos-ao3-reader/Features/Account/AO3CollectionScreenDecisions.swift:6"
+      ],
+      "reachable": "Account shortcuts 'Collections' -> AccountView.swift:658 Route.myCollections -> AccountView.swift:447",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": true,
+      "gaps": [
+        {
+          "element": "Count badge '3' on the 'Your items' scope pill",
+          "current": "No badge; comment records nothing caches a pending count (AO3CollectionsList.swift:262-264).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:265",
+          "effort": "M",
+          "needs": "One foreground fetch of the account-wide items page on the 'Awaiting you' tab (AO3CollectionItemsView already does this request) and a count badge on the pill; or cache the count when 1s loads.",
+          "aoWrite": false
+        },
+        {
+          "element": "Per-card '3 to approve' chip, '3 awaiting approval' and '2 of your works' meta facts",
+          "current": "Not drawn — the collections blurb carries neither (AO3CollectionScreenDecisions.swift:19-21, AO3CollectionsList.swift:414-416). Plan row REDESIGN_PLAN.md:582 records this deliberately.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionScreenDecisions.swift:22",
+          "effort": "L",
+          "needs": "BLOCKED_CAPABILITY: per-collection moderation queue and own-work counts need a request per collection; not worth building without an owner call.",
+          "aoWrite": false
+        },
+        {
+          "element": "Status chip 'Revealed' in the eyebrow row",
+          "current": "Only 'Anonymous' is a chip (AO3CollectionsList.swift:514-516); unrevealed state is a meta-line word 'Unrevealed' (AO3CollectionScreenDecisions.swift:38).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:504",
+          "effort": "S",
+          "needs": "Decide whether reveal state is a chip (board) or meta fact; board footnote says moderation is meta, status (revealed/anonymous) is chip.",
+          "aoWrite": false
+        },
+        {
+          "element": "Subtitle '4 AO3 collections · pull to refresh' and footnote 'AO3 collections only, read-only; local collections live in Home…'",
+          "current": "Subtitle 'N collections' (+ filtered/page facts) (AO3CollectionsList.swift:250-259); no footnote under the list.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionsList.swift:250",
+          "effort": "S",
+          "needs": "Add the footnote as a final caption row; optionally 'AO3 collections' wording.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: SubjectHeaderBlock 'AO3 Account' / 'Collections', scope pills (SubjectChip) with 'Your items' pushing the account-wide 1s, per-collection hue cards with archive-box tile, SubjectKicker eyebrow ('You moderate' / maintainer), Anonymous chip, works/moderated meta + date, Edit/Delete swipe + context menu, '+' and funnel toolbar, pagination, empty/error/signed-out states, pull to refresh. Delete opens AO3's confirm page (see 1bl gap). Card adds a summary, byline and chevron the board does not draw (density-positive)."
+    },
+    {
+      "id": "1s",
+      "title": "Collection items",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Account/AO3CollectionItemsView.swift:24",
+        "kudos-ao3-reader/Features/Account/AO3CollectionItemsView.swift:508 (AO3CollectionItemCard)",
+        "kudos-ao3-reader/Features/Account/AO3CollectionItemStaging.swift"
+      ],
+      "reachable": "1r 'Your items' pill (AO3CollectionsList.swift:269, slug nil) and card context 'Manage Items' (AO3CollectionsList.swift:197); AccountView.swift:176",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": true,
+      "gaps": [
+        {
+          "element": "Each card in its collection's own hue (board: purple / green / blue gradient cards with matching kicker rules)",
+          "current": "Every card gets the screen's theme.scopePalette (AO3CollectionItemsView.swift:317 passes palette; :294-296).",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionItemsView.swift:317",
+          "effort": "S",
+          "needs": "Per-card palette from CoverArt.workHue(fandoms: [], title: item.collectionTitle), as AO3CollectionCard does (AO3CollectionsList.swift:423-427).",
+          "aoWrite": false
+        },
+        {
+          "element": "Approval as chips you tap to change ('Approved' / 'Awaiting')",
+          "current": "Three-way SubjectSegmentedControl Awaiting/Approved/Rejected (AO3CollectionItemsView.swift:603-618); comment justifies the three states but it is not recorded as an owner decision.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionItemsView.swift:612",
+          "effort": "S",
+          "needs": "Either a SubjectChip that opens a Menu of the three states (board), or owner sign-off on the segmented control.",
+          "aoWrite": true
+        },
+        {
+          "element": "'Reset' pill",
+          "current": "Bug: Reset returns to defaultTab(slug:) but is disabled/dimmed on .unreviewed regardless of page (AO3CollectionItemsView.swift:257-270). On the account-wide page (default .invited) it is enabled on its own default tab and disabled on 'Awaiting collection', where it has work to do.",
+          "where": "kudos-ao3-reader/Features/Account/AO3CollectionItemsView.swift:269",
+          "effort": "S",
+          "needs": "Compare against Self.defaultTab(slug: slug) in both .opacity and .disabled.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: header 'AO3 Account › Collections' / 'Collection items' / 'Your works in AO3 collections · N need a decision', four tab pills + Reset, collection eyebrow with role, work title, approval rows, Unrevealed/Anonymous switches, disabled-by-AO3 as read-only facts, 'Remove from collection' destructive with staged strike-through, date, toolbar 'N staged' + checkmark submit + Discard, pagination, empty/error/signed-out. Submit is an AO3 write (built, never live-verified)."
+    }
+  ],
+  "areaNotes": "All five board ids printed. Plan doc is stale in both directions here: 1ab is marked 'Not built' but its header, Keep screen awake, Download on subscribe, Storage used, Version row and footnote are live; 1bl is marked built but is missing Byline, icon upload, Challenge, the edit-only Maintainers/Reveal/Delete sections and the delete alert. StorageUsedRow.swift:6-9's comment is stale ('Download on subscribe' now exists). AO3CollectionFormView's 'closing stays on AO3' copy contradicts its own 'Closed to new items' toggle. Blocked items: 1ab Notifications (no UserNotifications + policy line 45), 1bl icon upload (no multipart), 1bm My role / Has works of mine, 1r per-card approval counts. No OWNER_DECISION markers found in these files."
+}

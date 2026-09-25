@@ -1,0 +1,543 @@
+{
+  "area": "writing",
+  "auditedAt": "e0dbce77",
+  "boards": [
+    {
+      "id": "1u",
+      "title": "Works (own works list)",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Authors/AuthorProfileView.swift:186 (profileList, own-profile .works tab)",
+        "kudos-ao3-reader/Features/Authors/AuthorProfileView.swift:258 (accountHeader: SubjectHeaderBlock kicker 'AO3 Account' + tallies at :306-321)",
+        "kudos-ao3-reader/Features/Authors/WorksScopeAndSort.swift:9 (WorksScopeSegments: Works / In collections / Gifts)",
+        "kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:227 (AO3AuthorWorksSection, swipes :363-393)",
+        "kudos-ao3-reader/Features/Authors/AuthorDashboardSections.swift:163 (AO3AuthorWorkCard + AO3AuthorPerformanceStrip :197)"
+      ],
+      "reachable": "Account hub Writing > Works: AccountView.openWriting(.works) (AccountView.swift:1329) -> Route.myWorks -> ownProfile(title:'Works', tab:.works) (AccountView.swift:453) -> AuthorProfileView",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Add Chapter swipe only on a work in progress",
+          "current": "Chapter swipe is offered on every own work, including complete one-shots",
+          "where": "kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:373-379",
+          "spec": "1u footnote: 'Edit, Edit Tags, Add Chapter on a work in progress, Delete'",
+          "effort": "S",
+          "needs": "Gate the Chapter button on remote.isComplete != true",
+          "aoWrite": false
+        },
+        {
+          "element": "Select button in the glass chrome opening Edit Works",
+          "current": "Select lives inside the overflow menu ('Select Works'); only the ellipsis menu is in the toolbar",
+          "where": "kudos-ao3-reader/Features/Authors/AuthorProfileView.swift:742",
+          "spec": "1u footnote: 'The select button opens Edit Works, AO3's bulk editor.' (three glass buttons drawn in the chrome)",
+          "effort": "S",
+          "needs": "Promote Select to its own toolbar button when showsBulkEdit",
+          "aoWrite": false
+        },
+        {
+          "element": "Scope pills (Works / In collections / Gifts)",
+          "current": "System segmented Picker",
+          "where": "kudos-ao3-reader/Features/Authors/WorksScopeAndSort.swift:19-25",
+          "spec": "1u draws three capsule pills, selected one filled in the scope accent ('Works' #E39B9B, others rgba .12)",
+          "effort": "S",
+          "needs": "Render as SubjectChip .pill(isSelected:) buttons with .isSelected trait (as WorksSortSheet.completionChips does at WorksScopeAndSort.swift:146)",
+          "aoWrite": false
+        },
+        {
+          "element": "Series badge beside the fandom kicker",
+          "current": "searchLedgerCard draws only the fandom SubjectKicker; AO3WorkSummary.seriesTitle is parsed but not shown on the row",
+          "where": "kudos-ao3-reader/Features/Search/AO3WorkRow.swift:208-224",
+          "spec": "1u row 2 kicker: 'Star Wars' followed by 'Series' and 'Gift' badges; row 3 'Complete' badge",
+          "effort": "S",
+          "needs": "Small badge after the kicker when work.seriesTitle != nil (Complete is already carried by WorkStatusIconGrid)",
+          "aoWrite": false
+        },
+        {
+          "element": "Gift badge on the row",
+          "current": "No gift flag on AO3WorkSummary (grep 'gift' in Models/AO3Models.swift: none)",
+          "where": "kudos-ao3-reader/Models/AO3Models.swift:9",
+          "spec": "1u row 2: 'Gift' badge beside 'Series'",
+          "effort": "M",
+          "needs": "Parse the blurb heading's 'for <recipient>' gift links into AO3WorkSummary, then badge it",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Plan §3 audit row (REDESIGN_PLAN.md:584) is stale: hero tallies (AuthorProfileView.swift:306-321), sibling scopes (WorksScopeAndSort.swift:9, showsScopes: isOwnProfile at AuthorProfileView.swift:250), per-work performance strip (AuthorDashboardSections.swift:177/197), Edit/Tags/Chapter/Delete swipes (AuthorProfileContentSections.swift:363-393) with a named delete confirmation (AuthorProfileView.swift:76-84), and bulk Edit entry (AuthorProfileView.swift:708) are all built. Self-skeptic: the most-likely-missing element (delete confirmation naming what goes) exists at AuthorProfileView.swift:76-84. Delete is an AO3 write (built, not live-verified)."
+    },
+    {
+      "id": "1v",
+      "title": "Works - sort and filter",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Authors/WorksScopeAndSort.swift:38 (WorksSortSheet: sort menu, direction segmented, completion chips)",
+        "kudos-ao3-reader/Features/Authors/WorksScopeAndSort.swift:227 (separate Refine FilterButton -> AO3FilterPanel(mode: .refine))"
+      ],
+      "reachable": "1u list -> sort button (arrow.up.arrow.down) in AO3AuthorWorksScopeSection (WorksScopeAndSort.swift:272) and Refine funnel beside it (WorksScopeAndSort.swift:227)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": true,
+      "gaps": [
+        {
+          "element": "One sheet for sort + Include/Exclude facets, crossovers, word count, date range, search within results, language, Clear filters",
+          "current": "Split into two controls/sheets: WorksSortSheet (sort/direction/completion) and the shared AO3FilterPanel(.refine). Code marks this as a deliberate interim ('ponytail: 1v draws ONE control for both, and merging them is the right end state'), not an owner decision",
+          "where": "kudos-ao3-reader/Features/Authors/WorksScopeAndSort.swift:221-226, 264-271",
+          "spec": "1v label: 'as a sheet over the list ... the active count rides on the funnel in the chrome'",
+          "effort": "M",
+          "needs": "Host the sort rows at the top of the redesigned refine panel (1au card grammar) and drop the second button; depends on the 1au panel redesign in the Search area",
+          "aoWrite": false
+        },
+        {
+          "element": "Sort-by hint '9 fields' under the menu value",
+          "current": "Menu label shows only the chosen column",
+          "where": "kudos-ao3-reader/Features/Authors/WorksScopeAndSort.swift:61-73",
+          "spec": "1v: 'Sort by' / 'Date updated' / '9 fields'",
+          "effort": "S",
+          "needs": "Secondary caption with AO3WorksSort.allColumns.count",
+          "aoWrite": false
+        }
+      ],
+      "notes": "REDESIGN_PLAN.md:585 ('Built') is accurate for the sort half; the filter half lives in AO3FilterPanel, which belongs to the Search area's 1au audit. Sort params ride the route (model.applyWorksSort)."
+    },
+    {
+      "id": "1w",
+      "title": "Series (own series list)",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:423 (AO3AuthorSeriesSection, empty state :459-480, swipes Edit/Reorder)",
+        "kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:166 (AO3SeriesRow ledger: Complete/Restricted badges :205-209, works/words/bookmarks/updated :234-251)"
+      ],
+      "reachable": "AccountView.openWriting(.series) (AccountView.swift:1330) -> Route.mySeries -> ownProfile(title:'Series', tab:.series) (AccountView.swift:454) -> AuthorProfileView .series (AuthorProfileView.swift:418)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": true,
+      "gaps": [
+        {
+          "element": "Inline running order (numbered works 1-4 inside the series card)",
+          "current": "Not drawn; the author's series index blurb does not list a series' works",
+          "where": "kudos-ao3-reader/Features/Authors/AuthorProfileComponents.swift:166",
+          "spec": "1w footnote: 'Position is what a series stores, so the running order is inline'",
+          "effort": "M",
+          "needs": "BLOCKED on data: a per-series fetch (/series/<id>, already parsed by AO3SeriesDetailView) per visible row, paced through AO3RequestCoordinator",
+          "aoWrite": false
+        },
+        {
+          "element": "Hero tally '3 series · 9 works · 219,300 words'",
+          "current": "Series scope shows '<count> series · <display name>'; words/works sums only exist for the Works tab",
+          "where": "kudos-ao3-reader/Features/Authors/AuthorProfileView.swift:306-321",
+          "spec": "1w: '3 series · 9 works · 219,300 words'",
+          "effort": "S",
+          "needs": "Sum AO3SeriesSummary.workCount/words over model.series when the index is a single page (drop when paginated, to avoid a partial sum)",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Default displayMode is .detailed (AuthorProfileView.swift:13); the 1w ledger row only draws in Ledger mode (AuthorProfileContentSections.swift:494-500). Edit/Reorder swipes are gated on isCreator. Empty state is 1az's copy + 'New series on AO3'."
+    },
+    {
+      "id": "1bn",
+      "title": "Works select mode + Edit Multiple Works",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Authors/AuthorProfileView.swift:703-722 (select-mode toolbar: 'Edit Multiple' principal + shared RemoteWorkSelectionToolbar)",
+        "kudos-ao3-reader/Features/Writing/EditMultipleWorksView.swift:4 (sheet)",
+        "kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:355 (WritingBulkEditDestination)"
+      ],
+      "reachable": "1u overflow -> Select Works (AuthorProfileView.swift:742) -> select -> Edit Multiple (AuthorProfileView.swift:709) -> navigationDestination(isPresented: $isBulkEditing) (AuthorProfileView.swift:73) -> WritingBulkEditDestination",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Select-mode chrome: '3 selected' title, 'Select All', section header 'Your works 3 / 12'",
+          "current": "No count title, no Select All, no N/total header in AO3 select mode",
+          "where": "kudos-ao3-reader/Features/Authors/AuthorProfileView.swift:703-722",
+          "spec": "1bn select mode: '3 selected' · 'Select All' · 'Your works' '3 / 12'",
+          "effort": "S",
+          "needs": "Principal/leading toolbar text + Select All over model.works (RemoteWorkSelectionController)",
+          "aoWrite": false
+        },
+        {
+          "element": "AO3 bulk bar: Edit 3 / Collections / Visibility / Delete",
+          "current": "Bottom bar is the shared local RemoteWorkBulkActionBar (save/download); only 'Edit Multiple' is AO3-side; no bulk delete service (AO3WorkActions has no delete_multiple)",
+          "where": "kudos-ao3-reader/UIComponents/RemoteWorkSelection.swift:105-110",
+          "spec": "1bn select mode bottom bar: 'Edit 3' 'Collections' 'Visibility' 'Delete'",
+          "effort": "M",
+          "needs": "Own-works bottom bar; Collections/Visibility can open the same bulk form; Delete needs AO3WorkActions.deleteMultiple (otwarchive confirm_delete_multiple/delete_multiple) + confirmation",
+          "aoWrite": true
+        }
+      ],
+      "notes": "Edit Multiple Works itself matches the board group-for-group (Tags to add / Tags to remove / Change on all / Collections and gifts / Comments and visibility / Creators, both footnotes). AO3-ground-truth departures documented in code (not gaps): Gift recipients disabled because edit_multiple has no gift field (EditMultipleWorksView.swift:243-253); registered-users/moderation are three-state 'Leave as is' menus not switches (:256-282); 'Remove co-creators' is AO3's remove_me checkbox (:300-309). Plan Phase 11 claim 'bulk/tag-only routes remain unwired' is FALSE. Save is an AO3 write."
+    },
+    {
+      "id": "1bo",
+      "title": "Work Edit + delete confirmation",
+      "liveViews": ["kudos-ao3-reader/Features/Writing/WorkEditView.swift:4"],
+      "reachable": "1u swipe Edit (AuthorProfileView.swift:538 WritingWorkDestination), AccountView.swift:160, Drafts list (WritingDraftsView.swift:90), New work chip (AuthorProfileView.swift:278)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Chapters row (list of existing chapters to edit)",
+          "current": "No Chapters row; WritingChapterDestination always loads chapterID: nil, so AddChapterView's 'Edit chapter' / updateChapter path is unreachable",
+          "where": "kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:422 (loadChapterForm(workID:, chapterID: nil)); WorkEditView.swift:340-385",
+          "spec": "1bo Text group: 'Chapters' '12' with chevron",
+          "effort": "M",
+          "needs": "Row pushing a chapter list from AO3Client.chapterIndex(workID:) (AO3Client+Comments.swift:72), each row -> WritingChapterDestination with a chapterID parameter",
+          "aoWrite": true
+        },
+        {
+          "element": "Required asterisks on Title, Archive warnings, Fandoms",
+          "current": "SubjectFormRow has no required marker (params: label, arrangement, showsDisclosure, isDisabled, isDestructive)",
+          "where": "kudos-ao3-reader/UIComponents/SubjectForm.swift:206-222; WorkEditView.swift:211-223",
+          "spec": "1bo Required group: 'Title ∗', 'Archive warnings ∗', 'Fandoms ∗'",
+          "effort": "S",
+          "needs": "isRequired flag on SubjectFormRow (also used by 1bs, 1bp Fandoms, 1br Title)",
+          "aoWrite": false
+        },
+        {
+          "element": "Header subtitle with chapter count and posted date",
+          "current": "Subtitle is the title only",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:45",
+          "spec": "1bo: 'The Weight of Water · 12 chapters · posted 4 Mar 2024'",
+          "effort": "S",
+          "needs": "Append form.chaptersPosted; posted date only if the edit form carries it (drop, don't invent)",
+          "aoWrite": false
+        },
+        {
+          "element": "Publication date picker when 'Set a different publication date' is on",
+          "current": "Toggle binds form.backdate only; no DatePicker for the chapter published_at fields, so a backdate posts with no chosen date",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:416-420",
+          "spec": "1bo Publication: 'Set a different publication date' (AddChapterView already reveals a date row, AddChapterView.swift:148-186)",
+          "effort": "S",
+          "needs": "Reveal a DatePicker bound to form.chapter published Year/Month/Day (AO3WritingModels.swift:333-335) exactly like AddChapterView.publicationDate",
+          "aoWrite": false
+        },
+        {
+          "element": "Summary row shows the summary text; Series row value 'Water, 2 of 3'",
+          "current": "Summary row value is 'Set'/'Empty'; Series value is a bare count",
+          "where": "kudos-ao3-reader/Features/Writing/WritingTextEditor.swift:183; WorkEditView.swift:247, 327-330",
+          "spec": "1bo: Summary with preview line; 'Series' 'Water, 2 of 3'",
+          "effort": "S",
+          "needs": "Two-line row for Summary (stripped HTML); series value from the selected AO3SeriesMembership title/position/workCount",
+          "aoWrite": false
+        },
+        {
+          "element": "Delete alert naming the work",
+          "current": "confirmationDialog titled 'Delete Work?' with AO3's parsed cautionText; button 'Delete work on AO3'",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:189-202",
+          "spec": "1bo delete: 'Delete “The Weight of Water”?' ... 'Delete on AO3' / 'Cancel' (centred alert)",
+          "effort": "S",
+          "needs": "Title with form.title (the 1u swipe confirmation at AuthorProfileView.swift:76 already does this)",
+          "aoWrite": false
+        }
+      ],
+      "notes": "All five groups (Required, Tags, Association, Text, Publication) + Delete are present in order. Association's five rows all navigate now (WorkEditView.swift:244-279: Series, Add to collections, Gift recipients, Co-creators -> WorkCreatorsPickerView, Inspired by -> WorkParentWorkPickerView), so the Phase 11 claim 'remaining association/series ... controls still need wiring' is FALSE for association/series. Save/Post/Delete are AO3 writes."
+    },
+    {
+      "id": "1bp",
+      "title": "Edit Tags",
+      "liveViews": ["kudos-ao3-reader/Features/Writing/EditTagsView.swift:4"],
+      "reachable": "1u swipe Tags (AuthorProfileView.swift:540) and WorkEditView 'Edit tags' row for posted works (WorkEditView.swift:374-378) -> WritingTagsDestination (WritingDraftsView.swift:304)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Four tag sets as inline chips with an Add affordance",
+          "current": "WritingTagsRow: label + count + chevron; chips only appear after pushing into the editor",
+          "where": "kudos-ao3-reader/Features/Writing/EditTagsView.swift:154-163; WritingFormFields.swift:48-60",
+          "spec": "1bp label: 'then the four tag sets as chips with an add affordance' (Fandoms ∗ 2: Jujutsu Kaisen, Haikyuu!!, Add)",
+          "effort": "M",
+          "needs": "Per-set card: count header, FlowLayout of removable SubjectChips, an 'Add' chip pushing WritingTagsEditor",
+          "aoWrite": false
+        },
+        {
+          "element": "Archive warnings as checkmark rows",
+          "current": "Each warning is a Toggle row (multi-select kept deliberately: otwarchive validates presence only, comment at EditTagsView.swift:61-64)",
+          "where": "kudos-ao3-reader/Features/Writing/EditTagsView.swift:132-152",
+          "spec": "1bp: 'rating and the six warnings as exclusive rows' (drawn with a 15pt trailing check slot)",
+          "effort": "S",
+          "needs": "Checkmark-row style for the warnings (keep multi-select per AO3); categories stay switches",
+          "aoWrite": false
+        },
+        {
+          "element": "Work title in the header subtitle",
+          "current": "Subtitle is only 'changes here do not touch the text'; AO3EditTagsForm has no title field",
+          "where": "kudos-ao3-reader/Features/Writing/EditTagsView.swift:36; Models/AO3WritingModels.swift:559-568",
+          "spec": "1bp: 'The Weight of Water · changes here do not touch the text'",
+          "effort": "S",
+          "needs": "Pass the title through WritingTagsDestination (callers have it: swipe remote.title, WorkEditView form.title) or parse it from edit_tags",
+          "aoWrite": false
+        }
+      ],
+      "notes": "REDESIGN_PLAN.md:1087 'EditTagsView ... zero references anywhere' is stale (fixed same day at :1093, and swipe added). Rating menu, warnings footnote and tags footnote present. Save is an AO3 write (editTags diff)."
+    },
+    {
+      "id": "1bq",
+      "title": "Add Chapter",
+      "liveViews": ["kudos-ao3-reader/Features/Writing/AddChapterView.swift:4"],
+      "reachable": "1u swipe Chapter (AuthorProfileView.swift:542) and WorkEditView 'Add chapter' row (WorkEditView.swift:363-369) -> WritingChapterDestination",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": true,
+      "gaps": [
+        {
+          "element": "'Post without preview' switch (preview path)",
+          "current": "No switch; posting always sends .postWithoutPreview; AO3WorkActions.previewChapter has zero callers",
+          "where": "kudos-ao3-reader/Features/Writing/AddChapterView.swift:204; Services/AO3WorkActions.swift:375",
+          "spec": "1bq Publication: 'Set a different publication date' · 'Post without preview' · 'This is the last chapter'",
+          "effort": "M",
+          "needs": "Shared preview screen rendering AO3PreviewHTML (see 1bv) + AO3AuthService wrapper for previewChapter",
+          "aoWrite": true
+        },
+        {
+          "element": "Chapter number 'N of N' and Position 'After chapter 12'",
+          "current": "Free-text 'Expected chapter total' and numeric 'Position' fields",
+          "where": "kudos-ao3-reader/Features/Writing/AddChapterView.swift:122-130",
+          "spec": "1bq Chapter group: 'Chapter number' '13 of 13' · 'Position' 'After chapter 12'",
+          "effort": "S",
+          "needs": "Label/format change: 'Chapter number' as '<position> of <wipLength>' and Position as a Menu of 'After chapter N'",
+          "aoWrite": false
+        },
+        {
+          "element": "Header subtitle 'chapter 13'; Chapter text row explainer",
+          "current": "Subtitle '<work> · <chapter title or \"chapter\">'; Chapter text row shows only 'Empty'/'Set'",
+          "where": "kudos-ao3-reader/Features/Writing/AddChapterView.swift:39, 136",
+          "spec": "1bq: 'The Weight of Water · chapter 13'; 'Empty — opens the editor with plain text, AO3's HTML tags, or a paste from elsewhere.'",
+          "effort": "S",
+          "needs": "Use form.position for the subtitle; secondary line on the empty Chapter text row",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Last-chapter switch writes the work total via updateWorkTotals (AddChapterView.swift:271-279), Position hidden when !includePosition, Post chapter now / Save as draft panel and both footnotes match. Posting is an AO3 write."
+    },
+    {
+      "id": "1br",
+      "title": "Series Edit + Reorder",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Writing/SeriesEditView.swift:26 (SeriesEditView)",
+        "kudos-ao3-reader/Features/Writing/SeriesEditView.swift:250 (SeriesReorderView)",
+        "kudos-ao3-reader/Features/Writing/SeriesReorderDestination.swift:8"
+      ],
+      "reachable": "AO3SeriesDetailView overflow Edit (AO3SeriesDetailView.swift:96) and 1w swipes Edit/Reorder (AuthorProfileContentSections.swift:442-445), gated on isCreator",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": true,
+      "gaps": [
+        {
+          "element": "Remove works row",
+          "current": "Deliberately absent: no remove-from-series call in the app (code comment, not an owner decision)",
+          "where": "kudos-ao3-reader/Features/Writing/SeriesEditView.swift:14-17",
+          "spec": "1br Works group: 'Reorder works 3' · 'Remove works 3'",
+          "effort": "M",
+          "needs": "BLOCKED_CAPABILITY: a remove write. AO3SeriesWorkRow already parses serialWorkID; confirm otwarchive's serial_works destroy route before building",
+          "aoWrite": true
+        },
+        {
+          "element": "Reorder row metadata ('4,200 words · posted Jan 2023')",
+          "current": "Title + position + Draft chip only; manage page prints no words/date",
+          "where": "kudos-ao3-reader/Features/Writing/SeriesEditView.swift:18-21, 359-379",
+          "spec": "1br Reorder: 'Salt and Static' / '4,200 words · posted Jan 2023'",
+          "effort": "M",
+          "needs": "BLOCKED on data in the manage page; join by workID with the /series/<id> blurb parse AO3SeriesDetailView already uses",
+          "aoWrite": false
+        },
+        {
+          "element": "Title required marker; summary shown as a preview row, notes as 'Set' + push",
+          "current": "Inline TextFields for all four; no asterisk",
+          "where": "kudos-ao3-reader/Features/Writing/SeriesEditView.swift:136-163",
+          "spec": "1br: 'Title ∗' · 'Series summary' with the summary text below · 'Series notes' 'Set' with chevron",
+          "effort": "S",
+          "needs": "isRequired on Title (shared with 1bo); WritingTextEditorRow for summary/notes (AO3 series summary/notes accept HTML)",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Delete series is Open-on-AO3, matching the board's own 'Delete series on AO3' (SeriesEditView.swift:22-25, 190-194). Reorder saves once with N sequential POSTs as the footnote requires. All saves are AO3 writes."
+    },
+    {
+      "id": "1bs",
+      "title": "Draft editor, post and delete",
+      "liveViews": ["kudos-ao3-reader/Features/Writing/WorkEditView.swift:4 (same view with form.isDraft)"],
+      "reachable": "Account Drafts (AccountView.swift:452 WritingDraftsView) -> draft card (WritingDraftsView.swift:90) or New work (WritingDraftsView.swift:48) -> WritingWorkDestination -> WorkEditView",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Post confirmation ('Post this work?' ... notifies subscribers and cannot be undone)",
+          "current": "Toolbar 'Post' posts immediately; missing required fields only surface afterwards as the generic 'AO3 could not save the change' alert (message names the fields via AO3WorkWriteError.missingRequiredFields)",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:175-181; Services/AO3WorkActions.swift:131-135",
+          "spec": "1bs post confirmation: 'Post this work?' / 'Two things are missing: a title, and an archive warning ... cannot be undone' / 'Fill in what is missing' / 'Cancel'",
+          "effort": "S",
+          "needs": "Alert before save(submit: .postWithoutPreview) using form.missingRequiredFields() (AO3WritingModels.swift:424); confirm button only when nothing is missing",
+          "aoWrite": true
+        },
+        {
+          "element": "Draft identity: title 'Draft', subtitle '... · never posted', intro note, 'Required before posting'",
+          "current": "Title 'New work'/'Edit work', subtitle = title, section 'Required', no intro note",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:44-45, 55",
+          "spec": "1bs: 'Draft' / 'Untitled · saved 2 minutes ago · never posted' / 'Required before posting'",
+          "effort": "S",
+          "needs": "Branch copy on form.isDraft (drop 'saved X ago' unless the form carries a timestamp)",
+          "aoWrite": false
+        },
+        {
+          "element": "Posted-only fields absent on a draft; group named 'When posted'",
+          "current": "Publication group always shows 'Chapters posted' and 'Work is complete' rows",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:96, 396-413",
+          "spec": "1bs label: 'The same form as Work Edit with the posted-only fields absent'; group 'When posted'",
+          "effort": "S",
+          "needs": "Hide the two chapter rows when !form.isPosted and retitle the group",
+          "aoWrite": false
+        },
+        {
+          "element": "In-body Post group: 'Post work' + 'Delete draft' with the 30-day footnote",
+          "current": "Post is a toolbar button; delete row reads 'Delete work on AO3' even for drafts (routes to deleteDraft correctly)",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:175-181, 442, 478-482",
+          "spec": "1bs: 'Post work' · 'Delete draft' · 'AO3 deletes unposted drafts after 30 days ...'",
+          "effort": "S",
+          "needs": "Draft-only Post panel (AddChapterView.postPanel shape) + 'Delete draft' label + footnote",
+          "aoWrite": true
+        },
+        {
+          "element": "Work text row explainer ('2,140 words in one chapter ...')",
+          "current": "'Set'/'Empty'",
+          "where": "kudos-ao3-reader/Features/Writing/WorkEditView.swift:352-361; WritingTextEditor.swift:183",
+          "spec": "1bs: '2,140 words in one chapter. The editor keeps plain text, AO3's HTML tags and pasted formatting.'",
+          "effort": "S",
+          "needs": "Word count of form.chapter?.content via strippingHTML()",
+          "aoWrite": false
+        }
+      ],
+      "notes": "REDESIGN_PLAN.md:1090 maps 1bs to WritingDraftsView; the board is the draft EDITOR (WorkEditView on a draft), WritingDraftsView is 1x. Required asterisks gap shared with 1bo."
+    },
+    {
+      "id": "1bu",
+      "title": "Tag picker (typing / chosen)",
+      "liveViews": ["kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:95 (tagPicker(kind:))"],
+      "reachable": "Any WritingTagsRow with a kind (WorkEditView.swift:218-235, EditTagsView.swift:154-163, EditMultipleWorksView.swift:164-185)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": true,
+      "gaps": [
+        {
+          "element": "Drag to reorder chosen chips",
+          "current": "Chips are tap-to-remove only; code says 'Reordering them is not built.'",
+          "where": "kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:155-177",
+          "spec": "1bu chosen: '8 chosen · drag to reorder how they appear' / 'Order is preserved on AO3 exactly as entered, so the chips are draggable.'",
+          "effort": "M",
+          "needs": "draggable/dropDestination on the FlowLayout chips (or a List with onMove) over the values array",
+          "aoWrite": false
+        },
+        {
+          "element": "'Recently used' and 'From your other works' sections",
+          "current": "Not built (no recent-tag store; grep recentTags/recentlyUsed: none)",
+          "where": "kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift:113-123",
+          "spec": "1bu chosen: 'Recently used' · 'From your other works' ('local conveniences, not AO3 endpoints')",
+          "effort": "M",
+          "needs": "Small per-kind recent store written on add; 'other works' from the tags on the account's loaded own works",
+          "aoWrite": false
+        },
+        {
+          "element": "Per-suggestion AO3 work count",
+          "current": "workCount always nil; footnote says no counts are shown",
+          "where": "kudos-ao3-reader/Services/AO3TagAutocomplete.swift:24-30; WritingTagsEditor.swift:287-295",
+          "spec": "1bu: 'Gojo Satoru/Geto Suguru' 'Canonical' '41,208'",
+          "effort": "L",
+          "needs": "BLOCKED_CAPABILITY: autocomplete returns names only; count lives on /tags/search (measured 36 KB / 16 s per name, REDESIGN_PLAN item-3-1bu-built-2026-09-17)",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Chosen chips at top, Suggestions panel, Canonical mark, 'Posts as typed' (deliberately not 'Not canonical', reason at WritingTagsEditor.swift:207-211) are built."
+    },
+    {
+      "id": "1bv",
+      "title": "Chapter text editor",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Writing/WritingTextEditor.swift:5",
+        "kudos-ao3-reader/Features/Writing/WritingNativeTextView.swift:6 (plain-text HTML buffer)"
+      ],
+      "reachable": "Every WritingTextEditorRow: WorkEditView Summary/Notes/Work text (WorkEditView.swift:346-361), AddChapterView Chapter text (AddChapterView.swift:136)",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Formatted view by default, raw markup under 'Edit tags directly'",
+          "current": "Raw HTML markup only (UITextView plain text, accessibilityLabel 'HTML text')",
+          "where": "kudos-ao3-reader/Features/Writing/WritingNativeTextView.swift:3-28",
+          "spec": "1bv BUILD: 'A tag-aware text buffer with two views over one buffer: formatted by default, raw markup when Edit tags directly is on.'",
+          "effort": "L",
+          "needs": "Round-trip-safe formatted view; BUILD note says sit on an existing OSS editor. Not overnight work",
+          "aoWrite": false
+        },
+        {
+          "element": "Overflow menu: Paste as plain text, Preview on AO3, Delete chapter",
+          "current": "Toolbar has Undo/Redo + Done only; previewWork/previewChapter (AO3WorkActions.swift:365, 375) and deleteChapter/loadChapterDeleteImplications have zero UI callers",
+          "where": "kudos-ao3-reader/Features/Writing/WritingTextEditor.swift:73-83",
+          "spec": "1bv menu: 'Edit tags directly' · 'Paste as plain text ⌘V' · 'Preview on AO3 ↗' · 'Delete chapter'",
+          "effort": "M",
+          "needs": "Menu in the toolbar; Paste-as-plain-text is S (insert UIPasteboard.string); Preview needs an AO3PreviewHTML screen (M); Delete chapter only makes sense once existing chapters are reachable (1bo Chapters gap)",
+          "aoWrite": true
+        },
+        {
+          "element": "Section rule with chapter name + live word count; serif 15.5/1.62 body; HTML footnote",
+          "current": "Word count in a bottom caption row next to 'Local recovery · Save on the work form'; system font; no footnote",
+          "where": "kudos-ao3-reader/Features/Writing/WritingTextEditor.swift:46-55; WritingNativeTextView.swift (setAppearance)",
+          "spec": "1bv: 'Chapter 13' rule with '2,140 words'; 'serif at 15.5/1.62'; 'AO3 accepts a limited set of HTML. Anything else is stripped on post...'",
+          "effort": "S",
+          "needs": "SectionRuleHeader(title:, trailing count) above the text view; serif font in setAppearance; footnote under the tag bar",
+          "aoWrite": false
+        }
+      ],
+      "notes": "REDESIGN_PLAN.md:1450 says '1bv is explicitly not to be built'; it was superseded by T-215 (native editor, tag bar, undo/redo, local recovery all built). The tag bar exists (grouped AO3MarkupTag buttons). The formatted/raw two-view model is the L part."
+    },
+    {
+      "id": "1bw",
+      "title": "Collections and gifts + Series picker",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:19 (WorkCollectionsGiftsView)",
+        "kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:232 (WorkSeriesPickerView)"
+      ],
+      "reachable": "WorkEditView Association rows: Series (WorkEditView.swift:247-251), Add to collections / Gift recipients (WorkEditView.swift:252-264)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "New series: 'Create a series from this work'",
+          "current": "AO3WorkForm.newSeriesTitle is parsed (AO3Client+Works.swift:198) and posted as work[series_attributes][title] (AO3WritingModels.swift:496-497) but no UI sets it",
+          "where": "kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:251-277",
+          "spec": "1bw series picker: 'New series' / 'Create a series from this work'",
+          "effort": "S",
+          "needs": "TextField row bound to form.newSeriesTitle (pass a binding into WorkSeriesPickerView); clear it when an existing series is selected",
+          "aoWrite": true
+        },
+        {
+          "element": "'Reorder the series' row",
+          "current": "Footnote says reorder lives on the series; no row",
+          "where": "kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:265-275",
+          "spec": "1bw: 'Reorder the series' '3 works'",
+          "effort": "S",
+          "needs": "Row pushing SeriesReorderDestination/SeriesReorderView for the selected membership (seriesID + title)",
+          "aoWrite": true
+        },
+        {
+          "element": "'Position in <series>' — Place this work '2nd of 3'",
+          "current": "Position shown read-only in the row detail ('this work is 2nd')",
+          "where": "kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:330-340",
+          "spec": "1bw: 'Position in Water' / 'Place this work' '2nd of 3' / 'changing it here writes one work and leaves the others alone'",
+          "effort": "M",
+          "needs": "Position menu posting only this work's position (reorderSeries machinery, one request)",
+          "aoWrite": true
+        },
+        {
+          "element": "'Search all collections by name'",
+          "current": "Filters only the collections the form offers; code says 'there is no endpoint here for searching every collection' (implementation note, not an owner decision)",
+          "where": "kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:13-18, 96",
+          "spec": "1bw: 'Search all collections by name'",
+          "effort": "M",
+          "needs": "otwarchive's AutocompleteController serves open collection names (autocomplete/open_collection_names) — verify in otwarchive source, then reuse the autocompleteTags request shape",
+          "aoWrite": false
+        },
+        {
+          "element": "Translations row under 'Also on this work'",
+          "current": "Only 'Inspired by', and only when a parent work is set",
+          "where": "kudos-ao3-reader/Features/Writing/WorkAssociationPickers.swift:73-87",
+          "spec": "1bw: 'Also on this work' / 'Inspired by' '1 work' / 'Translations' 'None'",
+          "effort": "S",
+          "needs": "Always draw the group; Translations value from parentWork's translation flag",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Collection row states (Moderated / Closed / Open, + Unrevealed/Anonymous) and gift footnote are built. Unverified risk: WorkSeriesPickerView allows multi-select but AO3WorkForm.parameters posts only the first selected series (AO3WritingModels.swift:494-501), and deselecting may not remove the work from a series on AO3 — needs an otwarchive check before relying on it."
+    }
+  ],
+  "areaNotes": "Plan Phase 11 row (REDESIGN_PLAN.md:288) verified against code: 'bulk/tag-only routes remain unwired' is FALSE — bulk: AuthorProfileView.swift:709 -> :73 -> WritingBulkEditDestination; tag-only: AuthorProfileView.swift:540 swipe and WorkEditView.swift:374-378. 'remaining association/series/preview controls still need wiring' is FALSE for association/series (WorkEditView.swift:244-279, all five rows navigate) and TRUE for preview (AO3WorkActions.previewWork/previewChapter at :365/:375 have no AO3AuthService wrapper and no UI caller; every post sends .postWithoutPreview). Also unwired services: deleteChapter, loadChapterDeleteImplications, saveChapterUpdatingTotal, createSeries (the /series/new path throws seriesCreateUnavailable by design), and form.newSeriesTitle. The §3 audit table rows at REDESIGN_PLAN.md:584 (1u) and :1086-1090 (EditTagsView/1br unreachable, 1bs = WritingDraftsView) are stale. No OWNER_DECISION comments were found on any writing board; departures in code are AO3-ground-truth notes (EditMultipleWorksView gifts/remove_me/three-state switches, EditTagsView at-least-one warning, 'Posts as typed') or ponytail deferrals (1v split). Every save/post/delete on these screens is an AO3 write: buildable, never live-verified."
+}

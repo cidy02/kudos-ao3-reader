@@ -1,0 +1,85 @@
+{
+  "corrections": [
+    {
+      "area": "challenges",
+      "board": "1cc",
+      "claim": "Gap 'Card kicker = fandom', effort S",
+      "verdict": "WRONG",
+      "evidence": "kudos-ao3-reader/Services/AO3Client+Challenges.swift:741 selects every a.tag into one list and :758 joins them into tagSummary. AO3PromptMemePrompt (Models/AO3ChallengeModels.swift:469-485) has no fandom field. The fix needs a new model field, a parser split and a fixture test.",
+      "fix": "Keep the gap. Change effort from S to M."
+    },
+    {
+      "area": "challenges",
+      "board": "1by",
+      "claim": "Gap 'Requirement toggles semantics', effort S",
+      "verdict": "WRONG",
+      "evidence": "The 'needs' text itself requires parsing potential_match_settings. grep 'potential_match|num_required' across kudos-ao3-reader finds only the potentialMatches URL (Models/AO3ChallengeModels.swift:642) and comments. No parser exists (confirmed).",
+      "fix": "Split the gap. Rebinding 'Allow any prompt' to allowAny* is S. The fandom-match toggle needs a new potential_match_settings parser, so it is M, the same blocker as 1cf's Matching gap."
+    },
+    {
+      "area": "challenges",
+      "board": "1ca",
+      "claim": "Gap 'Withdraw after close is a different write', effort S",
+      "verdict": "WRONG",
+      "evidence": "withdrawSignUpAfterClose(slug:assignmentID:) (Services/AO3ChallengeActions.swift:94) needs the participant's assignment id. Nothing fetches a user's own assignment: grep 'myAssignments|userAssignments' is empty, and the only assignments URL is the maintainer list (Models/AO3ChallengeModels.swift:612). signupOpen exists only on AO3ChallengeSettings, which comes from the maintainer edit form, and ChallengeSignUpView never reads it (grep 'signupOpen|challengeSettings(' in ChallengeSignUpView.swift is empty).",
+      "fix": "Change effort from S to M. It needs a new fetch for the user's own assignment and a way to tell whether sign-ups are open. A stopgap is S: correct the dialog copy at ChallengeSignUpView.swift:126 so it stops promising a recorded default."
+    },
+    {
+      "area": "challenges",
+      "board": "1cf",
+      "claim": "Gap 'Basics: Name, Host byline, Tagline, Introduction · 142 words', effort S",
+      "verdict": "WRONG",
+      "evidence": "ChallengeSettingsEditView loads only challengeSettings (:622), challengeSignUps (:627) and collectionTagSets (:638). Byline and tagline live on AO3CollectionForm (ownerPseudIDs / description, AO3Client+Collections.swift:648-651), which this view never fetches.",
+      "fix": "Change effort from S to M. It needs a second request (the collectionForm fetch) or data handed in from the call site. The 'Introduction n words' summary row alone is S."
+    },
+    {
+      "area": "challenges",
+      "board": "1bz",
+      "claim": "Gap 'Row tap / chevron', effort S, needs 'push ... ChallengeSignUpView(existingSignUpID:) for the moderator's read'",
+      "verdict": "UNSURE",
+      "evidence": "The unused state is confirmed: selectedSignUp is assigned at ChallengeSignUpsView.swift:181 and never read. The suggested route is doubtful. existingSignUpID loads AO3ChallengeURL.editSignUp (AO3Client+Challenges.swift:83-88), and in otwarchive the sign-up edit form belongs to the sign-up's owner, so a moderator probably cannot load someone else's. The moderator's read would be the signups/:id show page, and no parser exists for it.",
+      "fix": "Dropping the chevron is S. A read-only sign-up detail is M, because it needs a new show-page parser. Check otwarchive challenge_signups access rules first."
+    },
+    {
+      "area": "challenges",
+      "board": "1by",
+      "claim": "reachable: 'Manage > Challenge Settings ONLY when !show.isMaintainer (AO3CollectionDetailView.swift:304)'",
+      "verdict": "UNSURE",
+      "evidence": "The route exists (AO3CollectionDetailView.swift:298-307), but it is gated on dashboard.challengeSettingsURL, which is parsed as a nav link containing '/gift_exchange' or '/prompt_meme' (AO3Client+Collections.swift:788). In otwarchive, the 'Challenge Settings' link to the gift_exchange edit page appears in the maintainer challenge nav. A non-maintainer's dashboard probably has no such link, so 1by, and TagSetView(isModerator:false) at ChallengeSettingsView.swift:323, may never be reachable. The audit's 'Data source vs audience' gap assumes the screen shows and then fails.",
+      "fix": "Mark 1by 'reachable in code, likely unreachable in practice'. Resolve it together with the 'Data source vs audience' gap: show 1by to maintainers as the read view and push 1cf from it."
+    },
+    {
+      "area": "collections-moderation",
+      "board": "1cg",
+      "claim": "Gap 'Maintainers section', effort S, 'form.maintainers is parsed but not rendered'",
+      "verdict": "UNSURE",
+      "evidence": "form.maintainers comes from parseCollectionParticipants(html) run on the collection EDIT page (AO3Client+Collections.swift:666), which selects 'ul.participant.index li, li[id^=participant_]' (:680). AO3's edit form most likely contains no participant list, so the array is probably always empty in practice. The real list comes from collectionModeration / the participants page (CollectionModerationView.swift:634-638).",
+      "fix": "Change effort from S to M. Render maintainers from a participants fetch, not from form.maintainers. Check an edit-page fixture before relying on it."
+    },
+    {
+      "area": "collections-moderation",
+      "board": "1cg",
+      "claim": "Gap 'Header ... subtitle Tidewrack · 168 works · 41 members', effort S",
+      "verdict": "WRONG",
+      "evidence": "AO3CollectionFormView fetches only the collection form. The spec's counts come from AO3CollectionShow.collection.worksCount plus a people count, and the view has neither. Two of its three call sites (AccountView.swift:172 AO3CollectionFormDestination, ChallengeSettingsEditView.swift:250) have no AO3CollectionShow to pass in. Only AO3CollectionDetailView.swift:270 does.",
+      "fix": "The kicker and title swap is S. The count subtitle is M, because it needs a show fetch and a people fetch or data passed from the detail call site."
+    },
+    {
+      "area": "collections-moderation",
+      "board": "1bx",
+      "claim": "Gap 'Non-self owner subtitle: Added 12 Jun 2025', effort S",
+      "verdict": "WRONG",
+      "evidence": "AO3CollectionParticipant (Models/AO3CollectionDetailModels.swift:39-46) has no date field, and the audit's own needs text says 'parse the join date if the participants page prints one'.",
+      "fix": "The drawn 'Added <date>' needs a new model field and parse, so it is M, or BLOCKED_CAPABILITY if AO3 does not print a date. Only the fallback, a subtitle that does not repeat 'Owner', is S."
+    },
+    {
+      "area": "collections-moderation",
+      "board": "1bx#1",
+      "claim": "Gap 'Card kicker is the fandom ... byline submitted 2 days ago', effort S",
+      "verdict": "WRONG",
+      "evidence": "The date half is S: itemDateText is parsed at AO3Client+Collections.swift:492. The fandom half needs a per-work fetch, because AO3CollectionItem (AO3CollectionDetailModels.swift:126-147) has no fandom or tags. The audit rates that same data M for 1cd ('Awaiting-review tag summary line').",
+      "fix": "Split the gap. The date is S and the fandom kicker is M. The screen is orphaned (no 'ModeratedItemsView(' call site, confirmed), so decide to wire it or delete it before spending M."
+    }
+  ],
+  "notes": "72 checks CONFIRMED against HEAD e32fba77. No file in these three areas changed since the e0dbce77 baseline. No board in the three files is DONE, OWNER_DECISION, NOT_BUILT or BLOCKED_CAPABILITY. All are GAPS_MINOR or GAPS_MAJOR, so check 1 did not apply. No owner decision is recorded for any of these boards in REDESIGN_PLAN.md or TASKS.md. Every blocker named inside a gap is confirmed absent under other names: no UNUserNotificationCenter or UserNotifications import, no multipart/boundary upload, no potential_match_settings parser, no tag-set owner fields, no participant date or work count, no UI caller of reportAssignmentDefault or withdrawSignUpAfterClose, and ModeratedItemsView has no call site. Key positives CONFIRMED: the sign-ups parser creates at most one request and no offers (AO3Client+Challenges.swift:277-300), the reject reason is discarded (AO3CollectionActions.swift:126-134), the 1s Reset pill is disabled on .unreviewed rather than on its default tab (AO3CollectionItemsView.swift:265-269), the 1ca offer ids collide (-2 twice, :615/:629), and 1cb reads worksRevealAt as the works-due date (:475). Unverified offline: the 1ci Gift badge. The code comment at AO3CollectionDetailView.swift:194 says the works page prints no recipient, but otwarchive's work blurb heading appears to print 'for <recipient>' (a /users/x/gifts link). If it does, the badge is an M parse addition, not blocked. The audit's needs text already hedges this, so it is counted as CONFIRMED."
+}

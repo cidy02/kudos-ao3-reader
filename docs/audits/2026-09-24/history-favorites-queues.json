@@ -1,0 +1,568 @@
+{
+  "area": "history-favorites-queues",
+  "boards": [
+    {
+      "id": "1ah",
+      "title": "Reading History — by time, ledger",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:10",
+        "kudos-ao3-reader/Features/Library/LibraryHistoryGrouping.swift:14",
+        "kudos-ao3-reader/Features/Library/ReadingHistoryFactsStrip.swift"
+      ],
+      "reachable": "Library tab > History carousel chevron (LibraryView.swift:335 localCarousel(.history), then LibraryView.swift:138 LibrarySectionRoute to LibrarySectionListView(kind: .history))",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Swipe actions: Queue + Remove-from-history",
+          "current": "Leading swipe is Save for Later + Favorite; trailing is Delete, which soft-deletes the whole work to Recently Deleted (PreservedWorkService.softDelete). Nothing clears a work from history only. History membership is hasStartedReading || isFinished (LibrarySectionKind.swift:121), so there is no field to hide one entry.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:886-929",
+          "effort": "M",
+          "needs": "Spec: \"Swipe a row for Queue and Remove — Remove clears it from history, which is the only destructive thing this page can do.\" Needs a stored hide-from-history marker (schema + backup/sync round-trip per DATA_AND_PERSISTENCE_INVARIANTS) or clearing progress and sessions (ReadingLogService.delete(_:) exists at ReadingLogService.swift:414). Queue swipe can reuse the Add to Queue picker ScopedRemovalBulkActionBar already uses.",
+          "aoWrite": false
+        },
+        {
+          "element": "Ledger only, no card view",
+          "current": "History's display mode defaults to .detailed (standard cards) and the … menu offers Detailed / Ledger / Compact. The Compact grid also drops the Time/State/Fandom/Flat strip and the facts strip, because compactGrid never draws them.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:90 (default .detailed), :217 (DisplayModeMenuPicker), :791-805 (compactGrid has no groupingStrip)",
+          "effort": "S",
+          "needs": "Spec: \"No card view here — the tile format cannot carry this much metadata legibly.\" and \"Ledger only\". Force rowPresentation to .ledger and hide DisplayModeMenuPicker when kind == .history.",
+          "aoWrite": false
+        },
+        {
+          "element": "Header tally line",
+          "current": "\"6 works\"",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:290-297",
+          "effort": "S",
+          "needs": "Spec draws \"6 works · most recently read first\".",
+          "aoWrite": false
+        },
+        {
+          "element": "\"Finished 4 Sep\" fact on the hairline strip",
+          "current": "The facts strip draws duration, Read ×N and N new chapters only. There is no finished date and no hairline above the strip.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingHistoryFactsStrip.swift (body: three facts only)",
+          "effort": "S",
+          "needs": "Spec row facts: \"6h 42m · Read ×3 · Finished 4 Sep\", \"sits on a hairline underneath\". The finish date is derivable from the log's didFinish sessions or from lastReadDate on finished works.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "The local reading log is built (ReadingSession, ReadingLogService, 725695e). The grouping strip (Time/State/Fandom/Flat) is built at LibrarySectionListView.swift:677 and the Today / This week / Earlier buckets at LibraryHistoryGrouping.swift:138-143. The facts strip draws hours, rereads and new chapters. The ledger row's offline tick is an OWNER_DECISION element: the owner approved removing it as a density reduction (UIComponents/SubjectScreen.swift:309-313). It is not a gap. The swipe Delete is more destructive than the spec allows on this page."
+    },
+    {
+      "id": "1ai",
+      "title": "Reading History — by state, ledger",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:10",
+        "kudos-ao3-reader/Features/Library/LibraryHistoryGrouping.swift:79-89",
+        "kudos-ao3-reader/Services/ReadingLogService.swift:346"
+      ],
+      "reachable": "Same screen as 1ah with the State segment selected (@AppStorage library.history.grouping, LibrarySectionListView.swift:46)",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "One-tap way back to In progress (manual override)",
+          "current": "SavedWork.keepInProgressOverride exists and isAbandoned honours it (ReadingLogService.swift:351), but no UI writes it. Outside backup restore, grep finds no writer of `keepInProgressOverride =`, so an Abandoned row cannot be moved back.",
+          "where": "kudos-ao3-reader/Models/Models.swift:212; kudos-ao3-reader/Services/ReadingLogService.swift:351; kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:864-873 (facts strip has no action)",
+          "effort": "S",
+          "needs": "Spec: \"Abandoned is its own section, ... each with a one-tap way back to In progress\" and \"The undo writes a manual override so the threshold cannot re-abandon it.\" Add a button to Abandoned-bucket rows that sets keepInProgressOverride = true, then markModified and save.",
+          "aoWrite": false
+        },
+        {
+          "element": "Abandoned rows dropped to grey",
+          "current": "Every row takes the fandom hue: .cardRow(tintHue: CoverArt.workHue(...)).",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:752-758",
+          "effort": "S",
+          "needs": "Spec: \"its rows dropped to grey rather than a fandom accent\" (the artboard uses #B0B0B6 for the kicker and rule). Pass a neutral palette or tint when group.title == \"Abandoned\".",
+          "aoWrite": false
+        },
+        {
+          "element": "State tally in header",
+          "current": "\"5 works\"",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:290-297",
+          "effort": "S",
+          "needs": "Spec: \"5 works · 2 in progress · 1 abandoned\".",
+          "aoWrite": false
+        },
+        {
+          "element": "Swipe Queue / Remove",
+          "current": "Same as 1ah: Save/Favorite, then Delete.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:886-929",
+          "effort": "M",
+          "needs": "Spec: \"Swipe carries the same Queue and Remove as 3a.\" Shares the fix with 1ah.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: the State buckets In progress / Abandoned / Read, not finished / Finished / Not started (LibraryHistoryGrouping.swift:79) and the derived 21-day threshold (ReadingLogService.swift:15)."
+    },
+    {
+      "id": "1aj",
+      "title": "Favorites — works",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:10",
+        "kudos-ao3-reader/Features/Library/FavoriteQuickFilter.swift:11"
+      ],
+      "reachable": "Library tab > Favorites carousel chevron (LibraryView.swift:336), then LibrarySectionListView(kind: .favorites) with the Works scope",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Ledger rows by default, and the scope strip in every mode",
+          "current": "The Favorites display mode defaults to .detailed (standard cards). In Compact mode, compactGrid draws no favoriteScopeStrip, so the Works/Authors/Fandoms/Tags control and the All/Rereads/Offline/WIP chips disappear. The reader cannot change scope until they switch the display mode back.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:90, :791-805",
+          "effort": "S",
+          "needs": "Spec: \"Rows are the same ledger row as 3a and Home\". Force .ledger for .favorites (same fix as 1ah).",
+          "aoWrite": false
+        },
+        {
+          "element": "Swipe Queue / Unstar",
+          "current": "Leading Save for Later + Favorite toggle (the toggle does unstar); trailing Delete soft-deletes the work.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:886-929",
+          "effort": "S",
+          "needs": "Artboard row swipe draws \"Queue\" and \"Unstar\". Add to Queue and drop Delete from this page.",
+          "aoWrite": false
+        },
+        {
+          "element": "Cross-scope header tally",
+          "current": "\"N works\" (or the scope's count on aggregate scopes)",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:290-297, :628-635",
+          "effort": "S",
+          "needs": "Spec: \"34 works · 9 authors · 12 fandoms · 6 tags\" on all four scopes.",
+          "aoWrite": false
+        },
+        {
+          "element": "Control order",
+          "current": "Header, then the filter rail (dashed Filter chip), then the scope segmented control, then the All/Rereads/Offline/WIP chips. The artboard has one chip rail below the segmented control, ending in a dashed Sort chip.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:322-335, :445-450",
+          "effort": "S",
+          "needs": "Spec order: header, segmented Works/Authors/Fandoms/Tags, then chips All/Rereads/Offline/WIP + dashed Sort. The code comment at :445-450 explains why there is no second sort chip. That is reasoning in code, not an owner decision.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: the filled star beside the title (WorkRow.swift:138, titleSymbol), the reread count in the footer (ReadingHistoryFactsStrip style .favorites), the All/Rereads/Offline/WIP chips (FavoriteQuickFilter.swift:11-49) and the scope segmented control (LibrarySectionListView.swift:413)."
+    },
+    {
+      "id": "1ak",
+      "title": "Favorites — authors",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift (FavoriteAuthorRow + FavoriteAffinityRow)",
+        "kudos-ao3-reader/Services/AuthorNewestWorkStore.swift",
+        "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:585"
+      ],
+      "reachable": "Favorites > Authors segment (LibrarySectionListView.swift:374-378 affinityRow)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Trailing chevron to the author's own page",
+          "current": "The identity line has no chevron or navigation; only the newest-work block navigates. The plan's reason (\"Library registers no author destination\") is stale: LibraryView now registers AO3AuthorRoute through .ao3AuthorNavigation(path:tab:).",
+          "where": "kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:42 (identityLine); kudos-ao3-reader/Features/Library/LibraryView.swift:142",
+          "effort": "S",
+          "needs": "Artboard row ends in a trailing chevron svg; label: \"Counts, signal mix and the rest live in the author's own page\". Link row.username to AO3AuthorRoute.",
+          "aoWrite": false
+        },
+        {
+          "element": "Chip rail shape",
+          "current": "A second SubjectSegmentedControl (Recent / Most read / Most time) sits above the All / With new work rail. There is no dashed Sort chip.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:419-425",
+          "effort": "S",
+          "needs": "Artboard rail: \"All · With new work · Most read\" chips + dashed \"Sort\".",
+          "aoWrite": false
+        },
+        {
+          "element": "Per-row hue",
+          "current": "Every row uses scopePalette.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:376",
+          "effort": "S",
+          "needs": "Artboard rows each carry their own gradient and border hue (e.g. #5B3A2A/#E0A883 for saltandsilver). Could derive it from CoverArt.hue(for: name).",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: the stat line \"N works read · hours · last read\" (FavoriteAffinityRow.swift:174), the Newest work block with UNREAD and the With new work chip (owner-approved prefetch, AO3_NETWORKING_POLICY.md:24; plan 2026-09-16). OWNER_DECISION: the library line stays on Authors rows (FavoriteAffinityRow.swift:66, \"The owner overrode that on 2026-09-15\"). The \"updated\" label instead of \"posted\" is a documented data limit (AuthorNewestWorkStore.swift header), not a gap."
+    },
+    {
+      "id": "1bc",
+      "title": "Favorites — fandoms",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift",
+        "kudos-ao3-reader/Features/Library/ReadingAffinities.swift"
+      ],
+      "reachable": "Favorites > Fandoms segment",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "\"Since your last visit\" block (N new works · N by authors you favorite · size split / Nothing new · Last new work <date>)",
+          "current": "Not drawn. The row shows name, star, log line and library line only.",
+          "where": "kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:11-18 (newestWork is only passed for authors), :196",
+          "effort": "M",
+          "needs": "Spec: \"it carries the read tally and what has landed since you last looked, which is the reason to favourite a fandom at all\". The capability exists: AO3Client.fandomWorksPage (AO3Client.swift:427) + AO3SearchFilters.dateFrom → work_search[date_from] (AO3Client.swift:520) + AO3ResultSummary.total (AO3Models.swift:91), plus the local watermark model FandomReadWatermark / ReadingLogService.markVisited (ReadingLogService.swift:439), which has zero callers. Missing: a store mirroring AuthorNewestWorkStore, a caller of markVisited, and the row block. NEEDS OWNER: AO3_NETWORKING_POLICY.md:24 calls the Authors prefetch \"the sole owner-approved exception to per-profile loading\", so a per-fandom fetch fan-out is a new exception. date_from filters revised_at, so the count is new-or-updated, not strictly new.",
+          "aoWrite": false
+        },
+        {
+          "element": "\"With new work\" chip for fandoms",
+          "current": "FavoriteAuthorFilterRail is only drawn when favoriteScope == .authors. Fandoms get only the Order segmented control.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:426-435",
+          "effort": "S",
+          "needs": "Artboard rail: \"All · With new work · Most read\" + Sort. Depends on the gap above.",
+          "aoWrite": false
+        },
+        {
+          "element": "\"N favorited\" in the stat line",
+          "current": "\"14 works read · 62h 40m · last read …\" with no favorited count. ReadingAffinities.Row has no favorited field.",
+          "where": "kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:174-183; kudos-ao3-reader/Features/Library/ReadingAffinities.swift:25-44",
+          "effort": "S",
+          "needs": "Spec: \"14 works read · 6 favorited · 62h 40m\". Count isFavorite works per fandom in ReadingAffinities.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "The plan's Phase 9 blocker (\"needs a fandom-page newest-works parse that does not exist\") is STALE. The parse is parseSearchPage behind fandomWorksPage, already used by Browse (NativeBrowseView.swift:307), and the per-fandom watermark model exists but is never written. The real gate is owner approval of a new networking exception. Built: the square badge (usesCircularTile false for fandoms, FavoriteAffinityRow.swift:156) and the star."
+    },
+    {
+      "id": "1bd",
+      "title": "Favorites — tags",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift",
+        "kudos-ao3-reader/Features/Library/ReadingAffinities.swift"
+      ],
+      "reachable": "Favorites > Tags segment",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "\"Unread works\" chip",
+          "current": "No chip rail on Tags; only the Recent / Most read / Most time segmented control.",
+          "where": "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:419-435",
+          "effort": "S",
+          "needs": "Artboard rail: \"All · Unread works · Most read\" + dashed Sort. Filter rows where row.unreadInLibrary > 0; the data exists (ReadingAffinities.Row.unreadInLibrary).",
+          "aoWrite": false
+        },
+        {
+          "element": "Row copy and \"In your library\" label",
+          "current": "Log line \"41 works read · … · last read …\"; library line has no \"IN YOUR LIBRARY\" label; the empty state reads \"No unread works in your library\".",
+          "where": "kudos-ao3-reader/Features/Library/FavoriteAffinityRow.swift:174-205",
+          "effort": "S",
+          "needs": "Spec: \"41 works read carry this tag · last read 4 Sep 2026\", then an \"In your library\" label, then \"12 unread works / 8 downloaded · 3 in Saved for Later\"; when empty, \"No unread works / Everything tagged this way is finished\".",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: the hash badge (usesHashTile), unread, downloaded and Saved for Later counts from library state, and the star. No AO3 call, as the spec requires."
+    },
+    {
+      "id": "1bi",
+      "title": "Reading Insights",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/ReadingInsightsView.swift"
+      ],
+      "reachable": "Library tab > … menu > Reading Insights (LibraryView.swift:584-589)",
+      "status": "DONE",
+      "planDocAccurate": true,
+      "gaps": [],
+      "notes": "Every block matches. Header \"N hours in <month> · measured on this device\" (:137-140); hero hours card with the \"vs <prev>\" delta pill (:186-196); weekly bars labelled with their own values, latest at full accent (:219-258); Where the hours went (:263); Pace and follow-through with median session, words per hour, % finished and longest streak (:322-358); footer measurement rule (:396-399). Skeptic check: the delta pill is the element most likely missing, and it exists at :186. Departures documented in code, not owner decisions: the footer states the real 15s threshold instead of \"a minute\"; a month/year Period; extra \"Your library\" and \"Most-read fandoms\" sections carried over from the retired ReadingStatisticsView (adds density, no loss)."
+    },
+    {
+      "id": "1bj",
+      "title": "Recently Deleted (+ permanent delete alert)",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift"
+      ],
+      "reachable": "Library tab > Recently Deleted row (LibraryView.swift:349-351, destination :143)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Delete All Permanently",
+          "current": "Absent (no \"Delete All\" anywhere in the app).",
+          "where": "kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:136-165 (list ends after the Later section)",
+          "effort": "S",
+          "needs": "Artboard footer button: \"Delete All Permanently\". Loop the existing per-kind permanent deletes behind one confirmation.",
+          "aoWrite": false
+        },
+        {
+          "element": "Select button / multi-select",
+          "current": "Absent; no selection state.",
+          "where": "kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:29-45",
+          "effort": "M",
+          "needs": "Artboard chrome: a glass \"Select\" pill top-right.",
+          "aoWrite": false
+        },
+        {
+          "element": "Per-item alert with the real numbers",
+          "current": "Title \"Delete Permanently?\"; message \"This work is gone for good — it can't be restored afterward.\"",
+          "where": "kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:61-83",
+          "effort": "S",
+          "needs": "Spec: \"the alert repeats it per item with the real numbers\". Artboard: \"Delete “Ice Breaker” permanently?\" / \"The download, your place at chapter 4 and your two notes are removed from this device. This cannot be undone.\"",
+          "aoWrite": false
+        },
+        {
+          "element": "Swipe order and side",
+          "current": "Restore on the leading edge, Delete Permanently on the trailing edge.",
+          "where": "kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:352-362",
+          "effort": "S",
+          "needs": "Spec: \"Swipe gives Restore and Delete in that order\". The artboard draws both trailing, Restore first.",
+          "aoWrite": false
+        },
+        {
+          "element": "Row detail and amber tint",
+          "current": "Queue and collection detail is \"8 works\" with no deletion date. Days-left turns red at 7 days or fewer. Collection kicker is \"Collection\".",
+          "where": "kudos-ao3-reader/Features/Library/RecentlyDeletedView.swift:250-268, :422",
+          "effort": "S",
+          "needs": "Spec: \"8 works · deleted 30 Aug\", \"Local collection\", \"amber under a week\" (#FF9F0A).",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: kind-led rows, the Expiring soon / Later sections, days-left trailing, the cost card (:198-199) and the header tally. The window reads 90 days, not the artboard's 30, because it derives from PreservedWorkService.recoveryWindow (PreservedWorkService.swift:12). That is truthful, not a gap."
+    },
+    {
+      "id": "1h",
+      "title": "Queue — tagged list / grid / Queue details (4 screens)",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:10",
+        "kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift"
+      ],
+      "reachable": "Home > queue card (HomeView.swift:427 AllReadingQueuesDestination(initialQueueID:)) or organizer row (ReadingQueueOrganizer.swift:405) or Library ReadingQueue link (LibraryView.swift:140). Queue details via … > Queue Details (ReadingQueueBrowser.swift:272)",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Twelve-segment read / in-progress / unread strip with preservation legend",
+          "current": "Text only: \"2 finished · 1 in progress · 9 unread · 9 of 12 kept offline\". No segmented bar on either the queue page or Queue details.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:169-177, :484-489",
+          "effort": "S",
+          "needs": "Spec: \"the twelve-segment read / in-progress / unread strip with its preservation legend\"; Queue details repeats \"the bare progress strip\". The data is readingState per work.",
+          "aoWrite": false
+        },
+        {
+          "element": "Queue tags row with dashed + Tag under the header",
+          "current": "Not drawn. The code comment says there is no data, but that is stale: ReadingQueue.tags exists (Models.swift:862) and QueueTagSheet edits it.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:180-196",
+          "effort": "S",
+          "needs": "Spec: \"the queue's tags with a dashed + Tag — all directly on the gradient, no card\".",
+          "aoWrite": false
+        },
+        {
+          "element": "Quick filter chips with counts",
+          "current": "The generic LibraryFilters rail (dashed Filter chip + active-filter labels).",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:185-196",
+          "effort": "S",
+          "needs": "Artboard: \"All 12 · Unread 9 · Offline 9 · WIP 4\". Derivable from readingState, hasEPUB and isComplete, following FavoriteQuickFilter's pattern.",
+          "aoWrite": false
+        },
+        {
+          "element": "Accent-filled + glass button to add works",
+          "current": "The toolbar has Filter and the … menu only. No UI adds library works from inside a queue, and no library-work picker exists.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:607-720",
+          "effort": "M",
+          "needs": "Spec: \"floating glass chrome (back, an accent-filled + for adding works, filter, '…')\". Needs a library-work picker sheet.",
+          "aoWrite": false
+        },
+        {
+          "element": "List/grid switch in the In line header, persisted per queue; Up next stays a ringed row in grid",
+          "current": "The display mode sits in the … menu and is @State (not persisted), defaulting to .compact. Grid mode collapses to one \"Works\" section with no Up next row.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:47, :517-543, :664",
+          "effort": "S",
+          "needs": "Spec: \"In line carries a list / grid switch in its section header ... persisted per queue on displayMode; Up next stays a ringed row either way.\"",
+          "aoWrite": false
+        },
+        {
+          "element": "Numbered ledger rows in In line",
+          "current": "In line rows show a progress ring, not a position number.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:216-240",
+          "effort": "S",
+          "needs": "Spec: \"the same queue reads as numbered ledger rows (1h.1)\". WorkLedgerRow's leading slot already supports a position number (SubjectScreen.swift:319).",
+          "aoWrite": false
+        },
+        {
+          "element": "Queue details: DESCRIPTION note",
+          "current": "Absent; ReadingQueue has no description field.",
+          "where": "kudos-ao3-reader/Models/Models.swift:813-862; kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:136-190",
+          "effort": "M",
+          "needs": "Spec: \"a DESCRIPTION note in serif\". Needs a schema field + backup/sync round-trip.",
+          "aoWrite": false
+        },
+        {
+          "element": "Queue details: Last read row",
+          "current": "Details shows Order: Manual and Preserved only. The file header says last read is not tracked, which is stale: SavedWork.lastReadDate and the ReadingSession log both exist.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:276-283",
+          "effort": "S",
+          "needs": "Artboard DETAILS: \"Last read · 2 hours ago\". Use the maximum lastReadDate across the queue's works.",
+          "aoWrite": false
+        },
+        {
+          "element": "Queue details: removable tag chips + Add tag chip; Manage all tags always visible",
+          "current": "Tags row opens a sheet; chips are non-removable SubjectChip(.tinted); \"Manage tags\" appears only when tags are non-empty.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:103-131",
+          "effort": "S",
+          "needs": "Spec: \"the tags as removable chips ... with Manage all tags as the way out to the shared vocabulary\"; the artboard draws an \"Add tag\" chip and \"Manage all tags 4\".",
+          "aoWrite": false
+        },
+        {
+          "element": "Kicker path",
+          "current": "\"Library › Queues\" on both the queue page and Queue details, even when opened from Home.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:203; kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:141",
+          "effort": "S",
+          "needs": "Spec: \"Home › Queues\" / \"Home › Queues › Queue details\". Pass an origin kicker the way LibrarySectionRoute does.",
+          "aoWrite": false
+        },
+        {
+          "element": "Offline toggle consequence (effect)",
+          "current": "\"Keep downloaded\" is stored (keepsWorksOffline) but the copy says \"Kudos does not act on it yet\".",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueSettingsView.swift:178-183",
+          "effort": "M",
+          "needs": "Spec copy: \"Turning offline off leaves the queue as a plain list — nothing is preserved and it stops counting against storage.\" NEEDS OWNER: this is the same open decision as 1bk's Keep downloads (stored, unread).",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: stored-hue wash (subjectPalette from queue.displayHue, ReadingQueueBrowser.swift:139-142), header tally \"N works · N kept offline · MB\", Up Next / In Line split in list mode (:443-450), swipe Remove from Queue, Queue details with the colour swatches (hue editable), Pin, Order and Preserved. The header comment in ReadingQueueSettingsView.swift (description/tags/offline/last read \"not built, and why\") is partly stale: tags and keepsWorksOffline exist now."
+    },
+    {
+      "id": "1i",
+      "title": "Queues — organizer",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/ReadingQueueOrganizer.swift:35 (AllReadingQueuesGridView)"
+      ],
+      "reachable": "Home > Queues carousel chevron (HomeView.swift:415 AllReadingQueuesDestination(initialQueueID: nil) to HomeView.swift:187)",
+      "status": "GAPS_MAJOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Header glass buttons: new queue + overflow carrying select mode (bulk pin / tag / delete)",
+          "current": "The toolbar has only a text \"Reorder\"/\"Done\" button. New queue is only the bottom row. No select mode or bulk actions.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueOrganizer.swift:292-300",
+          "effort": "M",
+          "needs": "Spec: \"two glass buttons in the header — new queue, and the overflow menu, which carries select mode for bulk pin / tag / delete.\"",
+          "aoWrite": false
+        },
+        {
+          "element": "Tags on every row",
+          "current": "Rows show name, count and storage line only.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueOrganizer.swift:397-440",
+          "effort": "S",
+          "needs": "Spec: \"count, tags and offline size on every row\" (artboard: \"Rereads · Long fic\").",
+          "aoWrite": false
+        },
+        {
+          "element": "2×2 peek tile of the first four works",
+          "current": "A 12pt hue dot (Circle).",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueOrganizer.swift:413-415",
+          "effort": "S",
+          "needs": "Spec: \"a 2×2 peek tile of the queue's first four works (ReadingQueueCard's idea, at 44px)\". The code comment's reason is that the tile is private in another file.",
+          "aoWrite": false
+        },
+        {
+          "element": "Edit tags chip on the tag rail",
+          "current": "Not built. The code comment's reason is that a second editor would be two ways to write one list.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueOrganizer.swift:17-20, :169",
+          "effort": "S",
+          "needs": "Artboard rail ends with \"Edit tags\".",
+          "aoWrite": false
+        },
+        {
+          "element": "New queue row copy, kicker, always-live drag",
+          "current": "\"Tap to create\"; kicker \"Library\"; drag only after tapping Reorder.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueOrganizer.swift:376, :226, :281",
+          "effort": "S",
+          "needs": "Artboard: \"Name it, colour it, tag it\"; kicker \"Home\" (this screen is only reachable from Home); \"All queues 5 · Drag to reorder\". The comment's premise (\"colour is derived from that name\") is stale since ReadingQueue.hue shipped.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "The file header comment (ReadingQueueOrganizer.swift:14-34) is STALE. It says search and Pinned are not built, but both are: search field :146 with matchesSearch over names, tags and works (:118), and the Pinned section :244-252 (isPinned, commit 50569046). Also built: the four-cell SubjectStatStrip (:351) and the tag filter rail with an Untagged option."
+    },
+    {
+      "id": "1j",
+      "title": "Queues — new queue",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift"
+      ],
+      "reachable": "Organizer New Queue row (ReadingQueueOrganizer.swift:302), Home (HomeView.swift:267), switcher (ReadingQueueSwitcher.swift:70)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Wash follows the tapped swatch",
+          "current": ".subjectScreenWash(palette: theme.scopePalette): the app accent, not the chosen hue.",
+          "where": "kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:103",
+          "effort": "S",
+          "needs": "Spec: \"The sheet takes a wash in whichever swatch you tap ... the confirm button, caret, selected tag and radio all follow it.\"",
+          "aoWrite": false
+        },
+        {
+          "element": "Tags field",
+          "current": "Not built. The code comment's reason: a second tag-entry surface beside QueueTagSheet.",
+          "where": "kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:24-29",
+          "effort": "S",
+          "needs": "Spec: \"Name, then the three decisions ... colour, tags, and whether membership downloads an EPUB\".",
+          "aoWrite": false
+        },
+        {
+          "element": "34pt circular glass × / accent check chrome; custom-hue dashed +",
+          "current": "Text Cancel/Create in the navigation bar, matching NewCollectionSheet (a code reasoning note, not an owner decision). The palette swatches have no custom + swatch.",
+          "where": "kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:30-38",
+          "effort": "S",
+          "needs": "Spec: \"Dismiss and confirm are the 34px circular glass buttons the filter controls use — × left, an accent-filled check right — rather than text buttons.\" NEEDS OWNER: artboard vs parity with NewCollectionSheet (AGENTS.md consistency rule).",
+          "aoWrite": false
+        },
+        {
+          "element": "Offline toggle effect",
+          "current": "\"Keep works offline\" is stored on create but has no effect (see 1h).",
+          "where": "kudos-ao3-reader/Features/Library/NewReadingQueueSheet.swift:148-152",
+          "effort": "M",
+          "needs": "Same open owner decision as 1bk Keep downloads.",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: name field, stored-hue swatches (SubjectHueSwatchRow :79), the Offline group, and the Start from radio list Empty / Saved for Later with the count subtitle (:255-256). Detent is .large."
+    },
+    {
+      "id": "1bg",
+      "title": "Queue — select mode",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:498-515 (selectionStatusRow)",
+        "kudos-ao3-reader/UIComponents/ScopedRemovalBulkActionBar.swift:10"
+      ],
+      "reachable": "Queue page > … > Select (ReadingQueueBrowser.swift:662)",
+      "status": "GAPS_MINOR",
+      "planDocAccurate": false,
+      "gaps": [
+        {
+          "element": "Title bar \"N selected\"",
+          "current": "Only Select All / Deselect All in the toolbar. No \"N selected\" title anywhere in this screen; the count is only in the status row's \"3 / 11\".",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:616-619",
+          "effort": "S",
+          "needs": "Spec: \"The title bar takes the count\" (artboard: \"3 selected\" · \"Select All\").",
+          "aoWrite": false
+        },
+        {
+          "element": "Four direct actions: Download · Move to · Tag · Remove",
+          "current": "A Remove button plus an \"Actions\" menu holding 9 items (Move to Queue, Tag, Download missing copies, …) plus a Done checkmark.",
+          "where": "kudos-ao3-reader/UIComponents/ScopedRemovalBulkActionBar.swift:55-117",
+          "effort": "S",
+          "needs": "Spec: \"the action bar replaces the tab bar with the four things a queue can do to a selection\".",
+          "aoWrite": false
+        },
+        {
+          "element": "Row keeps its position number and a live drag handle while selecting",
+          "current": "There are no position numbers, and select and reorder are mutually exclusive states.",
+          "where": "kudos-ao3-reader/Features/Library/ReadingQueueBrowser.swift:216-240, :556-575",
+          "effort": "M",
+          "needs": "Spec: \"the row keeps its position number ... so the number stays and the drag handle stays live\".",
+          "aoWrite": false
+        }
+      ],
+      "notes": "Built: the queue name + hairline + \"N / total\" status row (:498-515), Select All, a scoped Remove that leaves works in the library (a different call from Recently Deleted's delete, per the BUILD note), Move to Queue with a destination picker, Tag, and Download missing copies."
+    },
+    {
+      "id": "1bh",
+      "title": "Shared queue — tag manager",
+      "liveViews": [
+        "kudos-ao3-reader/Features/Library/QueueTagManagerView.swift"
+      ],
+      "reachable": "Queue details > Manage tags (ReadingQueueSettingsView.swift:115-121)",
+      "status": "EXCLUDED",
+      "planDocAccurate": false,
+      "gaps": [],
+      "notes": "EXCLUDED by the owner, not audited. The plan's Phase 8 row (\"1bh refused\") is contradicted by the plan's own later section queue-tags-1bh-2026-09-18 (REDESIGN_PLAN.md:3962), which records a private-queue tag manager redesign."
+    }
+  ],
+  "areaNotes": "Status counts: DONE 1 (1bi); GAPS_MINOR 6 (1aj, 1ak, 1bd, 1bj, 1j, 1bg); GAPS_MAJOR 5 (1ah, 1ai, 1bc, 1h, 1i); EXCLUDED 1 (1bh); NOT_BUILT 0; BLOCKED_CAPABILITY 0. Stale plan claims: (1) the Phase 9 \"1bc needs a fandom-page newest-works parse that does not exist\" is false. fandomWorksPage + dateFrom + AO3ResultSummary.total exist, and the per-fandom FandomReadWatermark model + ReadingLogService.markVisited exist with zero callers. The remaining gate is owner approval of a new networking exception (AO3_NETWORKING_POLICY.md:24 names the Authors prefetch the SOLE approved exception). (2) Phase 9 \"all built\" overstates it: 1ai's defining undo-to-In-progress control has no UI writer, and History/Favorites default to standard cards and offer a Compact grid that drops their scope/grouping strips. (3) Phase 8 \"1h/1i/1j/1bg built 2026-09-11\" is true for the screens but not their contents. Stale in-code 'not built' notes: ReadingQueueOrganizer.swift:14-34 (search and pinned are built), ReadingQueueSettingsView.swift header (tags, keepsWorksOffline and last-read data exist), ReadingQueueBrowser.swift:180 (queue tags exist). The 1ak chevron's plan blocker is stale too: LibraryView.swift:142 registers AO3AuthorRoute. Owner decisions found: offline tick removed from ledger rows (SubjectScreen.swift:309-313); library line kept on Authors rows (FavoriteAffinityRow.swift:66). Open owner items: queue Keep-offline effect (same as 1bk), 1j circle chrome vs NewCollectionSheet parity, 1bc per-fandom fetch exception. No AO3 writes on any board in this area; 1bc and 1ak involve AO3 reads."
+}
