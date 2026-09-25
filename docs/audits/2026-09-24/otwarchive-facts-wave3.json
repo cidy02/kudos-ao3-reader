@@ -1,0 +1,157 @@
+{
+  "note": "Wave-3 answers, Q11 onwards. Q1-Q10 live in otwarchive-facts.json on the Mac branch, which was not on origin when this was written; append these entries to it when the branches meet (same shape: q, answer, sources, quote, implication; 'id' added).",
+  "otwarchive_commit": "00ad85b4ff665b9c3f804d431eeb603372b70209 (master, 2026-09-10)",
+  "read_from": "git clone --depth 1 https://github.com/otwcode/otwarchive.git (no AO3 page fetched)",
+  "facts": [
+    {
+      "id": "Q11",
+      "q": "Do AO3's relative 'Updated' filter and the absolute After/Before dates combine, or does one override the other?",
+      "answer": "They combine (AND). Both become range filters on revised_at: the relative value is options[:revised_at] handled with the other countable ranges, and date_from/date_to become a second range on the same field. A work must pass both.",
+      "sources": [
+        "otwarchive@00ad85b4 app/models/search/work_query.rb:107-116",
+        "otwarchive@00ad85b4 app/models/search/work_query.rb:220-230"
+      ],
+      "quote": "[:word_count, :hits, :kudos_count, :comments_count, :bookmarks_count, :revised_at].each do |countable| ... ranges += [date_range_filter, word_count_filter].compact  /  { range: { revised_at: range } }",
+      "implication": "search-filters 1aq.3: the date section's missing footer can state it as fact."
+    },
+    {
+      "id": "Q12",
+      "q": "How is a user's subscriptions index paged and ordered, and does it print a total?",
+      "answer": "Sorted case-insensitively by subscription name in Ruby, then paginated at ArchiveConfig.ITEMS_PER_PAGE (25 in the open-source config; production may override). The page heading names the scope only; no count is printed. type=works/series/users narrows it.",
+      "sources": [
+        "otwarchive@00ad85b4 app/controllers/subscriptions_controller.rb:15-22",
+        "otwarchive@00ad85b4 config/config.yml:194",
+        "otwarchive@00ad85b4 app/views/subscriptions/index.html.erb:1-41"
+      ],
+      "quote": "@subscriptions = @subscriptions.to_a.sort { |a,b| a.name.downcase <=> b.name.downcase }  /  @subscriptions.paginate page: params[:page], per_page: ArchiveConfig.ITEMS_PER_PAGE  /  ITEMS_PER_PAGE: 25",
+      "implication": "home-library 1b.7 (page 1 is not a total), account-hub-reading 1p.3 ('104 total' has no source) and 1p.4 (scopes are type=). Home's carousel shows the alphabetically first page, not the most recent."
+    },
+    {
+      "id": "Q13",
+      "q": "What does AO3 render past COMMENT_THREAD_MAX_DEPTH, and what does its count mean?",
+      "answer": "At depth >= 5, if a comment has more than one reviewed reply, AO3 stops recursing and prints one link '(N more comments in this thread)'. N is children_count: every descendant in the nested set, not direct replies. With exactly one reply left it keeps rendering inline ('not if there's just one last measly comment left').",
+      "sources": [
+        "otwarchive@00ad85b4 app/views/comments/_comment_thread.html.erb:9-18",
+        "otwarchive@00ad85b4 config/config.yml:198",
+        "otwarchive@00ad85b4 lib/acts_as_commentable/comment_methods.rb:40-43"
+      ],
+      "quote": "<% if depth >= ArchiveConfig.COMMENT_THREAD_MAX_DEPTH && child_comments.size > 1 %> ... ts(\"%{count} more comments in this thread\", count: comment.children_count)  /  (self.threaded_right - self.threaded_left - 1)/2",
+      "implication": "browse-workdetail-comments 1f.5 (owner's depth cap; AO3's own is 5 with a one-reply exception); T-254 #7 (a cutoff placeholder's count is a descendant count and belongs in the thread totals)."
+    },
+    {
+      "id": "Q14",
+      "q": "In what order does AO3 page a work's comment threads?",
+      "answer": "It paginates the commentable's reviewed comments by thread id (Comment.per_page per page). The comments association sets no ORDER, so the order is the database's - insertion (id) order in practice, oldest thread first. 'Newest first' is therefore the last page, reversed.",
+      "sources": [
+        "otwarchive@00ad85b4 app/decorators/comment_decorator.rb:51-58",
+        "otwarchive@00ad85b4 lib/acts_as_commentable/commentable_entity.rb:5"
+      ],
+      "quote": "thread_ids = commentable.comments.reviewed.pluck(:thread).paginate(page: page, per_page: Comment.per_page)  /  has_many :comments, as: :commentable, dependent: :destroy",
+      "implication": "browse-workdetail-comments 1f.2: the app's newest-first (last page, roots reversed) matches practice; the code does not guarantee the order."
+    },
+    {
+      "id": "Q15",
+      "q": "What does AO3's 10,000-character comment limit count?",
+      "answer": "The raw comment_content as submitted, with Rails validates_length_of (Ruby String#length: characters = code points). Sanitizing happens at display time (sanitized_content), not before validation.",
+      "sources": [
+        "otwarchive@00ad85b4 app/models/comment.rb:20-23",
+        "otwarchive@00ad85b4 app/models/comment.rb:577-579",
+        "otwarchive@00ad85b4 config/config.yml:105"
+      ],
+      "quote": "validates_length_of :comment_content, maximum: ArchiveConfig.COMMENT_MAX, too_long: ts(\"must be less than %{count} characters long.\" ...)  /  COMMENT_MAX: 10000",
+      "implication": "browse-workdetail-comments 1ba.2: count unicodeScalars, not grapheme clusters."
+    },
+    {
+      "id": "Q16",
+      "q": "Where do AO3's Blocked users and Muted users pages live, and who may open them?",
+      "answer": "/users/:user_id/blocked/users and /users/:user_id/muted/users (index). The owner, or an admin with permission. /users/:login/blocked and /muted are not routes, which is why a probe of those 404s.",
+      "sources": [
+        "otwarchive@00ad85b4 config/routes.rb:361-380",
+        "otwarchive@00ad85b4 app/controllers/blocked/users_controller.rb:1-8"
+      ],
+      "quote": "namespace :blocked do resources :users, only: [:index, :create, :destroy] ...  /  before_action :check_ownership_or_admin, only: :index",
+      "implication": "account-leftovers 1z.3: both rows can be added with pathSuffix 'blocked/users' and 'muted/users'."
+    },
+    {
+      "id": "Q17",
+      "q": "Does the drafts page say when each draft will be deleted?",
+      "answer": "Yes. Drafts renders works/_work_blurb for each unposted work, and the work module adds, for !work.posted?, a caution notice with that draft's own deletion date: created_at + 29 days, formatted date_short_html (<abbr class=day>Mon</abbr> <span class=date>05</span> <abbr class=month>Oct</abbr> <span class=year>2026</span>). The page-level notice says drafts are saved 30 days from creation.",
+      "sources": [
+        "otwarchive@00ad85b4 app/views/works/_work_module.html.erb:48-50",
+        "otwarchive@00ad85b4 config/locales/views/en.yml:3647",
+        "otwarchive@00ad85b4 config/locales/views/en.yml:3194",
+        "otwarchive@00ad85b4 config/locales/views/en.yml:3495",
+        "otwarchive@00ad85b4 app/controllers/works_controller.rb:154-174",
+        "otwarchive@00ad85b4 app/views/works/drafts.html.erb:1-20"
+      ],
+      "quote": "<% if !work.posted? %> <p class=\"caution notice\"><%= t('.draft_deletion_notice_html', deletion_date: date_in_zone(work.created_at + 29.days)) %></p>  /  draft_deletion_notice_html: This draft will be <strong>scheduled for deletion</strong> on %{deletion_date}.",
+      "implication": "account-leftovers 1x.2: 'N days left', 'Created ...' and 'N expiring this week' come from the page already fetched. WritingDraftsView's reason for dropping them is contradicted."
+    },
+    {
+      "id": "Q18",
+      "q": "What does the dashboard's 'Bookmarks (N)' count?",
+      "answer": "SearchCounts.bookmark_count_for_user: a BookmarkQuery count over all of the user's bookmarks - works, series and external works alike - including private ones when the viewer is the owner. Cached with dashboard_cache_options.",
+      "sources": [
+        "otwarchive@00ad85b4 app/helpers/users_helper.rb:57-62",
+        "otwarchive@00ad85b4 app/models/search/search_counts.rb:88-94"
+      ],
+      "quote": "total = SearchCounts.bookmark_count_for_user(user)  /  BookmarkQuery.new(user_ids: [user.id], show_private: show_private).count",
+      "implication": "account-hub-reading 1m.3: a count built from parsed work rows is smaller than this and must not replace it."
+    },
+    {
+      "id": "Q19",
+      "q": "How does AO3 take a work off Marked for Later?",
+      "answer": "PATCH /works/:id/mark_as_read, which calls Reading.mark_to_read_later(work, current_user, false) and redirects back. The mirror of mark_for_later.",
+      "sources": [
+        "otwarchive@00ad85b4 config/routes.rb:398-399",
+        "otwarchive@00ad85b4 app/controllers/works_controller.rb:704-722"
+      ],
+      "quote": "patch :mark_for_later / patch :mark_as_read  /  def mark_as_read ... Reading.mark_to_read_later(@work, current_user, false)",
+      "implication": "account-hub-reading 1o.3 (the footer's promise) and 1o.4 (the unmark write, owner's call)."
+    },
+    {
+      "id": "Q20",
+      "q": "Which HTML tags survive in AO3 comments?",
+      "answer": "Sanitize::Config::ARCHIVE's elements: a abbr acronym address b big blockquote br caption center cite code col colgroup details figcaption figure dd del dfn div dl dt em h1-h6 hr i img ins kbd li ol p pre q rp rt ruby s samp small span strike strong sub summary sup table tbody td tfoot th thead tr tt u ul var; details keeps open.",
+      "sources": [
+        "otwarchive@00ad85b4 config/initializers/gem-plugin_config/sanitizer_config.rb:5-26"
+      ],
+      "quote": "elements: %w[ a abbr acronym ... details ... img ... summary sup ... ]",
+      "implication": "browse-workdetail-comments 1bf.1: every tray tag survives; img is allowed by AO3 and left out by the board's choice."
+    },
+    {
+      "id": "Q21",
+      "q": "What do the Inbox heading's counts cover, and which filters does AO3's Inbox support?",
+      "answer": "@inbox_total and @unread are the user's whole inbox (bad comments removed), unaffected by filters. The list itself is filtered by find_by_filters: read (true/false), replied_to (true/false), and date (ASC/DESC).",
+      "sources": [
+        "otwarchive@00ad85b4 app/views/inbox/show.html.erb:2",
+        "otwarchive@00ad85b4 app/controllers/inbox_controller.rb:15-22",
+        "otwarchive@00ad85b4 app/models/inbox_comment.rb:8-20"
+      ],
+      "quote": "@inbox_total = @user.inbox_comments.with_bad_comments_removed.count  /  @unread = ...count_unread  /  replied_to = case filters[:replied_to] when 'true' then true when 'false' then false ...",
+      "implication": "account-hub-reading 1l.1 (only the awaiting clause is page-scoped) and 1l.2 (Unread = read=false, Awaiting reply = replied_to=false, Replied = replied_to=true are real server filters, so the pill rail can be exact across pages)."
+    },
+    {
+      "id": "Q22",
+      "q": "What order does AO3 use when no sort is sent?",
+      "answer": "Relevance (_score) for a plain search; revised_at (date updated) for a tag's works list or a collection. Direction defaults to desc.",
+      "sources": [
+        "otwarchive@00ad85b4 app/models/search/work_query.rb:282-297"
+      ],
+      "quote": "def default_sort; facet_tags? || collected? ? 'revised_at' : '_score'; end  /  direction = options[:sort_direction].present? ? options[:sort_direction] : 'desc'",
+      "implication": "Confirms AO3FilterPanel.allowsRelevanceSort = false on Browse's /tags/<t>/works pages and relevance as Search's default."
+    },
+    {
+      "id": "Q23",
+      "q": "What does AO3's /media page list under each category?",
+      "answer": "Its five most-used canonical fandoms, by filter_counts.public_works_count (unhidden_works_count when logged in) - a count ranking, not a curated list. Uncategorized shows its five newest fandom tags instead.",
+      "sources": [
+        "otwarchive@00ad85b4 app/controllers/media_controller.rb:4-19",
+        "otwarchive@00ad85b4 app/models/tag.rb:341-351",
+        "otwarchive@00ad85b4 app/views/media/index.html.erb:6-23"
+      ],
+      "quote": "Fandom.public_top(5).joins(:common_taggings).where(canonical: true, ...)  /  order('filter_counts.public_works_count DESC')  /  medium.children.in_use.by_type('Fandom').order('created_at DESC').limit(5)",
+      "implication": "browse-workdetail-comments 1g.2: MediaBrowserView's twelve largest fandoms is AO3's own rule at a larger N; its doc comment's 'hand-curated and often stale' is wrong and should be corrected."
+    }
+  ]
+}
