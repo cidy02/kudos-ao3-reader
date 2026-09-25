@@ -102,6 +102,7 @@ struct RequestCoalescerTests {
 
         await #expect(throws: CancellationError.self) { try await doomed.value }
         try await Task.sleep(nanoseconds: 50_000_000)
+        // swiftlint:disable:next empty_count - a call tally on an actor, not a collection
         #expect(await counter.count == 0)
     }
 
