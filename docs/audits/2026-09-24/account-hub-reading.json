@@ -1,0 +1,513 @@
+{
+  "area": "account-hub-reading",
+  "wave": "3 (cloud)",
+  "auditor": "Claude (cloud session, no Xcode)",
+  "date": "2026-09-25",
+  "base_commit": "c4ce1e2",
+  "method": "docs/audits/2026-09-24/CLOUD_WAVE3_README.md (AUDIT_METHOD.md was not pushed; method reconstructed from the handoff + docs/REDESIGN_PLAN.md)",
+  "status_vocabulary": {
+    "DONE": "built as the board draws it; evidence cites the code",
+    "BUG": "wrong or dishonest output today; failure_scenario says how",
+    "GAP": "board element missing; no owner decision needed; size S/M/L",
+    "DEVIATION": "built differently on purpose; the reasoning is recorded in code or docs (cited)",
+    "DECIDED": "the owner already ruled; cited",
+    "OWNER": "needs an owner decision (policy, schema, or spec vs settled evidence)",
+    "NOT_BUILDABLE": "the data does not exist (AO3 or app); cited",
+    "SUPERSEDED": "board replaced by another board"
+  },
+  "caveats": [
+    "Audited at c4ce1e2. The handoff lists no T-246..T-255 commit touching the Account hub or these lists (T-250/T-251 touch local History/Favorites, not AO3's).",
+    "No Xcode: source reading only. No signed-in screen was seen."
+  ],
+  "counts": {
+    "BUG": 6,
+    "DECIDED": 3,
+    "DEVIATION": 2,
+    "DONE": 17,
+    "GAP": 4,
+    "OWNER": 1
+  },
+  "boards": [
+    {
+      "board": "1m",
+      "title": "Account hub",
+      "spec_label": "Username as the page title, four scopes as a segmented control; Overview = six shortcuts + Preferences + More on AO3; the wash, pill fills and icons derive from the app accent.",
+      "entry_points": [
+        "kudos-ao3-reader/App/ContentView.swift (Account tab root)"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift",
+        "kudos-ao3-reader/Features/Account/AccountComponents.swift",
+        "kudos-ao3-reader/Features/Account/AccountShortcuts.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1m.1",
+          "what": "Scopes as a segmented control",
+          "status": "DECIDED",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:575-601"
+          ],
+          "note": "Owner flattened the hub: Shortcuts, then Reading / Writing / Activity groups, then Account (Preferences, More on AO3). Recorded at the call site so nobody restores the pills."
+        },
+        {
+          "id": "1m.2",
+          "what": "Identity header, accent wash, tappable shortcuts with cached counts",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:246-275",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:617-651",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:1031-1036"
+          ],
+          "note": "Counts are AO3AccountListCount.displayText: exact, or 'N+' for a paged lower bound; nothing is fetched just for a tile."
+        },
+        {
+          "id": "1m.3",
+          "what": "Tile counts stay AO3's exact figures",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:892-900",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:948-954",
+            "kudos-ao3-reader/Services/AO3AccountListCountsCache.swift:30-55",
+            "kudos-ao3-reader/Services/AO3AccountListCountsCache.swift:127-155",
+            "kudos-ao3-reader/Services/AO3Client+Authors.swift:138-148",
+            "otwarchive@00ad85b4 app/helpers/users_helper.rb:57-62",
+            "otwarchive@00ad85b4 app/models/search/search_counts.rb:88-94"
+          ],
+          "failure_scenario": "The dashboard nav seeds Bookmarks with AO3's exact 'Bookmarks (10)', which counts every bookmark (BookmarkQuery: works, series, external, private for the owner). Opening a one-page Bookmarks list records AO3AccountListCount(itemsOnPage: 7, totalPages: 1) because parseAuthorBookmarksPage keeps only the 7 work rows; 'two exact counts are both totals, so the newer one wins', and the tile now reads 7. History and Marked for Later drop rows for deleted works the same way.",
+          "fix": "Record a list page as exact only when every row on it parsed (carry the raw row count from the parser, e.g. li.bookmark.blurb / li.reading count); otherwise record it as a lower bound, which never overrides an exact dashboard figure.",
+          "test": "AO3AccountListCount(parsedRows: 7, rawRows: 10, totalPages: 1).exact == nil and it does not replace a cached exact 10."
+        },
+        {
+          "id": "1m.4",
+          "what": "Dead compact branch still carries the scope control",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:124-127",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:278-320",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:1-10",
+            "docs/ARCHITECTURE_MAP.md:22"
+          ],
+          "note": "libraryStyleCompactRoot draws SubjectSegmentedControl(AccountTab) but is only used when showsWorkListControls is true, which no scope returns any more; the type's doc and ARCHITECTURE_MAP still describe 'primary segments Overview / Reading / Writing / Activity'. Stale docs are a hallucination source (AGENT_ONBOARDING DoD 3).",
+          "fix": "Correct the two docs; delete the unreachable branch in its own commit, or leave it and say it is unreachable."
+        }
+      ]
+    },
+    {
+      "board": "1n",
+      "title": "Account, signed out",
+      "spec_label": "No accent and no wash; Settings as a glass cog; below Log in, 'What is waiting' previews the signed-in tab's real structure with values withheld and faded.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:246-266"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:929-1030",
+        "kudos-ao3-reader/Features/Account/AccountComponents.swift:285-310"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1n.1",
+          "what": "Plain background, log-in card, faded preview",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:246-254",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:954-993"
+          ]
+        },
+        {
+          "id": "1n.2",
+          "what": "Preview drawn from the hub's real rows",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:960-966",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:1115-1160"
+          ],
+          "note": "The doc says the preview 'cannot drift from the thing it previews', but its rows are hard-coded strings: Reading lacks Subscriptions, Writing lacks Drafts, Activity lacks History, and Shortcuts/Account are absent.",
+          "fix": "Build the preview's row titles from the same destination lists the signed-in groups use (one static array per scope), so the two cannot differ."
+        },
+        {
+          "id": "1n.3",
+          "what": "Scope pills in the preview",
+          "status": "DECIDED",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:575-601"
+          ],
+          "note": "No pills exist on the signed-in tab to preview (owner flattened it)."
+        }
+      ]
+    },
+    {
+      "board": "1bt",
+      "title": "Hub scopes",
+      "spec_label": "Structure unchanged; only section sets change. Reading: Saved / Following; Writing: Posted / Unposted (drafts expire in 30 days); Activity: Read on AO3, then arrives vs exchanged.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:595-601"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:1109-1175"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1bt.1",
+          "what": "Inner groupings (Saved/Following, Posted/Unposted...)",
+          "status": "DECIDED",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:586-594",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:1115-1133"
+          ],
+          "note": "Owner: one group per scope, named for the scope; the inner split was dropped. Drafts keeps its 30-day subtitle, so the Posted/Unposted distinction survives as copy."
+        },
+        {
+          "id": "1bt.2",
+          "what": "Scope membership follows AccountView (History under Activity)",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountView.swift:1115-1160"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1o",
+      "title": "Marked for Later",
+      "spec_label": "Covers for what changed since your last visit (NEW badge), ledger rows for the rest; pills All / Updated / Downloaded / Reset; header 'N works - synced N min ago'; footer 'Marked for Later lives on AO3 - unmarking here unmarks there. Pagination follows the ledger'.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:637-640",
+        "kudos-ao3-reader/Features/Account/AccountView.swift:1115-1133"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift",
+        "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:534-548"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1o.1",
+          "what": "Updated covers + ledger rows, pills with Reset, Downloaded size line",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:186-200",
+            "kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:385-420"
+          ]
+        },
+        {
+          "id": "1o.2",
+          "what": "Header count reads as a total on a paged list",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:147-154",
+            "kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:226",
+            "kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:258-269",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:814-836"
+          ],
+          "failure_scenario": "A 9-page Marked for Later list shows '20 works - synced 2 min ago' at the top of page 1. Every other account list appends 'page 1 of 9' (headerTallyLine; Bookmarks' own subtitle); this one was carved out for its sync stamp and lost the page clause, so the page's count reads as the list's size.",
+          "fix": "AO3MarkedForLaterCopy.subtitle(workCount:syncedAt:currentPage:totalPages:) appending ' - page X of Y' when totalPages > 1.",
+          "test": "subtitle(workCount: 20, syncedAt: t, currentPage: 1, totalPages: 9) contains 'page 1 of 9'; one page -> no page clause."
+        },
+        {
+          "id": "1o.3",
+          "what": "Footer promises unmarking",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3MarkedForLaterWorksBrowser.swift:177-183",
+            "kudos-ao3-reader/Services/AO3WriteActions.swift:176-195",
+            "otwarchive@00ad85b4 app/controllers/works_controller.rb:714-722",
+            "otwarchive@00ad85b4 config/routes.rb:399"
+          ],
+          "failure_scenario": "The footer says 'unmarking here unmarks there', but this screen has no unmark control and the app has no unmark write (only markForLater, which adds). A reader looks for an action the copy promised.",
+          "fix": "Until an unmark exists, say only 'Marked for Later lives on AO3.' plus the pagination sentence. The unmark itself is filed for the owner (it is an AO3 write).",
+          "test": "Footer string contains no 'unmark'."
+        },
+        {
+          "id": "1o.4",
+          "what": "Unmark swipe (PATCH /works/:id/mark_as_read)",
+          "status": "OWNER",
+          "size": "M",
+          "evidence": [
+            "otwarchive@00ad85b4 app/controllers/works_controller.rb:714-722"
+          ],
+          "note": "An AO3 write; the handoff allows building write UI only where it says so. Shape would mirror markForLater (CSRF from the work page, _method=patch) behind a confirm."
+        }
+      ]
+    },
+    {
+      "board": "1q",
+      "title": "AO3 Bookmarks",
+      "spec_label": "Each bookmark a search-result card on its fandom wash; note on an accent rail where a summary would sit; AO3 tags as pills distinct from User Tags; lock chip for private; bookmark date in the stats row.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:637"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Bookmarks/AO3BookmarksWorksBrowser.swift",
+        "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:549-562"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1q.1",
+          "what": "All / Recs / Private / With notes pills over the loaded page",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3BookmarksWorksBrowser.swift:5-45"
+          ]
+        },
+        {
+          "id": "1q.2",
+          "what": "Note, bookmark tags, private lock, rec mark and date on each card",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3BookmarksWorksBrowser.swift:340-370"
+          ],
+          "note": "Drawn as a footnote under the card rather than in the summary slot; mature-blurred rows withhold it (AO3BookmarksWorksBrowser.swift:47-58)."
+        },
+        {
+          "id": "1q.3",
+          "what": "Header tally with page context",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3BookmarksWorksBrowser.swift:195-201"
+          ]
+        },
+        {
+          "id": "1q.4",
+          "what": "Tile count overwritten by work-only count",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "see 1m.3"
+          ],
+          "note": "Filed once under 1m.3; the list load is where it happens."
+        }
+      ]
+    },
+    {
+      "board": "1t",
+      "title": "AO3 History",
+      "spec_label": "Activity wash, kicker/rule/32pt hero with tallies; each row pairs the progress ring against the visit count; source-ordered time buckets; Clear in the overflow; Everything / In progress / Finished pills local.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:1146-1160"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Bookmarks/AO3HistoryWorksBrowser.swift",
+        "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:512-533"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1t.1",
+          "what": "Header tallies incl. 'M in progress' and page context",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:814-836"
+          ]
+        },
+        {
+          "id": "1t.2",
+          "what": "Ring (local) beside AO3 visit count / version / last visited",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:455-510"
+          ]
+        },
+        {
+          "id": "1t.3",
+          "what": "Source-ordered visit buckets; Clear History in the overflow behind a confirm; per-row delete behind a confirm",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3HistoryWorksBrowser.swift",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:300-307",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:361-392"
+          ]
+        },
+        {
+          "id": "1t.4",
+          "what": "Everything / In progress / Finished pills from local state",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:225-235"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1p",
+      "title": "Subscriptions",
+      "spec_label": "Covers for what posted since your last visit (NEW badge + chapter range), ledger rows for everything you follow; header '104 total - 7 with new chapters - page 1 of 6'; Works / Series / Authors / Reset pills; unsubscribe is a swipe. Needs a per-subscription last-seen stamp on device.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:639",
+        "kudos-ao3-reader/Features/Home/HomeView.swift:178-182"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift",
+        "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:563-580",
+        "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsPageEnrichment.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1p.1",
+          "what": "One surface, two entry points; kicker follows the caller",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:128-135",
+            "kudos-ao3-reader/Features/Home/HomeView.swift:178-182"
+          ]
+        },
+        {
+          "id": "1p.2",
+          "what": "'X NEW' badge from a device watermark; chapter range; Mark All as Seen",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:96-140",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:680-775"
+          ]
+        },
+        {
+          "id": "1p.3",
+          "what": "Header '104 total'",
+          "status": "DEVIATION",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:145-163"
+          ],
+          "note": "AO3 prints no subscriptions total, so the header says 'N works' for the page plus 'page X of Y'. Honest."
+        },
+        {
+          "id": "1p.4",
+          "what": "Works / Series / Authors scope pills",
+          "status": "GAP",
+          "size": "M",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:5-10",
+            "kudos-ao3-reader/Services/AO3Client.swift:665-674",
+            "otwarchive@00ad85b4 app/views/subscriptions/index.html.erb:11-41"
+          ],
+          "note": "The list asks for type=works only. Series and user subscriptions are name + byline rows on the same index (dl.subscription dt), not work blurbs, so each scope needs its own row and its own fetch."
+        },
+        {
+          "id": "1p.5",
+          "what": "Updated run as 164x232 covers",
+          "status": "DEVIATION",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:196-203"
+          ],
+          "note": "Rows kept so the chapter range and the unsubscribe swipe have somewhere to attach; reasoning in the doc comment."
+        },
+        {
+          "id": "1p.6",
+          "what": "Refine over sparse subscription rows",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:218-221",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:274-277",
+            "kudos-ao3-reader/Models/AO3Models.swift:54-68",
+            "kudos-ao3-reader/Features/Search/AO3SummaryFilter.swift:22-31"
+          ],
+          "failure_scenario": "The Filter button is offered on Subscriptions. visibleWorks applies the refine facets to `works` - the index rows, which carry no fandoms, rating, completion or language (AO3WorkSummary.subscription). Set a rating, a fandom, Complete or a language and every row fails, so the screen says 'No works on this page match the current filters' although the enriched summaries (enrichedSubscriptionSummaries) show matching works. The panel's '0 of 25 on this page match' line is wrong the same way.",
+          "fix": "For .subscriptions, refine over works.map { enrichedSubscriptionSummaries[$0.id] ?? $0 } and keep rows whose summary is still sparse (unknown is not a mismatch); pass the same array as refineSource. Or hide the Filter button on Subscriptions, as the display-mode switch already is.",
+          "test": "Pure: filters(rating: .teen).apply over [sparse row, enriched Teen row, enriched Explicit row] with 'unknown passes' keeps the first two."
+        },
+        {
+          "id": "1p.7",
+          "what": "Unsubscribe is a swipe behind a confirm; write is session-fenced",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:394-410",
+            "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:1027-1060"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1l",
+      "title": "Inbox",
+      "spec_label": "Activity wash; kicker/rule/32pt hero with tallies; the four filters (All / Unread / Awaiting reply / Replied) as a chip rail with a dashed Filter; rows with Reply (gated on AO3 rendering it), Mark read/unread, overflow, Replied pill, your reply quoted; paging pill.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:455-470"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AccountInboxScreen.swift",
+        "kudos-ao3-reader/Features/Account/AccountInboxViews.swift",
+        "kudos-ao3-reader/Features/Account/AO3InboxModel.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1l.1",
+          "what": "Header tally mixes site totals with a page-only count",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountInboxScreen.swift:110-125",
+            "kudos-ao3-reader/Services/AO3Client+Inbox.swift:70-80",
+            "otwarchive@00ad85b4 app/views/inbox/show.html.erb:2"
+          ],
+          "failure_scenario": "'1,204 comments - 12 unread - 3 awaiting your reply': the first two are AO3's own heading ('My Inbox (N comments, M unread)'), the third counts only the 20 loaded comments. On a 60-page inbox the line reads as if 3 comments site-wide await a reply. The code comment knows; the screen does not say.",
+          "fix": "When model.totalPages > 1, word the clause '3 awaiting your reply on this page'.",
+          "test": "Pure tally(total: 1204, unread: 12, awaitingOnPage: 3, totalPages: 60) ends with 'on this page'; totalPages 1 -> no suffix."
+        },
+        {
+          "id": "1l.2",
+          "what": "Filter chip rail (All / Unread / Awaiting reply / Replied)",
+          "status": "GAP",
+          "size": "M",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountInboxFilterSheet.swift",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:222-224"
+          ],
+          "note": "Filtering is AO3's own parsed GET form in a sheet (read / replied-to / date); no pill rail. 'Awaiting reply' is an inference AO3 cannot filter server-side, so as a pill it can only narrow the loaded page."
+        },
+        {
+          "id": "1l.3",
+          "what": "Row actions: Reply gated on AO3's rendered form, Replied pill, select and bulk bar",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountInboxViews.swift:189-262",
+            "kudos-ao3-reader/Features/Account/AccountInboxViews.swift:491-505"
+          ]
+        },
+        {
+          "id": "1l.4",
+          "what": "Paging pill",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountInboxScreen.swift:76-84"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1y",
+      "title": "Dashboard",
+      "spec_label": "Your own works with performance as a four-cell strip (kudos, comments, hits, bookmarks) tinted to each card's accent.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:451"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AO3DashboardView.swift",
+        "kudos-ao3-reader/Features/Authors/AuthorDashboardSections.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1y.1",
+          "what": "Dashboard composition with the per-work performance strip, own profile only",
+          "status": "DONE",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:1516-1560",
+            "docs/REDESIGN_PLAN.md:3527-3535"
+          ],
+          "note": "Strip is gated to the signed-in user's own profile (owner-reviewable decision recorded in §4). Printed zero survives; missing figures stay absent."
+        }
+      ]
+    }
+  ]
+}
