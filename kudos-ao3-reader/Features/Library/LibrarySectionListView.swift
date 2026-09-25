@@ -174,6 +174,12 @@ struct LibrarySectionListView: View {
         #endif
             .toolbar {
                 if isSelecting {
+                    // The wash empties the navigation title, so the count takes the
+                    // principal slot instead (1af).
+                    ToolbarItem(placement: .principal) {
+                        Text(WorkSelectionTitle.text(selectedCount: selectedWorks.count))
+                            .font(.headline)
+                    }
                     ToolbarItem(placement: .confirmationAction) {
                         SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
                     }
@@ -300,7 +306,12 @@ struct LibrarySectionListView: View {
                 workCount: workCount, grouping: historyGrouping, buckets: groupedItems
             )
         }
-        return "\(workCount) \(workCount == 1 ? "work" : "works")"
+        let tally = "\(workCount) \(workCount == 1 ? "work" : "works")"
+        // A filter brings its own sort (`visibleItems`), so the section's order
+        // is only true while none is on.
+        let order = kind.orderDescription
+        guard !filters.hasActiveFilters, !order.isEmpty else { return tally }
+        return "\(tally) · \(order)"
     }
 
     private var filterCollisionCard: some View {
@@ -623,7 +634,7 @@ struct LibrarySectionListView: View {
         guard showsGroupingStrip else {
             return visibleItems.isEmpty
                 ? []
-                : [LibraryHistoryGrouping.Bucket(title: kind.title, workIDs: visibleItems.map(\.id))]
+                : [LibraryHistoryGrouping.Bucket(title: kind.groupTitle, workIDs: visibleItems.map(\.id))]
         }
         return LibraryHistoryGrouping.groups(
             historyGrouping,

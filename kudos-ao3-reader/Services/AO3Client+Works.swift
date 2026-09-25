@@ -119,9 +119,50 @@ extension AO3Client {
         try await authenticatedPageHTML(for: request)
     }
 
-    func draftsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try await Self.parseSearchPage(authenticatedPageHTML(for: request), page: page)
+    /// The drafts page, parsed twice from the one response: as works, and for
+    /// the deletion date each draft's blurb prints.
+    func draftsPage(for request: URLRequest, page: Int) async throws -> AO3DraftsPage {
+        let html = try await authenticatedPageHTML(for: request)
+        return try AO3DraftsPage(
+            page: Self.parseSearchPage(html, page: page),
+            deletionDates: Self.parseDraftDeletionDates(html)
+        )
     }
+
+    /// Each draft's deletion date, keyed by work id. otwarchive renders every
+    /// unposted work's blurb (`li#work_<id>`) with
+    /// `<p class="caution notice">This draft will be <strong>scheduled for
+    /// deletion</strong> on …</p>`, the date in `date_short_html`: `span.date`
+    /// (day of month), `abbr.month[title]` (the English month name) and
+    /// `span.year` (`works/_work_module.html.erb`; `en.yml` `date_short_html`).
+    /// Read from the notice only — the blurb's `p.datetime` is the revised date.
+    /// A blurb whose notice is missing or unreadable is left out, not guessed.
+    static func parseDraftDeletionDates(_ html: String) -> [Int: DateComponents] {
+        guard let doc = try? SwiftSoup.parse(html),
+              let blurbs = try? doc.select("li.work.blurb").array()
+        else { return [:] }
+        var dates: [Int: DateComponents] = [:]
+        for blurb in blurbs {
+            let id = blurb.id()
+            guard id.hasPrefix("work_"), let workID = Int(id.dropFirst("work_".count)),
+                  let notice = try? blurb.select("p.caution.notice").first(),
+                  let dayText = try? notice.select("span.date").first()?.text(),
+                  let monthName = try? notice.select("abbr.month").first()?.attr("title"),
+                  let yearText = try? notice.select("span.year").first()?.text(),
+                  let day = Int(dayText.trimmingCharacters(in: .whitespaces)),
+                  let year = Int(yearText.trimmingCharacters(in: .whitespaces)),
+                  let month = draftNoticeMonths.firstIndex(of: monthName.trimmingCharacters(in: .whitespaces))
+            else { continue }
+            dates[workID] = DateComponents(year: year, month: month + 1, day: day)
+        }
+        return dates
+    }
+
+    /// `%B` in AO3's English locale, which is the only one its pages render in.
+    private static let draftNoticeMonths = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
 
     // MARK: Work form
 

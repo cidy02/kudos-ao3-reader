@@ -198,4 +198,32 @@ struct AO3AccountListCountsTests {
         cache.record(AO3AccountListCount(exact: 536), kind: .myWorks, authenticationScope: "signed-in:astolat")
         #expect(cache.count(for: .myWorks, authenticationScope: "signed-in:astolat")?.exact == 536)
     }
+
+    /// Bookmarks' page keeps only the bookmarks that parse as works; AO3's own
+    /// count also has series, external and deleted ones. One page is a floor.
+    @Test func aPageThatMayOmitRowsIsAFloorNotATotal() {
+        let single = AO3AccountListCount(itemsOnPage: 7, totalPages: 1, mayOmitRows: true)
+        #expect(single.exact == nil)
+        #expect(single.lowerBound == 7)
+        #expect(single.displayText == "7+")
+
+        // Several pages: the same arithmetic as any other list.
+        let paged = AO3AccountListCount(itemsOnPage: 20, totalPages: 3, mayOmitRows: true)
+        #expect(paged == AO3AccountListCount(itemsOnPage: 20, totalPages: 3))
+        // And without the flag nothing changes.
+        #expect(AO3AccountListCount(itemsOnPage: 7, totalPages: 1, mayOmitRows: false).exact == 7)
+    }
+
+    @Test func openingBookmarksKeepsAO3sExactCount() {
+        let cache = AO3AccountListCountsCache()
+        let scope = "signed-in:astolat"
+        // Seeded from the dashboard nav: "Bookmarks (10)".
+        cache.record(AO3AccountListCount(exact: 10), kind: .bookmarks, authenticationScope: scope)
+        cache.record(
+            AO3AccountListCount(itemsOnPage: 7, totalPages: 1, mayOmitRows: true),
+            kind: .bookmarks,
+            authenticationScope: scope
+        )
+        #expect(cache.count(for: .bookmarks, authenticationScope: scope)?.exact == 10)
+    }
 }

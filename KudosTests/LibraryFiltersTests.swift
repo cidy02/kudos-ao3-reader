@@ -206,6 +206,49 @@ struct LibraryFiltersTests {
         #expect(filters.apply(to: [alpha, bravo]).map(\.wordCount) == [99, 10])
     }
 
+    /// The dashboard rebuilds its sections only when this key changes. Each
+    /// field below was once missing from it, so switching it while another
+    /// filter stayed on left every carousel showing the old results.
+    @Test func revisionKeyChangesWhenAnyFieldChanges() {
+        var base = LibraryFilters()
+        base.fandoms = ["Fandom A"]
+
+        var character = base
+        character.characters = ["Character A"]
+        var otherCharacter = base
+        otherCharacter.characters = ["Character B"]
+        #expect(character.revisionKey != otherCharacter.revisionKey)
+
+        var warning = base
+        warning.warnings = [.nonCon]
+        #expect(warning.revisionKey != base.revisionKey)
+
+        var category = base
+        category.categories = [.ff]
+        #expect(category.revisionKey != base.revisionKey)
+
+        // Same number of user tags, different names: the count alone used to
+        // be all the key saw.
+        var tagged = base
+        tagged.userTags = ["reread"]
+        var otherTagged = base
+        otherTagged.userTags = ["comfort"]
+        #expect(tagged.revisionKey != otherTagged.revisionKey)
+
+        var excluded = base
+        excluded.excludeTags = ["Angst"]
+        #expect(excluded.revisionKey != base.revisionKey)
+    }
+
+    @Test func revisionKeyIgnoresInsertionOrder() {
+        var first = LibraryFilters()
+        first.relationships = ["A/B", "C/D"]
+        var second = LibraryFilters()
+        second.relationships = ["C/D", "A/B"]
+        #expect(first.revisionKey == second.revisionKey)
+        #expect(LibraryFilters().revisionKey == LibraryFilters().revisionKey)
+    }
+
     // MARK: - Helpers
 
     private func makeContext() throws -> ModelContext {

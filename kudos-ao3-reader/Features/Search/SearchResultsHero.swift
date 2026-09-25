@@ -310,3 +310,13 @@ struct SearchResultsHero: View {
     )
     .padding()
 }
+
+/// How many filters the Search toolbar's Filter button counts: what the hero's
+/// "Filters" cell counts for the same search — every summary label except the
+/// subject, which the heading already names, and the sort, which is always in
+/// effect and has its own control. One function so the two cannot disagree.
+enum SearchFilterBadge {
+    static func count(for filters: AO3SearchFilters) -> Int {
+        filters.summaryLabels(excluding: filters.searchSubject.text, includesSort: false).count
+    }
+}

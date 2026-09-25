@@ -204,3 +204,12 @@ struct SelectAllButton: View {
         Button(allSelected ? "Deselect All" : "Select All", action: action)
     }
 }
+
+/// What the title bar says while works are being selected — spec 1af: "Select
+/// mode takes the title bar for a count". One function so Library's dashboard
+/// and the pushed section lists count the same way.
+enum WorkSelectionTitle {
+    static func text(selectedCount: Int) -> String {
+        selectedCount == 0 ? "Select Works" : "\(selectedCount) Selected"
+    }
+}

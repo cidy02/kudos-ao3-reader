@@ -109,9 +109,14 @@ extension AO3MarkupTag {
     /// auto-paragraphed body a bare break is a way to make a mess, not a line.
     static let comments: [AO3MarkupTag] = allCases.filter { $0 != .paragraph && $0 != .lineBreak }
 
-    /// The chapter/summary/notes editor, which posts `content` verbatim: nothing
-    /// paragraphs it for the writer, so `<p>` and `<br>` are the two tags that
-    /// screen most needs, and the rest of the allow-list is theirs as well.
+    /// The chapter/summary/notes editor. It posts exactly what the writer typed,
+    /// and AO3 then paragraphs it like every other HTML field: outside `<p>`,
+    /// lists and headings, one newline becomes `<br>` and a blank line a new
+    /// paragraph (`html_cleaner.rb`, `paragraph_maker.rb`;
+    /// docs/WRITING_EDITOR_ARCHITECTURE.md §3.4). `<p>` and `<br>` are still the
+    /// two tags that screen most needs, because they say exactly what the writer
+    /// means instead of leaving it to line breaks, and the rest of the allow-list
+    /// is theirs as well.
     static let writing: [AO3MarkupTag] = allCases
 }
 
