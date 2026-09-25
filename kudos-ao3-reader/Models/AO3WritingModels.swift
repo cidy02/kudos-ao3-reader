@@ -961,3 +961,61 @@ enum AO3WorkWriteError: LocalizedError, Equatable {
         }
     }
 }
+
+/// One page of the signed-in user's drafts, plus the deletion date AO3 prints on
+/// each one (1x). `deletionDates` is keyed by work id and holds only the drafts
+/// whose notice parsed; a missing entry means "unknown", never "not expiring".
+nonisolated struct AO3DraftsPage: Sendable {
+    var page: AO3SearchPage
+    var deletionDates: [Int: DateComponents]
+}
+
+/// Time left on a draft, from the deletion date AO3 prints on it.
+///
+/// otwarchive's work module adds, for every unposted work, "This draft will be
+/// scheduled for deletion on <date>", where the date is `created_at + 29.days`
+/// in AO3's own time zone, as a day, month and year (otwarchive-facts-wave3
+/// Q17). Counted in whole calendar days, so near midnight it can be a day
+/// generous; never negative.
+nonisolated enum DraftExpiry {
+    /// AO3's notice date is its creation date plus this many days.
+    static let noticeOffsetDays = 29
+
+    static func daysLeft(until deletion: DateComponents, now: Date, calendar: Calendar) -> Int? {
+        guard let deletionDay = day(deletion, calendar: calendar) else { return nil }
+        let today = calendar.startOfDay(for: now)
+        guard let days = calendar.dateComponents([.day], from: today, to: deletionDay).day else { return nil }
+        return max(0, days)
+    }
+
+    /// The draft's creation date, which the listing does not print on its own:
+    /// the deletion date less `noticeOffsetDays`.
+    static func createdDate(fromDeletion deletion: DateComponents, calendar: Calendar) -> Date? {
+        guard let deletionDay = day(deletion, calendar: calendar) else { return nil }
+        return calendar.date(byAdding: .day, value: -noticeOffsetDays, to: deletionDay)
+    }
+
+    /// 1x's chip: "3 days left". The last day says so rather than "0 days left".
+    static func chipText(daysLeft: Int) -> String {
+        switch daysLeft {
+        case ...0: "Last day"
+        case 1: "1 day left"
+        default: "\(daysLeft) days left"
+        }
+    }
+
+    /// 1x's header clause: how many drafts on the page have a week or less.
+    static func expiringThisWeek(_ deletions: [DateComponents], now: Date, calendar: Calendar) -> Int {
+        deletions.count(where: { deletion in
+            guard let days = daysLeft(until: deletion, now: now, calendar: calendar) else { return false }
+            return days <= 7
+        })
+    }
+
+    private static func day(_ components: DateComponents, calendar: Calendar) -> Date? {
+        guard let year = components.year, let month = components.month, let day = components.day,
+              let date = calendar.date(from: DateComponents(year: year, month: month, day: day))
+        else { return nil }
+        return calendar.startOfDay(for: date)
+    }
+}
