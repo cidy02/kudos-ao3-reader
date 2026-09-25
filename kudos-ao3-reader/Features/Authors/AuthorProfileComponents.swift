@@ -280,19 +280,7 @@ struct AO3SeriesRow: View {
     }
 
     private func seriesStateBadge(_ title: String, color: Color) -> some View {
-        Text(title.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
-            .tracking(0.5)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
-            )
-            .accessibilityLabel(title)
+        SubjectStateBadge(title: title, color: color)
     }
 
     private var standardBody: some View {

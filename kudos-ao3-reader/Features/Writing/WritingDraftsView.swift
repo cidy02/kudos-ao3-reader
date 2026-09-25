@@ -5,6 +5,8 @@ struct WritingDraftsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @State private var result: AO3SearchPage?
+    /// Each draft's deletion date from its blurb, keyed by work id (1x).
+    @State private var deletionDates: [Int: DateComponents] = [:]
     @State private var page = 1
     @State private var reload = 0
     @State private var isLoading = false
@@ -14,13 +16,12 @@ struct WritingDraftsView: View {
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
     /// Artboard **1x**: header block, an orange notice that drafts expire, then
-    /// each draft as a card. What is not built, and why:
+    /// each draft as a card with its "N days left" chip and "Created …" date.
+    /// Both come from the deletion date AO3 prints on every draft's blurb
+    /// (`AO3Client.parseDraftDeletionDates`, `DraftExpiry`); a draft whose notice
+    /// did not parse shows neither, rather than a countdown from any other date.
+    /// What is not built, and why:
     ///
-    /// - **The "N days left" chip and "Created …".** AO3 deletes a draft 30
-    ///   days after it is *created*, and the drafts listing carries no creation
-    ///   date — see `draftsTally`. A countdown from any other date would be a
-    ///   number the app cannot stand behind, on the one screen where a wrong
-    ///   number can cost someone their writing.
     /// - **1x's Post and Delete swipe actions.** Both are AO3 writes — posting
     ///   notifies subscribers and cannot be undone — and both already live in
     ///   the editor (`WorkEditView`) behind its own buttons. A swipe is the
@@ -85,7 +86,7 @@ struct WritingDraftsView: View {
                     // card in the app carries. One card per row, so one link per
                     // row — the rows cannot misfire.
                     ForEach(result.works) { work in
-                        DraftCard(work: work)
+                        DraftCard(work: work, deletion: deletionDates[work.id])
                             .subjectRowNavigation(accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title) {
                                 WritingWorkDestination(workID: work.id)
                             }
@@ -147,28 +148,36 @@ struct WritingDraftsView: View {
             .pageBodyRow(top: 12, gutter: gutter)
     }
 
-    /// 1x heads the page "N drafts · N expiring this week". The second half is
-    /// not drawn: the drafts endpoint returns work summaries with no creation
-    /// date, so there is nothing to measure "expiring" against without asking AO3
-    /// for each draft separately.
+    /// 1x heads the page "N drafts · N expiring this week". The expiring count
+    /// is of the drafts on this page whose deletion date parsed; with several
+    /// pages it says so, since the others were not loaded.
     private var draftsTally: String? {
         guard let result, loadedGeneration == auth.sessionGeneration else { return nil }
         let count = result.works.count
-        if result.totalPages > 1 { return "page \(result.currentPage) of \(result.totalPages)" }
-        return count == 1 ? "1 draft" : "\(count) drafts"
+        let expiring = DraftExpiry.expiringThisWeek(
+            result.works.compactMap { deletionDates[$0.id] }, now: Date(), calendar: .current
+        )
+        if result.totalPages > 1 {
+            let pageLine = "page \(result.currentPage) of \(result.totalPages)"
+            return expiring > 0 ? "\(pageLine) · \(expiring) expiring this week on this page" : pageLine
+        }
+        let drafts = count == 1 ? "1 draft" : "\(count) drafts"
+        return expiring > 0 ? "\(drafts) · \(expiring) expiring this week" : drafts
     }
 
     private func load() async {
         let generation = auth.sessionGeneration
         let requestedPage = page
         result = nil
+        deletionDates = [:]
         errorMessage = nil
         isLoading = true
         do {
             let loaded = try await auth.loadDrafts(page: requestedPage)
             guard !Task.isCancelled, generation == auth.sessionGeneration, requestedPage == page else { return }
             loadedGeneration = generation
-            result = loaded
+            deletionDates = loaded.deletionDates
+            result = loaded.page
         } catch {
             guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
             errorMessage = error.localizedDescription
@@ -184,6 +193,8 @@ struct WritingDraftsView: View {
 /// actions on the card, and neither belongs on a work nobody else can see yet.
 private struct DraftCard: View {
     let work: AO3WorkSummary
+    /// The deletion date AO3 printed on this draft, when it parsed.
+    var deletion: DateComponents?
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -206,12 +217,41 @@ private struct DraftCard: View {
         return "\(words.formatted()) word\(words == 1 ? "" : "s")"
     }
 
+    private var daysLeft: Int? {
+        deletion.flatMap { DraftExpiry.daysLeft(until: $0, now: Date(), calendar: .current) }
+    }
+
+    private var created: Date? {
+        deletion.flatMap { DraftExpiry.createdDate(fromDeletion: $0, calendar: .current) }
+    }
+
+    /// 1x's three tones: red with three days or fewer, orange within the week,
+    /// mint beyond it.
+    private func expiryColor(_ daysLeft: Int) -> Color {
+        switch daysLeft {
+        case ...3: .red
+        case ...7: .orange
+        default: .mint
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack(alignment: .top, spacing: 13) {
                 VStack(alignment: .leading, spacing: 5) {
-                    if let first = fandoms.first {
-                        SubjectKicker(text: first, palette: palette, trailingCount: fandoms.count - 1)
+                    if fandoms.first != nil || daysLeft != nil {
+                        HStack(alignment: .top, spacing: 6) {
+                            if let first = fandoms.first {
+                                SubjectKicker(text: first, palette: palette, trailingCount: fandoms.count - 1)
+                            }
+                            if let daysLeft {
+                                SubjectStateBadge(
+                                    title: DraftExpiry.chipText(daysLeft: daysLeft),
+                                    color: expiryColor(daysLeft)
+                                )
+                                .fixedSize()
+                            }
+                        }
                     }
                     Text(work.title.isEmpty ? "Untitled" : work.title)
                         .font(.system(size: 19, weight: .semibold))
@@ -236,11 +276,19 @@ private struct DraftCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
-            if let counts {
-                Text(counts)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            if counts != nil || created != nil {
+                HStack(spacing: 8) {
+                    if let counts {
+                        Text(counts)
+                    }
+                    Spacer(minLength: 8)
+                    if let created {
+                        Text("Created \(created.formatted(.dateTime.day().month(.abbreviated).year()))")
+                    }
+                }
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
             }
         }
         .padding(.vertical, 6)
