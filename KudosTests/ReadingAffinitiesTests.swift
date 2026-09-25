@@ -45,6 +45,24 @@ struct ReadingAffinitiesTests {
         #expect(rows.map(\.name) == ["kestrelmoon"])
     }
 
+    /// A coauthored byline has no one author to open: its first identity is only
+    /// one of them, so the chevron would land on the wrong page.
+    @Test func onlyASingleRegisteredAuthorGivesABylineAUsername() throws {
+        let solo = work("Solo", author: "kestrelmoon", started: true)
+        solo.verifiedAuthorIdentities = [
+            try #require(AO3AuthorIdentity(displayName: "kestrelmoon", href: "/users/kestrelmoon/pseuds/kestrelmoon"))
+        ]
+        let joint = work("Joint", author: "alpha, beta", started: true)
+        joint.verifiedAuthorIdentities = [
+            try #require(AO3AuthorIdentity(displayName: "alpha", href: "/users/alpha/pseuds/alpha")),
+            try #require(AO3AuthorIdentity(displayName: "beta", href: "/users/beta/pseuds/beta")),
+        ]
+        let rows = ReadingAffinities.authors(works: [solo, joint], summaries: [:])
+
+        #expect(rows.first { $0.name == "kestrelmoon" }?.username == "kestrelmoon")
+        #expect(rows.first { $0.name == "alpha, beta" }?.username == nil)
+    }
+
     @Test func aWorkWithTwoTagsIsCountedByBothRatherThanSplit() {
         let both = work("Both", freeforms: ["Slow Burn", "Fix-It"], started: true)
         let rows = ReadingAffinities.tags(works: [both], summaries: [:])

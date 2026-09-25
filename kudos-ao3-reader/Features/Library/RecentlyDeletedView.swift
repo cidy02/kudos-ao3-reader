@@ -227,7 +227,7 @@ struct RecentlyDeletedView: View {
                     }
                 },
                 deletionMessage: { workDeletionMessage(work) },
-                deletePermanently: { WorkLifecycle.hardDelete(work, in: context) }
+                deletePermanently: { PreservedWorkService.deletePermanently(work, in: context) }
             ))
         }
         for collection in deletedCollections {
@@ -245,7 +245,7 @@ struct RecentlyDeletedView: View {
                     }
                 },
                 deletionMessage: { Self.containerDeletionMessage(workCount: collection.works.count) },
-                deletePermanently: { PreservedWorkService.hardDelete(collection, in: context) }
+                deletePermanently: { PreservedWorkService.deletePermanently(collection, in: context) }
             ))
         }
         for queue in deletedQueues {
@@ -262,7 +262,7 @@ struct RecentlyDeletedView: View {
                     }
                 },
                 deletionMessage: { Self.containerDeletionMessage(workCount: queue.memberships.count) },
-                deletePermanently: { PreservedWorkService.hardDelete(queue, in: context) }
+                deletePermanently: { PreservedWorkService.deletePermanently(queue, in: context) }
             ))
         }
         return all.sorted { $0.daysRemaining < $1.daysRemaining }

@@ -165,6 +165,26 @@ enum PreservedWorkService {
         context.saveBestEffort(reason: "Saving permanently-deleted queue failed")
     }
 
+    /// Recently Deleted's Delete Permanently, per item. Its confirmation can
+    /// outlive the item's deleted state — a restore in another window, or sync
+    /// bringing it back — so confirming then must leave a live record alone.
+    /// Guarded here, not in `WorkLifecycle.hardDelete`, which tests call on live
+    /// works on purpose.
+    static func deletePermanently(_ work: SavedWork, in context: ModelContext) {
+        guard work.isPendingDeletion else { return }
+        WorkLifecycle.hardDelete(work, in: context)
+    }
+
+    static func deletePermanently(_ collection: WorkCollection, in context: ModelContext) {
+        guard collection.isPendingDeletion else { return }
+        hardDelete(collection, in: context)
+    }
+
+    static func deletePermanently(_ queue: ReadingQueue, in context: ModelContext) {
+        guard queue.isPendingDeletion else { return }
+        hardDelete(queue, in: context)
+    }
+
     // MARK: - Sweep
 
     /// Permanently deletes everything past its recovery window. Skipped entirely
@@ -197,20 +217,20 @@ enum PreservedWorkService {
         var count = 0
         if let works = try? context.fetch(FetchDescriptor<SavedWork>()) {
             for work in works where work.isPendingDeletion && isDue(work.permanentDeletionScheduledAt) {
-                WorkLifecycle.hardDelete(work, in: context)
+                deletePermanently(work, in: context)
                 count += 1
             }
         }
         if let collections = try? context.fetch(FetchDescriptor<WorkCollection>()) {
             for collection in collections
             where collection.isPendingDeletion && isDue(collection.permanentDeletionScheduledAt) {
-                hardDelete(collection, in: context)
+                deletePermanently(collection, in: context)
                 count += 1
             }
         }
         if let queues = try? context.fetch(FetchDescriptor<ReadingQueue>()) {
             for queue in queues where queue.isPendingDeletion && isDue(queue.permanentDeletionScheduledAt) {
-                hardDelete(queue, in: context)
+                deletePermanently(queue, in: context)
                 count += 1
             }
         }
