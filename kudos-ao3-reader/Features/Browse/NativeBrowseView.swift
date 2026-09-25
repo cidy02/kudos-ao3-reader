@@ -199,7 +199,7 @@ struct FandomWorksView: View {
             // Zooms out of the fandom row that pushed it.
             .workCardZoomDestination(BrowseZoomKey.fandom(zoomKey), in: zoomNamespace)
             .toolbar { toolbarContent }
-            .filterPanelPresentation(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters, detents: [.medium, .large]) {
                 AO3FilterPanel(
                     filters: $filters,
                     allowsRelevanceSort: false,
@@ -494,7 +494,7 @@ struct TagWorksView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar { toolbarContent }
-            .filterPanelPresentation(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters, detents: [.medium, .large]) {
                 AO3FilterPanel(
                     filters: $filters,
                     allowsRelevanceSort: false,

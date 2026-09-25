@@ -28,6 +28,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @State private var saveName = ""
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
+    /// The page the latest load asked for, until it lands — so Try Again after a
+    /// failed page tap retries that page (1k.7) instead of `runSearch`'s page 1.
+    @State private var requestedPage: Int?
     @State private var totalPages = 1
     /// AO3's own result-count heading for the current results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
@@ -169,9 +172,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         // Filter sits directly visible, right after the search field —
                         // everything else (Select, Expand/Collapse) lives behind "...".
                         ActionToolbar(items: [
+                            // 1k: "an accent filter button with its count" — the same
+                            // number as the hero's Filters cell (`SearchFilterBadge`).
                             AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                   showingFilters: router.isShowing(.searchFilters),
-                                                  onClearFilters: clearAllFilters)),
+                                                  onClearFilters: clearAllFilters,
+                                                  badgeCount: SearchFilterBadge.count(for: filters))),
                             (phase == .loaded && !results.isEmpty)
                                 ? AnyView(WorkListMoreMenu {
                                     Button { bulkSelection.isSelecting = true } label: {
@@ -190,7 +196,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // Only at the root — pushed detail pages use the normal swipe-to-pop.
                 .edgeSwipeToGoBack(isActive: path.isEmpty) { goBack() }
             #endif
-                .filterPanelPresentation(isPresented: router.isShowing(.searchFilters)) {
+                .filterPanelPresentation(
+                    isPresented: router.isShowing(.searchFilters),
+                    detents: [.medium, .large]
+                ) {
                     // Width applies on iPad/macOS, where this is a real inspector;
                     // iPhone gets a sheet, and its grabber, from the modifier.
                     filterPanel
@@ -597,7 +606,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             } description: {
                 Text(message)
             } actions: {
-                Button("Try Again", action: runSearch)
+                Button("Try Again", action: retryFailedLoad)
             }
         default:
             EmptyView()
@@ -675,6 +684,20 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             .joined(separator: ", ")
     }
 
+    /// The failed overlay's Try Again: the page that failed when results are on
+    /// screen, a fresh search when the first load itself failed.
+    private func retryFailedLoad() {
+        if let page = SearchRetry.page(
+            requested: requestedPage,
+            current: currentPage,
+            hasResults: !results.isEmpty
+        ) {
+            load(page: page)
+        } else {
+            runSearch()
+        }
+    }
+
     private func runSearch() {
         guard filters.isSearchable else { return }
         // Close the filters panel — the other AO3FilterPanel call sites
@@ -743,22 +766,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// Opens the name-entry alert for saving the current filter set, seeding a sensible
     /// default name. Invoked from the filter panel's "Save Search…" action.
     private func presentSaveDialog() {
-        saveName = defaultSavedSearchName
+        saveName = Self.defaultSavedSearchName(for: filters)
         showingSaveDialog = true
     }
 
-    /// A default name for the current search: its query, else its fandom, else a label.
-    private var defaultSavedSearchName: String {
-        let query = filters.query.trimmingCharacters(in: .whitespaces)
-        if !query.isEmpty { return query }
-        let fandom = filters.fandom.trimmingCharacters(in: .whitespaces)
-        if !fandom.isEmpty {
-            return fandom
-                .split(separator: ",")
-                .first
-                .map { String($0).trimmingCharacters(in: .whitespaces) } ?? fandom
-        }
-        return "Saved Search"
+    /// A default name for a search: its subject, the same name the results
+    /// heading shows (1ax: "seeded from the search subject", which the sheet's
+    /// own caption promises). That is the one tag when exactly one tag field holds
+    /// exactly one name, else the query. It used to take the query first and then
+    /// the *first* of several fandoms, naming a two-fandom search after one of them.
+    static func defaultSavedSearchName(for filters: AO3SearchFilters) -> String {
+        let subject = filters.searchSubject.text
+        return subject == AO3SearchFilters.searchResultsFallback ? "Saved Search" : subject
     }
 
     /// Persists the current filter set under the entered name.
@@ -806,6 +825,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         // The skeleton branch is gated on `results` being empty, so paging still
         // keeps the current page on screen.
         phase = .loading
+        requestedPage = page
         loadToken += 1
         let token = loadToken
         let current = filters
@@ -824,6 +844,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 resultSummary = result.summary
+                requestedPage = nil
                 phase = .loaded
             } catch is CancellationError {
                 // Superseded on purpose — the newer load owns the UI now.
@@ -893,5 +914,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         } onCancel: {
             task?.cancel()
         }
+    }
+}
+
+/// Which page Try Again reloads after a failed search load. With results on
+/// screen the failure was a page tap or a refresh, so the page asked for (or,
+/// failing that, the one showing) is retried; `runSearch` would drop the reader
+/// back on page 1. With nothing on screen the first load failed, and nil tells
+/// the caller to run the search again from the top.
+enum SearchRetry {
+    static func page(requested: Int?, current: Int, hasResults: Bool) -> Int? {
+        guard hasResults else { return nil }
+        return requested ?? current
     }
 }
