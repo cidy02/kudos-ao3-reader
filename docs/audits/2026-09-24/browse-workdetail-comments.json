@@ -1,0 +1,521 @@
+{
+  "area": "browse-workdetail-comments",
+  "wave": "3 (cloud)",
+  "auditor": "Claude (cloud session, no Xcode)",
+  "date": "2026-09-25",
+  "base_commit": "c4ce1e2",
+  "method": "docs/audits/2026-09-24/CLOUD_WAVE3_README.md (AUDIT_METHOD.md was not pushed; method reconstructed from the handoff + docs/REDESIGN_PLAN.md)",
+  "status_vocabulary": {
+    "DONE": "built as the board draws it; evidence cites the code",
+    "BUG": "wrong or dishonest output today; failure_scenario says how",
+    "GAP": "board element missing; no owner decision needed; size S/M/L",
+    "DEVIATION": "built differently on purpose; the reasoning is recorded in code or docs (cited)",
+    "DECIDED": "the owner already ruled; cited",
+    "OWNER": "needs an owner decision (policy, schema, or spec vs settled evidence)",
+    "NOT_BUILDABLE": "the data does not exist (AO3 or app); cited",
+    "SUPERSEDED": "board replaced by another board"
+  },
+  "caveats": [
+    "Audited at c4ce1e2. T-247 (Mac, unpushed) rebuilt the comment threads (CommentThreadRow) and its skeleton: 1f.5 and any row-level claim must be re-checked on the Mac branch.",
+    "No Xcode: source reading only."
+  ],
+  "counts": {
+    "BUG": 4,
+    "DECIDED": 1,
+    "DEVIATION": 3,
+    "DONE": 20,
+    "GAP": 5,
+    "OWNER": 1
+  },
+  "boards": [
+    {
+      "board": "1g",
+      "title": "Browse",
+      "spec_label": "No carousel: featured fandoms wrap as a chip cluster in a category-tinted panel with a dashed '+N more' carrying the real remainder. Jump Back In keeps three cards. Needs featured subset + total per category, and FandomDisplayName splitting.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Browse/BrowseView.swift (Browse tab root)"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/MediaBrowserView.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1g.1",
+          "what": "One full-width panel per category, category hue, wrapping chip cluster, dashed '+N more' with the exact remainder",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:98-205"
+          ]
+        },
+        {
+          "id": "1g.2",
+          "what": "Featured fandoms",
+          "status": "DEVIATION",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:522-531"
+          ],
+          "note": "Shows the twelve largest fandoms from the cached full list instead of AO3's hand-curated featured subset; reasoning in the doc comment (no new request)."
+        },
+        {
+          "id": "1g.3",
+          "what": "Chips split title / qualifier (FandomDisplayName)",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:645-669"
+          ]
+        },
+        {
+          "id": "1g.4",
+          "what": "Category work total marked '~' when it is a sum of tag counts",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:411-420",
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:676-679"
+          ]
+        },
+        {
+          "id": "1g.5",
+          "what": "Jump Back In: three cards sized to the width",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:207-231",
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:256-289"
+          ]
+        },
+        {
+          "id": "1g.6",
+          "what": "Jump Back In picks the fandoms you read most recently",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:239-254",
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:618-641",
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:557-566"
+          ],
+          "failure_scenario": "The section's doc says 'the fandoms you were most recently reading'. readWorks is sorted by dateAdded, not lastReadDate, and the three slots are filled in category order: a reader who added an anime work a year ago and read a TV work last night sees the anime fandom first, and never the TV one if Anime & Manga has three read fandoms. statsToken ignores reading, so it would not refresh on a read either.",
+          "fix": "Carry lastReadDate (fallback dateAdded) in LibraryWorkSnapshot; sort readWorks by it; build Jump Back In from one global recency-ordered pass (first three distinct fandoms, each mapped to its category) instead of flattening per-category lists; add the newest lastReadDate to statsToken.",
+          "test": "Pure: two works, older-added but newer-read in category B -> B's fandom comes first."
+        },
+        {
+          "id": "1g.7",
+          "what": "Jump Back In card's work count",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:248"
+          ],
+          "note": "The count is looked up only among the top-12 cluster chips, case-sensitively, so most cards show no count although the full list (with counts) is cached.",
+          "fix": "Look the fandom up in the category's full catalog list, case-insensitively."
+        }
+      ]
+    },
+    {
+      "board": "1al",
+      "title": "Category: sibling families",
+      "spec_label": "Rows collapse on the parsed title; a family prints its title once, then its tags with the qualifier as primary text and its own count; tapping the family searches every sibling; single-tag fandoms use the same block without tint. Rail: A-Z / Most works / Group variants / Filter. Header tally '9,412 tags in 8,106 fandoms - A-Z'.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:127-129 (category panel -> FandomListView)"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/FandomListView.swift",
+        "kudos-ao3-reader/Features/Search/FandomFamily.swift",
+        "kudos-ao3-reader/Features/Search/FandomFamilyRows.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1al.1",
+          "what": "Families grouped on the parsed title; filters and searches on raw names only",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:5-14",
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:192-213"
+          ]
+        },
+        {
+          "id": "1al.2",
+          "what": "Family tap searches every sibling (filter_ids union)",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:203-207",
+            "docs/REDESIGN_PLAN.md:281"
+          ]
+        },
+        {
+          "id": "1al.3",
+          "what": "Page header: kicker 'Browse', category title, tally 'N tags in M fandoms - order'",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:104-107",
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:124-137"
+          ],
+          "note": "Only a navigation title and the sort rail; no SubjectHeaderBlock and no tag/fandom tally (both numbers are already in memory: fandoms.count, families.count).",
+          "fix": "SubjectHeaderBlock(kicker: 'Browse', title: category.name, subtitle: '\\(tags) tags in \\(families) fandoms - \\(sort title)') as the list's first row; when filtered, '\\(shown) of \\(tags) tags'.",
+          "test": "Pure tally string for (9412, 8106, .alphabetical) and the filtered form."
+        },
+        {
+          "id": "1al.4",
+          "what": "'Group variants' switch on the rail",
+          "status": "GAP",
+          "size": "M",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomFamily.swift:143-153",
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:126-133"
+          ],
+          "note": "Grouping is always on; the rail offers A-Z and Most works only. Turning it off means rendering the raw tag list with the same sorts."
+        },
+        {
+          "id": "1al.5",
+          "what": "Single-tag fandom 'uses the same block, without the tint or the tag marker'",
+          "status": "DEVIATION",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:192-201"
+          ],
+          "note": "A one-member family renders FandomListRow rather than the family block. Visual parity unverified here."
+        }
+      ]
+    },
+    {
+      "board": "1am",
+      "title": "Families ranked by total",
+      "spec_label": "Families rank on the sum of their tags; the family figure carries a tilde (sum of tag counts); opening a family caches the exact union and the tilde drops; letter groups and A-Z index drop out.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/FandomListView.swift:126-133"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/FandomFamily.swift",
+        "kudos-ao3-reader/Features/Search/FandomListView.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1am.1",
+          "what": "Rank on the summed count; tilde on the family figure",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomFamily.swift:156-175",
+            "kudos-ao3-reader/Features/Search/FandomFamilyRows.swift"
+          ]
+        },
+        {
+          "id": "1am.2",
+          "what": "Exact union cached back onto the row; tilde drops",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:80-85"
+          ]
+        },
+        {
+          "id": "1am.3",
+          "what": "Letter groups drop out in this order",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:148-167"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1an",
+      "title": "Category filter sheet",
+      "spec_label": "Minimum works, three tag-kind switches with the count each would remove, Favourited only, I have downloads from, Only fandoms with more than one tag; 'Show N tags' button.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/FandomListView.swift:108-121"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift",
+        "kudos-ao3-reader/Features/Search/FandomFamily.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1an.1",
+          "what": "Every row the board draws, with its count, and 'Show N tags'",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift:28-71",
+            "kudos-ao3-reader/Features/Search/FandomListFilterSheet.swift:161-176"
+          ]
+        },
+        {
+          "id": "1an.2",
+          "what": "'I have downloads from' means works you have downloaded",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:48-60",
+            "kudos-ao3-reader/Models/Models.swift:202-204",
+            "kudos-ao3-reader/Features/Library/LibrarySectionKind.swift:96-100"
+          ],
+          "failure_scenario": "The switch keeps fandoms of works with isSaved (the 'keep permanently' flag). Library's Downloaded shelf means hasEPUB (file on disk). A reader with an unkept, in-progress work in fandom X sees X under Library > Downloaded but not under 'I have downloads from'.",
+          "fix": "Use work.hasEPUB && !work.isQueueOnlyWork, the Downloaded shelf's own rule (or reuse LibrarySectionKind.downloaded's predicate).",
+          "test": "FandomLibraryIndex built from one hasEPUB-but-not-isSaved work lists its fandom under downloads.",
+          "confidence": "PLAUSIBLE"
+        }
+      ]
+    },
+    {
+      "board": "1a",
+      "title": "Work Detail",
+      "spec_label": "AO3 account actions in their own lane under the summary (Kudos filled); everything local behind one My copy button into a sheet built from the page's parts.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Library/WorkCardActions.swift (LocalWorkDestination)",
+        "kudos-ao3-reader/Features/Search/SearchView.swift:137-142"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/WorkDetail/WorkDetailView.swift",
+        "kudos-ao3-reader/Features/WorkDetail/WorkDetailAO3Actions.swift",
+        "kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift",
+        "kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1a.1",
+          "what": "ON AO3 lane: Kudos (filled when given), Subscribe, Bookmark, Mark for Later",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailAO3Actions.swift:15-64",
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailOverviewSections.swift:86-99"
+          ]
+        },
+        {
+          "id": "1a.2",
+          "what": "Identity block, figure strip, serif summary, tag clusters, facts card, tally strip, Mark finished, My copy row and sheet",
+          "status": "DONE",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:3472-3496",
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:140-170"
+          ],
+          "note": "Element-by-element audit recorded 2026-09-14; spot-checked here (tally strip, kudos lane)."
+        },
+        {
+          "id": "1a.3",
+          "what": "'Part 2 of 4' and '9 pages left'",
+          "status": "DEVIATION",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:3472-3496"
+          ],
+          "note": "Deliberately not drawn: neither figure is on the work page; recorded with reasons."
+        },
+        {
+          "id": "1a.4",
+          "what": "Sheet ACTIVITY 'Progress Ch 3 - 38%'",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:459-478"
+          ],
+          "note": "Reads readingProgressLabel, which prints a spine-derived 'Ch N' when the legacy reader wrote lastSpineIndex; same root and fix as home-library 1b.12. The board's combined 'Ch 3 - 38%' can come from WorkReadingPosition.title + readiumProgress.",
+          "confidence": "PLAUSIBLE"
+        },
+        {
+          "id": "1a.5",
+          "what": "Kudos/comments/bookmarks figures prefer the stored local value",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailView.swift:522-540"
+          ],
+          "note": "When a local copy exists, its stored figure (from the last refresh) wins over the remote summary that may have just been fetched; a local 0 falls through to the remote. Not false, but can be older than a figure the screen already holds.",
+          "fix": "Prefer the remote summary's figure when present (it is the fresher fetch); fall back to the stored one."
+        }
+      ]
+    },
+    {
+      "board": "1az",
+      "title": "Series, empty",
+      "spec_label": "1w with its list replaced by one card: 'No series yet / You have not made a series. / A series groups your works...' and 'New series on AO3 - Opens archiveofourown.org in Safari. Posting is not something the app does.'",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:449-480"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1az.1",
+          "what": "Empty card with the board's copy and the external 'New series on AO3' card",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:460-480"
+          ]
+        },
+        {
+          "id": "1az.2",
+          "what": "'No series yet' title and the Safari footnote",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Authors/AuthorProfileContentSections.swift:465-479",
+            "kudos-ao3-reader/Features/Account/AccountExternalNavCard.swift"
+          ],
+          "note": "The card starts at 'You have not made a series.'; the external card carries no 'Opens archiveofourown.org in Safari' line."
+        }
+      ]
+    },
+    {
+      "board": "1f",
+      "title": "Comments",
+      "spec_label": "Sheet over the reader on the work-detail wash; threads on a hairline rail with elbows behind reply avatars; '...' on every row; chapter and sort dropdowns under the signal strip; sans comment text; default sort Newest; older comments stream in; centred 'Write a comment' pill.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/WorkDetail/WorkDetailFactsSections.swift:152-160 (Comments cell)",
+        "kudos-ao3-reader/Features/ReaderReadium (reader comments entry)"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Comments/CommentsView.swift",
+        "kudos-ao3-reader/Features/Comments/CommentsModel.swift",
+        "kudos-ao3-reader/Features/Comments/CommentThreadRow.swift"
+      ],
+      "verdict": "PARTIAL",
+      "note": "Base c4ce1e2 predates T-247's rebuild of CommentThreadRow; every threading claim here needs re-checking against the Mac branch.",
+      "items": [
+        {
+          "id": "1f.1",
+          "what": "Signal strip COMMENTS / THREADS / YOURS / LATEST, sourced",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:476-553"
+          ],
+          "note": "Only COMMENTS is AO3's total; the other three count the page and a note under the strip says so whenever there is more than one page. YOURS is dropped when signed out."
+        },
+        {
+          "id": "1f.2",
+          "what": "Chapter and sort pills; default Newest (last page, roots reversed)",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Comments/CommentsModel.swift:147",
+            "kudos-ao3-reader/Features/Comments/CommentsModel.swift:620-640",
+            "kudos-ao3-reader/Features/Comments/CommentsModel.swift:755-762"
+          ],
+          "note": "Newest loads AO3's last page: otwarchive pages threads by thread id, oldest first (comment_decorator.rb:53-58)."
+        },
+        {
+          "id": "1f.3",
+          "what": "Wash, sans body text, '...' per row, centred Write a comment pill",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:171",
+            "kudos-ao3-reader/Features/Comments/CommentThreadRow.swift:1573",
+            "kudos-ao3-reader/Features/Comments/CommentThreadRow.swift:1505",
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:805"
+          ]
+        },
+        {
+          "id": "1f.4",
+          "what": "Older comments stream in instead of paging",
+          "status": "DECIDED",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:3651-3660"
+          ],
+          "note": "Owner 2026-09-15: keep paging, close the item."
+        },
+        {
+          "id": "1f.5",
+          "what": "Thread presentation: hairline rail, elbows, inline depth",
+          "status": "OWNER",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:3187-3232",
+            "kudos-ao3-reader/Features/Comments/CommentThreadRow.swift"
+          ],
+          "note": "At c4ce1e2 the shipped model is one card per comment with a depth bound of two plus Continue thread. The handoff says T-247 (Mac, unpushed) rebuilt it with elbow rails inline to depth 5 (CommentThreadGeometry.maxInlineDepth); the cap is the owner's call. AO3 itself cuts off at COMMENT_THREAD_MAX_DEPTH 5 only when more than one reply remains (otwarchive-facts-wave3 Q13). Re-audit this item on the Mac branch."
+        },
+        {
+          "id": "1f.6",
+          "what": "'REPLYING TO YOU' marker from AO3's own per-session edit link",
+          "status": "DONE",
+          "evidence": [
+            "docs/REDESIGN_PLAN.md:3212-3220"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1ba",
+      "title": "Comment composer",
+      "spec_label": "Medium detent over 1f; Cancel and Post in the header; quoted parent in the rail colour; identity and a 10,000 character budget under the field; footer says the sheet drags taller.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Comments/CommentsView.swift:805-830"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Comments/CommentsView.swift:1165-1370"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1ba.1",
+          "what": "Medium/large detents, Cancel and Post in the header, quoted parent, identity row",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:1234-1306",
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:1339-1360"
+          ]
+        },
+        {
+          "id": "1ba.2",
+          "what": "Character budget matches what AO3 counts",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:1169-1173",
+            "otwarchive@00ad85b4 app/models/comment.rb:21-23"
+          ],
+          "failure_scenario": "The budget subtracts composerText.count (grapheme clusters). AO3 validates the raw comment_content with Rails validates_length_of, which counts Ruby characters (code points), before any sanitizing. A comment of 9,995 graphemes containing a few multi-code-point emoji shows '5 left' and AO3 rejects it as too long.",
+          "fix": "Count composerText.unicodeScalars.count against 10_000.",
+          "test": "Budget for 'a' + family emoji (5 scalars) == 10_000 - 6.",
+          "confidence": "PLAUSIBLE"
+        }
+      ]
+    },
+    {
+      "board": "1be",
+      "title": "Composer with keyboard",
+      "spec_label": "The sheet rides above the keyboard; the quoted parent survives; the format bar stays pinned to the sheet's bottom edge.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Comments/CommentsView.swift"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Comments/CommentsView.swift:1234-1306"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1be.1",
+          "what": "Two detents, not two layouts; format bar in the bottom safe-area inset",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:1234-1246",
+            "kudos-ao3-reader/Features/Comments/CommentsView.swift:1296-1306"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1bf",
+      "title": "Formatting tray",
+      "spec_label": "The tray writes the tag and names it; only tags AO3's sanitizer keeps; spoiler is <details><summary>; no image.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Comments/CommentsView.swift"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Comments/CommentMarkup.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1bf.1",
+          "what": "Every offered tag survives AO3's sanitizer",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Comments/CommentMarkup.swift:32-60",
+            "otwarchive@00ad85b4 config/initializers/gem-plugin_config/sanitizer_config.rb:5-10"
+          ],
+          "note": "bold/italic/underline/strike/sup/sub/small/code/blockquote/ul/ol/h*/hr/a/details+summary are all in Sanitize::Config::ARCHIVE. img is also allowed there; leaving it out is the board's own product choice."
+        }
+      ]
+    }
+  ]
+}
