@@ -24,7 +24,7 @@
     "DECIDED": 1,
     "DEVIATION": 3,
     "DONE": 20,
-    "GAP": 5,
+    "GAP": 6,
     "OWNER": 1
   },
   "boards": [
@@ -138,7 +138,9 @@
           "what": "Family tap searches every sibling (filter_ids union)",
           "status": "DONE",
           "evidence": [
-            "kudos-ao3-reader/Features/Search/FandomListView.swift:203-207",
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:201-203",
+            "kudos-ao3-reader/Services/AO3FandomUnion.swift:34-35",
+            "kudos-ao3-reader/Features/Browse/NativeBrowseView.swift:324",
             "docs/REDESIGN_PLAN.md:281"
           ]
         },
@@ -162,7 +164,7 @@
           "size": "M",
           "evidence": [
             "kudos-ao3-reader/Features/Search/FandomFamily.swift:143-153",
-            "kudos-ao3-reader/Features/Search/FandomListView.swift:126-133"
+            "kudos-ao3-reader/Features/Search/FandomListView.swift:136-146"
           ],
           "note": "Grouping is always on; the rail offers A-Z and Most works only. Turning it off means rendering the raw tag list with the same sorts."
         },
@@ -196,7 +198,7 @@
           "status": "DONE",
           "evidence": [
             "kudos-ao3-reader/Features/Search/FandomFamily.swift:156-175",
-            "kudos-ao3-reader/Features/Search/FandomFamilyRows.swift"
+            "kudos-ao3-reader/Features/Search/FandomFamilyRows.swift:136"
           ]
         },
         {
@@ -274,12 +276,24 @@
       "items": [
         {
           "id": "1a.1",
-          "what": "ON AO3 lane: Kudos (filled when given), Subscribe, Bookmark, Mark for Later",
+          "what": "ON AO3 lane: Kudos, Subscribe, Bookmark, Mark for Later",
           "status": "DONE",
           "evidence": [
-            "kudos-ao3-reader/Features/WorkDetail/WorkDetailAO3Actions.swift:15-64",
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailAO3Actions.swift:15-54",
             "kudos-ao3-reader/Features/WorkDetail/WorkDetailOverviewSections.swift:86-99"
           ]
+        },
+        {
+          "id": "1a.1b",
+          "what": "Kudos chip drawn filled ('since it is the one the app is named after')",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/WorkDetail/WorkDetailAO3Actions.swift:43-60"
+          ],
+          "note": "Added by critic-wave3. The chip is left neutral because its doc comment reads the board's fill as 'you have left kudos here'. The board gives its own reason - emphasis, because the app is named after kudos - so the fill is a style of the primary chip, not a state claim.",
+          "fix": "Draw the Kudos chip in the accent-filled style (palette.accent / accentOnFill) regardless of state; keep the count; leave state out as now.",
+          "test": "none (style); screenshot at the Mac."
         },
         {
           "id": "1a.2",

@@ -86,8 +86,9 @@
           "status": "GAP",
           "size": "S",
           "evidence": [
-            "kudos-ao3-reader/Features/Account/AccountView.swift:124-127",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:127-130",
             "kudos-ao3-reader/Features/Account/AccountView.swift:278-320",
+            "kudos-ao3-reader/Features/Account/AccountView.swift:498-516",
             "kudos-ao3-reader/Features/Account/AccountView.swift:1-10",
             "docs/ARCHITECTURE_MAP.md:22"
           ],
@@ -396,7 +397,7 @@
           "what": "Updated run as 164x232 covers",
           "status": "DEVIATION",
           "evidence": [
-            "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:196-203"
+            "kudos-ao3-reader/Features/Bookmarks/AO3SubscriptionsWorksBrowser.swift:186-195"
           ],
           "note": "Rows kept so the chapter range and the unsubscribe swipe have somewhere to attach; reasoning in the doc comment."
         },

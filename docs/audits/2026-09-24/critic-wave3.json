@@ -1,0 +1,1015 @@
+{
+  "wave": "3 (cloud)",
+  "critic_of": [
+    "home-library.json",
+    "search-filters.json",
+    "browse-workdetail-comments.json",
+    "account-hub-reading.json",
+    "account-leftovers.json"
+  ],
+  "date": "2026-09-25",
+  "base_commit": "c4ce1e2",
+  "method": "Every item's cited file:line was re-opened by a script that prints the cited lines beside the claim (scratchpad critic_extract.py); each DONE was checked for the element it names, each BUG for a reachable failure, each GAP for the absence it claims (with a grep for a second implementation elsewhere). Same model as the auditor, so the pass was run adversarially: where a claim leaned on a plan row or a doc comment, the code was re-read instead. Corrections marked applied_to_area_file were written back into the area JSONs in the same commit.",
+  "verdict_vocabulary": {
+    "CONFIRMED": "claim holds as written (possibly with a better anchor)",
+    "WRONG": "claim or status was wrong; the correction wins",
+    "UNSURE": "not provable from source here; says what would settle it",
+    "ADDED": "item the critic added"
+  },
+  "summary": {
+    "ADDED": 1,
+    "CONFIRMED": 151,
+    "UNSURE": 2,
+    "WRONG": 2,
+    "items": 156,
+    "corrections_written_back": 15
+  },
+  "verdicts": [
+    {
+      "area": "home-library",
+      "id": "1b.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.5",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.6",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.7",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.8",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.9",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED",
+      "correction": "Added evidence: WorkUpdateChecker.checkForUpdates scans saved, non-complete works only (Services/WorkUpdateChecker.swift:17-47) - no subscription is involved.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "home-library",
+      "id": "1b.10",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.11",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1b.12",
+      "status_in_area_file": "BUG",
+      "verdict": "UNSURE",
+      "correction": "The rule violation is certain (Models.swift:568 infers 'Ch N' from a spine index; WorkReadingPosition.swift:5-6 forbids it). The concrete symptom ('Ch 2' while in chapter 1) assumes AO3 EPUBs open the spine with front matter, which REDESIGN_PLAN/ARCHITECTURE_MAP assert but this pass did not open an EPUB to confirm. Fix is right either way.",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "home-library",
+      "id": "1ad.1",
+      "status_in_area_file": "DECIDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ad.2",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ad.3",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ad.4",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ad.5",
+      "status_in_area_file": "OWNER",
+      "verdict": "WRONG",
+      "correction": "Status GAP -> OWNER. Making ledger the default drops the summary from every Reading Now row: a density reduction under AGENTS.md's UI Consistency rule, which needs explicit approval even though 1ad draws ledger rows.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "home-library",
+      "id": "1ad.6",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ad.7",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ae.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ae.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ae.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ae.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ae.5",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1af.1",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED",
+      "correction": "Mechanism reworded: both lists set navigationTitle(kind.title) and subjectScreenWash sets navigationTitle(\"\"); which one wins was not verified, but neither is a count, so the gap stands.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "home-library",
+      "id": "1af.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1af.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1af.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ag.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ag.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ag.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1c.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1c.2",
+      "status_in_area_file": "DECIDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1c.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence completed: the reveal gate is SensitiveWorkCoverCard (Features/Privacy/MatureContent.swift:274); LibraryView only routes to it.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "home-library",
+      "id": "1c.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1c.5",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1c.6",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1c.7",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED",
+      "correction": "Re-checked for another trigger: rebuildSectionCache is called only from .task(id: sectionsRevision) (LibraryView.swift:178-183); there is no onChange(of: filters).",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "home-library",
+      "id": "1c.8",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1d.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1d.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1d.3",
+      "status_in_area_file": "DECIDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1e.1",
+      "status_in_area_file": "SUPERSEDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ay.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ay.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "home-library",
+      "id": "1ay.3",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED",
+      "correction": "Addendum: naming all filters also misattributes when one filter alone matches nothing (the problem is that filter, not a collision). The pair search in the fix covers it by trying singletons first.",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "home-library",
+      "id": "1ay.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1k.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1k.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1k.3",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence corrected to SearchView.swift:298-303 (the 'wash only, not subjectScreenWash' comment); 289-296 was the pagination row.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "search-filters",
+      "id": "1k.4",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1k.5",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence corrected to SearchView.swift:276-285 (SelectableAO3WorkRow .searchLedger); 257-269 was the sort binding.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "search-filters",
+      "id": "1k.6",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED",
+      "correction": "The original note said SearchPaginationBar was 're-read here'; it had not been. Re-read in this pass and cited: pill (29), staged-confirm doc (253-273), detents (325), field (369), First/Last (442-444).",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "search-filters",
+      "id": "1k.7",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ao.1",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ao.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ao.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ap.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ap.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ap.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1aq.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1aq.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1aq.3",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence path fixed (otwarchive@00ad85b4 prefix was missing, so the citation did not resolve).",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "search-filters",
+      "id": "1aq.4",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1aq.5",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ar.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1as.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1as.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1at.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1at.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1au.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1au.2",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1au.3",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1av.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1aw.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "search-filters",
+      "id": "1ax.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence corrected to SearchView.swift:326-352 (idleScreen lists saved searches); 251-280 was the results list.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "search-filters",
+      "id": "1ax.2",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED",
+      "correction": "Addendum: searchSubject prefers a lone tag over the query (AO3Models.swift:463-469), so 'coffee shop' + fandom 'Naruto' seeds 'Naruto' under the board's rule and 'coffee shop' today.",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1g.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1g.2",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1g.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1g.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1g.5",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1g.6",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1g.7",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1al.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1al.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence corrected: the family tap is onSelectFamily (FandomListView.swift:201-203); the union is AO3FandomUnion.swift:34-35 via NativeBrowseView.swift:324. The earlier cite was onSelectMember.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1al.3",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1al.4",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence corrected to the rail (FandomListView.swift:136-146).",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1al.5",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1am.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence completed: the tilde is FandomFamilyRows.swift:136.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1am.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1am.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1an.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1an.2",
+      "status_in_area_file": "BUG",
+      "verdict": "UNSURE",
+      "correction": "Plausible, not proven wrong: the app has two meanings of 'downloaded' (isSaved = kept permanently; hasEPUB = on disk). Which one 1an's 'I have downloads from' means is arguably the owner's call; the Downloaded shelf's meaning is the likelier reading.",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1a.1",
+      "status_in_area_file": "DONE",
+      "verdict": "WRONG",
+      "correction": "'Kudos filled' was marked DONE. The chip is neutral (WorkDetailAO3Actions.swift:43, isDone: false) because its doc comment (55-60) reads the fill as a state. The board's own reason is emphasis ('since it is the one the app is named after'). Split: 1a.1 stays DONE for the lane; new 1a.1b GAP S for the fill.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1a.1b",
+      "status_in_area_file": "GAP",
+      "verdict": "ADDED",
+      "correction": "New item from the critic pass (see 1a.1).",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1a.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1a.3",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1a.4",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1a.5",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1az.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1az.2",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1f.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1f.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1f.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1f.4",
+      "status_in_area_file": "DECIDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1f.5",
+      "status_in_area_file": "OWNER",
+      "verdict": "CONFIRMED",
+      "correction": "Owner item stands, but its code evidence is stale by construction: T-247 (unpushed) replaced CommentThreadRow. Re-audit on the Mac branch.",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1f.6",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1ba.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1ba.2",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED",
+      "correction": "Rails LengthValidator measures value.length, which for a UTF-8 Ruby String counts code points. Impact is limited to multi-scalar graphemes (emoji sequences, some combining marks).",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1be.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "browse-workdetail-comments",
+      "id": "1bf.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1m.1",
+      "status_in_area_file": "DECIDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1m.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1m.3",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1m.4",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence completed: showsWorkListControls returns false for every scope (AccountView.swift:498-516), so libraryStyleCompactRoot is unreachable.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1n.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1n.2",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1n.3",
+      "status_in_area_file": "DECIDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1bt.1",
+      "status_in_area_file": "DECIDED",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1bt.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1o.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1o.2",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1o.3",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED",
+      "correction": "Re-checked: no mark_as_read / unmark call exists anywhere in the app (grep over kudos-ao3-reader/).",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1o.4",
+      "status_in_area_file": "OWNER",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1q.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1q.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED",
+      "correction": "Addendum: the board puts the lock chip 'in place of a note'; the app shows both when both exist - denser, not wrong.",
+      "applied_to_area_file": false
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1q.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1q.4",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1t.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1t.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1t.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1t.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1p.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1p.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1p.3",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1p.4",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1p.5",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED",
+      "correction": "Evidence corrected to the doc comment (AO3SubscriptionsWorksBrowser.swift:186-195); 196-203 were stored properties.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1p.6",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1p.7",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1l.1",
+      "status_in_area_file": "BUG",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1l.2",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1l.3",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1l.4",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-hub-reading",
+      "id": "1y.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1z.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1z.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1z.3",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1z.4",
+      "status_in_area_file": "NOT_BUILDABLE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1bb.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1bb.2",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1ac.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1aa.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1x.1",
+      "status_in_area_file": "DONE",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1x.2",
+      "status_in_area_file": "GAP",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "area": "account-leftovers",
+      "id": "1x.3",
+      "status_in_area_file": "DEVIATION",
+      "verdict": "CONFIRMED"
+    }
+  ]
+}

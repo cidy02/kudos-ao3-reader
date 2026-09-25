@@ -24,7 +24,8 @@
     "DECIDED": 3,
     "DEVIATION": 1,
     "DONE": 29,
-    "GAP": 8,
+    "GAP": 7,
+    "OWNER": 1,
     "SUPERSEDED": 1
   },
   "boards": [
@@ -133,7 +134,8 @@
           "evidence": [
             "kudos-ao3-reader/Features/Home/HomeSections.swift:40-42",
             "kudos-ao3-reader/Features/Home/HomeSections.swift:73-77",
-            "kudos-ao3-reader/Features/Home/HomeView.swift:201-206"
+            "kudos-ao3-reader/Features/Home/HomeView.swift:201-206",
+            "kudos-ao3-reader/Services/WorkUpdateChecker.swift:17-47"
           ],
           "failure_scenario": "Copy says 'No recent updates from your subscriptions yet.' The section is saved library works with hasUpdate (WorkUpdateChecker over the local library), not AO3 subscriptions; a reader with no saved WIPs but many subscriptions is told the wrong source.",
           "fix": "Say what the section is: e.g. 'No new chapters on works in your library yet. Kudos checks works in progress for new chapters.'",
@@ -247,14 +249,13 @@
         {
           "id": "1ad.5",
           "what": "Rows are the ledger row",
-          "status": "GAP",
+          "status": "OWNER",
           "size": "S",
           "evidence": [
             "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:90",
             "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:704-706"
           ],
-          "note": "Default display mode is .detailed, which draws the standard full card; ledger is one menu choice away. Default-only change; per-screen persistence is already there.",
-          "fix": "Default .ledger for readingNow (keep the stored choice when one exists)."
+          "note": "Default display mode is .detailed, which draws the standard full card; ledger is one menu choice away. Changed from GAP by critic-wave3: the ledger row drops the summary, so making it the default is a density reduction (AGENTS.md UI Consistency) and wants the owner's say-so even though the board draws it."
         },
         {
           "id": "1ad.6",
@@ -358,7 +359,7 @@
             "kudos-ao3-reader/Features/Library/LibrarySectionListView.swift:169",
             "kudos-ao3-reader/UIComponents/SubjectScreen.swift:109-139"
           ],
-          "note": "Both section lists sit under subjectScreenWash, which empties the navigation title; nothing shows the count while selecting. LibraryView's dashboard already does it ('N Selected', LibraryView.swift:130-132).",
+          "note": "Both section lists set navigationTitle(kind.title) and sit under subjectScreenWash, which sets navigationTitle(); whichever wins, the bar shows a static string, never the count. LibraryView's dashboard already does it ('N Selected', LibraryView.swift:130-132).",
           "fix": "While isSelecting, a .principal ToolbarItem Text('\\(n) selected') (or 'Select Works' at zero) on both lists.",
           "test": "Pure title helper shared with LibraryView: 0 -> 'Select Works', 2 -> '2 Selected'."
         },
@@ -471,7 +472,8 @@
           "what": "Mature work behind 'Tap to reveal'",
           "status": "DONE",
           "evidence": [
-            "kudos-ao3-reader/Features/Library/LibraryView.swift:700-718"
+            "kudos-ao3-reader/Features/Library/LibraryView.swift:700-718",
+            "kudos-ao3-reader/Features/Privacy/MatureContent.swift:274"
           ]
         },
         {
