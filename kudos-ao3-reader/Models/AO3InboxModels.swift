@@ -220,6 +220,23 @@ nonisolated enum AO3InboxTally {
     static func awaitingReplyCount(_ items: [AO3InboxItem]) -> Int {
         items.count(where: { $0.canReply && !$0.isReplied })
     }
+
+    /// The Inbox screen's header line (1l): "1,204 comments · 12 unread · 3
+    /// awaiting your reply". The first two are AO3's heading totals, which cover
+    /// the whole inbox; the third is `awaitingReplyCount` of the loaded page,
+    /// because the heading carries no such total. On a paged inbox the clause
+    /// says "on this page", so it does not pass for a third site total.
+    static func headerLine(total: Int, unread: Int?, awaitingOnPage: Int, totalPages: Int) -> String {
+        var line = total == 1 ? "1 comment" : "\(total.formatted()) comments"
+        if let unread, unread > 0 {
+            line += " · \(unread.formatted()) unread"
+        }
+        if awaitingOnPage > 0 {
+            line += " · \(awaitingOnPage.formatted()) awaiting your reply"
+            if totalPages > 1 { line += " on this page" }
+        }
+        return line
+    }
 }
 
 /// One page of the AO3 Inbox, plus the exact totals AO3 prints in the page

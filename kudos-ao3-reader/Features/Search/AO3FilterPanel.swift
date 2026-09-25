@@ -44,6 +44,10 @@ struct AO3FilterPanel: View {
     /// in `.search` mode, where there is no loaded page to count and the result
     /// depends on a request that has not been made.
     var refineSource: [AO3WorkSummary] = []
+    /// The host's own count of `refineSource` rows it shows, when its rule is not
+    /// `filters.apply` alone (Subscriptions keeps rows it knows nothing about yet —
+    /// `AO3SubscriptionsRefine`). Nil counts with `filters.apply`.
+    var refineMatchCount: Int?
 
     /// Whether "Include Not Rated" is drawn (1au.2). Refine reads it only once a
     /// rating is chosen — `AO3SummaryFilter`'s Rating-Any rule, pinned by
@@ -96,7 +100,7 @@ struct AO3FilterPanel: View {
 
     private var refineMatchText: String {
         let total = refineSource.count
-        let matching = filters.apply(to: refineSource).count
+        let matching = refineMatchCount ?? filters.apply(to: refineSource).count
         let works = total == 1 ? "work" : "works"
         return "\(matching) of the \(total) \(works) on this page match"
     }

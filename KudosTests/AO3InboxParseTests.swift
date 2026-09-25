@@ -396,6 +396,16 @@ struct AO3InboxTallyTests {
         #expect(AO3InboxTally.awaitingReplyCount(items) == 2)
     }
 
+    /// Comments and unread are AO3's whole-inbox totals; awaiting reply is the
+    /// loaded page's, and a paged inbox says so.
+    @Test func headerLineMarksThePageOnlyCount() {
+        let paged = AO3InboxTally.headerLine(total: 1204, unread: 12, awaitingOnPage: 3, totalPages: 60)
+        #expect(paged.hasSuffix("3 awaiting your reply on this page"))
+        let single = AO3InboxTally.headerLine(total: 9, unread: 0, awaitingOnPage: 3, totalPages: 1)
+        #expect(single == "9 comments · 3 awaiting your reply")
+        #expect(AO3InboxTally.headerLine(total: 1, unread: nil, awaitingOnPage: 0, totalPages: 1) == "1 comment")
+    }
+
     private func item(
         id: Int,
         canReply: Bool,
