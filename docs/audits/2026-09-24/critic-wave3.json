@@ -17,12 +17,12 @@
     "ADDED": "item the critic added"
   },
   "summary": {
-    "ADDED": 1,
+    "ADDED": 2,
     "CONFIRMED": 151,
-    "UNSURE": 2,
-    "WRONG": 2,
-    "items": 156,
-    "corrections_written_back": 15
+    "UNSURE": 1,
+    "WRONG": 3,
+    "items": 157,
+    "corrections_written_back": 17
   },
   "verdicts": [
     {
@@ -97,9 +97,9 @@
       "area": "home-library",
       "id": "1b.12",
       "status_in_area_file": "BUG",
-      "verdict": "UNSURE",
-      "correction": "The rule violation is certain (Models.swift:568 infers 'Ch N' from a spine index; WorkReadingPosition.swift:5-6 forbids it). The concrete symptom ('Ch 2' while in chapter 1) assumes AO3 EPUBs open the spine with front matter, which REDESIGN_PLAN/ARCHITECTURE_MAP assert but this pass did not open an EPUB to confirm. Fix is right either way.",
-      "applied_to_area_file": false
+      "verdict": "CONFIRMED",
+      "correction": "First recorded UNSURE (spine layout unverified); settled while writing the brief: the legacy reader classifies its own spine into Preface/Summary/Chapter/Afterword and labels 'instead of a raw spine position' (ReaderView.swift:263-297). readingProgressLabel prints the raw position. Note for the fix: SavedWorkProgressTests.swift:49-54 pins the ring fraction's spine-as-chapter assumption, so the brief fixes the label only.",
+      "applied_to_area_file": true
     },
     {
       "area": "home-library",
@@ -477,7 +477,17 @@
       "area": "search-filters",
       "id": "1au.2",
       "status_in_area_file": "BUG",
-      "verdict": "CONFIRMED"
+      "verdict": "WRONG",
+      "correction": "As first filed ('Refine ignores Include Not Rated under Any; the rail shows No Not Rated'), it contradicted a pinned decision (AO3SummaryFilterRatingTests.swift:69-76, toggle inert until a rating is chosen), and the chip only renders on Search/Browse heroes where the filter is applied. Rewritten: the defect is a visibly inert control in Refine (BUG S), plus a new OWNER item 1au.4 for the Search/Refine mismatch. Found while writing the brief, after the first critic commit.",
+      "applied_to_area_file": true
+    },
+    {
+      "area": "search-filters",
+      "id": "1au.4",
+      "status_in_area_file": "OWNER",
+      "verdict": "ADDED",
+      "correction": "New item from the critic pass (see 1au.2).",
+      "applied_to_area_file": true
     },
     {
       "area": "search-filters",

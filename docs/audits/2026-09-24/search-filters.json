@@ -23,7 +23,8 @@
     "BUG": 4,
     "DEVIATION": 1,
     "DONE": 21,
-    "GAP": 4
+    "GAP": 4,
+    "OWNER": 1
   },
   "boards": [
     {
@@ -374,18 +375,29 @@
         },
         {
           "id": "1au.2",
-          "what": "'Include Not Rated' off with Rating = Any",
+          "what": "'Include Not Rated' shown as a live control in Refine while Rating is Any",
           "status": "BUG",
           "size": "S",
           "evidence": [
-            "kudos-ao3-reader/Features/Search/AO3SummaryFilter.swift:42-46",
             "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:190",
-            "kudos-ao3-reader/Models/AO3Models.swift:524",
-            "kudos-ao3-reader/Models/AO3Models.swift:634-637"
+            "kudos-ao3-reader/Features/Search/AO3SummaryFilter.swift:42-46",
+            "KudosTests/AO3SummaryFilterRatingTests.swift:69-76"
           ],
-          "failure_scenario": "In Refine, leave Rating on Any and switch Include Not Rated off: ratingMatches returns true before it reads the toggle, so Not Rated works stay; the live count does not move, and the results rail still shows the 'No Not Rated' chip. Search mode does honour it (-rating_ids:9).",
-          "fix": "In ratingMatches: when rating == .any, return includeNotRated || !Rating.notRated.matchesRatingText(work.rating).",
-          "test": "AO3SearchFilters(rating: .any, includeNotRated: false).apply(to: [notRatedBlurb, teenBlurb]) == [teenBlurb]."
+          "failure_scenario": "In Refine with Rating on Any, the panel draws 'Include Not Rated' as an ordinary toggle. Switching it off changes nothing and the live 'N of M on this page match' line does not move, because Refine deliberately ignores the toggle until a rating is chosen (ratingMatches returns early; pinned by AO3SummaryFilterRatingTests.notRatedToggleIsInertUntilARatingIsChosen). A control that visibly does nothing.",
+          "note": "Corrected by the critic pass: this was first filed as 'Refine ignores the toggle', which is a pinned decision, not a bug; and the 'No Not Rated' chip only renders on Search/Browse heroes, where the filter is real.",
+          "fix": "In .refine mode, show the toggle only when filters.rating != .any. Do not change the matcher - the test pins its rule.",
+          "test": "Pure: AO3FilterPanel.showsIncludeNotRated(mode: .refine, rating: .any) == false; (.refine, .teen) == true; (.search, .any) == true."
+        },
+        {
+          "id": "1au.4",
+          "what": "Search and Refine disagree on Include Not Rated under Rating Any",
+          "status": "OWNER",
+          "evidence": [
+            "kudos-ao3-reader/Models/AO3Models.swift:634-637",
+            "kudos-ao3-reader/Features/Search/AO3SummaryFilter.swift:42-46",
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:170-178"
+          ],
+          "note": "Search sends -rating_ids:9 when the toggle is off and Rating is Any, so Not Rated works disappear; Refine keeps them (pinned by test). The Rating picker also turns the toggle off when leaving Any and never back on, so a reader who tried Teen and returned to Any keeps excluding Not Rated in Search. One rule for both modes is the owner's pick."
         },
         {
           "id": "1au.3",
