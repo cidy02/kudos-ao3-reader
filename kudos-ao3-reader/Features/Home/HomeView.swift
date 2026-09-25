@@ -32,6 +32,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     /// True only while the remote subscriptions request is actually in flight, so the
     /// carousel can show cover skeletons instead of briefly flashing its empty state.
     @State private var isLoadingSubscriptions = false
+    /// The size AO3's pagination gave the last successful load, taken from
+    /// `AO3AccountListCountsCache` at that moment so the header count cannot
+    /// outlive (or predate) the cards it describes.
+    @State private var subscriptionsListCount: AO3AccountListCount?
+    /// The first load failed and nothing was ever shown. Keeps the empty state
+    /// from telling a signed-in reader they are not subscribed to anything.
+    @State private var subscriptionsLoadFailed = false
     @State private var showingNewQueue = false
     @State private var newQueueName = ""
     /// 1j's colour swatch for the queue being created.
@@ -488,7 +495,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             hasItems: !merged.isEmpty || showSkeleton,
             // Suppressed while the skeletons are up: a count printed beside a
             // loading shelf would be the previous fetch's, not this one's.
-            itemCount: showSkeleton ? nil : merged.count,
+            // Only when page 1 was the whole list: see `HomeSubscriptionsCount`.
+            itemCount: showSkeleton
+                ? nil
+                : HomeSubscriptionsCount.itemCount(shown: merged.count, recorded: subscriptionsListCount),
             onSeeAll: merged.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
         ) {
             if showSkeleton {
@@ -500,9 +510,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             }
         } emptyState: {
             SectionEmptyState(
-                message: auth.isLoggedIn
-                    ? "You're not subscribed to anything yet. Subscribe to works or series to see updates here."
-                    : "Log in to AO3 to see the works and series you subscribe to.",
+                message: HomeSubscriptionsCopy.emptyMessage(
+                    isLoggedIn: auth.isLoggedIn,
+                    loadFailed: subscriptionsLoadFailed
+                ),
                 systemImage: "bell"
             )
         }
@@ -513,15 +524,25 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         // raise the loading flag — the signed-out empty state should show immediately.
         guard auth.isLoggedIn else {
             subscriptions = []
+            subscriptionsListCount = nil
+            subscriptionsLoadFailed = false
             isLoadingSubscriptions = false
             return
         }
         isLoadingSubscriptions = true
         do {
             subscriptions = try await auth.accountSubscriptions()
+            subscriptionsListCount = AO3AccountListCountsCache.shared.count(
+                for: .subscriptions,
+                authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+            )
+            subscriptionsLoadFailed = false
         } catch {
             // A refresh failure (network, rate limit, expired session) must not wipe
             // out a previously successful fetch — keep showing what's already there.
+            // With nothing to show, the empty state says the load failed instead —
+            // unless the task was cancelled (sign-out, tab switch), which is no failure.
+            if subscriptions.isEmpty, !Task.isCancelled { subscriptionsLoadFailed = true }
             Log.network.notice(
                 "Subscriptions refresh failed: \(error.localizedDescription, privacy: .public)"
             )
@@ -573,7 +594,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func footer(_ kind: HomeSectionKind, _ work: SavedWork) -> String? {
         switch kind {
         case .readingNow:
-            return work.readingProgressLabel
+            return WorkReadingPosition.cardProgressLabel(readiumProgress: work.readiumProgress)
         case .recentlyUpdated:
             let new = work.postedChapterCount - work.knownChapterCount
             return new > 0 ? "+\(new) new" : "Updated"

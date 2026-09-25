@@ -81,6 +81,26 @@ struct LibrarySectionKindTests {
         )
     }
 
+    /// The tally under a section's hero ends with its order (spec 1ad: "4 works ·
+    /// most recently read first"). Collections lists no works, so it has none.
+    @Test func everyWorkSectionNamesItsOrder() {
+        for kind in LibrarySectionKind.allCases where kind != .collections {
+            #expect(!kind.orderDescription.isEmpty, "\(kind) has no order phrase")
+        }
+        #expect(LibrarySectionKind.readingNow.orderDescription == "most recently read first")
+        #expect(LibrarySectionKind.savedForLater.orderDescription == "most recently read or added first")
+        #expect(LibrarySectionKind.downloaded.orderDescription == "newest first")
+        #expect(LibrarySectionKind.collections.orderDescription.isEmpty)
+    }
+
+    /// 1ad heads Reading Now's rows with their state, "IN PROGRESS", as Home's
+    /// Reading Now page already does; other sections keep their title.
+    @Test func readingNowRowsAreHeadedInProgress() {
+        #expect(LibrarySectionKind.readingNow.groupTitle == "In progress")
+        #expect(LibrarySectionKind.readingNow.groupTitle == HomeSectionKind.readingNow.groupTitle)
+        #expect(LibrarySectionKind.downloaded.groupTitle == LibrarySectionKind.downloaded.title)
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
