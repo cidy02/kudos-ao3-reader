@@ -1,0 +1,484 @@
+{
+  "area": "search-filters",
+  "wave": "3 (cloud)",
+  "auditor": "Claude (cloud session, no Xcode)",
+  "date": "2026-09-25",
+  "base_commit": "c4ce1e2",
+  "method": "docs/audits/2026-09-24/CLOUD_WAVE3_README.md (AUDIT_METHOD.md was not pushed; method reconstructed from the handoff + docs/REDESIGN_PLAN.md)",
+  "status_vocabulary": {
+    "DONE": "built as the board draws it; evidence cites the code",
+    "BUG": "wrong or dishonest output today; failure_scenario says how",
+    "GAP": "board element missing; no owner decision needed; size S/M/L",
+    "DEVIATION": "built differently on purpose; the reasoning is recorded in code or docs (cited)",
+    "DECIDED": "the owner already ruled; cited",
+    "OWNER": "needs an owner decision (policy, schema, or spec vs settled evidence)",
+    "NOT_BUILDABLE": "the data does not exist (AO3 or app); cited",
+    "SUPERSEDED": "board replaced by another board"
+  },
+  "caveats": [
+    "Audited at c4ce1e2. No handoff commit (T-246..T-255) is listed as touching Search.",
+    "No Xcode: source reading only."
+  ],
+  "counts": {
+    "BUG": 4,
+    "DEVIATION": 1,
+    "DONE": 21,
+    "GAP": 4
+  },
+  "boards": [
+    {
+      "board": "1k",
+      "title": "Search results",
+      "spec_label": "Fandom-hue wash; floating chrome (back, query pill, accent filter button with its count, overflow); kicker / rule / 32pt hero with the sort as a dropdown beside the fandom; four-cell stat strip; active filters as a chip rail with a dashed Filter; ledger rows with inline expand chevron, summary and meta line; paging switcher pill and page sheet.",
+      "entry_points": [
+        "kudos-ao3-reader/App/AppRouter.swift (AppTab.search)",
+        "kudos-ao3-reader/Features/Search/SearchView.swift:216-315"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/SearchView.swift",
+        "kudos-ao3-reader/Features/Search/SearchResultsHero.swift",
+        "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift",
+        "kudos-ao3-reader/Features/Search/AO3WorkRow.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1k.1",
+          "what": "Kicker 'Search results', 32pt total, subject + sort dropdown, four-cell strip (Works / Filters / Pages / Page)",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchResultsHero.swift:80-172"
+          ],
+          "note": "Every cell is sourced: Works is AO3's own heading, Pages AO3's pagination, Filters the app's own filter set. The sort label prints the Sort case title ('Date Updated'), where the board words it 'Newest updates first'."
+        },
+        {
+          "id": "1k.2",
+          "what": "Chip rail of active filters with a dashed Filter pinned at the end",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchResultsHero.swift:94-109"
+          ]
+        },
+        {
+          "id": "1k.3",
+          "what": "Full-bleed wash and floating 34pt chrome instead of a navigation bar",
+          "status": "DEVIATION",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchView.swift:289-296"
+          ],
+          "note": "Search is a tab root and keeps its bar; the wash is drawn at 600pt under it. Reason recorded at the call site."
+        },
+        {
+          "id": "1k.4",
+          "what": "Accent filter button carries its count",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchView.swift:172-174",
+            "kudos-ao3-reader/UIComponents/WorkCardListControls.swift:58-90"
+          ],
+          "note": "FilterButton already takes badgeCount (the Library/Home section lists pass it); Search passes none.",
+          "fix": "badgeCount: filters.summaryLabels(includesSort: false).count (or excluding the subject, matching the hero's own count).",
+          "test": "Pure: the badge count equals SearchResultsHero's 'Filters' cell for the same filters."
+        },
+        {
+          "id": "1k.5",
+          "what": "Ledger rows: kicker + inline expand chevron, rule, title, byline, 2x2 grid, summary, meta line; expand reveals tag groups",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchView.swift:257-269",
+            "kudos-ao3-reader/Features/Search/AO3WorkRow.swift:208-330"
+          ]
+        },
+        {
+          "id": "1k.6",
+          "what": "Paging switcher pill and page sheet (field, ten tiles, First/Last)",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift"
+          ],
+          "note": "Verified by the T-219 table (REDESIGN_PLAN.md:593) and re-read here: nothing loads until confirmed."
+        },
+        {
+          "id": "1k.7",
+          "what": "Retry after a failed page load",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchView.swift:588-602",
+            "kudos-ao3-reader/Features/Search/SearchView.swift:678-690",
+            "kudos-ao3-reader/Features/Search/SearchView.swift:801-846"
+          ],
+          "failure_scenario": "On page 4, tap page 5 and the request fails: the old page stays behind a 'Search failed' overlay, and 'Try Again' calls runSearch(), which resets currentPage to 1 and loads page 1. The reader asked for page 5 and is sent to page 1.",
+          "fix": "Remember the requested page in load(page:) (e.g. pendingPage) and have Try Again call load(page: pendingPage ?? currentPage) when results are already on screen; keep runSearch for the first-load failure.",
+          "test": "Pure decision: retryPage(requested: 5, current: 4, hasResults: true) == 5; hasResults false -> 1."
+        }
+      ]
+    },
+    {
+      "board": "1ao",
+      "title": "Filter panel, medium detent",
+      "spec_label": "Opens over the results at half height showing sort and rating; Reset and Apply at the ends of the bar from the first moment. Reset disabled rather than hidden; Apply disabled until filters.isSearchable.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/SearchView.swift:193-198",
+        "kudos-ao3-reader/UIComponents/FilterPanelPresentation.swift:28-46"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1ao.1",
+          "what": "iPhone sheet opens at a medium detent",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/UIComponents/FilterPanelPresentation.swift:33-40"
+          ],
+          "note": "The sheet sets only a drag indicator, so it opens full height. The earlier 'matches the code' note (REDESIGN_PLAN.md:280) covered the buttons, not the detent.",
+          "fix": ".presentationDetents([.medium, .large]) on the iPhone sheet branch only (the inspector branches are unaffected).",
+          "test": "none (presentation); screenshot at the Mac."
+        },
+        {
+          "id": "1ao.2",
+          "what": "Reset disabled not hidden; Apply disabled until searchable; both toolbar items",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:107-135"
+          ]
+        },
+        {
+          "id": "1ao.3",
+          "what": "Sort then rating first",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:145-191"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1ap",
+      "title": "Filter panel, top of form",
+      "spec_label": "Sort and rating, Warnings, Categories; included rows tinted with a filled plus (includeColor), excluded rows struck through (excludeColor).",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:431-467",
+        "kudos-ao3-reader/UIComponents/SemanticThemeColors.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1ap.1",
+          "what": "Three-state rows cycling clear/include/exclude",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:469-508"
+          ]
+        },
+        {
+          "id": "1ap.2",
+          "what": "includeColor tint + filled plus; strikethrough in excludeColor",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:436-458"
+          ]
+        },
+        {
+          "id": "1ap.3",
+          "what": "VoiceOver reads one combined row",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:452-455"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1aq",
+      "title": "Filter panel, status / dates / language",
+      "spec_label": "Three pickers on work state, then the date axis, then language. The date footer explains that the relative picker and the absolute bounds are ANDed by AO3.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:213-258"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1aq.1",
+          "what": "Crossovers, Completion, Chapters pickers; Crossovers/Updated search-only",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:213-238"
+          ]
+        },
+        {
+          "id": "1aq.2",
+          "what": "Date toggles seed today, not 2001",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:412-429"
+          ]
+        },
+        {
+          "id": "1aq.3",
+          "what": "Footer explaining that Updated and After/Before are ANDed",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:240-252",
+            "otwarchive app/models/search/work_query.rb:107-116,220-230"
+          ],
+          "note": "The code comment at :244-249 says 'the footer says so', but the date section has no footer. AO3 builds both as range filters on revised_at and ANDs them (otwarchive-facts-wave3 Q11).",
+          "fix": "Footer on the Updated/After/Before section (search mode): 'Updated and the After/Before dates all apply to the same date, and AO3 needs a work to pass every one.'"
+        },
+        {
+          "id": "1aq.4",
+          "what": "Completion footer copy",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:230-237",
+            "kudos-ao3-reader/Features/Search/AO3SummaryFilter.swift:101-107"
+          ],
+          "failure_scenario": "The footer says 'Crossover status and completion are not carried on a search result'. Completion is on every blurb (the Refine panel narrows by it from the loaded page at AO3SummaryFilter.completionMatches); only crossover is not. A reader is told a false reason.",
+          "fix": "Drop 'and completion' - the crossover half is true; fold the date explanation (1aq.3) into its own footer.",
+          "test": "none (copy)."
+        },
+        {
+          "id": "1aq.5",
+          "what": "Language pushes a searchable screen",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:253-257",
+            "kudos-ao3-reader/Features/Search/FilterLanguagePicker.swift"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1ar",
+      "title": "Language picker",
+      "spec_label": "Searchable pushed screen, AO3's order by each language's own name, 'Any language' at the top.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:253-257"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/FilterLanguagePicker.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1ar.1",
+          "what": "Searchable, AO3 order, Any language first",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FilterLanguagePicker.swift:8-63"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1as",
+      "title": "Tags, then title and creator",
+      "spec_label": "Each tag row states '2 included - 1 excluded' with tappable chips; Title and Creator below, Creator with autocap/autocorrect off; Fandoms hidden in Browse.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:374-391"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/TagSelectField.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1as.1",
+          "what": "Summary line and cycling chips per tag field",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/TagSelectField.swift:20-99"
+          ]
+        },
+        {
+          "id": "1as.2",
+          "what": "Fandoms hidden in Browse; Title/Creator search-only; Creator autocap off",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:289-306",
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:376-379"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1at",
+      "title": "Five ranges",
+      "spec_label": "Word count, hits, kudos, comments, bookmarks as sliders with typed bounds; untouched handle reads Any; only word count in Refine; digits-only fields.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:309-364"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/FilterRangeSlider.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1at.1",
+          "what": "Five sliders, typed bounds, 'Any' for an open handle",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/FilterRangeSlider.swift:3-11",
+            "kudos-ao3-reader/Features/Search/FilterRangeSlider.swift:77",
+            "kudos-ao3-reader/Features/Search/FilterRangeSlider.swift:158-165"
+          ]
+        },
+        {
+          "id": "1at.2",
+          "what": "Refine keeps only word count",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:320-364"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1au",
+      "title": "Refine",
+      "spec_label": "Same panel narrowing loaded works; query-only facets gone; tick instead of magnifier; live count above the form.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Bookmarks/AO3AccountWorksList.swift:287-298"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift",
+        "kudos-ao3-reader/Features/Search/AO3SummaryFilter.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1au.1",
+          "what": "Query-only facets hidden, tick button, live 'N of M on this page match'",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:72-94",
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:121-133"
+          ]
+        },
+        {
+          "id": "1au.2",
+          "what": "'Include Not Rated' off with Rating = Any",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/AO3SummaryFilter.swift:42-46",
+            "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:190",
+            "kudos-ao3-reader/Models/AO3Models.swift:524",
+            "kudos-ao3-reader/Models/AO3Models.swift:634-637"
+          ],
+          "failure_scenario": "In Refine, leave Rating on Any and switch Include Not Rated off: ratingMatches returns true before it reads the toggle, so Not Rated works stay; the live count does not move, and the results rail still shows the 'No Not Rated' chip. Search mode does honour it (-rating_ids:9).",
+          "fix": "In ratingMatches: when rating == .any, return includeNotRated || !Rating.notRated.matchesRatingText(work.rating).",
+          "test": "AO3SearchFilters(rating: .any, includeNotRated: false).apply(to: [notRatedBlurb, teenBlurb]) == [teenBlurb]."
+        },
+        {
+          "id": "1au.3",
+          "what": "Refine over sparse rows",
+          "status": "BUG",
+          "size": "S",
+          "evidence": [
+            "see account-hub-reading.json 1p.6"
+          ],
+          "note": "Subscriptions' Refine narrows rows that carry no tags/rating yet. Filed once, under 1p."
+        }
+      ]
+    },
+    {
+      "board": "1av",
+      "title": "Tag picker, empty",
+      "spec_label": "Opens on the set fandom's popular tags; own copy when no fandom is set; skeleton rows while loading.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/TagSelectField.swift:66-78"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/TagSelectField.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1av.1",
+          "what": "Popular tags with a fandom, no-fandom copy, skeleton rows",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/TagSelectField.swift:124-180",
+            "kudos-ao3-reader/Features/Search/TagSelectField.swift:234-260",
+            "kudos-ao3-reader/Features/Search/TagSelectField.swift:336-338"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1aw",
+      "title": "Tag picker, typing",
+      "spec_label": "Selected tags lift to the top as chips; AO3's own spellings kept; three states; debounced autocomplete.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/TagSelectField.swift"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/TagSelectField.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1aw.1",
+          "what": "Chips on top, shared FilterSelectionState, AO3 spellings",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/TagSelectField.swift:1-120",
+            "kudos-ao3-reader/Features/Search/TagSelectField.swift:124-260"
+          ]
+        }
+      ]
+    },
+    {
+      "board": "1ax",
+      "title": "Save Search",
+      "spec_label": "A name field and the filter set printed back as chips, sort last. Name seeded from the search subject.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Search/SearchView.swift:199-208",
+        "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:264-272"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Search/SaveSearchSheet.swift",
+        "kudos-ao3-reader/Features/Search/SearchView.swift:251-280"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1ax.1",
+          "what": "Sheet with name + 'What gets saved' chips; saved searches listed on Search's idle screen",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SaveSearchSheet.swift:30-80",
+            "kudos-ao3-reader/Features/Search/SearchView.swift:251-280"
+          ]
+        },
+        {
+          "id": "1ax.2",
+          "what": "Name seeded from searchSubject",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Search/SearchView.swift:751-763",
+            "kudos-ao3-reader/Models/AO3Models.swift:455-472"
+          ],
+          "note": "Seeds from the query first, else the first comma-separated fandom even when several fandoms or another tag field are set; the sheet's own caption promises 'Named from what the search is of'. searchSubject already encodes the board's rule (one tag field with one name, else the query).",
+          "fix": "defaultSavedSearchName = filters.searchSubject.text, with 'Saved Search' in place of the 'Search Results' fallback.",
+          "test": "fandom 'A, B' + characters 'C' -> not 'A'; characters 'C' alone -> 'C'."
+        }
+      ]
+    }
+  ]
+}
