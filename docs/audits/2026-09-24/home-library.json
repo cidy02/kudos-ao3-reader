@@ -110,6 +110,7 @@
             "kudos-ao3-reader/Services/AO3AccountListCountsCache.swift:24-38"
           ],
           "failure_scenario": "A reader with 45 work subscriptions: AO3 pages /users/:u/subscriptions?type=works ITEMS_PER_PAGE at a time (otwarchive subscriptions_controller.rb:20; 25 in config/config.yml:194). Home fetches page 1 only and prints 'SUBSCRIPTIONS 25' as if it were the total. WorkCarouselSection's own doc says an AO3-paged list showing one page of many must not print a count.",
+          "note": "otwarchive-facts-wave3 Q12.",
           "fix": "Pass itemCount only when the recorded AO3AccountListCount is exact (accountSubscriptions already records it); otherwise nil. Or extend SectionRuleHeader to take the count's displayText ('40+').",
           "test": "Pure helper, e.g. HomeSubscriptionsCount.itemCount(merged:count:) -> Int?: exact 12 on one page -> 12; lowerBound 25 (2 pages) -> nil."
         },

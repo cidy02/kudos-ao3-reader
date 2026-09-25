@@ -77,6 +77,7 @@
             "otwarchive@00ad85b4 app/models/search/search_counts.rb:88-94"
           ],
           "failure_scenario": "The dashboard nav seeds Bookmarks with AO3's exact 'Bookmarks (10)', which counts every bookmark (BookmarkQuery: works, series, external, private for the owner). Opening a one-page Bookmarks list records AO3AccountListCount(itemsOnPage: 7, totalPages: 1) because parseAuthorBookmarksPage keeps only the 7 work rows; 'two exact counts are both totals, so the newer one wins', and the tile now reads 7. History and Marked for Later drop rows for deleted works the same way.",
+          "note": "otwarchive-facts-wave3 Q18.",
           "fix": "Record a list page as exact only when every row on it parsed (carry the raw row count from the parser, e.g. li.bookmark.blurb / li.reading count); otherwise record it as a lower bound, which never overrides an exact dashboard figure.",
           "test": "AO3AccountListCount(parsedRows: 7, rawRows: 10, totalPages: 1).exact == nil and it does not replace a cached exact 10."
         },
@@ -224,6 +225,7 @@
             "otwarchive@00ad85b4 config/routes.rb:399"
           ],
           "failure_scenario": "The footer says 'unmarking here unmarks there', but this screen has no unmark control and the app has no unmark write (only markForLater, which adds). A reader looks for an action the copy promised.",
+          "note": "otwarchive-facts-wave3 Q19.",
           "fix": "Until an unmark exists, say only 'Marked for Later lives on AO3.' plus the pagination sentence. The unmark itself is filed for the owner (it is an AO3 write).",
           "test": "Footer string contains no 'unmark'."
         },
@@ -464,7 +466,8 @@
             "kudos-ao3-reader/Features/Account/AccountInboxFilterSheet.swift",
             "kudos-ao3-reader/Features/Account/AccountView.swift:222-224"
           ],
-          "note": "Filtering is AO3's own parsed GET form in a sheet (read / replied-to / date); no pill rail. 'Awaiting reply' is an inference AO3 cannot filter server-side, so as a pill it can only narrow the loaded page."
+          "note": "Filtering is AO3's own parsed GET form in a sheet; no pill rail. Correction to the board's build note: AO3 filters the inbox server-side on read, replied_to and date (otwarchive-facts-wave3 Q21), so All / Unread (read=false) / Awaiting reply (replied_to=false) / Replied (replied_to=true) are each one filtered GET, exact across pages - no inference needed.",
+          "fix": "A pill rail that drives the existing filter form's read/replied_to values and reloads page 1; the heading totals stay unfiltered, as AO3's are."
         },
         {
           "id": "1l.3",

@@ -55,7 +55,8 @@
           "evidence": [
             "kudos-ao3-reader/Features/Search/MediaBrowserView.swift:522-531"
           ],
-          "note": "Shows the twelve largest fandoms from the cached full list instead of AO3's hand-curated featured subset; reasoning in the doc comment (no new request)."
+          "note": "Shows the twelve largest fandoms from the cached full list. The doc comment's premise is wrong: AO3's /media does not hand-curate its featured fandoms, it lists each category's five most-used (otwarchive-facts-wave3 Q23). So this is AO3's own rule at N=12 - keep the behaviour, correct the comment (S).",
+          "fix": "Reword MediaBrowserView.swift:525-530 to say AO3 lists its top five by use and the app shows the top twelve from the cached list."
         },
         {
           "id": "1g.3",
@@ -478,6 +479,7 @@
             "otwarchive@00ad85b4 app/models/comment.rb:21-23"
           ],
           "failure_scenario": "The budget subtracts composerText.count (grapheme clusters). AO3 validates the raw comment_content with Rails validates_length_of, which counts Ruby characters (code points), before any sanitizing. A comment of 9,995 graphemes containing a few multi-code-point emoji shows '5 left' and AO3 rejects it as too long.",
+          "note": "otwarchive-facts-wave3 Q15.",
           "fix": "Count composerText.unicodeScalars.count against 10_000.",
           "test": "Budget for 'a' + family emoji (5 scalars) == 10_000 - 6.",
           "confidence": "PLAUSIBLE"
