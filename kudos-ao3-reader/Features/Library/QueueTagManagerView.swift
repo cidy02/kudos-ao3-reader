@@ -18,7 +18,6 @@ struct QueueTagManagerView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var themeManager
-    @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var newTagName = ""
     @State private var editing: Tag?
 
@@ -175,7 +174,7 @@ struct QueueTagManagerView: View {
     /// Looked up by name before being created: `Tag.name` is
     /// `@Attribute(.unique)`, so inserting a second one by the same name throws.
     private func addTypedTag() {
-        guard queue.addTag(named: trimmedNewTag, among: allTags, in: context) != nil else { return }
+        guard queue.addTag(named: trimmedNewTag, in: context) != nil else { return }
         context.saveBestEffort(reason: "Adding queue tag failed")
         newTagName = ""
     }

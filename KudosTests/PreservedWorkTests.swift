@@ -153,6 +153,8 @@ struct PreservedWorkTests {
         context.insert(pendingWork)
         context.insert(collection)
         context.insert(queue)
+        context.insert(WorkCollection(name: "Still collected"))
+        context.insert(ReadingQueue(name: "Still queued"))
         try context.save()
         PreservedWorkService.softDelete(pendingWork, in: context)
         PreservedWorkService.softDelete(collection, in: context)
@@ -162,8 +164,31 @@ struct PreservedWorkTests {
 
         #expect(removed == 3)
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).map(\.title) == ["Still Here"])
-        #expect(try context.fetch(FetchDescriptor<WorkCollection>()).isEmpty)
-        #expect(try context.fetch(FetchDescriptor<ReadingQueue>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<WorkCollection>()).map(\.name) == ["Still collected"])
+        #expect(try context.fetch(FetchDescriptor<ReadingQueue>()).map(\.name) == ["Still queued"])
+    }
+
+    /// Recently Deleted's per-item alert can outlive the item's deleted state (a
+    /// restore in another window, or sync). Confirming it then must not delete a
+    /// record that is live again.
+    @Test func deletePermanentlyLeavesALiveWorkCollectionAndQueueAlone() throws {
+        let container = try container()
+        let context = container.mainContext
+        let work = SavedWork(title: "Restored Elsewhere", author: "Writer")
+        let collection = WorkCollection(name: "Restored collection")
+        let queue = ReadingQueue(name: "Restored queue")
+        context.insert(work)
+        context.insert(collection)
+        context.insert(queue)
+        try context.save()
+
+        PreservedWorkService.deletePermanently(work, in: context)
+        PreservedWorkService.deletePermanently(collection, in: context)
+        PreservedWorkService.deletePermanently(queue, in: context)
+
+        #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<WorkCollection>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<ReadingQueue>()).count == 1)
     }
 
     /// The sweep shares the pass with Delete All; it must still spare records

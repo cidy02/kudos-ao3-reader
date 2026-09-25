@@ -147,7 +147,7 @@ struct QueueTagSheet: View {
     }
 
     private func addTypedTag() {
-        guard queue.addTag(named: trimmedNewTag, among: allTags, in: context) != nil else { return }
+        guard queue.addTag(named: trimmedNewTag, in: context) != nil else { return }
         context.saveBestEffort(reason: "Saving new queue tag failed")
         newTagName = ""
     }
@@ -158,11 +158,13 @@ extension ReadingQueue {
     /// one (matched ignoring case), else a new one. Looked up before it is created
     /// because `Tag.name` is `@Attribute(.unique)`, and a duplicate throws. The
     /// one way in for this sheet, `QueueTagManagerView` and 1j's New queue sheet.
-    /// The caller saves. Returns nil for a blank name.
+    /// The caller saves. Returns nil for a blank name, or when the tags could not
+    /// be fetched — the lookup is the store's own (pending inserts included), not
+    /// a caller's list, because a stale or failed one would insert a duplicate.
     @discardableResult
-    func addTag(named rawName: String, among known: [Tag], in context: ModelContext) -> Tag? {
+    func addTag(named rawName: String, in context: ModelContext) -> Tag? {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return nil }
+        guard !name.isEmpty, let known = try? context.fetch(FetchDescriptor<Tag>()) else { return nil }
         let tag = known.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
             ?? {
                 let created = Tag(name: name)

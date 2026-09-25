@@ -592,12 +592,7 @@ enum CommentConversationBuilder {
         maxDepth: Int = .max
     ) -> [CommentConversationItem] {
         let inline = replies.filter { $0.depth <= maxDepth }
-        // A dropped node can be AO3's own cutoff placeholder ("7 more comments"),
-        // which stands for `cutoffCount` replies, not one — counting it as one made
-        // the list say "1 deeper reply" while the thread screen said 7.
-        let deeper = replies.lazy.filter { $0.depth > maxDepth }.reduce(0) { total, reply in
-            total + (reply.comment.isThreadCutoff ? max(1, reply.comment.cutoffCount ?? 1) : 1)
-        }
+        let deeper = representedCount(of: replies.lazy.filter { $0.depth > maxDepth })
         // Gated on every reply the list would draw, because expanding renders
         // every inline descendant, not just the root's direct children.
         let showsReplies = isExpanded
@@ -608,13 +603,13 @@ enum CommentConversationBuilder {
                 .post(comment: root, parentAuthor: nil, depth: 0)
             ]
             if !inline.isEmpty {
-                items.append(.expander(rootID: root.id, hiddenCount: inline.count, showsVerb: false))
+                items.append(.expander(rootID: root.id, hiddenCount: representedCount(of: inline), showsVerb: false))
             }
             return items
         }
 
         let shown = Array(inline.prefix(max(visibleReplyCount, CommentThreadGeometry.autoExpandedMaxReplies)))
-        let hidden = inline.count - shown.count
+        let hidden = representedCount(of: inline.dropFirst(shown.count))
         var items: [CommentConversationItem] = [
             .post(comment: root, parentAuthor: nil, depth: 0)
         ]
@@ -632,6 +627,17 @@ enum CommentConversationBuilder {
             items.append(.continueThread(rootID: root.id, hiddenCount: deeper))
         }
         return items
+    }
+
+    /// How many comments `replies` stand for. AO3's cutoff placeholder ("7 more
+    /// comments") stands for `cutoffCount`, not one — counting it as one made the
+    /// list say "1 deeper reply" while the thread screen said 7. Every count this
+    /// builder shows goes through here, so "Show N", the expander and "N deeper
+    /// replies" agree.
+    static func representedCount(of replies: some Sequence<FlattenedReply>) -> Int {
+        replies.reduce(0) { total, reply in
+            total + (reply.comment.isThreadCutoff ? max(1, reply.comment.cutoffCount ?? 1) : 1)
+        }
     }
 
     /// Whether another node at exactly `depth` follows `index` under the *same*
@@ -713,7 +719,7 @@ enum CommentConversationBuilder {
                     // the same gesture on overlapping content, and closing a
                     // mid-thread reply leaves a hole rather than a tidier list.
                     collapse: index == 0 && offersCollapse
-                        ? CommentCollapseState(isCollapsed: isCollapsed, replyCount: replies.count)
+                        ? CommentCollapseState(isCollapsed: isCollapsed, replyCount: representedCount(of: replies))
                         : nil
                 ))
             }

@@ -74,15 +74,16 @@ enum ReadingAffinities {
         summaries: [UUID: WorkReadingSummary],
         order: Order = .recent
     ) -> [Row] {
-        // One byline can appear on many works; the first registered identity wins,
-        // and a byline that never carried one keeps a nil username.
+        // One byline can appear on many works; the first work that names exactly
+        // one registered identity wins. A coauthored byline keeps a nil username —
+        // its first identity is only one of the authors, so the chevron would open
+        // the wrong one — as does a byline that never carried an identity.
         var usernames: [String: String] = [:]
         for work in works {
             let byline = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !byline.isEmpty, usernames[byline] == nil else { continue }
-            if let username = work.verifiedAuthorIdentities
-                .first(where: { $0.kind == .registered && $0.username?.isEmpty == false })?
-                .username {
+            let registered = work.verifiedAuthorIdentities.filter { $0.kind == .registered }
+            if registered.count == 1, let username = registered[0].username, !username.isEmpty {
                 usernames[byline] = username
             }
         }

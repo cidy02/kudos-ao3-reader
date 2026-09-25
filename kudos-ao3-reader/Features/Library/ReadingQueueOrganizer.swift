@@ -80,8 +80,13 @@ struct AllReadingQueuesGridView: View {
     /// wrong-count defect this sweep keeps finding. With nothing filtering, this
     /// is the total anyway.
     private var visibleQueueCount: Int {
-        let savedForLaterShown = savedForLaterQueue.map(matchesSearch) ?? false
-        return customQueues.count + (savedForLaterShown ? 1 : 0)
+        customQueues.count + (savedForLaterQueue == nil ? 0 : 1)
+    }
+
+    /// A drag under a search or tag filter reorders only the visible ids and
+    /// rewrites `sortOrder` from 0, scrambling the hidden queues' order.
+    private var isFiltering: Bool {
+        !tagFilter.isEmpty || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// 1i draws **Pinned** as its own section above **All queues**, and the tree
@@ -195,8 +200,9 @@ struct AllReadingQueuesGridView: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
+    /// Saved for Later, when the search and the tag filter both let it through.
     private var savedForLaterQueue: ReadingQueue? {
-        readingQueues.first { $0.kind == .savedForLater }
+        readingQueues.first { $0.kind == .savedForLater && matchesTagFilter($0) && matchesSearch($0) }
     }
 
     /// Every queue's own hue tints its row; the page itself has no single
@@ -232,7 +238,9 @@ struct AllReadingQueuesGridView: View {
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             }
 
-            if !queueTagNames.isEmpty {
+            // A persisted filter whose tag is gone still needs the rail's All chip,
+            // or nothing on screen can clear it.
+            if !queueTagNames.isEmpty || !tagFilter.isEmpty {
                 Section {
                     tagRail.pageBodyRow(top: 14, gutter: 0)
                 }
@@ -253,7 +261,7 @@ struct AllReadingQueuesGridView: View {
                 SectionRuleHeader(title: "All queues", count: visibleQueueCount)
                     .pageBodyRow(top: 18, gutter: 0)
 
-                if let savedForLaterQueue, matchesSearch(savedForLaterQueue) {
+                if let savedForLaterQueue {
                     organizerRow(savedForLaterQueue, isReorderable: false)
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 }
@@ -276,7 +284,7 @@ struct AllReadingQueuesGridView: View {
                             .tint(.blue)
                         }
                 }
-                .onMove(perform: moveCustomQueues)
+                .onMove(perform: moveAction)
 
                 newQueueRow
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
@@ -287,8 +295,12 @@ struct AllReadingQueuesGridView: View {
         #if os(iOS)
         .environment(\.editMode, $reorderMode)
         #endif
+        // Filtering hides Done (and the drag), so it must not strand the list in edit mode.
+        .onChange(of: isFiltering) { _, filtering in
+            if filtering { setReordering(false) }
+        }
         .toolbar {
-            if !customQueues.isEmpty {
+            if !customQueues.isEmpty && !isFiltering {
                 ToolbarItem(placement: .primaryAction) {
                     Button(isReordering ? "Done" : "Reorder") {
                         setReordering(!isReordering)
@@ -454,6 +466,12 @@ struct AllReadingQueuesGridView: View {
         #else
         isReorderingMac = active
         #endif
+    }
+
+    /// No drag while filtering (see `isFiltering`).
+    private var moveAction: ((IndexSet, Int) -> Void)? {
+        guard !isFiltering else { return nil }
+        return { moveCustomQueues(from: $0, to: $1) }
     }
 
     private func moveCustomQueues(from source: IndexSet, to destination: Int) {

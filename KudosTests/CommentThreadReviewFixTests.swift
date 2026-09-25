@@ -42,6 +42,33 @@ struct CommentThreadReviewFixTests {
         #expect(hidden == 7)
     }
 
+    /// The same placeholder inside the cap: "Show N" on the expander and on the
+    /// collapse caret count what it stands for too, not one row.
+    @Test func inlineCountsIncludeWhatACutoffPlaceholderStandsFor() throws {
+        var cutoff = AO3Comment(id: 900, author: "", isGuest: false)
+        cutoff.isThreadCutoff = true
+        cutoff.cutoffCount = 7
+        var root = AO3Comment(id: 1, author: "Root", isGuest: false)
+        // 25 plain replies plus the placeholder: past the auto-expand limit.
+        root.replies = (2 ... 26).map { AO3Comment(id: $0, author: "R\($0)", isGuest: false) } + [cutoff]
+        let replies = [root.id: CommentThreadGeometry.flattenedReplies(from: root)]
+
+        let folded = CommentConversationBuilder.rows(
+            roots: [root], repliesByRoot: replies, expandedRootIDs: [], visibleReplyCounts: [:]
+        )
+        guard case let .expander(_, hidden, _) = try #require(folded.last).item else {
+            Issue.record("expected a trailing expander row")
+            return
+        }
+        #expect(hidden == 32)
+
+        let collapsed = CommentConversationBuilder.rows(
+            roots: [root], repliesByRoot: replies, expandedRootIDs: [], visibleReplyCounts: [:],
+            collapsedRootIDs: [root.id]
+        )
+        #expect(collapsed.first?.collapse?.replyCount == 32)
+    }
+
     /// Reopening a folded long thread must show its replies again. Collapsing
     /// drops the expanded state, so reopening used to bring back only the
     /// "Show N replies" row — with a "Hide" caret above it.

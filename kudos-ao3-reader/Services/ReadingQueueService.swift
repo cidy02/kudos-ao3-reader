@@ -181,10 +181,10 @@ enum ReadingQueueService {
         queue.keepsWorksOffline = keepsWorksOffline
         context.insert(queue)
         // 1j's tags, through the same lookup-before-create `QueueTagSheet` uses.
-        // A tag made for an earlier name joins `known`, so a later one finds it.
-        var known = tagNames.isEmpty ? [] : (try? context.fetch(FetchDescriptor<Tag>())) ?? []
+        // Its fetch sees pending inserts, so a tag made for an earlier name is
+        // found by a later one.
         for name in tagNames {
-            if let tag = queue.addTag(named: name, among: known, in: context) { known.append(tag) }
+            queue.addTag(named: name, in: context)
         }
         if seed == .savedForLater {
             seedFromSavedForLater(into: queue, in: context)
