@@ -64,7 +64,7 @@
           "what": "Full-bleed wash and floating 34pt chrome instead of a navigation bar",
           "status": "DEVIATION",
           "evidence": [
-            "kudos-ao3-reader/Features/Search/SearchView.swift:289-296"
+            "kudos-ao3-reader/Features/Search/SearchView.swift:298-303"
           ],
           "note": "Search is a tab root and keeps its bar; the wash is drawn at 600pt under it. Reason recorded at the call site."
         },
@@ -86,7 +86,7 @@
           "what": "Ledger rows: kicker + inline expand chevron, rule, title, byline, 2x2 grid, summary, meta line; expand reveals tag groups",
           "status": "DONE",
           "evidence": [
-            "kudos-ao3-reader/Features/Search/SearchView.swift:257-269",
+            "kudos-ao3-reader/Features/Search/SearchView.swift:276-285",
             "kudos-ao3-reader/Features/Search/AO3WorkRow.swift:208-330"
           ]
         },
@@ -95,9 +95,13 @@
           "what": "Paging switcher pill and page sheet (field, ten tiles, First/Last)",
           "status": "DONE",
           "evidence": [
-            "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift"
+            "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:29",
+            "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:253-273",
+            "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:325",
+            "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:369",
+            "kudos-ao3-reader/Features/Search/SearchPaginationBar.swift:442-444"
           ],
-          "note": "Verified by the T-219 table (REDESIGN_PLAN.md:593) and re-read here: nothing loads until confirmed."
+          "note": "Pill + PageJumpSheet (field, nearbyPageWindow tiles, First/Last, staged confirm, detents [.height(430), .large]). Re-read in the critic pass."
         },
         {
           "id": "1k.7",
@@ -232,7 +236,7 @@
           "size": "S",
           "evidence": [
             "kudos-ao3-reader/Features/Search/AO3FilterPanel.swift:240-252",
-            "otwarchive app/models/search/work_query.rb:107-116,220-230"
+            "otwarchive@00ad85b4 app/models/search/work_query.rb:107-116,220-230"
           ],
           "note": "The code comment at :244-249 says 'the footer says so', but the date section has no footer. AO3 builds both as range filters on revised_at and ANDs them (otwarchive-facts-wave3 Q11).",
           "fix": "Footer on the Updated/After/Before section (search mode): 'Updated and the After/Before dates all apply to the same date, and AO3 needs a work to pass every one.'"
@@ -452,7 +456,7 @@
       ],
       "implementation": [
         "kudos-ao3-reader/Features/Search/SaveSearchSheet.swift",
-        "kudos-ao3-reader/Features/Search/SearchView.swift:251-280"
+        "kudos-ao3-reader/Features/Search/SearchView.swift:326-352"
       ],
       "verdict": "PARTIAL",
       "items": [
@@ -462,7 +466,7 @@
           "status": "DONE",
           "evidence": [
             "kudos-ao3-reader/Features/Search/SaveSearchSheet.swift:30-80",
-            "kudos-ao3-reader/Features/Search/SearchView.swift:251-280"
+            "kudos-ao3-reader/Features/Search/SearchView.swift:326-352"
           ]
         },
         {
