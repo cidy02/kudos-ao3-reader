@@ -28,6 +28,8 @@ import SwiftUI
 /// never show one, takes the sheet.
 private struct FilterPanelPresentation<Panel: View>: ViewModifier {
     @Binding var isPresented: Bool
+    /// The iPhone sheet's detents; nil keeps the sheet's own full height.
+    var detents: Set<PresentationDetent>?
     @ViewBuilder var panel: () -> Panel
 
     func body(content: Content) -> some View {
@@ -38,6 +40,8 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
                     // The panel supplies its own navigation bar; the grabber sits
                     // above it, so the sheet still reads as swipe-to-dismiss.
                     .presentationDragIndicator(.visible)
+                    // `[.large]` is what a sheet does when given no detents.
+                    .presentationDetents(detents ?? [.large])
             }
         } else {
             content.inspector(isPresented: $isPresented) { panel() }
@@ -51,10 +55,13 @@ private struct FilterPanelPresentation<Panel: View>: ViewModifier {
 extension View {
     /// Presents the AO3 filter panel — see `FilterPanelPresentation` for why iPhone
     /// differs, and why using `.inspector` there is not merely a styling choice.
+    /// `detents` applies to the iPhone sheet only: the AO3 search panel passes
+    /// `[.medium, .large]`, spec 1ao's "opens over the results at half height".
     func filterPanelPresentation(
         isPresented: Binding<Bool>,
+        detents: Set<PresentationDetent>? = nil,
         @ViewBuilder panel: @escaping () -> some View
     ) -> some View {
-        modifier(FilterPanelPresentation(isPresented: isPresented, panel: panel))
+        modifier(FilterPanelPresentation(isPresented: isPresented, detents: detents, panel: panel))
     }
 }
