@@ -1,0 +1,154 @@
+{
+  "facts": [
+    {
+      "q": "Q1",
+      "answer": "Gift exchange maintainer sign-ups index (GET /collections/<c>/signups) renders one dt/dd pair per sign-up inside `dl.index.group`. There is NO printed per-row request/offer count; the full request and offer prompts are rendered inline in collapsed divs, so counts = number of prompt blurbs. dt.participant = byline link to /collections/<c>/signups/<id> + a mailto envelope link (a.mailto, img alt 'email <login>'). dd = ul.actions (Edit/Delete Sign-up controls, links to /signups/<id>/edit and /signups/<id>/confirm_delete), ul.actions ('Requests ↓'/'Offers ↓' toggles), then div.toggled#requests_<id> > div.requests.listbox.group > ol.prompt.index.group > li.blurb.group (one per request) and div.toggled#offers_<id> > div.offers.listbox.group > ol.prompt.index.group > li.blurb.group (one per offer). Each prompt li: h4.heading ('Request 1'/'Offer 1' or prompt title, 'by <byline>' or 'by Anonymous'), h5.fandoms.heading with a.tag fandom links, ul.tags.commas with li.warnings/relationships/characters/freeforms > a.tag, optional 'Any <Type>' li.tag, ul.optional.tags, blockquote.userstuff.summary (description), p with URL. The div for requests/offers is omitted entirely when that list is empty. Paginated (will_paginate), ordered by pseud name, optional ?query= pseud search. Prompt-meme sign-ups index renders only heading + nav (CSV, Manage Prompts, Manage Claims) — no rows at all. The /signups/summary page is per-TAG aggregates (table#challenge_summary: th tag name, td span.requested count, td span.offered count), not per sign-up.",
+      "sources": [
+        "app/views/challenge_signups/index.html.erb:1-5",
+        "app/views/challenge/gift_exchange/_challenge_signups.html.erb:29-63",
+        "app/views/challenge_signups/_show_requests.html.erb:1-24",
+        "app/views/challenge_signups/_show_offers.html.erb:1-24",
+        "app/views/prompts/_prompt_blurb.html.erb:2-61",
+        "app/views/challenge/prompt_meme/_challenge_signups.html.erb:1-11",
+        "app/views/challenge/gift_exchange/_challenge_signups_summary.html.erb:19-40",
+        "app/controllers/challenge_signups_controller.rb:105-116",
+        "app/helpers/application_helper.rb:278-282",
+        "config/locales/views/en.yml:708-719"
+      ],
+      "quote": "<dt class=\"participant\"><%= link_to signup.pseud.byline, collection_signup_path(@collection, signup) %> ... <div class=\"toggled\" id=\"<%= \"requests_#{signup.id}\" %>\"> ... <div class=\"requests listbox group\"> ... <ol class=\"prompt index group\"> ... <li class=\"... blurb group\" role=\"article\">",
+      "implication": "CONTRADICTS kudos-ao3-reader/Services/AO3Client+Challenges.swift:277-310. The first loop (:283-301) builds one fake request from `link.parent()` text (:290, the dt.participant text = the pseud name) and never reads offers, so every row is '1 requests · 0 offers' (ChallengeSignUpsView.swift:193). The second selector (:302) 'li.challenge.signup, li.signup.blurb, dd.signup' matches nothing in this template (dd has no class). Fix: iterate `dl.index > dt.participant`, take the id from its a[href*='/signups/'], the next sibling dd, then requests = dd.select(\"div[id^=requests_] ol.prompt > li.blurb\") and offers = dd.select(\"div[id^=offers_] ol.prompt > li.blurb\"); per prompt read h5.fandoms a.tag, ul.tags a.tag, blockquote.userstuff.summary. Also skip the /signups/<id>/edit and confirm_delete hrefs (same id, already de-duplicated). Prompt-meme collections have no per-row data on this page."
+    },
+    {
+      "q": "Q2",
+      "answer": "SHOW: yes — any collection maintainer (owner OR moderator), the sign-up's owner, or a privileged admin can view another user's sign-up (logged-in required). EDIT/UPDATE: only the sign-up's owner, OR a collection OWNER (not a moderator) of a GiftExchange once sign-ups are closed; plus check_signup_open lets maintainers past the open check. A moderator who follows the 'Edit Sign-up' link (which _signup_controls does show to any maintainer when sign-ups are closed) is redirected with 'You can't edit someone else's sign-up!'. Destroy/confirm_delete: ChallengeSignup#user_allowed_to_destroy?.",
+      "sources": [
+        "app/controllers/challenge_signups_controller.rb:7-17",
+        "app/controllers/challenge_signups_controller.rb:40-56",
+        "app/views/challenge_signups/_signup_controls.html.erb:12-16",
+        "lib/challenge_core.rb:52-54"
+      ],
+      "quote": "before_action :maintainer_or_signup_owner_only, only: [:show] ... not_allowed(@collection) and return unless (@challenge_signup.pseud.user == current_user || @collection.user_is_maintainer?(current_user) || privileged_collection_admin?) ... before_action :signup_owner_only, only: [:edit, :update] ... @collection.challenge_type == \"GiftExchange\" && !@challenge.signup_open && @collection.user_is_owner?(current_user)",
+      "implication": "A maintainer-facing sign-up detail screen can GET /collections/<c>/signups/<id> for any participant. Offer 'Edit' on someone else's sign-up only to owners of a gift exchange with sign-ups closed; moderators get a redirect."
+    },
+    {
+      "q": "Q3",
+      "answer": "Collection assignments index (GET /collections/<c>/assignments) accepts: (no param) = Defaulted (assignments.defaulted.uncovered); ?pinch_hit=true = unfulfilled, undefaulted, with a pinch hitter; ?unfulfilled=true = 'Open' (all unfulfilled + undefaulted, INCLUDING pinch-hit covers and posted-but-unapproved works); ?fulfilled=true = 'Complete' (creation posted AND collection item approved by user and collection). Plus ?page=. Param presence is what matters (case uses params[:x] truthiness). The WHOLE collection index is maintainer-only (owner or moderator, or privileged admin) and redirects if sign-ups are still open. posted=true/unposted is NOT a collection param: it only applies to the user's own list /users/<login>/assignments(?posted=true)[&collection_id=]. Mutations (update_multiple default_/undefault_/approve_/cover_, default_all, purge, generate, send_out) are collection OWNERS only. 'Matched/assigned' (every live sent assignment) = Open (?unfulfilled=true) ∪ Complete (?fulfilled=true); Pinch Hits is a subset of Open. Covering a default creates a NEW assignment with pinch_hitter set (shown in Open/Pinch Hits) and stamps covered_at on the original, which then drops out of every list.",
+      "sources": [
+        "app/controllers/challenge_assignments_controller.rb:2-7",
+        "app/controllers/challenge_assignments_controller.rb:73-110",
+        "app/views/challenge_assignments/_maintainer_index.html.erb:9-44",
+        "app/views/challenge_assignments/_maintainer_index.html.erb:56-77",
+        "app/models/challenge_assignment.rb:31-37",
+        "app/models/challenge_assignment.rb:76-88",
+        "app/models/challenge_assignment.rb:107-111",
+        "app/models/challenge_assignment.rb:230-240",
+        "lib/challenge_core.rb:56-58",
+        "app/controllers/application_controller.rb:377-379"
+      ],
+      "quote": "when params[:pinch_hit] ... .unfulfilled_in_collection(@collection).undefaulted.with_pinch_hitter ... when params[:fulfilled] @collection.assignments.fulfilled ... when params[:unfulfilled] ... .undefaulted ... else @collection.assignments.defaulted.uncovered",
+      "implication": "CONTRADICTS kudos-ao3-reader/Features/Challenges/ChallengeAssignmentsView.swift:447-452: the 'Matched' segment loads only list .assignments = ?fulfilled=true (Models/AO3ChallengeModels.swift:609), i.e. Complete only, so every open/in-progress assignment is missing. Matched should be ?unfulfilled=true + ?fulfilled=true. CONFIRMS AO3Client+Challenges.swift:61-63 (crawl fulfilled + unfulfilled + defaults; 'Open includes covered pinch hits') and the defaults/pinch_hit/unfulfilled URL mapping (AO3ChallengeModels.swift:606-609). Truly unmatched sign-ups are not on this page at all (they are on potential_matches before send-out)."
+    },
+    {
+      "q": "Q4",
+      "answer": "GiftExchange (and PromptMeme) table has separate columns assignments_due_at, works_reveal_at, authors_reveal_at (plus signups_open_at/signups_close_at, assignments_sent_at, time_zone). assignments_due_at is the DUE date: printed on the collection Profile page challenge meta as 'Assignments Due:' (always) and in the assignment notification email ('due'). works_reveal_at is the REVEAL date: printed as 'Works Revealed:' only when the collection is unrevealed; authors_reveal_at as 'Creators Revealed:' only when anonymous. Edit form fields: gift_exchange[assignments_due_at_string] (always), gift_exchange[works_reveal_at_string] (rendered only if collection unrevealed), gift_exchange[authors_reveal_at_string] (only if anonymous); all three are permitted params. Form note: 'Dates don't do anything right now; you need to manually open and close sign-up.'",
+      "sources": [
+        "db/schema.rb:560-572",
+        "app/views/challenge/shared/_challenge_meta.html.erb:24-35",
+        "app/views/collection_profile/show.html.erb:48-51",
+        "app/views/challenge/shared/_challenge_form_schedule.html.erb:9-35",
+        "app/views/user_mailer/challenge_assignment_notification.html.erb:77",
+        "app/controllers/challenge/gift_exchange_controller.rb:67-75"
+      ],
+      "quote": "<dt><%= ts(\"Assignments Due:\")%></dt><dd class=\"datetime\"><%= time_in_zone(challenge.assignments_due_at, zone) %></dd> <% if @collection.unrevealed? %><dt><%= ts(\"Works Revealed:\")%></dt><dd class=\"datetime\"><%= time_in_zone(challenge.works_reveal_at, zone) %></dd>",
+      "implication": "CONTRADICTS kudos-ao3-reader/Features/Challenges/ChallengeAssignmentsView.swift:475 (worksDueAt = form.settings.worksRevealAt; should be assignmentsDueAt) and ChallengeSettingsView.swift:218-221 (label 'Works due' on worksRevealAt; AO3 calls it 'Works revealed', which ChallengeSettingsEditView.swift:286 already uses). The due date can also be read without the owner-only edit form from the public profile (/collections/<c>/profile, dt 'Assignments Due:' + dd.datetime). Note AO3Client+Challenges.swift:239-241 posts works_reveal_at_string/authors_reveal_at_string unconditionally; AO3 permits them, but the form only renders them for unrevealed/anonymous collections, so parse may find no input to prefill."
+    },
+    {
+      "q": "Q5",
+      "answer": "Header subnav (everyone): 'Profile'; logged-in challenge nav = Sign Up / Edit Sign-up / Cancel Sign-up (only while sign-up open) and Join/Leave. Gift-exchange sidebar (logged-in only): 'My Sign-up' or 'Sign-up Form', 'My Assignment(s)' once sent, 'Sign-up Summary' (all logged-in users), 'Requests Summary' if maintainer or requests_summary_visible; 'Sign-ups (N)' and 'Matching'/'Assignments' ONLY for maintainers (owner or moderator). 'Challenge Settings' (edit_collection_gift_exchange_path / edit_collection_prompt_meme_path) and 'Collection Settings' are printed ONLY for collection OWNERS (sidebar and profile Actions), not moderators, not participants. The edit page itself is guarded by collection_owners_or_privileged_admins_only: a non-owner (moderator or participant) cannot load it — access_denied. No read-only challenge-settings page exists for non-owners; the public view of the challenge is the Profile page meta (dates, sign-up status, tag sets, signed-up count).",
+      "sources": [
+        "app/views/collections/_header.html.erb:10-38",
+        "app/views/challenge/shared/_challenge_navigation_user.html.erb:5-36",
+        "app/views/challenge/gift_exchange/_challenge_sidebar.html.erb:1-46",
+        "app/views/challenge/prompt_meme/_challenge_sidebar.html.erb:1-28",
+        "app/views/collections/_sidebar.html.erb:38-53",
+        "app/views/collection_profile/show.html.erb:98-115",
+        "app/views/challenge/gift_exchange/_challenge_navigation_maintainer.html.erb:1-6",
+        "app/controllers/challenge/gift_exchange_controller.rb:3-7",
+        "app/controllers/challenge/prompt_meme_controller.rb:3-7",
+        "app/controllers/application_controller.rb:381-383"
+      ],
+      "quote": "<% if @collection.user_is_owner?(current_user) %> <% if @collection.challenge %> ... <li><%= span_if_current t(\".challenge_settings\"), edit_collection_gift_exchange_path(@collection) %></li> ... before_action :collection_owners_or_privileged_admins_only, only: [:edit]",
+      "implication": "CONTRADICTS kudos-ao3-reader/Features/Account/AO3CollectionDetailView.swift:298-307: the !isMaintainer branch pushes ChallengeSettingsView, which loads the edit form (ChallengeSettingsView.swift:399/472 -> AO3ChallengeURL.giftExchangeEdit) that AO3 denies to non-owners. In practice the branch is dead: challengeSettingsURL (AO3Client+Collections.swift:788) is only non-nil when AO3 printed the owner-only link, so non-owners never see the row, and a moderator (isMaintainer true) never gets it either. Gate settings on OWNER role; for non-owners show the profile-page challenge meta instead. Also note signUpsURL (:785) matches '/signups/new', '/signups/<id>' and '/signups/summary' for ordinary participants, so it does not imply maintainer access."
+    },
+    {
+      "q": "Q6",
+      "answer": "No. The moderation form (collection_items index, PATCH /collections/<c>/items/update_multiple) has, per item, only collection_items[<id>][collection_approval_status] (select: '' unreviewed / 'Approved' / 'Rejected' = values unreviewed/approved/rejected), [unrevealed] and [anonymous] checkboxes (only if the collection is unrevealed/anonymous), and [remove]. Maintainer permitted params are exactly collection_approval_status, unrevealed, anonymous, remove. There is no reason/comment column or field, and no mail is sent on rejection: CollectionItem's only update callback mails about becoming anonymous/unrevealed; CollectionMailer has only item_added_notification (to the collection email on create); no mailer mentions rejection.",
+      "sources": [
+        "app/views/collection_items/_item_fields.html.erb:1-62",
+        "app/views/collection_items/_collection_item_controls.html.erb:28-74",
+        "app/controllers/collection_items_controller.rb:164-230",
+        "app/models/collection_item.rb:1-23",
+        "app/models/collection_item.rb:101-127",
+        "app/models/collection_item.rb:161-168",
+        "app/mailers/collection_mailer.rb:7"
+      ],
+      "quote": "def collection_update_multiple_params allowed = %i[collection_approval_status unrevealed anonymous remove] params.slice(:collection_items).permit(collection_items: allowed)",
+      "implication": "CONFIRMS kudos-ao3-reader/Services/AO3CollectionActions.swift:119-128 (reason is never POSTed). CONTRADICTS kudos-ao3-reader/Features/Challenges/RejectReasonSheet.swift:46 ('AO3 emails your reason to <creator>') — AO3 emails nothing and stores no reason. The copy must change, and a required reason that goes nowhere is misleading (make it optional/local-only or drop it)."
+    },
+    {
+      "q": "Q7",
+      "answer": "Yes. In works/_work_module (used by _work_blurb and collection item blurbs) the h4.heading prints, after the title link and byline, 'for' followed by comma-joined recipient links when the work has non-rejected gifts. Each link text is Gift#recipient (pseud byline, or the free-text recipient_name) and href is /users/<login>/gifts for a real pseud, or /gifts?recipient=<name> otherwise. Not printed for unrevealed works viewed by non-creators (mystery blurb instead). The maintainer items page prints it separately as h5.heading > span.recipients 'for' span.user.",
+      "sources": [
+        "app/views/works/_work_blurb.html.erb:2-3",
+        "app/views/works/_work_module.html.erb:2-3",
+        "app/views/works/_work_module.html.erb:8-34",
+        "app/helpers/works_helper.rb:55-58",
+        "app/models/gift.rb:71-73",
+        "app/views/collection_items/_item_fields.html.erb:26-28"
+      ],
+      "quote": "<% if work.gifts.not_rejected.exists? %> <%= ts(\"for\") %> <%= recipients_link(work) %> <% end %> ... link_to(h(gift.recipient), gift.pseud ? user_gifts_path(gift.pseud.user) : gifts_path(recipient: gift.recipient_name))",
+      "implication": "CONTRADICTS the comment at kudos-ao3-reader/Features/Account/AO3CollectionDetailView.swift:190-197 ('the collection's works page does not print one'). A Gift badge is derivable: in li.work.blurb h4.heading select a[href$='/gifts'], a[href*='/gifts?recipient=']. Needs a recipient field on AO3WorkSummary (M), not BLOCKED."
+    },
+    {
+      "q": "Q8",
+      "answer": "No date. Each participant row is li#participant_<id> containing a form with span.byline > a (pseud byline -> /users/<login>), a participant_role select (id '<login>_role'), an 'Update' submit, and a 'Remove' button_to. List is ul.participant.index.group, sorted by pseud name, not paginated. Page is maintainers/privileged admins only. created_at exists in the DB but is never rendered.",
+      "sources": [
+        "app/views/collection_participants/index.html.erb:1-10",
+        "app/views/collection_participants/_participant_form.html.erb:3-17",
+        "app/controllers/collection_participants_controller.rb:8",
+        "app/controllers/collection_participants_controller.rb:71-73"
+      ],
+      "quote": "<li id=\"participant_<%= participant.id %>\"> ... <span class=\"byline\"><%= link_to participant.pseud.byline, user_path(participant.pseud.user) %></span> ... form.select(:participant_role, CollectionParticipant::PARTICIPANT_ROLE_OPTIONS",
+      "implication": "The spec's 'Added 12 Jun 2025' subtitle (kudos-ao3-reader/Features/Challenges/CollectionMaintainersView.swift:186 gap) is BLOCKED_CAPABILITY: AO3 does not expose a join/added date. Use a non-date subtitle."
+    },
+    {
+      "q": "Q9",
+      "answer": "fieldset#match_settings, names under gift_exchange[potential_match_settings_attributes][...]: num_required_prompts (select: All=-1,1..5; '0' excluded), num_required_fandoms, num_required_characters, num_required_relationships, num_required_freeforms, num_required_categories, num_required_ratings, num_required_archive_warnings (selects: All=-1,0,1..5); include_optional_fandoms, include_optional_characters, include_optional_relationships, include_optional_freeforms, include_optional_categories, include_optional_ratings, include_optional_archive_warnings (Rails check_box: hidden '0' + checkbox '1'); plus hidden [id] for the persisted record (fields_for; :id is permitted).",
+      "sources": [
+        "app/views/potential_match_settings/_potential_match_settings_form.html.erb:5-47",
+        "app/models/potential_match_settings.rb:2-11",
+        "app/models/potential_match_settings.rb:23",
+        "app/models/tagset_models/tag_set.rb:5",
+        "app/controllers/challenge/gift_exchange_controller.rb:106-113",
+        "db/schema.rb:761-776"
+      ],
+      "quote": "match_settings_form.select(:num_required_prompts, PotentialMatchSettings::REQUIRED_MATCH_OPTIONS.select {|k,v| k != \"0\"}) ... match_settings_form.select(\"num_required_#{type}\", ...) ... match_settings_form.check_box(\"include_optional_#{type.pluralize}\"",
+      "implication": "No local parser for these exists (critic-wave2). If the settings editor round-trips them, it must carry all 15 fields + id, or unsent checkboxes are simply left unchanged (they are nested attributes; omission is safe, sending '0' clears)."
+    },
+    {
+      "q": "Q10",
+      "answer": "Route: GET /collections/<name>/confirm_delete (confirmation page) then DELETE /collections/<name> (collections#destroy). The confirm page has h2 'Delete Collection' and form_for(@collection, method: :delete, class 'simple destroy') => POST /collections/<name> with _method=delete + authenticity_token, submit 'Yes, Delete Collection'. Entry points: 'Delete Collection' link on the edit page (collections/_collection_form_delete) and on the Profile page Actions, both owner-only, with a JS confirm. Who: collection OWNERS only (collection_owners_only on confirm_delete and destroy; check_user_status on destroy) — moderators cannot. On success redirects to /collections with flash 'Collection was successfully deleted.'; works are not deleted.",
+      "sources": [
+        "config/routes.rb:470-478",
+        "app/controllers/collections_controller.rb:3-6",
+        "app/controllers/collections_controller.rb:182-195",
+        "app/views/collections/confirm_delete.html.erb:1-11",
+        "app/views/collections/_collection_form_delete.html.erb:1-6",
+        "app/views/collection_profile/show.html.erb:105-115"
+      ],
+      "quote": "before_action :collection_owners_only, only: [:update, :destroy, :confirm_delete] ... <%= form_for(@collection, :html => {:method => :delete, :class => \"simple destroy\"}) do |f| %> ... <%= f.submit ts(\"Yes, Delete Collection\") %>",
+      "implication": "An in-app 'Delete collection' (account-settings-collections gap) is buildable as GET confirm_delete (scrape authenticity_token from form.destroy) then POST _method=delete; show it to owners only. The challenge itself has a separate delete: 'Delete Challenge' link to /collections/<c>/gift_exchange/confirm_delete (or prompt_meme), rendered only in the owner block (challenge/shared/_challenge_form_delete.html.erb:1-8, routes.rb:539-543)."
+    }
+  ],
+  "notes": "All otwarchive citations are master @ 00ad85b4ff665b9c3f804d431eeb603372b70209 (committed 2026-09-11), fetched from raw.githubusercontent.com; line numbers refer to that revision. No AO3 host was contacted. 'Maintainer' in otwarchive = owner OR moderator (collection.rb:265-267); several gates are owner-only (challenge settings edit, collection delete, sign-up edit after close, all assignment mutations). Q4 'dates don't do anything' is AO3's own form note."
+}
