@@ -2,6 +2,11 @@ import SwiftUI
 
 /// A native, plain-text HTML buffer. Inserting tags never parses or normalizes
 /// existing markup; the platform text system owns selection, IME and undo.
+///
+/// A keystroke costs O(1) here (docs/WRITING_EDITOR_ARCHITECTURE.md D8): an edit
+/// bumps `revision` and calls `onEdit`. The text itself is read only when a
+/// checkpoint asks for it with `takeCheckpoint()`. It used to be copied and
+/// compared on every keystroke, then handed to the form and the recovery store.
 @MainActor @Observable
 final class WritingTextController: NSObject {
     #if os(iOS)
@@ -10,11 +15,20 @@ final class WritingTextController: NSObject {
     let scrollView = NSScrollView()
     let textView = NSTextView(frame: .zero)
     #endif
-    var onChange: ((String) -> Void)?
-    private var lastEmitted: String
+    /// Called after every change to the text, typed or programmatic. It runs on
+    /// every keystroke, so it must stay O(1).
+    @ObservationIgnored
+    var onEdit: (@MainActor () -> Void)?
+    /// Bumped by every change.
+    @ObservationIgnored
+    private(set) var revision = 0
+    @ObservationIgnored
+    private var checkpointedRevision = 0
+    @ObservationIgnored
+    private var checkpointedText: String
 
     init(text: String) {
-        lastEmitted = text
+        checkpointedText = text
         super.init()
         #if os(iOS)
         textView.text = text
@@ -51,12 +65,28 @@ final class WritingTextController: NSObject {
         textView.delegate = self
     }
 
+    /// The whole buffer. O(n): for checkpoints and toolbar commands, never per
+    /// keystroke.
     var text: String {
         #if os(iOS)
         textView.text ?? ""
         #else
         textView.string
         #endif
+    }
+
+    /// The text if it changed since the last checkpoint, otherwise nil.
+    ///
+    /// Reads and compares the buffer only when `revision` moved, so it costs
+    /// nothing between edits. Typing something and deleting it again within
+    /// one checkpoint window returns nil: nothing needs writing.
+    func takeCheckpoint() -> String? {
+        guard revision != checkpointedRevision else { return nil }
+        checkpointedRevision = revision
+        let value = text
+        guard value != checkpointedText else { return nil }
+        checkpointedText = value
+        return value
     }
 
     func setAppearance(_ theme: ReaderTheme, fontSize: Double) {
@@ -78,8 +108,8 @@ final class WritingTextController: NSObject {
         #else
         textView.window?.makeFirstResponder(textView)
         #endif
-        if tag == "undo" { textView.undoManager?.undo(); emit(); return }
-        if tag == "redo" { textView.undoManager?.redo(); emit(); return }
+        if tag == "undo" { textView.undoManager?.undo(); noteEdit(); return }
+        if tag == "redo" { textView.undoManager?.redo(); noteEdit(); return }
         #if os(iOS)
         let range = textView.selectedRange
         #else
@@ -108,12 +138,11 @@ final class WritingTextController: NSObject {
         replace(NSRange(location: 0, length: (text as NSString).length), with: value)
     }
 
-    func flush() {
-        commitComposition()
-        emit()
-    }
-
-    private func commitComposition() {
+    /// Ends an IME composition, keeping what it composed. Only explicit
+    /// checkpoints do this — a switch, Done, leaving the screen — never an idle
+    /// one: committing a Japanese or Chinese composition because the writer
+    /// paused would change their text (§7.6).
+    func commitComposition() {
         #if os(iOS)
         if textView.markedTextRange != nil { textView.unmarkText() }
         #else
@@ -133,20 +162,19 @@ final class WritingTextController: NSObject {
         textView.textStorage?.replaceCharacters(in: range, with: value)
         textView.didChangeText()
         #endif
-        emit()
+        noteEdit()
     }
 
-    fileprivate func emit() {
-        let value = text
-        guard value != lastEmitted else { return }
-        lastEmitted = value
-        onChange?(value)
+    /// Records a change. O(1): no text is read here.
+    fileprivate func noteEdit() {
+        revision += 1
+        onEdit?()
     }
 }
 
 #if os(iOS)
 extension WritingTextController: UITextViewDelegate {
-    func textViewDidChange(_: UITextView) { emit() }
+    func textViewDidChange(_: UITextView) { noteEdit() }
 }
 
 struct WritingNativeTextView: UIViewRepresentable {
@@ -156,7 +184,7 @@ struct WritingNativeTextView: UIViewRepresentable {
 }
 #else
 extension WritingTextController: NSTextViewDelegate {
-    func textDidChange(_: Notification) { emit() }
+    func textDidChange(_: Notification) { noteEdit() }
 }
 
 struct WritingNativeTextView: NSViewRepresentable {
