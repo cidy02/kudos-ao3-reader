@@ -206,8 +206,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private let minRequestInterval: TimeInterval = 0.6
 
     private func pace() async throws {
+        // Before the claim: a cancelled caller must not book a slot it will never
+        // use — the next real request would wait it out (T-255).
+        try Task.checkCancellation()
         let step = Self.paceStep(now: Date(), nextAllowed: nextAllowedRequestAt, minInterval: minRequestInterval)
         nextAllowedRequestAt = step.nextAllowed
+        if step.wait > 5 {
+            Log.network.notice("Pacer backlog: waiting \(step.wait, privacy: .public)s")
+        }
         if step.wait > 0 {
             try await paceSleep(step.wait)
         }

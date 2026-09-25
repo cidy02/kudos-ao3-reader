@@ -614,6 +614,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// are already complete, have no EPUB, or no AO3 source.
     private func backfillFilterMetadata() async {
         for work in works where !work.isQueueOnlyWork {
+            // A cancelled `.task` must stop here, not spin through every remaining
+            // work stamping attempts it never made (T-255).
+            if Task.isCancelled { break }
             await WorkTags.backfillFromEPUB(for: work, in: context)
             if work.needsAO3Refresh {
                 await WorkTags.refreshFromAO3(for: work, in: context)

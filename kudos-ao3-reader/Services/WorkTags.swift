@@ -15,8 +15,8 @@ enum WorkTags {
         // deleted (or, in tests, its whole container torn down) by the time this runs —
         // and touching any attribute of an invalidated model is a SwiftData assertion
         // crash. Same liveness guard PersistenceMigrationService uses.
-        guard work.modelContext != nil else { return }
-        guard let id = work.ao3WorkID ?? ao3WorkID(from: work.sourceURL) else { return }
+        guard work.modelContext != nil,
+              let id = work.ao3WorkID ?? ao3WorkID(from: work.sourceURL) else { return }
         work.ao3WorkID = id
         // Fetch when never fetched, when fetched before categorized tags existed, or
         // when the newer filter metadata (warnings/categories/language/word count) is
@@ -25,6 +25,7 @@ enum WorkTags {
         // Stamp every attempt so a locked/failing work waits out the cooldown before
         // the next try. The success/404 paths save it; on a pure failure it lives
         // only for this session, which is enough to stop same-session re-fetches.
+        let previousAttempt = work.lastTagRefreshAttemptAt
         work.lastTagRefreshAttemptAt = Date()
         do {
             // `workMetadata` reads the same page and parser as `workTags`, while
@@ -75,6 +76,10 @@ enum WorkTags {
             guard work.modelContext != nil else { return }
             work.markModified()
             WorkAvailability.record(.deleted, on: work, in: context)
+        } catch is CancellationError where work.modelContext != nil {
+            // Cancelled, so not an attempt: the cooldown would hide the work from
+            // the next sweep for nothing (T-255). A deleted work falls through.
+            work.lastTagRefreshAttemptAt = previousAttempt
         } catch {
             // Other network or parse failure: keep the EPUB-derived tags and retry next time.
         }
