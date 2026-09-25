@@ -203,10 +203,10 @@ struct AO3SeriesRow: View {
                             .foregroundStyle(fandomColor)
                             .lineLimit(1)
                         if series.isComplete == true {
-                            LedgerStateBadge(title: "Complete", color: .green)
+                            SubjectStateBadge(title: "Complete", color: .green)
                         }
                         if series.isRestricted {
-                            LedgerStateBadge(title: "Restricted", color: restrictedColor)
+                            SubjectStateBadge(title: "Restricted", color: restrictedColor)
                         }
                     }
 
@@ -529,29 +529,6 @@ struct AO3ProfileMessageRow: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-    }
-}
-
-/// The small tinted state badge beside a ledger row's kicker: 1w's Complete and
-/// Restricted, 1u's Series.
-struct LedgerStateBadge: View {
-    let title: String
-    let color: Color
-
-    var body: some View {
-        Text(title.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
-            .tracking(0.5)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
-            )
-            .accessibilityLabel(title)
     }
 }
 

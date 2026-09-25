@@ -59,12 +59,14 @@ struct WritingTextEditorTests {
         window.makeFirstResponder(controller.textView)
         defer { window.orderOut(nil) }
         #endif
-        var emitted: String?
-        controller.onChange = { emitted = $0 }
+        // Edits are counted, not emitted: the text is read only when a
+        // checkpoint asks for it (docs/WRITING_EDITOR_ARCHITECTURE.md D8).
+        var edits = 0
+        controller.onEdit = { edits += 1 }
         controller.setAppearance(.sepia, fontSize: 23)
-        controller.flush()
+        controller.commitComposition()
         #expect(controller.text == original)
-        #expect(emitted == nil)
+        #expect(controller.takeCheckpoint() == nil)
         let selected = (original as NSString).range(of: "👩🏽‍💻 &amp; 世界")
         #if os(iOS)
         controller.textView.selectedRange = selected
@@ -77,26 +79,29 @@ struct WritingTextEditorTests {
         let edited = original.replacingOccurrences(of: "👩🏽‍💻 &amp; 世界",
                                                   with: "<strong>👩🏽‍💻 &amp; 世界</strong>")
         #expect(controller.text == edited)
-        #expect(emitted == edited)
+        #expect(edits > 0)
+        #expect(controller.takeCheckpoint() == edited)
+        // Nothing changed since: the next checkpoint writes nothing.
+        #expect(controller.takeCheckpoint() == nil)
         #expect(undo.canUndo)
         controller.command("undo")
         #expect(controller.text == original)
-        #expect(emitted == original)
+        #expect(controller.takeCheckpoint() == original)
         controller.command("redo")
         #expect(controller.text == edited)
         try await Task.sleep(for: .milliseconds(50))
         controller.restore("<table><tr><td>Recovered</td></tr></table>")
         try await Task.sleep(for: .milliseconds(50))
-        #expect(emitted == "<table><tr><td>Recovered</td></tr></table>")
+        #expect(controller.takeCheckpoint() == "<table><tr><td>Recovered</td></tr></table>")
         controller.command("undo")
         #expect(controller.text == edited)
         #if os(iOS)
         controller.textView.selectedRange = NSRange(location: (edited as NSString).length, length: 0)
         controller.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
         controller.textView.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
-        controller.flush()
+        controller.commitComposition()
         #expect(controller.textView.markedTextRange == nil)
-        #expect(emitted == edited + "日本")
+        #expect(controller.takeCheckpoint() == edited + "日本")
         #endif
     }
 

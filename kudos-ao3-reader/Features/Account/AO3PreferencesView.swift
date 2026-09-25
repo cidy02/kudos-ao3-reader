@@ -578,13 +578,12 @@ extension AO3PreferencesView {
     /// 1z opens with an Account group of links to the AO3 pages this app does
     /// not implement natively.
     ///
-    /// Five of its seven rows are here. Blocked users and Muted users are not:
-    /// `/users/<name>/blocked` and `/muted` both answer 404 unauthenticated, and
-    /// so do their `/index` variants — which is genuinely ambiguous, because
-    /// `/change_password` *redirects* to login rather than 404ing, so a 404 here
-    /// may mean "not your account" rather than "no such page". Every row that is
-    /// here was confirmed to exist by probe; a row that drops someone on a 404
-    /// in Browse is worse than a row that is missing.
+    /// All seven of its rows. Blocked users and Muted users were once left out
+    /// because `/users/<name>/blocked` and `/muted` answered 404 — those are not
+    /// routes. otwarchive nests both as `blocked/users` and `muted/users` under the
+    /// user (`config/routes.rb`, index only, owner or admin; otwarchive-facts-wave3
+    /// Q16). Like the rest of this group they show no counts: the preferences page
+    /// carries none.
     @ViewBuilder
     private var accountLinksSection: some View {
         Section {
@@ -623,6 +622,20 @@ extension AO3PreferencesView {
                     title: "Change email",
                     systemImage: "envelope",
                     pathSuffix: "change_email",
+                    isFormRow: true
+                )
+                SubjectRowSeparator()
+                AccountExternalNavCard(
+                    title: "Blocked users",
+                    systemImage: "hand.raised",
+                    pathSuffix: "blocked/users",
+                    isFormRow: true
+                )
+                SubjectRowSeparator()
+                AccountExternalNavCard(
+                    title: "Muted users",
+                    systemImage: "speaker.slash",
+                    pathSuffix: "muted/users",
                     isFormRow: true
                 )
             }

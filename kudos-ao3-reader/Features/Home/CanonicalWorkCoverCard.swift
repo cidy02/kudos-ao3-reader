@@ -4,7 +4,8 @@ import SwiftUI
 /// record exists (reading progress, saved/favorite state, the local context menu,
 /// straight-to-reader navigation), the remote AO3 card otherwise. The host's
 /// navigation stack must register `LocalWorkDestination` and `AO3WorkSummary`
-/// destinations — every current host (Home, Library) already does.
+/// destinations — every current host (Home, Library) already does. The remote card
+/// carries `AO3ProvenanceBadge`, since a canonical row is by definition a mix.
 struct CanonicalWorkCoverCard: View {
     let entry: CanonicalWork
 
@@ -19,7 +20,7 @@ struct CanonicalWorkCoverCard: View {
             .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
             // AO3WorkCoverCard applies the remote context menu itself.
-            EnrichingAO3WorkCoverCard(work: remote)
+            EnrichingAO3WorkCoverCard(work: remote, showsProvenanceBadge: true)
         }
     }
 }
@@ -39,6 +40,8 @@ struct CanonicalWorkCoverCard: View {
 /// the work doesn't cost Work Details a second fetch for data this card already has.
 struct EnrichingAO3WorkCoverCard: View {
     let work: AO3WorkSummary
+    /// Passed through to `AO3WorkCoverCard`.
+    var showsProvenanceBadge = false
 
     @State private var enriched: AO3WorkSummary?
 
@@ -46,7 +49,7 @@ struct EnrichingAO3WorkCoverCard: View {
 
     var body: some View {
         NavigationLink(value: WorkCardTap.destination(for: displayed)) {
-            AO3WorkCoverCard(work: displayed)
+            AO3WorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
         }
         .buttonStyle(.plain)
         .task(id: work.id) {

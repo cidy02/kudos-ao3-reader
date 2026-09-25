@@ -31,6 +31,8 @@ struct MediaBrowserView: View {
     /// Per-category derived stats, recomputed off the render/main path (see
     /// `recomputeStats`); the cards read this rather than deriving inline.
     @State private var statsByCategory: [String: CategoryStats] = [:]
+    /// 1g's "Jump Back In", from the same off-actor pass — see `jumpBackInFandoms`.
+    @State private var jumpBackInPicks: [JumpBackInPick] = []
     /// Set once `cardsReady` has waited as long as it is willing to for counts
     /// (a warm cache beats it; a cold one does not) — see `load`.
     @State private var countsSettled = false
@@ -207,9 +209,10 @@ struct MediaBrowserView: View {
     /// Spec 1g's "Jump Back In": the fandoms you were most recently reading, as
     /// compact cards carrying their category, name and size.
     ///
-    /// Built from `recentFandoms`, which the stats pass already derives per
-    /// category — so this needs no new request and no new state, only a flatten
-    /// across categories.
+    /// Ranked across every category by when you last read, in the stats pass
+    /// (`jumpBackInFandoms`). It used to flatten each category's `recentFandoms`
+    /// in category order, so three read fandoms in Anime & Manga hid the TV
+    /// fandom read last night — and those were ordered by date added.
     @ViewBuilder
     private var jumpBackInSection: some View {
         let recent = jumpBackInEntries
@@ -236,21 +239,14 @@ struct MediaBrowserView: View {
         let workCount: Int?
     }
 
-    /// At most three, one per fandom, in category order. Three because 1g draws
-    /// three and they share the width equally — a fourth would squeeze every card
-    /// below the width its fandom name needs.
+    /// At most three (`jumpBackInLimit`), one per fandom, most recently read
+    /// first. Three because 1g draws three and they share the width equally — a
+    /// fourth would squeeze every card below the width its fandom name needs.
     private var jumpBackInEntries: [JumpBackInEntry] {
-        var entries: [JumpBackInEntry] = []
-        var seen = Set<String>()
-        for category in categories {
-            guard let stats = statsByCategory[category.id] else { continue }
-            for name in stats.recentFandoms where seen.insert(name.lowercased()).inserted {
-                let count = stats.clusterFandoms.first { $0.name == name }?.workCount
-                entries.append(JumpBackInEntry(fandom: name, category: category, workCount: count))
-                if entries.count == 3 { return entries }
-            }
+        jumpBackInPicks.compactMap { pick in
+            guard let category = categories.first(where: { $0.id == pick.categoryID }) else { return nil }
+            return JumpBackInEntry(fandom: pick.fandom, category: category, workCount: pick.workCount)
         }
-        return entries
     }
 
     private func jumpBackInCard(_ entry: JumpBackInEntry) -> some View {
@@ -524,10 +520,12 @@ struct MediaBrowserView: View {
         ///
         /// The spec calls these the category's *featured* fandoms, and its build
         /// note says AO3's featured subset is not in the current parse — true,
-        /// and it turns out not to matter: the app already caches the whole
-        /// per-category list with a work count on each, so the cluster shows the
-        /// largest fandoms instead. No new request, and arguably a better list
-        /// than AO3's own featured set, which is hand-curated and often stale.
+        /// and it turns out not to matter. AO3's `/media` picks each category's
+        /// five most-used canonical fandoms, ranked by count (otwarchive's
+        /// `MediaController#index`), and the app already caches the whole
+        /// per-category list with a work count on each. So the cluster applies
+        /// AO3's own rule — most used first — at twelve instead of five, with no
+        /// new request.
         var clusterFandoms: [ClusterFandom] = []
     }
 
@@ -543,11 +541,27 @@ struct MediaBrowserView: View {
 
     /// One library work reduced to just the fields the stats need, pre-lowercased,
     /// so the off-actor pass does only set lookups (SavedWork isn't `Sendable`).
-    private struct LibraryWorkSnapshot: Sendable {
+    /// Internal, not private, so `jumpBackInFandoms` can be tested.
+    nonisolated struct LibraryWorkSnapshot: Sendable {
         let fandomsLower: [String]
         let fandomsDisplay: [String]
         let hasBeenRead: Bool
         let dateAdded: Date
+        let lastReadDate: Date?
+
+        /// When it was last read, or added if it never records a read — the
+        /// same fallback the Library's own recency ordering uses.
+        var recency: Date {
+            lastReadDate ?? dateAdded
+        }
+    }
+
+    /// One Jump Back In card's worth: the fandom as the library spells it, the
+    /// category it was found in, and the fandom's AO3 work count when known.
+    nonisolated struct JumpBackInPick: Equatable, Sendable {
+        let fandom: String
+        let categoryID: String
+        let workCount: Int?
     }
 
     /// Cheap signature of everything `recomputeStats` depends on: which categories
@@ -560,7 +574,10 @@ struct MediaBrowserView: View {
             parts.append("\(category.id):\(catalog.fandoms(for: category)?.count ?? -1)")
         }
         let newest = library.map(\.dateAdded).max()?.timeIntervalSince1970 ?? 0
-        parts.append("lib:\(library.count):\(newest)")
+        // Reading a work changes what Jump Back In and the recent chips show, and
+        // neither the library's size nor its newest addition moves when you read.
+        let lastRead = library.compactMap(\.lastReadDate).max()?.timeIntervalSince1970 ?? 0
+        parts.append("lib:\(library.count):\(newest):\(lastRead)")
         return parts.joined(separator: "|")
     }
 
@@ -580,7 +597,8 @@ struct MediaBrowserView: View {
                 fandomsLower: work.workFandoms.map { $0.lowercased() },
                 fandomsDisplay: work.workFandoms,
                 hasBeenRead: work.hasBeenRead,
-                dateAdded: work.dateAdded
+                dateAdded: work.dateAdded,
+                lastReadDate: work.lastReadDate
             )
         }
         let inputs = categories.map { category -> CategoryStatsInput in
@@ -593,15 +611,78 @@ struct MediaBrowserView: View {
         }
 
         let computed = await Task.detached(priority: .userInitiated) {
-            Self.computeStats(inputs: inputs, works: works)
+            (
+                stats: Self.computeStats(inputs: inputs, works: works),
+                jumpBackIn: Self.rankJumpBackIn(inputs: inputs, works: works)
+            )
         }.value
 
         guard !Task.isCancelled else { return }
-        statsByCategory = computed
+        statsByCategory = computed.stats
+        jumpBackInPicks = computed.jumpBackIn
     }
 
     /// How many "recently read" fandom chips a category card shows at most.
     private static let recentFandomsLimit = 5
+
+    /// How many Jump Back In cards 1g draws.
+    private static let jumpBackInLimit = 3
+
+    /// Jump Back In, ranked across every category (1g.6): read works newest-read
+    /// first, the first `limit` distinct fandoms that belong to a category, each
+    /// in the library's own spelling. `categoryFor` and `workCountFor` take a
+    /// lowercased name. Pure, so the order can be tested without a catalog.
+    nonisolated static func jumpBackInFandoms(
+        works: [LibraryWorkSnapshot],
+        categoryFor: (String) -> String?,
+        workCountFor: (String) -> Int?,
+        limit: Int
+    ) -> [JumpBackInPick] {
+        let readWorks = works.filter(\.hasBeenRead).sorted { $0.recency > $1.recency }
+        var picks: [JumpBackInPick] = []
+        var seen = Set<String>()
+        for work in readWorks {
+            for index in work.fandomsLower.indices {
+                let lower = work.fandomsLower[index]
+                guard let categoryID = categoryFor(lower), seen.insert(lower).inserted else { continue }
+                picks.append(JumpBackInPick(
+                    fandom: work.fandomsDisplay[index],
+                    categoryID: categoryID,
+                    workCount: workCountFor(lower)
+                ))
+                if picks.count == limit { return picks }
+            }
+        }
+        return picks
+    }
+
+    /// Maps only the fandoms you have read to their category (the first that
+    /// lists them, in `/media` order) and to their work count — looked up in the
+    /// category's whole cached list, not just the twelve cluster chips, so a
+    /// fandom outside the top twelve still shows its size (1g.7).
+    private nonisolated static func rankJumpBackIn(
+        inputs: [CategoryStatsInput],
+        works: [LibraryWorkSnapshot]
+    ) -> [JumpBackInPick] {
+        let readLower = Set(works.lazy.filter(\.hasBeenRead).flatMap(\.fandomsLower))
+        guard !readLower.isEmpty else { return [] }
+        var categoryByFandom: [String: String] = [:]
+        var workCountByFandom: [String: Int] = [:]
+        for input in inputs {
+            for fandom in input.fandoms {
+                let lower = fandom.name.lowercased()
+                guard readLower.contains(lower), categoryByFandom[lower] == nil else { continue }
+                categoryByFandom[lower] = input.id
+                if let count = fandom.workCount { workCountByFandom[lower] = count }
+            }
+        }
+        return jumpBackInFandoms(
+            works: works,
+            categoryFor: { categoryByFandom[$0] },
+            workCountFor: { workCountByFandom[$0] },
+            limit: jumpBackInLimit
+        )
+    }
 
     /// How many fandoms a category's chip cluster shows before the rest collapse
     /// into the "+N more" chip. Twelve fills roughly three wrapped rows at phone
@@ -615,9 +696,11 @@ struct MediaBrowserView: View {
         inputs: [CategoryStatsInput],
         works: [LibraryWorkSnapshot]
     ) -> [String: CategoryStats] {
+        // Most recently read first, like Jump Back In: these are the category
+        // card's "recently read" chips, and date added said nothing about that.
         let readWorks = works
             .filter(\.hasBeenRead)
-            .sorted { $0.dateAdded > $1.dateAdded }
+            .sorted { $0.recency > $1.recency }
 
         var result: [String: CategoryStats] = [:]
         result.reserveCapacity(inputs.count)

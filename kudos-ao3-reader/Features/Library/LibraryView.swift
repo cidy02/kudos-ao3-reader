@@ -127,9 +127,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
             }
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
-            .navigationTitle(isSelecting
-                ? (selection.isEmpty ? "Select Works" : "\(selection.count) Selected")
-                : "Library")
+            .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selection.count) : "Library")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
@@ -264,14 +262,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             "\(works.count)",
             "\(newest)",
             "\(lifecycleBits)",
-            "\(filters.fandoms.sorted().joined(separator: ","))",
-            "\(filters.userTags.count)",
-            "\(filters.rating.rawValue)",
-            "\(filters.completion.rawValue)",
-            "\(filters.sort.rawValue)",
-            "\(filters.language)",
-            "\(filters.wordsFrom)|\(filters.wordsTo)",
-            "\(filters.hasActiveFilters)",
+            // All of them, not a subset: see `LibraryFilters.revisionKey`.
+            filters.revisionKey,
             "\(hideMature)",
             "\(matureMode.rawValue)",
             "\(gate.revealAll)",
@@ -512,7 +504,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private func footer(_ kind: LibrarySectionKind, _ work: SavedWork) -> String? {
         switch kind {
-        case .readingNow: work.readingProgressLabel
+        case .readingNow: WorkReadingPosition.cardProgressLabel(readiumProgress: work.readiumProgress)
         case .finished: "Finished"
         default: nil
         }

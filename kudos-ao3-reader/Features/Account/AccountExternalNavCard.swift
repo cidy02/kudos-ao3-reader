@@ -21,6 +21,9 @@ struct AccountExternalNavCard: View {
     var systemImage: String?
     let target: Target
     var isFormRow: Bool
+    /// A line under the label, inside the same card — 1az's "Opens
+    /// archiveofourown.org …" under New series. Nil for every other caller.
+    var footnote: String?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -29,12 +32,14 @@ struct AccountExternalNavCard: View {
         title: String,
         systemImage: String? = nil,
         pathSuffix: String,
-        isFormRow: Bool = false
+        isFormRow: Bool = false,
+        footnote: String? = nil
     ) {
         self.title = title
         self.systemImage = systemImage
         self.target = .user(pathSuffix: pathSuffix)
         self.isFormRow = isFormRow
+        self.footnote = footnote
     }
 
     init(
@@ -83,6 +88,16 @@ struct AccountExternalNavCard: View {
 
         if isFormRow {
             button
+        } else if let footnote {
+            VStack(alignment: .leading, spacing: 6) {
+                button
+                Text(footnote)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accountControlCardRow()
         } else {
             button.accountControlCardRow()
         }

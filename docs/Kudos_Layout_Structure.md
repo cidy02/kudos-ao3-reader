@@ -116,7 +116,7 @@ We are targeting a **4-tab model** (with Settings living inside the Account tab)
 **Empty States** (for each section):
 
 - **Reading Now**: “You’re not reading anything right now. Start exploring in Browse or open something from your Library.”
-- **Recently Updated**: “No recent updates from your subscriptions yet.”
+- **Recently Updated**: “No recent updates from your library works yet.” (was “…from your subscriptions…”; the section is built from saved works, not subscriptions)
 - **Subscriptions**: “You’re not subscribed to anything yet. Subscribe to works or series to see updates here.”
 - **Favorites**: “No favorites yet. Mark works as favorites to see them here.”
 - **Recently Opened**: “Nothing opened recently. Start reading to see your history here.”

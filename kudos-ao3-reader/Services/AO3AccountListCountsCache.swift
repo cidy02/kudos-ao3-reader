@@ -37,6 +37,20 @@ nonisolated struct AO3AccountListCount: Equatable, Sendable {
         }
     }
 
+    /// For a list whose parsed rows can be fewer than the rows AO3 counts —
+    /// Bookmarks, whose page here keeps only *work* bookmarks while AO3's total
+    /// (seeded from the dashboard nav) also has series, external and deleted
+    /// ones. A single page is then a floor, not the size: recorded as exact, it
+    /// would replace AO3's own figure ("the newer exact wins") with a smaller one.
+    /// A lower bound never replaces an exact count, so AO3's figure survives.
+    init(itemsOnPage: Int, totalPages: Int, mayOmitRows: Bool) {
+        self.init(itemsOnPage: itemsOnPage, totalPages: totalPages)
+        if mayOmitRows, totalPages <= 1 {
+            exact = nil
+            lowerBound = itemsOnPage
+        }
+    }
+
     init(exact: Int) {
         self.exact = exact
     }

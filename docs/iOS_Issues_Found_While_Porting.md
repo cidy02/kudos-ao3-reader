@@ -2,7 +2,7 @@
 
 Bugs and inconsistencies noticed in the iOS app (`hig-review`) while porting its
 behaviour to Android for the full-parity sweep. **Nothing here has been fixed on
-iOS** — this is a to-do list for a later iOS pass.
+iOS** unless its entry says so — this is a to-do list for a later iOS pass.
 
 Each entry records what Android did in the meantime, so the two platforms don't
 silently drift while the iOS side is still open.
@@ -39,6 +39,9 @@ updates from your library works yet") rather than porting the incorrect string.
 This is a deliberate, documented divergence: propagating wrong copy to a second
 platform would just mean fixing it twice. Align iOS to Android here, not the
 reverse.
+
+**iOS (2026-09-25, T-257, not yet compiled):** aligned to Android's string on
+`cloud/redesign-finish`, pinned by `HomeSubscriptionsTests`.
 
 ---
 

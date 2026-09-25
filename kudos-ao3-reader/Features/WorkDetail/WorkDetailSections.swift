@@ -468,7 +468,9 @@ extension WorkDetailView {
                     value: work.lastReadDate
                         .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
                 )
-                if let progressLabel = work.readingProgressLabel {
+                if let progressLabel = WorkReadingPosition.cardProgressLabel(
+                    readiumProgress: work.readiumProgress
+                ) {
                     LabeledContent("Progress", value: progressLabel)
                     if let progress = work.readingProgress {
                         ProgressView(value: progress)

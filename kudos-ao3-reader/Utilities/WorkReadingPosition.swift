@@ -12,4 +12,13 @@ enum WorkReadingPosition {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    /// The progress label a card or the Activity section prints: Readium's
+    /// overall percent, or nothing. Not `SavedWork.readingProgressLabel`, whose
+    /// "Ch N" is `lastSpineIndex + 1` — a spine position, off by the front matter
+    /// that the legacy reader itself walks past before it names a chapter.
+    static func cardProgressLabel(readiumProgress: Double?) -> String? {
+        guard let readiumProgress else { return nil }
+        return "\(Int((readiumProgress * 100).rounded()))%"
+    }
 }

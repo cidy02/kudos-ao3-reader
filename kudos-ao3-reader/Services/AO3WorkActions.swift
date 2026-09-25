@@ -108,7 +108,7 @@ extension AO3AuthService {
         )
     }
 
-    func loadDrafts(page: Int = 1) async throws -> AO3SearchPage {
+    func loadDrafts(page: Int = 1) async throws -> AO3DraftsPage {
         try requireWorkSession()
         guard let username, let url = AO3Client.myDraftsURL(username: username, page: page)
         else { throw AO3WorkWriteError.notSignedIn }

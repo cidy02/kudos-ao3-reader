@@ -519,24 +519,21 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         return .unknown
     }
 
+    // The fresher remote figure first — see `WorkDetailFigures`.
     var displayKudos: Int? {
-        if let kudos = localWork?.kudos, kudos > 0 { return kudos }
-        return remote?.kudos
+        WorkDetailFigures.preferred(local: localWork?.kudos, remote: remote?.kudos)
     }
 
     var displayComments: Int? {
-        if let comments = localWork?.comments, comments > 0 { return comments }
-        return remote?.comments
+        WorkDetailFigures.preferred(local: localWork?.comments, remote: remote?.comments)
     }
 
     var displayBookmarks: Int? {
-        if let work = localWork, work.bookmarks > 0 { return work.bookmarks }
-        return remote?.bookmarks
+        WorkDetailFigures.preferred(local: localWork?.bookmarks, remote: remote?.bookmarks)
     }
 
     var displayHits: Int? {
-        if let hits = localWork?.hits, hits > 0 { return hits }
-        return remote?.hits
+        WorkDetailFigures.preferred(local: localWork?.hits, remote: remote?.hits)
     }
 
     var displayWords: Int? {

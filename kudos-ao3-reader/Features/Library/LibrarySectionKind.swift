@@ -37,6 +37,31 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         }
     }
 
+    /// The label over the rows themselves, which names the state they are in
+    /// rather than the shelf — 1ad heads Reading Now's list "IN PROGRESS", as
+    /// `HomeSectionKind.groupTitle` already does. The other sections have no
+    /// board of their own for this and keep their title.
+    var groupTitle: String {
+        switch self {
+        case .readingNow: "In progress"
+        default: title
+        }
+    }
+
+    /// How the section is ordered, in the reader's own words — the tally under the
+    /// hero ends with it (spec 1ad: "4 works · most recently read first"). Each
+    /// phrase describes the `sorted` call for the same case in
+    /// `works(from:visible:)`; change one and the other goes with it. Empty for
+    /// Collections, which lists no works here.
+    var orderDescription: String {
+        switch self {
+        case .readingNow, .finished, .history: "most recently read first"
+        case .savedForLater: "most recently read or added first"
+        case .downloaded, .favorites: "newest first"
+        case .collections: ""
+        }
+    }
+
     /// Per-section empty-state copy.
     var emptyMessage: String {
         switch self {

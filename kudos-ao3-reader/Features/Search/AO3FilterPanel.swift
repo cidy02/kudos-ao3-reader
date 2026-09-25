@@ -44,6 +44,19 @@ struct AO3FilterPanel: View {
     /// in `.search` mode, where there is no loaded page to count and the result
     /// depends on a request that has not been made.
     var refineSource: [AO3WorkSummary] = []
+    /// The host's own count of `refineSource` rows it shows, when its rule is not
+    /// `filters.apply` alone (Subscriptions keeps rows it knows nothing about yet —
+    /// `AO3SubscriptionsRefine`). Nil counts with `filters.apply`.
+    var refineMatchCount: Int?
+
+    /// Whether "Include Not Rated" is drawn (1au.2). Refine reads it only once a
+    /// rating is chosen — `AO3SummaryFilter`'s Rating-Any rule, pinned by
+    /// `AO3SummaryFilterRatingTests` — so under Any it would be a switch that moves
+    /// nothing, not even the "N of M match" line. Search keeps it, because there
+    /// it does filter: off sends `-rating_ids:9`.
+    static func showsIncludeNotRated(mode: Mode, rating: AO3SearchFilters.Rating) -> Bool {
+        mode == .search || rating != .any
+    }
 
     /// The panel owns its own `NavigationStack`, because a presented panel has no
     /// navigation container of its own and a bare `.toolbar` there renders nothing.
@@ -87,7 +100,7 @@ struct AO3FilterPanel: View {
 
     private var refineMatchText: String {
         let total = refineSource.count
-        let matching = filters.apply(to: refineSource).count
+        let matching = refineMatchCount ?? filters.apply(to: refineSource).count
         let works = total == 1 ? "work" : "works"
         return "\(matching) of the \(total) \(works) on this page match"
     }
@@ -187,7 +200,9 @@ struct AO3FilterPanel: View {
                             }
                         }
                     }
-                    Toggle("Include Not Rated", isOn: $filters.includeNotRated)
+                    if Self.showsIncludeNotRated(mode: mode, rating: filters.rating) {
+                        Toggle("Include Not Rated", isOn: $filters.includeNotRated)
+                    }
                 }
 
                 Section {
@@ -228,12 +243,14 @@ struct AO3FilterPanel: View {
                     }
                 } footer: {
                     // Artboard 1aq says this out loud, and the reason was only a
-                    // code comment until now: these two re-run the search rather
+                    // code comment until now: Crossovers re-runs the search rather
                     // than narrowing what is already on screen, and a filter that
                     // costs a round trip should say so before it is tapped.
+                    // Completion is not in the sentence: every blurb carries it, and
+                    // Refine narrows by it (`AO3SummaryFilter`).
                     if mode == .search {
-                        Text("Crossover status and completion are not carried on a search result, "
-                            + "so both need AO3 to answer the query.")
+                        Text("Crossover status is not carried on a search result, "
+                            + "so it needs AO3 to answer the query.")
                     }
                 }
 
@@ -254,6 +271,13 @@ struct AO3FilterPanel: View {
                         FilterLanguagePicker(selection: $filters.language)
                     } label: {
                         LabeledContent("Language", value: filters.language.title)
+                    }
+                } footer: {
+                    // The footer the comment above promises (1aq). otwarchive's
+                    // `WorkQuery` turns both into `revised_at` ranges and ANDs them.
+                    if mode == .search {
+                        Text("Updated and the After / Before dates all apply to the same date, "
+                            + "and a work has to pass every one.")
                     }
                 }
 

@@ -131,8 +131,37 @@ struct FandomListView: View { // swiftlint:disable:this type_body_length
             .task { if fandoms.isEmpty { await load() } }
     }
 
+    /// Spec 1al's header line: how big the category is and in what order, or —
+    /// once a search or filter narrows it — how much of it is showing (1an).
+    private var headerTally: String {
+        let isFiltered = !query.trimmingCharacters(in: .whitespaces).isEmpty
+            || filterOptions.hasActiveFilters
+        return FandomListTally.text(
+            totalTags: FandomFamilyFilters.tagCount(in: families),
+            families: families.count,
+            shownTags: FandomFamilyFilters.tagCount(in: filtered),
+            isFiltered: isFiltered,
+            sort: sort
+        )
+    }
+
     private var loadedList: some View {
         List {
+            // The kicker / rule / hero as the list's first row, as every
+            // redesigned pushed page has it (1al); the wash below empties the
+            // navigation title so the name is not printed twice.
+            Section {
+                SubjectHeaderBlock(
+                    kicker: "Browse",
+                    title: category.name,
+                    subtitle: headerTally,
+                    palette: palette
+                )
+                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+
             Section {
                 FandomListSortRail(
                     sort: $sort,
@@ -166,6 +195,7 @@ struct FandomListView: View { // swiftlint:disable:this type_body_length
             }
         }
         .cardList()
+        .subjectScreenWash(palette: palette)
         // Here rather than inside `refresh()`, which `load()` also calls:
         // the initial load has nothing to invalidate and would only evict
         // other screens' entries. `/media/<x>/fandoms` is
@@ -744,4 +774,29 @@ private struct FandomListRow: View {
         return FandomScript.hasItalicForm(alias) ? name.italic() : name
     }
 
+}
+
+/// The tally under the fandom list's header (1al, 1an). Tags are AO3's raw
+/// fandom tags; fandoms are the families they collapse into on the parsed
+/// title, so "9,412 tags in 8,106 fandoms" says both how much AO3 lists and how
+/// many rows that makes. Filtered, it says how much of it is showing instead.
+nonisolated enum FandomListTally {
+    static func text(
+        totalTags: Int,
+        families: Int,
+        shownTags: Int,
+        isFiltered: Bool,
+        sort: FandomFamilySort
+    ) -> String {
+        let order = switch sort {
+        case .alphabetical: "A–Z"
+        case .familyTotal: "most works"
+        }
+        let tags = totalTags == 1 ? "tag" : "tags"
+        if isFiltered {
+            return "\(shownTags.formatted()) of \(totalTags.formatted()) \(tags) · \(order)"
+        }
+        let fandoms = families == 1 ? "fandom" : "fandoms"
+        return "\(totalTags.formatted()) \(tags) in \(families.formatted()) \(fandoms) · \(order)"
+    }
 }

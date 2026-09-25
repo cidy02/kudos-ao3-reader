@@ -36,6 +36,38 @@ struct LibraryFilters: Equatable {
             || sort != .dateAdded
     }
 
+    /// Every stored field, in a fixed order — the filter half of the Library
+    /// dashboard's cache key (`LibraryView.sectionsRevision`).
+    ///
+    /// That key used to list a hand-picked subset: no characters,
+    /// relationships, additional tags, excluded tags, warnings or categories,
+    /// and only the *count* of user tags. Changing one of those while another
+    /// filter was already on left the key unchanged, so every carousel kept
+    /// showing the previous filter's works and counts. Sets are sorted so two
+    /// equal filters give the same key whatever order they were built in; the
+    /// two control-character separators cannot occur in a tag name.
+    var revisionKey: String {
+        func joined(_ names: Set<String>) -> String {
+            names.sorted().joined(separator: "\u{1F}")
+        }
+        return [
+            joined(userTags),
+            joined(fandoms),
+            joined(characters),
+            joined(relationships),
+            joined(additionalTags),
+            joined(excludeTags),
+            rating.rawValue,
+            joined(Set(warnings.map(\.rawValue))),
+            joined(Set(categories.map(\.rawValue))),
+            completion.rawValue,
+            language,
+            wordsFrom,
+            wordsTo,
+            sort.rawValue
+        ].joined(separator: "\u{1E}")
+    }
+
     // MARK: Summary
 
     /// The active filters as chips, for the rail the redesign puts under a page

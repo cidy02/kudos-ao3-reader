@@ -5,7 +5,10 @@ extension String {
     /// to readable plain text: `<br>` and block-closing tags become line breaks,
     /// all other tags are removed, and character entities are decoded. Used so
     /// work summaries don't show raw "<p>…</p>" markup.
-    func strippingHTML() -> String {
+    ///
+    /// `nonisolated` because it is pure string work: the writing editor counts
+    /// words with it off the main thread (`WritingWordCount`).
+    nonisolated func strippingHTML() -> String {
         guard contains("<") || contains("&") else { return self }
         var text = self
 

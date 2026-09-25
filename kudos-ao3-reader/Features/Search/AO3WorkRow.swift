@@ -224,7 +224,7 @@ struct AO3WorkRow: View {
                             // 1u row 2: "Series" beside the kicker. Gift is drawn
                             // too, but no gift flag is parsed onto the summary yet.
                             if work.seriesTitle != nil {
-                                LedgerStateBadge(title: "Series", color: palette.accent)
+                                SubjectStateBadge(title: "Series", color: palette.accent)
                             }
                             if isExpandable {
                                 expandButton

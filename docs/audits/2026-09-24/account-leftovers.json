@@ -1,0 +1,216 @@
+{
+  "area": "account-leftovers",
+  "wave": "3 (cloud)",
+  "auditor": "Claude (cloud session, no Xcode)",
+  "date": "2026-09-25",
+  "base_commit": "c4ce1e2",
+  "method": "docs/audits/2026-09-24/CLOUD_WAVE3_README.md (AUDIT_METHOD.md was not pushed; method reconstructed from the handoff + docs/REDESIGN_PLAN.md)",
+  "status_vocabulary": {
+    "DONE": "built as the board draws it; evidence cites the code",
+    "BUG": "wrong or dishonest output today; failure_scenario says how",
+    "GAP": "board element missing; no owner decision needed; size S/M/L",
+    "DEVIATION": "built differently on purpose; the reasoning is recorded in code or docs (cited)",
+    "DECIDED": "the owner already ruled; cited",
+    "OWNER": "needs an owner decision (policy, schema, or spec vs settled evidence)",
+    "NOT_BUILDABLE": "the data does not exist (AO3 or app); cited",
+    "SUPERSEDED": "board replaced by another board"
+  },
+  "caveats": [
+    "Audited at c4ce1e2. T-248/T-249 (Mac, unpushed) touched writing screens (1u 1w 1bn 1bq 1br 1bv 1bo), not 1x's WritingDraftsView per the handoff's list; re-check if the Mac diff shows otherwise.",
+    "No Xcode: source reading only."
+  ],
+  "counts": {
+    "DEVIATION": 1,
+    "DONE": 7,
+    "GAP": 2,
+    "NOT_BUILDABLE": 1
+  },
+  "boards": [
+    {
+      "board": "1z",
+      "title": "AO3 Preferences",
+      "spec_label": "The account settings AO3 exposes, grouped with section chevrons; drawn help glyph on rows that need explaining; success banner with its checkmark; account links on top (Edit profile, Manage pseuds, Change username/password/email, Blocked users, Muted users); footer says everything writes back to AO3.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:448",
+        "kudos-ao3-reader/Features/Account/AccountView.swift:672-693"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift",
+        "kudos-ao3-reader/Services/AO3Client+Preferences.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1z.1",
+          "what": "Header, parsed groups with collapse chevrons, help glyphs opening AO3's help",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:100-190",
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:233-246",
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:634-642"
+          ]
+        },
+        {
+          "id": "1z.2",
+          "what": "Footer: every switch is AO3's own form",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:569-575",
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:183"
+          ]
+        },
+        {
+          "id": "1z.3",
+          "what": "Account links: Blocked users and Muted users",
+          "status": "GAP",
+          "size": "S",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:577-588",
+            "otwarchive@00ad85b4 config/routes.rb:361-380",
+            "otwarchive@00ad85b4 app/controllers/blocked/users_controller.rb:1-8"
+          ],
+          "note": "Left out because '/users/<name>/blocked' and '/muted' answered 404. Those are not AO3's paths: the pages are /users/:login/blocked/users and /users/:login/muted/users (index; owner or admin). otwarchive-facts-wave3 Q16.",
+          "fix": "Two more AccountExternalNavCard rows with pathSuffix 'blocked/users' and 'muted/users'; no counts (none is on the preferences page).",
+          "test": "Pure: the account-links route list contains both suffixes (if the rows are built from a static table)."
+        },
+        {
+          "id": "1z.4",
+          "what": "Counts on Manage pseuds / Blocked / Muted",
+          "status": "NOT_BUILDABLE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:589-632"
+          ],
+          "note": "Not on the preferences page; would each cost a request. Dropped, per the plan's 'figures must be sourced or dropped' rule."
+        }
+      ]
+    },
+    {
+      "board": "1bb",
+      "title": "Preferences saved",
+      "spec_label": "A transient toast above the tab bar, once per save; no row spinner, no banner pushing content; a failure uses the same slot with the red wash and a Retry.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:71-75"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:497-560"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1bb.1",
+          "what": "Toast overlay, success auto-dismisses after 3 s, once per save",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:497-535"
+          ]
+        },
+        {
+          "id": "1bb.2",
+          "what": "Failure in the same slot with Retry",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AO3PreferencesView.swift:505-511"
+          ],
+          "note": "Red glyph, not a red wash; the Retry re-posts the whole form."
+        }
+      ]
+    },
+    {
+      "board": "1ac",
+      "title": "Privacy and local data",
+      "spec_label": "What the app stores, what it sends to AO3, and the controls to clear each; destructive actions last and asking first.",
+      "entry_points": [
+        "kudos-ao3-reader/Settings/SettingsView.swift (SettingsRoute.privacy)",
+        "kudos-ao3-reader/Features/Account/AccountView.swift:161-165"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/PrivacyDataView.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1ac.1",
+          "what": "Header, promise, stored figures, clear panel; destructive rows red and confirmed",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/PrivacyDataView.swift:113-170",
+            "kudos-ao3-reader/Features/Account/PrivacyDataView.swift:305-375"
+          ],
+          "note": "Matches the T-219 verification (REDESIGN_PLAN.md:590); re-read here."
+        }
+      ]
+    },
+    {
+      "board": "1aa",
+      "title": "More on AO3",
+      "spec_label": "The surfaces the app does not implement, sent to the browser; each row says what it opens; external glyph.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:449"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Account/AccountMoreOnAO3View.swift"
+      ],
+      "verdict": "BUILT",
+      "items": [
+        {
+          "id": "1aa.1",
+          "what": "Groups and rows; every user-scoped path exists in otwarchive's routes",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Account/AccountMoreOnAO3View.swift:80-300",
+            "otwarchive@00ad85b4 config/routes.rb:280-345"
+          ],
+          "note": "Checked here: assignments, claims, gifts, invitations, profile, pseuds, related_works, signups, skins, stats, works/drafts are all routes under resources :users."
+        }
+      ]
+    },
+    {
+      "board": "1x",
+      "title": "Drafts",
+      "spec_label": "Unposted works: the work row minus what AO3 cannot know yet; header '4 drafts - 2 expiring this week'; a 'N days left' chip and 'Created ...' per draft; Post and Delete are the swipe, editing is the tap, deleting asks first.",
+      "entry_points": [
+        "kudos-ao3-reader/Features/Account/AccountView.swift:452"
+      ],
+      "implementation": [
+        "kudos-ao3-reader/Features/Writing/WritingDraftsView.swift"
+      ],
+      "verdict": "PARTIAL",
+      "items": [
+        {
+          "id": "1x.1",
+          "what": "Header, notice, draft cards, paging",
+          "status": "DONE",
+          "evidence": [
+            "kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:115-160"
+          ]
+        },
+        {
+          "id": "1x.2",
+          "what": "'N days left' chip, 'Created ...' and 'N expiring this week'",
+          "status": "GAP",
+          "size": "M",
+          "evidence": [
+            "kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:16-24",
+            "kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:150-160",
+            "otwarchive@00ad85b4 app/views/works/_work_module.html.erb:48-50",
+            "otwarchive@00ad85b4 config/locales/views/en.yml:3647",
+            "otwarchive@00ad85b4 config/locales/views/en.yml:3194",
+            "otwarchive@00ad85b4 app/controllers/works_controller.rb:154-174"
+          ],
+          "note": "The code's reason for not building these - 'the drafts listing carries no creation date' - is contradicted by otwarchive: every unposted work's blurb (drafts is works/_work_blurb over unposted_works) carries <p class='caution notice'>This draft will be <strong>scheduled for deletion</strong> on DATE</p>, DATE = created_at + 29 days, formatted date_short_html (<abbr class='day'>Mon</abbr> <span class='date'>05</span> <abbr class='month'>Oct</abbr> <span class='year'>2026</span>). Days left and 'expiring this week' come from the page already fetched; 'Created' is that date minus 29 days. otwarchive-facts-wave3 Q17.",
+          "fix": "Parse the notice's span.date / abbr.month / span.year per blurb into AO3WorkSummary (an optional draftDeletionDate); chip = whole days until it in the device calendar; tally counts <= 7 days. A missing notice leaves the chip off, as today.",
+          "test": "Parser fixture built from otwarchive's _work_module markup (not invented) yields the date; a pure daysLeft(until:now:) boundary test (today -> 0, tomorrow -> 1)."
+        },
+        {
+          "id": "1x.3",
+          "what": "Post / Delete as swipes",
+          "status": "DEVIATION",
+          "evidence": [
+            "kudos-ao3-reader/Features/Writing/WritingDraftsView.swift:24-28"
+          ],
+          "note": "Both are AO3 writes and already live in the editor behind their own buttons; a swipe was judged too easy to fire (posting notifies subscribers and cannot be undone). Owner may overrule."
+        }
+      ]
+    }
+  ]
+}
