@@ -115,8 +115,12 @@ struct PromptMemeView: View {
 
     // MARK: - Header & Filter
 
+    /// The counts are this page's, so a multi-page meme says which page.
     private var subtitleText: String {
-        var line = "\(prompts.count) prompt\(prompts.count == 1 ? "" : "s") · \(unclaimedCount) unclaimed"
+        var line = AO3ChallengeCountText.plural(prompts.count, "prompt") + " · \(unclaimedCount) unclaimed"
+        if let page = AO3ChallengeCountText.pageQualifier(page: currentPage, totalPages: totalPages) {
+            line += " \(page)"
+        }
         if !closeDateText.isEmpty {
             line += " · \(closeDateText)"
         }
@@ -300,9 +304,10 @@ struct PromptMemeView: View {
     }
 
     private var footnoteText: some View {
-        Text("AO3 posts and claims prompts with no sign-up or matching step in between. "
-            + "The app can claim a prompt for you and release your own claim; writing a fill for "
-            + "someone else's claimed prompt, and posting a brand-new prompt, both happen on AO3 itself.")
+        Text("Prompt Meme replaces sign-ups and assignments entirely — there is no matching, "
+            + "so nothing here is matched or assigned. Claiming is an AO3 write, "
+            + "and a claim can be released; both need the prompt id, which is on the row. "
+            + "Posting a new prompt or a fill happens on AO3.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

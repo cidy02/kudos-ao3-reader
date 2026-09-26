@@ -40,7 +40,8 @@ struct ChallengeSettingsEditView: View {
 
     @State private var form: AO3ChallengeSettingsForm?
     @State private var tagSetLinks: [AO3CollectionTagSetLink] = []
-    @State private var signUpCount: Int = 0
+    /// The challenge's total, not page 1's count; `nil` leaves it out.
+    @State private var signUpTotal: Int?
     @State private var phase: Phase = .idle
     @State private var isSaving: Bool = false
     @State private var saveNotice: String?
@@ -125,8 +126,8 @@ struct ChallengeSettingsEditView: View {
 
     private var kicker: String {
         switch settings.kind {
-        case .giftExchange: "Gift exchange - moderator"
-        case .promptMeme: "Prompt meme - moderator"
+        case .giftExchange: "Gift exchange · moderator"
+        case .promptMeme: "Prompt meme · moderator"
         }
     }
 
@@ -134,7 +135,8 @@ struct ChallengeSettingsEditView: View {
         SubjectHeaderBlock(
             kicker: kicker,
             title: "Challenge settings",
-            subtitle: "\(effectiveTitle) - \(signUpCount) sign-ups",
+            subtitle: signUpTotal.map { "\(effectiveTitle) · \(AO3ChallengeCountText.plural($0, "sign-up"))" }
+                ?? effectiveTitle,
             palette: palette,
             gutter: SubjectMetrics.accountGutter
         )
@@ -167,14 +169,7 @@ struct ChallengeSettingsEditView: View {
             ForEach(limitsErrors, id: \.self) { message in
                 errorCard(message).pageBodyRow(top: 6, gutter: gutter)
             }
-            SubjectFieldLabel(text: "Requests", style: .formGroup)
-                .pageBodyRow(top: 8, gutter: gutter)
-            requestLimitsPanel.pageBodyRow(top: 8, gutter: gutter)
-            if settings.kind == .giftExchange {
-                SubjectFieldLabel(text: "Offers", style: .formGroup)
-                    .pageBodyRow(top: 12, gutter: gutter)
-                offerLimitsPanel.pageBodyRow(top: 8, gutter: gutter)
-            }
+            limitsPanel.pageBodyRow(top: 8, gutter: gutter)
             SubjectFieldLabel(text: "Request restrictions", style: .formGroup)
                 .pageBodyRow(top: 12, gutter: gutter)
             requestRestrictionTogglesPanel.pageBodyRow(top: 8, gutter: gutter)
@@ -281,7 +276,17 @@ struct ChallengeSettingsEditView: View {
             SubjectRowSeparator()
             dateRow(label: "Sign-ups close", keyPath: \.signupsCloseAt)
             SubjectRowSeparator()
-            dateRow(label: "Assignments due", keyPath: \.assignmentsDueAt)
+            // AO3 stamps this when an owner sends assignments by hand; the form
+            // has no input for it, so it is read-only and usually unknown here.
+            SubjectFormRow(
+                label: "Assignments sent",
+                value: settings.assignmentsSentAt?.formatted(date: .abbreviated, time: .shortened) ?? "Manual",
+                isMonospaced: settings.assignmentsSentAt != nil
+            )
+            SubjectRowSeparator()
+            // assignments_due_at: AO3 prints "Assignments Due" and mails it as
+            // the deadline for works.
+            dateRow(label: "Works due", keyPath: \.assignmentsDueAt)
             SubjectRowSeparator()
             dateRow(label: "Works revealed", keyPath: \.worksRevealAt)
             SubjectRowSeparator()
@@ -324,30 +329,59 @@ struct ChallengeSettingsEditView: View {
         }
     }
 
-    private var requestLimitsPanel: some View {
+    /// 1cf's "Requests · 1 to 3" / "Offers · 2 to 5": AO3's required and allowed
+    /// counts as one range row each.
+    private var limitsPanel: some View {
         VStack(spacing: 0) {
-            stepperRow(label: "Required", value: settings.limits.requestsRequired, range: 0...20) {
-                form?.settings.limits.requestsRequired = $0
-            }
-            SubjectRowSeparator()
-            stepperRow(label: "Allowed", value: settings.limits.requestsAllowed, range: 0...20) {
-                form?.settings.limits.requestsAllowed = $0
+            rangeRow("Requests", required: \.requestsRequired, allowed: \.requestsAllowed)
+            if settings.kind == .giftExchange {
+                SubjectRowSeparator()
+                rangeRow("Offers", required: \.offersRequired, allowed: \.offersAllowed)
             }
         }
         .subjectPanel()
     }
 
-    private var offerLimitsPanel: some View {
-        VStack(spacing: 0) {
-            stepperRow(label: "Required", value: settings.limits.offersRequired, range: 0...20) {
-                form?.settings.limits.offersRequired = $0
-            }
-            SubjectRowSeparator()
-            stepperRow(label: "Allowed", value: settings.limits.offersAllowed, range: 0...20) {
-                form?.settings.limits.offersAllowed = $0
-            }
+    private func rangeRow(
+        _ label: String,
+        required: WritableKeyPath<AO3ChallengeSignUpLimits, Int>,
+        allowed: WritableKeyPath<AO3ChallengeSignUpLimits, Int>
+    ) -> some View {
+        SubjectFormRow(label: label, arrangement: .control) {
+            countMenu("\(label) required", required)
+            Text("to")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+            countMenu("\(label) allowed", allowed)
         }
-        .subjectPanel()
+    }
+
+    /// A `Menu`, as `WritingChoiceRow` uses: it answers only its own label, so
+    /// two in one row cannot open each other.
+    private func countMenu(_ title: String, _ keyPath: WritableKeyPath<AO3ChallengeSignUpLimits, Int>) -> some View {
+        let value = settings.limits[keyPath: keyPath]
+        return Menu {
+            Picker(title, selection: Binding(
+                get: { value },
+                set: { form?.settings.limits[keyPath: keyPath] = $0 }
+            )) {
+                ForEach(0...20, id: \.self) { Text("\($0)").tag($0) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(value)")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(palette.accent)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue("\(value)")
     }
 
     private func requestRestrictionToggleBinding(_ keyPath: WritableKeyPath<AO3PromptRestrictionSnapshot, Bool>) -> Binding<Bool> {
@@ -623,11 +657,13 @@ struct ChallengeSettingsEditView: View {
             form = loaded
 
             if let signUpsRequest = try? auth.authenticatedRequest(
-                for: AO3ChallengeURL.signUps(slug: collectionSlug, page: 1)
-            ), let signUpsPage = try? await AO3Client.shared.challengeSignUps(
-                slug: collectionSlug, page: 1, request: signUpsRequest
+                for: AO3ChallengeURL.signUps(slug: collectionSlug)
+            ), let firstPage = try? await AO3Client.shared.challengeSignUps(
+                slug: collectionSlug, request: signUpsRequest
             ) {
-                signUpCount = signUpsPage.signUps.count
+                signUpTotal = try? await AO3Client.shared.challengeSignUpTotal(
+                    slug: collectionSlug, firstPage: firstPage, request: signUpsRequest
+                )
             }
 
             // Best-effort: a challenge with no tag set is ordinary, and a failed
