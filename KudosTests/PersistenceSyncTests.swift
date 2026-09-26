@@ -118,6 +118,122 @@ struct PersistenceSyncTests {
         #expect(restored.lastScrollFraction == 0.9)
     }
 
+    // MARK: legacyReaderProgress — the macOS reader's card percent
+
+    private func progressWork(mac: Double?, locatorTotal: Double?, at seconds: TimeInterval) -> SavedWork {
+        let work = SavedWork(title: "Mac Read", author: "Writer",
+                             sourceURL: "https://archiveofourown.org/works/444")
+        work.ao3WorkID = 444
+        work.lastSpineIndex = 3
+        work.readiumLocator = locatorTotal.map {
+            #"{"href":"ch.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":\#($0)}}"#
+        } ?? ""
+        work.legacyReaderProgress = mac
+        work.markProgressModified(Date(timeIntervalSince1970: seconds))
+        return work
+    }
+
+    /// Restores `archived` over `local` through the manifest's JSON bytes, so a
+    /// field left out of `CodingKeys` is lost exactly as it would be on disk.
+    /// `dropping` removes that key from the work's JSON first, as an older build or
+    /// Android (which strips unknown keys) would have written it.
+    private func restore(
+        _ archived: SavedWork, over local: SavedWork, in context: ModelContext, dropping key: String? = nil
+    ) throws -> SavedWork {
+        let defaults = try testDefaults()
+        let contents = try KudosBackupService.makeContents(
+            works: [archived], bookmarks: [], fonts: [], readingQueues: [], defaults: defaults
+        )
+        var manifest = try contents.manifestData()
+        if let key {
+            var root = try #require(try JSONSerialization.jsonObject(with: manifest) as? [String: Any])
+            var works = try #require(root["works"] as? [[String: Any]])
+            #expect(works[0].removeValue(forKey: key) != nil)
+            root["works"] = works
+            manifest = try JSONSerialization.data(withJSONObject: root)
+        }
+        let decoded = KudosBackupContents(manifest: try KudosBackupContents.decodeManifest(manifest))
+        context.insert(local)
+        _ = try KudosBackupService.restore(decoded, into: context, defaults: defaults)
+        return try #require(try context.fetch(FetchDescriptor<SavedWork>()).first)
+    }
+
+    @Test func newerMacPercentSurvivesBackupAndBeatsTheLocator() throws {
+        let container = try container()
+        let restored = try restore(
+            progressWork(mac: 0.37, locatorTotal: 0.2, at: 200),
+            over: progressWork(mac: nil, locatorTotal: 0.8, at: 100),
+            in: container.mainContext
+        )
+        #expect(restored.legacyReaderProgress == 0.37)
+        #expect(restored.publicationProgress == 0.37)
+    }
+
+    @Test func olderMacPercentLeavesNewerLocalProgress() throws {
+        let container = try container()
+        let restored = try restore(
+            progressWork(mac: 0.37, locatorTotal: nil, at: 100),
+            over: progressWork(mac: 0.6, locatorTotal: nil, at: 200),
+            in: container.mainContext
+        )
+        #expect(restored.legacyReaderProgress == 0.6)
+    }
+
+    /// iOS read last: its snapshot carries no Mac percent, and that nil must win.
+    @Test func newerSnapshotWithoutMacPercentClearsIt() throws {
+        let container = try container()
+        let restored = try restore(
+            progressWork(mac: nil, locatorTotal: 0.8, at: 200),
+            over: progressWork(mac: 0.37, locatorTotal: 0.2, at: 100),
+            in: container.mainContext
+        )
+        #expect(restored.legacyReaderProgress == nil)
+        #expect(restored.publicationProgress == 0.8)
+    }
+
+    /// An older build or Android re-exported the work without the key, progress
+    /// untouched: same timestamp, so the snapshot applies — but absent is not a clear.
+    @Test func keylessSnapshotAtTheSameTimeKeepsTheMacPercent() throws {
+        let container = try container()
+        let restored = try restore(
+            progressWork(mac: nil, locatorTotal: 0.2, at: 100),
+            over: progressWork(mac: 0.42, locatorTotal: 0.2, at: 100),
+            in: container.mainContext,
+            dropping: "legacyReaderProgress"
+        )
+        #expect(restored.legacyReaderProgress == 0.42)
+    }
+
+    @Test func clearedMacPercentIsExportedAsNull() throws {
+        let contents = try KudosBackupService.makeContents(
+            works: [progressWork(mac: nil, locatorTotal: 0.8, at: 100)],
+            bookmarks: [], fonts: [], readingQueues: [], defaults: try testDefaults()
+        )
+        let root = try #require(
+            try JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any]
+        )
+        let works = try #require(root["works"] as? [[String: Any]])
+        #expect(works[0]["legacyReaderProgress"] is NSNull)
+        let manifest = try KudosBackupContents.decodeManifest(contents.manifestData())
+        #expect(manifest.works.first?.legacyReaderProgress == .some(nil))
+    }
+
+    @Test func manifestWithoutTheMacPercentKeyDecodesItAsNil() throws {
+        let contents = try KudosBackupService.makeContents(
+            works: [progressWork(mac: 0.37, locatorTotal: nil, at: 100)],
+            bookmarks: [], fonts: [], readingQueues: [], defaults: try testDefaults()
+        )
+        var root = try #require(
+            try JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any]
+        )
+        var works = try #require(root["works"] as? [[String: Any]])
+        #expect(works[0]["legacyReaderProgress"] as? Double == 0.37)
+        works[0].removeValue(forKey: "legacyReaderProgress")
+        root["works"] = works
+        let manifest = try KudosBackupContents.decodeManifest(try JSONSerialization.data(withJSONObject: root))
+        #expect(manifest.works.first?.legacyReaderProgress == nil)
+    }
+
     @Test func deletingWorkCreatesTombstone() throws {
         let container = try container()
         let context = container.mainContext

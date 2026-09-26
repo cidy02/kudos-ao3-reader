@@ -51,9 +51,11 @@ enum LocalDataClearing {
     /// Three fields rather than one because two readers wrote them: Readium
     /// persists a JSON locator, the legacy WKWebView reader a spine index and a
     /// scroll fraction. A work resumed only by the legacy reader has an empty
-    /// locator and is still very much mid-read.
+    /// locator and is still very much mid-read. The legacy reader's whole-book
+    /// percent (`legacyReaderProgress`) resumes nothing but is cleared with them.
     static func hasReadingPosition(_ work: SavedWork) -> Bool {
         !work.readiumLocator.isEmpty || work.lastSpineIndex > 0 || work.lastScrollFraction > 0
+            || work.legacyReaderProgress != nil
     }
 
     static func selectReadingPositions(from works: [SavedWork]) -> [SavedWork] {
@@ -73,6 +75,7 @@ enum LocalDataClearing {
             work.readiumLocator = ""
             work.lastSpineIndex = 0
             work.lastScrollFraction = 0
+            work.legacyReaderProgress = nil
             work.progressModifiedAt = Date()
             work.markModified()
         }

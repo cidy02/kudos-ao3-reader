@@ -127,6 +127,16 @@ struct EPUBTests {
         #expect(doc.chapters.map(\.spineIndex) == [0, 1])
     }
 
+    /// Readium sizes positions by the archive entry length, so the Mac reader's
+    /// weights must be the deflated sizes (raw would be [59, 61]).
+    @Test func spineEntryLengthsAreTheArchivedSizes() throws {
+        let doc = try EPUBDocument.open(epubURL: try Self.sampleEPUB, into: freshTempDir())
+        #expect(doc.spineEntryLengths == [52, 54])
+        let zip = try MiniZip(data: try Data(contentsOf: try Self.sampleEPUB))
+        #expect(zip.entryLength(named: "mimetype") == 20)   // stored
+        #expect(zip.entryLength(named: "missing") == nil)
+    }
+
     @Test func ratingPickedOutOfSubjects() {
         #expect(EPUBMetadata.rating(in: ["Fluff", "Mature", "Angst"]) == "Mature")
         #expect(EPUBMetadata.rating(in: ["Fluff", "Angst"]).isEmpty)

@@ -154,6 +154,60 @@ struct ReaderProgressBridgeTests {
         #expect(bridge.fractionForFlush() == nil) // nothing new → no redundant write
     }
 
+    // MARK: Card percent (legacyReaderProgress)
+
+    /// Two 1 KB spine items: one position each, so spine 1 spans 0.5…1.
+    private static let lengths = [1024, 1024]
+
+    @Test func openingWriteKeepsAnotherReadersPercent() {
+        // Read to 60% on the iPhone, then opened on the Mac, which lands on its
+        // own stale spine: the load's re-save must not relabel the work.
+        let bridge = ReaderProgressBridge()
+        let work = SavedWork(title: "T", author: "A")
+        work.legacyReaderProgress = 0.6
+        bridge.seed(spine: 1, fraction: 0.5)
+        bridge.persist(bridge.beginChapter(spine: 1), to: work, resourceLengths: Self.lengths)
+        #expect(work.lastScrollFraction == 0.5)
+        #expect(work.legacyReaderProgress == 0.6)
+
+        // Moving claims it, at the bridge's spine.
+        bridge.recordProgress(0.8)
+        bridge.persist(0.8, to: work, resourceLengths: Self.lengths)
+        #expect(work.legacyReaderProgress == 0.9)
+    }
+
+    /// Opened on the Mac and closed again without reading: the layout reports the
+    /// restored spot — as seeded, floored to a page (paged mode, which also posts
+    /// page 1 first) or clamped to the last screen (scrolled) — and the dismiss
+    /// flush writes it. None of that is reading, so the iPhone's percent stays.
+    @Test func openingAndClosingNeverClaimsThePercent() {
+        for landed in [0.5, 0.25, 0] {
+            let bridge = ReaderProgressBridge()
+            let work = SavedWork(title: "T", author: "A")
+            work.legacyReaderProgress = 0.8
+            bridge.seed(spine: 1, fraction: 0.5)
+            bridge.persist(bridge.beginChapter(spine: 1), to: work, resourceLengths: Self.lengths)
+            bridge.recordProgress(landed)
+            if let due = bridge.fractionForDebouncedWrite(at: .distantFuture) {
+                bridge.persist(due, to: work, resourceLengths: Self.lengths)
+            }
+            if let flush = bridge.fractionForFlush() {
+                bridge.persist(flush, to: work, resourceLengths: Self.lengths)
+            }
+            #expect(work.lastScrollFraction == landed) // resume still follows the page
+            #expect(work.legacyReaderProgress == 0.8, "landed at \(landed)")
+        }
+    }
+
+    @Test func aLaterChapterLoadClaimsThePercent() {
+        let bridge = ReaderProgressBridge()
+        let work = SavedWork(title: "T", author: "A")
+        bridge.persist(bridge.beginChapter(spine: 0), to: work, resourceLengths: Self.lengths)
+        #expect(work.legacyReaderProgress == nil)
+        bridge.persist(bridge.beginChapter(spine: 1), to: work, resourceLengths: Self.lengths)
+        #expect(work.legacyReaderProgress == 0.5)
+    }
+
     @Test func progressBeforeAnyChapterIsIgnored() {
         let bridge = ReaderProgressBridge()
         bridge.recordProgress(0.9)

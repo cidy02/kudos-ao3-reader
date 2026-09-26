@@ -285,6 +285,7 @@ enum WorkReaderPreparation {
         // The intra-chapter fraction pairs with the spine index — clear both so
         // the fresh copy doesn't restore mid-chapter-one from a stale fraction.
         work.lastScrollFraction = 0
+        work.legacyReaderProgress = nil
         work.markModified()
         try context.save()
     }

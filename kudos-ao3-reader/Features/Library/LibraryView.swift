@@ -504,7 +504,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private func footer(_ kind: LibrarySectionKind, _ work: SavedWork) -> String? {
         switch kind {
-        case .readingNow: WorkReadingPosition.cardProgressLabel(readiumProgress: work.readiumProgress)
+        case .readingNow: WorkReadingPosition.cardProgressLabel(progress: work.publicationProgress)
         case .finished: "Finished"
         default: nil
         }

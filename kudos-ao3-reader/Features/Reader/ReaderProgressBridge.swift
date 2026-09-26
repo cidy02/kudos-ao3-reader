@@ -79,6 +79,12 @@ final class ReaderProgressBridge {
 
     private var lastPersistedFraction: Double?
     private var lastPersistAt: Date?
+    /// Where the session opened. The card percent waits until the reader leaves
+    /// it: another chapter, or reading forward past the opening fraction. Not
+    /// backward — the restore itself lands at or before it (paged floors to a
+    /// page, scrolled clamps to the last screen), so a lower report can be layout.
+    private var opening: (spine: Int, fraction: Double)?
+    private var hasMoved = false
 
     /// Seeds session memory from the persisted position (the work's saved
     /// chapter + fraction) before the first chapter load, so reopening
@@ -94,6 +100,11 @@ final class ReaderProgressBridge {
     /// persisted pair always describes the chapter actually on screen.
     func beginChapter(spine: Int) -> Double {
         let restore = fractionBySpine[spine] ?? 0
+        if let opening {
+            hasMoved = hasMoved || spine != opening.spine
+        } else {
+            opening = (spine, restore)
+        }
         currentSpine = spine
         currentFraction = restore
         return restore
@@ -112,6 +123,7 @@ final class ReaderProgressBridge {
         let clamped = min(max(fraction, 0), 1)
         currentFraction = clamped
         fractionBySpine[spine] = clamped
+        if let opening, clamped >= opening.fraction + Self.minPersistDelta { hasMoved = true }
     }
 
     /// The fraction to write for an ordinary streamed update, or nil while the
@@ -134,6 +146,22 @@ final class ReaderProgressBridge {
         guard currentSpine != nil else { return nil }
         guard currentFraction != lastPersistedFraction else { return nil }
         return currentFraction
+    }
+
+    /// Writes `fraction` as the work's resume point, plus its Readium-equivalent
+    /// whole-book fraction for the cards (`legacyReaderProgress`) — keyed by this
+    /// bridge's spine, not the view's `currentIndex`, which can run ahead of the
+    /// chapter on screen. Until the reader moves (`hasMoved`) the percent is left
+    /// alone: the session opened on the Mac's own last spine, and opening and
+    /// closing a work read on the iPhone must not replace that device's percent.
+    func persist(_ fraction: Double, to work: SavedWork, resourceLengths: [Int?], at now: Date = Date()) {
+        work.lastScrollFraction = fraction
+        if hasMoved, let currentSpine, let percent = WorkReadingPosition.publicationProgress(
+            spineIndex: currentSpine, chapterFraction: fraction, resourceLengths: resourceLengths) {
+            work.legacyReaderProgress = percent
+        }
+        work.markProgressModified(now)
+        markPersisted(fraction, at: now)
     }
 
     /// Marks `fraction` as durably written so the debounce baseline advances.

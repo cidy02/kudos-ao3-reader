@@ -892,12 +892,8 @@ struct ReadiumReaderView: View {
         }
         let now = Date()
         if let toWrite = progressPersistence.locatorForFlush() {
-            if shelfStamp {
-                work.readiumLocator = toWrite
-                work.markProgressModified(now)
-            } else {
-                work.applyDebouncedReadiumLocator(toWrite, at: now)
-            }
+            work.applyDebouncedReadiumLocator(toWrite, at: now)
+            if shelfStamp { work.markProgressModified(now) }
             progressPersistence.markPersisted(
                 locatorString: toWrite,
                 totalProgression: book.currentLocator?.locations.totalProgression

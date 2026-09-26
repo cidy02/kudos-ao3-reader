@@ -130,6 +130,45 @@ struct SavedWorkProgressTests {
         #expect(reading.readingProgress == 0.8)
     }
 
+    // MARK: macOS reader progress (legacyReaderProgress)
+
+    @Test func macReaderPercentBeatsTheChapterFallback() {
+        // "3/?" has no total, so the legacy fallback was one chapter's scroll (0.9).
+        let reading = work()
+        reading.chapters = "3/?"
+        reading.lastSpineIndex = 3
+        reading.lastScrollFraction = 0.9
+        reading.legacyReaderProgress = 0.4
+        #expect(reading.readingProgress == 0.4)
+        #expect(WorkReadingPosition.cardProgressLabel(progress: reading.publicationProgress) == "40%")
+    }
+
+    @Test func lastReaderToWriteOwnsThePercent() {
+        let reading = work()
+        reading.readiumLocator = Self.readiumLocator(total: 0.8)
+        reading.legacyReaderProgress = 0.3      // then read on the Mac
+        #expect(reading.publicationProgress == 0.3)
+        #expect(reading.readingProgress == 0.3)
+
+        reading.applyDebouncedReadiumLocator(Self.readiumLocator(total: 0.6))   // back on iOS
+        #expect(reading.legacyReaderProgress == nil)
+        #expect(reading.publicationProgress == 0.6)
+        #expect(reading.readingProgress == 0.6)
+    }
+
+    /// Readium re-reports the restored spot on open, often as a new string. That
+    /// is not a read on the iPhone, so the Mac's further percent stays.
+    @Test func reReportedReadiumSpotKeepsTheMacPercent() {
+        let reading = work()
+        reading.readiumLocator = Self.readiumLocator(total: 0.2)
+        reading.legacyReaderProgress = 0.7
+        reading.applyDebouncedReadiumLocator(
+            #"{"href":"chapter1.xhtml","locations":{"totalProgression":0.2,"progression":0.1}}"#
+        )
+        #expect(reading.legacyReaderProgress == 0.7)
+        #expect(reading.publicationProgress == 0.7)
+    }
+
     // MARK: readingState — one partition for the whole reading lifecycle
 
     @Test func readingStatePartitionsTheLifecycle() {
