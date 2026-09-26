@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Artboard **1cb** — Assignments.
 ///
-/// The maintainer's read of a Gift Exchange's matching pass: who is matched, who
-/// AO3 could not match, and who is covering as a pinch hitter. Does not apply to
+/// The maintainer's read of a Gift Exchange's matching pass: who is matched, whose
+/// giver defaulted with no cover yet, and who is covering as a pinch hitter. Does not apply to
 /// Prompt Meme (1cc), which has no matching step at all.
 ///
 /// Matching is AO3's own algorithm (`potential_matches#generate`) and there is no
@@ -23,11 +23,13 @@ struct ChallengeAssignmentsView: View {
     @State private var matched: [AO3ChallengeAssignment] = []
     @State private var unmatched: [AO3ChallengeAssignment] = []
     @State private var pinchHits: [AO3ChallengeAssignment] = []
+    /// A list whose fetch failed shows its error, never an empty-state claim.
+    @State private var loadErrors: [Segment: String] = [:]
     /// Works-due is challenge-wide, not per-assignment, so it is read once off the
-    /// settings form (the same field `ChallengeSettingsView` labels "Works due")
-    /// rather than invented per row.
+    /// settings form (`AO3ChallengeSettings.worksDueAt`) rather than invented per row.
     @State private var worksDueAt: AO3ChallengeInstant?
-    @State private var segment: Segment = .matched
+    /// Unmatched leads: it is the only part a moderator has to act on.
+    @State private var segment: Segment = .unmatched
     @State private var phase: Phase = .idle
     @State private var itemInFlight: Int?
     @State private var actionErrorMessage: String?
@@ -100,7 +102,11 @@ struct ChallengeAssignmentsView: View {
     }
 
     private var subtitleLine: String {
-        var parts = ["\(matched.count) matched", "\(unmatched.count) unmatched"]
+        var parts: [String] = []
+        if phase == .loaded {
+            if loadErrors[.matched] == nil { parts.append("\(matched.count) matched") }
+            if loadErrors[.unmatched] == nil { parts.append("\(unmatched.count) unmatched") }
+        }
         if let date = worksDueAt?.date {
             parts.append("works due \(mediumDate(date))")
         }
@@ -126,13 +132,19 @@ struct ChallengeAssignmentsView: View {
         case .unmatched: unmatchedSection
         case .pinchHits: pinchHitsSection
         }
+
+        Section {
+            footnote.pageBodyRow(top: 8, gutter: gutter)
+        }
     }
 
     private var matchedSection: some View {
         Section {
             SectionRuleHeader(title: "Matched", count: matched.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            if matched.isEmpty {
+            if let error = loadErrors[.matched] {
+                failureCard(error, title: "Couldn't load matched assignments").pageBodyRow(top: 8, gutter: gutter)
+            } else if matched.isEmpty {
                 emptyCard("No matched assignments yet.").pageBodyRow(top: 8, gutter: gutter)
             } else {
                 assignmentRows(matched).pageBodyRow(top: 8, gutter: gutter)
@@ -144,7 +156,9 @@ struct ChallengeAssignmentsView: View {
         Section {
             SectionRuleHeader(title: "Pinch hits", count: pinchHits.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            if pinchHits.isEmpty {
+            if let error = loadErrors[.pinchHits] {
+                failureCard(error, title: "Couldn't load pinch hits").pageBodyRow(top: 8, gutter: gutter)
+            } else if pinchHits.isEmpty {
                 emptyCard("No pinch hits open right now.").pageBodyRow(top: 8, gutter: gutter)
             } else {
                 assignmentRows(pinchHits).pageBodyRow(top: 8, gutter: gutter)
@@ -154,13 +168,15 @@ struct ChallengeAssignmentsView: View {
 
     private var unmatchedSection: some View {
         Section {
-            SectionRuleHeader(title: "Unmatched", count: unmatched.count)
+            SectionRuleHeader(title: "Unmatched sign-ups", count: unmatched.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            if unmatched.isEmpty {
-                emptyCard("Every sign-up matched.").pageBodyRow(top: 8, gutter: gutter)
+            if let error = loadErrors[.unmatched] {
+                failureCard(error, title: "Couldn't load defaults").pageBodyRow(top: 8, gutter: gutter)
+            } else if unmatched.isEmpty {
+                emptyCard("No defaulted assignments are waiting for a pinch hitter.")
+                    .pageBodyRow(top: 8, gutter: gutter)
             } else {
                 unmatchedCards.pageBodyRow(top: 8, gutter: gutter)
-                unmatchedFootnote.pageBodyRow(top: 8, gutter: gutter)
             }
         }
     }
@@ -217,10 +233,11 @@ struct ChallengeAssignmentsView: View {
 
     @ViewBuilder
     private func statusBadge(for assignment: AO3ChallengeAssignment) -> some View {
-        if assignment.isFulfilled {
-            badge("Delivered", color: .green)
-        } else if assignment.isDefaulted {
-            badge("Defaulted", color: .orange)
+        switch assignment.badge(dueAt: worksDueAt?.date) {
+        case .delivered: badge("Delivered", color: .green)
+        case .late: badge("Late", color: .secondary)
+        case .defaulted: badge("Defaulted", color: .orange)
+        case nil: EmptyView()
         }
     }
 
@@ -280,11 +297,12 @@ struct ChallengeAssignmentsView: View {
 
     // MARK: - Unmatched cards
 
-    /// AO3's defaults queue lists one stuck request per row, not a pairing — the
-    /// spec's copy reads two names per card ("<pseud> and <pseud> share no
-    /// fandom…"), so consecutive unmatched requests are grouped two at a time
-    /// rather than each getting its own singleton card. An odd one out gets a
-    /// singular version of the same copy.
+    /// AO3's defaults queue lists one stuck request per row, not a pairing. The
+    /// spec draws two names per card, so consecutive rows are grouped two at a
+    /// time for layout only; an odd one out gets the singular copy. Truly
+    /// unmatched sign-ups live on potential_matches, which nothing parses, so
+    /// the copy says what the defaults list proves: a giver defaulted and no
+    /// pinch hitter has covered it.
     private var unmatchedPairs: [[String]] {
         let names = unmatched.map { displayName($0.requestPseud) }
         return stride(from: 0, to: names.count, by: 2).map { Array(names[$0..<min($0 + 2, names.count)]) }
@@ -300,7 +318,7 @@ struct ChallengeAssignmentsView: View {
 
     private func unmatchedCard(_ pair: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(pair.count == 2 ? "Two sign-ups did not match" : "One sign-up did not match")
+            Text(pair.count == 2 ? "Two sign-ups lost their giver" : "One sign-up lost its giver")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
 
@@ -319,12 +337,10 @@ struct ChallengeAssignmentsView: View {
     }
 
     private func unmatchedProse(_ pair: [String]) -> String {
-        let subject = pair.count == 2
-            ? "\(pair[0]) and \(pair[1])"
-            : pair[0]
-        let verb = pair.count == 2 ? "share" : "shares"
-        return "\(subject) \(verb) no fandom with any remaining offer. AO3 runs matching on its side, "
-            + "so the fix is either a pinch hit or a manual assignment there."
+        let lead = pair.count == 2
+            ? "The givers for \(pair[0]) and \(pair[1]) defaulted, and no pinch hitter has covered them yet."
+            : "The giver for \(pair[0]) defaulted, and no pinch hitter has covered it yet."
+        return lead + " AO3 runs matching on its side, so the fix is either a pinch hit or a manual assignment there."
     }
 
     /// Neither label is a native write — there is no maintainer-side "request a
@@ -342,9 +358,11 @@ struct ChallengeAssignmentsView: View {
         .tint(tint)
     }
 
-    private var unmatchedFootnote: some View {
-        Text("Matching is AO3’s own algorithm and runs on their side. "
-            + "The app can show who didn’t match; it cannot re-run matching or file a pinch hit request.")
+    /// The spec's footnote also says the app can report a default and send a
+    /// pinch-hit request; neither is a native write here yet, so it doesn't.
+    private var footnote: some View {
+        Text("Assignments and pinch hits are paged lists, and the app reads every page. "
+            + "A pinch-hit request opens AO3, and the app cannot run AO3’s matching, so no screen here offers to.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -376,9 +394,9 @@ struct ChallengeAssignmentsView: View {
             .subjectPanel()
     }
 
-    private func failureCard(_ message: String) -> some View {
+    private func failureCard(_ message: String, title: String = "Couldn't load assignments") -> some View {
         VStack(spacing: 8) {
-            Text("Couldn't load assignments")
+            Text(title)
                 .font(.system(size: 15, weight: .semibold))
             Text(message)
                 .font(.system(size: 13))
@@ -439,43 +457,39 @@ struct ChallengeAssignmentsView: View {
             return
         }
         phase = .loading
+        loadErrors = [:]
 
-        // Each list degrades to empty on a parse failure rather than failing the
-        // whole screen — matches ChallengeSettingsView's KNOWN DEFECT work-around
-        // for the same parser.
-        if let request = try? auth.authenticatedRequest(
-            for: AO3ChallengeURL.assignments(slug: collectionSlug, list: .assignments, page: 1)
-        ), let page = try? await AO3Client.shared.challengeAssignments(
-            slug: collectionSlug, list: .assignments, page: 1, request: request
-        ) {
-            matched = page.assignments
-        }
+        // Matched is every sent assignment: otwarchive's Complete (?fulfilled)
+        // plus Open (?unfulfilled). Each list fails on its own.
+        matched = await allPages(of: [.assignments, .unfulfilled], for: .matched)
+        unmatched = await allPages(of: [.defaults], for: .unmatched)
+        pinchHits = await allPages(of: [.pinchHits], for: .pinchHits)
 
-        if let request = try? auth.authenticatedRequest(
-            for: AO3ChallengeURL.assignments(slug: collectionSlug, list: .defaults, page: 1)
-        ), let page = try? await AO3Client.shared.challengeAssignments(
-            slug: collectionSlug, list: .defaults, page: 1, request: request
-        ) {
-            unmatched = page.assignments
-        }
-
-        if let request = try? auth.authenticatedRequest(
-            for: AO3ChallengeURL.assignments(slug: collectionSlug, list: .pinchHits, page: 1)
-        ), let page = try? await AO3Client.shared.challengeAssignments(
-            slug: collectionSlug, list: .pinchHits, page: 1, request: request
-        ) {
-            pinchHits = page.assignments
-        }
-
-        // Works-due is read off the settings form, best-effort: a failure here
-        // just leaves the header/rows without a due date.
+        // Works-due is read off the owner-only settings form, best-effort: a
+        // failure just leaves the header/rows without a due date (and no "late").
         if let request = try? auth.authenticatedRequest(
             for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
         ), let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request) {
-            worksDueAt = form.settings.worksRevealAt
+            worksDueAt = form.settings.worksDueAt
         }
 
         phase = .loaded
+    }
+
+    private func allPages(
+        of lists: [AO3ChallengeAssignmentList], for segment: Segment
+    ) async -> [AO3ChallengeAssignment] {
+        do {
+            let request = try auth.authenticatedRequest(
+                for: AO3ChallengeURL.assignments(slug: collectionSlug, list: lists[0])
+            )
+            return try await AO3Client.shared.allChallengeAssignments(
+                slug: collectionSlug, lists: lists, request: request
+            )
+        } catch {
+            loadErrors[segment] = error.localizedDescription
+            return []
+        }
     }
 
     private func claimPinchHit(_ assignment: AO3ChallengeAssignment) async {
