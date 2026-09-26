@@ -108,6 +108,13 @@ nonisolated struct EPUBDocument {
     let metadata: EPUBMetadata
     /// Table of contents, each entry mapped to a spine index.
     let chapters: [TOCEntry]
+    /// False for a `linear="no"` item, which this reader still shows but Readium
+    /// leaves out of its reading order (and so out of its progress).
+    let spineIsLinear: [Bool]
+    /// Each spine item's ZIP entry length in spine order — the weights
+    /// `WorkReadingPosition.publicationProgress` needs; nil where Readium has no
+    /// positions (non-linear, or not in the archive). Filled by `open`.
+    var spineEntryLengths: [Int?] = []
 
     /// Parses an already-unzipped EPUB rooted at `directory`.
     init(unzippedAt directory: URL) throws {
@@ -129,6 +136,8 @@ nonisolated struct EPUBDocument {
         }
         guard !spineURLs.isEmpty else { throw EPUBError.noReadableContent }
         self.spineURLs = spineURLs
+        spineIsLinear = parser.spine.indices.filter { parser.manifest[parser.spine[$0]] != nil }
+            .map { parser.spineLinear[$0] }
         metadata = EPUBMetadata(
             title: parser.title,
             author: parser.author,
@@ -226,7 +235,16 @@ nonisolated struct EPUBDocument {
         guard let data = try? Data(contentsOf: epubURL) else { throw EPUBError.unreadableFile }
         guard let zip = try? MiniZip(data: data) else { throw EPUBError.notAnEPUB }
         do { try zip.unzip(to: directory) } catch { throw EPUBError.extractionFailed }
-        return try EPUBDocument(unzippedAt: directory)
+        var document = try EPUBDocument(unzippedAt: directory)
+        let root = directory.standardizedFileURL.path + "/"
+        document.spineEntryLengths = document.spineURLs.indices.map { index in
+            let path = document.spineURLs[index].standardizedFileURL.path
+            guard document.spineIsLinear[index], path.hasPrefix(root) else { return nil }
+            // The OPF href is a URL: "ch%201.xhtml" names the archive entry "ch 1.xhtml".
+            let name = String(path.dropFirst(root.count))
+            return zip.entryLength(named: name.removingPercentEncoding ?? name)
+        }
+        return document
     }
 
     /// Reads just the metadata from an EPUB file without unzipping to disk.

@@ -468,13 +468,12 @@ extension WorkDetailView {
                     value: work.lastReadDate
                         .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
                 )
-                if let progressLabel = WorkReadingPosition.cardProgressLabel(
-                    readiumProgress: work.readiumProgress
-                ) {
+                // Bar and label share one source: `readingProgress`'s chapter
+                // fallback draws a bar for works never opened.
+                if let progress = work.publicationProgress,
+                   let progressLabel = WorkReadingPosition.cardProgressLabel(progress: progress) {
                     LabeledContent("Progress", value: progressLabel)
-                    if let progress = work.readingProgress {
-                        ProgressView(value: progress)
-                    }
+                    ProgressView(value: progress)
                 }
             }
             .cardRow()

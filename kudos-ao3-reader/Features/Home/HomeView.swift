@@ -595,7 +595,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func footer(_ kind: HomeSectionKind, _ work: SavedWork) -> String? {
         switch kind {
         case .readingNow:
-            return WorkReadingPosition.cardProgressLabel(readiumProgress: work.readiumProgress)
+            return WorkReadingPosition.cardProgressLabel(progress: work.publicationProgress)
         case .recentlyUpdated:
             let new = work.postedChapterCount - work.knownChapterCount
             return new > 0 ? "+\(new) new" : "Updated"

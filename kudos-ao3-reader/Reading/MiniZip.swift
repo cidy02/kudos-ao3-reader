@@ -220,6 +220,14 @@ nonisolated struct MiniZip {
         return entries[index].uncompressedSize
     }
 
+    /// The entry's length as stored in the archive — compressed size for DEFLATE,
+    /// raw size for stored — which is what Readium sizes its positions by.
+    func entryLength(named name: String) -> Int? {
+        guard let index = entryIndexByName[name] else { return nil }
+        let entry = entries[index]
+        return entry.method == 0 ? entry.uncompressedSize : entry.compressedSize
+    }
+
     /// The CRC-32 the archive declares for an entry, for a caller that wants to
     /// check extracted bytes against it.
     ///

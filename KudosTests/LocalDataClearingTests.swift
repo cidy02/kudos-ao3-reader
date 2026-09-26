@@ -102,17 +102,19 @@ struct LocalDataClearingTests {
         spine.lastSpineIndex = 4
         let scrolled = finishedWork(title: "Scrolled", in: context)
         scrolled.lastScrollFraction = 0.3
+        let macPercent = finishedWork(title: "Mac Percent", in: context)
+        macPercent.legacyReaderProgress = 0.4
         let untouched = finishedWork(title: "Untouched", in: context)
         try context.save()
 
         let positioned = LocalDataClearing
-            .selectReadingPositions(from: [readium, spine, scrolled, untouched])
+            .selectReadingPositions(from: [readium, spine, scrolled, macPercent, untouched])
             .map(\.title)
             .sorted()
 
         // Three fields, two readers. Checking only `readiumLocator` would drop
         // the two works someone is genuinely mid-way through.
-        #expect(positioned == ["Readium", "Scrolled", "Spine"])
+        #expect(positioned == ["Mac Percent", "Readium", "Scrolled", "Spine"])
     }
 
     @Test func clearingPositionsLeavesTheContinueReadingOrderAlone() throws {
@@ -121,6 +123,7 @@ struct LocalDataClearingTests {
         work.readiumLocator = #"{"href":"c1.xhtml"}"#
         work.lastSpineIndex = 6
         work.lastScrollFraction = 0.75
+        work.legacyReaderProgress = 0.5
         let lastRead = Date(timeIntervalSince1970: 5_000)
         work.lastReadDate = lastRead
         try context.save()
@@ -131,6 +134,7 @@ struct LocalDataClearingTests {
         #expect(work.readiumLocator.isEmpty)
         #expect(work.lastSpineIndex == 0)
         #expect(work.lastScrollFraction == 0)
+        #expect(work.legacyReaderProgress == nil)
         // `lastReadDate` is the Library shelf's ordering, not a position inside
         // a file. Clearing it would empty a shelf nobody asked to empty.
         #expect(work.lastReadDate == lastRead)

@@ -24,6 +24,7 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
     var manifestMedia: [String: String] = [:] // item id -> media-type
     var manifestProps: [String: String] = [:] // item id -> properties
     var spine: [String] = [] // itemref idref order
+    var spineLinear: [Bool] = [] // per itemref: false for linear="no"
     var tocID: String? // <spine toc="..."> (NCX id)
 
     private var currentElement = ""
@@ -57,7 +58,10 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
                 manifestProps[id] = attributes["properties"]
             }
         case "itemref":
-            if let idref = attributes["idref"] { spine.append(idref) }
+            if let idref = attributes["idref"] {
+                spine.append(idref)
+                spineLinear.append(attributes["linear"]?.lowercased() != "no")
+            }
         case "spine":
             if let toc = attributes["toc"] { tocID = toc }
         case "meta":

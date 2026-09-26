@@ -22,7 +22,7 @@ final class ReadiumProgressPersistence {
     /// Write at most this often while progress streams in from scrolling/page turns.
     static let minPersistInterval: TimeInterval = 2
     /// Skip writes for changes smaller than this (noise-level progression jitter).
-    static let minProgressionDelta: Double = 0.001
+    nonisolated static let minProgressionDelta: Double = 0.001
 
     /// Latest locator JSON reported by the navigator (may be ahead of disk).
     private(set) var latestLocatorString: String?

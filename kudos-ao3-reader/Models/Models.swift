@@ -282,6 +282,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     var lastScrollFraction: Double = 0
     var readiumLocator: String = ""
     var progressModifiedAt: Date?
+    /// The macOS reader's position as Readium's whole-publication fraction
+    /// (`WorkReadingPosition.publicationProgress`). Display only — neither reader
+    /// resumes from it. The Mac writes it once its session moves
+    /// (`ReaderProgressBridge.persist`); the Readium reader clears it when it
+    /// writes a new position, so labels follow whichever reader last moved.
+    var legacyReaderProgress: Double?
 
     /// When the work was last opened in the reader. Drives the Library's
     /// "Continue Reading" ordering; nil for works never opened (or pre-migration).
@@ -507,6 +513,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         return total
     }
 
+    /// Whole-publication fraction from whichever reader had the work open last:
+    /// the macOS reader's Readium-equivalent value, else Readium's own.
+    var publicationProgress: Double? {
+        legacyReaderProgress ?? readiumProgress
+    }
+
     /// The user has opened this work in either reader. The Readium reader records a
     /// `readiumLocator`; the legacy reader records a spine index / scroll fraction.
     /// Both stamp `lastReadDate`, which also covers works restored from a backup.
@@ -549,12 +561,13 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         readingState == .inProgress
     }
 
-    /// Reading progress in 0…1 for the Reading Now shelves. Prefers the Readium
-    /// reader's exact fraction; falls back to the legacy reader's chapter position
-    /// over the work's AO3 chapter count ("5/10") or its in-chapter scroll fraction.
+    /// Reading progress in 0…1 for the Reading Now shelves. Prefers the
+    /// whole-publication fraction (`publicationProgress`); falls back to the legacy
+    /// reader's chapter position over the work's AO3 chapter count ("5/10") or its
+    /// in-chapter scroll fraction, for works not reopened on the Mac since.
     /// `nil` when there's nothing meaningful to show.
     var readingProgress: Double? {
-        if let readium = readiumProgress { return readium }
+        if let progress = publicationProgress { return progress }
         let parts = chapters.split(separator: "/")
         if parts.count == 2, let total = Int(parts[1].trimmingCharacters(in: .whitespaces)), total > 1 {
             return min(1, Double(lastSpineIndex + 1) / Double(total))
@@ -615,8 +628,15 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// **not** write a `ReadingSession` — sessions start/end on reader
     /// appear/disappear (`ReadingLogService`), not on mid-scroll ticks.
     func applyDebouncedReadiumLocator(_ locator: String, at date: Date = Date()) {
+        let before = readiumProgress
         readiumLocator = locator
         progressModifiedAt = date
+        // Only a new position retires the macOS reader's percent. The first write
+        // after open is string-gated, so the restored spot re-reported as a new
+        // string lands here too; a glance is not a read.
+        if let before, let after = readiumProgress,
+           abs(after - before) < ReadiumProgressPersistence.minProgressionDelta { return }
+        legacyReaderProgress = nil
     }
 }
 

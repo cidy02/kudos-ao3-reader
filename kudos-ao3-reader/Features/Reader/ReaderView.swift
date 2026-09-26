@@ -531,28 +531,26 @@ private extension ReaderView {
         // Chapter transitions persist the position pair together, so the saved
         // spine + fraction always describe the same chapter.
         work.lastSpineIndex = currentIndex
-        work.lastScrollFraction = restore
-        work.markProgressModified()
-        progressBridge.markPersisted(restore)
+        persist(fraction: restore)
         landNextChapterOnLastPage = false
+    }
+
+    func persist(fraction: Double) {
+        progressBridge.persist(fraction, to: work, resourceLengths: document?.spineEntryLengths ?? [])
     }
 
     /// Ordinary streamed update: writes only when the bridge's debounce allows,
     /// keeping SwiftData writes rare while the user scrolls.
     func persistProgressIfDue() {
         guard let fraction = progressBridge.fractionForDebouncedWrite() else { return }
-        work.lastScrollFraction = fraction
-        work.markProgressModified()
-        progressBridge.markPersisted(fraction)
+        persist(fraction: fraction)
     }
 
     /// Flush point (dismissal, mode/layout transition, app termination): always
     /// writes the latest position, bypassing the debounce window.
     func flushProgress() {
         guard let fraction = progressBridge.fractionForFlush() else { return }
-        work.lastScrollFraction = fraction
-        work.markProgressModified()
-        progressBridge.markPersisted(fraction)
+        persist(fraction: fraction)
     }
 }
 

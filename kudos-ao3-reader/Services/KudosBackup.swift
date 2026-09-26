@@ -920,6 +920,11 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let ao3WorkID: Int?
     let userTags: [String]
     let readiumLocator: String?
+    /// The macOS reader's whole-publication fraction (`SavedWork.legacyReaderProgress`).
+    /// Additive on v8 like `keepInProgressOverride`. Always written, a cleared value
+    /// as JSON null (`.some(nil)`); only an absent key — an older build, or Android,
+    /// which strips unknown keys — decodes as nil, and that leaves the local value.
+    let legacyReaderProgress: Double??
     /// SHA-256 of the EPUB this record was exported with, when known.
     ///
     /// Optional, and absent in every archive written before this — which is
@@ -996,6 +1001,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         // serialized nil, and restoring it onto an iPhone lost the exact
         // reading position of every work that had one.
         readiumLocator = work.readiumLocator
+        legacyReaderProgress = .some(work.legacyReaderProgress)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
     }
 
@@ -1055,6 +1061,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case ao3WorkID
         case userTags
         case readiumLocator
+        case legacyReaderProgress
         case epubDigest
     }
 
@@ -1131,6 +1138,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         ao3WorkID = try container.decodeIfPresent(Int.self, forKey: .ao3WorkID)
         userTags = try container.decodeIfPresent([String].self, forKey: .userTags) ?? []
         readiumLocator = try container.decodeIfPresent(String.self, forKey: .readiumLocator)
+        legacyReaderProgress = container.contains(.legacyReaderProgress)
+            ? .some(try container.decode(Double?.self, forKey: .legacyReaderProgress)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
     }
 }
@@ -4432,7 +4441,8 @@ enum KudosBackupService {
                 lastScrollFraction: archived.lastScrollFraction,
                 readiumLocator: archived.readiumLocator,
                 lastReadDate: archived.lastReadDate,
-                modifiedAt: archived.progressModifiedAt
+                modifiedAt: archived.progressModifiedAt,
+                legacyReaderProgress: archived.legacyReaderProgress
             ),
             to: work,
             // Replace is a snapshot: the archive's reading position wins even

@@ -561,6 +561,9 @@ nonisolated enum SyncMerge {
         var readiumLocator: String?
         var lastReadDate: Date?
         var modifiedAt: Date?
+        /// The macOS reader's card percent. Like the locator, absent (nil) is not a
+        /// reset; `.some(nil)` — a snapshot that carried the key as null — clears it.
+        var legacyReaderProgress: Double??
     }
 
     static func shouldApplyIncoming(localModifiedAt: Date?, incomingModifiedAt: Date?) -> Bool {
@@ -635,6 +638,9 @@ nonisolated enum SyncMerge {
         // backup round-tripped through macOS cost every work its exact page.
         if let locator = incoming.readiumLocator {
             work.readiumLocator = locator
+        }
+        if let percent = incoming.legacyReaderProgress {
+            work.legacyReaderProgress = percent
         }
         work.lastReadDate = incoming.lastReadDate
         work.progressModifiedAt = incomingModifiedAt
