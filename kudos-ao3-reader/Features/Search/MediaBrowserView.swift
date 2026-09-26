@@ -565,19 +565,28 @@ struct MediaBrowserView: View {
     }
 
     /// Cheap signature of everything `recomputeStats` depends on: which categories
-    /// have a full list yet (+its size) and the library's size/newest item. The
-    /// body recomputes only THIS (O(categories)), never the stats themselves; the
-    /// stats recompute is driven by `.task(id: statsToken)`.
+    /// have a full list yet (+its size), the catalog's revision, and the library's
+    /// size and latest change. The body recomputes only THIS (O(categories +
+    /// works)), never the stats themselves; the stats recompute is driven by
+    /// `.task(id: statsToken)`.
     private var statsToken: String {
         var parts: [String] = []
         for category in categories {
             parts.append("\(category.id):\(catalog.fandoms(for: category)?.count ?? -1)")
         }
-        let newest = library.map(\.dateAdded).max()?.timeIntervalSince1970 ?? 0
-        // Reading a work changes what Jump Back In and the recent chips show, and
-        // neither the library's size nor its newest addition moves when you read.
+        // A same-size catalog refresh moves only `revision`.
+        parts.append("rev:\(catalog.revision)")
+        // Every read, finish/unfinish and metadata refresh stamps `lastModifiedAt`
+        // (`markModified`/`markProgressModified`), so the max moves whenever Jump
+        // Back In or the chips could; `count` catches soft-deletes leaving the query.
+        // A synced read keeps its own older stamps (`PersistenceSync.applyProgress`),
+        // so it can be the newest read without being the newest change: hence the
+        // `lastReadDate` max as well.
+        // ponytail: a synced read older than both maxima won't retrigger; fingerprint
+        // the works if that ever shows up.
+        let changed = library.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
         let lastRead = library.compactMap(\.lastReadDate).max()?.timeIntervalSince1970 ?? 0
-        parts.append("lib:\(library.count):\(newest):\(lastRead)")
+        parts.append("lib:\(library.count):\(changed):\(lastRead)")
         return parts.joined(separator: "|")
     }
 

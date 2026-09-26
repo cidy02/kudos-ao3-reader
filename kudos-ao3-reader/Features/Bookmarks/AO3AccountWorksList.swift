@@ -227,6 +227,14 @@ struct AO3AccountWorksList: View {
         )
     }
 
+    /// Subscriptions rows shown but not yet judged by the facets; 0 elsewhere.
+    private var refinePendingCount: Int {
+        guard kind == .subscriptions else { return 0 }
+        return AO3SubscriptionsRefine.pendingCount(
+            works: works, enriched: enrichedSubscriptionSummaries, filters: filters
+        )
+    }
+
     /// History's progress pills, applied after the refine facets. Other lists
     /// leave the merged page alone.
     private var historyDisplayedEntries: [CanonicalWork] {
@@ -327,8 +335,11 @@ struct AO3AccountWorksList: View {
                     // The same array `visibleWorks` narrows, and the count it
                     // leaves, so 1au's line and the list behind it can never
                     // disagree — Subscriptions' rule is not the panel's own.
+                    // Rows kept unjudged are the list's too, named apart from
+                    // the matches: matches + pending is still the list.
                     refineSource: works,
-                    refineMatchCount: visibleWorks.count
+                    refineMatchCount: visibleWorks.count - refinePendingCount,
+                    refinePendingCount: refinePendingCount
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
