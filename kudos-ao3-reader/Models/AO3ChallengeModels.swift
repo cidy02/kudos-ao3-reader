@@ -184,6 +184,12 @@ nonisolated struct AO3PromptRestrictionSnapshot: Hashable, Sendable {
     var archiveWarningRequired: Int = 0
     var archiveWarningAllowed: Int = 0
     var tagSetsToAdd: String = ""
+
+    /// 1by's "Allow any prompt": whether a request may pick AO3's "Any" option
+    /// for any of the four tag types.
+    var allowsAnyTag: Bool {
+        allowAnyFandom || allowAnyCharacter || allowAnyRelationship || allowAnyFreeform
+    }
 }
 
 /// Gift-exchange / prompt-meme settings as AO3 stores them on the challenge
@@ -214,6 +220,10 @@ nonisolated struct AO3ChallengeSettings: Hashable, Sendable, Identifiable {
     var assignmentsSentAt: Date?
 
     var id: String { collectionSlug }
+
+    /// When works are due. otwarchive prints `assignments_due_at` as "Assignments
+    /// Due:" and mails it as the due date; `works_reveal_at` is only the reveal.
+    var worksDueAt: AO3ChallengeInstant { assignmentsDueAt }
 
     /// AO3 matching is not exposed to clients (`potential_matches#generate`).
     var matchingOpenOnAO3: URL {
@@ -328,16 +338,6 @@ nonisolated struct AO3ChallengePrompt: Hashable, Sendable, Identifiable {
     var anyRelationship: Bool = false
     var anyFreeform: Bool = false
     var destroy: Bool = false
-
-    /// One-line tag summary for the sign-up row (1bz).
-    var tagSummary: String {
-        var parts = fandoms + characters + relationships + freeforms
-        if anyFandom { parts.append("Any Fandom") }
-        if anyCharacter { parts.append("Any Character") }
-        if anyRelationship { parts.append("Any Relationship") }
-        if anyFreeform { parts.append("Any Additional Tag") }
-        return parts.joined(separator: ", ")
-    }
 }
 
 nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
@@ -358,6 +358,17 @@ nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
         // byline instead. A giver is what makes the joined request matched.
         offerSignupID != nil || !offerPseud.isEmpty
     }
+
+    enum Badge { case delivered, late, defaulted }
+
+    /// 1cb's row badge. Late is derived, not parsed: past the challenge's
+    /// works-due date and not complete. No due date, no late claim.
+    func badge(dueAt: Date?, now: Date = .now) -> Badge? {
+        if isFulfilled { return .delivered }
+        if isDefaulted { return .defaulted }
+        if let dueAt, now > dueAt { return .late }
+        return nil
+    }
 }
 
 nonisolated struct AO3ChallengeSignUp: Hashable, Sendable, Identifiable {
@@ -365,16 +376,19 @@ nonisolated struct AO3ChallengeSignUp: Hashable, Sendable, Identifiable {
     var collectionSlug: String
     var pseud: String
     var pseudID: String = ""
-    var userURL: URL?
     var requests: [AO3ChallengePrompt] = []
     var offers: [AO3ChallengePrompt] = []
     /// Joined from the assignments object, never from the sign-up itself (1bz).
     var assignment: AO3ChallengeAssignment?
 
-    var isMatched: Bool { assignment?.isMatched == true }
+    /// A defaulted, uncovered assignment has lost its giver: 1cb lists it
+    /// under "Unmatched sign-ups", so it is not matched here either.
+    var isMatched: Bool { assignment.map { $0.isMatched && !$0.isDefaulted } ?? false }
 
+    /// The distinct fandoms the sign-up requests, in order (1bz's one-liner).
     var requestTagSummary: String {
-        requests.map(\.tagSummary).filter { !$0.isEmpty }.joined(separator: " · ")
+        var seen = Set<String>()
+        return requests.flatMap(\.fandoms).filter { seen.insert($0).inserted }.joined(separator: ", ")
     }
 }
 
@@ -400,6 +414,10 @@ nonisolated struct AO3ChallengeSignUpForm: Hashable, Sendable {
 
     var isNew: Bool { signUpID == nil }
     var isValid: Bool { fieldErrors.isEmpty && generalErrors.isEmpty }
+
+    /// Unsaved prompts take negative ids, one below the lowest in use, so
+    /// `ForEach` identity stays unique. Only AO3's own (positive) ids are posted.
+    var nextDraftPromptID: Int { min(0, (requests + offers).map(\.id).min() ?? 0) - 1 }
 
     func validated() -> AO3ChallengeSignUpForm {
         var copy = self
@@ -670,6 +688,26 @@ nonisolated enum AO3ChallengeURL {
 
 /// Join matched-state from the assignments object onto sign-up rows (1bz).
 nonisolated enum AO3ChallengeSignUpMatching {
+    enum State { case matched, unmatched, unknown }
+
+    /// Without the assignments (fetch failed, or AO3 withholds them while
+    /// sign-ups are open), no row can honestly be called unmatched.
+    static func state(of signUp: AO3ChallengeSignUp, assignmentsLoaded: Bool) -> State {
+        guard assignmentsLoaded else { return .unknown }
+        return signUp.isMatched ? .matched : .unmatched
+    }
+
+    /// The viewer's own row, by byline: otwarchive prints `name` for a default
+    /// pseud and `name (login)` otherwise.
+    static func ownSignUpID(in signUps: [AO3ChallengeSignUp], login: String) -> Int? {
+        let login = login.lowercased()
+        guard !login.isEmpty else { return nil }
+        return signUps.first {
+            let byline = $0.pseud.lowercased()
+            return byline == login || byline.hasSuffix("(\(login))")
+        }?.id
+    }
+
     static func joining(
         _ signUps: [AO3ChallengeSignUp],
         assignments: [AO3ChallengeAssignment]
@@ -691,5 +729,17 @@ nonisolated enum AO3ChallengeSignUpMatching {
                 ?? byRequestPseud[signUp.pseud.lowercased()]
             return copy
         }
+    }
+}
+
+/// Count labels that say what was actually read (1bz, 1by, 1cc, 1cf).
+nonisolated enum AO3ChallengeCountText {
+    static func plural(_ count: Int, _ noun: String) -> String {
+        "\(count) \(noun)\(count == 1 ? "" : "s")"
+    }
+
+    /// A count taken from one page of several is labelled with that page.
+    static func pageQualifier(page: Int, totalPages: Int) -> String? {
+        totalPages > 1 ? "on page \(page) of \(totalPages)" : nil
     }
 }
