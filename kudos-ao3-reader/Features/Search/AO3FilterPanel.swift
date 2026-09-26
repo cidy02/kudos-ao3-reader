@@ -48,6 +48,9 @@ struct AO3FilterPanel: View {
     /// `filters.apply` alone (Subscriptions keeps rows it knows nothing about yet —
     /// `AO3SubscriptionsRefine`). Nil counts with `filters.apply`.
     var refineMatchCount: Int?
+    /// Rows the host shows but could not judge yet (Subscriptions' index-only
+    /// rows). Not in `refineMatchCount`; the line names them separately.
+    var refinePendingCount = 0
 
     /// Whether "Include Not Rated" is drawn (1au.2). Refine reads it only once a
     /// rating is chosen — `AO3SummaryFilter`'s Rating-Any rule, pinned by
@@ -102,7 +105,8 @@ struct AO3FilterPanel: View {
         let total = refineSource.count
         let matching = refineMatchCount ?? filters.apply(to: refineSource).count
         let works = total == 1 ? "work" : "works"
-        return "\(matching) of the \(total) \(works) on this page match"
+        let line = "\(matching) of the \(total) \(works) on this page match"
+        return refinePendingCount > 0 ? "\(line) · \(refinePendingCount) not checked yet" : line
     }
 
     /// Reset top-left, Apply top-right — the ends of the bar, where a sheet's

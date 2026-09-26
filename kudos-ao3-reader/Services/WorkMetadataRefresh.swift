@@ -68,7 +68,12 @@ enum WorkMetadataRefresh {
         return summary
     }
 
-    static func refresh(_ work: SavedWork, in context: ModelContext, auth: AO3AuthService) async throws {
+    /// Returns the metadata it applied, for a screen that also shows it from
+    /// its own remote snapshot (Work Details opened from a listing).
+    @discardableResult
+    static func refresh(
+        _ work: SavedWork, in context: ModelContext, auth: AO3AuthService
+    ) async throws -> AO3WorkMetadata {
         guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
             throw RefreshError.missingAO3ID
         }
@@ -84,6 +89,7 @@ enum WorkMetadataRefresh {
         apply(metadata, to: work)
         WorkSearchIndex.reindex(work)
         try context.save()
+        return metadata
     }
 
     /// The full parsed work-page metadata, for callers (Work Details refresh)

@@ -13,7 +13,9 @@ import Foundation
 /// fetched, the index row until then. A row still index-only stays, because a
 /// facet cannot yet say no; it is judged when its summary lands. The rows
 /// returned are the index rows themselves, so the list draws exactly what it drew
-/// before and only the choice of rows changes.
+/// before and only the choice of rows changes. A kept index-only row is not a
+/// match, though: `pendingCount` is how many there are, so the panel can say so
+/// instead of counting them in.
 enum AO3SubscriptionsRefine {
     static func visible(
         works: [AO3WorkSummary],
@@ -24,6 +26,17 @@ enum AO3SubscriptionsRefine {
             let known = enriched[row.id] ?? row
             return isIndexOnly(known) || filters.matchesSummary(known)
         }
+    }
+
+    /// The rows `visible` keeps only because nothing is known of them yet. None
+    /// while no refine facet narrows, since then every row simply matches.
+    static func pendingCount(
+        works: [AO3WorkSummary],
+        enriched: [Int: AO3WorkSummary],
+        filters: AO3SearchFilters
+    ) -> Int {
+        guard filters.refineActiveCount > 0 else { return 0 }
+        return works.count(where: { isIndexOnly(enriched[$0.id] ?? $0) })
     }
 
     /// Nothing but the index's title, id and author: no rating and no fandom,

@@ -674,7 +674,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         resolveExistingIfNeeded()
         do {
             if let work = localWork {
-                try await WorkMetadataRefresh.refresh(work, in: context, auth: auth)
+                let metadata = try await WorkMetadataRefresh.refresh(work, in: context, auth: auth)
+                // Opened from a listing, the figures come from the remote
+                // snapshot first (`WorkDetailFigures.preferred`), so it has to
+                // move with the save or the stale listing figures stay up.
+                if sourceRemote != nil { refreshedRemote = metadata.summaryValue }
             } else if let summary = remote {
                 let metadata = try await WorkMetadataRefresh.remoteMetadata(workID: summary.id, auth: auth)
                 refreshedRemote = metadata.summaryValue

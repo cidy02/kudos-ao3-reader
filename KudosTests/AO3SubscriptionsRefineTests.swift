@@ -26,6 +26,14 @@ struct AO3SubscriptionsRefineTests {
         #expect(visible.map(\.id) == [1, 2])
         // The index rows come back, not their summaries: only the choice changes.
         #expect(visible.map(\.title) == ["Unknown", "Teen"])
+        // The unknown row stays on the list but is not a match: the panel
+        // counts it apart ("1 of the 3 works on this page match · 1 not
+        // checked yet").
+        let pending = AO3SubscriptionsRefine.pendingCount(
+            works: [unknown, teenRow, explicitRow], enriched: enriched, filters: filters
+        )
+        #expect(pending == 1)
+        #expect(visible.count - pending == 1)
     }
 
     @Test func withNoFacetEveryRowStays() {
@@ -37,6 +45,9 @@ struct AO3SubscriptionsRefineTests {
             works: rows, enriched: [2: summary(id: 2, rating: "Explicit")], filters: AO3SearchFilters()
         )
         #expect(visible.map(\.id) == [1, 2])
+        #expect(AO3SubscriptionsRefine.pendingCount(
+            works: rows, enriched: [2: summary(id: 2, rating: "Explicit")], filters: AO3SearchFilters()
+        ) == 0)
     }
 
     @Test func aRowWithARatingOrAFandomIsNoLongerIndexOnly() {

@@ -31,6 +31,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// The page the latest load asked for, until it lands — so Try Again after a
     /// failed page tap retries that page (1k.7) instead of `runSearch`'s page 1.
     @State private var requestedPage: Int?
+    /// The filters the results on screen were loaded with; nil while a new
+    /// search has none yet. The panel edits the live `filters` before Apply, so
+    /// they can differ from what is showing.
+    @State private var loadedFilters: AO3SearchFilters?
     @State private var totalPages = 1
     /// AO3's own result-count heading for the current results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
@@ -648,6 +652,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             loadToken += 1
             bulkSelection.selection.removeAll()
             filters = previous.filters
+            loadedFilters = previous.filters
             results = previous.results
             currentPage = previous.page
             totalPages = previous.totalPages
@@ -706,6 +711,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         router.panel = .none
         phase = .loading
         results = []
+        loadedFilters = nil
         currentPage = 1
         totalPages = 1
         resultSummary = nil
@@ -750,7 +756,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             filterHistory.removeAll()
         } else if filters.isSearchable {
             filterHistory.append(FilterHistoryEntry(
-                filters: filters,
+                // What the saved results were loaded with, not an un-applied panel
+                // edit: Back restores these as `loadedFilters` too.
+                filters: loadedFilters ?? filters,
                 page: currentPage,
                 results: results,
                 totalPages: totalPages,
@@ -818,6 +826,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     }
 
     private func load(page: Int) {
+        // A page tap, a refresh or Try Again after an un-applied filter edit
+        // would otherwise ask for page N of a query whose page 1 never loaded.
+        // Here, so all three callers get it: the edited query starts at page 1.
+        if page != 1, filters != loadedFilters {
+            runSearch()
+            return
+        }
         // Here rather than in the callers: `runSearch` and `refreshCurrentResults`
         // each set it themselves, but a page tap goes straight to `load` — so the
         // Search tab's pager had no spinner and kept both arrows live while a
@@ -844,6 +859,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 resultSummary = result.summary
+                loadedFilters = current
                 requestedPage = nil
                 phase = .loaded
             } catch is CancellationError {
