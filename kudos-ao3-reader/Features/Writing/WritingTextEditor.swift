@@ -216,7 +216,24 @@ struct WritingTextEditor: View {
         text = value
         let sequence = scheduler.checkpointCount
         if let recoveryWriter {
+            // The write is queued, and the app can be suspended before it runs
+            // (a scene change, or an idle or Done write still in flight when the
+            // app backgrounds). The assertion buys the documented finish window;
+            // the expiration handler ends it rather than overrunning.
+            #if os(iOS)
+            var assertion = UIBackgroundTaskIdentifier.invalid
+            assertion = UIApplication.shared.beginBackgroundTask(withName: "Writing recovery") {
+                UIApplication.shared.endBackgroundTask(assertion)
+                assertion = .invalid
+            }
+            #endif
             Task {
+                #if os(iOS)
+                defer {
+                    if assertion != .invalid { UIApplication.shared.endBackgroundTask(assertion) }
+                    assertion = .invalid
+                }
+                #endif
                 do {
                     try await recoveryWriter.write(value, sequence: sequence)
                 } catch {

@@ -1,9 +1,11 @@
+import Combine
 import SwiftUI
 
 /// The existing authenticated drafts endpoint, with native form destinations.
 struct WritingDraftsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var result: AO3SearchPage?
     /// Each draft's deletion date from its blurb, keyed by work id (1x).
     @State private var deletionDates: [Int: DateComponents] = [:]
@@ -12,6 +14,9 @@ struct WritingDraftsView: View {
     @State private var isLoading = false
     @State private var loadedGeneration: Int?
     @State private var errorMessage: String?
+    /// The day the chips and the tally count from. Read on resume and when the
+    /// day changes, since nothing else re-renders this screen on time.
+    @State private var now = Date()
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
@@ -86,7 +91,7 @@ struct WritingDraftsView: View {
                     // card in the app carries. One card per row, so one link per
                     // row — the rows cannot misfire.
                     ForEach(result.works) { work in
-                        DraftCard(work: work, deletion: deletionDates[work.id])
+                        DraftCard(work: work, deletion: deletionDates[work.id], now: now)
                             .subjectRowNavigation(accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title) {
                                 WritingWorkDestination(workID: work.id)
                             }
@@ -115,6 +120,10 @@ struct WritingDraftsView: View {
         .subjectScreenWash(palette: theme.scopePalette)
         .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
         .refreshable { reload += 1 }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            now = Date()
+        }
     }
 
     /// 1x's orange notice. Artboard 1x warns that drafts expire, which is the
@@ -155,7 +164,7 @@ struct WritingDraftsView: View {
         guard let result, loadedGeneration == auth.sessionGeneration else { return nil }
         let count = result.works.count
         let expiring = DraftExpiry.expiringThisWeek(
-            result.works.compactMap { deletionDates[$0.id] }, now: Date(), calendar: .current
+            result.works.compactMap { deletionDates[$0.id] }, now: now, calendar: .current
         )
         if result.totalPages > 1 {
             let pageLine = "page \(result.currentPage) of \(result.totalPages)"
@@ -195,6 +204,7 @@ private struct DraftCard: View {
     let work: AO3WorkSummary
     /// The deletion date AO3 printed on this draft, when it parsed.
     var deletion: DateComponents?
+    let now: Date
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -218,7 +228,7 @@ private struct DraftCard: View {
     }
 
     private var daysLeft: Int? {
-        deletion.flatMap { DraftExpiry.daysLeft(until: $0, now: Date(), calendar: .current) }
+        deletion.flatMap { DraftExpiry.daysLeft(until: $0, now: now, calendar: .current) }
     }
 
     private var created: Date? {

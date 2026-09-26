@@ -441,9 +441,12 @@ here; this session pushes only its own branch.
 
 **E. Known limits of E1 to watch on device:**
 - **The recovery write is asynchronous.** It starts when the scene goes inactive and
-  takes milliseconds, with no background-task assertion. If iOS ever suspended the app
-  inside that window, the last checkpoint (at most 20 s of typing) could miss the disk.
-  If the force-quit check shows it, wrap the write in `beginBackgroundTask`.
+  takes milliseconds. On iOS every checkpoint's write now holds a `beginBackgroundTask`
+  assertion until it finishes (fix batch 2, codex-2), so suspension should not catch it
+  mid-write; the device check is to press the side button within 0.3 s of typing, stop
+  the app from Xcode while suspended, and confirm the recovery prompt offers the text,
+  10 times in a row. Measure the assertion in B3 (≤ 4 ms per checkpoint). A write that
+  fails is retried by the next checkpoint's write, which always writes the newest text.
 - **Reopening a field within milliseconds of Done** can list the previous session's
   older copy as a recovery. It is harmless: "Keep form text" dismisses it.
 - **As before E1,** leaving the screen tears the controller down, so returning (for
