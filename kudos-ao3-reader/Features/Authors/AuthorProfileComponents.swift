@@ -536,10 +536,12 @@ struct AO3ProfileMessageRow: View {
 /// sits at the file-length limit.
 extension AuthorProfileView {
     /// 1w's "3 series · 9 works · 219,300 words", after the series count. Summed
-    /// from the loaded blurbs, so a paged index says so rather than passing a
-    /// partial sum off as the account's total. A figure AO3 printed for no
-    /// series is dropped, not shown as zero.
-    static func seriesTallyParts(_ series: [AO3SeriesSummary], isPaged: Bool) -> [String] {
+    /// from the loaded blurbs, so while more pages exist than are loaded both
+    /// sums sit in one clause scoped to them — "45 series · 60 works, 1,200,000
+    /// words in the 20 loaded series" — rather than passing a partial sum off as
+    /// the account's total. A figure AO3 printed for no series is dropped, not
+    /// shown as zero.
+    static func seriesTallyParts(_ series: [AO3SeriesSummary], isPartial: Bool) -> [String] {
         var parts: [String] = []
         let works = series.compactMap(\.workCount)
         if !works.isEmpty {
@@ -550,9 +552,7 @@ extension AuthorProfileView {
         if !words.isEmpty {
             parts.append("\(words.reduce(0, +).formatted()) words")
         }
-        if isPaged, !parts.isEmpty {
-            parts[parts.count - 1] += " on this page"
-        }
-        return parts
+        guard isPartial, !parts.isEmpty else { return parts }
+        return ["\(parts.joined(separator: ", ")) in the \(series.count.formatted()) loaded series"]
     }
 }

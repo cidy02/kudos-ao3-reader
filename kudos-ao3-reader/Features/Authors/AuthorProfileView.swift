@@ -313,7 +313,7 @@ private extension AuthorProfileView {
         // count and the name it has always been rather than showing blanks.
         var parts = ["\(count) \(scopeNoun(stored.exact))"]
         if model.selectedTab == .series {
-            parts += Self.seriesTallyParts(model.series, isPaged: model.totalPages > 1)
+            parts += Self.seriesTallyParts(model.series, isPartial: model.hasMore)
         }
         if model.selectedTab == .works, let stats = model.stats {
             if let words = stats.wordCount {
