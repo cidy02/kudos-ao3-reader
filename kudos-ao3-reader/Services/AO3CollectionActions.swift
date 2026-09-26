@@ -47,33 +47,49 @@ extension AO3AuthService {
         return try await AO3Client.shared.collectionNewForm(request: request)
     }
 
-    func createCollection(_ form: AO3CollectionForm) async throws -> AO3CollectionSaveOutcome {
+    /// `expectedGeneration` is the session the form was loaded under. Checked on
+    /// entry and again after the CSRF GET, as `postComment` does: the T-239 fence
+    /// only compares the POST with its own GET, so a form loaded as one account
+    /// would otherwise post under whichever account is signed in at Save.
+    /// `client`: as `submitWrite`'s, so a test can stub both requests.
+    func createCollection(
+        _ form: AO3CollectionForm, expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> AO3CollectionSaveOutcome {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         guard AO3Client.collectionNameFormatIsValid(form.name) else {
             var invalid = form
             invalid.fieldErrors[AO3CollectionParam.name] = AO3CollectionWriteError.invalidName.errorDescription ?? ""
             return .invalid(invalid)
         }
-        let (html, token) = try await fetchCSRFPage(at: AO3CollectionURL.new())
+        let (html, token) = try await fetchCSRFPage(at: AO3CollectionURL.new(), using: client)
+        try requireSessionGeneration(expectedGeneration)
         var posted = form
         posted.csrfToken = token
         if posted.actionURL.absoluteString.isEmpty {
             posted.actionURL = AO3CollectionURL.create()
         }
-        return try await submitCollectionForm(posted, referer: AO3CollectionURL.new(), fallbackHTML: html)
+        return try await submitCollectionForm(
+            posted, referer: AO3CollectionURL.new(), fallbackHTML: html, using: client
+        )
     }
 
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt. Single-shot `submitWrite`; never retried or coalesced.
-    func updateCollection(slug: String, form: AO3CollectionForm) async throws -> AO3CollectionSaveOutcome {
+    /// `expectedGeneration` and `client`: as `createCollection`.
+    func updateCollection(
+        slug: String, form: AO3CollectionForm, expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> AO3CollectionSaveOutcome {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         let referer = AO3CollectionURL.edit(slug: slug)
-        let (html, token) = try await fetchCSRFPage(at: referer)
+        let (html, token) = try await fetchCSRFPage(at: referer, using: client)
+        try requireSessionGeneration(expectedGeneration)
         var posted = form
         posted.csrfToken = token
         posted.collectionSlug = slug
         if posted.nameIsLocked { posted.name = slug }
-        return try await submitCollectionForm(posted, referer: referer, fallbackHTML: html)
+        return try await submitCollectionForm(posted, referer: referer, fallbackHTML: html, using: client)
     }
 
     /// Confirmed one-way reveal. Unchecks `unrevealed` on the live edit form and
@@ -81,9 +97,10 @@ extension AO3AuthService {
     /// live AO3 session — a release gate, not a reason this endpoint is unbuilt.
     func revealCollection(slug: String) async throws -> String {
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
+        let generation = sessionGeneration
         var form = try await collectionEditForm(slug: slug)
         form.isUnrevealed = false
-        switch try await updateCollection(slug: slug, form: form) {
+        switch try await updateCollection(slug: slug, form: form, expectedGeneration: generation) {
         case let .saved(message, _): return message
         case let .invalid(invalid):
             throw AO3CollectionWriteError.rejected(invalid.generalErrors.first ?? "Couldn't reveal the collection.")
@@ -95,9 +112,10 @@ extension AO3AuthService {
     /// gate, not a reason this endpoint is unbuilt.
     func unanonCollection(slug: String) async throws -> String {
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
+        let generation = sessionGeneration
         var form = try await collectionEditForm(slug: slug)
         form.isAnonymous = false
-        switch try await updateCollection(slug: slug, form: form) {
+        switch try await updateCollection(slug: slug, form: form, expectedGeneration: generation) {
         case let .saved(message, _): return message
         case let .invalid(invalid):
             throw AO3CollectionWriteError.rejected(invalid.generalErrors.first ?? "Couldn't un-anon the collection.")
@@ -362,7 +380,7 @@ extension AO3AuthService {
     }
 
     private func submitCollectionForm(
-        _ form: AO3CollectionForm, referer: URL, fallbackHTML: String
+        _ form: AO3CollectionForm, referer: URL, fallbackHTML: String, using client: AO3Client
     ) async throws -> AO3CollectionSaveOutcome {
         let params = AO3Client.collectionFormParameters(form)
         let request = try writeRequest(
@@ -372,7 +390,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, body) = try await submitWrite(request)
+        let (status, body) = try await submitWrite(request, using: client)
         if let error = AO3Client.writeErrorMessage(in: body) {
             var invalid = (try? AO3Client.parseCollectionForm(body, slug: form.collectionSlug)) ?? form
             invalid.generalErrors = [error] + invalid.generalErrors

@@ -26,6 +26,13 @@ struct AO3CollectionFormView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var form: AO3CollectionForm?
+    /// The session `form` was loaded under, and its account. Save posts only
+    /// under that session, or a later one of the same account, so a form filled
+    /// in as one account is never sent as another. Not a `.task` key: re-keying
+    /// would discard typed edits on a same-user cookie rotation, and the
+    /// save-time check is enough.
+    @State private var formGeneration: Int?
+    @State private var formUsername: String?
     @State private var phase: Phase = .idle
     @State private var saveMessage: String?
     @State private var nameAvailability: AO3CollectionNameAvailability?
@@ -355,12 +362,23 @@ struct AO3CollectionFormView: View {
 
     private func loadForm() async {
         phase = .loading
+        let generation = auth.sessionGeneration
+        let username = auth.username
         do {
-            if let slug {
-                form = try await auth.collectionEditForm(slug: slug)
+            let loaded = if let slug {
+                try await auth.collectionEditForm(slug: slug)
             } else {
-                form = try await auth.collectionNewForm()
+                try await auth.collectionNewForm()
             }
+            // Fetched under an account that has since changed: not this
+            // session's form to fill in.
+            guard generation == auth.sessionGeneration else {
+                phase = .failed("Your AO3 session changed while the form was loading.")
+                return
+            }
+            form = loaded
+            formGeneration = generation
+            formUsername = username
             phase = .ready
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
@@ -370,15 +388,26 @@ struct AO3CollectionFormView: View {
     }
 
     private func save() async {
+        // Set with `form` in `loadForm`.
+        guard let loaded = formGeneration else { return }
+        let generation = AO3CollectionSessionReload.formSaveGeneration(
+            loaded: loaded, loadedUsername: formUsername,
+            current: auth.sessionGeneration, currentUsername: auth.username
+        )
+        formGeneration = generation
+        // This attempt reports its own errors; AO3 re-sends any that still apply.
+        form?.generalErrors = []
         guard let current = form else { return }
         phase = .saving
         saveMessage = nil
         do {
             let outcome: AO3CollectionSaveOutcome
             if let slug {
-                outcome = try await auth.updateCollection(slug: slug, form: current)
+                outcome = try await auth.updateCollection(
+                    slug: slug, form: current, expectedGeneration: generation
+                )
             } else {
-                outcome = try await auth.createCollection(current)
+                outcome = try await auth.createCollection(current, expectedGeneration: generation)
             }
             switch outcome {
             case let .saved(message, savedForm):
@@ -391,11 +420,24 @@ struct AO3CollectionFormView: View {
                 form = returned
                 phase = .ready
             }
+        } catch is CancellationError {
+            saveFailed(
+                "Not saved: your AO3 session changed since this form opened. Your edits are still "
+                    + "here, and Save works again once \(formUsername ?? "that account") is signed in. "
+                    + "To edit as another account, reopen the form."
+            )
         } catch let error as AO3CollectionWriteError {
-            phase = .failed(error.errorDescription ?? "The collection could not be saved.")
+            saveFailed(error.errorDescription ?? "The collection could not be saved.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            saveFailed(error.localizedDescription)
         }
+    }
+
+    /// Inline, over the fields as typed. The failed screen's Try Again reloads
+    /// AO3's copy, which would throw every unsaved edit away.
+    private func saveFailed(_ message: String) {
+        form?.generalErrors = [message]
+        phase = .ready
     }
 
     /// Availability is one request per settled name, not per keystroke. AO3 has to
