@@ -62,76 +62,75 @@ struct ChallengeSignUpView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                List {
+        ZStack(alignment: .bottom) {
+            List {
+                Section {
+                    header.pageBodyRow(top: 20, gutter: selfGuttered)
+                }
+
+                if let notice = statusNotice {
                     Section {
-                        header.pageBodyRow(top: 20, gutter: selfGuttered)
+                        noticeCard(notice).pageBodyRow(top: 8, gutter: gutter)
                     }
+                }
 
-                    if let notice = statusNotice {
-                        Section {
-                            noticeCard(notice).pageBodyRow(top: 8, gutter: gutter)
-                        }
-                    }
-
-                    if let generalErrors = form?.generalErrors, !generalErrors.isEmpty {
-                        Section {
-                            ForEach(generalErrors, id: \.self) { error in
-                                errorCard(error).pageBodyRow(top: 6, gutter: gutter)
-                            }
-                        }
-                    }
-
-                    switch phase {
-                    case .loading:
-                        Section {
-                            loadingRow.pageBodyRow(top: 20, gutter: gutter)
-                        }
-                    case let .failed(message):
-                        Section {
-                            failureCard(message).pageBodyRow(top: 14, gutter: gutter)
-                        }
-                    case .idle, .loaded:
-                        contentSections
-                    }
-
+                if let generalErrors = form?.generalErrors, !generalErrors.isEmpty {
                     Section {
-                        Spacer(minLength: 75)
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
+                        ForEach(generalErrors, id: \.self) { error in
+                            errorCard(error).pageBodyRow(top: 6, gutter: gutter)
+                        }
                     }
                 }
-                .cardList()
-                #if os(macOS)
-                .navigationTitle("Your sign-up")
-                #endif
-                .subjectScreenWash(palette: palette)
 
-                bottomActionBar
-            }
-            .task { await loadSignUpIfNeeded() }
-            .refreshable { await loadSignUp() }
-            .confirmationDialog(
-                "Withdraw this sign-up?",
-                isPresented: $confirmWithdraw,
-                titleVisibility: .visible
-            ) {
-                Button("Withdraw Sign-up", role: .destructive) {
-                    Task { await performWithdraw() }
+                switch phase {
+                case .loading:
+                    Section {
+                        loadingRow.pageBodyRow(top: 20, gutter: gutter)
+                    }
+                case let .failed(message):
+                    Section {
+                        failureCard(message).pageBodyRow(top: 14, gutter: gutter)
+                    }
+                case .idle, .loaded:
+                    contentSections
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Withdrawing removes your requests and offers from \(effectiveTitle). "
-                    + "If sign-ups have closed, this will record a default on your assignment.")
-            }
-            .sheet(isPresented: Binding(
-                get: { editingPromptIndex != nil },
-                set: { if !$0 { editingPromptIndex = nil } }
-            )) {
-                if let index = editingPromptIndex {
-                    promptTagsEditor(index: index, isOffer: isEditingOffer)
+
+                Section {
+                    Spacer(minLength: 75)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                 }
+            }
+            .cardList()
+            #if os(macOS)
+            .navigationTitle("Your sign-up")
+            #endif
+            .subjectScreenWash(palette: palette)
+
+            bottomActionBar
+        }
+        .task { await loadSignUpIfNeeded() }
+        .refreshable { await loadSignUp() }
+        .confirmationDialog(
+            "Withdraw this sign-up?",
+            isPresented: $confirmWithdraw,
+            titleVisibility: .visible
+        ) {
+            Button("Withdraw Sign-up", role: .destructive) {
+                Task { await performWithdraw() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            // Withdrawing after close is a different AO3 write (a default on the
+            // assignment) that this screen does not make yet, so it isn't promised.
+            Text("Withdrawing removes your requests and offers from \(effectiveTitle).")
+        }
+        .sheet(isPresented: Binding(
+            get: { editingPromptIndex != nil },
+            set: { if !$0 { editingPromptIndex = nil } }
+        )) {
+            if let index = editingPromptIndex {
+                promptTagsEditor(index: index, isOffer: isEditingOffer)
             }
         }
     }
@@ -252,10 +251,19 @@ extension ChallengeSignUpView {
 
             SubjectRowSeparator()
 
-            SubjectFormRow(
-                label: "Any of these is fine",
-                arrangement: .control
-            ) {
+            // AO3's any_relationship: the request takes any relationship, not
+            // only the ones chosen above. Two lines, as 1by's Type rows.
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Any of these is fine")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.primary)
+                    Text("Any relationship matches, not only the ones chosen")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
                 Toggle("", isOn: Binding(
                     get: { form?.requests[index].anyRelationship ?? false },
                     set: { form?.requests[index].anyRelationship = $0 }
@@ -263,6 +271,8 @@ extension ChallengeSignUpView {
                 .labelsHidden()
                 .tint(palette.accent)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
         }
         .subjectPanel()
     }
@@ -609,25 +619,23 @@ extension ChallengeSignUpView {
     func ensureMinimumPrompts() {
         guard var currentForm = form else { return }
         if currentForm.requests.isEmpty {
-            currentForm.requests.append(AO3ChallengePrompt(id: -1, kind: .request))
+            currentForm.requests.append(AO3ChallengePrompt(id: currentForm.nextDraftPromptID, kind: .request))
         }
         if currentForm.offers.isEmpty {
-            currentForm.offers.append(AO3ChallengePrompt(id: -2, kind: .offer))
+            currentForm.offers.append(AO3ChallengePrompt(id: currentForm.nextDraftPromptID, kind: .offer))
         }
         form = currentForm
     }
 
     func addNewRequest() {
         guard var currentForm = form else { return }
-        let nextID = -(currentForm.requests.count + 1)
-        currentForm.requests.append(AO3ChallengePrompt(id: nextID, kind: .request))
+        currentForm.requests.append(AO3ChallengePrompt(id: currentForm.nextDraftPromptID, kind: .request))
         form = currentForm
     }
 
     func addNewOffer() {
         guard var currentForm = form else { return }
-        let nextID = -(currentForm.offers.count + 1)
-        currentForm.offers.append(AO3ChallengePrompt(id: nextID, kind: .offer))
+        currentForm.offers.append(AO3ChallengePrompt(id: currentForm.nextDraftPromptID, kind: .offer))
         form = currentForm
     }
 

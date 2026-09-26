@@ -19,9 +19,12 @@ struct ChallengeSignUpsView: View {
     @State private var filterSelection: SignUpFilter = .all
     @State private var phase: Phase = .idle
     @State private var closeDateText: String = ""
-    @State private var showOwnSignUp: Bool = false
-    @State private var showCreateSignUp: Bool = false
-    @State private var selectedSignUp: AO3ChallengeSignUp?
+    /// Every assignment the rows are joined to, read once per refresh. `nil`
+    /// means the fetch failed, so match state is unknown rather than unmatched.
+    @State private var assignments: [AO3ChallengeAssignment]?
+    @State private var matchError: String?
+    /// The challenge's total, not the pages fetched; `nil` until known.
+    @State private var signUpTotal: Int?
 
     enum SignUpFilter: String, CaseIterable, Hashable, Sendable {
         case all = "All"
@@ -49,14 +52,18 @@ struct ChallengeSignUpsView: View {
         collectionTitle.isEmpty ? collectionSlug : collectionTitle
     }
 
+    private func matchState(_ signUp: AO3ChallengeSignUp) -> AO3ChallengeSignUpMatching.State {
+        AO3ChallengeSignUpMatching.state(of: signUp, assignmentsLoaded: assignments != nil)
+    }
+
     private var filteredSignUps: [AO3ChallengeSignUp] {
         switch filterSelection {
         case .all:
             return signUps
         case .matched:
-            return signUps.filter(\.isMatched)
+            return signUps.filter { matchState($0) == .matched }
         case .unmatched:
-            return signUps.filter { !$0.isMatched }
+            return signUps.filter { matchState($0) == .unmatched }
         }
     }
 
@@ -98,28 +105,19 @@ struct ChallengeSignUpsView: View {
         }
         .task { await loadSignUpsIfNeeded() }
         .refreshable { await loadSignUps(resetPage: true) }
-        .sheet(isPresented: $showOwnSignUp) {
-            ChallengeSignUpView(
-                collectionSlug: collectionSlug,
-                collectionTitle: effectiveTitle
-            )
-        }
-        .sheet(isPresented: $showCreateSignUp) {
-            ChallengeSignUpView(
-                collectionSlug: collectionSlug,
-                collectionTitle: effectiveTitle
-            )
-        }
     }
 
     // MARK: - Header & Filter
 
     private var subtitleText: String {
-        let count = "\(signUps.count) sign-up\(signUps.count == 1 ? "" : "s")"
-        if !closeDateText.isEmpty {
-            return "\(count) · \(closeDateText)"
+        var parts: [String] = []
+        if let signUpTotal {
+            parts.append(AO3ChallengeCountText.plural(signUpTotal, "sign-up"))
         }
-        return count
+        if !closeDateText.isEmpty {
+            parts.append(closeDateText)
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var header: some View {
@@ -146,12 +144,17 @@ struct ChallengeSignUpsView: View {
     private var contentSections: some View {
         Section {
             SectionRuleHeader(title: "Sign-ups", count: filteredSignUps.count)
+                .padding(.bottom, 8)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
 
+            if let matchError {
+                matchUnavailableNote(matchError).padding(.bottom, 8).pageBodyRow(top: 0, gutter: gutter)
+            }
+
             if filteredSignUps.isEmpty {
-                emptyFilteredCard.pageBodyRow(top: 8, gutter: gutter)
+                emptyFilteredCard.pageBodyRow(top: 0, gutter: gutter)
             } else {
-                signUpsPanel.pageBodyRow(top: 8, gutter: gutter)
+                signUpRows
             }
 
             footnoteText.pageBodyRow(top: 8, gutter: gutter)
@@ -164,60 +167,65 @@ struct ChallengeSignUpsView: View {
         }
     }
 
-    private var signUpsPanel: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(filteredSignUps.enumerated()), id: \.element.id) { index, signUp in
-                if index > 0 {
-                    SubjectRowSeparator()
+    /// One `List` row per sign-up: a row is one tap target, so a card holding
+    /// every sign-up in a single row would push them all at once.
+    private var signUpRows: some View {
+        let rows = PanelSegment.keyed(filteredSignUps, id: \.id)
+        return ForEach(rows, id: \.key) { row in
+            signUpRow(row.element)
+                .subjectRowNavigation(accessibilityLabel: row.element.pseud) {
+                    ChallengeSignUpDetailView(signUp: row.element, collectionTitle: effectiveTitle, palette: palette)
                 }
-                signUpRow(signUp)
-            }
+                .panelSegment(row.offset, of: rows.count, gutter: gutter)
         }
-        .subjectPanel()
     }
 
     private func signUpRow(_ signUp: AO3ChallengeSignUp) -> some View {
-        Button {
-            selectedSignUp = signUp
-        } label: {
-            HStack(alignment: .top, spacing: 11) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .center, spacing: 7) {
-                        Text(signUp.pseud)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.primary)
+        HStack(alignment: .top, spacing: 11) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .center, spacing: 7) {
+                    Text(signUp.pseud)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
 
-                        matchedStatusBadge(isMatched: signUp.isMatched)
-                    }
-
-                    Text("\(signUp.requests.count) requests · \(signUp.offers.count) offers")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Color.secondary.opacity(0.85))
-                        .monospacedDigit()
-
-                    if !signUp.requestTagSummary.isEmpty {
-                        Text(signUp.requestTagSummary)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.secondary.opacity(0.65))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
+                    matchedStatusBadge(matchState(signUp))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.secondary.opacity(0.42))
-                    .padding(.top, 4)
+                Text(AO3ChallengeCountText.plural(signUp.requests.count, "request")
+                    + " · " + AO3ChallengeCountText.plural(signUp.offers.count, "offer"))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color.secondary.opacity(0.85))
+                    .monospacedDigit()
+
+                if !signUp.requestTagSummary.isEmpty {
+                    Text(signUp.requestTagSummary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.secondary.opacity(0.65))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.secondary.opacity(0.42))
+                .padding(.top, 4)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
     }
 
-    private func matchedStatusBadge(isMatched: Bool) -> some View {
+    /// No chip at all when the state is unknown: a guess would be a false claim.
+    @ViewBuilder
+    private func matchedStatusBadge(_ state: AO3ChallengeSignUpMatching.State) -> some View {
+        if state != .unknown {
+            statusChip(isMatched: state == .matched)
+        }
+    }
+
+    private func statusChip(isMatched: Bool) -> some View {
         Text(isMatched ? "MATCHED" : "UNMATCHED")
             .font(.system(size: 8.5, weight: .bold))
             .tracking(8.5 * 0.07)
@@ -230,13 +238,25 @@ struct ChallengeSignUpsView: View {
             )
     }
 
+    private func matchUnavailableNote(_ message: String) -> some View {
+        Label("Match state unavailable: AO3 shows assignments to maintainers once sign-ups close. "
+            + message, systemImage: "exclamationmark.triangle")
+            .font(.system(size: 11.5))
+            .foregroundStyle(Color.secondary.opacity(0.85))
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
+    }
+
     private var emptyFilteredCard: some View {
-        VStack(spacing: 6) {
-            Text("No \(filterSelection.rawValue.lowercased()) sign-ups")
+        let unknown = assignments == nil && filterSelection != .all
+        return VStack(spacing: 6) {
+            Text(unknown ? "Match state unavailable" : "No \(filterSelection.rawValue.lowercased()) sign-ups")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
 
-            Text("No sign-ups in this page match the \"\(filterSelection.rawValue)\" filter.")
+            Text(unknown
+                ? "Assignments couldn't be loaded, so no sign-up can be shown as matched or unmatched."
+                : "No sign-ups in this page match the \"\(filterSelection.rawValue)\" filter.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
         }
@@ -280,8 +300,14 @@ struct ChallengeSignUpsView: View {
 
     private var bottomActionBar: some View {
         HStack(spacing: 9) {
-            Button {
-                showOwnSignUp = true
+            NavigationLink {
+                ChallengeSignUpView(
+                    collectionSlug: collectionSlug,
+                    collectionTitle: effectiveTitle,
+                    existingSignUpID: AO3ChallengeSignUpMatching.ownSignUpID(
+                        in: signUps, login: auth.username ?? ""
+                    )
+                )
             } label: {
                 Text("Your sign-up")
                     .font(.system(size: 14, weight: .semibold))
@@ -299,8 +325,8 @@ struct ChallengeSignUpsView: View {
             }
             .buttonStyle(.plain)
 
-            Button {
-                showCreateSignUp = true
+            NavigationLink {
+                ChallengeSignUpView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
             } label: {
                 Text("Create sign-up")
                     .font(.system(size: 14, weight: .semibold))
@@ -377,52 +403,66 @@ struct ChallengeSignUpsView: View {
         }
         phase = .loading
 
-        // Attempt to read challenge settings for schedule dates
-        if let settingsRequest = try? auth.authenticatedRequest(
-            for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
-        ), let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: settingsRequest) {
-            if let closeDate = form.settings.signupsCloseAt.date {
-                let formatter = DateFormatter()
-                formatter.dateStyle = .medium
-                formatter.timeStyle = .none
-                closeDateText = "open until \(formatter.string(from: closeDate))"
-            }
+        if resetPage {
+            await loadSchedule()
+            await loadAssignments()
         }
 
         do {
             let request = try auth.authenticatedRequest(
                 for: AO3ChallengeURL.signUps(slug: collectionSlug, page: currentPage)
             )
-
-            // Attempt joined signups (signups + assignments)
-            do {
-                let page = try await AO3Client.shared.challengeSignUpsJoinedToAssignments(
-                    slug: collectionSlug, page: currentPage, request: request
+            let page = try await AO3Client.shared.challengeSignUps(
+                slug: collectionSlug, page: currentPage, request: request
+            )
+            let rows = assignments.map {
+                AO3ChallengeSignUpMatching.joining(page.signUps, assignments: $0)
+            } ?? page.signUps
+            if resetPage {
+                signUps = rows
+                // No total rather than page 1's count passed off as one.
+                signUpTotal = try? await AO3Client.shared.challengeSignUpTotal(
+                    slug: collectionSlug, firstPage: page, request: request
                 )
-                if resetPage {
-                    signUps = page.signUps
-                } else {
-                    signUps.append(contentsOf: page.signUps)
-                }
-                totalPages = page.totalPages
-                phase = .loaded
-            } catch {
-                // KNOWN DEFECT work-around: parseChallengeAssignmentsPage does not match real
-                // otwarchive markup. If joining fails, degrade gracefully to plain sign-ups so the
-                // list displays without crashing or claiming falsified match states.
-                let plainPage = try await AO3Client.shared.challengeSignUps(
-                    slug: collectionSlug, page: currentPage, request: request
-                )
-                if resetPage {
-                    signUps = plainPage.signUps
-                } else {
-                    signUps.append(contentsOf: plainPage.signUps)
-                }
-                totalPages = plainPage.totalPages
-                phase = .loaded
+            } else {
+                signUps.append(contentsOf: rows)
             }
+            totalPages = page.totalPages
+            phase = .loaded
         } catch {
             phase = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Owner-only edit form, so a moderator just gets no date. AO3's own form
+    /// says its dates do nothing and sign-ups open and close by hand, so the
+    /// switch decides "open", not the close date.
+    private func loadSchedule() async {
+        guard let request = try? auth.authenticatedRequest(
+            for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
+        ), let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request)
+        else { return }
+        if !form.settings.signupOpen {
+            closeDateText = "closed"
+        } else if let closeDate = form.settings.signupsCloseAt.date {
+            closeDateText = "open until \(closeDate.formatted(date: .abbreviated, time: .omitted))"
+        } else {
+            closeDateText = "open"
+        }
+    }
+
+    private func loadAssignments() async {
+        do {
+            let request = try auth.authenticatedRequest(
+                for: AO3ChallengeURL.assignments(slug: collectionSlug, list: .defaults)
+            )
+            assignments = try await AO3Client.shared.allChallengeAssignments(
+                slug: collectionSlug, lists: [.assignments, .unfulfilled, .defaults], request: request
+            )
+            matchError = nil
+        } catch {
+            assignments = nil
+            matchError = error.localizedDescription
         }
     }
 
@@ -430,5 +470,90 @@ struct ChallengeSignUpsView: View {
         guard currentPage < totalPages, phase != .loading else { return }
         currentPage += 1
         await loadSignUps(resetPage: false)
+    }
+}
+
+/// A maintainer's read of one sign-up (1bz row). otwarchive lets any
+/// maintainer see another participant's sign-up, and its sign-ups index
+/// already renders every request and offer inline, so this shows the row's
+/// parsed prompts rather than fetching and parsing /signups/<id> again.
+private struct ChallengeSignUpDetailView: View {
+    let signUp: AO3ChallengeSignUp
+    let collectionTitle: String
+    let palette: SubjectPalette
+
+    private var gutter: CGFloat { SubjectMetrics.accountGutter }
+
+    var body: some View {
+        List {
+            Section {
+                SubjectHeaderBlock(
+                    kicker: collectionTitle,
+                    title: signUp.pseud,
+                    subtitle: AO3ChallengeCountText.plural(signUp.requests.count, "request")
+                        + " · " + AO3ChallengeCountText.plural(signUp.offers.count, "offer"),
+                    palette: palette,
+                    gutter: gutter
+                )
+                .pageBodyRow(top: 20, gutter: 0)
+            }
+            promptSections(signUp.requests, noun: "Request")
+            promptSections(signUp.offers, noun: "Offer")
+        }
+        .cardList()
+        #if os(macOS)
+        .navigationTitle(signUp.pseud)
+        #endif
+        .subjectScreenWash(palette: palette)
+    }
+
+    private func promptSections(_ prompts: [AO3ChallengePrompt], noun: String) -> some View {
+        ForEach(Array(prompts.enumerated()), id: \.offset) { index, prompt in
+            Section {
+                SectionRuleHeader(title: "\(noun) \(index + 1)")
+                    .pageBodyRow(top: 18, gutter: 0)
+                // "Any <type>" choices are not parsed, so a prompt with nothing
+                // else shows no panel rather than claiming it chose nothing.
+                let tags = tagRows(prompt)
+                if !tags.isEmpty || !prompt.promptText.isEmpty {
+                    promptPanel(tags: tags, text: prompt.promptText).pageBodyRow(top: 8, gutter: gutter)
+                }
+            }
+        }
+    }
+
+    private func tagRows(_ prompt: AO3ChallengePrompt) -> [(title: String, tags: [String])] {
+        [
+            ("Fandoms", prompt.fandoms), ("Relationships", prompt.relationships),
+            ("Characters", prompt.characters), ("Additional tags", prompt.freeforms)
+        ].filter { !$0.tags.isEmpty }
+    }
+
+    /// Two-line rows, as in 1by's Type panel: a tag list does not fit a value column.
+    private func promptPanel(tags: [(title: String, tags: [String])], text: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(tags.enumerated()), id: \.offset) { index, row in
+                if index > 0 { SubjectRowSeparator() }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.title)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.primary)
+                    Text(row.tags.joined(separator: ", "))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+            }
+            if !text.isEmpty {
+                if !tags.isEmpty { SubjectRowSeparator() }
+                Text(text)
+                    .font(.system(size: 13.5, design: .serif))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+            }
+        }
+        .subjectPanel()
     }
 }

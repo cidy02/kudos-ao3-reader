@@ -34,33 +34,45 @@ extension AO3Client {
         )
     }
 
-    /// Maintainer-only join: complete, open, and defaulted assignments each
-    /// paginate independently. Fetch sequentially and stop on cancellation.
-    func challengeSignUpsJoinedToAssignments(
-        slug: String, page: Int = 1, request: URLRequest
-    ) async throws -> AO3ChallengeSignUpPage {
-        let signUps = try await AO3RequestCoordinator.shared.withSlot {
-            try await challengeSignUps(slug: slug, page: page, request: request)
-        }
-        let assignments = try await Self.allChallengeAssignments { list, assignmentPage in
-            try await AO3RequestCoordinator.shared.withSlot {
-                try await self.challengeAssignments(
-                    slug: slug, list: list, page: assignmentPage, request: request
-                )
-            }
-        }
-        return AO3ChallengeSignUpPage(
-            signUps: AO3ChallengeSignUpMatching.joining(signUps.signUps, assignments: assignments),
-            currentPage: signUps.currentPage, totalPages: signUps.totalPages
+    /// The challenge's sign-up total, not page 1's count. will_paginate fills
+    /// every page but the last, so only the last page needs fetching.
+    func challengeSignUpTotal(
+        slug: String, firstPage: AO3ChallengeSignUpPage, request: URLRequest
+    ) async throws -> Int {
+        guard firstPage.totalPages > 1 else { return firstPage.signUps.count }
+        let last = try await challengeSignUps(slug: slug, page: firstPage.totalPages, request: request)
+        return Self.signUpTotal(
+            pageSize: firstPage.signUps.count, totalPages: firstPage.totalPages,
+            lastPageCount: last.signUps.count
         )
     }
 
+    static func signUpTotal(pageSize: Int, totalPages: Int, lastPageCount: Int) -> Int {
+        pageSize * (totalPages - 1) + lastPageCount
+    }
+
+    /// Every page of each list, in order. Maintainer-only, and AO3 redirects
+    /// away while sign-ups are open, so callers must treat a throw as "unknown".
+    func allChallengeAssignments(
+        slug: String, lists: [AO3ChallengeAssignmentList], request: URLRequest
+    ) async throws -> [AO3ChallengeAssignment] {
+        try await Self.allChallengeAssignments(lists: lists) { list, page in
+            try await AO3RequestCoordinator.shared.withSlot {
+                try await self.challengeAssignments(slug: slug, list: list, page: page, request: request)
+            }
+        }
+    }
+
+    /// Complete, open and defaulted each paginate independently. Fetch
+    /// sequentially and stop on cancellation. The default is everything a
+    /// sign-up can be joined to: Open includes covered pinch hits, so no fourth
+    /// crawl is needed.
     static func allChallengeAssignments(
+        lists: [AO3ChallengeAssignmentList] = [.assignments, .unfulfilled, .defaults],
         fetchPage: (AO3ChallengeAssignmentList, Int) async throws -> AO3ChallengeAssignmentPage
     ) async throws -> [AO3ChallengeAssignment] {
         var assignments: [AO3ChallengeAssignment] = []
-        // Open includes covered pinch hits; no fourth crawl is needed.
-        for list in [AO3ChallengeAssignmentList.assignments, .unfulfilled, .defaults] {
+        for list in lists {
             var page = 1
             while true {
                 try Task.checkCancellation()
@@ -274,38 +286,27 @@ extension AO3Client {
 
     // MARK: - Sign-ups
 
+    /// Mirrors otwarchive's gift_exchange/_challenge_signups: a dt.participant
+    /// (byline linking the sign-up) per row, then a dd whose collapsed
+    /// div#requests_<id> / div#offers_<id> hold one li.blurb per prompt. Either
+    /// div is omitted when its list is empty. A prompt meme's index has no rows.
     static func parseChallengeSignUpsPage(
         _ html: String, slug: String, page: Int
     ) throws -> AO3ChallengeSignUpPage {
         let doc = try SwiftSoup.parse(html)
         var signUps: [AO3ChallengeSignUp] = []
-        let links = try doc.select("a[href*='/signups/']").array()
-        var seen = Set<Int>()
-        for link in links {
-            let href = (try? link.attr("href")) ?? ""
-            guard let id = resourceID(href, after: "signups"), !seen.contains(id) else { continue }
-            seen.insert(id)
-            let pseud = ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let identity = try? AO3AuthorIdentity(displayName: pseud, href: href)
-            let parent = link.parent()
-            let summary = ((try? parent?.text()) ?? "")
+        for participant in try doc.select("dl.index > dt.participant").array() {
+            guard let link = try participant.select("a[href*='/signups/']").first(),
+                  let id = resourceID(try link.attr("href"), after: "signups"),
+                  let details = try participant.nextElementSibling(), details.tagName() == "dd"
+            else { throw AO3Error.parse }
             signUps.append(AO3ChallengeSignUp(
                 id: id,
                 collectionSlug: slug,
-                pseud: pseud,
-                userURL: identity?.userURL,
-                requests: summary.isEmpty ? [] : [
-                    AO3ChallengePrompt(id: 0, kind: .request, promptText: summary, fandoms: [])
-                ]
+                pseud: try link.text().trimmingCharacters(in: .whitespacesAndNewlines),
+                requests: try parseSignUpPrompts(details, list: "requests", kind: .request),
+                offers: try parseSignUpPrompts(details, list: "offers", kind: .offer)
             ))
-        }
-        for li in try doc.select("li.challenge.signup, li.signup.blurb, dd.signup").array() {
-            guard let parsed = try? parseSignUpBlurb(li, slug: slug) else { continue }
-            if let index = signUps.firstIndex(where: { $0.id == parsed.id }) {
-                signUps[index] = parsed
-            } else {
-                signUps.append(parsed)
-            }
         }
         if signUps.isEmpty {
             let heading = ((try? doc.select("h2.heading").first()?.text()) ?? "").lowercased()
@@ -609,7 +610,8 @@ extension AO3Client {
         }
         return indices.sorted().map { index in
             let p = "\(prefix)[\(index)]"
-            let id = Int(inputValue(form, "\(p)[id]")) ?? index
+            // A blank block on signups/new has no id; a draft id keeps it unposted.
+            let id = Int(inputValue(form, "\(p)[id]")) ?? -(index + 1)
             let fandoms = commaTags(inputValue(form, "\(p)[tag_set_attributes][fandom_tagnames]"))
             let characters = commaTags(inputValue(form, "\(p)[tag_set_attributes][character_tagnames]"))
             let relationships = commaTags(inputValue(form, "\(p)[tag_set_attributes][relationship_tagnames]"))
@@ -640,7 +642,7 @@ extension AO3Client {
         var params: [(String, String)] = []
         for (index, prompt) in prompts.enumerated() {
             let p = "challenge_signup[\(key)_attributes][\(index)]"
-            if prompt.id != 0 { params.append(("\(p)[id]", String(prompt.id))) }
+            if prompt.id > 0 { params.append(("\(p)[id]", String(prompt.id))) }
             params.append(contentsOf: [
                 ("\(p)[title]", prompt.title),
                 ("\(p)[description]", prompt.promptText),
@@ -660,27 +662,25 @@ extension AO3Client {
         return params
     }
 
-    private static func parseSignUpBlurb(_ li: Element, slug: String) throws -> AO3ChallengeSignUp {
-        let link = try li.select("a[href*='/signups/']").first()
-        let href = (try? link?.attr("href")) ?? ""
-        guard let id = resourceID(href, after: "signups") else { throw AO3Error.parse }
-        let pseud = ((try? link?.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let tags = (try? li.select("a.tag, .tags a").array().map { try $0.text() }) ?? []
-        let anonymous = ((try? li.className()) ?? "").contains("anonymous")
-            || ((try? li.text()) ?? "").localizedCaseInsensitiveContains("anonymous")
-        let prompt = AO3ChallengePrompt(
-            id: 0,
-            kind: .request,
-            promptText: ((try? li.select("blockquote, .userstuff").first()?.text()) ?? ""),
-            isAnonymous: anonymous,
-            fandoms: tags
-        )
-        return AO3ChallengeSignUp(
-            id: id,
-            collectionSlug: slug,
-            pseud: anonymous ? "" : pseud,
-            requests: [prompt]
-        )
+    /// prompts/_prompt_blurb: h5.fandoms, then ul.tags split by tag type. The
+    /// optional-tags list is a separate ul.optional.tags and is left out.
+    private static func parseSignUpPrompts(
+        _ details: Element, list: String, kind: AO3ChallengePromptKind
+    ) throws -> [AO3ChallengePrompt] {
+        try details.select("div[id^=\(list)_] ol.prompt > li.blurb").array().enumerated().map { index, li in
+            func tags(_ type: String) throws -> [String] {
+                try li.select("ul.tags:not(.optional) li.\(type) a.tag").array().map { try $0.text() }
+            }
+            return AO3ChallengePrompt(
+                id: index + 1,
+                kind: kind,
+                promptText: try li.select("blockquote.userstuff.summary").text(),
+                fandoms: try li.select("h5.fandoms a.tag").array().map { try $0.text() },
+                characters: try tags("characters"),
+                relationships: try tags("relationships"),
+                freeforms: try tags("freeforms")
+            )
+        }
     }
 
     /// Mirrors otwarchive's assignment_blurb and maintainer_index_* dt/dd pairs.

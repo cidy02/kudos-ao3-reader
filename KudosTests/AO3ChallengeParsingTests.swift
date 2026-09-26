@@ -32,22 +32,91 @@ struct AO3ChallengeParsingTests {
         #expect(instant.postedString == "2026-01-15 12:00:00")
     }
 
+    /// Rendered shape of otwarchive's gift_exchange/_challenge_signups with
+    /// challenge_signups/_show_requests, _show_offers and prompts/_prompt_blurb
+    /// (master 00ad85b4): a dt.participant byline per sign-up, then a dd whose
+    /// div#requests_<id> / div#offers_<id> hold one li.blurb per prompt, each div
+    /// omitted when its list is empty. Not a production capture: the index is
+    /// maintainer-only.
+    static let signUpIndexHTML = """
+    <html><body>
+    <h2 class="heading">Sign-ups for Winter Fest</h2>
+    <dl class="index group">
+      <dt class="participant"><a href="/collections/fest/signups/11">Alice</a>
+        <a class="mailto" href="mailto:alice@example.test"><img alt="email alice"></a></dt>
+      <dd>
+        <ul class="actions"><li><a href="/collections/fest/signups/11/edit">Edit Sign-up</a></li>
+          <li><a href="/collections/fest/signups/11/confirm_delete">Delete Sign-up</a></li></ul>
+        <ul class="actions"><li><a href="#">Requests ↓</a></li><li><a href="#">Offers ↓</a></li></ul>
+        <div class="toggled" id="requests_11"><div class="requests listbox group"><ol class="prompt index group">
+          <li class="request blurb group" role="article">
+            <h4 class="heading">Request 1 by Alice</h4>
+            <h5 class="fandoms heading"><a class="tag" href="/tags/Good%20Omens%20(TV)">Good Omens (TV)</a></h5>
+            <ul class="tags commas">
+              <li class="relationships"><a class="tag" href="/tags/x">Aziraphale/Crowley</a></li>
+              <li class="freeforms"><a class="tag" href="/tags/y">Slow Burn</a></li>
+            </ul>
+            <ul class="optional tags commas"><li class="freeforms"><a class="tag" href="/tags/z">Fluff</a></li></ul>
+            <blockquote class="userstuff summary"><p>A bookshop that rearranges itself.</p></blockquote>
+          </li>
+          <li class="request blurb group" role="article">
+            <h4 class="heading">Request 2 by Alice</h4>
+            <h5 class="fandoms heading"><a class="tag" href="/tags/n">Naruto</a>
+              <a class="tag" href="/tags/Good%20Omens%20(TV)">Good Omens (TV)</a></h5>
+          </li>
+        </ol></div></div>
+        <div class="toggled" id="offers_11"><div class="offers listbox group"><ol class="prompt index group">
+          <li class="offer blurb group" role="article">
+            <h4 class="heading">Offer 1 by Alice</h4>
+            <h5 class="fandoms heading"><a class="tag" href="/tags/sw">Star Wars</a></h5>
+          </li>
+        </ol></div></div>
+      </dd>
+      <dt class="participant"><a href="/collections/fest/signups/12">Bob (bobby)</a>
+        <a class="mailto" href="mailto:bob@example.test"><img alt="email bobby"></a></dt>
+      <dd>
+        <ul class="actions"><li><a href="/collections/fest/signups/12/edit">Edit Sign-up</a></li></ul>
+        <div class="toggled" id="requests_12"><div class="requests listbox group"><ol class="prompt index group">
+          <li class="request blurb group" role="article">
+            <h4 class="heading">Request 1 by Anonymous</h4>
+            <h5 class="fandoms heading"><a class="tag" href="/tags/t">Trek</a></h5>
+          </li>
+        </ol></div></div>
+      </dd>
+    </dl>
+    <ol class="pagination actions"><li><span class="current">1</span></li>
+      <li><a href="/collections/fest/signups?page=2">2</a></li></ol>
+    </body></html>
+    """
+
+    @Test func signUpIndexCountsEachRowsRequestsAndOffers() throws {
+        let page = try AO3Client.parseChallengeSignUpsPage(Self.signUpIndexHTML, slug: "fest", page: 1)
+        try #require(page.signUps.map(\.id) == [11, 12])
+        #expect(page.totalPages == 2)
+        let alice = page.signUps[0]
+        #expect(alice.pseud == "Alice")
+        try #require(alice.requests.count == 2)
+        try #require(alice.offers.count == 1)
+        #expect(alice.requests[0].relationships == ["Aziraphale/Crowley"])
+        // The optional-tags list is not a chosen tag.
+        #expect(alice.requests[0].freeforms == ["Slow Burn"])
+        #expect(alice.requests[0].promptText == "A bookshop that rearranges itself.")
+        #expect(alice.offers[0].fandoms == ["Star Wars"])
+        // Distinct request fandoms, in order: 1bz's one-line summary.
+        #expect(alice.requestTagSummary == "Good Omens (TV), Naruto")
+        let bob = page.signUps[1]
+        #expect(bob.pseud == "Bob (bobby)")
+        #expect(bob.requests.count == 1)
+        #expect(bob.offers.isEmpty)
+        // A prompt meme's index prints the heading and no rows.
+        let meme = try AO3Client.parseChallengeSignUpsPage(
+            "<h2 class='heading'>Sign-ups for Meme</h2>", slug: "meme", page: 1
+        )
+        #expect(meme.signUps.isEmpty)
+    }
+
     @Test func signUpJoinsAssignmentMatchedState() throws {
-        let signUpHTML = """
-        <html><body>
-        <h2 class="heading">Sign-ups for Winter Fest</h2>
-        <ul class="index group">
-          <li class="challenge signup blurb" id="signup_11">
-            <h4 class="heading"><a href="/collections/fest/signups/11">Alice</a></h4>
-            <a class="tag">Star Wars</a>
-          </li>
-          <li class="challenge signup blurb" id="signup_12">
-            <h4 class="heading"><a href="/collections/fest/signups/12">Bob</a></h4>
-            <a class="tag">Trek</a>
-          </li>
-        </ul>
-        </body></html>
-        """
+        let signUpHTML = Self.signUpIndexHTML
         // Rendered shape of maintainer_index_unfulfilled.html.erb, not a
         // production capture: assignment indexes require collection-maintainer access.
         let assignmentHTML = """
@@ -68,7 +137,7 @@ struct AO3ChallengeParsingTests {
             signUps.signUps, assignments: assignments.assignments
         )
         let alice = try #require(joined.first(where: { $0.pseud == "Alice" }))
-        let bob = try #require(joined.first(where: { $0.pseud == "Bob" }))
+        let bob = try #require(joined.first(where: { $0.pseud == "Bob (bobby)" }))
         #expect(alice.isMatched)
         #expect(alice.assignment?.id == 80)
         #expect(alice.assignment?.offerPseud == "Carol")
@@ -77,6 +146,74 @@ struct AO3ChallengeParsingTests {
         #expect(alice.assignment?.isDefaulted == false)
         #expect(!bob.isMatched)
         #expect(bob.assignment == nil)
+    }
+
+    @Test func signUpMatchStateIsUnknownWithoutAssignments() {
+        let alice = AO3ChallengeSignUp(id: 11, collectionSlug: "fest", pseud: "Alice")
+        // A failed assignments fetch must not read as "unmatched".
+        #expect(AO3ChallengeSignUpMatching.state(of: alice, assignmentsLoaded: false) == .unknown)
+        #expect(AO3ChallengeSignUpMatching.state(of: alice, assignmentsLoaded: true) == .unmatched)
+        var matched = alice
+        matched.assignment = AO3ChallengeAssignment(id: 80, collectionSlug: "fest", offerPseud: "Carol")
+        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignmentsLoaded: false) == .unknown)
+        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignmentsLoaded: true) == .matched)
+        // A defaulted, uncovered giver is what 1cb lists as unmatched.
+        matched.assignment?.isDefaulted = true
+        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignmentsLoaded: true) == .unmatched)
+    }
+
+    @Test func ownSignUpMatchesBylineOrPseudWithLogin() {
+        let rows = [
+            AO3ChallengeSignUp(id: 11, collectionSlug: "fest", pseud: "Alice"),
+            AO3ChallengeSignUp(id: 12, collectionSlug: "fest", pseud: "Bob (bobby)")
+        ]
+        #expect(AO3ChallengeSignUpMatching.ownSignUpID(in: rows, login: "alice") == 11)
+        #expect(AO3ChallengeSignUpMatching.ownSignUpID(in: rows, login: "bobby") == 12)
+        #expect(AO3ChallengeSignUpMatching.ownSignUpID(in: rows, login: "bob") == nil)
+        #expect(AO3ChallengeSignUpMatching.ownSignUpID(in: rows, login: "") == nil)
+    }
+
+    @Test func assignmentBadgeDerivesLateFromWorksDue() {
+        let due = Date(timeIntervalSince1970: 1_000_000)
+        let before = due.addingTimeInterval(-60)
+        let after = due.addingTimeInterval(60)
+        let open = AO3ChallengeAssignment(id: 1, collectionSlug: "fest", offerPseud: "Giver")
+        #expect(open.badge(dueAt: due, now: before) == nil)
+        #expect(open.badge(dueAt: due, now: after) == .late)
+        // No due date, no late claim.
+        #expect(open.badge(dueAt: nil, now: after) == nil)
+        var delivered = open
+        delivered.isFulfilled = true
+        #expect(delivered.badge(dueAt: due, now: after) == .delivered)
+        var defaulted = open
+        defaulted.isDefaulted = true
+        #expect(defaulted.badge(dueAt: due, now: after) == .defaulted)
+    }
+
+    @Test func draftPromptIDsStayUniqueAndAreNeverPosted() throws {
+        var form = AO3ChallengeSignUpForm(
+            actionURL: try #require(URL(string: "https://archiveofourown.org/collections/fest/signups")),
+            csrfToken: "csrf", collectionSlug: "fest", pseudID: "15",
+            requests: [AO3ChallengePrompt(id: 21, kind: .request)], offers: []
+        )
+        // Seeding an offer then adding one used to give both id -2.
+        form.offers.append(AO3ChallengePrompt(id: form.nextDraftPromptID, kind: .offer))
+        form.offers.append(AO3ChallengePrompt(id: form.nextDraftPromptID, kind: .offer))
+        form.requests.append(AO3ChallengePrompt(id: form.nextDraftPromptID, kind: .request))
+        let ids = (form.requests + form.offers).map(\.id)
+        #expect(Set(ids).count == ids.count)
+        let posted = AO3Client.challengeSignUpParameters(form).filter { $0.0.hasSuffix("[id]") }
+        #expect(posted.map(\.1) == ["21"])
+    }
+
+    @Test func signUpTotalAndPageLabels() {
+        // will_paginate: every page but the last is full.
+        #expect(AO3Client.signUpTotal(pageSize: 20, totalPages: 3, lastPageCount: 7) == 47)
+        #expect(AO3Client.signUpTotal(pageSize: 5, totalPages: 1, lastPageCount: 5) == 5)
+        #expect(AO3ChallengeCountText.plural(1, "sign-up") == "1 sign-up")
+        #expect(AO3ChallengeCountText.plural(31, "sign-up") == "31 sign-ups")
+        #expect(AO3ChallengeCountText.pageQualifier(page: 2, totalPages: 4) == "on page 2 of 4")
+        #expect(AO3ChallengeCountText.pageQualifier(page: 1, totalPages: 1) == nil)
     }
 
     @Test func assignmentTemplatesPreserveDefaultAndDeliveryStates() throws {
@@ -169,6 +306,8 @@ struct AO3ChallengeParsingTests {
         #expect(form.settings.assignmentsDueAt.postedString == "2026-03-01 00:00:00")
         #expect(form.settings.worksRevealAt.postedString == "2026-04-01 00:00:00")
         #expect(form.settings.authorsRevealAt.postedString == "2026-05-01 00:00:00")
+        // Works are due on assignments_due_at; works_reveal_at is the reveal.
+        #expect(form.settings.worksDueAt.postedString == "2026-03-01 00:00:00")
         #expect(form.settings.limits.requestsAllowed == 3)
         #expect(form.settings.matchingOpenOnAO3.path == "/collections/fest/potential_matches")
         // Matching is Open on AO3 — there is no runMatching() write on AO3AuthService.
