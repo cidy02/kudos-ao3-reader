@@ -1,0 +1,94 @@
+{
+ "area": "comments-1f-reaudit",
+ "boards": [
+  {
+   "id": "1f",
+   "title": "Comments",
+   "liveViews": [
+    "kudos-ao3-reader/Features/Comments/CommentsView.swift:25",
+    "kudos-ao3-reader/Features/Comments/CommentThreadRow.swift:38",
+    "kudos-ao3-reader/Features/Comments/CommentsModel.swift:3"
+   ],
+   "reachable": "Work Detail exposes All comments, Chapter comments and Write a comment routes at kudos-ao3-reader/Features/WorkDetail/WorkDetailSections.swift:153; the shared destination constructs CommentsView at kudos-ao3-reader/UIComponents/AO3AuthorNavigation.swift:250. The iOS reader presents it from its Comments fan-menu action at kudos-ao3-reader/Features/ReaderReadium/ReadiumReaderView.swift:1897 through commentsSheet at :234.",
+   "status": "OWNER_DECISION",
+   "planDocAccurate": true,
+   "gaps": [],
+   "notes": "The threading rebuild is live: cardless flat rows, neutral hairline rails and elbows are defined at CommentThreadRow.swift:9 and :477; CommentsModel supplies the flat depth-5 projection at CommentsModel.swift:692. Depth 5 is explicitly an OWNER_DECISION at CommentThreadRow.swift:11 and AUDIT_METHOD.md:57, never a gap. T-251/T-254's cutoff-aware counts and caret rules are present at CommentThreadRow.swift:632 and :686. The signal strip, chapter/sort pills, sans body, per-row overflow and centered write pill remain present at CommentsView.swift:506, :563, CommentThreadRow.swift:1279, :1387 and CommentsView.swift:803. Continuous streaming remains an open OWNER_DECISION under AUDIT_METHOD.md:61: live code still renders Previous/Next pagination at CommentsView.swift:718 and :761. AO3 Q13 supports cutoff descendant counts and Q14 supports newest-first as last page with roots reversed."
+  },
+  {
+   "id": "1ba",
+   "title": "Comment composer",
+   "liveViews": [
+    "kudos-ao3-reader/Features/Comments/CommentsView.swift:1148"
+   ],
+   "reachable": "CommentsView presents CommentComposerSheet at CommentsView.swift:261. It opens from the floating Write a comment control at :803, per-comment Reply actions at CommentThreadRow.swift:1257, and Work Detail's direct compose route at WorkDetailSections.swift:175.",
+   "status": "GAPS_MINOR",
+   "planDocAccurate": false,
+   "gaps": [
+    {
+     "element": "Drag-taller footer",
+     "current": "The content ends with the identity/budget block and the bottom safe-area inset contains only CommentFormatBar. A visible system drag indicator exists, but the specified explanatory footer copy does not.",
+     "where": "kudos-ao3-reader/Features/Comments/CommentsView.swift:1248",
+     "effort": "S",
+     "needs": "“the footer says the sheet drags taller” — add that footer copy below the identity and character-budget line.",
+     "aoWrite": true
+    },
+    {
+     "element": "Reply confirmation-action copy",
+     "current": "Replies label the header action “Post Reply”; the board specifies “Post”.",
+     "where": "kudos-ao3-reader/Features/Comments/CommentsView.swift:1278",
+     "effort": "S",
+     "needs": "“Cancel and Post sit in the sheet header” — use the specified “Post” label for replies.",
+     "aoWrite": true
+    }
+   ],
+   "notes": "The earlier character-budget bug is fixed: remainingCharacters uses unicodeScalars at CommentsView.swift:1181, matching AO3 Q15, with coverage at BrowseAndWorkDetailRulesTests.swift:67. Medium/large detents, quoted-parent rail, identity and budget are present at CommentsView.swift:1216, :1318, :1353 and :1385. This is an AO3 write surface; no write was exercised."
+  },
+  {
+   "id": "1be",
+   "title": "Composer with keyboard",
+   "liveViews": [
+    "kudos-ao3-reader/Features/Comments/CommentsView.swift:1210",
+    "kudos-ao3-reader/Features/Comments/CommentMarkup.swift:171"
+   ],
+   "reachable": "It is the focused-keyboard state of CommentComposerSheet, reached through every 1ba entry point. The editor is focused on appearance at CommentsView.swift:1305.",
+   "status": "DONE",
+   "planDocAccurate": true,
+   "gaps": [],
+   "notes": "The format bar is pinned with a bottom safe-area inset at CommentsView.swift:1245 and the sheet uses medium/large detents at :1318. Self-skeptic check: the squeezed state’s most likely missing element was the quoted parent; it remains above the editor at CommentsView.swift:1216. Source inspection confirms the structure, but no runtime keyboard/layout check was performed."
+  },
+  {
+   "id": "1bf",
+   "title": "Formatting tray",
+   "liveViews": [
+    "kudos-ao3-reader/Features/Comments/CommentMarkup.swift:219",
+    "kudos-ao3-reader/Models/AO3Markup.swift:31"
+   ],
+   "reachable": "The composer’s pinned CommentFormatBar opens CommentFormattingTray at CommentsView.swift:1248 and :1253.",
+   "status": "GAPS_MINOR",
+   "planDocAccurate": false,
+   "gaps": [
+    {
+     "element": "Formatting-control layout",
+     "current": "The artboard's four-column tiles are replaced by full-width rows inside a VStack/subjectPanel. The code acknowledges this substitution, but records implementer reasoning rather than an owner decision.",
+     "where": "kudos-ao3-reader/Features/Comments/CommentMarkup.swift:277",
+     "effort": "M",
+     "needs": "“The tray writes the tag for you and names it underneath” — restore the artboard’s four-column tile presentation while retaining accessible reflow.",
+     "aoWrite": true
+    },
+    {
+     "element": "Heading range",
+     "current": "The single Heading action silently writes and labels only h3.",
+     "where": "kudos-ao3-reader/Models/AO3Markup.swift:82",
+     "effort": "M",
+     "needs": "“Heading h1–h6” — let the heading control represent or select the advertised range rather than reducing it to h3.",
+     "aoWrite": true
+    }
+   ],
+   "notes": "The old sanitizer finding remains correct: every offered element maps through AO3MarkupTag, spoiler writes details/summary, and img is deliberately absent. AO3 Q20 confirms all offered tags survive AO3's sanitizer. Exact buffer behavior is pinned in CommentMarkupTests.swift:31, :98 and :106. The row-for-tile and h3-only explanations are implementer decisions, so AUDIT_METHOD.md:45 forbids treating them as OWNER_DECISION."
+  }
+ ],
+ "areaNotes": "Re-audited exclusively from commit 92480fab via Git objects; no working-tree files, builds, tests or network were used. The T-247/T-251/T-254 threading implementation is present and the earlier pre-rebuild threading verdict is obsolete. Self-skeptic pass found no hidden capability blocker and verified 1be's most likely missing element—the quoted parent—at CommentsView.swift:1216. When visual behavior could not be proven without running the app, the conclusion is explicitly source-only.",
+ "reauditSummary": "FIXED\n\n- `1f.5`: T-247 replaced the old cards/depth-two projection with flat elbow-rail rows through depth 5; T-251/T-254 fixed cutoff counts and collapse behavior.\n- `1ba.2`: the 10,000-character budget now counts Unicode scalars/code points.\n\nSTILL OPEN\n\n- `1f.4`: continuous loading is still pagination; the current audit method calls this an open owner decision.\n\nWRONG\n\n- The old `1f.5` description of the live implementation is stale at `92480fab`, although the old audit correctly warned that it predated T-247.\n- `1ba.1` overclaimed completion: the drag-taller footer is absent and replies say “Post Reply”.\n- The old `1bf` BUILT verdict checked sanitizer compatibility but missed the row-for-tile substitution and the `h1–h6` → `h3` reduction.",
+ "provenance": "Codex (gpt-5.6-sol), 2026-09-25, read-only at 92480fab; supersedes the 1f/1ba/1be/1bf entries of browse-workdetail-comments.json, which predate T-247."
+}
