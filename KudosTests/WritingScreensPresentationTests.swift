@@ -20,20 +20,27 @@ struct WritingScreensPresentationTests {
     @Test func seriesTallySumsTheLoadedSeries() {
         let parts = AuthorProfileView.seriesTallyParts(
             [series(1, works: 3, words: 118_600), series(2, works: 6, words: 100_700)],
-            isPaged: false
+            isPartial: false
         )
         #expect(parts == ["9 works", "219,300 words"])
     }
 
-    @Test func pagedSeriesTallyDoesNotClaimTheAccountTotal() {
-        let parts = AuthorProfileView.seriesTallyParts([series(1, works: 1, words: 500)], isPaged: true)
-        #expect(parts == ["1 work", "500 words on this page"])
+    /// With more series pages than loaded, one clause scopes both sums: "on
+    /// this page" used to qualify the words alone, and stayed after every page
+    /// had loaded.
+    @Test func aPartialSeriesTallyScopesBothSumsToTheLoadedSeries() {
+        let parts = AuthorProfileView.seriesTallyParts(
+            [series(1, works: 2, words: 100), series(2, works: 7, words: 200)], isPartial: true
+        )
+        #expect(parts == ["9 works, 300 words in the 2 loaded series"])
+        #expect(AuthorProfileView.seriesTallyParts([series(1, works: 1, words: nil)], isPartial: true)
+            == ["1 work in the 1 loaded series"])
     }
 
     @Test func seriesTallyDropsAFigureAO3PrintedForNoSeries() {
-        #expect(AuthorProfileView.seriesTallyParts([series(1, works: nil, words: nil)], isPaged: false).isEmpty)
-        #expect(AuthorProfileView.seriesTallyParts([], isPaged: true).isEmpty)
-        #expect(AuthorProfileView.seriesTallyParts([series(1, works: 2, words: nil)], isPaged: false)
+        #expect(AuthorProfileView.seriesTallyParts([series(1, works: nil, words: nil)], isPartial: false).isEmpty)
+        #expect(AuthorProfileView.seriesTallyParts([], isPartial: true).isEmpty)
+        #expect(AuthorProfileView.seriesTallyParts([series(1, works: 2, words: nil)], isPartial: false)
             == ["2 works"])
     }
 
