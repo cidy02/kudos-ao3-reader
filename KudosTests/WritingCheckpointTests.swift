@@ -141,6 +141,21 @@ struct WritingRecoveryWriterTests {
         #expect(try store.load(from: url)?.text == "newer")
     }
 
+    /// A newer checkpoint whose write failed is what a later, older call
+    /// writes: the older text never reaches disk, and the newer is retried.
+    @Test func aFailedNewerWriteIsWhatALaterCallWrites() async throws {
+        let store = makeStore()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let url = sessionURL(store, "s1")
+        let writer = WritingRecoveryWriter(store: store, url: url, original: "")
+        // A file where the directory should be makes `createDirectory` throw.
+        try Data().write(to: store.directory)
+        await #expect(throws: (any Error).self) { try await writer.write("newer", sequence: 2) }
+        try FileManager.default.removeItem(at: store.directory)
+        #expect(try await writer.write("older", sequence: 1))
+        #expect(try store.load(from: url)?.text == "newer")
+    }
+
     @Test func aCorruptCopyIsSkippedNotFatal() throws {
         let store = makeStore()
         defer { try? FileManager.default.removeItem(at: store.directory) }
