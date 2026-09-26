@@ -16,10 +16,11 @@ struct ChallengeSettingsView: View {
 
     @State private var settingsForm: AO3ChallengeSettingsForm?
     @State private var tagSetLinks: [AO3CollectionTagSetLink] = []
-    @State private var signUpCount: Int = 0
-    @State private var matchedCount: Int = 0
-    @State private var unmatchedCount: Int = 0
-    @State private var defaultsCount: Int = 0
+    /// `nil` = that fetch failed; the row says so instead of showing 0.
+    @State private var signUpTotal: Int?
+    @State private var matchedCount: Int?
+    @State private var unmatchedCount: Int?
+    @State private var defaultsCount: Int?
     @State private var phase: Phase = .idle
 
     private enum Phase: Equatable {
@@ -207,16 +208,19 @@ struct ChallengeSettingsView: View {
 
             SubjectRowSeparator()
 
+            // AO3 prints assignments_due_at as "Assignments Due" and mails it as
+            // the deadline for works; works_reveal_at and authors_reveal_at are
+            // the two reveals, never a due date.
             SubjectFormRow(
-                label: "Assignments due",
-                value: formatDate(settings.assignmentsDueAt),
+                label: "Works due",
+                value: formatDate(settings.worksDueAt),
                 isMonospaced: true
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Works due",
+                label: "Works revealed",
                 value: formatDate(settings.worksRevealAt),
                 isMonospaced: true
             )
@@ -224,7 +228,7 @@ struct ChallengeSettingsView: View {
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Reveal",
+                label: "Creators revealed",
                 value: formatDate(settings.authorsRevealAt),
                 isMonospaced: true
             )
@@ -284,7 +288,7 @@ struct ChallengeSettingsView: View {
             SubjectRowSeparator()
 
             SubjectFormRow(label: "Allow any prompt", arrangement: .control) {
-                Toggle("", isOn: .constant(!restriction.descriptionRequired))
+                Toggle("", isOn: .constant(restriction.allowsAnyTag))
                     .labelsHidden()
                     .disabled(true)
             }
@@ -331,7 +335,7 @@ struct ChallengeSettingsView: View {
         VStack(spacing: 0) {
             SubjectFormRow(
                 label: "Sign-ups",
-                value: "\(signUpCount)",
+                value: signUpTotal.map(String.init) ?? "Couldn't load",
                 showsDisclosure: true,
                 isMonospaced: true
             )
@@ -354,7 +358,7 @@ struct ChallengeSettingsView: View {
 
             SubjectFormRow(
                 label: "Defaults and pinch hits",
-                value: "\(defaultsCount)",
+                value: defaultsCount.map(String.init) ?? "Couldn't load",
                 isMonospaced: true
             )
 
@@ -363,9 +367,7 @@ struct ChallengeSettingsView: View {
     }
 
     private var assignmentsSummaryText: String {
-        if matchedCount == 0 && unmatchedCount == 0 {
-            return "No assignments found"
-        }
+        guard let matchedCount, let unmatchedCount else { return "Couldn't load" }
         return "\(matchedCount) matched, \(unmatchedCount) unmatched"
     }
 
@@ -483,37 +485,42 @@ struct ChallengeSettingsView: View {
                 slug: collectionSlug, request: profileRequest
             )) ?? []
 
-            // Load signups count
-            if let signUpsRequest = try? auth.authenticatedRequest(
-                for: AO3ChallengeURL.signUps(slug: collectionSlug, page: 1)
-            ), let signUpsPage = try? await AO3Client.shared.challengeSignUps(
-                slug: collectionSlug, page: 1, request: signUpsRequest
-            ) {
-                signUpCount = signUpsPage.signUps.count
-            }
+            signUpTotal = try? await loadSignUpTotal()
 
-            // KNOWN DEFECT work-around: parseChallengeAssignmentsPage does not match real
-            // otwarchive markup. If it fails to parse, degrade gracefully to 0 rather than throwing.
-            if let assignmentsRequest = try? auth.authenticatedRequest(
-                for: AO3ChallengeURL.assignments(slug: collectionSlug, list: .assignments, page: 1)
-            ), let assignmentsPage = try? await AO3Client.shared.challengeAssignments(
-                slug: collectionSlug, list: .assignments, page: 1, request: assignmentsRequest
-            ) {
-                matchedCount = assignmentsPage.assignments.filter(\.isMatched).count
-                unmatchedCount = assignmentsPage.assignments.filter { !$0.isMatched }.count
-            }
-
-            if let defaultsRequest = try? auth.authenticatedRequest(
-                for: AO3ChallengeURL.assignments(slug: collectionSlug, list: .defaults, page: 1)
-            ), let defaultsPage = try? await AO3Client.shared.challengeAssignments(
-                slug: collectionSlug, list: .defaults, page: 1, request: defaultsRequest
-            ) {
-                defaultsCount = defaultsPage.assignments.count
+            // The same lists as 1cb, every page. Matched = Complete + Open;
+            // unmatched = defaulted and uncovered; a covered default reappears in
+            // Open with a pinch hitter, so defaults + covered counts each once.
+            let sent = try? await assignmentRows([.assignments, .unfulfilled])
+            let defaults = try? await assignmentRows([.defaults])
+            matchedCount = sent?.count
+            unmatchedCount = defaults?.count
+            if let sent, let defaults {
+                defaultsCount = defaults.count + sent.filter(\.isCovered).count
+            } else {
+                defaultsCount = nil
             }
 
             phase = .loaded
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    /// Every page counted, not page 1's twenty.
+    private func loadSignUpTotal() async throws -> Int {
+        let request = try auth.authenticatedRequest(for: AO3ChallengeURL.signUps(slug: collectionSlug))
+        let firstPage = try await AO3Client.shared.challengeSignUps(slug: collectionSlug, request: request)
+        return try await AO3Client.shared.challengeSignUpTotal(
+            slug: collectionSlug, firstPage: firstPage, request: request
+        )
+    }
+
+    private func assignmentRows(_ lists: [AO3ChallengeAssignmentList]) async throws -> [AO3ChallengeAssignment] {
+        let request = try auth.authenticatedRequest(
+            for: AO3ChallengeURL.assignments(slug: collectionSlug, list: lists[0])
+        )
+        return try await AO3Client.shared.allChallengeAssignments(
+            slug: collectionSlug, lists: lists, request: request
+        )
     }
 }
