@@ -6,6 +6,7 @@ import Testing
 /// regression that still dispatches does not POST to AO3.
 private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
     struct Hit: Sendable {
+        var method: String?
         var cookie: String?
         var preparedWriteSession: String?
         var handlesCookies: Bool
@@ -32,6 +33,7 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         let hit = Hit(
+            method: request.httpMethod,
             cookie: request.value(forHTTPHeaderField: "Cookie"),
             preparedWriteSession: request.value(
                 forHTTPHeaderField: AO3Client.preparedWriteSessionHeader
@@ -42,16 +44,19 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
         Self.hits.append(hit)
         Self.lock.unlock()
 
+        // A GET is a write's CSRF fetch: answer with a page carrying the token.
+        let isGET = request.httpMethod == "GET"
         guard let url = request.url,
               let response = HTTPURLResponse(
-                url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil
+                url: url, statusCode: isGET ? 200 : 201, httpVersion: "HTTP/1.1", headerFields: nil
               )
         else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
+        let body = isGET ? #"<meta name="csrf-token" content="probe-csrf">"# : "fence-ok"
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data("fence-ok".utf8))
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
 
@@ -210,5 +215,76 @@ struct AO3WriteDispatchFenceTests {
             try await auth.submitWrite(request, using: client)
         }
         #expect(AO3WriteDispatchProbe.recorded().isEmpty)
+    }
+
+    private func collectionForm() -> AO3CollectionForm {
+        var form = AO3CollectionForm.blank
+        form.name = "alice_fest"
+        form.title = "Alice Fest"
+        return form
+    }
+
+    /// The fence above compares a POST with its own CSRF GET, so a collection
+    /// form loaded as alice and saved after bob signs in would pass it: the GET
+    /// and the POST are both bob's. The form's own generation stops it first,
+    /// before any request.
+    @Test func aCollectionFormLoadedUnderAnEarlierSessionIsNotSaved() async throws {
+        AO3WriteDispatchProbe.reset()
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let formGeneration = auth.sessionGeneration
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        #expect(auth.isLoggedIn)
+        let client = AO3Client(session: probeSession(), paceSleep: { _ in })
+
+        await #expect(throws: CancellationError.self) {
+            try await auth.createCollection(collectionForm(), expectedGeneration: formGeneration, using: client)
+        }
+        await #expect(throws: CancellationError.self) {
+            try await auth.updateCollection(
+                slug: "alice_fest", form: collectionForm(), expectedGeneration: formGeneration, using: client
+            )
+        }
+        #expect(AO3WriteDispatchProbe.recorded().isEmpty)
+    }
+
+    /// Bob signs in while alice's CSRF GET is out. Nothing downstream catches
+    /// it: `writeRequest` would stamp bob's session, so the dispatch fence would
+    /// send bob's cookie with alice's form. Only the check after the GET stops it.
+    @Test func aSessionChangeDuringTheCollectionCSRFFetchPostsNothing() async throws {
+        let auth = makeAuth()
+        // Every request waits out its pace slot here. The first is the GET's,
+        // after its Cookie was built and before the page comes back.
+        let client = AO3Client(
+            session: probeSession(),
+            nextAllowedRequestAt: Date().addingTimeInterval(60),
+            paceSleep: { @MainActor _ in
+                guard auth.username == "alice" else { return }
+                await auth.logout()
+                await auth.login(username: "bob", password: "pw")
+            }
+        )
+
+        for isUpdate in [false, true] {
+            AO3WriteDispatchProbe.reset()
+            await auth.logout()
+            await auth.login(username: "alice", password: "pw")
+            let formGeneration = auth.sessionGeneration
+
+            await #expect(throws: CancellationError.self) {
+                if isUpdate {
+                    _ = try await auth.updateCollection(
+                        slug: "alice_fest", form: collectionForm(), expectedGeneration: formGeneration, using: client
+                    )
+                } else {
+                    _ = try await auth.createCollection(
+                        collectionForm(), expectedGeneration: formGeneration, using: client
+                    )
+                }
+            }
+            #expect(auth.username == "bob")
+            #expect(AO3WriteDispatchProbe.recorded().map(\.method) == ["GET"])
+        }
     }
 }

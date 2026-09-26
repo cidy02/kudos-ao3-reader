@@ -14,7 +14,7 @@ struct AO3CollectionSessionReloadTests {
         var rowNames: [String] = []
         var currentPage = 1
         var totalPages = 1
-        var phaseIsIdle = true
+        var phase: AO3CollectionSessionReload.ItemsPhase = .idle
         var filters = AO3CollectionsFilter()
         var didStartPageOne = false
 
@@ -34,7 +34,7 @@ struct AO3CollectionSessionReloadTests {
             self.isLoggedIn = isLoggedIn
             let decision = AO3CollectionSessionReload.listTask(
                 boundGeneration: boundGeneration,
-                phaseIsIdle: phaseIsIdle,
+                phase: phase,
                 sessionGeneration: sessionGeneration,
                 isLoggedIn: isLoggedIn
             )
@@ -44,13 +44,13 @@ struct AO3CollectionSessionReloadTests {
                 rowNames = cleared.collections.map(\.name)
                 currentPage = cleared.currentPage
                 totalPages = cleared.totalPages
-                phaseIsIdle = true
+                phase = .idle
                 boundGeneration = sessionGeneration
             }
             didStartPageOne = decision.loadPageOne
             if decision.loadPageOne {
                 loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
-                phaseIsIdle = false
+                phase = .loading
             }
             return decision.loadPageOne
         }
@@ -261,7 +261,7 @@ struct AO3CollectionSessionReloadTests {
         screen.boundGeneration = 4
         screen.sessionGeneration = 4
         screen.isLoggedIn = true
-        screen.phaseIsIdle = false
+        screen.phase = .settled
         screen.rowNames = ["alice-fest"]
         screen.currentPage = 2
         screen.totalPages = 3
@@ -293,18 +293,32 @@ struct AO3CollectionSessionReloadTests {
         screen.rowNames = ["bob-fest"]
         screen.currentPage = 1
         screen.totalPages = 1
-        screen.phaseIsIdle = false
+        screen.phase = .settled
         let reappear = screen.task(sessionGeneration: 6, isLoggedIn: true)
         #expect(!reappear)
         #expect(screen.rowNames == ["bob-fest"])
         #expect(screen.filters.showsOpenOnly)
     }
 
+    /// Pushing New Collection or switching sidebar tabs cancels the list's
+    /// first load, and its cancel handler leaves `.loading`. The task that runs
+    /// on the way back is the same generation and must fetch again, or the list
+    /// spins with no Try Again. The list counterpart of
+    /// `aCancelledItemsLoadRestartsWithoutDroppingSameSessionDrafts`.
+    @Test func aCancelledListLoadRestartsOnReappearance() {
+        #expect(AO3CollectionSessionReload.listTask(
+            boundGeneration: 6, phase: .loading, sessionGeneration: 6, isLoggedIn: true
+        ).loadPageOne)
+        #expect(!AO3CollectionSessionReload.listTask(
+            boundGeneration: 6, phase: .settled, sessionGeneration: 6, isLoggedIn: true
+        ).loadPageOne)
+    }
+
     @Test func aGenerationBumpWhileSignedInClearsCollectionsBeforeFetching() {
         var screen = ListScreen()
         screen.boundGeneration = 6
         screen.sessionGeneration = 6
-        screen.phaseIsIdle = false
+        screen.phase = .settled
         screen.rowNames = ["bob-fest"]
         screen.filters.showsOpenOnly = true
         screen.loadGeneration = 4
@@ -312,7 +326,7 @@ struct AO3CollectionSessionReloadTests {
         let fetches = screen.task(sessionGeneration: 7, isLoggedIn: true)
         #expect(fetches)
         #expect(screen.rowNames.isEmpty)
-        #expect(screen.phaseIsIdle == false)
+        #expect(screen.phase == .loading)
         #expect(screen.filters.showsOpenOnly)
         #expect(!AO3CollectionSessionReload.shouldApplyLoad(
             capturedLoadGeneration: 4,
@@ -520,5 +534,22 @@ struct AO3CollectionSessionReloadTests {
         #expect(currentLoad)
         #expect(screen.rowIDs == [7])
         #expect(screen.phase == .loaded)
+    }
+
+    /// A collection form loaded as alice saves under a later session only if
+    /// alice is the one signed in: never bob's, never a signed-out one.
+    @Test func aCollectionFormSavesUnderANewSessionOnlyForTheSameAccount() {
+        func save(as user: String?) -> Int {
+            AO3CollectionSessionReload.formSaveGeneration(
+                loaded: 3, loadedUsername: "alice", current: 7, currentUsername: user
+            )
+        }
+        #expect(save(as: "alice") == 7)
+        #expect(save(as: "Alice") == 7)
+        #expect(save(as: "bob") == 3)
+        #expect(save(as: nil) == 3)
+        #expect(AO3CollectionSessionReload.formSaveGeneration(
+            loaded: 3, loadedUsername: nil, current: 7, currentUsername: "alice"
+        ) == 3)
     }
 }

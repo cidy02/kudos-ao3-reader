@@ -95,7 +95,7 @@ struct AO3CollectionsList: View {
         )) {
             let decision = AO3CollectionSessionReload.listTask(
                 boundGeneration: loadedSessionGeneration,
-                phaseIsIdle: phase == .idle,
+                phase: listPhase,
                 sessionGeneration: auth.sessionGeneration,
                 isLoggedIn: auth.isLoggedIn
             )
@@ -355,6 +355,15 @@ struct AO3CollectionsList: View {
         currentPage = cleared.currentPage
         totalPages = cleared.totalPages
         phase = .idle
+    }
+
+    /// `phase` in the reload rule's terms: loaded and failed are both settled.
+    private var listPhase: AO3CollectionSessionReload.ItemsPhase {
+        switch phase {
+        case .idle: .idle
+        case .loading: .loading
+        case .loaded, .failed: .settled
+        }
     }
 
     private func load(page: Int) async {

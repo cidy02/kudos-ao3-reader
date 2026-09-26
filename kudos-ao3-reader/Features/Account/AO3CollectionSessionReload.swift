@@ -90,7 +90,7 @@ enum AO3CollectionSessionReload {
 
     static func listTask(
         boundGeneration: Int?,
-        phaseIsIdle: Bool,
+        phase: ItemsPhase,
         sessionGeneration: Int,
         isLoggedIn: Bool
     ) -> ListTask {
@@ -101,8 +101,10 @@ enum AO3CollectionSessionReload {
         // Clearing makes the screen idle. A same-generation run whose phase
         // is already idle is `finishAccepting`: the generation moved earlier,
         // while status was still signing in, and this run is the one that
-        // fetches. A loaded page at this generation is a reappearance.
-        let load = isLoggedIn && (clear || phaseIsIdle)
+        // fetches. `.loading` is a fetch the previous task lost when SwiftUI
+        // cancelled it (a pushed New Collection, a sidebar switch), as on the
+        // items screen. A settled page at this generation is a reappearance.
+        let load = isLoggedIn && (clear || phase != .settled)
         return ListTask(clearAccountState: clear, loadPageOne: load)
     }
 
@@ -125,5 +127,19 @@ enum AO3CollectionSessionReload {
             clear || phase == .idle || phase == .loading || loadedTab != tab
         )
         return ItemsTask(clearAccountState: clear, loadPageOne: load)
+    }
+
+    /// The session a collection form's Save posts under: the one the form
+    /// loaded under, or the current one when the same account has signed in
+    /// again since (an expiry, a re-login). The form is still theirs, and the
+    /// save fetches that session's CSRF anyway. Signed out or another account
+    /// keeps the old one, which the write's entry check then refuses.
+    static func formSaveGeneration(
+        loaded: Int, loadedUsername: String?, current: Int, currentUsername: String?
+    ) -> Int {
+        guard let loadedUsername, let currentUsername,
+              currentUsername.caseInsensitiveCompare(loadedUsername) == .orderedSame
+        else { return loaded }
+        return current
     }
 }

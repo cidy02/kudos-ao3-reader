@@ -365,10 +365,12 @@ extension AO3AuthService {
     /// fetch; callers that only need the token (kudos, mark-for-later, comment
     /// delete/edit) just discard it. Internal (not private) so sibling
     /// write-action extensions (`AO3CommentActions`) share the one
-    /// implementation instead of forking it.
-    func fetchCSRFPage(at url: URL) async throws -> (html: String, token: String) {
+    /// implementation instead of forking it. `client`: as `submitWrite`'s.
+    func fetchCSRFPage(
+        at url: URL, using client: AO3Client = .shared
+    ) async throws -> (html: String, token: String) {
         let request = try authenticatedRequest(for: url)
-        let html = try await AO3Client.shared.authenticatedPageHTML(for: request)
+        let html = try await client.authenticatedPageHTML(for: request)
         guard let token = AO3Client.parseCSRFToken(from: html) else {
             throw AO3WriteError.noCSRFToken
         }
