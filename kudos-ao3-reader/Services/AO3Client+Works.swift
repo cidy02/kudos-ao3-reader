@@ -560,9 +560,7 @@ extension AO3Client {
     static func parsePreviewHTML(from html: String) throws -> AO3PreviewHTML {
         let doc = try SwiftSoup.parse(html)
         guard let pane = try doc.select("#previewpane").first() else {
-            if let reason = try doc.select("#error li").first()?.text(), !reason.isEmpty {
-                throw AO3WorkWriteError.rejected(reason)
-            }
+            if let reason = workWriteError(in: html) { throw AO3WorkWriteError.rejected(reason) }
             throw AO3WorkWriteError.previewUnavailable
         }
         // The posting fieldset in preview mode swaps Preview for `edit_button`.
@@ -587,9 +585,41 @@ extension AO3Client {
             workID: workIDFromPath(action),
             chapterID: chapterID(inPath: action),
             csrfToken: parseCSRFToken(from: html),
-            notice: writeSuccessMessage(in: html),
+            notice: workWriteNotice(in: html),
             blocks: blocks
         )
+    }
+
+    // MARK: - Write verdicts
+
+    /// AO3's refusal of a work, chapter or series write: the layout's error
+    /// flash (`flash_div :error, :caution, :notice, :alert`, the first thing
+    /// in `#main`) or `error_messages_for`'s `#error` list, which the form
+    /// templates put at their top level. Only `#main`'s own children count:
+    /// AO3 keeps a writer's `class` attributes (`OtwSanitize::UserClassSanitizer`),
+    /// so a chapter's own `<div class="error"><p>` in a preview or on the
+    /// work page is not AO3 refusing it — the shared `writeErrorMessage`
+    /// matches `.error p` anywhere, and `.flash.caution`, which otwarchive's
+    /// work and chapter controllers never set. A page that shows the saved
+    /// thing (`#previewpane`) or says so (a notice) is never a refusal: AO3
+    /// has the draft, and reading it as a failure skipped `adopting`, so the
+    /// next Preview or Post made a second one.
+    static func workWriteError(in html: String) -> String? {
+        guard let doc = try? SwiftSoup.parse(html),
+              (try? doc.select("#main > #previewpane, #main > .flash.notice").first()) == nil
+        else { return nil }
+        return mainText(doc, "#main > .flash.error, #main > #error li")
+    }
+
+    /// The layout's notice flash — same scoping as `workWriteError`.
+    static func workWriteNotice(in html: String) -> String? {
+        guard let doc = try? SwiftSoup.parse(html) else { return nil }
+        return mainText(doc, "#main > .flash.notice")
+    }
+
+    private static func mainText(_ doc: Document, _ selector: String) -> String? {
+        let text = (try? doc.select(selector).first()?.text())?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text?.isEmpty == false ? text : nil
     }
 
     // MARK: - Field helpers
