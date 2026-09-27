@@ -129,6 +129,14 @@ extension AO3Client {
         return URL(string: "https://archiveofourown.org/users/\(name)/works/update_multiple")
     }
 
+    /// `delete_multiple_user_works_path` — where `works/confirm_delete_multiple`
+    /// posts "Yes, Delete Works".
+    static func deleteMultipleWorksURL(username: String) -> URL? {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        return URL(string: "https://archiveofourown.org/users/\(name)/works/delete_multiple")
+    }
+
     // MARK: Fetchers
 
     func workFormHTML(for request: URLRequest) async throws -> String {
