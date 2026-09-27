@@ -971,8 +971,69 @@ nonisolated struct AO3DeleteImplications: Equatable, Sendable {
     var cautionText: String
 }
 
+/// AO3's preview page (otwarchive `works/preview` / `chapters/preview`).
 nonisolated struct AO3PreviewHTML: Equatable, Sendable {
+    /// `#previewpane`, without the page's own form.
     var html: String
+    /// The work and chapter the page's Post / Edit form submits to. Previewing
+    /// something new makes AO3 save it as a draft first (`works#create` and
+    /// `chapters#create` redirect to its preview), so this is how the app
+    /// learns the draft exists.
+    var workID: Int?
+    var chapterID: Int?
+    var csrfToken: String?
+    /// AO3's flash on the page — the draft notice after a first preview.
+    var notice: String?
+    /// What the page shows, in order. Images are dropped (no remote loads).
+    var blocks: [Block] = []
+
+    enum Block: Equatable, Sendable {
+        /// A work or chapter title.
+        case heading(String)
+        /// "Summary:", "Notes:".
+        case label(String)
+        /// One paragraph of AO3-sanitized text.
+        case text(AO3RichText)
+    }
+}
+
+extension AO3ChapterForm {
+    /// The form after a preview. A new chapter now exists on AO3 as a draft,
+    /// so everything after this — Post, Save as draft, another preview —
+    /// must update that draft: posting to `/works/:id/chapters` again would
+    /// create a second chapter. Throws `.unconfirmed` when the page doesn't
+    /// say which draft AO3 made.
+    func adopting(_ preview: AO3PreviewHTML) throws -> AO3ChapterForm {
+        var form = self
+        if let token = preview.csrfToken { form.csrfToken = token }
+        guard chapterID == nil else { return form }
+        guard let chapterID = preview.chapterID, preview.workID == workID else {
+            throw AO3WorkWriteError.unconfirmed
+        }
+        form.chapterID = chapterID
+        form.actionURL = AO3Client.chapterURL(workID: workID, chapterID: chapterID)
+        form.httpMethodOverride = "patch"
+        form.isDraft = true
+        return form
+    }
+}
+
+extension AO3WorkForm {
+    /// `AO3ChapterForm.adopting`, for a new work: after its first preview it
+    /// is a draft on AO3, and posting to `/works` again would make a second one.
+    func adopting(_ preview: AO3PreviewHTML) throws -> AO3WorkForm {
+        var form = self
+        if let token = preview.csrfToken { form.csrfToken = token }
+        guard workID == nil else { return form }
+        guard let workID = preview.workID else { throw AO3WorkWriteError.unconfirmed }
+        form.workID = workID
+        form.actionURL = AO3Client.workURL(workID: workID)
+        form.httpMethodOverride = "patch"
+        form.kind = .draft
+        form.isDraft = true
+        form.isPosted = false
+        return form
+    }
 }
 
 // MARK: - Errors
