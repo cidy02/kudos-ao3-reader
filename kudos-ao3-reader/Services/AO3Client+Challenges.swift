@@ -177,10 +177,11 @@ extension AO3Client {
         let zone = selectedValue(form, name: "\(prefix)[time_zone]").nilIfBlank ?? "UTC"
 
         func instant(_ key: String) -> AO3ChallengeInstant {
-            AO3ChallengeInstant.parse(
-                inputValue(form, "\(prefix)[\(key)_string]").nilIfBlank
-                    ?? inputValue(form, "\(prefix)[\(key)]"),
-                timeZoneName: zone
+            let names = ["\(prefix)[\(key)_string]", "\(prefix)[\(key)]"]
+            return AO3ChallengeInstant.parse(
+                inputValue(form, names[0]).nilIfBlank ?? inputValue(form, names[1]),
+                timeZoneName: zone,
+                isOnForm: names.contains { (try? form.select("[name=\"\($0)\"]").first()) != nil }
             )
         }
 
@@ -243,14 +244,21 @@ extension AO3Client {
         if let method = form.httpMethodOverride, !method.isEmpty {
             params.append(("_method", method))
         }
+        // The dates are wall clocks in the challenge's zone, so that zone goes
+        // back with them; a date with no input on the form is left alone.
         params.append(contentsOf: [
             ("\(prefix)[signup_open]", settings.signupOpen ? "1" : "0"),
-            ("\(prefix)[time_zone]", "UTC"),
-            ("\(prefix)[signups_open_at_string]", settings.signupsOpenAt.postedString),
-            ("\(prefix)[signups_close_at_string]", settings.signupsCloseAt.postedString),
-            ("\(prefix)[assignments_due_at_string]", settings.assignmentsDueAt.postedString),
-            ("\(prefix)[works_reveal_at_string]", settings.worksRevealAt.postedString),
-            ("\(prefix)[authors_reveal_at_string]", settings.authorsRevealAt.postedString),
+            ("\(prefix)[time_zone]", settings.timeZoneName)
+        ])
+        let dates: [(String, AO3ChallengeInstant)] = [
+            ("signups_open_at", settings.signupsOpenAt), ("signups_close_at", settings.signupsCloseAt),
+            ("assignments_due_at", settings.assignmentsDueAt), ("works_reveal_at", settings.worksRevealAt),
+            ("authors_reveal_at", settings.authorsRevealAt)
+        ]
+        for (key, instant) in dates where instant.isOnForm {
+            params.append(("\(prefix)[\(key)_string]", instant.postedString))
+        }
+        params.append(contentsOf: [
             ("\(prefix)[requests_num_required]", String(settings.limits.requestsRequired)),
             ("\(prefix)[requests_num_allowed]", String(settings.limits.requestsAllowed)),
             ("\(prefix)[signup_instructions_general]", settings.signupInstructionsGeneral),

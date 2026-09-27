@@ -444,8 +444,8 @@ struct ChallengeSignUpsView: View {
         else { return }
         if !form.settings.signupOpen {
             closeDateText = "closed"
-        } else if let closeDate = form.settings.signupsCloseAt.date {
-            closeDateText = "open until \(closeDate.formatted(date: .abbreviated, time: .omitted))"
+        } else if let closeDate = form.settings.signupsCloseAt.dateText {
+            closeDateText = "open until \(closeDate)"
         } else {
             closeDateText = "open"
         }

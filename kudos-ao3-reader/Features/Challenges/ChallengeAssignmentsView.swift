@@ -107,8 +107,8 @@ struct ChallengeAssignmentsView: View {
             if loadErrors[.matched] == nil { parts.append("\(matched.count) matched") }
             if loadErrors[.unmatched] == nil { parts.append("\(unmatched.count) unmatched") }
         }
-        if let date = worksDueAt?.date {
-            parts.append("works due \(mediumDate(date))")
+        if let due = worksDueAt?.dateText {
+            parts.append("works due \(due)")
         }
         return parts.joined(separator: " · ")
     }
@@ -233,7 +233,7 @@ struct ChallengeAssignmentsView: View {
 
     @ViewBuilder
     private func statusBadge(for assignment: AO3ChallengeAssignment) -> some View {
-        switch assignment.badge(dueAt: worksDueAt?.date) {
+        switch assignment.badge(dueAt: worksDueAt?.instant) {
         case .delivered: badge("Delivered", color: .green)
         case .late: badge("Late", color: .secondary)
         case .defaulted: badge("Defaulted", color: .orange)
@@ -264,8 +264,8 @@ struct ChallengeAssignmentsView: View {
         if let sentAt = assignment.sentAt {
             parts.append("Assigned \(mediumDate(sentAt))")
         }
-        if let due = worksDueAt?.date {
-            parts.append("due \(mediumDate(due))")
+        if let due = worksDueAt?.dateText {
+            parts.append("due \(due)")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }

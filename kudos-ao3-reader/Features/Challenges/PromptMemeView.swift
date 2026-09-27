@@ -413,11 +413,8 @@ struct PromptMemeView: View {
                for: AO3ChallengeURL.promptMemeEdit(slug: collectionSlug)
            ),
            let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: settingsRequest),
-           let closeDate = form.settings.signupsCloseAt.date {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .none
-            closeDateText = "open until \(formatter.string(from: closeDate))"
+           let closeDate = form.settings.signupsCloseAt.dateText {
+            closeDateText = "open until \(closeDate)"
         }
 
         do {

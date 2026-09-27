@@ -3,8 +3,8 @@ import SwiftUI
 /// Artboard **1by** — Challenge settings.
 ///
 /// Read-only inspection of a collection's challenge object in AO3's order:
-/// type (Gift Exchange vs Prompt Meme), the five UTC schedule dates round-tripped
-/// to the device timezone, sign-up requirements, and assignment tallies.
+/// type (Gift Exchange vs Prompt Meme), the schedule dates in the challenge's own
+/// time zone (as AO3 prints them), sign-up requirements, and assignment tallies.
 /// Matching is AO3's own algorithm, so matching actions are drawn as "Open on AO3"
 /// escape hatches rather than fake local controls.
 struct ChallengeSettingsView: View {
@@ -442,16 +442,9 @@ struct ChallengeSettingsView: View {
 
     // MARK: - Helpers & Actions
 
+    /// The date in the challenge's own zone, as AO3 prints it.
     private func formatDate(_ instant: AO3ChallengeInstant) -> String {
-        if let date = instant.date {
-            let formatter = DateFormatter()
-            formatter.locale = Locale.autoupdatingCurrent
-            formatter.timeZone = TimeZone.autoupdatingCurrent
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .none
-            return formatter.string(from: date)
-        }
-        return instant.wireString.isEmpty ? "Not set" : instant.wireString
+        instant.dateText ?? "Not set"
     }
 
     private func openExternalURL(_ url: URL) {

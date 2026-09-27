@@ -255,49 +255,70 @@ struct ChallengeSettingsEditView: View {
             .compactMap { fieldErrors[$0] }
     }
 
-    private func instantBinding(_ keyPath: WritableKeyPath<AO3ChallengeSettings, AO3ChallengeInstant>) -> Binding<Date> {
-        Binding(
-            get: { form?.settings[keyPath: keyPath].date ?? Date() },
-            set: { form?.settings[keyPath: keyPath].date = $0 }
-        )
-    }
-
+    /// AO3's form shows each date as a wall clock in the challenge's zone, and the
+    /// picker edits those same digits: it runs in UTC because `wallClock` carries
+    /// them as UTC. A missing date says so; it is never filled in with today.
     private func dateRow(label: String, keyPath: WritableKeyPath<AO3ChallengeSettings, AO3ChallengeInstant>) -> some View {
-        SubjectFormRow(label: label, arrangement: .control) {
-            DatePicker("", selection: instantBinding(keyPath), displayedComponents: [.date, .hourAndMinute])
+        let instant = settings[keyPath: keyPath]
+        return SubjectFormRow(label: label, arrangement: .control) {
+            if let wallClock = instant.wallClock {
+                DatePicker("", selection: Binding(
+                    get: { wallClock },
+                    set: { form?.settings[keyPath: keyPath].wallClock = $0 }
+                ), displayedComponents: [.date, .hourAndMinute])
                 .labelsHidden()
                 .datePickerStyle(.compact)
+                .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
+            } else {
+                // Unreadable text is shown as AO3 sent it and posted back unchanged.
+                Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                if instant.wireString.isEmpty {
+                    Button("Set") { form?.settings[keyPath: keyPath].wallClock = Date() }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(palette.accent)
+                        .buttonStyle(.plain)
+                }
+            }
         }
     }
 
+    /// Spec order. A reveal date AO3 left off the form (the collection is not
+    /// unrevealed / not anonymous) is not a field here either.
     private var schedulePanel: some View {
-        VStack(spacing: 0) {
-            dateRow(label: "Sign-ups open", keyPath: \.signupsOpenAt)
-            SubjectRowSeparator()
-            dateRow(label: "Sign-ups close", keyPath: \.signupsCloseAt)
-            SubjectRowSeparator()
-            // AO3 stamps this when an owner sends assignments by hand; the form
-            // has no input for it, so it is read-only and usually unknown here.
-            SubjectFormRow(
-                label: "Assignments sent",
-                value: settings.assignmentsSentAt?.formatted(date: .abbreviated, time: .shortened) ?? "Manual",
-                isMonospaced: settings.assignmentsSentAt != nil
-            )
-            SubjectRowSeparator()
+        let rows: [(label: String, keyPath: WritableKeyPath<AO3ChallengeSettings, AO3ChallengeInstant>?)] = [
+            ("Sign-ups open", \.signupsOpenAt), ("Sign-ups close", \.signupsCloseAt),
+            ("Assignments sent", nil),
             // assignments_due_at: AO3 prints "Assignments Due" and mails it as
             // the deadline for works.
-            dateRow(label: "Works due", keyPath: \.assignmentsDueAt)
+            ("Works due", \.assignmentsDueAt),
+            ("Works revealed", \.worksRevealAt), ("Creators revealed", \.authorsRevealAt)
+        ].filter { $0.keyPath.map { settings[keyPath: $0].isOnForm } ?? true }
+        return VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                if index > 0 { SubjectRowSeparator() }
+                if let keyPath = row.keyPath {
+                    dateRow(label: row.label, keyPath: keyPath)
+                } else {
+                    // AO3 stamps this when an owner sends assignments by hand; the
+                    // form has no input for it, so it is read-only and usually unknown.
+                    SubjectFormRow(
+                        label: row.label,
+                        value: settings.assignmentsSentAt?.formatted(date: .abbreviated, time: .shortened) ?? "Manual",
+                        isMonospaced: settings.assignmentsSentAt != nil
+                    )
+                }
+            }
             SubjectRowSeparator()
-            dateRow(label: "Works revealed", keyPath: \.worksRevealAt)
-            SubjectRowSeparator()
-            dateRow(label: "Creators revealed", keyPath: \.authorsRevealAt)
+            SubjectFormRow(label: "Time zone", value: settings.timeZoneName)
         }
         .subjectPanel()
     }
 
     private var scheduleFootnote: some View {
-        Text("AO3 stores every date in UTC and runs reveals server-side, so the app shows the "
-            + "local equivalent and cannot bring a reveal forward once it has fired.")
+        Text("Dates are in the challenge’s time zone, as on AO3’s own form. AO3 runs reveals "
+            + "server-side, so the app cannot bring a reveal forward once it has fired.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

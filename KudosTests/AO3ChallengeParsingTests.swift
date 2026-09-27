@@ -28,8 +28,52 @@ struct AO3ChallengeParsingTests {
         #expect(components.second == 0)
 
         let instant = AO3ChallengeInstant.parse("2026-01-15 12:00:00 UTC", timeZoneName: "UTC")
-        #expect(instant.date != nil)
+        #expect(instant.wallClock != nil)
         #expect(instant.postedString == "2026-01-15 12:00:00")
+    }
+
+    /// otwarchive's schedule fieldset (Q4): the `*_at_string` inputs are wall
+    /// clocks in `gift_exchange[time_zone]`; works_reveal_at_string is rendered
+    /// only for an unrevealed collection and authors_reveal_at_string only for an
+    /// anonymous one, so this revealed, non-anonymous challenge has neither.
+    @Test func challengeDatesStayInTheChallengesOwnZone() throws {
+        func form(zone: String) throws -> AO3ChallengeSettingsForm {
+            try AO3Client.parseChallengeSettingsForm("""
+            <form action="/collections/fest/gift_exchange" method="post">
+              <input type="hidden" name="_method" value="put">
+              <input type="hidden" name="authenticity_token" value="csrf">
+              <input name="gift_exchange[signups_open_at_string]" value="2026-01-01 09:00:00">
+              <input name="gift_exchange[signups_close_at_string]" value="2026-02-01 23:59:00">
+              <input name="gift_exchange[assignments_due_at_string]" value="2026-03-01 23:59:00">
+              <select name="gift_exchange[time_zone]"><option value="UTC">UTC</option>
+                <option value="\(zone)" selected="selected">\(zone)</option></select>
+            </form>
+            """, slug: "fest", kind: .giftExchange)
+        }
+        let eastern = try form(zone: "America/New_York").settings
+        // 23:59 on 1 March in New York is 04:59 UTC on 2 March.
+        let due = try #require(eastern.worksDueAt.instant)
+        #expect(due == Date(timeIntervalSince1970: 1_772_427_540))
+        let open = AO3ChallengeAssignment(id: 1, collectionSlug: "fest", offerPseud: "Giver")
+        #expect(open.badge(dueAt: due, now: Date(timeIntervalSince1970: 1_772_427_540 - 3600)) == nil)
+        #expect(open.badge(dueAt: due, now: Date(timeIntervalSince1970: 1_772_427_540 + 60)) == .late)
+
+        let params = Dictionary(uniqueKeysWithValues: AO3Client.challengeSettingsParameters(
+            try form(zone: "America/New_York")
+        ))
+        #expect(params["gift_exchange[time_zone]"] == "America/New_York")
+        #expect(params["gift_exchange[assignments_due_at_string]"] == "2026-03-01 23:59:00")
+        #expect(params["gift_exchange[works_reveal_at_string]"] == nil)
+        #expect(params["gift_exchange[authors_reveal_at_string]"] == nil)
+        #expect(!eastern.worksRevealAt.isOnForm && eastern.worksRevealAt.dateText == nil)
+
+        // A Rails zone name Foundation cannot resolve: the digits and zone still
+        // round-trip, and no moment is claimed.
+        let rails = try form(zone: "Eastern Time (US &amp; Canada)")
+        #expect(rails.settings.worksDueAt.instant == nil)
+        let railsParams = Dictionary(uniqueKeysWithValues: AO3Client.challengeSettingsParameters(rails))
+        #expect(railsParams["gift_exchange[time_zone]"] == "Eastern Time (US & Canada)")
+        #expect(railsParams["gift_exchange[assignments_due_at_string]"] == "2026-03-01 23:59:00")
     }
 
     /// Rendered shape of otwarchive's gift_exchange/_challenge_signups with
