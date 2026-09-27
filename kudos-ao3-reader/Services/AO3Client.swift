@@ -2012,7 +2012,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             hits: statInt("hits"),
             seriesTitle: seriesTitle?.isEmpty == false ? seriesTitle : nil,
             seriesURL: seriesURL,
-            seriesPosition: seriesPosition
+            seriesPosition: seriesPosition,
+            // Q7: `_work_module` prints "for" and the recipients after the
+            // byline; a real pseud links to /users/<login>/gifts, a free-text
+            // recipient to /gifts?recipient=<name>.
+            giftRecipients: try el.select("h4.heading a[href*=/gifts]").array().map { try $0.text() }
         )
     }
 
