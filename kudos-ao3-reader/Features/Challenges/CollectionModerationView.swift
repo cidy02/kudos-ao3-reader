@@ -20,6 +20,10 @@ struct CollectionModerationView: View {
     @Environment(ThemeManager.self) private var theme
 
     @State private var awaitingReview: [AO3CollectionItem] = []
+    /// The review queue is AO3's paged Awaiting list; only this page is held.
+    @State private var reviewPage = 1
+    @State private var reviewTotalPages = 1
+    @State private var isLoadingReviewPage = false
     @State private var membershipRequests: [AO3CollectionParticipant] = []
     @State private var maintainers: [AO3CollectionParticipant] = []
     @State private var revealScheduleText: String = ""
@@ -27,7 +31,7 @@ struct CollectionModerationView: View {
     @State private var itemInFlight: Int?
     @State private var participantInFlight: Int?
     @State private var actionErrorMessage: String?
-    @State private var selectedItemForReject: AO3CollectionItem?
+    @State private var itemToReject: AO3CollectionItem?
     @State private var confirmReveal = false
     @State private var confirmUnanon = false
     @State private var isRevealing = false
@@ -83,16 +87,20 @@ struct CollectionModerationView: View {
         .subjectScreenWash(palette: palette)
         .task { await loadIfNeeded() }
         .refreshable { await load() }
-        .sheet(item: $selectedItemForReject) { item in
-            RejectReasonSheet(
-                collectionSlug: collectionSlug,
-                item: item,
-                palette: palette
-            ) {
-                withAnimation {
-                    awaitingReview.removeAll { $0.id == item.id }
-                }
+        // AO3 has no reason field and sends no mail on rejection (Q6), so this
+        // is a plain confirmation rather than a reason sheet.
+        .alert(
+            "Reject this work?",
+            isPresented: Binding(get: { itemToReject != nil }, set: { if !$0 { itemToReject = nil } }),
+            presenting: itemToReject
+        ) { item in
+            Button("Reject", role: .destructive) {
+                Task { await rejectItem(item) }
             }
+            Button("Cancel", role: .cancel) {}
+        } message: { item in
+            Text("“\(item.workTitle)” leaves the review queue as rejected. AO3 sends the creator no reason "
+                + "and no email, and the work stays on AO3; only its place in this collection changes.")
         }
         .alert("Reveal this collection?", isPresented: $confirmReveal) {
             Button("Reveal", role: .destructive) {
@@ -117,8 +125,9 @@ struct CollectionModerationView: View {
     // MARK: - Header
 
     private var subtitleText: String {
-        let workPhrase = awaitingReview.count == 1
-            ? "1 work awaiting review" : "\(awaitingReview.count) works awaiting review"
+        let workPhrase = CollectionModerationCopy.reviewTally(
+            count: awaitingReview.count, page: reviewPage, totalPages: reviewTotalPages
+        )
         let requestPhrase = membershipRequests.count == 1
             ? "1 membership request" : "\(membershipRequests.count) membership requests"
         return "\(workPhrase) · \(requestPhrase)"
@@ -154,6 +163,32 @@ struct CollectionModerationView: View {
             } else {
                 awaitingReviewList.pageBodyRow(top: 8, gutter: gutter)
             }
+            if reviewTotalPages > 1 {
+                SearchPaginationBar(
+                    currentPage: reviewPage,
+                    totalPages: reviewTotalPages,
+                    isLoading: isLoadingReviewPage,
+                    palette: palette
+                ) { page in
+                    Task { await loadReviewPage(page) }
+                }
+                .pageBodyRow(top: 4, gutter: gutter)
+            }
+            reviewFootnote.pageBodyRow(top: 8, gutter: gutter)
+        }
+
+        // Owner decision (REDESIGN_DECISIONS): the old Moderated Items screen's
+        // "recently decided" lives here. AO3 pages approved and rejected items
+        // with no totals, so this opens those lists rather than counting page one.
+        Section {
+            SubjectFormRow(label: "Recently decided", value: "Approved and rejected", showsDisclosure: true) {
+                EmptyView()
+            }
+            .subjectRowNavigation(accessibilityLabel: "Recently decided") {
+                AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle)
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 12, gutter: gutter)
         }
 
         Section {
@@ -187,7 +222,23 @@ struct CollectionModerationView: View {
             if let revealErrorMessage {
                 errorNotice(revealErrorMessage).pageBodyRow(top: 8, gutter: gutter)
             }
+            footnote("Reveal and remove anonymity are separate AO3 writes, each confirmed first; "
+                + "neither can be undone from the app.")
+                .pageBodyRow(top: 8, gutter: gutter)
         }
+    }
+
+    private var reviewFootnote: some View {
+        footnote("Rejecting sends the creator no reason and no email: AO3 has neither. The work stays "
+            + "on AO3; only its place in this collection changes.")
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(Color.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
     }
 
     // MARK: - Awaiting Review
@@ -200,12 +251,9 @@ struct CollectionModerationView: View {
         }
     }
 
-    /// Title, creator/submission line, and the three side-by-side actions —
-    /// the same card `ModeratedItemsView.waitingItemCard` already draws.
-    /// `AO3CollectionItem` carries no word count, submission date, or tag
-    /// summary (see the model, and how `ModeratedItemsView` itself renders
-    /// this same row), so this matches what actually exists rather than
-    /// inventing those figures.
+    /// Title, creator/submission line, and the three side-by-side actions.
+    /// `AO3CollectionItem` carries no word count or tag summary, so none is
+    /// invented; the submission date is AO3's own `p.datetime` when printed.
     private func awaitingReviewCard(_ item: AO3CollectionItem) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             VStack(alignment: .leading, spacing: 4) {
@@ -218,7 +266,7 @@ struct CollectionModerationView: View {
                     .font(.system(size: 15.5, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text("\(item.creatorByline) · submitted to \(effectiveTitle)")
+                Text(CollectionModerationCopy.byline(creator: item.creatorByline, dateText: item.itemDateText))
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
             }
@@ -266,7 +314,7 @@ struct CollectionModerationView: View {
 
     private func rejectButton(for item: AO3CollectionItem) -> some View {
         Button {
-            selectedItemForReject = item
+            itemToReject = item
         } label: {
             Text("Reject")
                 .font(.system(size: 13, weight: .semibold))
@@ -286,8 +334,7 @@ struct CollectionModerationView: View {
         .disabled(itemInFlight != nil)
     }
 
-    /// Same behavior as `ModeratedItemsView.messageCreatorButton`: opens the
-    /// work itself, since AO3's own moderator queue offers no separate
+    /// Opens the work itself, since AO3's own moderator queue offers no separate
     /// messaging endpoint — a comment on the work is the fix-it channel.
     private func messageCreatorButton(for item: AO3CollectionItem) -> some View {
         GlassCircleButton(
@@ -438,21 +485,16 @@ struct CollectionModerationView: View {
     private var maintainersRows: some View {
         SubjectFormRow(
             label: "Owners and moderators",
-            value: maintainers.count == 1 ? "1 person" : "\(maintainers.count) people",
-            showsDisclosure: true
+            value: "\(maintainers.count)",
+            showsDisclosure: true,
+            isMonospaced: true
         )
         .subjectRowNavigation(accessibilityLabel: "Owners and moderators") {
             CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
         }
         .panelSegment(0, of: 2, gutter: gutter)
 
-        // The hidden link, like the row above, so `List` draws no second
-        // chevron beside the card.
-        Text("Invite a maintainer")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(palette.accent)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 12)
+        SubjectFormRow(label: "Invite a maintainer", showsDisclosure: true) { EmptyView() }
             .subjectRowNavigation(accessibilityLabel: "Invite a maintainer") {
                 CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
             }
@@ -486,6 +528,15 @@ struct CollectionModerationView: View {
                 label: "Creators",
                 value: isAnonymous ? "Anonymous until reveal" : "Credited"
             )
+
+            if isAnonymous {
+                Text("Creators are hidden from everyone but maintainers.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 11)
+            }
         }
         .subjectPanel()
     }
@@ -634,6 +685,8 @@ struct CollectionModerationView: View {
             let request = try auth.authenticatedRequest(for: AO3CollectionURL.participants(slug: collectionSlug))
             let moderation = try await AO3Client.shared.collectionModeration(slug: collectionSlug, request: request)
             awaitingReview = moderation.awaitingReview
+            reviewPage = moderation.itemsForm?.currentPage ?? 1
+            reviewTotalPages = moderation.itemsForm?.totalPages ?? 1
             membershipRequests = moderation.membershipRequests
             maintainers = moderation.maintainers
             revealScheduleText = moderation.revealScheduleText
@@ -643,16 +696,60 @@ struct CollectionModerationView: View {
         }
     }
 
+    /// Only the review queue's page: participants and the show page are not
+    /// refetched for a page change.
+    private func loadReviewPage(_ page: Int) async {
+        isLoadingReviewPage = true
+        defer { isLoadingReviewPage = false }
+        do {
+            let request = try auth.authenticatedRequest(
+                for: AO3CollectionURL.items(slug: collectionSlug, tab: .unreviewed, page: page)
+            )
+            let items = try await AO3Client.shared.collectionItems(
+                slug: collectionSlug, tab: .unreviewed, page: page, request: request
+            )
+            awaitingReview = items.items
+            reviewPage = items.currentPage
+            reviewTotalPages = items.totalPages
+        } catch {
+            actionErrorMessage = "Couldn't load that page: \(error.localizedDescription)"
+        }
+    }
+
+    /// A decided item leaves the page; an emptied page moves to the nearest
+    /// page AO3 still has.
+    private func removeDecided(_ item: AO3CollectionItem) async {
+        withAnimation {
+            awaitingReview.removeAll { $0.id == item.id }
+        }
+        if awaitingReview.isEmpty, reviewTotalPages > 1 {
+            await loadReviewPage(
+                CollectionModerationCopy.pageAfterEmptying(page: reviewPage, totalPages: reviewTotalPages)
+            )
+        }
+    }
+
     private func approveItem(_ item: AO3CollectionItem) async {
         itemInFlight = item.id
         actionErrorMessage = nil
         do {
             try await auth.approveCollectionItem(slug: collectionSlug, itemID: item.id)
-            withAnimation {
-                awaitingReview.removeAll { $0.id == item.id }
-            }
+            await removeDecided(item)
         } catch {
             actionErrorMessage = "Failed to approve: \(error.localizedDescription)"
+        }
+        itemInFlight = nil
+    }
+
+    /// On failure the item stays in the queue.
+    private func rejectItem(_ item: AO3CollectionItem) async {
+        itemInFlight = item.id
+        actionErrorMessage = nil
+        do {
+            try await auth.rejectCollectionItem(slug: collectionSlug, itemID: item.id)
+            await removeDecided(item)
+        } catch {
+            actionErrorMessage = "Failed to reject: \(error.localizedDescription)"
         }
         itemInFlight = nil
     }
@@ -707,5 +804,26 @@ struct CollectionModerationView: View {
             revealErrorMessage = error.localizedDescription
         }
         isUnanonymizing = false
+    }
+}
+
+/// 1cd's wording, kept pure so it can be pinned by tests.
+enum CollectionModerationCopy {
+    /// Page one's rows are not the queue: a paged queue says which page.
+    static func reviewTally(count: Int, page: Int, totalPages: Int) -> String {
+        let works = count == 1 ? "1 work awaiting review" : "\(count) works awaiting review"
+        return totalPages > 1 ? "\(works) on this page · page \(page) of \(totalPages)" : works
+    }
+
+    /// The spec's "kestrelmoon · submitted 3 Nov", without a date AO3 did not print.
+    static func byline(creator: String, dateText: String) -> String {
+        let date = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return date.isEmpty ? creator : "\(creator) · submitted \(date)"
+    }
+
+    /// After the last item on a page is decided: AO3 moves later items up, so
+    /// the same page still exists unless it was the last one.
+    static func pageAfterEmptying(page: Int, totalPages: Int) -> Int {
+        page < totalPages ? page : max(1, page - 1)
     }
 }
