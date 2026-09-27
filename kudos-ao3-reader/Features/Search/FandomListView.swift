@@ -35,6 +35,12 @@ struct FandomListView: View {
     @State private var exactCounts = FandomFamilyExactCountCache.shared
     /// 1al's switch. Off lists every raw tag on its own (`FandomFamily.ungrouped`).
     @AppStorage("browse.fandoms.groupsVariants") private var groupsVariants = true
+    /// Whether `families` is the grouped build. Lags the switch while a rebuild
+    /// runs, so the tally describes the rows on screen.
+    @State private var familiesAreGrouped = true
+    /// Bumped by each rebuild. A slower build that finishes after a later one
+    /// started (grouping is the slow side) is dropped, so a later toggle wins.
+    @State private var rebuildGeneration = 0
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
@@ -117,6 +123,7 @@ struct FandomListView: View {
                 FandomListFilterSheet(
                     options: $draftFilterOptions,
                     families: families,
+                    groupsVariants: groupsVariants,
                     library: libraryIndex,
                     palette: palette,
                     onApply: {
@@ -140,7 +147,7 @@ struct FandomListView: View {
             || filterOptions.hasActiveFilters
         return FandomListTally.text(
             totalTags: FandomFamilyFilters.tagCount(in: families),
-            families: families.count,
+            families: familiesAreGrouped ? families.count : nil,
             shownTags: FandomFamilyFilters.tagCount(in: filtered),
             isFiltered: isFiltered,
             sort: sort
@@ -214,7 +221,10 @@ struct FandomListView: View {
         .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
         #endif
         .task(id: listingToken) { await applyFilter() }
-        .onChange(of: groupsVariants) { Task { await rebuildFamilies() } }
+        .onChange(of: groupsVariants) { _, isOn in
+            filterOptions.groupsVariantsChanged(to: isOn)
+            Task { await rebuildFamilies() }
+        }
     }
 
     @ViewBuilder
@@ -268,6 +278,8 @@ struct FandomListView: View {
 
     /// Families from the loaded tags, grouped or not per the switch.
     private func rebuildFamilies() async {
+        rebuildGeneration &+= 1
+        let generation = rebuildGeneration
         let list = fandoms
         let groups = groupsVariants
         // Full-category grouping is tens of thousands of splits on Uncategorized
@@ -275,7 +287,9 @@ struct FandomListView: View {
         let built = await Task.detached(priority: .userInitiated) {
             groups ? FandomFamily.grouped(fandoms: list) : FandomFamily.ungrouped(fandoms: list)
         }.value
+        guard generation == rebuildGeneration else { return }
         families = built
+        familiesAreGrouped = groups
         searchEntries = built.map {
             FamilySearchEntry(family: $0, haystack: $0.searchHaystack())
         }
@@ -790,10 +804,12 @@ private struct FandomListRow: View {
 /// fandom tags; fandoms are the families they collapse into on the parsed
 /// title, so "9,412 tags in 8,106 fandoms" says both how much AO3 lists and how
 /// many rows that makes. Filtered, it says how much of it is showing instead.
+/// `families` is nil while Group variants is off: every row is then one tag,
+/// and the list has not worked out which tags are one fandom, so it names none.
 nonisolated enum FandomListTally {
     static func text(
         totalTags: Int,
-        families: Int,
+        families: Int?,
         shownTags: Int,
         isFiltered: Bool,
         sort: FandomFamilySort
@@ -806,6 +822,7 @@ nonisolated enum FandomListTally {
         if isFiltered {
             return "\(shownTags.formatted()) of \(totalTags.formatted()) \(tags) · \(order)"
         }
+        guard let families else { return "\(totalTags.formatted()) \(tags) · \(order)" }
         let fandoms = families == 1 ? "fandom" : "fandoms"
         return "\(totalTags.formatted()) \(tags) in \(families.formatted()) \(fandoms) · \(order)"
     }
