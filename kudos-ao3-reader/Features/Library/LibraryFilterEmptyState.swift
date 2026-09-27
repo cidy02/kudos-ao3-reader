@@ -52,7 +52,7 @@ struct LibraryFilterCollisionCard: View {
                         .textCase(.uppercase)
                         .foregroundStyle(.tertiary)
                     VStack(spacing: 7) {
-                        ForEach(revealingDrops, id: \.filterLabel) { drop in
+                        ForEach(revealingDrops) { drop in
                             Button {
                                 filters = drop.remainingFilters
                             } label: {
