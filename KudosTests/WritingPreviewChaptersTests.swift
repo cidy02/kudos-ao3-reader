@@ -197,13 +197,17 @@ private final class WritingWriteStub: URLProtocol, @unchecked Sendable {
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var hits: [Hit] = []
-    /// "METHOD path" → body; status 200.
-    nonisolated(unsafe) private static var routes: [String: String] = [:]
+    /// "METHOD path" → bodies, one per request, the last repeating; status 200.
+    nonisolated(unsafe) private static var routes: [String: [String]] = [:]
 
     static func reset(_ newRoutes: [String: String]) {
+        reset(sequences: newRoutes.mapValues { [$0] })
+    }
+
+    static func reset(sequences: [String: [String]]) {
         lock.lock()
         hits = []
-        routes = newRoutes
+        routes = sequences
         lock.unlock()
     }
 
@@ -232,7 +236,9 @@ private final class WritingWriteStub: URLProtocol, @unchecked Sendable {
         }
         Self.lock.lock()
         Self.hits.append(Hit(method: method, path: path, body: String(decoding: data, as: UTF8.self)))
-        let body = Self.routes["\(method) \(path)"]
+        let bodies = Self.routes["\(method) \(path)"] ?? []
+        if bodies.count > 1 { Self.routes["\(method) \(path)"] = Array(bodies.dropFirst()) }
+        let body = bodies.first
         Self.lock.unlock()
         guard let url = request.url, let body,
               let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
@@ -376,5 +382,105 @@ struct WritingWriteStubTests {
         #expect(hits.first?.body.contains("preview_button=1") == true)
         #expect(hits.first?.body.contains("post_without_preview_button") == false)
         #expect(try form.adopting(preview).chapterID == 9001)
+    }
+
+    // MARK: Grok review of T-267 (P0, P2)
+
+    private func newChapter() -> AO3ChapterForm {
+        AO3ChapterForm(
+            workID: 424242, chapterID: nil, actionURL: AO3Client.chaptersURL(workID: 424242),
+            httpMethodOverride: nil, csrfToken: "old==", content: "<p>The tide.</p>", isDraft: true
+        )
+    }
+
+    /// AO3 saved the draft and says so; a caution beside the notice, or the
+    /// writer's own `class="error"` in the text (AO3 keeps writer classes),
+    /// used to read as a refusal, skip `adopting`, and let the next Preview or
+    /// Post create a second chapter.
+    @Test func aSavedDraftIsNotRefusedByACautionOrTheWritersOwnErrorClass() async throws {
+        let caution = WritingPreviewParsingTests.chapterPreview.replacingOccurrences(
+            of: "<h2 class=\"heading\">Preview</h2>",
+            with: "<div class=\"flash caution\">Check your collections.</div><h2 class=\"heading\">Preview</h2>"
+        )
+        let ownClasses = WritingPreviewParsingTests.chapterPreview
+            .replacingOccurrences(of: "<div class=\"flash notice\">", with: "<div class=\"gone\">")
+            .replacingOccurrences(
+                of: "<p>The tide came in <em>without asking</em>.</p>",
+                with: "<div class=\"error\"><p>Error: late.</p></div><div class=\"flash caution\">x</div>"
+            )
+        #expect(ownClasses.contains("<div class=\"error\"><p>") && !ownClasses.contains("flash notice"))
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        for page in [caution, ownClasses] {
+            WritingWriteStub.reset(["POST /works/424242/chapters": page])
+            let preview = try await auth.previewChapter(newChapter(), using: stubClient())
+            #expect(try newChapter().adopting(preview).chapterID == 9001)
+        }
+        #expect(AO3Client.workWriteError(in: ownClasses) == nil)
+    }
+
+    /// The real refusals still refuse: the layout's error flash and
+    /// `error_messages_for`, both `#main`'s own children.
+    @Test func aRealRefusalStillRefuses() {
+        let flash = "<html><body><div id=\"main\"><div class=\"flash error\">No.</div></div></body></html>"
+        #expect(AO3Client.workWriteError(in: flash) == "No.")
+        let list = """
+        <html><body><div id="main"><div id="error" class="error"><h4>Sorry!</h4>
+        <ul><li>Title can't be blank</li></ul></div></div></body></html>
+        """
+        #expect(AO3Client.workWriteError(in: list) == "Title can't be blank")
+    }
+
+    /// Post work, through the service with the button the view posts, onto
+    /// a work page whose text carries the writer's own `class="error"`.
+    @Test func postingAWorkSendsPostButtonAndReadsTheNotice() async throws {
+        WritingWriteStub.reset(["POST /works": """
+        <html><body><div id="main"><div class="flash notice">Work was successfully posted.</div>
+        <div id="workskin"><div class="userstuff"><div class="error"><p>Error 404</p></div></div></div>
+        </div></body></html>
+        """])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        var form = AO3WorkForm(
+            kind: .new, workID: nil, actionURL: URL(string: "https://archiveofourown.org/works")!,
+            httpMethodOverride: nil, csrfToken: "w==", isDraft: true, isPosted: false
+        )
+        form.title = "Tide"
+        form.rating = "Teen And Up Audiences"
+        form.warnings = ["No Archive Warnings Apply"]
+        form.fandoms = ["Original Work"]
+        form.languageID = "1"
+        form.chapter = AO3WorkChapterDraft(content: "<p>It rained.</p>")
+        let notice = try await auth.saveWork(form, submit: WorkEditView.postSubmit, using: stubClient())
+        #expect(notice == "Work was successfully posted.")
+        let body = try #require(WritingWriteStub.recorded().first?.body)
+        #expect(body.contains("post_button=1"))
+        #expect(!body.contains("post_without_preview_button"))
+    }
+
+    /// AddChapterView's own sequence: Preview (AO3 makes the draft), Edit,
+    /// Preview again, Post. Everything after the first request goes to the
+    /// draft, so there is one chapter.
+    @Test func previewEditPreviewPostStaysOnTheDraftAO3Made() async throws {
+        let posted = "<html><body><div id=\"main\"><div class=\"flash notice\">Chapter was successfully posted."
+            + "</div></div></body></html>"
+        WritingWriteStub.reset(sequences: [
+            "POST /works/424242/chapters": [WritingPreviewParsingTests.chapterPreview],
+            "POST /works/424242/chapters/9001": [WritingPreviewParsingTests.chapterPreview, posted]
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let client = stubClient()
+        var form = try newChapter().adopting(try await auth.previewChapter(newChapter(), using: client))
+        form.content = "<p>The tide came in, edited.</p>"
+        form = try form.adopting(try await auth.previewChapter(form, using: client))
+        try await auth.updateChapter(form, submit: .post, using: client)
+        let hits = WritingWriteStub.recorded()
+        #expect(hits.map { "\($0.method) \($0.path)" } == [
+            "POST /works/424242/chapters", "POST /works/424242/chapters/9001", "POST /works/424242/chapters/9001"
+        ])
+        #expect(hits[1].body.contains("_method=patch") && hits[1].body.contains("preview_button=1"))
+        #expect(hits[1].body.contains("edited"))
+        #expect(hits[2].body.contains("_method=patch") && hits[2].body.contains("post_button=1"))
     }
 }
