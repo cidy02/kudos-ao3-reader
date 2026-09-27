@@ -5,7 +5,7 @@ import SwiftUI
 /// Artboard **1br** — the series form, and the reorder screen behind it.
 ///
 /// The whole service layer for this existed and was dead: `loadSeriesForm`,
-/// `loadSeriesManagePage`, `saveSeries`, `createSeries` and `reorderSeries` were
+/// `loadSeriesManagePage`, `saveSeries`, `createSeries` and a reorder write were
 /// written, `AO3SeriesForm` and `AO3SeriesWorkRow` were complete with
 /// `parameters()` ready to POST, and nothing in the app called any of it. This is
 /// the screen that reaches it.
@@ -215,10 +215,10 @@ struct SeriesEditView: View {
         return count == 1 ? "the work" : "the \(count) works"
     }
 
-    /// 1br's own sentence, with the real count in it.
+    /// 1br's sentence, corrected: AO3 renumbers every work from one list.
     private var reorderFootnote: String {
-        "A work’s place in a series is stored on the work, not the series, so reordering "
-            + "writes to \(worksPhrase) — one request each."
+        "A work’s place in a series is stored on the work, so reordering rewrites the "
+            + "position of \(worksPhrase), in one request."
     }
 
     private func footnote(_ text: String) -> some View {
@@ -256,11 +256,9 @@ struct SeriesEditView: View {
 /// 1br's reorder screen. Drag-only, with the position number kept visible
 /// "because the number is the thing being written".
 ///
-/// **Saves once, not per drag**, which is the board's own reasoning: position
-/// lives on each work, so writing the order is one request per work, and a
-/// failure part-way would leave the series half-ordered. `reorderSeries` already
-/// does the sequential writes through request-coordinator slots; this screen's
-/// job is to not start them until the reader is done dragging.
+/// **Saves once, not per drag.** `reorderSeries` sends the whole order in one
+/// request, as AO3's own manage page does, then reads the page back to check
+/// it; this screen's job is to not send it until the reader is done dragging.
 struct SeriesReorderView: View {
     let seriesID: Int
     let seriesTitle: String
@@ -270,6 +268,7 @@ struct SeriesReorderView: View {
     @Environment(AO3AuthService.self) private var auth
 
     @State private var rows: [AO3SeriesWorkRow]
+    @State private var openedGeneration: Int?
     @State private var isSaving = false
     @State private var errorMessage: String?
     /// Handed the saved order, renumbered, before this screen dismisses. The
@@ -331,9 +330,9 @@ struct SeriesReorderView: View {
             }
 
             Section {
-                Text("Position is a number on each work, so the order here is written back one "
-                    + "work at a time. A failure part-way leaves the series half-ordered, which "
-                    + "is why this screen saves once rather than on each drag.")
+                Text("Position is a number on each work. Save sends the whole order to AO3 in "
+                    + "one request, then reads the series back to check it — which is why this "
+                    + "screen saves once rather than on each drag.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
@@ -358,15 +357,10 @@ struct SeriesReorderView: View {
         #endif
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { save() }.disabled(isSaving || !canSave)
+                Button("Save") { save() }.disabled(isSaving || rows.count < 2)
             }
         }
-    }
-
-    /// Nothing to write when the works carry no AO3 id — `reorderSeries` matches
-    /// on work ids, and a row parsed without one cannot be placed.
-    private var canSave: Bool {
-        rows.count > 1 && rows.allSatisfy { $0.workID != nil }
+        .onAppear { if openedGeneration == nil { openedGeneration = auth.sessionGeneration } }
     }
 
     /// The number is the position *after* dragging, not the one AO3 currently
@@ -398,21 +392,21 @@ struct SeriesReorderView: View {
     }
 
     private func save() {
-        guard !isSaving else { return }
-        let orderedWorkIDs = rows.compactMap(\.workID)
-        guard orderedWorkIDs.count == rows.count else {
-            errorMessage = "Couldn’t match those works to the series."
-            return
-        }
+        guard !isSaving, let generation = openedGeneration else { return }
         isSaving = true
         errorMessage = nil
+        let order = rows.map(\.serialWorkID)
         Task {
             do {
-                _ = try await auth.reorderSeries(seriesID: seriesID, orderedWorkIDs: orderedWorkIDs)
-                var saved = rows
-                for index in saved.indices { saved[index].position = index + 1 }
-                onSaved(saved)
+                let fresh = try await AO3RequestCoordinator.shared.withSlot {
+                    try await auth.reorderSeries(
+                        seriesID: seriesID, orderedSerialWorkIDs: order, expectedGeneration: generation
+                    )
+                }
+                onSaved(SeriesRemoveWorksView.keepingMetadata(of: rows, on: fresh))
                 dismiss()
+            } catch is CancellationError {
+                errorMessage = "Your AO3 session changed, so the order was not saved."
             } catch {
                 errorMessage = error.localizedDescription
             }

@@ -257,37 +257,52 @@ extension AO3AuthService {
         return try await saveSeries(form)
     }
 
-    /// Reorder is drag-only from the caller's POV: one save, N sequential
-    /// POSTs via coordinator slots. Position lives on the work's `SerialWork`.
-    @discardableResult
-    func reorderSeries(seriesID: Int, orderedWorkIDs: [Int]) async throws -> String {
+    /// 1br's reorder Save: one POST of AO3's own sortable payload. The manage
+    /// page (`series/_series_order`) draws each work as `li#serial_<id>` with a
+    /// bare title — no work link — and its jQuery `sortable("serialize")` posts
+    /// those ids as `serial[]` in the dragged order, which
+    /// `series#update_positions` numbers 1…N (`SerialWork.update(id,
+    /// position:)`). The ids are the manage page's own, drafts included; the
+    /// public series page (posted works only, paginated) is never used to
+    /// match them. The whole list must be the one AO3 lists now, or a partial
+    /// renumbering would leave two works at one position. The HTML reply is
+    /// a bare redirect, so the manage page is read back and must show the
+    /// order, else `.unconfirmed`. `expectedGeneration`: as `deleteChapter`.
+    /// Unexercised against a live AO3 session (release gate).
+    func reorderSeries(
+        seriesID: Int, orderedSerialWorkIDs: [Int], expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> [AO3SeriesWorkRow] {
+        try requireSessionGeneration(expectedGeneration)
         try requireWorkSession()
-        let manageHTML = try await workFormHTML(at: AO3Client.seriesManageURL(seriesID: seriesID))
+        let manageURL = AO3Client.seriesManageURL(seriesID: seriesID)
+        let manageHTML = try await workFormHTML(at: manageURL, using: client)
+        try requireSessionGeneration(expectedGeneration)
         let csrf = try csrfToken(from: manageHTML)
-        let rows = try AO3Client.parseSeriesManagePage(from: manageHTML)
-        let seriesHTML = try await workFormHTML(at: AO3Client.seriesURL(seriesID: seriesID))
-        let serialByWork = try serialWorkMap(
-            rows: rows, seriesHTML: seriesHTML, orderedWorkIDs: orderedWorkIDs
-        )
-        let plan = AO3SeriesReorderPlan.writes(
-            seriesID: seriesID,
-            orderedWorkIDs: orderedWorkIDs,
-            serialByWorkID: serialByWork
-        )
-        guard plan.count == orderedWorkIDs.count else {
-            throw AO3WorkWriteError.rejected("Couldn't match those works to the series.")
+        let listed = try AO3Client.parseSeriesManagePage(from: manageHTML).map(\.serialWorkID)
+        guard listed.count == orderedSerialWorkIDs.count, Set(listed) == Set(orderedSerialWorkIDs) else {
+            throw AO3WorkWriteError.rejected(
+                "The series changed on AO3 since this screen opened. Reopen it and try again."
+            )
         }
-        var last = "Series order updated."
-        for write in plan {
-            last = try await AO3RequestCoordinator.shared.withSlot {
-                try await submitWorkForm(
-                    AO3Client.seriesUpdatePositionsURL(seriesID: seriesID),
-                    write.parameters(csrfToken: csrf),
-                    referer: AO3Client.seriesManageURL(seriesID: seriesID)
-                )
-            }
+        let params = [(AO3WorkFormField.authenticityToken, csrf)]
+            + orderedSerialWorkIDs.map { (AO3WorkFormField.serialOrder, String($0)) }
+        let request = try writeRequest(
+            to: AO3Client.seriesUpdatePositionsURL(seriesID: seriesID),
+            body: Self.formEncoded(params),
+            csrf: csrf,
+            referer: manageURL,
+            ajax: false
+        )
+        let (_, body) = try await submitWrite(request, using: client)
+        if let error = AO3Client.workWriteError(in: body) {
+            throw AO3WorkWriteError.rejected(error)
         }
-        return last
+        guard let rows = try? AO3Client.parseSeriesManagePage(
+            from: try await workFormHTML(at: manageURL, using: client)
+        ), rows.sorted(by: { $0.position < $1.position }).map(\.serialWorkID) == orderedSerialWorkIDs else {
+            throw AO3WorkWriteError.unconfirmed
+        }
+        return rows
     }
 
     /// 1br's Remove works: AO3's "Remove Work From Series" link, which Rails
@@ -552,28 +567,5 @@ extension AO3AuthService {
             throw AO3WorkWriteError.previewUnavailable
         }
         return body
-    }
-
-    private func serialWorkMap(
-        rows: [AO3SeriesWorkRow],
-        seriesHTML: String,
-        orderedWorkIDs: [Int]
-    ) throws -> [Int: Int] {
-        var map: [Int: Int] = [:]
-        for row in rows {
-            if let workID = row.workID {
-                map[workID] = row.serialWorkID
-            }
-        }
-        if map.count == orderedWorkIDs.count { return map }
-        // Series show lists works in position order as `li.work.blurb`; match
-        // that order to the manage-page serial rows.
-        if let page = try? AO3Client.parseSearchPage(seriesHTML, page: 1) {
-            let works = page.works
-            for (index, row) in rows.enumerated() where index < works.count {
-                map[works[index].id] = row.serialWorkID
-            }
-        }
-        return map
     }
 }

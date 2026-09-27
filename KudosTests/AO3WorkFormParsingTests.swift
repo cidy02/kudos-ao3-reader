@@ -278,22 +278,6 @@ struct AO3WorkFormParsingTests {
         #expect(changes.hasUniformChanges)
     }
 
-    @Test func seriesReorderBuildsNWritesInOrder() {
-        let writes = AO3SeriesReorderPlan.writes(
-            seriesID: 77,
-            orderedWorkIDs: [200, 100, 300],
-            serialByWorkID: [100: 11, 200: 22, 300: 33]
-        )
-        #expect(writes.count == 3)
-        #expect(writes.map(\.position) == [1, 2, 3])
-        #expect(writes.map(\.serialWorkID) == [22, 11, 33])
-        #expect(writes.compactMap(\.workID) == [200, 100, 300])
-        #expect(writes.allSatisfy { $0.orderedSerialWorkIDs == [22, 11, 33] })
-        #expect(writes[0].path == "/series/77/update_positions")
-        let body = writes[1].parameters(csrfToken: "tok")
-        #expect(body.filter { $0.0 == AO3WorkFormField.serialOrder }.map(\.1) == ["22", "11", "33"])
-    }
-
     @Test func parsesChapterFormAndOmitsPositionWhenAbsent() throws {
         let html = """
         <html><head><meta name="csrf-token" content="ch=="></head>
@@ -322,6 +306,9 @@ struct AO3WorkFormParsingTests {
         #expect(params[AO3WorkFormField.chapterWipLength] == "13")
     }
 
+    /// otwarchive's `series/_series_order.html.erb`: the ids are the `li`'s
+    /// `serial_<id>`; the title is bare text (a draft reads "Title (DRAFT)"),
+    /// with no link to the work — so a row carries no work id.
     @Test func parsesSeriesManageOrder() throws {
         let html = """
         <html><head><meta name="csrf-token" content="s=="></head>
@@ -331,15 +318,15 @@ struct AO3WorkFormParsingTests {
             <ul id="sortable_series_list">
               <li id="serial_11" class="serial-position-list">
                 <span id="position-for-11">1</span>.
-                <h3 class="heading"><a href="/works/100">The Weight of Water</a></h3>
+                <h3 class="heading">The Weight of Water</h3>
               </li>
               <li id="serial_22" class="serial-position-list">
                 <span id="position-for-22">2</span>.
-                <h3 class="heading"><a href="/works/200">Salt and Static</a></h3>
+                <h3 class="heading">Salt and Static (DRAFT)</h3>
               </li>
               <li id="serial_33" class="serial-position-list">
                 <span id="position-for-33">3</span>.
-                <h3 class="heading"><a href="/works/300">Long Way from Home</a></h3>
+                <h3 class="heading">Long Way from Home</h3>
               </li>
             </ul>
           </form>
@@ -348,7 +335,8 @@ struct AO3WorkFormParsingTests {
         """
         let rows = try #require(try? AO3Client.parseSeriesManagePage(from: html))
         #expect(rows.map(\.serialWorkID) == [11, 22, 33])
-        #expect(rows.map(\.workID) == [100, 200, 300])
+        #expect(rows.allSatisfy { $0.workID == nil })
+        #expect(rows.map(\.isDraft) == [false, true, false])
         #expect(rows.map(\.position) == [1, 2, 3])
     }
 
