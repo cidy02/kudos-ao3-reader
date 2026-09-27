@@ -64,9 +64,10 @@ struct ReadingQueueCard: View {
     // "a place for works to land" rather than a dead, contentless tile.
     @ViewBuilder
     private var tile: some View {
-        let states = works.map(\.readingState)
-        if let position = ReadingQueueFacts.nextUpPosition(states: states) ?? (works.isEmpty ? nil : 1) {
-            nextUpFace(works[position - 1], progress: ReadingQueueFacts.progress(of: states))
+        let queued = works
+        // The queue page's Up next row is this same work (`ReadingQueueFacts.upNext`).
+        if let upNext = ReadingQueueFacts.upNext(in: queued).upNext {
+            nextUpFace(upNext, progress: ReadingQueueFacts.progress(of: queued.map(\.readingState)))
         } else {
             skeletonGrid
         }
