@@ -625,7 +625,9 @@ extension AO3Client {
     private static func parseMatchSettings(_ form: Element, prefix: String) -> AO3PotentialMatchSettings? {
         let prompts = selectedValue(form, name: "\(prefix)[num_required_prompts]")
         guard let numRequiredPrompts = Int(prompts) else { return nil }
-        var settings = AO3PotentialMatchSettings(id: inputValue(form, "\(prefix)[id]"), numRequiredPrompts: numRequiredPrompts)
+        var settings = AO3PotentialMatchSettings(
+            id: inputValue(form, "\(prefix)[id]"), numRequiredPrompts: numRequiredPrompts
+        )
         for type in AO3PotentialMatchSettings.tagTypes {
             settings.numRequired[type] = Int(selectedValue(form, name: "\(prefix)[num_required_\(type)]")) ?? 0
             settings.includeOptional[type] = isChecked(form, name: "\(prefix)[include_optional_\(type)]")
