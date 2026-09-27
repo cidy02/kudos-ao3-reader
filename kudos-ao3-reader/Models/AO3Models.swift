@@ -39,6 +39,14 @@ nonisolated struct AO3WorkSummary: Identifiable, Hashable, Sendable {
     var seriesTitle: String?
     var seriesURL: String?
     var seriesPosition: Int?
+    /// Q7: the blurb heading's "for <recipient>" links, in AO3's order. Empty
+    /// when the work is no gift, or the listing printed no blurb heading.
+    var giftRecipients: [String] = []
+
+    /// 1u's gift badge: "Gift for kestrelmoon", or nil when it is no gift.
+    var giftLine: String? {
+        giftRecipients.isEmpty ? nil : "Gift for " + giftRecipients.joined(separator: ", ")
+    }
 
     var workURL: URL {
         URL(string: "https://archiveofourown.org/works/\(id)")!
