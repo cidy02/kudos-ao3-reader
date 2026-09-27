@@ -122,10 +122,11 @@ extension AO3AuthService {
     /// be reversed — that is copy, not an extra endpoint. Gifts
     /// (`work[recipients]`) notify by email on post and cannot be taken back.
     /// Locally blocked when `missingRequiredFields()` is non-empty for a post.
-    /// Unexercised against a live AO3 session (release gate).
+    /// Unexercised against a live AO3 session (release gate). `client` is for
+    /// the local-stub tests.
     @discardableResult
     func saveWork(
-        _ form: AO3WorkForm, submit: AO3WorkSubmitAction
+        _ form: AO3WorkForm, submit: AO3WorkSubmitAction, using client: AO3Client = .shared
     ) async throws -> String {
         try requireWorkSession()
         if submit == .post || submit == .postWithoutPreview {
@@ -134,7 +135,9 @@ extension AO3AuthService {
                 throw AO3WorkWriteError.missingRequiredFields(missing)
             }
         }
-        return try await submitWorkForm(form.actionURL, form.parameters(submit: submit), referer: form.actionURL)
+        return try await submitWorkForm(
+            form.actionURL, form.parameters(submit: submit), referer: form.actionURL, using: client
+        )
     }
 
     /// GET `/works/:id/edit_tags` is its own page so a tag fix never opens the
@@ -163,25 +166,28 @@ extension AO3AuthService {
     /// posting notifies subscribers.
     @discardableResult
     func createChapter(
-        _ form: AO3ChapterForm, submit: AO3WorkSubmitAction = .postWithoutPreview
+        _ form: AO3ChapterForm, submit: AO3WorkSubmitAction = .postWithoutPreview,
+        using client: AO3Client = .shared
     ) async throws -> String {
         try requireWorkSession()
         return try await submitWorkForm(
             form.actionURL,
             form.parameters(submit: submit),
-            referer: form.actionURL
+            referer: form.actionURL,
+            using: client
         )
     }
 
     @discardableResult
     func updateChapter(
-        _ form: AO3ChapterForm, submit: AO3WorkSubmitAction = .update
+        _ form: AO3ChapterForm, submit: AO3WorkSubmitAction = .update, using client: AO3Client = .shared
     ) async throws -> String {
         try requireWorkSession()
         return try await submitWorkForm(
             form.actionURL,
             form.parameters(submit: submit),
-            referer: form.actionURL
+            referer: form.actionURL,
+            using: client
         )
     }
 
@@ -454,10 +460,10 @@ extension AO3AuthService {
             ajax: false
         )
         let (status, body) = try await submitWrite(request, using: client)
-        if let error = AO3Client.writeErrorMessage(in: body) {
+        if let error = AO3Client.workWriteError(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
-        if let notice = AO3Client.writeSuccessMessage(in: body) {
+        if let notice = AO3Client.workWriteNotice(in: body) {
             return notice
         }
         if (300 ... 399).contains(status) {
@@ -502,7 +508,7 @@ extension AO3AuthService {
             ajax: false
         )
         let (status, body) = try await submitWrite(request, using: client)
-        if let error = AO3Client.writeErrorMessage(in: body) {
+        if let error = AO3Client.workWriteError(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
         guard (200 ... 399).contains(status) else {
