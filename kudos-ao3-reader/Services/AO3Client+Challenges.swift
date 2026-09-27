@@ -366,8 +366,56 @@ extension AO3Client {
             offers: offers,
             fieldErrors: fieldErrors,
             generalErrors: general,
-            hiddenFields: hidden
+            hiddenFields: hidden,
+            limits: try parseSignUpLimits(form),
+            requestTagLimits: try parseTagLimits(form, list: "requests"),
+            offerTagLimits: try parseTagLimits(form, list: "offers")
         )
+    }
+
+    /// challenge_signups/_signup_form: a fieldset per prompt type headed with
+    /// `allowed_range_string`, "Requests (1 - 3)" or "Offers (2)". A prompt meme
+    /// has no Offers fieldset, so it takes none.
+    private static func parseSignUpLimits(_ form: Element) throws -> AO3ChallengeSignUpLimits? {
+        var ranges: [String: ClosedRange<Int>] = [:]
+        for heading in try form.select("fieldset > h3.heading").array() {
+            let text = try heading.text()
+            for kind in ["Requests", "Offers"] where text.hasPrefix(kind) {
+                ranges[kind] = countRange(in: text)
+            }
+        }
+        guard let requests = ranges["Requests"] else { return nil }
+        let offers = ranges["Offers"] ?? 0...0
+        return AO3ChallengeSignUpLimits(
+            requestsRequired: requests.lowerBound, requestsAllowed: requests.upperBound,
+            offersRequired: offers.lowerBound, offersAllowed: offers.upperBound
+        )
+    }
+
+    /// prompts/_prompt_form_tag_options labels each tag field with
+    /// `challenge_signup_label`, "Fandoms (1 - 2): *" or "Characters (0 - 4):",
+    /// and renders no field at all for a type the challenge allows none of.
+    private static func parseTagLimits(
+        _ form: Element, list: String
+    ) throws -> [AO3PromptTagType: ClosedRange<Int>]? {
+        let labels = try form.select("label[for^=challenge_signup_\(list)_attributes_]").array()
+        guard !labels.isEmpty else { return nil }
+        var limits: [AO3PromptTagType: ClosedRange<Int>] = [:]
+        for type in AO3PromptTagType.allCases {
+            let suffix = "_tag_set_attributes_\(type.rawValue)_tagnames"
+            if let label = try labels.first(where: { try $0.attr("for").hasSuffix(suffix) }) {
+                limits[type] = countRange(in: try label.text())
+            }
+        }
+        return limits
+    }
+
+    /// "(1 - 3)" or "(2)" anywhere in `text`.
+    static func countRange(in text: String) -> ClosedRange<Int>? {
+        guard let match = text.firstMatch(of: /\((\d+)(?:\s*-\s*(\d+))?\)/),
+              let low = Int(match.1) else { return nil }
+        let high = match.2.flatMap { Int($0) } ?? low
+        return low...max(low, high)
     }
 
     static func challengeSignUpParameters(_ form: AO3ChallengeSignUpForm) -> [(String, String)] {

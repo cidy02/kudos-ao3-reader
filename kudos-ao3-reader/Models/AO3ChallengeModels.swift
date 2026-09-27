@@ -370,6 +370,39 @@ nonisolated struct AO3ChallengePrompt: Hashable, Sendable, Identifiable {
     var optionalTags: [String] = []
 }
 
+/// The four tag types a sign-up prompt edits here (ratings, warnings and
+/// categories are AO3 checkboxes the app does not offer).
+nonisolated enum AO3PromptTagType: String, CaseIterable, Hashable, Sendable {
+    case fandom, character, relationship, freeform
+
+    var plural: String {
+        switch self {
+        case .fandom: "fandoms"
+        case .character: "characters"
+        case .relationship: "relationships"
+        case .freeform: "additional tags"
+        }
+    }
+
+    var tags: KeyPath<AO3ChallengePrompt, [String]> {
+        switch self {
+        case .fandom: \.fandoms
+        case .character: \.characters
+        case .relationship: \.relationships
+        case .freeform: \.freeforms
+        }
+    }
+
+    var any: KeyPath<AO3ChallengePrompt, Bool> {
+        switch self {
+        case .fandom: \.anyFandom
+        case .character: \.anyCharacter
+        case .relationship: \.anyRelationship
+        case .freeform: \.anyFreeform
+        }
+    }
+}
+
 nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
     var id: Int
     var collectionSlug: String
@@ -441,9 +474,24 @@ nonisolated struct AO3ChallengeSignUpForm: Hashable, Sendable {
     var fieldErrors: [String: String] = [:]
     var generalErrors: [String] = []
     var hiddenFields: [(name: String, value: String)] = []
-    var limits: AO3ChallengeSignUpLimits = AO3ChallengeSignUpLimits()
+    /// Prompts per sign-up, from the form's "Requests (1 - 3)" headings. `nil`
+    /// when AO3 printed none: no count is then checked or shown. A prompt meme
+    /// takes no offers (0 to 0).
+    var limits: AO3ChallengeSignUpLimits?
+    /// Tags per prompt by type, from the labels ("Fandoms (1 - 2): *"). A type
+    /// AO3 printed no field for allows none; `nil` means no prompt block was
+    /// on the form to read.
+    var requestTagLimits: [AO3PromptTagType: ClosedRange<Int>]?
+    var offerTagLimits: [AO3PromptTagType: ClosedRange<Int>]?
 
     var isNew: Bool { signUpID == nil }
+    /// A prompt meme's form has no Offers fieldset.
+    var takesOffers: Bool { (limits?.offersAllowed ?? 1) > 0 }
+
+    /// `fieldErrors` key for one prompt's tag-count message, shown in its section.
+    static func errorKey(for prompt: AO3ChallengePrompt) -> String {
+        "\(prompt.kind.rawValue):\(prompt.id)"
+    }
     var isValid: Bool { fieldErrors.isEmpty && generalErrors.isEmpty }
 
     /// Unsaved prompts take negative ids, one below the lowest in use, so
@@ -471,23 +519,55 @@ nonisolated struct AO3ChallengeSignUpForm: Hashable, Sendable {
         copy.generalErrors = []
         let liveRequests = requests.filter { !$0.destroy }
         let liveOffers = offers.filter { !$0.destroy }
-        if liveRequests.count < limits.requestsRequired {
-            copy.fieldErrors["requests"] =
-                "This challenge requires at least \(limits.requestsRequired) request(s)."
+        if let limits {
+            if liveRequests.count < limits.requestsRequired {
+                copy.fieldErrors["requests"] =
+                    "This challenge requires at least \(limits.requestsRequired) request(s)."
+            }
+            if liveRequests.count > limits.requestsAllowed {
+                copy.fieldErrors["requests"] =
+                    "This challenge allows at most \(limits.requestsAllowed) request(s)."
+            }
+            if liveOffers.count < limits.offersRequired {
+                copy.fieldErrors["offers"] =
+                    "This challenge requires at least \(limits.offersRequired) offer(s)."
+            }
+            if liveOffers.count > limits.offersAllowed {
+                copy.fieldErrors["offers"] =
+                    "This challenge allows at most \(limits.offersAllowed) offer(s)."
+            }
         }
-        if liveRequests.count > limits.requestsAllowed {
-            copy.fieldErrors["requests"] =
-                "This challenge allows at most \(limits.requestsAllowed) request(s)."
-        }
-        if liveOffers.count < limits.offersRequired {
-            copy.fieldErrors["offers"] =
-                "This challenge requires at least \(limits.offersRequired) offer(s)."
-        }
-        if liveOffers.count > limits.offersAllowed {
-            copy.fieldErrors["offers"] =
-                "This challenge allows at most \(limits.offersAllowed) offer(s)."
+        for (prompts, tagLimits) in [(liveRequests, requestTagLimits), (liveOffers, offerTagLimits)] {
+            guard let tagLimits else { continue }
+            for (position, prompt) in prompts.enumerated() {
+                let problems = Self.tagCountProblems(prompt, limits: tagLimits)
+                if !problems.isEmpty {
+                    let name = "\(prompt.kind == .request ? "Request" : "Offer") \(position + 1)"
+                    copy.fieldErrors[Self.errorKey(for: prompt)] = "\(name): " + problems.joined(separator: " ")
+                }
+            }
         }
         return copy
+    }
+
+    /// otwarchive's `Prompt#correct_number_of_tags`: with "Any" chosen a type
+    /// must have no tags; otherwise its count must fall in the challenge's range.
+    static func tagCountProblems(
+        _ prompt: AO3ChallengePrompt, limits: [AO3PromptTagType: ClosedRange<Int>]
+    ) -> [String] {
+        AO3PromptTagType.allCases.compactMap { type in
+            let count = prompt[keyPath: type.tags].count
+            if prompt[keyPath: type.any] {
+                return count > 0 ? "Choose \(type.plural) or “Any”, not both." : nil
+            }
+            let range = limits[type] ?? 0...0
+            guard !range.contains(count) else { return nil }
+            if range.upperBound == 0 { return "This challenge takes no \(type.plural)." }
+            let wanted = range.lowerBound == range.upperBound
+                ? "exactly \(range.lowerBound)"
+                : "\(range.lowerBound) to \(range.upperBound)"
+            return "Choose \(wanted) \(type.plural) (you have \(count))."
+        }
     }
 
     static func == (lhs: AO3ChallengeSignUpForm, rhs: AO3ChallengeSignUpForm) -> Bool {
@@ -502,6 +582,8 @@ nonisolated struct AO3ChallengeSignUpForm: Hashable, Sendable {
             && lhs.fieldErrors == rhs.fieldErrors
             && lhs.generalErrors == rhs.generalErrors
             && lhs.limits == rhs.limits
+            && lhs.requestTagLimits == rhs.requestTagLimits
+            && lhs.offerTagLimits == rhs.offerTagLimits
     }
 
     func hash(into hasher: inout Hasher) {
