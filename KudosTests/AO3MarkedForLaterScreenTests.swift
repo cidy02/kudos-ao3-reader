@@ -167,23 +167,14 @@ struct AO3MarkedForLaterScreenTests {
     @Test func footerUsesTheRealPageNumbers() {
         #expect(
             AO3MarkedForLaterCopy.footer(currentPage: 2, totalPages: 4)
-                == "Marked for Later lives on AO3. "
+                == "Marked for Later lives on AO3 — unmarking here unmarks there. "
                 + "Pagination follows the ledger: 2 of 4 pages."
         )
         #expect(
             AO3MarkedForLaterCopy.footer(currentPage: 1, totalPages: 1)
-                == "Marked for Later lives on AO3. "
+                == "Marked for Later lives on AO3 — unmarking here unmarks there. "
                 + "Pagination follows the ledger: 1 of 1 page."
         )
-    }
-
-    /// The screen has no unmark and the app has no unmark write, so the footer
-    /// must not promise one (1o.3).
-    @Test func footerPromisesNoUnmark() {
-        for (page, pages) in [(1, 1), (2, 4)] {
-            #expect(!AO3MarkedForLaterCopy.footer(currentPage: page, totalPages: pages)
-                .lowercased().contains("unmark"))
-        }
     }
 
     /// Page 1 of 9 is not the whole list; the tally says which page it counts.

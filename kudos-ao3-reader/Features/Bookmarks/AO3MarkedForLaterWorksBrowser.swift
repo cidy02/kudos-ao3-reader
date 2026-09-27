@@ -186,17 +186,13 @@ enum AO3MarkedForLaterCopy {
     }
 
     /// The artboard's "12 of 4 pages" is its own illustration. The numbers here
-    /// are the page the pagination bar is already on.
-    ///
-    /// The artboard's "unmarking here unmarks there" is left out: this screen has
-    /// no unmark, and the app has no unmark write (AO3's is `PATCH
-    /// /works/:id/mark_as_read`). It comes back with that action, if the owner
-    /// approves one (1o.4).
+    /// are the page the pagination bar is already on. "Unmarking here unmarks
+    /// there" is true since 1o.4: each row's Unmark is AO3's `mark_as_read`.
     static func footer(currentPage: Int, totalPages: Int) -> String {
         let pages = max(totalPages, 1)
         let page = min(max(currentPage, 1), pages)
         let noun = pages == 1 ? "page" : "pages"
-        return "Marked for Later lives on AO3. "
+        return "Marked for Later lives on AO3 — unmarking here unmarks there. "
             + "Pagination follows the ledger: \(page) of \(pages) \(noun)."
     }
 }
@@ -228,7 +224,11 @@ struct AO3MarkedForLaterWorksBrowser: View {
     let totalPages: Int
     let isLoading: Bool
     @Binding var filter: AO3MarkedForLaterFilter
+    /// An unmark is in flight; the buttons wait for it (one write at a time).
+    var isUnmarking = false
     let onPage: (Int) -> Void
+    /// 1o.4: AO3's `mark_as_read`. The host runs the write and drops the row.
+    var onUnmark: (CanonicalWork) -> Void = { _ in }
 
     @Environment(ThemeManager.self) private var theme
 
@@ -348,8 +348,12 @@ struct AO3MarkedForLaterWorksBrowser: View {
     private func ledgerRow(_ entry: CanonicalWork) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ledgerRowBody(entry)
-            if let line = downloadLine(for: entry) {
-                AO3MarkedForLaterDownloadFootnote(text: line)
+            HStack(alignment: .firstTextBaseline) {
+                if let line = downloadLine(for: entry) {
+                    AO3MarkedForLaterDownloadFootnote(text: line)
+                }
+                Spacer(minLength: 0)
+                unmarkButton(entry)
             }
         }
         .padding(.horizontal, 16)
@@ -372,6 +376,25 @@ struct AO3MarkedForLaterWorksBrowser: View {
                 expandAll: expandAll,
                 presentation: .searchLedger
             )
+        }
+    }
+
+    /// 1o.4. A button on the row, not a swipe: this screen is a `ScrollView`
+    /// (the covers grid cannot live in a `List`), and the rows' long-press
+    /// already opens the work menu. AO3's own list has the same per-work button.
+    /// Ledger rows only; the updated run's covers keep their card tap.
+    @ViewBuilder
+    private func unmarkButton(_ entry: CanonicalWork) -> some View {
+        if entry.ao3WorkID != nil {
+            Button {
+                onUnmark(entry)
+            } label: {
+                SubjectChip(text: "Unmark", style: .neutral, systemImage: "clock.badge.xmark", palette: palette)
+            }
+            .buttonStyle(.plain)
+            .disabled(isUnmarking)
+            .minimumHitTarget(28)
+            .accessibilityLabel("Unmark \(entry.title)")
         }
     }
 
