@@ -40,7 +40,7 @@ struct WorkAO3ActionChips: View {
             SubjectFieldLabel(text: "On AO3")
 
             FlowLayout(spacing: 8, rowSpacing: 8) {
-                chip(kudosLabel, systemImage: "heart", isDone: false, style: .tinted) {
+                chip(kudosLabel, systemImage: "heart", isDone: false) {
                     actions.giveKudos(workID: workID, auth: auth)
                 }
                 subscribeChip
@@ -53,13 +53,11 @@ struct WorkAO3ActionChips: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Spec 1a draws this chip tinted — "Kudos filled, since it is the one the app
-    /// is named after". The fill is emphasis, not a state: it does not mean "you
-    /// have left kudos here", which the app cannot know (AO3's work page does not
-    /// say whether *you* gave kudos, and `AO3WorkActionStates` carries only
-    /// subscription and bookmark). So the label claims nothing either: the count
-    /// rides along as a fact about the work, and the verb never turns into a
-    /// past tense the way "Subscribed" does.
+    /// Neutral, like every chip whose state is unknown (B6): a tint is kept for
+    /// states about the reader, and the count is a fact about the work. The app
+    /// cannot know whether *you* gave kudos (AO3's work page does not say, and
+    /// `AO3WorkActionStates` carries only subscription and bookmark), so the
+    /// verb never turns into a past tense the way "Subscribed" does.
     private var kudosLabel: String {
         guard let kudosCount else { return "Kudos" }
         return "Kudos · " + kudosCount.formatted()
@@ -88,19 +86,17 @@ struct WorkAO3ActionChips: View {
     }
 
     /// `isDone` tints a chip whose action you have already taken, applied only
-    /// to the two states AO3 actually tells us about. `style` overrides it for
-    /// Kudos, whose tint is 1a's emphasis rather than a state (see `kudosLabel`).
+    /// to the two states AO3 actually tells us about.
     private func chip(
         _ text: String,
         systemImage: String,
         isDone: Bool,
-        style: SubjectChip.Style? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             SubjectChip(
                 text: text,
-                style: style ?? (isDone ? .tinted : .neutral),
+                style: isDone ? .tinted : .neutral,
                 systemImage: systemImage,
                 palette: palette
             )
