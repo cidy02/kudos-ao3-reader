@@ -460,6 +460,78 @@ struct WritingWriteStubTests {
         #expect(WritingWriteStub.recorded().map(\.method) == ["GET"])
     }
 
+    // MARK: 1br reorder (T-274)
+
+    /// AO3's own sortable payload: `serial[]` = the manage page's ids in the
+    /// new order, one POST, then the manage page read back.
+    @Test func reorderingPostsTheManagePagesIDsInOrderAndReadsThemBack() async throws {
+        WritingWriteStub.reset(sequences: [
+            "GET \(Self.managePath)": [
+                Self.managePage([(11, "A"), (22, "B"), (33, "C")]),
+                Self.managePage([(22, "B"), (11, "A"), (33, "C")])
+            ],
+            "POST /series/77/update_positions": ["<html><body><div id=\"main\">Water</div></body></html>"]
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let rows = try await auth.reorderSeries(
+            seriesID: 77, orderedSerialWorkIDs: [22, 11, 33],
+            expectedGeneration: auth.sessionGeneration, using: stubClient()
+        )
+        #expect(rows.map(\.serialWorkID) == [22, 11, 33])
+        let hits = WritingWriteStub.recorded()
+        #expect(hits.map { "\($0.method) \($0.path)" } == [
+            "GET \(Self.managePath)", "POST /series/77/update_positions", "GET \(Self.managePath)"
+        ])
+        #expect(hits[1].body == "authenticity_token=ser%3D%3D&serial%5B%5D=22&serial%5B%5D=11&serial%5B%5D=33")
+    }
+
+    /// The old order read back is not a save.
+    @Test func aReorderTheManagePageDoesNotShowIsUnconfirmed() async throws {
+        WritingWriteStub.reset(sequences: [
+            "GET \(Self.managePath)": [Self.managePage([(11, "A"), (22, "B")])],
+            "POST /series/77/update_positions": ["<html><body></body></html>"]
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        await #expect(throws: AO3WorkWriteError.unconfirmed) {
+            try await auth.reorderSeries(
+                seriesID: 77, orderedSerialWorkIDs: [22, 11],
+                expectedGeneration: auth.sessionGeneration, using: stubClient()
+            )
+        }
+    }
+
+    /// A list that is not exactly AO3's current one is never sent: renumbering
+    /// part of a series leaves two works at one position.
+    @Test func aReorderOfAListAO3NoLongerHasSendsNothing() async throws {
+        WritingWriteStub.reset(["GET \(Self.managePath)": Self.managePage([(11, "A"), (22, "B"), (44, "D")])])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        await #expect(throws: AO3WorkWriteError.self) {
+            try await auth.reorderSeries(
+                seriesID: 77, orderedSerialWorkIDs: [22, 11, 33],
+                expectedGeneration: auth.sessionGeneration, using: stubClient()
+            )
+        }
+        #expect(WritingWriteStub.recorded().map(\.method) == ["GET"])
+    }
+
+    @Test func aReorderFromAnEarlierSessionSendsNothing() async throws {
+        WritingWriteStub.reset(["GET \(Self.managePath)": Self.managePage([(11, "A"), (22, "B")])])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let opened = auth.sessionGeneration
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        await #expect(throws: CancellationError.self) {
+            try await auth.reorderSeries(
+                seriesID: 77, orderedSerialWorkIDs: [22, 11], expectedGeneration: opened, using: stubClient()
+            )
+        }
+        #expect(WritingWriteStub.recorded().isEmpty)
+    }
+
     /// Previewing a new chapter is AO3's `preview_button` on create; the page
     /// that comes back names the draft it made.
     @Test func previewingANewChapterPostsPreviewAndLearnsTheDraft() async throws {
