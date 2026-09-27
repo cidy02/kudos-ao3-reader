@@ -462,20 +462,10 @@ extension AO3Client {
         _ html: String, slug: String, page: Int
     ) throws -> AO3PromptMemePage {
         let doc = try SwiftSoup.parse(html)
-        var prompts: [AO3PromptMemePrompt] = []
-        for li in try doc.select("li.prompt.blurb, li.request.blurb, li.prompt").array() {
-            guard let parsed = try? parsePromptMemeCard(li, slug: slug) else { continue }
-            prompts.append(parsed)
-        }
-        if prompts.isEmpty {
-            for link in try doc.select("a[href*='/prompts/']").array() {
-                let href = (try? link.attr("href")) ?? ""
-                guard let id = resourceID(href, after: "prompts") else { continue }
-                let text = ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                prompts.append(AO3PromptMemePrompt(
-                    id: id, collectionSlug: slug, promptText: text
-                ))
-            }
+        // challenge/shared/_challenge_requests: `ul.prompt.index` of
+        // prompts/_prompt_blurb items, whose li carries no "prompt" class.
+        let prompts = try doc.select("ul.prompt.index > li.blurb").array().enumerated().map { index, li in
+            try parsePromptMemeCard(li, slug: slug, index: index)
         }
         if prompts.isEmpty {
             let heading = ((try? doc.select("h2.heading").first()?.text()) ?? "").lowercased()
@@ -788,44 +778,53 @@ extension AO3Client {
         )
     }
 
-    private static func parsePromptMemeCard(_ li: Element, slug: String) throws -> AO3PromptMemePrompt {
-        let idAttr = li.id()
-        var id = 0
-        if idAttr.hasPrefix("prompt_") {
-            id = Int(idAttr.replacingOccurrences(of: "prompt_", with: "")) ?? 0
+    /// prompts/_prompt_blurb and _prompt_controls: h4 is "<title> by <byline>"
+    /// or "by Anonymous" (an untitled prompt is headed "Request"), h5.fandoms
+    /// the fandom links, ul.tags the rest plus bare "Any <Type>" items. The
+    /// prompt id is only on the Claim button (`claims?prompt_id=`) or the
+    /// owner's Edit/Delete Prompt links; the viewer's own claim is the Drop
+    /// Claim link; everyone's claims are the "Claimed By" list.
+    private static func parsePromptMemeCard(
+        _ li: Element, slug: String, index: Int
+    ) throws -> AO3PromptMemePrompt {
+        let claimForm = try li.select("form[action*='/claims']").first()
+        let claimAction = try claimForm?.attr("action") ?? ""
+        let promptIDFromClaim = URLComponents(string: claimAction)?.queryItems?
+            .first { $0.name == "prompt_id" }?.value.flatMap { Int($0) }
+        let promptLink = try li.select("a[href*='/prompts/']").first()?.attr("href") ?? ""
+        let dropClaim = try li.select("a[href*='/claims/'][data-method=delete]").first()?.attr("href") ?? ""
+        let claimID = resourceID(dropClaim, after: "claims")
+
+        var heading = try li.select("div.header h4.heading").first()?.text() ?? ""
+        var owner: String?
+        if let by = heading.range(of: " by ", options: .backwards) {
+            owner = String(heading[by.upperBound...]).trimmingCharacters(in: .whitespaces)
+            heading = String(heading[..<by.lowerBound])
+        } else if heading.hasPrefix("by ") {
+            owner = String(heading.dropFirst(3))
+            heading = ""
         }
-        if id == 0 {
-            let href = (try? li.select("a[href*='/prompts/']").first()?.attr("href")) ?? ""
-            id = resourceID(href, after: "prompts") ?? 0
-        }
-        guard id != 0 else { throw AO3Error.parse }
-        let classes = ((try? li.className()) ?? "").lowercased()
-        let body = ((try? li.select("blockquote.userstuff, .userstuff, p").first()?.text()) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = ((try? li.select("h4.heading, h5.heading").first()?.text()) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let tags = (try? li.select("a.tag").array().map { try $0.text() }) ?? []
-        let isAnonymous = classes.contains("anonymous")
-            || title.localizedCaseInsensitiveContains("anonymous")
-            || body.localizedCaseInsensitiveContains("(anonymous)")
-        let ownerLink = try li.select("h4.heading a[href*='/users/'], .byline a[href*='/users/']").first()
-        let owner = isAnonymous ? nil : (try? ownerLink?.text())
-        let claimHref = (try? li.select("a[href*='/claims/'], form[action*='/claims']").first()?.attr("href"))
-            ?? (try? li.select("form[action*='/claims']").first()?.attr("action"))
-            ?? ""
-        let claimID = resourceID(claimHref, after: "claims")
-        let claimedByMe = ((try? li.text()) ?? "").localizedCaseInsensitiveContains("your claim")
-            || ((try? li.select(".actions").first()?.text()) ?? "").localizedCaseInsensitiveContains("drop")
+        let isAnonymous = owner == "Anonymous"
+        heading = heading.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chosen = "ul.tags:not(.optional)"
+        let tags = try li.select("\(chosen) a.tag, \(chosen) li.tag").array().map { try $0.text() }
+        let claimants = try li.select("div.claims li").count
+        let anonymousClaimants = try li.select("div.claims ul").first()?.ownText()
+            .firstMatch(of: /(\d+) anonymous claimant/).flatMap { Int($0.1) } ?? 0
         return AO3PromptMemePrompt(
-            id: id,
+            id: promptIDFromClaim ?? resourceID(promptLink, after: "prompts") ?? -(index + 1),
             collectionSlug: slug,
-            promptText: body,
-            title: title,
+            promptText: try li.select("blockquote.userstuff.summary").text(),
+            // `ts("Request")` is AO3's stand-in for an untitled prompt.
+            title: heading == "Request" ? "" : heading,
+            fandoms: try li.select("h5.fandoms a.tag").array().map { try $0.text() },
             tagSummary: tags.joined(separator: ", "),
             isAnonymous: isAnonymous,
-            ownerPseud: owner,
+            ownerPseud: isAnonymous ? nil : owner,
             claimID: claimID,
-            claimedByCurrentUser: claimedByMe
+            claimedByCurrentUser: claimID != nil,
+            claimantCount: max(claimants, anonymousClaimants),
+            canClaim: promptIDFromClaim != nil
         )
     }
 
