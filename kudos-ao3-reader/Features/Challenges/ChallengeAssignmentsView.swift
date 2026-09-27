@@ -461,7 +461,7 @@ struct ChallengeAssignmentsView: View {
 
         // Matched is every sent assignment: otwarchive's Complete (?fulfilled)
         // plus Open (?unfulfilled). Each list fails on its own.
-        matched = await allPages(of: [.assignments, .unfulfilled], for: .matched)
+        matched = await allPages(of: AO3ChallengeAssignmentList.sent, for: .matched)
         unmatched = await allPages(of: [.defaults], for: .unmatched)
         pinchHits = await allPages(of: [.pinchHits], for: .pinchHits)
 

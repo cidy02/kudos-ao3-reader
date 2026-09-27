@@ -39,16 +39,17 @@ extension AO3Client {
     func challengeSignUpTotal(
         slug: String, firstPage: AO3ChallengeSignUpPage, request: URLRequest
     ) async throws -> Int {
-        guard firstPage.totalPages > 1 else { return firstPage.signUps.count }
-        let last = try await challengeSignUps(slug: slug, page: firstPage.totalPages, request: request)
-        return Self.signUpTotal(
-            pageSize: firstPage.signUps.count, totalPages: firstPage.totalPages,
-            lastPageCount: last.signUps.count
-        )
+        try await Self.signUpTotal(firstPage: firstPage) { page in
+            try await challengeSignUps(slug: slug, page: page, request: request)
+        }
     }
 
-    static func signUpTotal(pageSize: Int, totalPages: Int, lastPageCount: Int) -> Int {
-        pageSize * (totalPages - 1) + lastPageCount
+    static func signUpTotal(
+        firstPage: AO3ChallengeSignUpPage, fetchPage: (Int) async throws -> AO3ChallengeSignUpPage
+    ) async throws -> Int {
+        guard firstPage.totalPages > 1 else { return firstPage.signUps.count }
+        let last = try await fetchPage(firstPage.totalPages)
+        return firstPage.signUps.count * (firstPage.totalPages - 1) + last.signUps.count
     }
 
     /// Every page of each list, in order. Maintainer-only, and AO3 redirects
@@ -68,7 +69,7 @@ extension AO3Client {
     /// sign-up can be joined to: Open includes covered pinch hits, so no fourth
     /// crawl is needed.
     static func allChallengeAssignments(
-        lists: [AO3ChallengeAssignmentList] = [.assignments, .unfulfilled, .defaults],
+        lists: [AO3ChallengeAssignmentList] = AO3ChallengeAssignmentList.sent + [.defaults],
         fetchPage: (AO3ChallengeAssignmentList, Int) async throws -> AO3ChallengeAssignmentPage
     ) async throws -> [AO3ChallengeAssignment] {
         var assignments: [AO3ChallengeAssignment] = []

@@ -91,6 +91,19 @@ struct PromptMemeView: View {
                 }
             }
 
+            // A failed page change keeps the page already shown (`currentPage`
+            // moves only on success) and says so above it.
+            if case let .failed(message) = phase, !prompts.isEmpty {
+                Section {
+                    Label("Couldn't load that page: \(message)", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Color.secondary.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 4)
+                        .pageBodyRow(top: 8, gutter: gutter)
+                }
+            }
+
             switch phase {
             case .loading where prompts.isEmpty:
                 Section {

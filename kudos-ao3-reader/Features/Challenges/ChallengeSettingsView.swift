@@ -368,6 +368,8 @@ struct ChallengeSettingsView: View {
 
     private var assignmentsSummaryText: String {
         guard let matchedCount, let unmatchedCount else { return "Couldn't load" }
+        // Every list empty means nothing has been sent, not that nobody matched.
+        if matchedCount == 0, unmatchedCount == 0 { return "None sent yet" }
         return "\(matchedCount) matched, \(unmatchedCount) unmatched"
     }
 
@@ -483,7 +485,7 @@ struct ChallengeSettingsView: View {
             // The same lists as 1cb, every page. Matched = Complete + Open;
             // unmatched = defaulted and uncovered; a covered default reappears in
             // Open with a pinch hitter, so defaults + covered counts each once.
-            let sent = try? await assignmentRows([.assignments, .unfulfilled])
+            let sent = try? await assignmentRows(AO3ChallengeAssignmentList.sent)
             let defaults = try? await assignmentRows([.defaults])
             matchedCount = sent?.count
             unmatchedCount = defaults?.count

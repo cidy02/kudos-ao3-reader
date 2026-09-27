@@ -13,9 +13,7 @@ struct ChallengeSignUpsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
 
-    @State private var signUps: [AO3ChallengeSignUp] = []
-    @State private var currentPage: Int = 1
-    @State private var totalPages: Int = 1
+    @State private var pages = AO3LoadMorePages<AO3ChallengeSignUp>()
     @State private var filterSelection: SignUpFilter = .all
     @State private var phase: Phase = .idle
     @State private var closeDateText: String = ""
@@ -52,8 +50,21 @@ struct ChallengeSignUpsView: View {
         collectionTitle.isEmpty ? collectionSlug : collectionTitle
     }
 
+    private var signUps: [AO3ChallengeSignUp] { pages.rows }
+
     private func matchState(_ signUp: AO3ChallengeSignUp) -> AO3ChallengeSignUpMatching.State {
-        AO3ChallengeSignUpMatching.state(of: signUp, assignmentsLoaded: assignments != nil)
+        AO3ChallengeSignUpMatching.state(of: signUp, assignments: assignments)
+    }
+
+    /// Why no chip shows, when none can.
+    private var matchNote: String? {
+        if let matchError {
+            return "Match state unavailable: AO3 shows assignments to maintainers once sign-ups close. "
+                + matchError
+        }
+        return assignments?.isEmpty == true
+            ? "No assignments have been sent yet, so no sign-up is matched or unmatched."
+            : nil
     }
 
     private var filteredSignUps: [AO3ChallengeSignUp] {
@@ -147,8 +158,14 @@ struct ChallengeSignUpsView: View {
                 .padding(.bottom, 8)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
 
-            if let matchError {
-                matchUnavailableNote(matchError).padding(.bottom, 8).pageBodyRow(top: 0, gutter: gutter)
+            // A failed page (refresh or Load more) is reported above the rows
+            // already loaded, which stay.
+            if case let .failed(message) = phase {
+                note("Couldn't load sign-ups: \(message)").padding(.bottom, 8).pageBodyRow(top: 0, gutter: gutter)
+            }
+
+            if let matchNote {
+                note(matchNote).padding(.bottom, 8).pageBodyRow(top: 0, gutter: gutter)
             }
 
             if filteredSignUps.isEmpty {
@@ -160,7 +177,7 @@ struct ChallengeSignUpsView: View {
             footnoteText.pageBodyRow(top: 8, gutter: gutter)
         }
 
-        if currentPage < totalPages {
+        if pages.hasMore {
             Section {
                 loadMoreRow.pageBodyRow(top: 10, gutter: gutter)
             }
@@ -238,9 +255,8 @@ struct ChallengeSignUpsView: View {
             )
     }
 
-    private func matchUnavailableNote(_ message: String) -> some View {
-        Label("Match state unavailable: AO3 shows assignments to maintainers once sign-ups close. "
-            + message, systemImage: "exclamationmark.triangle")
+    private func note(_ text: String) -> some View {
+        Label(text, systemImage: "exclamationmark.triangle")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.85))
             .fixedSize(horizontal: false, vertical: true)
@@ -248,14 +264,14 @@ struct ChallengeSignUpsView: View {
     }
 
     private var emptyFilteredCard: some View {
-        let unknown = assignments == nil && filterSelection != .all
+        let unknown = matchNote != nil && filterSelection != .all
         return VStack(spacing: 6) {
             Text(unknown ? "Match state unavailable" : "No \(filterSelection.rawValue.lowercased()) sign-ups")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
 
             Text(unknown
-                ? "Assignments couldn't be loaded, so no sign-up can be shown as matched or unmatched."
+                ? "No sign-up can be shown as matched or unmatched without assignments."
                 : "No sign-ups in this page match the \"\(filterSelection.rawValue)\" filter.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
@@ -285,7 +301,7 @@ struct ChallengeSignUpsView: View {
                         .controlSize(.small)
                         .padding(.trailing, 4)
                 }
-                Text("Load page \(currentPage + 1) of \(totalPages)")
+                Text("Load page \(pages.loadedPages + 1) of \(pages.totalPages)")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(palette.accent)
             }
@@ -397,10 +413,10 @@ struct ChallengeSignUpsView: View {
         await loadSignUps(resetPage: true)
     }
 
+    /// A refresh starts a fresh pager and Load more continues this one; either
+    /// way `pages` only changes once the page arrives, so a failure keeps the
+    /// rows on screen and Load more still offers the same page.
     private func loadSignUps(resetPage: Bool) async {
-        if resetPage {
-            currentPage = 1
-        }
         phase = .loading
 
         if resetPage {
@@ -408,26 +424,27 @@ struct ChallengeSignUpsView: View {
             await loadAssignments()
         }
 
+        var next = resetPage ? AO3LoadMorePages<AO3ChallengeSignUp>() : pages
         do {
-            let request = try auth.authenticatedRequest(
-                for: AO3ChallengeURL.signUps(slug: collectionSlug, page: currentPage)
-            )
-            let page = try await AO3Client.shared.challengeSignUps(
-                slug: collectionSlug, page: currentPage, request: request
-            )
-            let rows = assignments.map {
-                AO3ChallengeSignUpMatching.joining(page.signUps, assignments: $0)
-            } ?? page.signUps
-            if resetPage {
-                signUps = rows
-                // No total rather than page 1's count passed off as one.
-                signUpTotal = try? await AO3Client.shared.challengeSignUpTotal(
-                    slug: collectionSlug, firstPage: page, request: request
+            try await next.loadNext { number in
+                let request = try auth.authenticatedRequest(
+                    for: AO3ChallengeURL.signUps(slug: collectionSlug, page: number)
                 )
-            } else {
-                signUps.append(contentsOf: rows)
+                let page = try await AO3Client.shared.challengeSignUps(
+                    slug: collectionSlug, page: number, request: request
+                )
+                if number == 1 {
+                    // No total rather than page 1's count passed off as one.
+                    signUpTotal = try? await AO3Client.shared.challengeSignUpTotal(
+                        slug: collectionSlug, firstPage: page, request: request
+                    )
+                }
+                let rows = assignments.map {
+                    AO3ChallengeSignUpMatching.joining(page.signUps, assignments: $0)
+                } ?? page.signUps
+                return (rows, page.totalPages)
             }
-            totalPages = page.totalPages
+            pages = next
             phase = .loaded
         } catch {
             phase = .failed(error.localizedDescription)
@@ -457,7 +474,7 @@ struct ChallengeSignUpsView: View {
                 for: AO3ChallengeURL.assignments(slug: collectionSlug, list: .defaults)
             )
             assignments = try await AO3Client.shared.allChallengeAssignments(
-                slug: collectionSlug, lists: [.assignments, .unfulfilled, .defaults], request: request
+                slug: collectionSlug, lists: AO3ChallengeAssignmentList.sent + [.defaults], request: request
             )
             matchError = nil
         } catch {
@@ -467,8 +484,7 @@ struct ChallengeSignUpsView: View {
     }
 
     private func loadNextPage() async {
-        guard currentPage < totalPages, phase != .loading else { return }
-        currentPage += 1
+        guard pages.hasMore, phase != .loading else { return }
         await loadSignUps(resetPage: false)
     }
 }

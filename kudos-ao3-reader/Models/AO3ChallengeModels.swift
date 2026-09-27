@@ -510,6 +510,10 @@ nonisolated enum AO3ChallengeAssignmentList: String, Hashable, Sendable {
     case pinchHits
     case unfulfilled
     case assignments
+
+    /// Every sent assignment: Complete (?fulfilled) plus Open (?unfulfilled),
+    /// which already includes pinch-hit covers (Q3). 1cb's Matched, 1by's count.
+    static let sent: [Self] = [.assignments, .unfulfilled]
 }
 
 nonisolated struct AO3PromptMemePrompt: Hashable, Sendable, Identifiable {
@@ -718,10 +722,11 @@ nonisolated enum AO3ChallengeURL {
 nonisolated enum AO3ChallengeSignUpMatching {
     enum State { case matched, unmatched, unknown }
 
-    /// Without the assignments (fetch failed, or AO3 withholds them while
-    /// sign-ups are open), no row can honestly be called unmatched.
-    static func state(of signUp: AO3ChallengeSignUp, assignmentsLoaded: Bool) -> State {
-        guard assignmentsLoaded else { return .unknown }
+    /// Match state needs assignment rows. Without them — the fetch failed (`nil`),
+    /// AO3 withholds the lists while sign-ups are open, or they are all empty
+    /// because nothing has been sent yet — no row can honestly be called unmatched.
+    static func state(of signUp: AO3ChallengeSignUp, assignments: [AO3ChallengeAssignment]?) -> State {
+        guard let assignments, !assignments.isEmpty else { return .unknown }
         return signUp.isMatched ? .matched : .unmatched
     }
 
@@ -757,6 +762,25 @@ nonisolated enum AO3ChallengeSignUpMatching {
                 ?? byRequestPseud[signUp.pseud.lowercased()]
             return copy
         }
+    }
+}
+
+/// Rows behind a "Load more" button (1bz). A page counts only once it has loaded,
+/// so a failed page leaves `rows` and `loadedPages` alone: Load more stays and
+/// retries that page rather than skipping it.
+nonisolated struct AO3LoadMorePages<Row: Sendable>: Sendable {
+    private(set) var rows: [Row] = []
+    private(set) var loadedPages = 0
+    private(set) var totalPages = 1
+
+    var hasMore: Bool { loadedPages < totalPages }
+
+    mutating func loadNext(_ fetch: (Int) async throws -> (rows: [Row], totalPages: Int)) async throws {
+        let page = loadedPages + 1
+        let result = try await fetch(page)
+        rows += result.rows
+        loadedPages = page
+        totalPages = result.totalPages
     }
 }
 
