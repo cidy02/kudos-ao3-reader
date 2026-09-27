@@ -579,7 +579,7 @@ struct AO3AccountWorksList: View {
                     filter: $markedForLaterFilter,
                     isUnmarking: markedForLaterWriteInFlight,
                     onPage: { page in Task { await load(page: page) } },
-                    onUnmark: { entry in Task { await unmarkForLater(entry) } }
+                    onUnmark: startUnmark
                 )
                 .onDisappear { persistMarkedForLaterLook() }
             } else if kind == .bookmarks {
@@ -1043,6 +1043,7 @@ struct AO3AccountWorksList: View {
             guard writeResultStillOwnsScreen(generation) else { return }
             works.removeAll { $0.id == workID }
             readingEntries[workID] = nil
+            reloadIfPageEmptied()
         } catch is CancellationError {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
@@ -1089,6 +1090,7 @@ struct AO3AccountWorksList: View {
             guard writeResultStillOwnsScreen(generation) else { return }
             works.removeAll { $0.id == workID }
             unsubscribePaths[workID] = nil
+            reloadIfPageEmptied()
         } catch is CancellationError {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
@@ -1182,11 +1184,24 @@ struct AO3AccountWorksList: View {
 
 // Out of the struct body only for its length; `private` state is file-scoped.
 extension AO3AccountWorksList {
-    /// 1o.4's Unmark. No confirm, like AO3's own button: the work is only
-    /// taken off a reading list, and Mark for Later puts it back.
-    private func unmarkForLater(_ entry: CanonicalWork) async {
-        guard !markedForLaterWriteInFlight, let workID = entry.ao3WorkID else { return }
+    /// 1o.4's Unmark tap. The generation is read here, in the tap, not when
+    /// the task starts: a sign-in change queued ahead of that task must not
+    /// hand this account's write to the next one.
+    private func startUnmark(_ entry: CanonicalWork) {
         let generation = auth.sessionGeneration
+        Task { await unmarkForLater(entry, generation: generation) }
+    }
+
+    /// 1o.4's Unmark. No confirm, like AO3's own button: the work is only
+    /// taken off a reading list, and Mark for Later puts it back. The row
+    /// goes only on AO3's confirmed success; `.unconfirmed` keeps it and
+    /// says so.
+    private func unmarkForLater(_ entry: CanonicalWork, generation: Int) async {
+        // A stale tap must not raise the next account's in-flight flag: its
+        // `defer` would never lower it.
+        guard writeResultStillOwnsScreen(generation), !markedForLaterWriteInFlight,
+              let workID = entry.ao3WorkID
+        else { return }
         markedForLaterWriteInFlight = true
         defer {
             if writeResultStillOwnsScreen(generation) {
@@ -1194,15 +1209,40 @@ extension AO3AccountWorksList {
             }
         }
         do {
-            _ = try await auth.unmarkForLater(workID: workID)
+            _ = try await auth.unmarkForLater(workID: workID, expectedGeneration: generation)
             guard writeResultStillOwnsScreen(generation) else { return }
             works.removeAll { $0.id == workID }
+            reloadIfPageEmptied()
         } catch is CancellationError {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
             guard writeResultStillOwnsScreen(generation) else { return }
             markedForLaterWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    /// A write took the last row off this page. AO3's later rows move up and
+    /// a last page can disappear, so load the page that now has rows rather
+    /// than the empty state, which would strand the pages around it.
+    private func reloadIfPageEmptied() {
+        guard works.isEmpty,
+              let page = AO3AccountWorksPaging.pageAfterEmptying(
+                  currentPage: currentPage, totalPages: totalPages
+              )
+        else { return }
+        phase = .loading // the skeleton, not a frame of the empty state
+        Task { await load(page: page) }
+    }
+}
+
+/// Where an account list goes when a write empties the page on screen.
+enum AO3AccountWorksPaging {
+    /// Nil when there was one page: the list really is empty. Otherwise the
+    /// same page while later pages exist (their rows move up into it), else
+    /// the page before (the last page is gone).
+    static func pageAfterEmptying(currentPage: Int, totalPages: Int) -> Int? {
+        guard totalPages > 1 else { return nil }
+        return currentPage < totalPages ? max(currentPage, 1) : totalPages - 1
     }
 }
 

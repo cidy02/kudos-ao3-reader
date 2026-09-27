@@ -240,15 +240,22 @@ struct AO3WriteDispatchFenceTests {
         #expect(AO3WriteDispatchProbe.recorded().isEmpty)
     }
 
+    /// What `mark_as_read` redirects back to: the page it came from, with
+    /// AO3's notice (Q19).
+    private static let unmarkedNotice = #"<div class="flash notice">This work was removed from your "#
+        + #"<a href="/users/alice/readings?show=to-read">Marked for Later list</a>.</div>"#
+
     /// 1o.4's Unmark: one CSRF GET of the work page, then one POST to
     /// `/works/:id/mark_as_read` carrying `_method=patch` (Q19). Stub only.
     @Test func unmarkForLaterPatchesMarkAsReadOnce() async throws {
-        AO3WriteDispatchProbe.reset()
+        AO3WriteDispatchProbe.reset(postBody: Self.unmarkedNotice)
         let auth = makeAuth()
         await auth.login(username: "alice", password: "pw")
         let client = AO3Client(session: probeSession(), paceSleep: { _ in })
 
-        let message = try await auth.unmarkForLater(workID: 42, using: client)
+        let message = try await auth.unmarkForLater(
+            workID: 42, expectedGeneration: auth.sessionGeneration, using: client
+        )
 
         #expect(message == "Unmarked.")
         let hits = AO3WriteDispatchProbe.recorded()
@@ -274,11 +281,53 @@ struct AO3WriteDispatchFenceTests {
             }
         )
 
+        let tapped = auth.sessionGeneration
         await #expect(throws: CancellationError.self) {
-            _ = try await auth.unmarkForLater(workID: 42, using: client)
+            _ = try await auth.unmarkForLater(workID: 42, expectedGeneration: tapped, using: client)
         }
         #expect(auth.username == "bob")
         #expect(AO3WriteDispatchProbe.recorded().map(\.method) == ["GET"])
+    }
+
+    /// Alice taps Unmark; bob is signed in before the write's task runs. The
+    /// generation is the tap's, so nothing goes out — not even the GET, which
+    /// would carry bob's cookie.
+    @Test func anUnmarkTappedUnderAnEarlierSessionSendsNothing() async throws {
+        AO3WriteDispatchProbe.reset(postBody: Self.unmarkedNotice)
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let tapped = auth.sessionGeneration
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        let client = AO3Client(session: probeSession(), paceSleep: { _ in })
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await auth.unmarkForLater(workID: 42, expectedGeneration: tapped, using: client)
+        }
+        #expect(AO3WriteDispatchProbe.recorded().isEmpty)
+    }
+
+    /// A final page with no flash (a maintenance page, an interstitial) is not
+    /// an unmark, and AO3's error flash is its reason. Either way the caller
+    /// keeps the row: only a returned message removes it.
+    @Test func anUnmarkWithoutAO3sNoticeIsNotASuccess() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let client = AO3Client(session: probeSession(), paceSleep: { _ in })
+
+        AO3WriteDispatchProbe.reset(postBody: "<html><body><h2>Down for maintenance</h2></body></html>")
+        await #expect(throws: AO3WriteError.unconfirmed) {
+            _ = try await auth.unmarkForLater(
+                workID: 42, expectedGeneration: auth.sessionGeneration, using: client
+            )
+        }
+
+        AO3WriteDispatchProbe.reset(postBody: #"<div class="flash error">Sorry, you don't have permission.</div>"#)
+        await #expect(throws: AO3WriteError.rejected("Sorry, you don't have permission.")) {
+            _ = try await auth.unmarkForLater(
+                workID: 42, expectedGeneration: auth.sessionGeneration, using: client
+            )
+        }
     }
 
     private func collectionForm() -> AO3CollectionForm {
