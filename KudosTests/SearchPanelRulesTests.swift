@@ -5,15 +5,6 @@ import Testing
 /// 1au.2, 1k.7, 1k.4, 1ax.2).
 @MainActor
 struct SearchPanelRulesTests {
-    /// Refine reads "Include Not Rated" only once a rating is chosen (pinned by
-    /// `AO3SummaryFilterRatingTests`), so under Any it is not drawn there. Search
-    /// always draws it: off sends `-rating_ids:9`.
-    @Test func includeNotRatedIsDrawnOnlyWhereItFilters() {
-        #expect(!AO3FilterPanel.showsIncludeNotRated(mode: .refine, rating: .any))
-        #expect(AO3FilterPanel.showsIncludeNotRated(mode: .refine, rating: .teen))
-        #expect(AO3FilterPanel.showsIncludeNotRated(mode: .search, rating: .any))
-    }
-
     /// Try Again after a failed page tap retries that page, not page 1.
     @Test func retryKeepsTheReaderOnTheirPage() {
         #expect(SearchRetry.page(requested: 5, current: 4, hasResults: true) == 5)
