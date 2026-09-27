@@ -165,6 +165,11 @@ final class AO3InboxModel {
     var canSelectItems: Bool { bulkForm != nil && !selectableItemIDs.isEmpty }
     var canFilter: Bool { filterForm != nil }
 
+    /// The form's checked values under whatever the reader has picked since.
+    var currentFilterValues: [String: String] {
+        (filterForm?.selectedValues ?? [:]).merging(filterValues) { $1 }
+    }
+
     func workContext(for workID: Int) -> AO3CommentsWorkContext? {
         workContextsByID[workID]
     }
@@ -357,12 +362,21 @@ final class AO3InboxModel {
     }
 
     func applyFilter(fieldName: String, value: String, auth: AO3AuthService) {
+        applyFilters([fieldName: value], auth: auth)
+    }
+
+    /// Sets several of the form's fields in one reload (1l's pills). Every
+    /// name and value must be one the loaded form renders, or nothing changes.
+    func applyFilters(_ values: [String: String], auth: AO3AuthService) {
         guard isCurrent(authContext, auth),
               !isPerformingBulkAction,
-              let field = filterForm?.fields.first(where: { $0.name == fieldName }),
-              field.options.contains(where: { $0.value == value })
+              let fields = filterForm?.fields,
+              !values.isEmpty,
+              values.allSatisfy({ name, value in
+                  fields.first { $0.name == name }?.options.contains { $0.value == value } == true
+              })
         else { return }
-        filterValues[fieldName] = value
+        filterValues.merge(values) { $1 }
         endSelection()
         let expected = authContext
         launch {
