@@ -65,6 +65,15 @@ struct AO3WorkFormParsingTests {
         #expect(skin.map(\.1) == [""])
     }
 
+    /// AO3's work form has `post_button` and no `post_without_preview_button`
+    /// (that is the chapter form's); `works#create`/`#update` post only on
+    /// `post_button`. Sending the other saved a draft and reported success.
+    @Test @MainActor func postingAWorkSendsTheWorkFormsOwnPostButton() throws {
+        let html = try fixture("ao3_work_new_draft")
+        #expect(html.contains("name=\"\(WorkEditView.postSubmit.rawValue)\""))
+        #expect(!html.contains(AO3WorkSubmitAction.postWithoutPreview.rawValue))
+    }
+
     @Test func missingRequiredFieldsNamesWhatPostNeeds() throws {
         let form = try AO3Client.parseWorkForm(from: try fixture("ao3_work_new_draft"))
         #expect(form.kind == .new)

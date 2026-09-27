@@ -196,7 +196,7 @@ struct WorkEditView: View {
         // the confirm button is replaced by the board's "Fill in what is missing".
         .alert("Post this work?", isPresented: $showPostConfirmation) {
             if form.missingRequiredFields().isEmpty {
-                Button("Post work") { save(submit: .postWithoutPreview) }
+                Button("Post work") { save(submit: Self.postSubmit) }
             } else {
                 Button("Fill in what is missing") {}
             }
@@ -584,9 +584,14 @@ extension WorkEditView {
         .panelSegment(1, of: count, gutter: gutter)
     }
 
+    /// AO3's work form has no `post_without_preview_button` — that name is
+    /// the chapter form's. `works#create` and `#update` post only on
+    /// `post_button` (`@work.posted = … if params[:post_button]`) and save
+    /// anything else as a draft, which is what "Post work" used to do.
+    static let postSubmit = AO3WorkSubmitAction.post
+
     /// 1bs's Post group: "Post work", then "Delete draft" once AO3 has the
-    /// draft. Post asks first (`showPostConfirmation`); the write itself is
-    /// the same `save(submit: .postWithoutPreview)` the toolbar used to send.
+    /// draft. Post asks first (`showPostConfirmation`).
     private var postPanel: some View {
         VStack(spacing: 0) {
             postPanelRow("Post work", icon: "arrow.up.circle.fill", color: theme.appTheme.statusSuccessColor) {
