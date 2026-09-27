@@ -119,6 +119,10 @@ enum CommentMarkup {
     /// `headingLevel` is read only for `.heading`. Nil uses `defaultHeadingLevel`.
     /// Anything outside `headingLevels` does too, so the buffer never grows an
     /// `<h7>` AO3 would strip.
+    ///
+    /// A heading over text that is already exactly one heading re-levels it:
+    /// the Heading tile then an h1 chip gives `<h1>…</h1>`, never
+    /// `<h3><h1>…</h1></h3>`.
     static func apply(
         _ tag: CommentMarkupTag,
         to text: String,
@@ -126,20 +130,44 @@ enum CommentMarkup {
         headingLevel: Int? = nil
     ) -> CommentMarkupResult {
         let range = AO3Markup.validRange(selection, in: text)
+        let replaced = tag == .heading ? (enclosingHeading(around: range, in: text) ?? range) : range
         let splice = renderedSplice(tag, in: text, over: range, headingLevel: headingLevel)
 
         var out = text
-        out.replaceSubrange(range, with: splice.text)
+        out.replaceSubrange(replaced, with: splice.text)
         // Offsets are counted in UTF-8, not in Characters: concatenation is
         // additive in UTF-8 but not in grapheme clusters. A selection beginning
         // with a combining mark would merge with the `>` written before it and
         // throw a Character count off by one, which is a silently misplaced
         // caret rather than a crash — the worst kind of bug to find later.
-        let start = text.utf8.distance(from: text.utf8.startIndex, to: range.lowerBound)
+        let start = text.utf8.distance(from: text.utf8.startIndex, to: replaced.lowerBound)
             + splice.prefix.utf8.count
         let lower = out.utf8.index(out.utf8.startIndex, offsetBy: start)
         let upper = out.utf8.index(lower, offsetBy: splice.body.utf8.count)
         return CommentMarkupResult(text: out, selection: lower..<upper)
+    }
+
+    /// The `<hN>…</hN>` pair wrapped directly around `range`, tags included, or
+    /// nil. Matched on UTF-8 so a body starting with a combining mark (which
+    /// would merge with the `>` as one Character) finds no wrapper and simply
+    /// nests, rather than cutting a tag in half.
+    static func enclosingHeading(
+        around range: Range<String.Index>, in text: String
+    ) -> Range<String.Index>? {
+        let before = text.utf8[..<range.lowerBound]
+        let after = text.utf8[range.upperBound...]
+        for level in headingLevels {
+            let open = Array("<h\(level)>".utf8)
+            let close = Array("</h\(level)>".utf8)
+            guard before.count >= open.count, after.count >= close.count,
+                  Array(before.suffix(open.count)) == open,
+                  Array(after.prefix(close.count)) == close
+            else { continue }
+            let lower = text.utf8.index(range.lowerBound, offsetBy: -open.count)
+            let upper = text.utf8.index(range.upperBound, offsetBy: close.count)
+            return lower..<upper
+        }
+        return nil
     }
 
     /// Heading writes the chosen level here. Every other tag still goes through
@@ -399,7 +427,7 @@ struct CommentFormattingTray: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .minimumHitTarget(36)
+                .minimumHitTarget()
                 .accessibilityLabel("Heading \(level)")
             }
         }
@@ -417,12 +445,14 @@ private struct CommentFormatTileFace: View {
         VStack(spacing: 3) {
             glyph
                 .frame(height: 19)
+            // Semantic sizes: at accessibility sizes the grid reflows to fewer
+            // columns, and the text has to grow into that room (T-273).
             Text(tag.name)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.caption2.weight(.medium))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(tag.tagLabel)
-                .font(.system(size: 9.5, design: .monospaced))
+                .font(.system(.caption2, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)

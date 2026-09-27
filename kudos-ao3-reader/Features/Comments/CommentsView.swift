@@ -1247,7 +1247,7 @@ struct CommentComposerSheet: View {
                     identityRow
 
                     Text(Self.dragTallerFooter)
-                        .font(.system(size: 11.5))
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
