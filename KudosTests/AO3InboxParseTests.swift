@@ -203,6 +203,27 @@ struct AO3InboxParseTests {
         #expect(values["page"] == "2")
     }
 
+    /// 1l's pills are presets over AO3's own filters (Q21): all four exist in
+    /// the fixture's form, the checked radios light Unread, a mix the sheet set
+    /// lights none, and Awaiting reply asks the server for `replied_to=false`.
+    @Test func inboxPillsArePresetsOverAO3sOwnFilters() throws {
+        let page = try AO3Client.parseInboxPage(try fixture("ao3_inbox_manage"), page: 1)
+        let form = try #require(page.filterForm)
+
+        #expect(AO3InboxPill.available(in: form) == AO3InboxPill.allCases)
+        #expect(AO3InboxPill.available(in: nil).isEmpty)
+        #expect(AO3InboxPill.selected(in: form.selectedValues) == .unread)
+        #expect(AO3InboxPill.selected(in: [
+            AO3InboxPill.readField: "true", AO3InboxPill.repliedField: "all"
+        ]) == nil)
+
+        let url = try #require(form.url(values: AO3InboxPill.awaitingReply.values, page: 1))
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(query.contains(URLQueryItem(name: "filters[replied_to]", value: "false")))
+        #expect(query.contains(URLQueryItem(name: "filters[read]", value: "all")))
+        #expect(query.contains(URLQueryItem(name: "filters[date]", value: "desc")))
+    }
+
     @MainActor
     @Test func buildsFixtureDerivedBulkRequestBody() throws {
         let page = try AO3Client.parseInboxPage(try fixture("ao3_inbox_manage"), page: 1)

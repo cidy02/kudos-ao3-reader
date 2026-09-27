@@ -203,6 +203,57 @@ nonisolated struct AO3InboxFilterForm: Hashable {
     }
 }
 
+/// 1l's pill rail: All / Unread / Awaiting reply / Replied, each a preset over
+/// AO3's own server-side filters (Q21: `filters[read]`, `filters[replied_to]`),
+/// so every pill is one filtered GET and exact across pages — nothing is
+/// inferred from the loaded page. The date order is left as it is.
+nonisolated enum AO3InboxPill: String, CaseIterable, Identifiable, Sendable {
+    case all
+    case unread
+    case awaitingReply
+    case replied
+
+    static let readField = "filters[read]"
+    static let repliedField = "filters[replied_to]"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .unread: "Unread"
+        case .awaitingReply: "Awaiting reply"
+        case .replied: "Replied"
+        }
+    }
+
+    var values: [String: String] {
+        switch self {
+        case .all: [Self.readField: "all", Self.repliedField: "all"]
+        case .unread: [Self.readField: "false", Self.repliedField: "all"]
+        case .awaitingReply: [Self.readField: "all", Self.repliedField: "false"]
+        case .replied: [Self.readField: "all", Self.repliedField: "true"]
+        }
+    }
+
+    /// The pills the loaded form can express. A field or value AO3 no longer
+    /// renders drops that pill rather than sending a guessed query.
+    static func available(in form: AO3InboxFilterForm?) -> [Self] {
+        guard let form else { return [] }
+        return allCases.filter { pill in
+            pill.values.allSatisfy { name, value in
+                form.fields.first { $0.name == name }?.options.contains { $0.value == value } == true
+            }
+        }
+    }
+
+    /// The pill the current values are, or nil when the filter sheet has set a
+    /// mix no pill names (say read and replied to): then none is lit.
+    static func selected(in current: [String: String]) -> Self? {
+        allCases.first { pill in pill.values.allSatisfy { current[$0.key] == $0.value } }
+    }
+}
+
 /// How many loaded inbox comments the reader can still reply to.
 ///
 /// `totalComments` and `unreadCount` are the two integers in the page heading
