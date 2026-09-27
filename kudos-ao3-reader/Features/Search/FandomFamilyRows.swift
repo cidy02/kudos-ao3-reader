@@ -177,6 +177,8 @@ struct FandomLetterHeader: View {
 /// Sort chips (A–Z / Most works) plus the dashed Filter affordance.
 struct FandomListSortRail: View {
     @Binding var sort: FandomFamilySort
+    /// 1al's "Group variants" switch: tinted while on.
+    @Binding var groupsVariants: Bool
     var filterCount: Int
     var palette: SubjectPalette
     var onOpenFilters: () -> Void
@@ -198,6 +200,18 @@ struct FandomListSortRail: View {
                         .buttonStyle(.plain)
                         .accessibilityAddTraits(sort == option ? .isSelected : [])
                     }
+                    Button {
+                        groupsVariants.toggle()
+                    } label: {
+                        SubjectChip(
+                            text: "Group variants",
+                            style: groupsVariants ? .tinted : .neutral,
+                            systemImage: "square.stack",
+                            palette: palette
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(groupsVariants ? .isSelected : [])
                 }
             }
 
