@@ -186,6 +186,7 @@ struct TagSetView: View {
             }
 
             reviewQueueList.pageBodyRow(top: 8, gutter: gutter)
+            reviewFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
 
         Section {
@@ -259,6 +260,16 @@ struct TagSetView: View {
         }
         .padding(14)
         .subjectPanel()
+    }
+
+    /// The spec's review caption (C2-8).
+    private var reviewFootnote: some View {
+        Text("Nominated characters and relationships have to be associated with a fandom before they "
+            + "can be approved. The queue groups by fandom for that reason.")
+            .font(.system(size: 11.5))
+            .foregroundStyle(Color.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
     }
 
     private var tagFieldsFootnote: some View {
