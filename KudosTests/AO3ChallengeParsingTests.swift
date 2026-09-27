@@ -194,16 +194,50 @@ struct AO3ChallengeParsingTests {
 
     @Test func signUpMatchStateIsUnknownWithoutAssignments() {
         let alice = AO3ChallengeSignUp(id: 11, collectionSlug: "fest", pseud: "Alice")
+        let carol = AO3ChallengeAssignment(id: 80, collectionSlug: "fest", offerPseud: "Carol")
         // A failed assignments fetch must not read as "unmatched".
-        #expect(AO3ChallengeSignUpMatching.state(of: alice, assignmentsLoaded: false) == .unknown)
-        #expect(AO3ChallengeSignUpMatching.state(of: alice, assignmentsLoaded: true) == .unmatched)
+        #expect(AO3ChallengeSignUpMatching.state(of: alice, assignments: nil) == .unknown)
+        #expect(AO3ChallengeSignUpMatching.state(of: alice, assignments: [carol]) == .unmatched)
         var matched = alice
-        matched.assignment = AO3ChallengeAssignment(id: 80, collectionSlug: "fest", offerPseud: "Carol")
-        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignmentsLoaded: false) == .unknown)
-        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignmentsLoaded: true) == .matched)
+        matched.assignment = carol
+        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignments: nil) == .unknown)
+        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignments: [carol]) == .matched)
         // A defaulted, uncovered giver is what 1cb lists as unmatched.
         matched.assignment?.isDefaulted = true
-        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignmentsLoaded: true) == .unmatched)
+        #expect(AO3ChallengeSignUpMatching.state(of: matched, assignments: [carol]) == .unmatched)
+    }
+
+    /// Before send-out every list is AO3's empty "No assignments" page, which
+    /// parses fine: three empty lists are no assignments, not three unmatched.
+    @Test func emptyAssignmentListsLeaveMatchStateUnknown() async throws {
+        let empty = """
+        <h2 class="heading">Assignments for Winter Fest</h2><p class="note">No assignments to review!</p>
+        """
+        let assignments = try await AO3Client.allChallengeAssignments { _, page in
+            try AO3Client.parseChallengeAssignmentsPage(empty, slug: "fest", page: page)
+        }
+        #expect(assignments.isEmpty)
+        let alice = AO3ChallengeSignUp(id: 11, collectionSlug: "fest", pseud: "Alice")
+        #expect(AO3ChallengeSignUpMatching.state(of: alice, assignments: assignments) == .unknown)
+    }
+
+    @Test func failedLoadMoreKeepsRowsAndRetriesThePage() async throws {
+        struct Offline: Error {}
+        var pager = AO3LoadMorePages<Int>()
+        try await pager.loadNext { page in ([page * 10], 3) }
+        await #expect(throws: Offline.self) {
+            try await pager.loadNext { _ in throw Offline() }
+        }
+        // Page 2 failed: page 1's rows stay, and Load more still offers page 2.
+        #expect(pager.rows == [10])
+        #expect(pager.loadedPages == 1)
+        #expect(pager.hasMore)
+        var asked: [Int] = []
+        try await pager.loadNext { page in asked.append(page); return ([page * 10], 3) }
+        try await pager.loadNext { page in asked.append(page); return ([page * 10], 3) }
+        #expect(asked == [2, 3])
+        #expect(pager.rows == [10, 20, 30])
+        #expect(!pager.hasMore)
     }
 
     @Test func ownSignUpMatchesBylineOrPseudWithLogin() {
@@ -250,10 +284,26 @@ struct AO3ChallengeParsingTests {
         #expect(posted.map(\.1) == ["21"])
     }
 
-    @Test func signUpTotalAndPageLabels() {
-        // will_paginate: every page but the last is full.
-        #expect(AO3Client.signUpTotal(pageSize: 20, totalPages: 3, lastPageCount: 7) == 47)
-        #expect(AO3Client.signUpTotal(pageSize: 5, totalPages: 1, lastPageCount: 5) == 5)
+    @Test func signUpTotalReadsTheLastPageAndPageLabels() async throws {
+        func page(_ number: Int, rows: Int, of total: Int) -> AO3ChallengeSignUpPage {
+            AO3ChallengeSignUpPage(
+                signUps: (0..<rows).map { AO3ChallengeSignUp(id: number * 100 + $0, collectionSlug: "fest", pseud: "p") },
+                currentPage: number, totalPages: total
+            )
+        }
+        // will_paginate: every page but the last is full, so only the last is read.
+        var asked: [Int] = []
+        let total = try await AO3Client.signUpTotal(firstPage: page(1, rows: 20, of: 3)) { number in
+            asked.append(number)
+            return page(number, rows: 7, of: 3)
+        }
+        #expect(asked == [3])
+        #expect(total == 47)
+        let single = try await AO3Client.signUpTotal(firstPage: page(1, rows: 5, of: 1)) { _ in
+            Issue.record("A single page needs no second fetch")
+            return page(1, rows: 5, of: 1)
+        }
+        #expect(single == 5)
         #expect(AO3ChallengeCountText.plural(1, "sign-up") == "1 sign-up")
         #expect(AO3ChallengeCountText.plural(31, "sign-up") == "31 sign-ups")
         #expect(AO3ChallengeCountText.pageQualifier(page: 2, totalPages: 4) == "on page 2 of 4")
@@ -313,6 +363,8 @@ struct AO3ChallengeParsingTests {
         }
         #expect(fetched == ["assignments:1", "assignments:2", "unfulfilled:1", "unfulfilled:2",
                             "unfulfilled:3", "defaults:1", "defaults:2"])
+        // 1cb's Matched and 1by's count read this list: Complete plus Open (Q3).
+        #expect(AO3ChallengeAssignmentList.sent == [.assignments, .unfulfilled])
         #expect(assignments.count == 7)
         let url = AO3ChallengeURL.assignments(slug: "fest", list: .unfulfilled, page: 3)
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
