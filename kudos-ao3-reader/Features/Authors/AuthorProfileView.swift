@@ -14,6 +14,12 @@ struct AuthorProfileView: View {
     @State private var bulkSelection = RemoteWorkSelectionController()
     /// 1bn: pushed rather than presented, so the bulk form gets a real back stack.
     @State private var isBulkEditing = false
+    /// Which group the bulk bar's button opens the form on.
+    @State private var bulkEditFocus: EditMultipleWorksView.Focus?
+    /// 1bn's bulk Delete: the works named in the alert, fixed when it opened,
+    /// with the session they were selected under.
+    @State private var pendingBulkDelete: (works: [AO3WorkSummary], generation: Int)?
+    @State private var isBulkDeleting = false
     /// 1u's swipe actions. Edit / Tags / Chapter push; Delete confirms first.
     @State private var pendingOwnWorkAction: AO3OwnWorkAction?
     @State private var pendingDeleteWork: (id: Int, title: String)?
@@ -83,6 +89,12 @@ struct AuthorProfileView: View {
                 Text("This removes the work from AO3 for everyone, with its chapters, "
                     + "kudos, comments and bookmarks. It cannot be undone.")
             }
+            .modifier(OwnWorksBulkDelete(
+                pending: $pendingBulkDelete, isDeleting: $isBulkDeleting, errorMessage: $deleteErrorMessage
+            ) {
+                bulkSelection.exitSelectMode()
+                await model.refresh(auth: auth)
+            })
             .alert("Couldn’t delete", isPresented: deleteErrorBinding) {
                 Button("OK") { deleteErrorMessage = nil }
             } message: {
@@ -597,7 +609,7 @@ private extension AuthorProfileView {
                 description: Text("Choose the works to edit, then try again.")
             )
         } else {
-            WritingBulkEditDestination(workIDs: ids)
+            WritingBulkEditDestination(workIDs: ids, focus: bulkEditFocus)
         }
     }
 
@@ -713,15 +725,6 @@ private extension AuthorProfileView {
             //
             // Trailing rather than `.principal`, which on iOS replaces the title
             // — and the title is now 1bn's "3 selected".
-            if showsBulkEdit {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { isBulkEditing = true } label: {
-                        Label("Edit Multiple", systemImage: "square.and.pencil")
-                    }
-                    .disabled(bulkSelection.selection.isEmpty)
-                    .accessibilityLabel("Edit selected works on AO3")
-                }
-            }
             // 1bn's Select All, over the works loaded so far — AO3's later pages
             // are not on screen, so they are not selectable.
             ToolbarItem(placement: .primaryAction) {
@@ -730,14 +733,29 @@ private extension AuthorProfileView {
                 }
                 .disabled(model.works.isEmpty)
             }
-            RemoteWorkSelectionToolbar(controller: bulkSelection) {
-                bulkSelection.selected(in: model.works)
+            if showsBulkEdit {
+                // 1bn's own bar — your works, AO3's bulk actions — in place of
+                // the shared local one (Search's and Browse's), whose works
+                // belong to other people.
+                OwnWorksSelectionToolbar(controller: bulkSelection) { ownWorksBar }
+            } else {
+                RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                    bulkSelection.selected(in: model.works)
+                }
             }
         } else if showsSelectButton {
             ActionToolbar(items: [AnyView(selectButton), AnyView(profileMenu)])
         } else {
             ActionToolbar(items: [AnyView(profileMenu)])
         }
+    }
+
+    private var ownWorksBar: OwnWorksBulkBar {
+        OwnWorksBulkBar(
+            selectedCount: bulkSelection.selected(in: model.works).count, isBusy: isBulkDeleting,
+            edit: { bulkEditFocus = $0; isBulkEditing = true },
+            delete: { pendingBulkDelete = (bulkSelection.selected(in: model.works), auth.sessionGeneration) }
+        )
     }
 
     private var screenTitle: String {

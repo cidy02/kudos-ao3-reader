@@ -402,6 +402,33 @@ extension AO3AuthService {
         return try await submitDelete(implications)
     }
 
+    /// 1bn's bulk Delete: AO3's own last step. Edit Multiple Works' Delete
+    /// renders `works/confirm_delete_multiple`, whose form posts `work_ids[]`
+    /// and "Yes, Delete Works" to `/users/:login/works/delete_multiple`;
+    /// `works#delete_multiple` destroys the signed-in user's works among those
+    /// ids and flashes "Your works … were deleted." The app's own alert, naming
+    /// the count and the titles, stands in for AO3's confirm page. The CSRF
+    /// token comes from Edit Multiple Works' GET page. `expectedGeneration`:
+    /// as `deleteChapter`. Unexercised against a live AO3 session (release gate).
+    @discardableResult
+    func deleteWorks(
+        workIDs: [Int], expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
+        try requireWorkSession()
+        guard !workIDs.isEmpty else { throw AO3WorkWriteError.rejected("Select at least one work.") }
+        guard let username,
+              let url = AO3Client.deleteMultipleWorksURL(username: username),
+              let referer = AO3Client.showMultipleWorksURL(username: username)
+        else { throw AO3WorkWriteError.notSignedIn }
+        let csrf = try csrfToken(from: try await workFormHTML(at: referer, using: client))
+        try requireSessionGeneration(expectedGeneration)
+        let params = [(AO3WorkFormField.authenticityToken, csrf)]
+            + workIDs.map { (AO3WorkFormField.workIDs, String($0)) }
+            + [("commit", "Yes, Delete Works")]
+        return try await submitWorkForm(url, params, referer: referer, using: client)
+    }
+
     @discardableResult
     func deleteDraft(workID: Int) async throws -> String {
         try await deleteWork(workID: workID)

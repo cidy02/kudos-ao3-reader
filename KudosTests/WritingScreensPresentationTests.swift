@@ -173,6 +173,17 @@ struct WritingScreensPresentationTests {
         #expect(WorkEditView.refreshedChapter(current, fresh: nil) == nil)
     }
 
+    /// 1bn's bulk Delete names the count and every title; one work reads
+    /// like the single swipe's alert.
+    @Test func theBulkDeleteAlertNamesWhatGoes() {
+        let three = [work(1), work(2), work(3)]
+        #expect(OwnWorksBulkBar.deleteTitle(three) == "Delete 3 works?")
+        #expect(OwnWorksBulkBar.deleteMessage(three).hasPrefix("This removes “Work 1”, “Work 2”, and “Work 3” from AO3")
+            || OwnWorksBulkBar.deleteMessage(three).hasPrefix("This removes “Work 1”, “Work 2” and “Work 3” from AO3"))
+        #expect(OwnWorksBulkBar.deleteTitle([work(7)]) == "Delete “Work 7”?")
+        #expect(OwnWorksBulkBar.deleteMessage([work(7)]).hasPrefix("This removes the work from AO3"))
+    }
+
     // MARK: Fixtures
 
     private func work(_ id: Int, isComplete: Bool? = nil) -> AO3WorkSummary {
