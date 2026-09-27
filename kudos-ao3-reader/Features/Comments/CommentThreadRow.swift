@@ -157,6 +157,35 @@ enum CommentThreadGeometry {
     }
 }
 
+/// How the strip under a comment lays out.
+///
+/// Signed in, Reply leads and the overflow trails — the board's 40pt row.
+/// Signed out, Reply is absent (login lives in the overflow menu) and a 44pt
+/// band around that lone button is a tall empty gap under a short comment
+/// (T-247). The button stays a 44pt target; the extra overlaps the prose
+/// instead of stacking under it.
+enum CommentActionRowLayout {
+    static let hitTarget: CGFloat = 44
+    /// Board 1f's action row `min-height: 40px` when Reply is in the strip.
+    static let leadingRowHeight: CGFloat = 40
+    /// The overflow capsule, without the empty air `minimumHitTarget` adds
+    /// around it. Used when that capsule is the whole strip.
+    static let overflowOnlyHeight: CGFloat = 28
+
+    static func showsLeadingReply(canReply: Bool, isLoggedIn: Bool) -> Bool {
+        canReply && isLoggedIn
+    }
+
+    static func layoutHeight(showsLeadingReply: Bool) -> CGFloat {
+        showsLeadingReply ? leadingRowHeight : overflowOnlyHeight
+    }
+
+    /// How far the 44pt target extends past `layoutHeight`, per side.
+    static func verticalOverlap(showsLeadingReply: Bool) -> CGFloat {
+        max(0, (hitTarget - layoutHeight(showsLeadingReply: showsLeadingReply)) / 2)
+    }
+}
+
 /// One row of a rendered conversation. A top-level comment and every reply
 /// under it each become their **own** `List` row rather than subviews of a
 /// single row, because `.swipeActions` only attaches to a row — packing a whole
@@ -1252,11 +1281,15 @@ private struct CommentPostRow: View {
     }
 
     /// Bottom strip: Reply bottom-leading, overflow bottom-trailing. Each keeps a
-    /// 44pt minimum hit area (same convention as `expandRepliesButton`/
-    /// `CommentAuthorAvatarButton` elsewhere in this file).
+    /// 44pt hit area. Signed out, that area overlaps the comment instead of
+    /// opening a gap — see `CommentActionRowLayout`.
     private var actionsRow: some View {
-        HStack(alignment: .center, spacing: 4) {
-            if comment.canReply && auth.isLoggedIn {
+        let showsReply = CommentActionRowLayout.showsLeadingReply(
+            canReply: comment.canReply, isLoggedIn: auth.isLoggedIn
+        )
+        let overlap = CommentActionRowLayout.verticalOverlap(showsLeadingReply: showsReply)
+        return HStack(alignment: .center, spacing: 4) {
+            if showsReply {
                 // 1f's Reply is plain accent text, not a capsule: the actions sit
                 // under prose with no card around it, where a filled chip on every
                 // comment would be the heaviest thing in the column. The word, not
@@ -1267,7 +1300,7 @@ private struct CommentPostRow: View {
                         .lineLimit(1)
                         .fixedSize()
                         .padding(.horizontal, 10)
-                        .frame(minHeight: 44)
+                        .frame(minHeight: CommentActionRowLayout.hitTarget)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
@@ -1277,7 +1310,7 @@ private struct CommentPostRow: View {
             }
             Spacer(minLength: 0)
             Menu {
-                if comment.canReply && auth.isLoggedIn {
+                if showsReply {
                     Button { handlers.onReply(comment) } label: {
                         Label("Reply", systemImage: "arrowshape.turn.up.left")
                     }
@@ -1312,9 +1345,13 @@ private struct CommentPostRow: View {
             } label: {
                 CommentOverflowButtonLabel()
             }
+            // Without this the menu takes the row's whole width and, signed out,
+            // its whole height — the lone button in a tall empty gap.
+            .fixedSize(horizontal: true, vertical: true)
             .buttonStyle(.borderless)
             .accessibilityLabel("More actions for \(comment.author)'s comment")
         }
+        .padding(.vertical, -overlap)
     }
 }
 
