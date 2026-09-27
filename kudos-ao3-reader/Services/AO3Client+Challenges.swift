@@ -217,6 +217,7 @@ extension AO3Client {
         if let sent = AO3ChallengeUTCDate.parse(inputValue(form, "\(prefix)[assignments_sent_at]")) {
             settings.assignmentsSentAt = sent
         }
+        settings.matchSettings = parseMatchSettings(form, prefix: "\(prefix)[potential_match_settings_attributes]")
         let (fieldErrors, general) = parseChallengeFormErrors(in: doc)
         var hidden: [(String, String)] = []
         for input in try form.select("input[type=hidden]").array() {
@@ -286,6 +287,17 @@ extension AO3Client {
             params.append(contentsOf: promptRestrictionParameters(
                 settings.offerRestriction, prefix: "\(prefix)[offer_restriction_attributes]"
             ))
+        }
+        if let match = settings.matchSettings {
+            // All fifteen fields: the form's hidden "0" for each unchecked
+            // include_optional box would otherwise post and clear it.
+            let base = "\(prefix)[potential_match_settings_attributes]"
+            if !match.id.isEmpty { params.append(("\(base)[id]", match.id)) }
+            params.append(("\(base)[num_required_prompts]", String(match.numRequiredPrompts)))
+            for type in AO3PotentialMatchSettings.tagTypes {
+                params.append(("\(base)[num_required_\(type)]", String(match.numRequired[type] ?? 0)))
+                params.append(("\(base)[include_optional_\(type)]", match.includeOptional[type] == true ? "1" : "0"))
+            }
         }
         for hidden in form.hiddenFields where !params.contains(where: { $0.0 == hidden.name }) {
             params.append(hidden)
@@ -607,6 +619,18 @@ extension AO3Client {
             requireUniqueFreeform: isChecked(form, name: "\(prefix)[require_unique_freeform]"),
             tagSetsToAdd: inputValue(form, "\(prefix)[tag_sets_to_add]")
         )
+    }
+
+    /// `nil` when the form has no num_required_prompts select (a prompt meme).
+    private static func parseMatchSettings(_ form: Element, prefix: String) -> AO3PotentialMatchSettings? {
+        let prompts = selectedValue(form, name: "\(prefix)[num_required_prompts]")
+        guard let numRequiredPrompts = Int(prompts) else { return nil }
+        var settings = AO3PotentialMatchSettings(id: inputValue(form, "\(prefix)[id]"), numRequiredPrompts: numRequiredPrompts)
+        for type in AO3PotentialMatchSettings.tagTypes {
+            settings.numRequired[type] = Int(selectedValue(form, name: "\(prefix)[num_required_\(type)]")) ?? 0
+            settings.includeOptional[type] = isChecked(form, name: "\(prefix)[include_optional_\(type)]")
+        }
+        return settings
     }
 
     private static func promptRestrictionParameters(
