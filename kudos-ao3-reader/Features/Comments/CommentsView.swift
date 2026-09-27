@@ -1182,6 +1182,18 @@ struct CommentComposerSheet: View {
         characterLimit - text.unicodeScalars.count
     }
 
+    /// 1ba's footer, under the identity and the character budget: the sheet is a
+    /// medium detent, and the reader can drag it taller.
+    static let dragTallerFooter = "Drag the sheet taller"
+
+    /// 1ba: Cancel and Post sit in the sheet header. A reply uses that same
+    /// Post — the board does not say "Post Reply". An edit stays Save.
+    static func confirmationAction(isEdit: Bool, isReply: Bool) -> String {
+        if isEdit { return "Save" }
+        if isReply { return "Post" }
+        return "Post"
+    }
+
     private var remainingCharacters: Int {
         Self.remainingCharacters(for: model.composerText)
     }
@@ -1233,6 +1245,12 @@ struct CommentComposerSheet: View {
                     statusBanner
 
                     identityRow
+
+                    Text(Self.dragTallerFooter)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -1275,7 +1293,7 @@ struct CommentComposerSheet: View {
                         if model.submissionGuard.phase.isBusy {
                             ProgressView()
                         } else {
-                            Text(isEdit ? "Save" : (isReply ? "Post Reply" : "Post"))
+                            Text(Self.confirmationAction(isEdit: isEdit, isReply: isReply))
                                 .fontWeight(.semibold)
                         }
                     }
