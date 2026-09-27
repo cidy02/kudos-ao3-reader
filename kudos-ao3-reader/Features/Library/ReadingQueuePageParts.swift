@@ -32,6 +32,17 @@ enum ReadingQueueFacts {
         states.firstIndex { $0 != .finished }.map { $0 + 1 }
     }
 
+    /// The one "Up next" rule, for Home's queue card face and the queue page's
+    /// Up next row alike: the first work not yet finished, else the first (a
+    /// fully read queue). `inLine` is everything else, in queue order.
+    static func upNext(in works: [SavedWork]) -> (upNext: SavedWork?, inLine: [SavedWork]) {
+        let states = works.map(\.readingState)
+        guard let index = nextUpPosition(states: states).map({ $0 - 1 }) ?? (works.isEmpty ? nil : 0)
+        else { return (nil, []) }
+        var inLine = works
+        return (inLine.remove(at: index), inLine)
+    }
+
     /// The queue card's footer — spec 1b: "7 works · next up 3".
     static func cardFooter(states: [SavedWork.ReadingState]) -> String {
         let count = "\(states.count) work\(states.count == 1 ? "" : "s")"

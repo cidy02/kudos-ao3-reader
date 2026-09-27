@@ -31,6 +31,30 @@ struct ReadingQueueFactsTests {
         #expect(ReadingQueueFacts.cardFooter(states: []) == "0 works")
     }
 
+    /// Home's card face and the queue page's Up next row are one rule. For
+    /// [finished A, unread B] both are B, and the footer's "next up 2" names
+    /// the same work; A stays In line. A fully read queue leads with its first.
+    @Test func homeCardAndQueuePageAgreeOnUpNext() throws {
+        let context = try makeContext()
+        let finished = work(in: context, title: "A")
+        finished.isFinished = true
+        let unread = work(in: context, title: "B")
+        let later = work(in: context, title: "C")
+
+        let split = ReadingQueueFacts.upNext(in: [finished, unread, later])
+        #expect(split.upNext?.title == "B")
+        #expect(split.inLine.map(\.title) == ["A", "C"])
+        let states = [finished, unread, later].map(\.readingState)
+        #expect(ReadingQueueFacts.cardFooter(states: states) == "3 works · next up 2")
+
+        later.isFinished = true
+        unread.isFinished = true
+        let allRead = ReadingQueueFacts.upNext(in: [finished, unread, later])
+        #expect(allRead.upNext?.title == "A")
+        #expect(allRead.inLine.map(\.title) == ["B", "C"])
+        #expect(ReadingQueueFacts.upNext(in: []).upNext == nil)
+    }
+
     @Test func kickerNamesTheOriginTab() {
         #expect(ReadingQueueFacts.kicker(origin: "Home") == "Home › Queues")
         #expect(ReadingQueueFacts.kicker(origin: "Library") == "Library › Queues")

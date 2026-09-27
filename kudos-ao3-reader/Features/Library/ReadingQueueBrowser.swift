@@ -203,14 +203,18 @@ struct ReadingQueueBrowserView: View {
         )
     }
 
-    /// Spec 1h splits a queue into "Up next" (the front of the queue) and "In
-    /// line" (everything behind it) — real content, since `orderedWorks`
-    /// already reflects the queue's own manual order (`sortOrderInQueue`).
+    /// Spec 1h splits a queue into "Up next" and "In line" (everything else,
+    /// in the queue's own `sortOrderInQueue` order). Up next is Home's card
+    /// face too: `ReadingQueueFacts.upNext`, the first work not yet finished.
     /// Both use `visibleWorks` (filters applied) rather than `displayedWorks`,
     /// since that split only ever renders while `!isReordering`.
-    private var upNextWork: SavedWork? { visibleWorks.first }
+    private var upNextSplit: (upNext: SavedWork?, inLine: [SavedWork]) {
+        ReadingQueueFacts.upNext(in: visibleWorks)
+    }
 
-    private var inLineWorks: [SavedWork] { Array(visibleWorks.dropFirst()) }
+    private var upNextWork: SavedWork? { upNextSplit.upNext }
+
+    private var inLineWorks: [SavedWork] { upNextSplit.inLine }
 
     /// 1h's numbered In line rows: the work's place in the whole queue, so a
     /// filter narrows the list without renumbering it.
