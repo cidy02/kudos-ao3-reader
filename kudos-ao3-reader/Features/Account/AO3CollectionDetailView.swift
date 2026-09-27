@@ -351,16 +351,14 @@ struct AO3CollectionDetailView: View {
                 ChallengeSignUpView(collectionSlug: slug, collectionTitle: title)
             }))
         }
-        if show.dashboard.challengeSettingsURL != nil {
-            if show.isMaintainer {
-                rows.append(AnyView(manageRow("Challenge Settings") {
-                    ChallengeSettingsEditView(collectionSlug: slug, collectionTitle: title)
-                }))
-            } else {
-                rows.append(AnyView(manageRow("Challenge Settings") {
-                    ChallengeSettingsView(collectionSlug: slug, collectionTitle: title)
-                }))
-            }
+        // Owners only (REDESIGN_DECISIONS 1by): AO3 prints the Challenge Settings
+        // link for collection owners alone and refuses its edit page to everyone
+        // else, moderators included (otwarchive Q5), so the link is the owner
+        // signal. The read (1by) pushes the edit form (1cf).
+        if show.dashboard.challengeSettingsURL != nil, show.isMaintainer {
+            rows.append(AnyView(manageRow("Challenge Settings") {
+                ChallengeSettingsView(collectionSlug: slug, collectionTitle: title)
+            }))
         }
 
         return rows

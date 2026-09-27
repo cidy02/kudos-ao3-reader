@@ -24,7 +24,7 @@ import SwiftUI
 /// `AO3TagSet` carries no owner/moderator pseud fields, so "Ownership" shows only
 /// what the model actually has (`title`, `isVisible`) rather than inventing a
 /// roster. `isModerator` — which the pushing challenge screen passes in, `true`
-/// from the maintainer edit form and `false` from the read view — only swaps the
+/// from both owner-only challenge screens — only swaps the
 /// header's kicker between "owner" and "moderator";
 /// it does not gate which rows appear, since every write path above behaves the
 /// same regardless of which relationship brought the reader here.

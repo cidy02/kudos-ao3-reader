@@ -105,6 +105,17 @@ struct ChallengeSettingsView: View {
 
     @ViewBuilder
     private var contentSections: some View {
+        // Only collection owners reach this read (AO3CollectionDetailView), and
+        // the edit form (1cf) is theirs as well.
+        Section {
+            SubjectFormRow(label: "Edit settings", showsDisclosure: true) { EmptyView() }
+                .subjectRowNavigation(accessibilityLabel: "Edit settings") {
+                    ChallengeSettingsEditView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
+                }
+                .subjectPanel()
+                .pageBodyRow(top: 14, gutter: gutter)
+        }
+
         Section {
             SectionRuleHeader(title: "Type")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
@@ -314,17 +325,17 @@ struct ChallengeSettingsView: View {
     /// request politeness as a product requirement, so the cost sits on the two
     /// screens that use it.
     ///
-    /// `isModerator: false` here: 1by is the read-only view of the challenge,
-    /// reachable by anyone who can see the collection, so it cannot honestly
-    /// claim the reader moderates the tag set. The kicker says "owner", which is
-    /// what `TagSetView` shows for a plain reader. 1cf passes `true` instead.
+    /// `isModerator: true`, as on 1cf: only a collection owner reaches this read
+    /// (AO3 prints the Challenge Settings link for owners alone and refuses the
+    /// edit page this screen loads to everyone else, otwarchive Q5), so the
+    /// viewer runs the challenge the tag set belongs to.
     private var tagSetsPanel: some View {
         VStack(spacing: 0) {
             ForEach(Array(tagSetLinks.enumerated()), id: \.element.id) { index, link in
                 if index > 0 { SubjectRowSeparator() }
                 SubjectFormRow(label: link.title, showsDisclosure: true) { EmptyView() }
                     .subjectRowNavigation(accessibilityLabel: link.title) {
-                        TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: false)
+                        TagSetView(tagSetID: link.id, tagSetTitle: link.title, isModerator: true)
                     }
             }
         }
@@ -390,19 +401,6 @@ struct ChallengeSettingsView: View {
                 showsDisclosure: true
             ) {
                 openExternalURL(settings.matchingOpenOnAO3)
-            }
-
-            SubjectRowSeparator()
-
-            SubjectFormRow(
-                label: "Edit challenge on AO3",
-                value: "Opens AO3",
-                showsDisclosure: true
-            ) {
-                let editURL = settings.kind == .giftExchange
-                    ? AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
-                    : AO3ChallengeURL.promptMemeEdit(slug: collectionSlug)
-                openExternalURL(editURL)
             }
         }
         .subjectPanel()
