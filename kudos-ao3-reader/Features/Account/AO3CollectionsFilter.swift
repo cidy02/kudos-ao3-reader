@@ -63,6 +63,10 @@ nonisolated struct AO3CollectionsFilter: Equatable, Sendable {
             || sort != .asReturned
     }
 
+    /// Client-side narrowing or ordering is honest only after every AO3 page
+    /// has been loaded. A stale direction beside AO3 order has no effect.
+    var needsWholeIndex: Bool { hasActiveFilters }
+
     /// Spec 1bm's chips, for the rail above the list. Only non-default settings
     /// appear — the same rule `AO3SearchFilters.summaryLabels` follows.
     var summaryLabels: [String] {
@@ -172,4 +176,50 @@ nonisolated struct AO3CollectionsFilter: Equatable, Sendable {
             return formatter
         }
     }()
+}
+
+/// The filter sheet edits this copy. Cancel resolves to the value it opened
+/// with; Apply resolves to the draft; Reset changes only the draft.
+nonisolated struct AO3CollectionsFilterDraft: Equatable, Sendable {
+    enum Resolution: Sendable { case cancel, apply }
+
+    let initial: AO3CollectionsFilter
+    var draft: AO3CollectionsFilter
+
+    init(initial: AO3CollectionsFilter) {
+        self.initial = initial
+        self.draft = initial
+    }
+
+    mutating func reset() {
+        draft = AO3CollectionsFilter()
+    }
+
+    func resolved(_ resolution: Resolution) -> AO3CollectionsFilter {
+        resolution == .apply ? draft : initial
+    }
+}
+
+/// Appends one fetched page only while the list load and AO3 session still
+/// match. `append(contentsOf:)` retains AO3's page and row order.
+enum AO3CollectionsWholeIndex {
+    // Lint: the six values are `shouldApplyLoad`'s four generations plus the page.
+    @discardableResult
+    static func append( // swiftlint:disable:this function_parameter_count
+        _ page: AO3CollectionsIndexPage,
+        to collections: inout [AO3Collection],
+        capturedLoadGeneration: Int,
+        loadGeneration: Int,
+        capturedSessionGeneration: Int,
+        sessionGeneration: Int
+    ) -> Bool {
+        guard AO3CollectionSessionReload.shouldApplyLoad(
+            capturedLoadGeneration: capturedLoadGeneration,
+            loadGeneration: loadGeneration,
+            capturedSessionGeneration: capturedSessionGeneration,
+            sessionGeneration: sessionGeneration
+        ) else { return false }
+        collections.append(contentsOf: page.collections)
+        return true
+    }
 }

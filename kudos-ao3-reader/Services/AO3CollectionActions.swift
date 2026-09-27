@@ -8,9 +8,8 @@ import Foundation
 /// Unexercised against a live AO3 session — a release gate, not a reason these
 /// endpoints are unbuilt.
 ///
-/// Close and delete stay on AO3 (irreversible: unrevealed works become revealed
-/// and anonymous creators are shown). Use `AO3CollectionForm.deleteOpenOnAO3` /
-/// `closeOpenOnAO3` rather than a native write.
+/// Closing stays on AO3 because revealing hidden works/creators is irreversible.
+/// Collection deletion is owner-only and has its own confirmed native write.
 enum AO3CollectionWriteError: LocalizedError, Equatable {
     case notSignedIn
     case noCSRFToken
@@ -90,6 +89,36 @@ extension AO3AuthService {
         posted.collectionSlug = slug
         if posted.nameIsLocked { posted.name = slug }
         return try await submitCollectionForm(posted, referer: referer, fallbackHTML: html, using: client)
+    }
+
+    /// Owner-only collection deletion. AO3 serves the CSRF token on its
+    /// confirmation page, then expects one method-override POST to the collection.
+    /// `expectedGeneration` owns the form/confirmation the reader approved.
+    /// Unexercised against a live AO3 session; tests use a local URLProtocol stub.
+    func deleteCollection(
+        slug: String, expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
+        guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
+        guard let action = AO3CollectionURL.show(slug: slug) else { throw AO3Error.parse }
+        let referer = AO3CollectionURL.confirmDelete(slug: slug)
+        let (_, token) = try await fetchCSRFPage(at: referer, using: client)
+        try requireSessionGeneration(expectedGeneration)
+        let request = try writeRequest(
+            to: action,
+            body: Self.formEncoded([
+                ("_method", "delete"),
+                ("authenticity_token", token)
+            ]),
+            csrf: token,
+            referer: referer,
+            ajax: false
+        )
+        let (status, response) = try await submitWrite(request, using: client)
+        try throwIfCollectionWriteFailed(
+            status: status, body: response, fallback: "AO3 couldn't delete that collection."
+        )
+        return AO3Client.writeSuccessMessage(in: response) ?? "Collection deleted."
     }
 
     /// Confirmed one-way reveal. Unchecks `unrevealed` on the live edit form and

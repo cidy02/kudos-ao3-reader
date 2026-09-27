@@ -4,14 +4,11 @@ import SwiftUI
 /// (its sort-and-filter sheet). Tapping a collection pushes its works, reusing
 /// `AO3AccountWorksList` via the `.collection` kind.
 ///
-/// Read-only. Joining, leaving and submitting a work to a collection are AO3 writes
-/// the app does not surface here; the networking exists (`AO3CollectionActions`) and
-/// the screens for it are Phase 10's remaining work. Deleting a collection stays on
-/// AO3's confirm page — this list opens that page and does not POST.
+/// Cards route to native details, item management, and the collection form.
+/// Owner-only deletion lives in that form behind its destructive confirmation.
 struct AO3CollectionsList: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
-    @Environment(AppRouter.self) private var router
 
     @State private var collections: [AO3Collection] = []
     @State private var phase: Phase = .idle
@@ -26,8 +23,20 @@ struct AO3CollectionsList: View {
     /// Generation whose rows are stored. Nil until the load task has bound
     /// one. A later run with the same generation is a reappearance.
     @State private var loadedSessionGeneration: Int?
+    @State private var wholeIndex: [AO3Collection] = []
+    @State private var wholeIndexSessionGeneration: Int?
+    @State private var wholeIndexPhase: Phase = .idle
+    @State private var wholeIndexRetry = 0
 
     private enum Phase: Equatable { case idle, loading, loaded, failed(String) }
+
+    private struct WholeIndexLoadID: Equatable {
+        var sessionGeneration: Int
+        var isLoggedIn: Bool
+        var needsWholeIndex: Bool
+        var listIsSettled: Bool
+        var retry: Int
+    }
 
     /// Stored rows are drawn only for the generation that loaded them. A new
     /// generation renders empty in the same body pass that observes it,
@@ -39,18 +48,27 @@ struct AO3CollectionsList: View {
         )
     }
 
-    private var displayedCollections: [AO3Collection] {
-        sessionOwnsScreen ? collections : []
+    private var hasCurrentWholeIndex: Bool {
+        wholeIndexSessionGeneration == auth.sessionGeneration
     }
 
-    /// What the list draws: AO3's rows, sorted and narrowed in memory. Spec 1bm's
-    /// own note says why that is client-side — AO3 sorts collections by title and
-    /// date only. The sort sees the page on screen, not every page of the index.
+    private var displayedCollections: [AO3Collection] {
+        guard sessionOwnsScreen else { return [] }
+        if filters.needsWholeIndex {
+            return hasCurrentWholeIndex ? wholeIndex : []
+        }
+        return collections
+    }
+
+    /// What the list draws: AO3's rows, sorted and narrowed in memory. Any
+    /// non-default client rule switches to the generation-owned whole index.
     private var visibleCollections: [AO3Collection] {
         filters.apply(to: displayedCollections)
     }
 
-    private var showPagination: Bool { totalPages > 1 }
+    private var showPagination: Bool {
+        !filters.needsWholeIndex && totalPages > 1
+    }
 
     var body: some View {
         Group {
@@ -65,7 +83,7 @@ struct AO3CollectionsList: View {
                     }
                 }
             }
-            if phase == .loaded, !displayedCollections.isEmpty {
+            if phase == .loaded, !collections.isEmpty || hasCurrentWholeIndex {
                 ToolbarItem(placement: .primaryAction) {
                     FilterButton(
                         filtersActive: filters.hasActiveFilters,
@@ -77,14 +95,20 @@ struct AO3CollectionsList: View {
         }
         .filterPanelPresentation(isPresented: $showingFilters) {
             AO3CollectionsFilterPanel(
-                filters: $filters,
-                onApply: { showingFilters = false },
-                onReset: { filters = AO3CollectionsFilter() }
+                initial: filters,
+                onFinish: {
+                    filters = $0
+                    showingFilters = false
+                }
             )
             .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
         }
         .navigationDestination(item: $editingCollection) { destination in
-            AO3CollectionFormView(slug: destination.slug)
+            AO3CollectionFormView(
+                slug: destination.slug,
+                viewerIsOwner: destination.viewerIsOwner,
+                onDeleted: { editingCollection = nil }
+            )
         }
         .navigationDestination(item: $yourItems) { destination in
             AO3CollectionItemsView(slug: destination.slug, title: destination.title)
@@ -107,7 +131,21 @@ struct AO3CollectionsList: View {
                 await load(page: 1)
             }
         }
+        .task(id: WholeIndexLoadID(
+            sessionGeneration: auth.sessionGeneration,
+            isLoggedIn: auth.isLoggedIn,
+            needsWholeIndex: filters.needsWholeIndex,
+            listIsSettled: phase == .loaded,
+            retry: wholeIndexRetry
+        )) {
+            guard auth.isLoggedIn, filters.needsWholeIndex, phase == .loaded else { return }
+            await loadWholeIndexIfNeeded()
+        }
         .sheet(isPresented: $showLogin) { AO3LoginView() }
+        .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionDeleted)) { notification in
+            guard let slug = notification.object as? String else { return }
+            refreshAfterDelete(slug: slug)
+        }
         // A failed page change (page 2+, say) while `collections` still holds
         // the prior page falls through to the ordinary list below — nothing
         // else in `signedInContent` ever surfaces it, so a tap that silently
@@ -143,6 +181,19 @@ struct AO3CollectionsList: View {
             }
         } else if phase == .loading, displayedCollections.isEmpty {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if filters.needsWholeIndex, !hasCurrentWholeIndex {
+            switch wholeIndexPhase {
+            case let .failed(message):
+                ContentUnavailableView {
+                    Label("Couldn't load all collections", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                } actions: {
+                    Button("Try Again") { wholeIndexRetry += 1 }
+                }
+            case .idle, .loading, .loaded:
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else {
             collectionsList
         }
@@ -178,10 +229,18 @@ struct AO3CollectionsList: View {
                     paginationBar.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
                 }
             }
+
+            Section {
+                sourceFooter.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+            }
         }
         .cardList()
         .subjectScreenWash(palette: palette)
-        .refreshable { await load(page: currentPage) }
+        .refreshable {
+            if !filters.needsWholeIndex {
+                await load(page: currentPage)
+            }
+        }
     }
 
     private func collectionRow(_ collection: AO3Collection) -> some View {
@@ -200,18 +259,8 @@ struct AO3CollectionsList: View {
                 NavigationLink(value: itemsDestination(for: collection)) {
                     Label("Manage Items", systemImage: "tray.full")
                 }
-                Button(role: .destructive) {
-                    openDeleteOnAO3(collection)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(role: .destructive) {
-                    openDeleteOnAO3(collection)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
                 Button {
                     editingCollection = editDestination(for: collection)
                 } label: {
@@ -223,16 +272,14 @@ struct AO3CollectionsList: View {
     }
 
     private func editDestination(for collection: AO3Collection) -> AO3CollectionFormDestination {
-        AO3CollectionFormDestination(slug: collection.name)
+        AO3CollectionFormDestination(
+            slug: collection.name,
+            viewerIsOwner: collection.viewerIsOwner
+        )
     }
 
     private func itemsDestination(for collection: AO3Collection) -> AO3CollectionItemsDestination {
         AO3CollectionItemsDestination(slug: collection.name, title: collection.title)
-    }
-
-    /// Delete is AO3's confirm page. The app does not remove the collection itself.
-    private func openDeleteOnAO3(_ collection: AO3Collection) {
-        router.open(AO3CollectionURL.confirmDelete(slug: collection.name))
     }
 
     private var header: some View {
@@ -253,7 +300,7 @@ struct AO3CollectionsList: View {
         if shown != displayedCollections.count {
             line += " · \(displayedCollections.count) in all"
         }
-        if totalPages > 1 {
+        if showPagination {
             line += " · page \(currentPage) of \(totalPages)"
         }
         return line
@@ -332,6 +379,15 @@ struct AO3CollectionsList: View {
         return "\(count) collection\(count == 1 ? "" : "s") are hidden by the current filters."
     }
 
+    private var sourceFooter: some View {
+        Text("AO3 collections. Local collections live in Library.")
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+    }
+
     private var palette: SubjectPalette {
         theme.scopePalette
     }
@@ -355,6 +411,26 @@ struct AO3CollectionsList: View {
         currentPage = cleared.currentPage
         totalPages = cleared.totalPages
         phase = .idle
+        wholeIndex = []
+        wholeIndexSessionGeneration = nil
+        wholeIndexPhase = .idle
+    }
+
+    /// The delete form can be reached from this list or through collection
+    /// details. Remove the stale row immediately, then refresh the server page
+    /// (or the generation-owned whole index) that backs the visible list.
+    private func refreshAfterDelete(slug: String) {
+        collections.removeAll { $0.name == slug }
+        wholeIndex.removeAll { $0.name == slug }
+        guard auth.isLoggedIn else { return }
+        if filters.needsWholeIndex {
+            wholeIndexSessionGeneration = nil
+            wholeIndexPhase = .idle
+            wholeIndexRetry += 1
+        } else {
+            let page = collections.isEmpty && currentPage > 1 ? currentPage - 1 : currentPage
+            Task { await load(page: page) }
+        }
     }
 
     /// `phase` in the reload rule's terms: loaded and failed are both settled.
@@ -419,6 +495,94 @@ struct AO3CollectionsList: View {
             phase = .failed(error.localizedDescription)
         }
     }
+
+}
+
+// Out of the struct body only for its length; `private` state is file-scoped.
+extension AO3CollectionsList {
+    /// Loads every collections-index page strictly in sequence. The surrounding
+    /// SwiftUI task owns cancellation; each landed page also passes the existing
+    /// list load/session fence before it can join the accumulator.
+    private func loadWholeIndexIfNeeded() async {
+        let expectedSessionGeneration = auth.sessionGeneration
+        guard filters.needsWholeIndex,
+              auth.isLoggedIn,
+              wholeIndexSessionGeneration != expectedSessionGeneration,
+              let username = auth.username
+        else { return }
+
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let generation = loadGeneration
+        wholeIndexPhase = .loading
+        var accumulated: [AO3Collection] = []
+        var page = 1
+        var lastPage = 1
+
+        do {
+            repeat {
+                try Task.checkCancellation()
+                guard let url = AO3Client.collectionsURL(username: username, page: page) else {
+                    throw AO3Error.network("Couldn't build the collections page address.")
+                }
+                let request = try auth.authenticatedRequest(for: url)
+                let result = try await AO3Client.shared.collectionsIndex(for: request, page: page)
+                try Task.checkCancellation()
+                guard AO3CollectionsWholeIndex.append(
+                    result,
+                    to: &accumulated,
+                    capturedLoadGeneration: generation,
+                    loadGeneration: loadGeneration,
+                    capturedSessionGeneration: expectedSessionGeneration,
+                    sessionGeneration: auth.sessionGeneration
+                ) else { return }
+                lastPage = max(result.currentPage, max(result.totalPages, 1))
+                page += 1
+            } while page <= lastPage
+
+            guard filters.needsWholeIndex,
+                  AO3CollectionSessionReload.shouldApplyLoad(
+                      capturedLoadGeneration: generation,
+                      loadGeneration: loadGeneration,
+                      capturedSessionGeneration: expectedSessionGeneration,
+                      sessionGeneration: auth.sessionGeneration
+                  )
+            else { return }
+            wholeIndex = accumulated
+            wholeIndexSessionGeneration = expectedSessionGeneration
+            wholeIndexPhase = .loaded
+        } catch AO3Error.authenticationRequired {
+            guard generation == loadGeneration else { return }
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else {
+                return
+            }
+            wholeIndexPhase = .idle
+        } catch let error where error is CancellationError || (error as? URLError)?.code == .cancelled {
+            if AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) {
+                wholeIndexPhase = .idle
+            }
+        } catch let error as AO3Error {
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
+            wholeIndexPhase = .failed(error.errorDescription ?? "Something went wrong.")
+        } catch {
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
+            wholeIndexPhase = .failed(error.localizedDescription)
+        }
+    }
 }
 
 /// One collection on the list. The hue is the collection's own, from its title,
@@ -449,8 +613,14 @@ struct AO3CollectionCard: View {
             bookmarksCount: collection.bookmarksCount,
             isModerated: collection.isModerated,
             isClosed: collection.isClosed,
-            isUnrevealed: collection.isUnrevealed,
             challengeName: collection.challengeKind?.displayName
+        )
+    }
+
+    private var statusLabels: [String] {
+        AO3CollectionCardCopy.statusLabels(
+            isUnrevealed: collection.isUnrevealed,
+            isAnonymous: collection.isAnonymous
         )
     }
 
@@ -511,7 +681,7 @@ struct AO3CollectionCard: View {
 
     @ViewBuilder
     private var eyebrowRow: some View {
-        if !eyebrow.isEmpty || collection.isAnonymous {
+        if !eyebrow.isEmpty || !statusLabels.isEmpty {
             HStack(alignment: .top, spacing: 6) {
                 if !eyebrow.isEmpty {
                     SubjectKicker(
@@ -521,8 +691,8 @@ struct AO3CollectionCard: View {
                         ruleSpacing: 5
                     )
                 }
-                if collection.isAnonymous {
-                    SubjectChip(text: "Anonymous", style: .neutral, palette: palette)
+                ForEach(statusLabels, id: \.self) { label in
+                    SubjectChip(text: label, style: .neutral, palette: palette)
                 }
                 Spacer(minLength: 0)
             }

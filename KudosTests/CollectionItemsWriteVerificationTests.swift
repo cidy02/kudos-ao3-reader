@@ -22,6 +22,22 @@ struct CollectionItemsWriteVerificationTests {
         #expect(AO3CollectionItemsView.defaultTab(slug: "fest") == .unreviewed)
     }
 
+    @Test func accountWideResetIsDisabledOnAwaitingYou() {
+        #expect(AO3CollectionItemsView.resetIsDisabled(slug: nil, tab: .invited))
+    }
+
+    @Test func accountWideResetIsEnabledOnAwaitingCollection() {
+        #expect(!AO3CollectionItemsView.resetIsDisabled(slug: nil, tab: .unreviewed))
+    }
+
+    @Test func collectionScopedResetIsDisabledOnAwaitingCollection() {
+        #expect(AO3CollectionItemsView.resetIsDisabled(slug: "fest", tab: .unreviewed))
+    }
+
+    @Test func collectionScopedResetIsEnabledOnAwaitingYou() {
+        #expect(!AO3CollectionItemsView.resetIsDisabled(slug: "fest", tab: .invited))
+    }
+
     /// `AO3CollectionActions.collectionWriteVerdict` — the classification
     /// every collection member/item write shares (except
     /// `submitCollectionForm`, which already did this correctly and was the

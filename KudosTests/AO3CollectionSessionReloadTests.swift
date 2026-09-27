@@ -252,6 +252,58 @@ struct AO3CollectionSessionReloadTests {
         ))
     }
 
+    @Test func theWholeIndexPreservesServerOrderAndRejectsStalePages() {
+        var collections = [
+            AO3Collection(name: "page-one-a", title: "Page one A"),
+            AO3Collection(name: "page-one-b", title: "Page one B")
+        ]
+        let pageTwo = AO3CollectionsIndexPage(
+            collections: [
+                AO3Collection(name: "page-two-a", title: "Page two A"),
+                AO3Collection(name: "page-two-b", title: "Page two B")
+            ],
+            currentPage: 2,
+            totalPages: 3
+        )
+
+        #expect(AO3CollectionsWholeIndex.append(
+            pageTwo,
+            to: &collections,
+            capturedLoadGeneration: 7,
+            loadGeneration: 7,
+            capturedSessionGeneration: 4,
+            sessionGeneration: 4
+        ))
+        #expect(collections.map(\.name) == [
+            "page-one-a", "page-one-b", "page-two-a", "page-two-b"
+        ])
+
+        let stalePage = AO3CollectionsIndexPage(
+            collections: [AO3Collection(name: "stale", title: "Stale")],
+            currentPage: 3,
+            totalPages: 3
+        )
+        #expect(!AO3CollectionsWholeIndex.append(
+            stalePage,
+            to: &collections,
+            capturedLoadGeneration: 7,
+            loadGeneration: 8,
+            capturedSessionGeneration: 4,
+            sessionGeneration: 4
+        ))
+        #expect(!AO3CollectionsWholeIndex.append(
+            stalePage,
+            to: &collections,
+            capturedLoadGeneration: 8,
+            loadGeneration: 8,
+            capturedSessionGeneration: 4,
+            sessionGeneration: 5
+        ))
+        #expect(collections.map(\.name) == [
+            "page-one-a", "page-one-b", "page-two-a", "page-two-b"
+        ])
+    }
+
     /// Account A is on screen. Sign-out and the next login each bump the
     /// generation before status is signed-in, so those runs drop A's rows and
     /// must not fetch. The open-only filter is a client-side choice and stays.

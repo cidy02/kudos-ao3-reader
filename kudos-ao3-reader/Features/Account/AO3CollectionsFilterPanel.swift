@@ -14,24 +14,57 @@ import SwiftUI
 /// page load per row for a filter. Recorded rather than faked: a filter that
 /// silently matched everything would be worse than its absence.
 struct AO3CollectionsFilterPanel: View {
-    @Binding var filters: AO3CollectionsFilter
-    var onApply: () -> Void
-    var onReset: () -> Void
+    var onFinish: (AO3CollectionsFilter) -> Void
 
     @Environment(ThemeManager.self) private var theme
+    @State private var editor: AO3CollectionsFilterDraft
+
+    init(
+        initial: AO3CollectionsFilter,
+        onFinish: @escaping (AO3CollectionsFilter) -> Void
+    ) {
+        self.onFinish = onFinish
+        self._editor = State(initialValue: AO3CollectionsFilterDraft(initial: initial))
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                sortGroup
-                showOnlyGroup
-                unavailableNote
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    sortGroup
+                    showOnlyGroup
+                    unavailableNote
+                }
+                .padding(.horizontal, SubjectMetrics.gutter)
+                .padding(.vertical, 20)
             }
-            .padding(.horizontal, SubjectMetrics.gutter)
-            .padding(.vertical, 20)
+            .safeAreaInset(edge: .bottom) { resetBar }
+            .appThemedScroll()
+            .navigationTitle("Sort and filter")
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .subjectScreenWash(palette: theme.scopePalette)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            onFinish(editor.resolved(.cancel))
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Cancel")
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            onFinish(editor.resolved(.apply))
+                        } label: {
+                            Image(systemName: "checkmark")
+                        }
+                        .accessibilityLabel("Apply")
+                        .disabled(editor.draft == editor.initial)
+                    }
+                }
         }
-        .safeAreaInset(edge: .bottom) { applyBar }
-        .appThemedScroll()
     }
 
     // MARK: Sort
@@ -44,7 +77,7 @@ struct AO3CollectionsFilterPanel: View {
                     label: "Order by",
                     arrangement: .control,
                     trailing: {
-                        Picker("Order by", selection: $filters.sort) {
+                        Picker("Order by", selection: $editor.draft.sort) {
                             ForEach(AO3CollectionsFilter.Sort.allCases, id: \.self) { sort in
                                 Text(sort.title).tag(sort)
                             }
@@ -53,7 +86,7 @@ struct AO3CollectionsFilterPanel: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 )
-                if filters.sort != .asReturned {
+                if editor.draft.sort != .asReturned {
                     SubjectRowSeparator()
                     SubjectFormRow(
                         label: "Direction",
@@ -61,8 +94,8 @@ struct AO3CollectionsFilterPanel: View {
                         trailing: {
                             SubjectSegmentedControl(
                                 options: AO3CollectionsFilter.Order.allCases,
-                                title: { $0.title(for: filters.sort) },
-                                selection: $filters.order
+                                title: { $0.title(for: editor.draft.sort) },
+                                selection: $editor.draft.order
                             )
                         }
                     )
@@ -70,7 +103,7 @@ struct AO3CollectionsFilterPanel: View {
             }
             .subjectPanel()
 
-            if filters.sort == .recentlyUpdated {
+            if editor.draft.sort == .recentlyUpdated {
                 note("Recently updated is computed here from the date AO3 prints on each "
                     + "collection. A collection whose date does not parse keeps AO3's own "
                     + "position rather than being sorted somewhere wrong.")
@@ -84,13 +117,13 @@ struct AO3CollectionsFilterPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             SubjectFieldLabel(text: "Show only", style: .formGroup)
             VStack(spacing: 0) {
-                toggleRow("Open to new works", isOn: $filters.showsOpenOnly)
+                toggleRow("Open to new works", isOn: $editor.draft.showsOpenOnly)
                 SubjectRowSeparator()
-                toggleRow("Has works", isOn: $filters.showsWithWorksOnly)
+                toggleRow("Has works", isOn: $editor.draft.showsWithWorksOnly)
                 SubjectRowSeparator()
-                toggleRow("Moderated", isOn: $filters.showsModeratedOnly)
+                toggleRow("Moderated", isOn: $editor.draft.showsModeratedOnly)
                 SubjectRowSeparator()
-                toggleRow("Unrevealed", isOn: $filters.showsUnrevealedOnly)
+                toggleRow("Unrevealed", isOn: $editor.draft.showsUnrevealedOnly)
             }
             .subjectPanel()
             note("These four are independent on AO3, so they narrow together rather than "
@@ -126,15 +159,11 @@ struct AO3CollectionsFilterPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var applyBar: some View {
-        HStack(spacing: 12) {
-            Button("Reset", action: onReset)
-                .buttonStyle(.bordered)
-                .disabled(!filters.hasActiveFilters)
-            Button("Done", action: onApply)
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
-        }
+    private var resetBar: some View {
+        Button("Reset") { editor.reset() }
+            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .disabled(editor.draft == AO3CollectionsFilter())
         .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.vertical, 12)
         .background(.bar)

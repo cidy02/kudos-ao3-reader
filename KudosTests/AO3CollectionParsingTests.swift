@@ -285,7 +285,7 @@ struct AO3CollectionParsingTests {
             <input name="collection[header_image_url]" value="https://example.com/header.png">
             <input name="collection[icon_alt_text]" value="icon alt">
             <input name="collection[icon_comment_text]" value="icon comment">
-            <textarea name="collection[description]">Brief</textarea>
+            <textarea name="collection[description]">Coastal fic, all fandoms</textarea>
           </fieldset>
           <fieldset>
             <legend>Preferences</legend>
@@ -294,6 +294,15 @@ struct AO3CollectionParsingTests {
             <input type="checkbox" name="collection[collection_preference_attributes][moderated]" value="1" checked>
             <input type="checkbox" name="collection[collection_preference_attributes][unrevealed]" value="1" checked>
             <input type="checkbox" name="collection[collection_preference_attributes][anonymous]" value="1" checked>
+            <input type="checkbox" name="collection[collection_preference_attributes][email_notify]" value="1" checked>
+          </fieldset>
+          <fieldset>
+            <legend>Challenge</legend>
+            <select name="challenge_type">
+              <option value="">None</option>
+              <option value="GiftExchange">Gift Exchange</option>
+              <option value="PromptMeme" selected>Prompt Meme</option>
+            </select>
           </fieldset>
           <fieldset class="profile">
             <legend>Profile</legend>
@@ -314,17 +323,30 @@ struct AO3CollectionParsingTests {
         #expect(form.headerImageURL.contains("header.png"))
         #expect(form.iconAlt == "icon alt")
         #expect(form.iconComment == "icon comment")
+        #expect(form.description == "Coastal fic, all fandoms")
+        #expect(form.emailNotify)
+        #expect(form.challengeType == "PromptMeme")
+        #expect(form.challengeOptions.map(\.title) == ["None", "Gift Exchange", "Prompt Meme"])
+        #expect(form.challengeOptions.map(\.value) == ["", "GiftExchange", "PromptMeme"])
         #expect(form.introduction == "Hello")
         #expect(form.faq == "FAQ")
         #expect(form.rules == "Be kind")
         #expect(form.isClosed && form.isModerated && form.isUnrevealed && form.isAnonymous)
         #expect(form.deleteOpenOnAO3?.path.hasSuffix("/collections/fest/confirm_delete") == true)
         #expect(form.closeOpenOnAO3?.path.hasSuffix("/collections/fest/edit") == true)
-        let params = Dictionary(uniqueKeysWithValues: AO3Client.collectionFormParameters(form))
+        var edited = form
+        edited.description = "A changed tagline"
+        edited.emailNotify = false
+        edited.challengeType = "GiftExchange"
+        let params = Dictionary(uniqueKeysWithValues: AO3Client.collectionFormParameters(edited))
         #expect(params[AO3CollectionParam.closed] == "1")
         #expect(params[AO3CollectionParam.moderated] == "1")
         #expect(params[AO3CollectionParam.unrevealed] == "1")
         #expect(params[AO3CollectionParam.anonymous] == "1")
+        #expect(params[AO3CollectionParam.description] == "A changed tagline")
+        #expect(params[AO3CollectionParam.emailNotify] == "0")
+        #expect(params[AO3CollectionParam.challengeType] == "GiftExchange")
+        #expect(params[AO3CollectionParam.intro] == "Hello")
     }
 
     @Test func nameAvailabilityHeuristic() {
@@ -415,5 +437,112 @@ struct AO3CollectionParsingTests {
         #expect(page.people.count == 1)
         #expect(page.people[0].identity.displayName == "Alice")
         #expect(page.people[0].workCount == 4)
+    }
+}
+
+extension AO3CollectionParsingTests {
+
+    @Test func collectionShowParsesExactWorksAndBookmarksStats() throws {
+        let html = """
+        <html><body>
+        <ul class="navigation actions">
+          <li><a href="/collections/winter/edit">Collection Settings</a></li>
+        </ul>
+        <div class="primary header module">
+          <h2 class="heading">Winter Fest</h2>
+          <p class="type">(Open, Moderated)</p>
+          <dl class="stats">
+            <dt class="works">Works:</dt><dd class="works">1,234</dd>
+            <dt class="bookmarks">Bookmarked Items:</dt><dd class="bookmarks">56</dd>
+          </dl>
+        </div>
+        </body></html>
+        """
+        let show = try AO3Client.parseCollectionShow(html, slug: "winter")
+        #expect(show.collection.worksCount == 1_234)
+        #expect(show.collection.bookmarksCount == 56)
+        #expect(show.collection.viewerIsOwner)
+    }
+
+    /// No header stats: the totals come from the collection nav's own links,
+    /// and a link to another collection's works never supplies them.
+    @Test func collectionShowReadsTotalsFromItsOwnNavLinks() throws {
+        let html = """
+        <html><body>
+        <div class="primary header module"><h2 class="heading">Winter Fest</h2></div>
+        <ul class="navigation actions">
+          <li><a href="/collections/winter_child/works">Works (999)</a></li>
+          <li><a href="/collections/winter/works">Works (1,234)</a></li>
+          <li><a href="/collections/winter/bookmarks">Bookmarked Items (56)</a></li>
+        </ul>
+        </body></html>
+        """
+        let show = try AO3Client.parseCollectionShow(html, slug: "winter")
+        #expect(show.collection.worksCount == 1_234)
+        #expect(show.collection.bookmarksCount == 56)
+        #expect(!show.collection.viewerIsOwner)
+
+        let bare = try AO3Client.parseCollectionShow(
+            "<html><body><h2 class=\"heading\">Winter</h2></body></html>", slug: "winter"
+        )
+        #expect(bare.collection.worksCount == nil)
+        #expect(bare.collection.bookmarksCount == nil)
+    }
+
+    @Test func collectionSegmentParsersKeepEachPager() throws {
+        let worksHTML = """
+        <html><body>
+        <ol class="pagination actions">
+          <li><a href="?page=1">1</a></li>
+          <li><span class="current">2</span></li>
+          <li><a href="?page=7">7</a></li>
+        </ol>
+        </body></html>
+        """
+        let works = try AO3Client.parseSearchPage(worksHTML, page: 2)
+        #expect(works.currentPage == 2)
+        #expect(works.totalPages == 7)
+
+        let bookmarksHTML = """
+        <html><body>
+        <ol class="pagination actions">
+          <li><a href="?page=1">1</a></li>
+          <li><span class="current">3</span></li>
+          <li><a href="?page=5">5</a></li>
+        </ol>
+        </body></html>
+        """
+        let bookmarks = try AO3Client.parseBookmarksPage(bookmarksHTML, page: 3)
+        #expect(bookmarks.currentPage == 3)
+        #expect(bookmarks.totalPages == 5)
+
+        let peopleHTML = """
+        <html><body>
+        <h2 class="heading">Participants in Winter Fest</h2>
+        <ul class="participant pseud index group">
+          <li class="user pseud picture blurb group">
+            <h4 class="heading"><a href="/users/alice">Alice</a></h4>
+          </li>
+        </ul>
+        <ol class="pagination actions">
+          <li><a href="?page=1">1</a></li>
+          <li><span class="current">4</span></li>
+          <li><a href="?page=9">9</a></li>
+        </ol>
+        </body></html>
+        """
+        let people = try AO3Client.parseCollectionPeoplePage(peopleHTML, page: 4)
+        #expect(people.currentPage == 4)
+        #expect(people.totalPages == 9)
+    }
+
+    @Test func pagedPeopleCountIsExplicitlyPageScoped() {
+        let label = AO3CollectionDetailView.peopleCountLabel(
+            count: 20, currentPage: 2, totalPages: 4
+        )
+        #expect(label == "20 on this page · page 2 of 4")
+        #expect(AO3CollectionDetailView.peopleCountLabel(
+            count: 7, currentPage: 1, totalPages: 1
+        ) == "7")
     }
 }

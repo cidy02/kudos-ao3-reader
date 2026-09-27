@@ -24,7 +24,6 @@ enum AO3CollectionCardCopy {
         bookmarksCount: Int?,
         isModerated: Bool,
         isClosed: Bool,
-        isUnrevealed: Bool,
         challengeName: String?
     ) -> [String] {
         var parts: [String] = []
@@ -36,9 +35,16 @@ enum AO3CollectionCardCopy {
         }
         if isModerated { parts.append("Moderated") }
         if isClosed { parts.append("Closed") }
-        if isUnrevealed { parts.append("Unrevealed") }
         if let challengeName, !challengeName.isEmpty { parts.append(challengeName) }
         return parts
+    }
+
+    /// Visibility and anonymity are states rather than sentence fragments on
+    /// the blurb, so cards render them as compact chips.
+    static func statusLabels(isUnrevealed: Bool, isAnonymous: Bool) -> [String] {
+        var labels = [isUnrevealed ? "Unrevealed" : "Revealed"]
+        if isAnonymous { labels.append("Anonymous") }
+        return labels
     }
 }
 
