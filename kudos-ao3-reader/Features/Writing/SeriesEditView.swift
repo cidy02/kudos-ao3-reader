@@ -10,15 +10,14 @@ import SwiftUI
 /// `parameters()` ready to POST, and nothing in the app called any of it. This is
 /// the screen that reaches it.
 ///
-/// **What 1br draws that this does not build, and why:**
-/// - **"Remove works"** (a row with a count, beside Reorder). There is no
-///   remove-from-series call anywhere in the app — the manage page is parsed for
-///   order only — so the row would open nothing. Adding one means a new write
-///   endpoint, not a control.
-/// - **The reorder rows' metadata line** ("4,200 words · posted Jan 2023").
-///   `AO3SeriesWorkRow` carries workID, serialWorkID, title, position and
-///   isDraft; `parseSeriesManagePage` reads AO3's sortable list, which prints no
-///   word count and no date. Drawing either would mean inventing a figure.
+/// **Where 1br is only partly built, and why:**
+/// - **"Remove works"** removes one work at a time and never the last: AO3
+///   deletes a series with its last work, and deleting a series is left to AO3
+///   (below).
+/// - **The reorder rows' metadata line** ("4,200 words · 12 Jan 2023") comes
+///   from the series page the series screen already loaded
+///   (`AO3SeriesWorkRow.attachingBlurbs`); AO3's manage page prints neither
+///   figure. Opened without that page (1w's swipes), rows show the title only.
 /// - **Delete is an Open-on-AO3 link, not a native action**, which is what the
 ///   artboard's own "Delete series **on AO3**" label says. There is no series
 ///   delete call either, and this is the right side of that line: deleting a
@@ -175,18 +174,29 @@ struct SeriesEditView: View {
     }
 
     private var worksPanel: some View {
-        SubjectFormRow(
-            label: "Reorder works",
-            value: "\(form.works.count)",
-            showsDisclosure: true,
-            isDisabled: form.works.count < 2
-        )
-        .subjectRowNavigation(accessibilityLabel: "Reorder works") {
-            SeriesReorderView(
-                seriesID: form.seriesID ?? series.id,
-                seriesTitle: series.title,
-                rows: form.works
-            ) { form.works = $0 }
+        VStack(spacing: 0) {
+            SubjectFormRow(
+                label: "Reorder works",
+                value: "\(form.works.count)",
+                showsDisclosure: true,
+                isDisabled: form.works.count < 2
+            )
+            .subjectRowNavigation(accessibilityLabel: "Reorder works") {
+                SeriesReorderView(
+                    seriesID: form.seriesID ?? series.id,
+                    seriesTitle: series.title,
+                    rows: form.works
+                ) { form.works = $0 }
+            }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Remove works", value: "\(form.works.count)", showsDisclosure: true)
+                .subjectRowNavigation(accessibilityLabel: "Remove works") {
+                    SeriesRemoveWorksView(
+                        seriesID: form.seriesID ?? series.id,
+                        seriesTitle: series.title,
+                        rows: form.works
+                    ) { form.works = $0 }
+                }
         }
         .subjectPanel()
     }
@@ -367,9 +377,14 @@ struct SeriesReorderView: View {
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundStyle(accountPalette.accent)
                 .frame(minWidth: 26, alignment: .trailing)
-            Text(row.title.isEmpty ? "Untitled work" : row.title)
-                .font(.system(size: 14.5, weight: .medium))
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(row.title.isEmpty ? "Untitled work" : row.title)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .lineLimit(2)
+                if let metadata = row.metadataText {
+                    Text(metadata).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                }
+            }
             Spacer(minLength: 0)
             if row.isDraft {
                 SubjectChip(text: "Draft", style: .neutral, palette: accountPalette)
@@ -379,7 +394,7 @@ struct SeriesReorderView: View {
         // Reads what the row shows: "Untitled work" for an empty title, and
         // the Draft chip, which was drawn but never spoken.
         .accessibilityLabel("\(index). \(row.title.isEmpty ? "Untitled work" : row.title)"
-            + (row.isDraft ? ", Draft" : ""))
+            + (row.isDraft ? ", Draft" : "") + (row.metadataText.map { ", \($0)" } ?? ""))
     }
 
     private func save() {
@@ -406,6 +421,156 @@ struct SeriesReorderView: View {
     }
 }
 
+// MARK: - Remove works (1br)
+
+/// 1br's Remove works. One work at a time, each behind a confirmation naming
+/// it, and never the last: AO3 deletes a series with its last work
+/// (`SerialWork#delete_empty_series`), and deleting a series is AO3's own page.
+struct SeriesRemoveWorksView: View {
+    let seriesID: Int
+    let seriesTitle: String
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(AO3AuthService.self) private var auth
+
+    @State private var rows: [AO3SeriesWorkRow]
+    @State private var openedGeneration: Int?
+    @State private var removing: AO3SeriesWorkRow?
+    @State private var isRemoving = false
+    @State private var errorMessage: String?
+    /// Handed the series' works after each removal, as AO3 now lists them.
+    let onChanged: ([AO3SeriesWorkRow]) -> Void
+
+    init(
+        seriesID: Int, seriesTitle: String, rows: [AO3SeriesWorkRow],
+        onChanged: @escaping ([AO3SeriesWorkRow]) -> Void
+    ) {
+        self.seriesID = seriesID
+        self.seriesTitle = seriesTitle
+        self._rows = State(initialValue: rows.sorted { $0.position < $1.position })
+        self.onChanged = onChanged
+    }
+
+    private var palette: SubjectPalette { theme.scopePalette }
+    private var gutter: CGFloat { SubjectMetrics.accountGutter }
+
+    var body: some View {
+        List {
+            Section {
+                SubjectHeaderBlock(
+                    kicker: "AO3 Account", title: "Remove works",
+                    subtitle: "\(seriesTitle) · \(rows.count) work\(rows.count == 1 ? "" : "s")",
+                    palette: palette, gutter: gutter
+                )
+                .pageBodyRow(top: 20, gutter: 0)
+            }
+            Section {
+                ForEach(PanelSegment.keyed(rows, id: \.id), id: \.key) { segment in
+                    row(segment.element)
+                        .subjectPanelSegmentRow(
+                            isFirst: segment.offset == 0, isLast: segment.offset == rows.count - 1, gutter: gutter
+                        )
+                }
+            }
+            Section {
+                Text(rows.count > 1
+                    ? "A removed work stays posted; only its place in this series goes."
+                    : "AO3 deletes a series with its last work, so the last one goes by deleting the series on AO3.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .pageBodyRow(top: 8, gutter: gutter)
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(theme.appTheme.errorColor)
+                        .pageBodyRow(top: 8, gutter: gutter)
+                }
+            }
+        }
+        .cardList()
+        .disabled(isRemoving)
+        .subjectScreenWash(palette: palette)
+        #if os(macOS)
+        .navigationTitle("Remove works")
+        #endif
+        .onAppear { if openedGeneration == nil { openedGeneration = auth.sessionGeneration } }
+        .alert(
+            "Remove “\(Self.title(removing))” from \(seriesTitle)?",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
+        ) {
+            Button("Remove from series", role: .destructive) {
+                if let removing { remove(removing) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The work stays posted on AO3.")
+        }
+    }
+
+    private func row(_ row: AO3SeriesWorkRow) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Self.title(row)).font(.system(size: 14.5, weight: .medium)).lineLimit(2)
+                if let metadata = row.metadataText {
+                    Text(metadata).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            if row.isDraft { SubjectChip(text: "Draft", style: .neutral, palette: palette) }
+            if rows.count > 1 {
+                Button { removing = row } label: {
+                    Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Remove \(Self.title(row)) from the series")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+    }
+
+    static func title(_ row: AO3SeriesWorkRow?) -> String {
+        guard let title = row?.title, !title.isEmpty else { return "Untitled work" }
+        return title
+    }
+
+    private func remove(_ row: AO3SeriesWorkRow) {
+        guard !isRemoving, let generation = openedGeneration else { return }
+        isRemoving = true
+        errorMessage = nil
+        Task {
+            do {
+                let fresh = try await AO3RequestCoordinator.shared.withSlot {
+                    try await auth.removeWorkFromSeries(
+                        seriesID: seriesID, serialWorkID: row.serialWorkID, expectedGeneration: generation
+                    )
+                }
+                rows = Self.keepingMetadata(of: rows, on: fresh)
+                onChanged(rows)
+            } catch is CancellationError {
+                errorMessage = "Your AO3 session changed, so nothing was removed."
+            } catch {
+                errorMessage = "\(Self.title(row)) was not removed. " + error.localizedDescription
+            }
+            isRemoving = false
+        }
+    }
+
+    /// AO3's rows after a removal, keeping the words and date already joined.
+    static func keepingMetadata(of old: [AO3SeriesWorkRow], on fresh: [AO3SeriesWorkRow]) -> [AO3SeriesWorkRow] {
+        fresh.sorted { $0.position < $1.position }.map { row in
+            guard let known = old.first(where: { $0.serialWorkID == row.serialWorkID }) else { return row }
+            var row = row
+            row.words = known.words
+            row.dateText = known.dateText
+            return row
+        }
+    }
+}
+
 // MARK: - Loader
 
 /// Loads the series form, then hands it to `SeriesEditView`. Same shape as
@@ -414,6 +579,9 @@ struct SeriesReorderView: View {
 struct SeriesEditDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let series: AO3SeriesSummary
+    /// The series page's works, when the screen opening this already loaded
+    /// them — the reorder rows' words and date (1br).
+    var works: [AO3WorkSummary] = []
 
     @State private var form: AO3SeriesForm?
     @State private var loadedGeneration: Int?
@@ -440,8 +608,9 @@ struct SeriesEditDestination: View {
             errorMessage = nil
             let generation = auth.sessionGeneration
             do {
-                let loaded = try await auth.loadSeriesForm(seriesID: series.id)
+                var loaded = try await auth.loadSeriesForm(seriesID: series.id)
                 guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
+                loaded.works = AO3SeriesWorkRow.attachingBlurbs(works, to: loaded.works)
                 loadedGeneration = generation
                 form = loaded
             } catch {

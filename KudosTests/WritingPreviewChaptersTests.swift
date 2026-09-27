@@ -366,6 +366,100 @@ struct WritingWriteStubTests {
         #expect(WritingWriteStub.recorded().map(\.method) == ["GET"])
     }
 
+    // MARK: 1br Remove works
+
+    static let managePath = "/series/77/manage"
+
+    /// `series/_series_order.html.erb`: bare titles, no work links.
+    static func managePage(_ rows: [(serial: Int, title: String)]) -> String {
+        let items = rows.enumerated().map { index, row in
+            """
+            <li id="serial_\(row.serial)" class="serial-position-list">
+              <input type="text" name="serial_works[]" class="number serial-position-field">
+              <span id='position-for-\(row.serial)'>\(index + 1)</span>.
+              <h3 class="heading">\(row.title)</h3>
+            </li>
+            """
+        }.joined()
+        return """
+        <html><head><meta name="csrf-token" content="ser=="></head><body><div id="main">
+        <div id="manage-series"><form action="/series/77/update_positions" method="post">
+        <ul id="sortable_series_list">\(items)</ul></form></div></div></body></html>
+        """
+    }
+
+    /// AO3's "Remove Work From Series" link, as Rails UJS sends it; the manage
+    /// page read back afterwards is the proof (the redirect carries no flash).
+    @Test func removingAWorkFromASeriesSendsAO3sDeleteAndReadsTheRowsBack() async throws {
+        WritingWriteStub.reset(sequences: [
+            "GET \(Self.managePath)": [
+                Self.managePage([(11, "Salt and Static"), (22, "The Weight of Water"), (33, "Long Way")]),
+                Self.managePage([(11, "Salt and Static"), (33, "Long Way")])
+            ],
+            "POST /serial_works/22": ["<html><body><div id=\"main\">Water</div></body></html>"]
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let rows = try await auth.removeWorkFromSeries(
+            seriesID: 77, serialWorkID: 22, expectedGeneration: auth.sessionGeneration, using: stubClient()
+        )
+        #expect(rows.map(\.serialWorkID) == [11, 33])
+        let hits = WritingWriteStub.recorded()
+        #expect(hits.map { "\($0.method) \($0.path)" }
+            == ["GET \(Self.managePath)", "POST /serial_works/22", "GET \(Self.managePath)"])
+        let body = try #require(hits.dropFirst().first?.body)
+        #expect(body.contains("_method=delete"))
+        #expect(body.contains("authenticity_token=ser%3D%3D"))
+    }
+
+    /// A 200 with the row still listed is not a removal.
+    @Test func aRemovalTheManagePageDoesNotShowIsUnconfirmed() async throws {
+        let page = Self.managePage([(11, "Salt and Static"), (22, "The Weight of Water")])
+        WritingWriteStub.reset(sequences: [
+            "GET \(Self.managePath)": [page],
+            "POST /serial_works/22": ["<html><body></body></html>"]
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        await #expect(throws: AO3WorkWriteError.unconfirmed) {
+            try await auth.removeWorkFromSeries(
+                seriesID: 77, serialWorkID: 22, expectedGeneration: auth.sessionGeneration, using: stubClient()
+            )
+        }
+    }
+
+    @Test func aRemovalFromAnEarlierSessionSendsNothing() async throws {
+        WritingWriteStub.reset(["GET \(Self.managePath)": Self.managePage([(11, "A"), (22, "B")])])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let opened = auth.sessionGeneration
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        await #expect(throws: CancellationError.self) {
+            try await auth.removeWorkFromSeries(
+                seriesID: 77, serialWorkID: 22, expectedGeneration: opened, using: stubClient()
+            )
+        }
+        #expect(WritingWriteStub.recorded().isEmpty)
+    }
+
+    /// Bob signs in while alice's manage page (the CSRF GET) is loading.
+    @Test func aSessionChangeDuringTheManagePageRemovesNothing() async throws {
+        WritingWriteStub.reset(["GET \(Self.managePath)": Self.managePage([(11, "A"), (22, "B")])])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let opened = auth.sessionGeneration
+        let client = stubClient(paceSleep: { @MainActor _ in
+            guard auth.username == "alice" else { return }
+            await auth.logout()
+            await auth.login(username: "bob", password: "pw")
+        })
+        await #expect(throws: CancellationError.self) {
+            try await auth.removeWorkFromSeries(seriesID: 77, serialWorkID: 22, expectedGeneration: opened, using: client)
+        }
+        #expect(WritingWriteStub.recorded().map(\.method) == ["GET"])
+    }
+
     /// Previewing a new chapter is AO3's `preview_button` on create; the page
     /// that comes back names the draft it made.
     @Test func previewingANewChapterPostsPreviewAndLearnsTheDraft() async throws {
