@@ -553,19 +553,43 @@ extension AO3Client {
         )
     }
 
-    /// `#previewpane` when AO3 rendered a preview; otherwise the work-skin body.
+    /// Both of otwarchive's preview templates wrap the page in `#previewpane`.
+    /// Anything else is AO3 re-rendering the form instead (`render :new` /
+    /// `:edit` on a validation failure), so it is refused rather than shown as
+    /// a preview — with AO3's own reason when `error_messages_for` gave one.
     static func parsePreviewHTML(from html: String) throws -> AO3PreviewHTML {
         let doc = try SwiftSoup.parse(html)
-        if let pane = try doc.select("#previewpane, #workskin, div.draft.work").first() {
-            let inner = (try? pane.html()) ?? ""
-            if !inner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return AO3PreviewHTML(html: inner)
+        guard let pane = try doc.select("#previewpane").first() else {
+            if let reason = try doc.select("#error li").first()?.text(), !reason.isEmpty {
+                throw AO3WorkWriteError.rejected(reason)
+            }
+            throw AO3WorkWriteError.previewUnavailable
+        }
+        // The posting fieldset in preview mode swaps Preview for `edit_button`.
+        // The form sits inside the pane for a work, after it for a chapter.
+        let form = try doc.select("form").array().first {
+            (try? $0.select("[name=\(AO3WorkFormField.editButton)]").first()) != nil
+        }
+        let action = form.flatMap { try? $0.attr("action") }.flatMap(writingAbsoluteURL)?.path ?? ""
+        try pane.select("form, .landmark, img").remove()
+
+        var blocks: [AO3PreviewHTML.Block] = []
+        for element in try pane.select("h2.title, h3.title, .module > h3.heading, .userstuff") {
+            if element.hasClass("userstuff") {
+                blocks += try parseRichText(element).blocks.map { .text(AO3RichText(blocks: [$0])) }
+            } else if let text = try? element.text().trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty {
+                blocks.append(element.hasClass("title") ? .heading(text) : .label(text))
             }
         }
-        if let main = try doc.select("#main").first() {
-            return AO3PreviewHTML(html: (try? main.html()) ?? html)
-        }
-        throw AO3Error.parse
+        return AO3PreviewHTML(
+            html: try pane.html(),
+            workID: workIDFromPath(action),
+            chapterID: chapterID(inPath: action),
+            csrfToken: parseCSRFToken(from: html),
+            notice: writeSuccessMessage(in: html),
+            blocks: blocks
+        )
     }
 
     // MARK: - Field helpers
