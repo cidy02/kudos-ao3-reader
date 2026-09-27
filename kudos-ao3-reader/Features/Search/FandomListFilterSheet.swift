@@ -7,6 +7,8 @@ import SwiftUI
 struct FandomListFilterSheet: View {
     @Binding var options: FandomListFilterOptions
     let families: [FandomFamily]
+    /// 1al's switch. Off, "more than one tag" has no groups to judge.
+    var groupsVariants = true
     let library: FandomLibraryIndex
     var palette: SubjectPalette
     var onApply: () -> Void
@@ -65,9 +67,12 @@ struct FandomListFilterSheet: View {
                     sectionLabel("Grouping")
                     toggleRow(
                         title: "Only fandoms with more than one tag",
-                        detail: familyCountLabel(tallies.multiTagFamilies),
+                        detail: groupsVariants
+                            ? familyCountLabel(tallies.multiTagFamilies)
+                            : "Turn on Group variants to use this",
                         isOn: $options.multiTagOnly
                     )
+                    .disabled(!groupsVariants)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)

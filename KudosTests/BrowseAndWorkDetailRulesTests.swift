@@ -80,6 +80,17 @@ struct BrowseAndWorkDetailRulesTests {
         ) == "\(1_204.formatted()) of \(9_412.formatted()) tags · most works")
     }
 
+    /// Group variants off: two tags of one fandom are two rows, not "2 tags
+    /// in 2 fandoms". The ungrouped list names no fandom count at all.
+    @Test func ungroupedFandomTallyClaimsNoFandoms() {
+        #expect(FandomListTally.text(
+            totalTags: 2, families: nil, shownTags: 2, isFiltered: false, sort: .alphabetical
+        ) == "2 tags · A–Z")
+        #expect(FandomListTally.text(
+            totalTags: 2, families: 1, shownTags: 2, isFiltered: false, sort: .alphabetical
+        ) == "2 tags in 1 fandom · A–Z")
+    }
+
     // MARK: Work Details figures
 
     @Test func workDetailPrefersTheFresherRemoteFigure() {

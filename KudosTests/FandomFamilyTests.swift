@@ -16,16 +16,44 @@ struct FandomFamilyTests {
     }
 
     /// 1al's "Group variants" off: siblings that would group stay separate
-    /// rows, titled by the raw AO3 name; a repeated tag is still one row.
+    /// rows, each keeping its raw AO3 name as its filter; a repeated tag is
+    /// still one row.
     @Test func ungroupedListsEveryRawTagOnItsOwn() {
         let families = FandomFamily.ungrouped(fandoms: [
             AO3Fandom(name: "Doctor Who (1963)", workCount: 4_000),
             AO3Fandom(name: "Doctor Who (2005)", workCount: 12_000),
             AO3Fandom(name: "Doctor Who (2005)", workCount: 12_000),
         ])
-        #expect(families.map(\.parsedTitle) == ["Doctor Who (1963)", "Doctor Who (2005)"])
+        #expect(families.count == 2)
         #expect(families.allSatisfy { $0.memberCount == 1 })
         #expect(families.map(\.includedFilterNames) == [["Doctor Who (1963)"], ["Doctor Who (2005)"]])
+    }
+
+    /// Ungrouped rows sort and section under the title the row displays —
+    /// the last `|` segment's title — not the raw multilingual tag, which
+    /// would file "Attack on Titan" under #.
+    @Test func ungroupedRowsSortUnderTheirDisplayedTitle() {
+        let families = FandomFamily.ungrouped(fandoms: [
+            AO3Fandom(name: "進撃の巨人 | Shingeki no Kyojin | Attack on Titan (Anime)", workCount: 90_000),
+            AO3Fandom(name: "Bleach (Anime & Manga)", workCount: 1),
+        ])
+        #expect(families.map(\.parsedTitle) == ["Attack on Titan", "Bleach"])
+        let sections = FandomFamily.letterSections(FandomFamily.sorted(families, by: .alphabetical))
+        #expect(sections.map(\.letter) == ["A", "B"])
+    }
+
+    /// "More than one tag" would empty an ungrouped list, where every row is
+    /// one tag. Switching grouping off clears it; switching on leaves it be.
+    @Test func switchingGroupingOffClearsTheGroupingOnlyFilter() {
+        var options = FandomListFilterOptions(hideRPF: true, multiTagOnly: true)
+        options.groupsVariantsChanged(to: true)
+        #expect(options.multiTagOnly)
+        options.groupsVariantsChanged(to: false)
+        #expect(!options.multiTagOnly)
+        #expect(options.hideRPF)
+
+        let ungrouped = FandomFamily.ungrouped(fandoms: [AO3Fandom(name: "Naruto", workCount: 3)])
+        #expect(FandomFamilyFilters.apply(ungrouped, options: options).count == 1)
     }
 
     @Test func twoTagsWithTheSameParsedTitleGroupAndKeepOriginals() {

@@ -139,14 +139,18 @@ extension FandomFamily {
 }
 
 extension FandomFamily {
-    /// 1al's "Group variants" off: the raw tag list, each tag its own row
-    /// titled by its full AO3 name, so the same sorts, letter sections and
-    /// filters apply unchanged. Duplicates are dropped as `grouped` drops them.
+    /// 1al's "Group variants" off: the raw tag list, each tag its own row, so
+    /// the same sorts, letter sections and filters apply unchanged. A row is
+    /// sorted and sectioned by the title it displays (`FandomListRow` shows
+    /// the last `|` segment's title), not by the raw multilingual name — "進撃の
+    /// 巨人 | … | Attack on Titan" files under A. Duplicates are dropped as
+    /// `grouped` drops them.
     static func ungrouped(fandoms: [AO3Fandom]) -> [FandomFamily] {
         var seen = Set<String>()
         return fandoms.compactMap { fandom in
             guard seen.insert(fandom.name).inserted else { return nil }
-            return FandomFamily(parsedTitle: fandom.name, members: [Member(fandom: fandom)])
+            let member = Member(fandom: fandom)
+            return FandomFamily(parsedTitle: member.displayName.title, members: [member])
         }
     }
 }
@@ -292,6 +296,13 @@ nonisolated struct FandomListFilterOptions: Equatable, Sendable {
             || favouritedOnly
             || downloadsOnly
             || multiTagOnly
+    }
+
+    /// "More than one tag" is a grouping filter. With Group variants off every
+    /// row is one tag, so it would empty the list (1al): switching off clears
+    /// it, and the sheet disables it until grouping is back.
+    mutating func groupsVariantsChanged(to isOn: Bool) {
+        if !isOn { multiTagOnly = false }
     }
 
     var activeFilterCount: Int {
