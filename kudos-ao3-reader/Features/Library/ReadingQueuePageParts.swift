@@ -26,6 +26,19 @@ enum ReadingQueueFacts {
         }
     }
 
+    /// Spec 1b's "next up 3": the 1-based place of the first work not yet
+    /// finished, in queue order. Nil when every work is finished (or none).
+    static func nextUpPosition(states: [SavedWork.ReadingState]) -> Int? {
+        states.firstIndex { $0 != .finished }.map { $0 + 1 }
+    }
+
+    /// The queue card's footer — spec 1b: "7 works · next up 3".
+    static func cardFooter(states: [SavedWork.ReadingState]) -> String {
+        let count = "\(states.count) work\(states.count == 1 ? "" : "s")"
+        guard let position = nextUpPosition(states: states) else { return count }
+        return "\(count) · next up \(position)"
+    }
+
     /// Queue details' "Last read": the latest of the member works' own dates.
     static func lastRead(_ dates: [Date?]) -> Date? {
         dates.compactMap(\.self).max()
