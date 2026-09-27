@@ -130,7 +130,7 @@ struct ChallengeSettingsView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Sign-up requirements")
+            SectionRuleHeader(title: isPromptMeme ? "Prompt requirements" : "Sign-up requirements")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             requirementsPanel.pageBodyRow(top: 8, gutter: gutter)
         }
@@ -143,18 +143,55 @@ struct ChallengeSettingsView: View {
             }
         }
 
-        Section {
-            SectionRuleHeader(title: "Assignments")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-            assignmentsPanel.pageBodyRow(top: 8, gutter: gutter)
-            assignmentsFootnote.pageBodyRow(top: 8, gutter: gutter)
-        }
+        // Prompt Meme replaces the whole lower half (the spec's second layout):
+        // no sign-up matching, no assignments, nothing to run on AO3.
+        if isPromptMeme {
+            Section {
+                SectionRuleHeader(title: "Prompts")
+                    .padding(.bottom, 8)
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
+            }
+            Section {
+                promptsRows
+                promptsFootnote.pageBodyRow(top: 8, gutter: gutter)
+            }
+        } else {
+            Section {
+                SectionRuleHeader(title: "Assignments")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                assignmentsPanel.pageBodyRow(top: 8, gutter: gutter)
+                assignmentsFootnote.pageBodyRow(top: 8, gutter: gutter)
+            }
 
-        Section {
-            SectionRuleHeader(title: "At AO3")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-            escapeHatchPanel.pageBodyRow(top: 8, gutter: gutter)
+            Section {
+                SectionRuleHeader(title: "At AO3")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                escapeHatchPanel.pageBodyRow(top: 8, gutter: gutter)
+            }
         }
+    }
+
+    private var isPromptMeme: Bool { settings.kind == .promptMeme }
+
+    /// Two `List` rows so only the first pushes.
+    @ViewBuilder
+    private var promptsRows: some View {
+        SubjectFormRow(label: "Prompts", value: "Claim and fill", showsDisclosure: true) { EmptyView() }
+            .subjectRowNavigation(accessibilityLabel: "Prompts") {
+                PromptMemeView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
+            }
+            .panelSegment(0, of: 2, gutter: gutter)
+        SubjectFormRow(label: "Prompts posted anonymously", value: settings.isAnonymous ? "Yes" : "No")
+            .panelSegment(1, of: 2, gutter: gutter)
+    }
+
+    private var promptsFootnote: some View {
+        Text("A Prompt Meme has no matching and no assignments: prompts are posted to the meme "
+            + "and claimed freely, so there is nothing to match or send.")
+            .font(.system(size: 11.5))
+            .foregroundStyle(Color.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
     }
 
     // MARK: - Panels
@@ -256,36 +293,43 @@ struct ChallengeSettingsView: View {
             .padding(.horizontal, 4)
     }
 
+    /// The request restriction's own ranges. A prompt meme's prompts are its
+    /// requests, so it also says how many one sign-up may post.
     private var requirementsPanel: some View {
         let limits = settings.limits
         let restriction = settings.requestRestriction
-        let fandomReq = restriction.fandomRequired > 0 ? restriction.fandomRequired : limits.requestsRequired
-        let fandomAllowed = restriction.fandomAllowed > 0 ? restriction.fandomAllowed : limits.requestsAllowed
-        let relReq = restriction.relationshipRequired
-        let relAllowed = restriction.relationshipAllowed
-        let charReq = restriction.characterRequired
-        let charAllowed = restriction.characterAllowed
+        let noun = isPromptMeme ? "prompt" : "request"
 
         return VStack(spacing: 0) {
+            if isPromptMeme {
+                SubjectFormRow(
+                    label: "Prompts per sign-up",
+                    value: "\(limits.requestsRequired) to \(limits.requestsAllowed)",
+                    isMonospaced: true
+                )
+
+                SubjectRowSeparator()
+            }
+
             SubjectFormRow(
-                label: "Fandoms per request",
-                value: "\(fandomReq) to \(fandomAllowed)",
+                label: "Fandoms per \(noun)",
+                value: "\(restriction.fandomRequired) to \(restriction.fandomAllowed)",
                 isMonospaced: true
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Relationships per request",
-                value: "\(relReq) to \(relAllowed)",
+                label: "Relationships per \(noun)",
+                value: "\(restriction.relationshipRequired) to \(restriction.relationshipAllowed)",
                 isMonospaced: true
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Characters per request",
-                value: "\(charReq) to \(charAllowed)",
+                label: "Characters per \(noun)",
+                value: "\(restriction.characterRequired) to \(restriction.characterAllowed)",
                 isMonospaced: true
             )
 
@@ -304,12 +348,14 @@ struct ChallengeSettingsView: View {
                     .disabled(true)
             }
 
-            SubjectRowSeparator()
+            if !isPromptMeme {
+                SubjectRowSeparator()
 
-            SubjectFormRow(label: "Require a fandom match", arrangement: .control) {
-                Toggle("", isOn: .constant(!restriction.allowAnyFandom))
-                    .labelsHidden()
-                    .disabled(true)
+                SubjectFormRow(label: "Require a fandom match", arrangement: .control) {
+                    Toggle("", isOn: .constant(!restriction.allowAnyFandom))
+                        .labelsHidden()
+                        .disabled(true)
+                }
             }
         }
         .subjectPanel()
@@ -477,6 +523,12 @@ struct ChallengeSettingsView: View {
             tagSetLinks = (try? await AO3Client.shared.collectionTagSets(
                 slug: collectionSlug, request: profileRequest
             )) ?? []
+
+            // A prompt meme has no sign-up rows or assignments to count.
+            guard form.settings.kind == .giftExchange else {
+                phase = .loaded
+                return
+            }
 
             signUpTotal = try? await loadSignUpTotal()
 
