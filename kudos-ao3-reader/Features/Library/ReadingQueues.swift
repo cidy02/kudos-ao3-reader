@@ -51,7 +51,7 @@ struct ReadingQueueCard: View {
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
                 .foregroundStyle(.primary)
-            Text("\(works.count) work\(works.count == 1 ? "" : "s")")
+            Text(ReadingQueueFacts.cardFooter(states: works.map(\.readingState)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -59,32 +59,43 @@ struct ReadingQueueCard: View {
         .frame(width: cardSize.width, alignment: .leading)
     }
 
-    // Safari Tab-Groups style: a 2×2 grid of the queue's own first 4 works (each
-    // its own hued title/author cell), reading as a peek at what's actually
-    // queued rather than an abstract icon. An empty queue has no titles to
-    // preview, so it shows 4 skeleton cells in the same grid shape instead —
+    // Spec 1b's face: the next-up work, not a peek at the first four. An empty
+    // queue has no titles to preview, so it shows 4 skeleton cells instead —
     // "a place for works to land" rather than a dead, contentless tile.
     @ViewBuilder
     private var tile: some View {
-        if works.isEmpty {
-            skeletonGrid
+        let states = works.map(\.readingState)
+        if let position = ReadingQueueFacts.nextUpPosition(states: states) ?? (works.isEmpty ? nil : 1) {
+            nextUpFace(works[position - 1], progress: ReadingQueueFacts.progress(of: states))
         } else {
-            tabGroupGrid
+            skeletonGrid
         }
     }
 
-    private var tabGroupGrid: some View {
-        let cells = Array(works.prefix(4))
-        return gridFrame {
-            HStack(spacing: 4) {
-                gridCell(!cells.isEmpty ? cells[0] : nil)
-                gridCell(cells.count > 1 ? cells[1] : nil)
+    /// The next-up work's fandom and title over its own wash, with 1h's
+    /// finished / in-progress / unread strip for the whole queue along the
+    /// bottom. A fully read queue shows its first work.
+    private func nextUpFace(_ work: SavedWork, progress: ReadingQueueFacts.Progress) -> some View {
+        let palette = themeManager.appTheme.subjectPalette(
+            hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+        )
+        let shape = RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+        let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return VStack(alignment: .leading, spacing: 6) {
+            if let fandom {
+                SubjectKicker(text: fandom, palette: palette, size: 8.5)
             }
-            HStack(spacing: 4) {
-                gridCell(cells.count > 2 ? cells[2] : nil)
-                gridCell(cells.count > 3 ? cells[3] : nil)
-            }
+            Text(work.title)
+                .font(.system(size: 13, weight: .bold))
+                .lineLimit(3)
+                .foregroundStyle(.primary)
+            Spacer(minLength: 0)
+            QueueProgressStrip(progress: progress, palette: palette)
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(shape.fill(themeManager.appTheme.cardSurface).overlay(shape.fill(palette.rowWash)))
+        .overlay(shape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
     }
 
     // No `.skeletonShimmer()` — this isn't a loading state waiting on a request
@@ -103,9 +114,8 @@ struct ReadingQueueCard: View {
         }
     }
 
-    /// Shared 2×2 grid chrome (padding, material background, border, shadow) —
-    /// both `tabGroupGrid` and `skeletonGrid` are just this frame around
-    /// different row content.
+    /// The empty queue's 2×2 grid chrome (padding, material background, border,
+    /// shadow).
     private func gridFrame(@ViewBuilder rows: () -> some View) -> some View {
         VStack(spacing: 4, content: rows)
             .padding(6)
@@ -121,10 +131,8 @@ struct ReadingQueueCard: View {
             .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
     }
 
-    /// One skeleton cell, matching `gridCell`'s current layout so an empty
-    /// queue previews the same shape it'll fill into: title placeholder,
-    /// a 2×2 of blocks the same size as `miniStatusTile`'s real tiles, then
-    /// author/fandom placeholder lines.
+    /// One skeleton cell: title placeholder, a 2×2 of status-tile-sized blocks,
+    /// then author/fandom placeholder lines.
     private func skeletonCell() -> some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         return VStack(alignment: .leading, spacing: 2) {
@@ -142,9 +150,7 @@ struct ReadingQueueCard: View {
         .clipShape(shape)
     }
 
-    /// Placeholder for `miniStatusGrid` — same 14×14/3pt-radius/2pt-gap
-    /// geometry as `miniStatusTile`, just `SkeletonBlock` instead of a real
-    /// hued icon tile.
+    /// A 2×2 of 14×14 `SkeletonBlock`s, 3pt radius, 2pt gap.
     private var skeletonStatusGrid: some View {
         VStack(spacing: 2) {
             HStack(spacing: 2) {
@@ -157,56 +163,6 @@ struct ReadingQueueCard: View {
             }
         }
     }
-
-    /// One grid cell, left-aligned like every other card in the app, over its
-    /// own title-hued tint: `work`'s title at top, its rating/category/
-    /// warnings/completion as a compact icon-only 2×2 (AO3's own tag-grid
-    /// idea, reimagined for this app's chip colors/symbols) centered in the
-    /// middle, then author and fandom at the bottom. An empty placeholder
-    /// when the queue has fewer than 4 works.
-    @ViewBuilder
-    private func gridCell(_ work: SavedWork?) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        Group {
-            if let work {
-                let hue = CoverArt.hue(for: work.title)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(work.title)
-                        .font(.system(size: 9, weight: .semibold))
-                        .lineLimit(2)
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                    WorkStatusIconGrid(
-                        rating: work.rating.isEmpty ? nil : work.rating,
-                        categories: work.workCategories,
-                        warnings: work.workWarnings,
-                        completion: work.completionStatus
-                    )
-                    .frame(maxWidth: .infinity)
-                    Spacer(minLength: 0)
-                    if !work.author.isEmpty {
-                        Text(work.author)
-                            .font(.system(size: 8))
-                            .lineLimit(1)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let fandom = work.workFandoms.first, !fandom.isEmpty {
-                        Text(fandom)
-                            .font(.system(size: 7))
-                            .lineLimit(1)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .padding(6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(themeManager.appTheme.carouselCardTint(hue: hue))
-            } else {
-                Color.clear
-            }
-        }
-        .clipShape(shape)
-    }
-
 }
 
 struct NewReadingQueueCard: View {
@@ -230,11 +186,11 @@ struct NewReadingQueueCard: View {
                         .font(.system(size: 34, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-            Text("New Queue")
+            Text("New queue")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
                 .foregroundStyle(.primary)
-            Text("Tap to create")
+            Text("Plan what to read next")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

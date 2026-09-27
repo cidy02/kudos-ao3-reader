@@ -20,6 +20,17 @@ struct ReadingQueueFactsTests {
         #expect(ReadingQueueFacts.lastRead([nil, nil]) == nil)
     }
 
+    /// 1b.5: "7 works · next up 3" — the first work not yet finished.
+    @Test func cardFooterNamesTheFirstUnfinishedPlace() {
+        let states: [SavedWork.ReadingState] = [.finished, .finished, .inProgress, .unread]
+        #expect(ReadingQueueFacts.nextUpPosition(states: states) == 3)
+        #expect(ReadingQueueFacts.cardFooter(states: states) == "4 works · next up 3")
+        #expect(ReadingQueueFacts.cardFooter(states: [.unread]) == "1 work · next up 1")
+        // Nothing left to read, or nothing queued: no "next up".
+        #expect(ReadingQueueFacts.cardFooter(states: [.finished, .finished]) == "2 works")
+        #expect(ReadingQueueFacts.cardFooter(states: []) == "0 works")
+    }
+
     @Test func kickerNamesTheOriginTab() {
         #expect(ReadingQueueFacts.kicker(origin: "Home") == "Home › Queues")
         #expect(ReadingQueueFacts.kicker(origin: "Library") == "Library › Queues")
