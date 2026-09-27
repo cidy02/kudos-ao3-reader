@@ -70,6 +70,10 @@ struct AO3ChallengeFormTests {
         #expect(meme.limits?.offersAllowed == 0)
         #expect(!meme.takesOffers)
         #expect(meme.offerTagLimits == nil)
+        // 1cc's "New prompt" posts this form: a request, and no offer at all.
+        let params = AO3Client.challengeSignUpParameters(meme).map(\.0)
+        #expect(params.contains("challenge_signup[requests_attributes][0][tag_set_attributes][fandom_tagnames]"))
+        #expect(!params.contains { $0.contains("offers_attributes") })
     }
 
     /// Mirrors `Prompt#correct_number_of_tags`. A type with no field on the

@@ -8,12 +8,11 @@ import SwiftUI
 /// than sitting alongside them. Each card reads as prose, the way a prompt
 /// actually is, with only the claim state as chrome (no cover art, no stat
 /// strip). Claim and release are real writes (`AO3ChallengeActions.claimPrompt`
-/// / `releasePrompt`); posting a brand-new prompt has no client endpoint at
-/// all — `AO3ChallengeActions.swift` has no method for it — so "New prompt"
-/// is an honest "Opens AO3" row rather than a form this app can't submit.
-/// "Fill it" is the same story: filling someone else's claimed prompt means
-/// posting a whole new work, which this screen doesn't attempt either, so it
-/// too opens the meme on AO3 instead of gating the participant from writing.
+/// / `releasePrompt`). A prompt-meme prompt is a request on the poster's
+/// sign-up, so "New prompt" opens the sign-up form (1ca), which AO3 serves as
+/// requests only and redirects to the existing sign-up for a returning poster.
+/// "Fill it" means posting a whole new work, which this screen doesn't
+/// attempt, so it opens the meme on AO3 instead.
 struct PromptMemeView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
@@ -79,6 +78,17 @@ struct PromptMemeView: View {
     }
 
     var body: some View {
+        ZStack(alignment: .bottom) {
+            promptList
+            if auth.isLoggedIn {
+                newPromptBar
+            }
+        }
+        .task { await loadPromptsIfNeeded() }
+        .refreshable { await loadPrompts(page: 1) }
+    }
+
+    private var promptList: some View {
         List {
             Section {
                 header.pageBodyRow(top: 20, gutter: selfGuttered)
@@ -122,8 +132,35 @@ struct PromptMemeView: View {
         .navigationTitle("Prompts")
         #endif
         .subjectScreenWash(palette: palette)
-        .task { await loadPromptsIfNeeded() }
-        .refreshable { await loadPrompts(page: 1) }
+    }
+
+    /// The spec's bottom-bar "New prompt": AO3's sign-up form for this meme.
+    private var newPromptBar: some View {
+        NavigationLink {
+            ChallengeSignUpView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
+        } label: {
+            Text("New prompt")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(palette.accentOnFill)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.accent))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 26)
+        .background(
+            LinearGradient(
+                colors: [
+                    theme.appTheme.cardBackdrop,
+                    theme.appTheme.cardBackdrop.opacity(0.96),
+                    theme.appTheme.cardBackdrop.opacity(0.0)
+                ],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+        )
     }
 
     // MARK: - Header & Filter
@@ -181,10 +218,11 @@ struct PromptMemeView: View {
             }
         }
 
+        // Room for the floating "New prompt" bar.
         Section {
-            SectionRuleHeader(title: "At AO3")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
-            escapeHatchPanel.pageBodyRow(top: 8, gutter: gutter)
+            Spacer(minLength: 70)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
     }
 
@@ -200,19 +238,31 @@ struct PromptMemeView: View {
 
     private func promptCard(_ prompt: AO3PromptMemePrompt) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            // The spec's kicker is the fandom; a multi-fandom prompt adds "+N".
             HStack(spacing: 7) {
-                if !prompt.title.isEmpty {
-                    Text(prompt.title.uppercased())
+                if let fandom = prompt.fandoms.first {
+                    Text(fandom.uppercased())
                         .font(.system(size: 9, weight: .bold))
                         .tracking(9 * 0.11)
                         .foregroundStyle(palette.accent)
                         .lineLimit(1)
+                    if prompt.fandoms.count > 1 {
+                        Text("+\(prompt.fandoms.count - 1)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(palette.accent.opacity(0.6))
+                    }
                 }
 
                 Text(prompt.isClaimed ? "claimed" : "unclaimed")
                     .font(.system(size: 9, weight: .semibold))
                     .tracking(9 * 0.05)
                     .foregroundStyle(Color.secondary.opacity(0.6))
+            }
+
+            if !prompt.title.isEmpty {
+                Text(prompt.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
             }
 
             Text(prompt.promptText)
@@ -254,17 +304,18 @@ struct PromptMemeView: View {
                 promptActionButton(title: "Release", isProminent: false, isInFlight: isInFlight) {
                     Task { await release(prompt) }
                 }
+            } else if prompt.canClaim {
+                // AO3 printed Claim for this viewer; a prompt meme takes several claims.
+                Spacer()
+
+                promptActionButton(title: "Claim", isProminent: true, isInFlight: isInFlight) {
+                    Task { await claim(prompt) }
+                }
             } else if prompt.isClaimed {
                 Spacer()
 
                 promptActionButton(title: "Fill it", systemImage: "safari", isProminent: false, isInFlight: false) {
                     router.open(AO3ChallengeURL.promptMeme(slug: collectionSlug))
-                }
-            } else {
-                Spacer()
-
-                promptActionButton(title: "Claim", isProminent: true, isInFlight: isInFlight) {
-                    Task { await claim(prompt) }
                 }
             }
         }
@@ -320,7 +371,7 @@ struct PromptMemeView: View {
         Text("Prompt Meme replaces sign-ups and assignments entirely — there is no matching, "
             + "so nothing here is matched or assigned. Claiming is an AO3 write, "
             + "and a claim can be released; both need the prompt id, which is on the row. "
-            + "Posting a new prompt or a fill happens on AO3.")
+            + "A new prompt is a request on your sign-up; posting a fill happens on AO3.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -336,19 +387,6 @@ struct PromptMemeView: View {
         ) { page in
             Task { await loadPrompts(page: page) }
         }
-    }
-
-    private var escapeHatchPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(
-                label: "New prompt",
-                value: "Opens AO3",
-                showsDisclosure: true
-            ) {
-                router.open(AO3ChallengeURL.promptMeme(slug: collectionSlug))
-            }
-        }
-        .subjectPanel()
     }
 
     // MARK: - State Cards

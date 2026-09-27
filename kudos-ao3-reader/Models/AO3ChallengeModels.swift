@@ -617,17 +617,26 @@ nonisolated enum AO3ChallengeAssignmentList: String, Hashable, Sendable {
 }
 
 nonisolated struct AO3PromptMemePrompt: Hashable, Sendable, Identifiable {
+    /// AO3's prompt id, which claiming posts. A row AO3 printed no id for (not
+    /// claimable, not the viewer's) carries a negative stand-in for identity only.
     var id: Int
     var collectionSlug: String
     var promptText: String
     var title: String = ""
+    /// The card's kicker (1cc): the prompt's fandoms, kept off the tag line.
+    var fandoms: [String] = []
     var tagSummary: String = ""
     var isAnonymous: Bool = false
     /// Hidden when `isAnonymous` even if a later cache knows the owner (1cc).
     var ownerPseud: String?
+    /// The viewer's own claim ("Drop Claim"), which releasing deletes.
     var claimID: Int?
     var claimedByCurrentUser: Bool = false
-    var isClaimed: Bool { claimID != nil }
+    /// Everyone's unfulfilled claims ("Claimed By"). A prompt meme takes several.
+    var claimantCount: Int = 0
+    /// AO3 printed a Claim button for this viewer.
+    var canClaim: Bool = false
+    var isClaimed: Bool { claimantCount > 0 || claimedByCurrentUser }
 
     var displayedOwner: String? {
         isAnonymous ? nil : ownerPseud
