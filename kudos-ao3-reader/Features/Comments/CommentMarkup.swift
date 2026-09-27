@@ -67,8 +67,11 @@ enum CommentMarkupTag: String, CaseIterable, Identifiable, Hashable {
     var element: String { shared.element }
     /// SF Symbol for the button.
     var symbol: String { shared.symbol }
-    /// What the tray prints under the name.
-    var tagLabel: String { shared.tagLabel }
+    /// What the tray prints under the name. Heading is the board's range
+    /// (`h1–h6`), not the one level a tap with no chip selected writes.
+    var tagLabel: String {
+        self == .heading ? CommentMarkup.headingRangeLabel : shared.tagLabel
+    }
 
     /// The six the compact bar carries before the tray is opened (spec 1be).
     static let quickBar: [CommentMarkupTag] = [.bold, .italic, .underline, .strike, .link, .quote]
@@ -91,21 +94,39 @@ struct CommentMarkupResult: Equatable {
 
 /// `AO3Markup` in the coordinates a SwiftUI `TextEditor` works in.
 enum CommentMarkup {
+    /// Levels AO3 keeps in a comment (Q20, `Sanitize::Config::ARCHIVE`: h1–h6).
+    /// The chapter editor's shared heading stays h3; a comment picks from this
+    /// list. h3 is the tap on the Heading tile when no chip is chosen — AO3
+    /// already spends h1 on the site and h2 on the work title.
+    static let headingLevels = Array(1 ... 6)
+    static let defaultHeadingLevel = 3
+    /// The board's own label under Heading, en dash included.
+    static let headingRangeLabel = "h1–h6"
+
+    /// The element a heading chip writes, or nil when `level` would not survive
+    /// the comment sanitizer.
+    static func headingElement(level: Int) -> String? {
+        guard headingLevels.contains(level) else { return nil }
+        return "h\(level)"
+    }
+
     /// Writes `tag` into `text` around `selection`.
     ///
     /// Total by construction: any `(text, selection)` pair returns a buffer, and
     /// a selection that no longer belongs to this string appends at the end
     /// rather than trapping or eating a span it never covered.
+    ///
+    /// `headingLevel` is read only for `.heading`. Nil uses `defaultHeadingLevel`.
+    /// Anything outside `headingLevels` does too, so the buffer never grows an
+    /// `<h7>` AO3 would strip.
     static func apply(
         _ tag: CommentMarkupTag,
         to text: String,
-        in selection: Range<String.Index>
+        in selection: Range<String.Index>,
+        headingLevel: Int? = nil
     ) -> CommentMarkupResult {
         let range = AO3Markup.validRange(selection, in: text)
-        // No `link:` — the tray has nowhere to ask for a URL, so the link tag
-        // writes an empty href and puts the caret in it. The chapter editor,
-        // which does ask, is the caller that passes one.
-        let splice = AO3Markup.splice(tag.shared, in: text, over: range)
+        let splice = renderedSplice(tag, in: text, over: range, headingLevel: headingLevel)
 
         var out = text
         out.replaceSubrange(range, with: splice.text)
@@ -120,6 +141,26 @@ enum CommentMarkup {
         let upper = out.utf8.index(lower, offsetBy: splice.body.utf8.count)
         return CommentMarkupResult(text: out, selection: lower..<upper)
     }
+
+    /// Heading writes the chosen level here. Every other tag still goes through
+    /// `AO3Markup`, so a comment and a chapter spell `<strong>` the same way.
+    /// No `link:` — the tray has nowhere to ask for a URL, so the link tag
+    /// writes an empty href and puts the caret in it.
+    private static func renderedSplice(
+        _ tag: CommentMarkupTag,
+        in text: String,
+        over range: Range<String.Index>,
+        headingLevel: Int?
+    ) -> AO3Markup.Splice {
+        guard tag == .heading else {
+            return AO3Markup.splice(tag.shared, in: text, over: range)
+        }
+        let element = headingElement(level: headingLevel ?? defaultHeadingLevel)
+            ?? headingElement(level: defaultHeadingLevel)
+            ?? "h3"
+        let selected = String(text[range])
+        return AO3Markup.Splice(prefix: "<\(element)>", body: selected, suffix: "</\(element)>")
+    }
 }
 
 // MARK: - SwiftUI selection bridge
@@ -131,8 +172,15 @@ extension CommentMarkup {
     /// targets 26.5, so a real selection range is available here — the pure
     /// function above does not depend on that, and still does the right thing
     /// given nothing but an insertion point.
-    static func apply(_ tag: CommentMarkupTag, text: inout String, selection: inout TextSelection?) {
-        let result = apply(tag, to: text, in: range(of: selection, in: text))
+    static func apply(
+        _ tag: CommentMarkupTag,
+        text: inout String,
+        selection: inout TextSelection?,
+        headingLevel: Int? = nil
+    ) {
+        let result = apply(
+            tag, to: text, in: range(of: selection, in: text), headingLevel: headingLevel
+        )
         text = result.text
         selection = TextSelection(range: result.selection)
     }
@@ -204,18 +252,40 @@ struct CommentFormatBar: View {
     }
 }
 
+// MARK: - Tray layout
+
+/// Artboard 1bf's grid. Four columns at reading sizes; fewer once Dynamic Type
+/// is an accessibility size, so "blockquote" under "Quote" still fits.
+enum CommentFormattingLayout {
+    /// The board's `grid-template-columns: repeat(4, 1fr)` and `gap: 7px`.
+    static let restingColumnCount = 4
+    static let gridGap: CGFloat = 7
+    /// The board's tile: 58pt tall, 11pt corner.
+    static let tileMinHeight: CGFloat = 58
+    static let tileCornerRadius: CGFloat = 11
+    /// Inside the tile, so the glyph and the two labels are not flush to the edge.
+    static let tilePaddingH: CGFloat = 6
+    static let tilePaddingV: CGFloat = 8
+
+    static func columnCount(for typeSize: DynamicTypeSize) -> Int {
+        if typeSize >= .accessibility3 { return 1 }
+        if typeSize.isAccessibilitySize { return 2 }
+        return restingColumnCount
+    }
+}
+
 // MARK: - Formatting tray
 
 /// Artboard 1bf's sheet. Every tag AO3 keeps, grouped as the artboard groups
-/// them, each row printing the literal tag under the human name.
+/// them, each tile printing the literal tag under the human name.
 ///
 /// Printing the tag is the entire point of the screen: the tray is training
-/// wheels for the website, where the user will type `<strong>` by hand. A row
+/// wheels for the website, where the user will type `<strong>` by hand. A tile
 /// that said only "Bold" would teach nothing.
 ///
-/// The artboard draws the two groups as 4-column tiles. Rows instead: the tile
-/// has room for a glyph and two words, and "blockquote" beside "Quote" is the
-/// pairing that has to be legible at accessibility text sizes.
+/// Heading is one tile labelled `h1–h6`, then a row of `SubjectChip`s for the
+/// levels Q20 keeps. The chip's own insets are its internal padding — this
+/// row does not draw a bare label in their place.
 struct CommentFormattingTray: View {
     @Binding var text: String
     @Binding var selection: TextSelection?
@@ -226,18 +296,16 @@ struct CommentFormattingTray: View {
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 0) {
             titleRow
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 14) {
                     ForEach(CommentMarkupTag.Group.allCases) { group in
-                        VStack(alignment: .leading, spacing: 8) {
-                            SubjectFieldLabel(text: group.title, style: .formGroup)
-                            panel(for: group)
-                        }
+                        groupSection(group)
                     }
                 }
                 .padding(.horizontal, SubjectMetrics.accountGutter)
@@ -271,45 +339,139 @@ struct CommentFormattingTray: View {
             .minimumHitTarget()
         }
         .padding(.horizontal, SubjectMetrics.accountGutter)
-        .padding(.top, 14)
+        .frame(minHeight: 44)
     }
 
-    private func panel(for group: CommentMarkupTag.Group) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array(group.tags.enumerated()), id: \.element) { index, tag in
-                if index > 0 {
-                    SubjectRowSeparator()
-                }
-                row(tag)
+    private func groupSection(_ group: CommentMarkupTag.Group) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            // `.field` is the label that sits over a cluster of chips (10pt,
+            // tracking .1em). The board's group titles are that, not a form-row
+            // header and not `SectionRuleHeader`'s page rule.
+            SubjectFieldLabel(text: group.title, style: .field)
+            tileGrid(for: group)
+            if group == .blocksAndLinks {
+                headingLevelChips
             }
         }
-        .subjectPanel()
     }
 
-    /// `SubjectFormRow`'s own metrics (14×12, gap 10) with a leading glyph, which
-    /// that row has no slot for. The trailing tag is `SubjectFormValue`'s
-    /// monospaced style, so the tag here and a date on a settings screen are set
-    /// in the same face.
-    private func row(_ tag: CommentMarkupTag) -> some View {
-        Button {
-            CommentMarkup.apply(tag, text: &text, selection: &selection)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: tag.symbol)
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 22)
-
-                Text(tag.name)
-                    .font(.system(size: 15))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                SubjectFormValue(text: tag.tagLabel, isMonospaced: true)
+    private func tileGrid(for group: CommentMarkupTag.Group) -> some View {
+        let count = CommentFormattingLayout.columnCount(for: dynamicTypeSize)
+        let columns = Array(
+            repeating: GridItem(.flexible(), spacing: CommentFormattingLayout.gridGap),
+            count: count
+        )
+        return LazyVGrid(columns: columns, spacing: CommentFormattingLayout.gridGap) {
+            ForEach(group.tags) { tag in
+                tile(tag)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
+        }
+    }
+
+    private func tile(_ tag: CommentMarkupTag) -> some View {
+        Button {
+            let level = tag == .heading ? CommentMarkup.defaultHeadingLevel : nil
+            CommentMarkup.apply(tag, text: &text, selection: &selection, headingLevel: level)
+        } label: {
+            CommentFormatTileFace(tag: tag)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(tag.name), \(tag.tagLabel)")
+    }
+
+    /// One chip per level the sanitizer keeps. `SubjectChip` pads its label
+    /// (11×6 on the rect); that padding is the chip, not a margin around it.
+    private var headingLevelChips: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 52), spacing: 6)],
+            alignment: .leading,
+            spacing: 6
+        ) {
+            ForEach(CommentMarkup.headingLevels, id: \.self) { level in
+                Button {
+                    CommentMarkup.apply(
+                        .heading, text: &text, selection: &selection, headingLevel: level
+                    )
+                } label: {
+                    SubjectChip(
+                        text: CommentMarkup.headingElement(level: level) ?? "",
+                        style: .neutral
+                    )
+                }
+                .buttonStyle(.plain)
+                .minimumHitTarget(36)
+                .accessibilityLabel("Heading \(level)")
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
+/// One 1bf tile: glyph, name, and the tag it writes, with padding inside the fill.
+private struct CommentFormatTileFace: View {
+    let tag: CommentMarkupTag
+
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        VStack(spacing: 3) {
+            glyph
+                .frame(height: 19)
+            Text(tag.name)
+                .font(.system(size: 10.5, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(tag.tagLabel)
+                .font(.system(size: 9.5, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, CommentFormattingLayout.tilePaddingH)
+        .padding(.vertical, CommentFormattingLayout.tilePaddingV)
+        .frame(maxWidth: .infinity, minHeight: CommentFormattingLayout.tileMinHeight)
+        .background(
+            RoundedRectangle(cornerRadius: CommentFormattingLayout.tileCornerRadius, style: .continuous)
+                .fill(theme.appTheme.glassFill(0.09))
+        )
+        .contentShape(
+            RoundedRectangle(cornerRadius: CommentFormattingLayout.tileCornerRadius, style: .continuous)
+        )
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        switch tag {
+        case .bold:
+            Text("B").font(.system(size: 16, weight: .bold, design: .serif))
+        case .italic:
+            Text("I").font(.system(size: 16, design: .serif)).italic()
+        case .underline:
+            Text("U").font(.system(size: 16, design: .serif))
+        case .strike:
+            Text("S").font(.system(size: 16, design: .serif))
+        case .superscript:
+            scriptedTwo(raised: true)
+        case .`subscript`:
+            scriptedTwo(raised: false)
+        case .small:
+            Text("Aa").font(.system(size: 11, design: .serif))
+        case .code:
+            Text("</>").font(.system(size: 12, design: .monospaced))
+        case .heading:
+            Text("H").font(.system(size: 15, weight: .bold))
+        default:
+            Image(systemName: tag.symbol)
+                .font(.system(size: 15, weight: .medium))
+        }
+    }
+
+    private func scriptedTwo(raised: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text("A").font(.system(size: 15, design: .serif))
+            Text("2")
+                .font(.system(size: 9, design: .serif))
+                .baselineOffset(raised ? 6 : -4)
+        }
     }
 }
