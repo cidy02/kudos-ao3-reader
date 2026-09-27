@@ -10,8 +10,17 @@ struct EditMultipleWorksView: View {
     @State private var changes: AO3BulkEditChanges
     @State private var isSaving = false
     @State private var errorMessage: String?
+    /// The group 1bn's Collections / Visibility buttons open on.
+    let focus: Focus?
 
-    init(form: AO3BulkEditForm) {
+    /// Groups the bulk bar can open on, named as their headers are.
+    enum Focus: String {
+        case collections = "Collections and gifts"
+        case visibility = "Comments and visibility"
+    }
+
+    init(form: AO3BulkEditForm, focus: Focus? = nil) {
+        self.focus = focus
         self._form = State(initialValue: form)
         var initialChanges = AO3BulkEditChanges()
         initialChanges.workIDs = form.workIDs
@@ -30,6 +39,15 @@ struct EditMultipleWorksView: View {
     private var selfGuttered: CGFloat { 0 }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list.task {
+                guard let focus else { return }
+                proxy.scrollTo(focus.rawValue, anchor: .top)
+            }
+        }
+    }
+
+    private var list: some View {
         List {
             Section {
                 SubjectHeaderBlock(
@@ -152,6 +170,7 @@ struct EditMultipleWorksView: View {
             SectionRuleHeader(title: title)
                 .padding(.bottom, 8)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
+                .id(title)
         }
     }
 

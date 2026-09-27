@@ -532,6 +532,67 @@ struct WritingWriteStubTests {
         #expect(WritingWriteStub.recorded().isEmpty)
     }
 
+    // MARK: 1bn bulk Delete (T-274)
+
+    static let showMultiplePath = "/users/alice/works/show_multiple"
+    static let showMultiplePage = """
+    <html><head><meta name="csrf-token" content="bulk=="></head><body><div id="main">
+    <h2 class="heading">Edit Multiple Works</h2></div></body></html>
+    """
+
+    /// `works/confirm_delete_multiple`'s form: `work_ids[]` and "Yes, Delete
+    /// Works" to `delete_multiple`, whose redirect carries AO3's notice.
+    @Test func deletingSelectedWorksPostsAO3sConfirmForm() async throws {
+        WritingWriteStub.reset([
+            "GET \(Self.showMultiplePath)": Self.showMultiplePage,
+            "POST /users/alice/works/delete_multiple": """
+            <html><body><div id="main"><div class="flash notice">Your works Tide, Salt were deleted.</div>
+            </div></body></html>
+            """
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let notice = try await auth.deleteWorks(
+            workIDs: [101, 202], expectedGeneration: auth.sessionGeneration, using: stubClient()
+        )
+        #expect(notice == "Your works Tide, Salt were deleted.")
+        let hits = WritingWriteStub.recorded()
+        #expect(hits.map { "\($0.method) \($0.path)" }
+            == ["GET \(Self.showMultiplePath)", "POST /users/alice/works/delete_multiple"])
+        #expect(hits[1].body == "authenticity_token=bulk%3D%3D&work_ids%5B%5D=101&work_ids%5B%5D=202"
+            + "&commit=Yes%2C%20Delete%20Works")
+    }
+
+    @Test func aBulkDeleteFromAnEarlierSessionSendsNothing() async throws {
+        WritingWriteStub.reset(["GET \(Self.showMultiplePath)": Self.showMultiplePage])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let opened = auth.sessionGeneration
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        await #expect(throws: CancellationError.self) {
+            try await auth.deleteWorks(workIDs: [101], expectedGeneration: opened, using: stubClient())
+        }
+        #expect(WritingWriteStub.recorded().isEmpty)
+    }
+
+    /// Bob signs in while alice's token page loads: nothing is deleted.
+    @Test func aSessionChangeDuringTheBulkDeleteTokenPageDeletesNothing() async throws {
+        WritingWriteStub.reset(["GET \(Self.showMultiplePath)": Self.showMultiplePage])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let opened = auth.sessionGeneration
+        let client = stubClient(paceSleep: { @MainActor _ in
+            guard auth.username == "alice" else { return }
+            await auth.logout()
+            await auth.login(username: "bob", password: "pw")
+        })
+        await #expect(throws: CancellationError.self) {
+            try await auth.deleteWorks(workIDs: [101], expectedGeneration: opened, using: client)
+        }
+        #expect(WritingWriteStub.recorded().map(\.method) == ["GET"])
+    }
+
     /// Previewing a new chapter is AO3's `preview_button` on create; the page
     /// that comes back names the draft it made.
     @Test func previewingANewChapterPostsPreviewAndLearnsTheDraft() async throws {
