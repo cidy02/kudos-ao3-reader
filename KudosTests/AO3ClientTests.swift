@@ -89,6 +89,25 @@ struct AO3ClientTests {
         #expect(work.seriesURL == "https://archiveofourown.org/series/777")
     }
 
+    /// Q7: AO3 prints gift recipients after the byline, linked to their gifts
+    /// page (a pseud) or `/gifts?recipient=` (free text). The author stays the
+    /// author; the recipients are the 1u badge.
+    @Test func parsesGiftRecipientsFromTheBlurbHeading() throws {
+        let html = """
+        <ol class="work index group"><li id="work_77" class="work blurb group">
+          <div class="header module"><h4 class="heading">
+            <a href="/works/77">Tide</a> by <a rel="author" href="/users/writer/pseuds/writer">writer</a>
+            for <a href="/users/kestrel/gifts">kestrel</a>, <a href="/gifts?recipient=Moon">Moon</a>
+          </h4></div>
+        </li></ol>
+        """
+        let work = try #require(try AO3Client.parseSearchPage(html, page: 1).works.first)
+        #expect(work.authors == ["writer"])
+        #expect(work.giftRecipients == ["kestrel", "Moon"])
+        #expect(work.giftLine == "Gift for kestrel, Moon")
+        #expect(try AO3Client.parseSearchPage(Self.searchHTML, page: 1).works.allSatisfy { $0.giftLine == nil })
+    }
+
     @Test func parsesPaginationTotal() throws {
         let page = try AO3Client.parseSearchPage(Self.searchHTML, page: 1)
         #expect(page.currentPage == 1)
