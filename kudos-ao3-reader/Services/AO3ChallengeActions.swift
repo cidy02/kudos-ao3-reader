@@ -126,7 +126,7 @@ extension AO3AuthService {
             throw AO3ChallengeWriteError.rejected("Name a pinch hitter.")
         }
         try await updateAssignments(
-            slug: slug, list: .defaults, field: ("cover_\(assignmentID)", pinch),
+            slug: slug, field: ("cover_\(assignmentID)", pinch),
             fallback: "AO3 couldn't claim that pinch hit.",
             expectedGeneration: expectedGeneration, using: client
         )
@@ -142,7 +142,7 @@ extension AO3AuthService {
         expectedGeneration: Int? = nil, using client: AO3Client = .shared
     ) async throws {
         try await updateAssignments(
-            slug: slug, list: .unfulfilled, field: ("default_\(assignmentID)", "1"),
+            slug: slug, field: ("default_\(assignmentID)", "1"),
             fallback: "AO3 couldn't record the default.",
             expectedGeneration: expectedGeneration, using: client
         )
@@ -150,14 +150,16 @@ extension AO3AuthService {
 
     /// otwarchive's `challenge_assignments#update_multiple`: `PUT
     /// /collections/:slug/assignments/update_multiple`, one `<action>_<id>` field
-    /// per change, from the list page that renders that field. The session that
-    /// loaded the screen is re-checked around the CSRF fetch.
+    /// per change, from the list page that renders that field (Default boxes on
+    /// Open, Pinch Hitter fields on Defaulted). The session that loaded the
+    /// screen is re-checked around the CSRF fetch.
     private func updateAssignments(
-        slug: String, list: AO3ChallengeAssignmentList, field: (String, String),
+        slug: String, field: (String, String),
         fallback: String, expectedGeneration: Int?, using client: AO3Client
     ) async throws {
         if let expectedGeneration { try requireSessionGeneration(expectedGeneration) }
         guard isLoggedIn else { throw AO3ChallengeWriteError.notSignedIn }
+        let list: AO3ChallengeAssignmentList = field.0.hasPrefix("cover_") ? .defaults : .unfulfilled
         let referer = AO3ChallengeURL.assignments(slug: slug, list: list, page: 1)
         let (_, token) = try await fetchCSRFPage(at: referer, using: client)
         if let expectedGeneration { try requireSessionGeneration(expectedGeneration) }
