@@ -21,6 +21,7 @@ struct WritingTextEditor: View {
     let account: String
     let target: String
     let field: String
+    let chapterActions: WritingChapterEditorActions?
 
     @State private var controller: WritingTextController?
     @State private var checkpoints: WritingCheckpointScheduler?
@@ -37,11 +38,13 @@ struct WritingTextEditor: View {
     @State private var errorMessage: String?
     @State private var showLink = false
     @State private var link = "https://"
+    @State private var showDeleteChapter = false
     private let store = WritingTextRecovery()
 
     init(
         text: Binding<String>, title: String, ruleTitle: String? = nil,
-        account: String, target: String, field: String
+        account: String, target: String, field: String,
+        chapterActions: WritingChapterEditorActions? = nil
     ) {
         _text = text
         self.title = title
@@ -49,6 +52,7 @@ struct WritingTextEditor: View {
         self.account = account
         self.target = target
         self.field = field
+        self.chapterActions = chapterActions
         _original = State(initialValue: text.wrappedValue)
     }
 
@@ -99,14 +103,22 @@ struct WritingTextEditor: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Undo", systemImage: "arrow.uturn.backward") { controller?.command("undo") }
                 Button("Redo", systemImage: "arrow.uturn.forward") { controller?.command("redo") }
+                moreMenu
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") {
-                    controller?.commitComposition()
-                    checkpoints?.fireNow()
-                    dismiss()
-                }
+                Button("Done") { close() }
             }
+        }
+        // 1bo's delete alert shape: named, destructive, never the default.
+        .alert(
+            "Delete “\(chapterActions?.deleteName ?? "")”?",
+            isPresented: $showDeleteChapter
+        ) {
+            Button("Delete on AO3", role: .destructive) { close(then: chapterActions?.delete) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            // chapters/edit.html.erb's own confirmation.
+            Text("This will delete all comments on the chapter as well and cannot be undone.")
         }
         .onAppear(perform: start)
         .onChange(of: editorFontSize) { _, value in controller?.setAppearance(theme.appTheme, fontSize: value) }
@@ -139,6 +151,35 @@ struct WritingTextEditor: View {
         )) {
             recoverySheet
         }
+    }
+
+    /// 1bv's overflow menu, less "Edit tags directly": this buffer is always
+    /// the markup (OD1). Preview and Delete are the chapter editor's alone.
+    private var moreMenu: some View {
+        Menu("More", systemImage: "ellipsis.circle") {
+            // ⌥⇧⌘V, the platform's own "paste and match style": plain ⌘V is
+            // the text view's paste.
+            Button("Paste as plain text", systemImage: "doc.on.clipboard") { controller?.pastePlainText() }
+                .keyboardShortcut("v", modifiers: [.command, .option, .shift])
+            if let chapterActions {
+                Button("Preview on AO3", systemImage: "arrow.up.forward.square") {
+                    close(then: chapterActions.preview)
+                }
+                if chapterActions.deleteName != nil {
+                    Button("Delete chapter", systemImage: "trash", role: .destructive) {
+                        showDeleteChapter = true
+                    }
+                }
+            }
+        }
+    }
+
+    /// Done's checkpoint, then `action` — after it, the form holds this text.
+    private func close(then action: (() -> Void)? = nil) {
+        controller?.commitComposition()
+        checkpoints?.fireNow()
+        dismiss()
+        action?()
     }
 
     /// Labelled with the tag it writes, as the comment tray prints the tag under
@@ -288,6 +329,15 @@ struct WritingTextEditor: View {
     }
 }
 
+/// What the chapter form lends its text editor. Both run after the editor has
+/// checkpointed into the form and closed, so they act on the text just typed.
+struct WritingChapterEditorActions {
+    var preview: () -> Void
+    /// Names the chapter in the delete alert; nil leaves Delete chapter out.
+    var deleteName: String?
+    var delete: () -> Void = {}
+}
+
 struct WritingTextEditorRow: View {
     @Environment(AO3AuthService.self) private var auth
     let title: String
@@ -300,6 +350,8 @@ struct WritingTextEditorRow: View {
     var emptyHint: String?
     /// The editor's section rule — 1bv's "Chapter 13". Defaults to `title`.
     var ruleTitle: String?
+    /// The chapter text row's menu items; nil on every other row.
+    var chapterActions: WritingChapterEditorActions?
 
     var body: some View {
         Group {
@@ -325,7 +377,8 @@ struct WritingTextEditorRow: View {
         .subjectRowNavigation(accessibilityLabel: title) {
             WritingTextEditor(
                 text: $text, title: title, ruleTitle: ruleTitle,
-                account: auth.username ?? "", target: target, field: field
+                account: auth.username ?? "", target: target, field: field,
+                chapterActions: chapterActions
             )
         }
     }

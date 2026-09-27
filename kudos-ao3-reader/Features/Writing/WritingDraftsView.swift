@@ -450,10 +450,14 @@ struct WritingBulkEditDestination: View {
     }
 }
 
+/// Add chapter, or — with `chapterID`, from the work's Chapters list (1bo) —
+/// that chapter's edit form.
 struct WritingChapterDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let workID: Int
     let workTitle: String
+    var chapterID: Int?
+    var chapterCount: Int?
     var onSaved: () -> Void = {}
     @State private var form: AO3ChapterForm?
     @State private var loadedGeneration: Int?
@@ -462,7 +466,10 @@ struct WritingChapterDestination: View {
 
     var body: some View {
         Group {
-            if let form, loadedGeneration == auth.sessionGeneration { AddChapterView(form: form, workTitle: workTitle, onSaved: onSaved).id(auth.sessionGeneration) }
+            if let form, loadedGeneration == auth.sessionGeneration {
+                AddChapterView(form: form, workTitle: workTitle, chapterCount: chapterCount, onSaved: onSaved)
+                    .id(auth.sessionGeneration)
+            }
             else if let errorMessage {
                 VStack {
                     Text(errorMessage)
@@ -477,7 +484,7 @@ struct WritingChapterDestination: View {
             errorMessage = nil
             let generation = auth.sessionGeneration
             do {
-                let loaded = try await auth.loadChapterForm(workID: workID, chapterID: nil)
+                let loaded = try await auth.loadChapterForm(workID: workID, chapterID: chapterID)
                 guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
                 loadedGeneration = generation
                 form = loaded

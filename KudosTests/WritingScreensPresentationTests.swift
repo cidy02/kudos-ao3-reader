@@ -125,6 +125,37 @@ struct WritingScreensPresentationTests {
         #expect(WorkEditView.subtitle(for: draft) == "Untitled · never posted")
     }
 
+    // MARK: 1bo Chapters / 1bv chapter menu (T-267)
+
+    @Test func deleteIsOfferedOnlyForAnExistingChapterOfSeveral() {
+        #expect(AddChapterView.offersDelete(chapterID: 9, chapterCount: 2))
+        #expect(!AddChapterView.offersDelete(chapterID: 9, chapterCount: 1))
+        #expect(!AddChapterView.offersDelete(chapterID: 9, chapterCount: nil))
+        #expect(!AddChapterView.offersDelete(chapterID: nil, chapterCount: 5))
+    }
+
+    @Test func theDeleteAlertNamesTheChapterAsAO3Does() {
+        #expect(AddChapterView.chapterName(position: "13", title: "What the tide leaves")
+            == "Chapter 13: What the tide leaves")
+        #expect(AddChapterView.chapterName(position: "13", title: " ") == "Chapter 13")
+        #expect(AddChapterView.chapterName(position: "", title: "Coda") == "Coda")
+        #expect(WritingChaptersView.subtitle(workTitle: "Water", count: 1) == "Water · 1 chapter")
+        #expect(WritingChaptersView.subtitle(workTitle: "Water", count: nil) == "Water")
+    }
+
+    @Test func pasteAsPlainTextReplacesTheSelection() {
+        let controller = WritingTextController(text: "<p>one two</p>")
+        let two = ("<p>one two</p>" as NSString).range(of: "two")
+        #if os(iOS)
+        controller.textView.selectedRange = two
+        #else
+        controller.textView.setSelectedRange(two)
+        #endif
+        controller.insertPlainText("three\nfour")
+        #expect(controller.text == "<p>one three\nfour</p>")
+        #expect(controller.takeCheckpoint() == "<p>one three\nfour</p>")
+    }
+
     // MARK: Fixtures
 
     private func work(_ id: Int, isComplete: Bool? = nil) -> AO3WorkSummary {
