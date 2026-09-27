@@ -187,6 +187,10 @@ struct AO3AuthorWorkCard: View {
                 )
                 .cardNavigation(to: work, accessibilityLabel: work.title)
             }
+            if let giftLine = entry.remote?.giftLine {
+                WorkStateBadge(text: giftLine, symbol: "gift")
+                    .font(.caption2)
+            }
         }
         .cardRow(tintHue: usesLedger ? entry.remote.map {
             CoverArt.workHue(fandoms: $0.fandoms, title: $0.title)
