@@ -15,7 +15,6 @@ enum AO3CollectionWriteError: LocalizedError, Equatable {
     case noCSRFToken
     case rejected(String)
     case unconfirmed
-    case emptyRejectReason
     case invalidName
 
     var errorDescription: String? {
@@ -25,8 +24,6 @@ enum AO3CollectionWriteError: LocalizedError, Equatable {
         case let .rejected(reason): reason
         case .unconfirmed:
             "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."
-        case .emptyRejectReason:
-            "A reject reason is required. The item stays in the queue until AO3 accepts the rejection."
         case .invalidName:
             "That URL name isn't valid on AO3. Use letters, numbers, and underscores, and don't start or end with an underscore."
         }
@@ -163,16 +160,14 @@ extension AO3AuthService {
         )
     }
 
-    /// Reject reason is required by artboard 1ce. AO3's item form has no reason
-    /// field (`collection_items_controller` permits only approval/unrevealed/
-    /// anonymous/remove), so the reason is validated locally and never invented
-    /// as a POST param. On failure the item remains in the queue.
+    /// AO3's item form has no reason field and sends no mail on rejection
+    /// (otwarchive Q6: `collection_items_controller` permits only approval/
+    /// unrevealed/anonymous/remove), so a rejection is the approval status alone.
+    /// On failure the item remains in the queue.
     ///
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt.
-    func rejectCollectionItem(slug: String, itemID: Int, reason: String) async throws {
-        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw AO3CollectionWriteError.emptyRejectReason }
+    func rejectCollectionItem(slug: String, itemID: Int) async throws {
         try await updateCollectionItems(
             slug: slug,
             drafts: [
