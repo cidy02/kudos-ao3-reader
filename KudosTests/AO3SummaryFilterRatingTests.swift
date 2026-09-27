@@ -66,13 +66,14 @@ struct AO3SummaryFilterRatingTests {
         #expect(!dropped.matchesSummary(work("Not Rated")))
     }
 
-    @Test func notRatedToggleIsInertUntilARatingIsChosen() {
-        // With no rating selected there is nothing to include Not Rated *beside*,
-        // so the toggle must not start hiding works on its own.
+    @Test func notRatedToggleFollowsSearchsRuleUnderAny() {
+        // One rule for Search and Refine (1au.4): under Any, off drops Not Rated
+        // works exactly as Search's `-rating_ids:9` does, and nothing else.
         var f = AO3SearchFilters()
         f.includeNotRated = false
-        #expect(f.matchesSummary(work("Not Rated")))
+        #expect(!f.matchesSummary(work("Not Rated")))
         #expect(f.matchesSummary(work("Explicit")))
+        #expect(f.searchQuery.contains("-rating_ids:9"))
     }
 
     @Test func singleChapterMeansFinishedAtOne() {

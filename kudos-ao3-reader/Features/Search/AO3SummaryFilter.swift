@@ -39,11 +39,14 @@ extension AO3SearchFilters {
     /// `Rating.severityRank`, so "or higher" / "or lower" are comparisons; and
     /// "Not Rated" is a rating AO3 prints by name, so it can be kept or dropped
     /// rather than guessed at.
+    ///
+    /// Under Any it is Search's rule (1au.4): the toggle alone decides Not Rated
+    /// works, as `-rating_ids:9` does there, so the two panels agree.
     private func ratingMatches(_ work: AO3WorkSummary) -> Bool {
-        guard rating != .any else { return true }
         // Handled before the ladder: Not Rated is not a rung on it, so it is in or
         // out by its own toggle whatever the selected rating and match mode are.
         if Rating.notRated.matchesRatingText(work.rating) { return includeNotRated }
+        guard rating != .any else { return true }
         guard let wanted = rating.severityRank,
               let found = Rating.severityRank(ofRatingText: work.rating)
         else { return false }

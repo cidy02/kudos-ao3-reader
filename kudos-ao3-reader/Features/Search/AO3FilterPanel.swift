@@ -52,15 +52,6 @@ struct AO3FilterPanel: View {
     /// rows). Not in `refineMatchCount`; the line names them separately.
     var refinePendingCount = 0
 
-    /// Whether "Include Not Rated" is drawn (1au.2). Refine reads it only once a
-    /// rating is chosen — `AO3SummaryFilter`'s Rating-Any rule, pinned by
-    /// `AO3SummaryFilterRatingTests` — so under Any it would be a switch that moves
-    /// nothing, not even the "N of M match" line. Search keeps it, because there
-    /// it does filter: off sends `-rating_ids:9`.
-    static func showsIncludeNotRated(mode: Mode, rating: AO3SearchFilters.Rating) -> Bool {
-        mode == .search || rating != .any
-    }
-
     /// The panel owns its own `NavigationStack`, because a presented panel has no
     /// navigation container of its own and a bare `.toolbar` there renders nothing.
     /// Same arrangement `CommentsView` uses for the same reason, and what gets the
@@ -204,9 +195,9 @@ struct AO3FilterPanel: View {
                             }
                         }
                     }
-                    if Self.showsIncludeNotRated(mode: mode, rating: filters.rating) {
-                        Toggle("Include Not Rated", isOn: $filters.includeNotRated)
-                    }
+                    // Drawn in both modes: Refine applies Search's rule under Any
+                    // too (1au.4), so the switch filters wherever it shows.
+                    Toggle("Include Not Rated", isOn: $filters.includeNotRated)
                 }
 
                 Section {
