@@ -330,7 +330,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
             }
             switch section.layout {
             case .covers:
-                AccountWorksCompactGrid(entries: section.items)
+                AccountWorksCompactGrid(entries: section.items) { unmarkButton($0) }
             case .ledger:
                 VStack(spacing: 10) {
                     ForEach(section.items) { entry in
@@ -382,7 +382,8 @@ struct AO3MarkedForLaterWorksBrowser: View {
     /// 1o.4. A button on the row, not a swipe: this screen is a `ScrollView`
     /// (the covers grid cannot live in a `List`), and the rows' long-press
     /// already opens the work menu. AO3's own list has the same per-work button.
-    /// Ledger rows only; the updated run's covers keep their card tap.
+    /// Under a ledger row and under each cover of the updated run, so every
+    /// pill, Updated included, can unmark.
     @ViewBuilder
     private func unmarkButton(_ entry: CanonicalWork) -> some View {
         if entry.ao3WorkID != nil {

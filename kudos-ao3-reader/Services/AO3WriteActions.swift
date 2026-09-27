@@ -198,25 +198,32 @@ extension AO3AuthService {
     /// (otwarchive `config/routes.rb:398-399`), which runs
     /// `Reading.mark_to_read_later(work, current_user, false)` and redirects
     /// back (Q19). Same `button_to` shape, so the same POST with
-    /// `_method=patch`, CSRF from the work page. The session generation is held
-    /// across the GET so a sign-in change in between posts nothing.
+    /// `_method=patch`, CSRF from the work page.
+    ///
+    /// `expectedGeneration` is the session the reader tapped Unmark under,
+    /// read in the tap itself: a sign-in change before this runs, or during
+    /// the GET, posts nothing. Success needs AO3's evidence
+    /// (`readingsWriteResult`): a final 200 with no flash, such as a
+    /// maintenance page, is `.unconfirmed`, and the row stays.
     ///
     /// The POST itself has not been sent against a live session.
-    func unmarkForLater(workID: Int, using client: AO3Client = .shared) async throws -> String {
-        let generation = sessionGeneration
+    func unmarkForLater(
+        workID: Int, expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
         let (_, token) = try await fetchCSRFPage(at: workURL, using: client)
-        try requireSessionGeneration(generation)
+        try requireSessionGeneration(expectedGeneration)
         let body = Self.formEncoded([("_method", "patch"), ("authenticity_token", token)])
         let request = try writeRequest(
             to: Self.markAsReadEndpoint(workID: workID),
             body: body, csrf: token, referer: workURL, ajax: false
         )
         let (status, responseBody) = try await submitWrite(request, using: client)
-        if (200 ... 399).contains(status) { return "Unmarked." }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't unmark that work."
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Unmarked.", rejectedFallback: "Couldn't unmark that work."
         )
     }
 
