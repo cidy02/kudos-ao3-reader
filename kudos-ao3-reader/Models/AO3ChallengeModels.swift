@@ -434,6 +434,33 @@ nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
     }
 }
 
+/// One row of 1cb's Pinch hits: a defaulted assignment still waiting for a
+/// pinch hitter ("open", AO3's Defaulted list) or one a pinch hitter has taken
+/// ("claimed", AO3's Pinch Hits list). AO3's maintainer rows carry no posted
+/// date or fandom, so neither is drawn.
+nonisolated struct AO3PinchHitRow: Hashable, Sendable, Identifiable {
+    var number: Int
+    var assignment: AO3ChallengeAssignment
+    var isOpen: Bool
+
+    var id: String { "\(isOpen ? "open" : "claimed")-\(assignment.id)" }
+
+    /// Open first (the ones a maintainer acts on), numbered in AO3's order.
+    static func rows(open: [AO3ChallengeAssignment], claimed: [AO3ChallengeAssignment]) -> [AO3PinchHitRow] {
+        (open.map { ($0, true) } + claimed.map { ($0, false) }).enumerated().map { index, pair in
+            AO3PinchHitRow(number: index + 1, assignment: pair.0, isOpen: pair.1)
+        }
+    }
+
+    func detail(dueText: String?) -> String {
+        let recipient = assignment.requestPseud.isEmpty ? "an anonymous sign-up" : assignment.requestPseud
+        guard !isOpen else { return "Requested by \(recipient)" }
+        let hitter = assignment.pinchHitterPseud.isEmpty ? assignment.offerPseud : assignment.pinchHitterPseud
+        return (["Claimed by \(hitter) for \(recipient)"] + [dueText.map { "due \($0)" }].compactMap { $0 })
+            .joined(separator: " · ")
+    }
+}
+
 nonisolated struct AO3ChallengeSignUp: Hashable, Sendable, Identifiable {
     var id: Int
     var collectionSlug: String

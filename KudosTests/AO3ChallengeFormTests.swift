@@ -103,4 +103,22 @@ struct AO3ChallengeFormTests {
         form.updatePrompt(edited)
         #expect(form.validated().isValid)
     }
+
+    /// 1cb: defaulted-and-uncovered rows are the open pinch hits; AO3's Pinch
+    /// Hits list is the claimed ones. Open lead, numbered straight through.
+    @Test func pinchHitRowsPutOpenOnesFirst() {
+        let open = AO3ChallengeAssignment(
+            id: 82, collectionSlug: "fest", requestPseud: "tidewrack", offerPseud: "FormerGiver", isDefaulted: true
+        )
+        let claimed = AO3ChallengeAssignment(
+            id: 83, collectionSlug: "fest", requestPseud: "Casey", offerPseud: "paperlanterns",
+            pinchHitterPseud: "paperlanterns", isCovered: true
+        )
+        let rows = AO3PinchHitRow.rows(open: [open], claimed: [claimed])
+        #expect(rows.map(\.number) == [1, 2])
+        #expect(rows.map(\.isOpen) == [true, false])
+        #expect(rows[0].detail(dueText: "1 Dec 2026") == "Requested by tidewrack")
+        #expect(rows[1].detail(dueText: "1 Dec 2026") == "Claimed by paperlanterns for Casey · due 1 Dec 2026")
+        #expect(rows[1].detail(dueText: nil) == "Claimed by paperlanterns for Casey")
+    }
 }
