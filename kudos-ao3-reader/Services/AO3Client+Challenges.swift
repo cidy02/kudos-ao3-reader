@@ -671,23 +671,31 @@ extension AO3Client {
         return params
     }
 
-    /// prompts/_prompt_blurb: h5.fandoms, then ul.tags split by tag type. The
-    /// optional-tags list is a separate ul.optional.tags and is left out.
+    /// prompts/_prompt_blurb: h5.fandoms, then ul.tags split by tag type, where
+    /// an "Any <Type>" choice is a bare li.tag with no link (Q1). Optional tags
+    /// are their own ul.optional.tags, kept apart from the chosen ones.
     private static func parseSignUpPrompts(
         _ details: Element, list: String, kind: AO3ChallengePromptKind
     ) throws -> [AO3ChallengePrompt] {
         try details.select("div[id^=\(list)_] ol.prompt > li.blurb").array().enumerated().map { index, li in
-            func tags(_ type: String) throws -> [String] {
-                try li.select("ul.tags:not(.optional) li.\(type) a.tag").array().map { try $0.text() }
+            let chosen = "ul.tags:not(.optional)"
+            func tags(_ selector: String) throws -> [String] {
+                try li.select(selector).array().map { try $0.text() }
             }
+            let any = try tags("\(chosen) li.tag").map { $0.lowercased() }
             return AO3ChallengePrompt(
                 id: index + 1,
                 kind: kind,
                 promptText: try li.select("blockquote.userstuff.summary").text(),
-                fandoms: try li.select("h5.fandoms a.tag").array().map { try $0.text() },
-                characters: try tags("characters"),
-                relationships: try tags("relationships"),
-                freeforms: try tags("freeforms")
+                fandoms: try tags("h5.fandoms a.tag"),
+                characters: try tags("\(chosen) li.characters a.tag"),
+                relationships: try tags("\(chosen) li.relationships a.tag"),
+                freeforms: try tags("\(chosen) li.freeforms a.tag"),
+                anyFandom: any.contains { $0.contains("fandom") },
+                anyCharacter: any.contains { $0.contains("character") },
+                anyRelationship: any.contains { $0.contains("relationship") },
+                anyFreeform: any.contains { $0.contains("additional") || $0.contains("freeform") },
+                optionalTags: try tags("ul.optional.tags a.tag")
             )
         }
     }

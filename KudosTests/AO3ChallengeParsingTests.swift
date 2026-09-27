@@ -123,7 +123,9 @@ struct AO3ChallengeParsingTests {
         <div class="toggled" id="requests_12"><div class="requests listbox group"><ol class="prompt index group">
           <li class="request blurb group" role="article">
             <h4 class="heading">Request 1 by Anonymous</h4>
-            <h5 class="fandoms heading"><a class="tag" href="/tags/t">Trek</a></h5>
+            <ul class="tags commas"><li class="tag">Any Fandom</li>
+              <li class="characters"><a class="tag" href="/tags/k">Kirk</a></li></ul>
+            <ul class="optional tags commas"><li class="freeforms"><a class="tag" href="/tags/z">Fluff</a></li></ul>
           </li>
         </ol></div></div>
       </dd>
@@ -142,16 +144,23 @@ struct AO3ChallengeParsingTests {
         try #require(alice.requests.count == 2)
         try #require(alice.offers.count == 1)
         #expect(alice.requests[0].relationships == ["Aziraphale/Crowley"])
-        // The optional-tags list is not a chosen tag.
+        // The optional-tags list is not a chosen tag, but it is kept apart.
         #expect(alice.requests[0].freeforms == ["Slow Burn"])
+        #expect(alice.requests[0].optionalTags == ["Fluff"])
         #expect(alice.requests[0].promptText == "A bookshop that rearranges itself.")
         #expect(alice.offers[0].fandoms == ["Star Wars"])
         // Distinct request fandoms, in order: 1bz's one-line summary.
         #expect(alice.requestTagSummary == "Good Omens (TV), Naruto")
         let bob = page.signUps[1]
         #expect(bob.pseud == "Bob (bobby)")
-        #expect(bob.requests.count == 1)
+        try #require(bob.requests.count == 1)
         #expect(bob.offers.isEmpty)
+        // "Any Fandom" is a bare li.tag with no link; the request is not empty.
+        #expect(bob.requests[0].anyFandom)
+        #expect(!bob.requests[0].anyCharacter)
+        #expect(bob.requests[0].characters == ["Kirk"])
+        #expect(bob.requests[0].optionalTags == ["Fluff"])
+        #expect(bob.requestTagSummary == "Any Fandom")
         // A prompt meme's index prints the heading and no rows.
         let meme = try AO3Client.parseChallengeSignUpsPage(
             "<h2 class='heading'>Sign-ups for Meme</h2>", slug: "meme", page: 1
@@ -498,9 +507,38 @@ struct AO3ChallengeParsingTests {
         let form = try AO3Client.parseChallengeSignUpForm(html, slug: "fest")
         #expect(form.signUpID == 4)
         #expect(form.pseudID == "15")
-        #expect(form.requests.count == 1)
+        try #require(form.requests.count == 1)
         #expect(form.requests[0].fandoms == ["Star Wars"])
-        #expect(form.offers.count == 1)
+        try #require(form.offers.count == 1)
         #expect(form.offers[0].fandoms == ["Trek"])
+        // AO3's own prompt ids round-trip into the POST, each in its own list.
+        #expect(form.requests[0].id == 21 && form.offers[0].id == 22)
+        let params = AO3Client.challengeSignUpParameters(form)
+        #expect(params.contains { $0 == ("challenge_signup[requests_attributes][0][id]", "21") })
+        #expect(params.contains { $0 == ("challenge_signup[offers_attributes][0][id]", "22") })
+    }
+
+    /// Rows show only live prompts, so an earlier prompt marked for removal
+    /// shifts every position: edits must land on the prompt by id.
+    @Test func promptEditsLandOnThePromptByID() throws {
+        var form = AO3ChallengeSignUpForm(
+            actionURL: try #require(URL(string: "https://archiveofourown.org/collections/fest/signups/4")),
+            csrfToken: "csrf", collectionSlug: "fest", pseudID: "15",
+            requests: [
+                AO3ChallengePrompt(id: 21, kind: .request, promptText: "First", destroy: true),
+                AO3ChallengePrompt(id: 22, kind: .request, promptText: "Second")
+            ],
+            offers: [AO3ChallengePrompt(id: -1, kind: .offer)]
+        )
+        // The first live row is prompt 22, at position 0 on screen.
+        var second = try #require(form.prompt(id: 22, kind: .request))
+        second.promptText = "Edited"
+        form.updatePrompt(second)
+        #expect(form.requests.map(\.promptText) == ["First", "Edited"])
+        // Same id, other kind: an offer's draft id never reaches a request.
+        #expect(form.prompt(id: -1, kind: .request) == nil)
+        // A prompt that has gone is not recreated, and nothing positive is invented.
+        form.updatePrompt(AO3ChallengePrompt(id: 99, kind: .request, promptText: "Ghost"))
+        #expect(form.requests.map(\.id) == [21, 22])
     }
 }
