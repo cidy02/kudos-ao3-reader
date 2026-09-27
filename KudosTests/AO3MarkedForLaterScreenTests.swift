@@ -177,6 +177,18 @@ struct AO3MarkedForLaterScreenTests {
         )
     }
 
+    /// Unmarking the last row of page 2 of 2 goes back to page 1 rather than to
+    /// "Nothing marked for later" with page 1 out of reach. A page with later
+    /// pages behind it reloads itself: their rows move up into it.
+    @Test func anEmptiedPageReloadsOneThatHasRows() {
+        #expect(AO3AccountWorksPaging.pageAfterEmptying(currentPage: 2, totalPages: 2) == 1)
+        #expect(AO3AccountWorksPaging.pageAfterEmptying(currentPage: 4, totalPages: 4) == 3)
+        #expect(AO3AccountWorksPaging.pageAfterEmptying(currentPage: 1, totalPages: 3) == 1)
+        #expect(AO3AccountWorksPaging.pageAfterEmptying(currentPage: 2, totalPages: 3) == 2)
+        // One page: the list really is empty now.
+        #expect(AO3AccountWorksPaging.pageAfterEmptying(currentPage: 1, totalPages: 1) == nil)
+    }
+
     /// Page 1 of 9 is not the whole list; the tally says which page it counts.
     @Test func subtitleNamesThePageWhenThereAreSeveral() {
         let now = Date(timeIntervalSince1970: 1_000_000)

@@ -449,7 +449,7 @@ struct AccountShortcutGridTile: View {
 ///
 /// **Host in a `ScrollView` (or other non-List container).** Embedding many
 /// `NavigationLink`s in a single List cell re-breaks tap targeting.
-struct AccountWorksCompactGrid: View {
+struct AccountWorksCompactGrid<Accessory: View>: View {
     let entries: [CanonicalWork]
 
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`AO3WorkCoverCard` actually
@@ -457,6 +457,9 @@ struct AccountWorksCompactGrid: View {
     /// that's grown wider with Dynamic Type instead of assuming the static base
     /// width. Not `private` — see `LibraryEntityGridView.cardSize`.
     var cardSize = ScaledCarouselCardSize()
+    /// Drawn under each card, outside its link. Marked for Later's Unmark
+    /// (1o.4); nothing on every other list.
+    @ViewBuilder var accessory: (CanonicalWork) -> Accessory
 
     /// Column count tracks the actual scaled card width at every Dynamic Type step
     /// (not just an accessibility-size on/off gate — see
@@ -469,7 +472,10 @@ struct AccountWorksCompactGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
             ForEach(entries) { entry in
-                compactCard(for: entry)
+                VStack(spacing: 6) {
+                    compactCard(for: entry)
+                    accessory(entry)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -488,6 +494,12 @@ struct AccountWorksCompactGrid: View {
         } else if let remote = entry.remote {
             EnrichingAO3WorkCoverCard(work: remote)
         }
+    }
+}
+
+extension AccountWorksCompactGrid where Accessory == EmptyView {
+    init(entries: [CanonicalWork]) {
+        self.init(entries: entries) { _ in EmptyView() }
     }
 }
 
