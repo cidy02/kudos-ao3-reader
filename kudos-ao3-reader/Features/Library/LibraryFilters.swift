@@ -82,7 +82,9 @@ struct LibraryFilters: Equatable {
     /// version gives: there is always an order in effect, so it is the one label
     /// that is never noise, and it is the setting people most often forget they
     /// set.
-    func summaryLabels(includesSort: Bool = true) -> [AO3SearchFilters.SummaryLabel] {
+    func summaryLabels(
+        includesSort: Bool = true, includesInProgress: Bool = true
+    ) -> [AO3SearchFilters.SummaryLabel] {
         var labels: [AO3SearchFilters.SummaryLabel] = []
 
         func add(_ text: String, _ symbol: String? = nil) {
@@ -110,7 +112,9 @@ struct LibraryFilters: Equatable {
         for category in AO3SearchFilters.Category.allCases.filter(categories.contains) {
             add(category.title)
         }
-        if completion != .any { add(completion.title) }
+        if completion == .complete || (completion == .inProgress && includesInProgress) {
+            add(completion.title)
+        }
         if !language.isEmpty { add(language) }
 
         let lowerWordBound = wordsFrom.trimmingCharacters(in: .whitespaces)
@@ -126,6 +130,22 @@ struct LibraryFilters: Equatable {
         return labels
     }
 
+    // MARK: Quick pills
+
+    /// 1ad's "All N" and "WIP N": what each pill would show with every other
+    /// filter held. The pills *are* the completion filter (All = any, WIP = in
+    /// progress — AO3's posted status, as `FavoriteQuickFilter.wip`), so they
+    /// narrow alongside the panel and the collision card can drop them like any
+    /// other filter. 1ad's "Offline" pill is not built: Reading Now already
+    /// requires the EPUB, so it would always equal All.
+    func completionPillCounts(in works: [SavedWork]) -> (all: Int, wip: Int) {
+        var all = self
+        all.completion = .any
+        var wip = self
+        wip.completion = .inProgress
+        return (works.filter(all.matches).count, works.filter(wip.matches).count)
+    }
+
     // MARK: Collision drops
 
     /// One active filter removed, with how many works would remain. Sort is not
@@ -139,91 +159,78 @@ struct LibraryFilters: Equatable {
     /// Evaluates the predicate set minus one member over `works`. Cheap over an
     /// in-memory list; the empty state uses the counts so a colliding set of
     /// filters is actionable rather than apologetic.
-    func droppingEachActiveFilter( // swiftlint:disable:this cyclomatic_complexity
-        from works: [SavedWork]
-    ) -> [FilterDrop] {
-        var drops: [FilterDrop] = []
-
-        func add(_ label: String, _ remaining: LibraryFilters) {
-            drops.append(FilterDrop(
-                filterLabel: label,
+    func droppingEachActiveFilter(from works: [SavedWork]) -> [FilterDrop] {
+        activeMembers.map { member in
+            var remaining = self
+            member.clear(&remaining)
+            return FilterDrop(
+                filterLabel: member.label,
                 remainingCount: works.filter(remaining.matches).count,
                 remainingFilters: remaining
-            ))
+            )
         }
+    }
 
-        for name in userTags.sorted() {
-            var remaining = self
-            remaining.userTags.remove(name)
-            add(name, remaining)
+    /// The smallest set of active filters that already matches nothing over
+    /// `works` (1ay.3): one filter no work passes on its own, else the first
+    /// pair with no work in common, else every active filter. Each member is
+    /// judged alone — `self` with every *other* member cleared — so the pair
+    /// named really is the collision, not a bystander. O(k² · n) for k filters;
+    /// k is a handful of chips.
+    func collidingFilterLabels(in works: [SavedWork]) -> [String] {
+        let members = activeMembers
+        let alone: [LibraryFilters] = members.indices.map { index in
+            var only = self
+            for other in members.indices where other != index { members[other].clear(&only) }
+            return only
         }
-        for name in fandoms.sorted() {
-            var remaining = self
-            remaining.fandoms.remove(name)
-            add(name, remaining)
+        for index in members.indices where !works.contains(where: alone[index].matches) {
+            return [members[index].label]
         }
-        for name in characters.sorted() {
-            var remaining = self
-            remaining.characters.remove(name)
-            add(name, remaining)
+        for first in members.indices {
+            for second in members.indices where second > first {
+                let overlap = works.contains { alone[first].matches($0) && alone[second].matches($0) }
+                if !overlap { return [members[first].label, members[second].label] }
+            }
         }
-        for name in relationships.sorted() {
-            var remaining = self
-            remaining.relationships.remove(name)
-            add(name, remaining)
-        }
-        for name in additionalTags.sorted() {
-            var remaining = self
-            remaining.additionalTags.remove(name)
-            add(name, remaining)
-        }
-        for name in excludeTags.sorted() {
-            var remaining = self
-            remaining.excludeTags.remove(name)
-            add("−\(name)", remaining)
-        }
-        if rating != .any {
-            var remaining = self
-            remaining.rating = .any
-            add(rating.title, remaining)
-        }
+        return members.map(\.label)
+    }
+
+    /// Every active narrowing filter, labelled as `summaryLabels` labels it,
+    /// with how to clear just that one. Sort is not a
+    /// narrowing predicate, so it is never a member.
+    private var activeMembers: [(label: String, clear: (inout LibraryFilters) -> Void)] {
+        var members: [(label: String, clear: (inout LibraryFilters) -> Void)] = []
+        for name in userTags.sorted() { members.append((name, { $0.userTags.remove(name) })) }
+        for name in fandoms.sorted() { members.append((name, { $0.fandoms.remove(name) })) }
+        for name in characters.sorted() { members.append((name, { $0.characters.remove(name) })) }
+        for name in relationships.sorted() { members.append((name, { $0.relationships.remove(name) })) }
+        for name in additionalTags.sorted() { members.append((name, { $0.additionalTags.remove(name) })) }
+        for name in excludeTags.sorted() { members.append(("−\(name)", { $0.excludeTags.remove(name) })) }
+        if rating != .any { members.append((rating.title, { $0.rating = .any })) }
         for warning in AO3SearchFilters.Warning.allCases where warnings.contains(warning) {
-            var remaining = self
-            remaining.warnings.remove(warning)
-            add(warning.title, remaining)
+            members.append((warning.title, { $0.warnings.remove(warning) }))
         }
         for category in AO3SearchFilters.Category.allCases where categories.contains(category) {
-            var remaining = self
-            remaining.categories.remove(category)
-            add(category.title, remaining)
+            members.append((category.title, { $0.categories.remove(category) }))
         }
-        if completion != .any {
-            var remaining = self
-            remaining.completion = .any
-            add(completion.title, remaining)
-        }
-        if !language.isEmpty {
-            var remaining = self
-            remaining.language = ""
-            add(language, remaining)
-        }
+        if completion != .any { members.append((completion.title, { $0.completion = .any })) }
+        if !language.isEmpty { members.append((language, { $0.language = "" })) }
         let lowerWordBound = wordsFrom.trimmingCharacters(in: .whitespaces)
         let upperWordBound = wordsTo.trimmingCharacters(in: .whitespaces)
-        if !lowerWordBound.isEmpty || !upperWordBound.isEmpty {
-            var remaining = self
-            remaining.wordsFrom = ""
-            remaining.wordsTo = ""
-            let label: String
-            switch (lowerWordBound.isEmpty, upperWordBound.isEmpty) {
-            case (false, false): label = "Words \(lowerWordBound)–\(upperWordBound)"
-            case (false, true): label = "Words ≥ \(lowerWordBound)"
-            case (true, false): label = "Words ≤ \(upperWordBound)"
-            case (true, true): label = "Word count"
-            }
-            add(label, remaining)
+        let wordLabel: String? = switch (lowerWordBound.isEmpty, upperWordBound.isEmpty) {
+        case (false, false): "Words \(lowerWordBound)–\(upperWordBound)"
+        case (false, true): "Words ≥ \(lowerWordBound)"
+        case (true, false): "Words ≤ \(upperWordBound)"
+        case (true, true): nil
         }
-
-        return drops
+        if let wordLabel {
+            members.append((wordLabel, {
+                $0.wordsFrom = ""
+                $0.wordsTo = ""
+            }))
+        }
+        return members
     }
 
     // MARK: Applying

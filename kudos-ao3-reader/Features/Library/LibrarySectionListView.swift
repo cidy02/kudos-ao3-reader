@@ -356,7 +356,11 @@ struct LibrarySectionListView: View {
             onOpenFilters: { showingFilters = true },
             activeFilterCount: filters.summaryLabels(includesSort: false).count
         ) {
-            ForEach(filters.summaryLabels(), id: \.self) { label in
+            if kind == .readingNow {
+                LibraryCompletionPills(filters: $filters, works: items, palette: scopePalette)
+            }
+            // A selected WIP pill already says "In Progress"; no second chip.
+            ForEach(filters.summaryLabels(includesInProgress: kind != .readingNow), id: \.self) { label in
                 SubjectChip(
                     text: label.text,
                     style: .tinted,
