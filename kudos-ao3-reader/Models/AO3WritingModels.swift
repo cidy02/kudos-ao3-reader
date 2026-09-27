@@ -779,69 +779,6 @@ nonisolated struct AO3SeriesWorkRow: Equatable, Identifiable, Sendable {
     }
 }
 
-/// One write in a series reorder. Position lives on `SerialWork`, so three
-/// works are three sequential POSTs. Each payload carries the full ordered
-/// `serial[]` list AO3's `update_positions` ajax path expects
-/// (`series_controller.rb`).
-nonisolated struct AO3SeriesPositionWrite: Equatable, Sendable {
-    var seriesID: Int
-    var serialWorkID: Int
-    var workID: Int?
-    var position: Int
-    var orderedSerialWorkIDs: [Int]
-
-    var path: String { "/series/\(seriesID)/update_positions" }
-
-    func parameters(csrfToken: String) -> [(String, String)] {
-        var pairs: [(String, String)] = [
-            (AO3WorkFormField.authenticityToken, csrfToken)
-        ]
-        for id in orderedSerialWorkIDs {
-            pairs.append((AO3WorkFormField.serialOrder, String(id)))
-        }
-        return pairs
-    }
-}
-
-enum AO3SeriesReorderPlan {
-    /// Builds N writes in the given work order. `serialByWorkID` maps a work
-    /// to its `SerialWork` id from the manage page.
-    static func writes(
-        seriesID: Int,
-        orderedWorkIDs: [Int],
-        serialByWorkID: [Int: Int]
-    ) -> [AO3SeriesPositionWrite] {
-        let orderedSerial = orderedWorkIDs.compactMap { serialByWorkID[$0] }
-        return orderedWorkIDs.enumerated().compactMap { index, workID in
-            guard let serialID = serialByWorkID[workID] else { return nil }
-            return AO3SeriesPositionWrite(
-                seriesID: seriesID,
-                serialWorkID: serialID,
-                workID: workID,
-                position: index + 1,
-                orderedSerialWorkIDs: orderedSerial
-            )
-        }
-    }
-
-    /// Same plan when the caller already has serial-work ids in the desired
-    /// order (manage-page drag result).
-    static func writes(
-        seriesID: Int,
-        orderedSerialWorkIDs: [Int]
-    ) -> [AO3SeriesPositionWrite] {
-        orderedSerialWorkIDs.enumerated().map { index, serialID in
-            AO3SeriesPositionWrite(
-                seriesID: seriesID,
-                serialWorkID: serialID,
-                workID: nil,
-                position: index + 1,
-                orderedSerialWorkIDs: orderedSerialWorkIDs
-            )
-        }
-    }
-}
-
 // MARK: - Bulk edit (1bn)
 
 /// Native bulk-edit intent. Tag additions/removals are merged against each
