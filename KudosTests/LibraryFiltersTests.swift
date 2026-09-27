@@ -216,6 +216,23 @@ struct LibraryFiltersTests {
         #expect(filters.collidingFilterLabels(in: works) == ["Français"])
     }
 
+    /// A user tag and a language both called "English" are two filters: two
+    /// drop rows with distinct ids, and labels that say which is which.
+    @Test func sameNamedFiltersOnDifferentFacetsStayDistinct() throws {
+        let context = try makeContext()
+        let french = work(in: context, title: "French")
+        french.language = "Français"
+
+        var filters = LibraryFilters()
+        filters.userTags = ["English"]
+        filters.language = "English"
+
+        let drops = filters.droppingEachActiveFilter(from: [french])
+        #expect(Set(drops.map(\.id)).count == 2)
+        #expect(drops.map(\.filterLabel) == ["English (your tag)", "English (language)"])
+        #expect(!filters.collidingFilterLabels(in: [french]).contains("English"))
+    }
+
     @Test func droppingEachActiveFilterTreatsWordBoundsAsOneMember() throws {
         let context = try makeContext()
         let shortComplete = work(in: context, title: "Short")
