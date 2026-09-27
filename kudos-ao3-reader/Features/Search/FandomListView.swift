@@ -6,7 +6,7 @@ import SwiftUI
 /// `/media/<name>/fandoms` index). Sibling tags that share a parsed title are
 /// grouped into families; tapping a family sends every raw original name as an
 /// included fandom filter, never the parsed title.
-struct FandomListView: View { // swiftlint:disable:this type_body_length
+struct FandomListView: View {
     let category: AO3MediaCategory
     /// `originalNames` are the raw AO3 tags to include. `title` is the works
     /// screen's navigation title (the original tag for a single fandom, the
@@ -33,6 +33,8 @@ struct FandomListView: View { // swiftlint:disable:this type_body_length
     @State private var draftFilterOptions = FandomListFilterOptions()
     @State private var showingFilters = false
     @State private var exactCounts = FandomFamilyExactCountCache.shared
+    /// 1al's switch. Off lists every raw tag on its own (`FandomFamily.ungrouped`).
+    @AppStorage("browse.fandoms.groupsVariants") private var groupsVariants = true
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
@@ -165,6 +167,7 @@ struct FandomListView: View { // swiftlint:disable:this type_body_length
             Section {
                 FandomListSortRail(
                     sort: $sort,
+                    groupsVariants: $groupsVariants,
                     filterCount: filterOptions.activeFilterCount,
                     palette: palette,
                     onOpenFilters: { showingFilters = true }
@@ -211,6 +214,7 @@ struct FandomListView: View { // swiftlint:disable:this type_body_length
         .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
         #endif
         .task(id: listingToken) { await applyFilter() }
+        .onChange(of: groupsVariants) { Task { await rebuildFamilies() } }
     }
 
     @ViewBuilder
@@ -262,20 +266,26 @@ struct FandomListView: View { // swiftlint:disable:this type_body_length
         await refresh()
     }
 
+    /// Families from the loaded tags, grouped or not per the switch.
+    private func rebuildFamilies() async {
+        let list = fandoms
+        let groups = groupsVariants
+        // Full-category grouping is tens of thousands of splits on Uncategorized
+        // — same reason MediaBrowserView.computeStats is off the main actor.
+        let built = await Task.detached(priority: .userInitiated) {
+            groups ? FandomFamily.grouped(fandoms: list) : FandomFamily.ungrouped(fandoms: list)
+        }.value
+        families = built
+        searchEntries = built.map {
+            FamilySearchEntry(family: $0, haystack: $0.searchHaystack())
+        }
+        await applyFilter()
+    }
+
     private func refresh() async {
         do {
-            let list = try await AO3Client.shared.fandoms(atPath: category.fandomsURL)
-            fandoms = list
-            // Full-category grouping is tens of thousands of splits on Uncategorized
-            // — same reason MediaBrowserView.computeStats is off the main actor.
-            let grouped = await Task.detached(priority: .userInitiated) {
-                FandomFamily.grouped(fandoms: list)
-            }.value
-            families = grouped
-            searchEntries = grouped.map {
-                FamilySearchEntry(family: $0, haystack: $0.searchHaystack())
-            }
-            await applyFilter()
+            fandoms = try await AO3Client.shared.fandoms(atPath: category.fandomsURL)
+            await rebuildFamilies()
             phase = .loaded
         } catch let error as AO3Error {
             if fandoms.isEmpty {
