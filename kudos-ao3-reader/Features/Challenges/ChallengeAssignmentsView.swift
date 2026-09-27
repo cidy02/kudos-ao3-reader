@@ -6,12 +6,12 @@ import SwiftUI
 /// giver defaulted with no cover yet, and who is covering as a pinch hitter. Does not apply to
 /// Prompt Meme (1cc), which has no matching step at all.
 ///
-/// Matching is AO3's own algorithm (`potential_matches#generate`) and there is no
-/// maintainer-side client write to request a pinch hit — only `claimPinchHit`
-/// exists, and that is the *participant* side of claiming a pinch hit AO3 has
-/// already opened. So both actions on an unmatched pair's card — "Send pinch-hit
-/// request" and "Open on AO3" — are the same Open-on-AO3 escape hatch to AO3's own
-/// assignments/pinch-hits page, not two different native writes.
+/// Matching is AO3's own algorithm (`potential_matches#generate`), and AO3 has no
+/// "request a pinch hit" write — asking for volunteers happens off-site — so both
+/// actions on an unmatched card open AO3's own assignments page. The bottom bar's
+/// two writes are the owner's fields on that page (`update_multiple`): a Default
+/// box on an open assignment and a Pinch Hitter name on a defaulted one, each
+/// behind a picker and a confirmation.
 struct ChallengeAssignmentsView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
@@ -33,6 +33,12 @@ struct ChallengeAssignmentsView: View {
     @State private var phase: Phase = .idle
     @State private var itemInFlight: Int?
     @State private var actionErrorMessage: String?
+    /// Which assignment list the bottom bar's picker is choosing from.
+    @State private var picking: WriteKind?
+    /// A chosen write awaiting its confirmation.
+    @State private var pendingWrite: PendingWrite?
+    /// The AO3 session the lists were read under; a write under another is refused.
+    @State private var loadedGeneration: Int?
 
     private enum Phase: Equatable {
         case idle
@@ -65,28 +71,66 @@ struct ChallengeAssignmentsView: View {
     private var effectiveTitle: String { collectionTitle.isEmpty ? collectionSlug : collectionTitle }
 
     var body: some View {
-        List {
-            Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
-                segmentStrip.pageBodyRow(top: 14, gutter: gutter)
-            }
+        ZStack(alignment: .bottom) {
+            List {
+                Section {
+                    header.pageBodyRow(top: 20, gutter: selfGuttered)
+                    segmentStrip.pageBodyRow(top: 14, gutter: gutter)
+                }
 
-            switch phase {
-            case .loading:
-                Section { loadingRow.pageBodyRow(top: 20, gutter: gutter) }
-            case let .failed(message):
-                Section { failureCard(message).pageBodyRow(top: 14, gutter: gutter) }
-            case .idle, .loaded:
-                contentSections
+                switch phase {
+                case .loading:
+                    Section { loadingRow.pageBodyRow(top: 20, gutter: gutter) }
+                case let .failed(message):
+                    Section { failureCard(message).pageBodyRow(top: 14, gutter: gutter) }
+                case .idle, .loaded:
+                    contentSections
+                }
+
+                // Room for the floating bottom bar.
+                Section {
+                    Spacer(minLength: 70)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
+            .cardList()
+            #if os(macOS)
+            .navigationTitle("Assignments")
+            #endif
+            .subjectScreenWash(palette: palette)
+
+            if auth.isLoggedIn, phase == .loaded {
+                bottomActionBar
             }
         }
-        .cardList()
-        #if os(macOS)
-        .navigationTitle("Assignments")
-        #endif
-        .subjectScreenWash(palette: palette)
         .task { await loadIfNeeded() }
         .refreshable { await load() }
+        .confirmationDialog(
+            picking?.title ?? "",
+            isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } }),
+            titleVisibility: .visible,
+            presenting: picking
+        ) { kind in
+            ForEach(candidates(for: kind)) { assignment in
+                Button(candidateLabel(assignment)) {
+                    pendingWrite = PendingWrite(kind: kind, assignment: assignment)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert(
+            pendingWrite?.kind.confirmTitle ?? "",
+            isPresented: Binding(get: { pendingWrite != nil }, set: { if !$0 { pendingWrite = nil } }),
+            presenting: pendingWrite
+        ) { write in
+            Button(write.kind.confirmButton, role: write.kind == .reportDefault ? .destructive : nil) {
+                Task { await perform(write) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { write in
+            Text(confirmationMessage(write))
+        }
     }
 
     // MARK: - Header
@@ -152,18 +196,63 @@ struct ChallengeAssignmentsView: View {
         }
     }
 
+    private var pinchHitRows: [AO3PinchHitRow] {
+        AO3PinchHitRow.rows(open: unmatched, claimed: pinchHits)
+    }
+
     private var pinchHitsSection: some View {
         Section {
-            SectionRuleHeader(title: "Pinch hits", count: pinchHits.count)
+            SectionRuleHeader(title: "Pinch hits", count: pinchHitRows.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            if let error = loadErrors[.pinchHits] {
+            if let error = loadErrors[.pinchHits] ?? loadErrors[.unmatched] {
                 failureCard(error, title: "Couldn't load pinch hits").pageBodyRow(top: 8, gutter: gutter)
-            } else if pinchHits.isEmpty {
+            } else if pinchHitRows.isEmpty {
                 emptyCard("No pinch hits open right now.").pageBodyRow(top: 8, gutter: gutter)
             } else {
-                assignmentRows(pinchHits).pageBodyRow(top: 8, gutter: gutter)
+                VStack(spacing: 0) {
+                    ForEach(Array(pinchHitRows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 { SubjectRowSeparator() }
+                        pinchHitRow(row)
+                    }
+                }
+                .subjectPanel()
+                .pageBodyRow(top: 8, gutter: gutter)
             }
         }
+    }
+
+    /// The spec's "Pinch hit #1 · open / Requested by …" and "Pinch hit #2 ·
+    /// claimed / Claimed by … · due …".
+    private func pinchHitRow(_ row: AO3PinchHitRow) -> some View {
+        HStack(alignment: .center, spacing: 11) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Text("Pinch hit #\(row.number)")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(row.isOpen ? "OPEN" : "CLAIMED")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .tracking(8.5 * 0.07)
+                        .foregroundStyle(row.isOpen ? palette.accent : Color.secondary.opacity(0.7))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(row.isOpen ? palette.accent.opacity(0.18) : Color.secondary.opacity(0.12))
+                        )
+                }
+                Text(row.detail(dueText: worksDueAt?.dateText))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color.secondary.opacity(0.85))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if row.isOpen, auth.isLoggedIn {
+                claimButton(for: row.assignment)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 
     private var unmatchedSection: some View {
@@ -207,12 +296,7 @@ struct ChallengeAssignmentsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: 8) {
-                statusBadge(for: assignment)
-                if segment == .pinchHits, assignment.pinchHitterPseud.isEmpty {
-                    claimButton(for: assignment)
-                }
-            }
+            statusBadge(for: assignment)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -273,7 +357,7 @@ struct ChallengeAssignmentsView: View {
     private func claimButton(for assignment: AO3ChallengeAssignment) -> some View {
         let isInFlight = itemInFlight == assignment.id
         return Button {
-            Task { await claimPinchHit(assignment) }
+            pendingWrite = PendingWrite(kind: .claimPinchHit, assignment: assignment)
         } label: {
             HStack(spacing: 4) {
                 if isInFlight {
@@ -343,10 +427,9 @@ struct ChallengeAssignmentsView: View {
         return lead + " AO3 runs matching on its side, so the fix is either a pinch hit or a manual assignment there."
     }
 
-    /// Neither label is a native write — there is no maintainer-side "request a
-    /// pinch hit" endpoint, only the participant-side `claimPinchHit`. Both open
-    /// AO3's own assignments page with the pinch-hits filter, per the file's own
-    /// header note.
+    /// Neither label is a native write — AO3 has no "request a pinch hit"
+    /// endpoint. Both open AO3's own assignments page with the pinch-hits
+    /// filter, per the file's own header note.
     private func openOnAO3Button(title: String, tint: Color) -> some View {
         Button {
             router.open(AO3ChallengeURL.assignments(slug: collectionSlug, list: .pinchHits))
@@ -361,8 +444,9 @@ struct ChallengeAssignmentsView: View {
     /// The spec's footnote also says the app can report a default and send a
     /// pinch-hit request; neither is a native write here yet, so it doesn't.
     private var footnote: some View {
-        Text("Assignments and pinch hits are paged lists, and the app reads every page. "
-            + "A pinch-hit request opens AO3, and the app cannot run AO3’s matching, so no screen here offers to.")
+        Text("Assignments and pinch hits are paged lists. The app reads them, reports a default and "
+            + "claims a pinch hit; a pinch-hit request opens AO3, and it cannot run AO3’s matching, "
+            + "so no screen here offers to.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -458,6 +542,7 @@ struct ChallengeAssignmentsView: View {
         }
         phase = .loading
         loadErrors = [:]
+        loadedGeneration = auth.sessionGeneration
 
         // Matched is every sent assignment: otwarchive's Complete (?fulfilled)
         // plus Open (?unfulfilled). Each list fails on its own.
@@ -492,20 +577,132 @@ struct ChallengeAssignmentsView: View {
         }
     }
 
-    private func claimPinchHit(_ assignment: AO3ChallengeAssignment) async {
-        itemInFlight = assignment.id
+    /// Runs a confirmed write, then reloads: both writes move the assignment
+    /// between AO3's lists, so the lists are re-read rather than patched.
+    private func perform(_ write: PendingWrite) async {
+        itemInFlight = write.assignment.id
         actionErrorMessage = nil
         do {
-            let byline = auth.username ?? ""
-            try await auth.claimPinchHit(slug: collectionSlug, assignmentID: assignment.id, byline: byline)
-            if let index = pinchHits.firstIndex(where: { $0.id == assignment.id }) {
-                withAnimation {
-                    pinchHits[index].pinchHitterPseud = byline
-                }
+            switch write.kind {
+            case .claimPinchHit:
+                try await auth.claimPinchHit(
+                    slug: collectionSlug, assignmentID: write.assignment.id, byline: auth.username ?? "",
+                    expectedGeneration: loadedGeneration
+                )
+            case .reportDefault:
+                try await auth.markAssignmentDefaulted(
+                    slug: collectionSlug, assignmentID: write.assignment.id, expectedGeneration: loadedGeneration
+                )
             }
+            itemInFlight = nil
+            await load()
+        } catch is CancellationError {
+            itemInFlight = nil
+            actionErrorMessage = "You changed AO3 accounts, so nothing was sent. Reload and try again."
         } catch {
-            actionErrorMessage = "Couldn't claim that pinch hit: \(error.localizedDescription)"
+            itemInFlight = nil
+            actionErrorMessage = "\(write.kind.failure): \(error.localizedDescription)"
         }
-        itemInFlight = nil
+    }
+
+    // MARK: - Writes (confirmed)
+
+    /// The spec's bottom bar. Both are AO3 writes that only collection owners
+    /// may make; each goes through a picker and a confirmation.
+    private var bottomActionBar: some View {
+        HStack(spacing: 9) {
+            Button {
+                picking = .reportDefault
+            } label: {
+                Text("Report a default")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(theme.appTheme.glassFill(0.10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(theme.appTheme.glassStroke(0.16), lineWidth: 0.5)
+                            )
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(reportable.isEmpty || itemInFlight != nil)
+
+            Button {
+                picking = .claimPinchHit
+            } label: {
+                Text("Claim a pinch hit")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(palette.accentOnFill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.accent))
+            }
+            .buttonStyle(.plain)
+            .disabled(unmatched.isEmpty || itemInFlight != nil)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 26)
+        .background(
+            LinearGradient(
+                colors: [
+                    theme.appTheme.cardBackdrop,
+                    theme.appTheme.cardBackdrop.opacity(0.96),
+                    theme.appTheme.cardBackdrop.opacity(0.0)
+                ],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+        )
+    }
+
+    /// Open assignments a giver can default on: sent, not delivered, not
+    /// already defaulted.
+    private var reportable: [AO3ChallengeAssignment] {
+        matched.filter { !$0.isFulfilled && !$0.isDefaulted }
+    }
+
+    private func candidates(for kind: WriteKind) -> [AO3ChallengeAssignment] {
+        kind == .reportDefault ? reportable : unmatched
+    }
+
+    private func candidateLabel(_ assignment: AO3ChallengeAssignment) -> String {
+        "\(giverDisplay(for: assignment)) → \(displayName(assignment.requestPseud))"
+    }
+
+    private func confirmationMessage(_ write: PendingWrite) -> String {
+        let recipient = displayName(write.assignment.requestPseud)
+        switch write.kind {
+        case .reportDefault:
+            return "AO3 will mark \(giverDisplay(for: write.assignment))'s assignment for \(recipient) as "
+                + "defaulted, and it moves to the pinch hits waiting for cover."
+        case .claimPinchHit:
+            let due = worksDueAt?.dateText.map { ", due \($0)" } ?? ""
+            return "You'll be the pinch hitter for \(recipient)'s gift\(due)."
+        }
+    }
+}
+
+extension ChallengeAssignmentsView {
+    enum WriteKind: String, Identifiable {
+        case reportDefault, claimPinchHit
+        var id: String { rawValue }
+
+        var title: String { self == .reportDefault ? "Report a default" : "Claim a pinch hit" }
+        var confirmTitle: String { self == .reportDefault ? "Report this default?" : "Claim this pinch hit?" }
+        var confirmButton: String { self == .reportDefault ? "Report default" : "Claim" }
+        var failure: String {
+            self == .reportDefault ? "Couldn't record the default" : "Couldn't claim that pinch hit"
+        }
+    }
+
+    struct PendingWrite: Identifiable {
+        var kind: WriteKind
+        var assignment: AO3ChallengeAssignment
+        var id: String { "\(kind.rawValue)-\(assignment.id)" }
     }
 }
