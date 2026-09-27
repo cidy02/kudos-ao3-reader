@@ -301,6 +301,16 @@ nonisolated struct AO3GiftRecipient: Equatable, Identifiable, Sendable {
     var id: String { name }
 }
 
+/// One entry of the work form's "Current Series": the series, and the
+/// `SerialWork` its "Remove Work From Series" link deletes.
+nonisolated struct AO3CurrentSeries: Equatable, Identifiable, Sendable {
+    var seriesID: Int
+    var title: String
+    var serialWorkID: Int?
+
+    var id: Int { seriesID }
+}
+
 nonisolated struct AO3SeriesMembership: Equatable, Identifiable, Sendable {
     var seriesID: Int
     var title: String
@@ -419,6 +429,10 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
     var gifts: [AO3GiftRecipient] = []
     var series: [AO3SeriesMembership] = []
     var newSeriesTitle: String = ""
+    /// The series the work is already in — `_standard_form`'s "Current
+    /// Series". Read-only: the form posts none of it, and `series` above only
+    /// ever adds (`Work#series_attributes=` skips a series the work is in).
+    var currentSeries: [AO3CurrentSeries] = []
 
     /// The typed new-series title as it will be posted, or nil when it is only
     /// whitespace — which must neither create a series nor un-pick one.
@@ -730,8 +744,39 @@ nonisolated struct AO3SeriesWorkRow: Equatable, Identifiable, Sendable {
     var title: String
     var position: Int
     var isDraft: Bool = false
+    /// From the series page's blurb, when the screen that opened this had it.
+    var words: Int?
+    var dateText: String = ""
 
     var id: Int { serialWorkID }
+
+    /// 1br's "4,200 words · 12 Jan 2023"; nil when no blurb matched. The date
+    /// is the blurb's own, unlabelled as AO3 prints it: it is the last update,
+    /// so calling it "posted" would be wrong for a work updated since.
+    var metadataText: String? {
+        var parts: [String] = []
+        if let words { parts.append("\(words.formatted()) \(words == 1 ? "word" : "words")") }
+        if !dateText.isEmpty { parts.append(dateText) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Joins the series page's blurbs (already parsed by the series screen)
+    /// onto the manage page's rows. The manage page links no works
+    /// (`series/_series_order.html.erb` prints a bare title), so rows match by
+    /// title in reading order. `series#show` lists posted works only, so a
+    /// draft stays bare. Only display fields are set — never `workID`, which
+    /// the reorder write would then trust.
+    static func attachingBlurbs(_ works: [AO3WorkSummary], to rows: [AO3SeriesWorkRow]) -> [AO3SeriesWorkRow] {
+        var remaining = works
+        return rows.sorted { $0.position < $1.position }.map { row in
+            var row = row
+            guard !row.isDraft, let index = remaining.firstIndex(where: { $0.title == row.title }) else { return row }
+            let work = remaining.remove(at: index)
+            row.words = work.words
+            row.dateText = work.dateUpdated
+            return row
+        }
+    }
 }
 
 /// One write in a series reorder. Position lives on `SerialWork`, so three

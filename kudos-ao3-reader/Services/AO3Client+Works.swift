@@ -70,6 +70,11 @@ extension AO3Client {
         URL(string: "https://archiveofourown.org/series/\(seriesID)")!
     }
 
+    /// `serial_work_path` — what "Remove Work From Series" deletes.
+    static func serialWorkURL(serialWorkID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/serial_works/\(serialWorkID)")!
+    }
+
     /// The work form's own collection field autocomplete —
     /// `autocomplete_options("open_collection_names")` in `works/_standard_form`
     /// — built like `autocompleteURL(kind:term:)`. nil for a blank term.
@@ -274,6 +279,7 @@ extension AO3Client {
             hiddenFields: parseCarryHiddenFields(in: form)
         )
         formDTO.chaptersPosted = parsePostedChapterCount(in: doc, form: form)
+        formDTO.currentSeries = parseCurrentSeries(in: form)
         formDTO.collections = formDTO.collectionNames.map {
             AO3CollectionOffer(
                 name: $0,
@@ -733,6 +739,24 @@ extension AO3Client {
                 seriesID: id,
                 title: option.title,
                 isSelected: option.isSelected
+            )
+        }
+    }
+
+    /// "Current Series": each `<dd>` holds the series link and "Remove Work
+    /// From Series" (`link_to …, serial_work_path(serial), method: :delete`).
+    private static func parseCurrentSeries(in form: Element) -> [AO3CurrentSeries] {
+        let removals = (try? form.select("a[href*=/serial_works/]").array()) ?? []
+        return removals.compactMap { remove in
+            guard let entry = remove.parent()?.parent(),
+                  let link = try? entry.select("a[href*=/series/]").first(),
+                  let seriesID = seriesID(inPath: (try? link.attr("href")) ?? "")
+            else { return nil }
+            let href = (try? remove.attr("href")) ?? ""
+            return AO3CurrentSeries(
+                seriesID: seriesID,
+                title: ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                serialWorkID: href.split(separator: "/").last.flatMap { Int($0) }
             )
         }
     }

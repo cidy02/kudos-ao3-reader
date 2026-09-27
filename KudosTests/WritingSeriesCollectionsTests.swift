@@ -40,6 +40,30 @@ struct WritingSeriesCollectionsTests {
     </ul></dd>
     """
 
+    @Test func theWorkFormReadsItsCurrentSeriesAndPostsNoneOfIt() throws {
+        let form = try editForm(currentSeries: Self.currentSeriesMarkup)
+        #expect(form.currentSeries == [
+            AO3CurrentSeries(seriesID: 77, title: "Water", serialWorkID: 4401),
+            AO3CurrentSeries(seriesID: 91, title: "Salt", serialWorkID: 4402)
+        ])
+        // Nothing picked: the select and title go blank, which
+        // `Work#series_attributes=` reads as "add nothing".
+        let params = Dictionary(form.parameters(submit: .update), uniquingKeysWith: { $1 })
+        #expect(params[AO3WorkFormField.seriesID] == "")
+        #expect(params[AO3WorkFormField.seriesTitle] == "")
+        #expect(!form.parameters(submit: .update).contains { $0.0.contains("serial") })
+        #expect(WorkEditView.seriesValue(current: form.currentSeries.map(\.title), adding: nil) == "Water, Salt")
+        #expect(try editForm().currentSeries.isEmpty)
+    }
+
+    @Test func theSeriesRowNamesWhatIsAndWhatSavingAdds() {
+        #expect(WorkEditView.seriesValue(current: [], adding: nil) == "None")
+        #expect(WorkEditView.seriesValue(current: [], adding: "Salt") == "Adding Salt")
+        #expect(WorkEditView.seriesValue(current: ["Water"], adding: "Salt") == "Water + Salt")
+        #expect(WorkSeriesPickerView.membershipText(workTitle: "Tide", count: 1) == "Tide is part of one series")
+        #expect(WorkSeriesPickerView.membershipText(workTitle: "Tide", count: 2) == "Tide is part of 2 series")
+    }
+
     // MARK: Collections
 
     /// The picker edits `collections`; the payload used to post
@@ -87,5 +111,28 @@ struct WritingSeriesCollectionsTests {
             id: id, title: title, authors: [], fandoms: [], rating: "", warnings: [], categories: [],
             isComplete: nil, dateUpdated: date, tags: [], summary: "", language: "", words: words, chapters: ""
         )
+    }
+
+    @Test func reorderRowsTakeWordsAndDatesFromTheSeriesPage() {
+        let rows = [
+            row(33, "Long Way", position: 3),
+            row(11, "Salt and Static", position: 1),
+            row(22, "Untitled (DRAFT)", position: 2, draft: true)
+        ]
+        let works = [
+            blurb(300, "Long Way", words: 30_280, date: "12 Aug 2024"),
+            blurb(100, "Salt and Static", words: 4200, date: "09 Jan 2023")
+        ]
+        let joined = AO3SeriesWorkRow.attachingBlurbs(works, to: rows)
+        #expect(joined.map(\.serialWorkID) == [11, 22, 33])
+        #expect(joined.map(\.metadataText) == ["4,200 words · 09 Jan 2023", nil, "30,280 words · 12 Aug 2024"])
+        // Display only: the reorder write still has no work id to trust.
+        #expect(joined.allSatisfy { $0.workID == nil })
+        #expect(AO3SeriesWorkRow.attachingBlurbs([], to: rows).allSatisfy { $0.metadataText == nil })
+
+        let fresh = [row(33, "Long Way", position: 2), row(11, "Salt and Static", position: 1)]
+        let kept = SeriesRemoveWorksView.keepingMetadata(of: joined, on: fresh)
+        #expect(kept.map(\.serialWorkID) == [11, 33])
+        #expect(kept.map(\.metadataText) == ["4,200 words · 09 Jan 2023", "30,280 words · 12 Aug 2024"])
     }
 }

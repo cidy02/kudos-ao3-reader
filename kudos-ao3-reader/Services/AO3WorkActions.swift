@@ -290,6 +290,43 @@ extension AO3AuthService {
         return last
     }
 
+    /// 1br's Remove works: AO3's "Remove Work From Series" link, which Rails
+    /// UJS sends as a POST with `_method=delete` to `/serial_works/:id`. The
+    /// work stays posted. `serial_works#destroy` redirects with no flash, so
+    /// the manage page is read back as the evidence: the row must be gone, and
+    /// the fresh rows are returned. AO3 deletes the series with its last work
+    /// (`SerialWork#delete_empty_series`) — the caller never offers that one.
+    /// `expectedGeneration`: as `deleteChapter`. Unexercised against a live
+    /// AO3 session (release gate).
+    func removeWorkFromSeries(
+        seriesID: Int, serialWorkID: Int, expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> [AO3SeriesWorkRow] {
+        try requireSessionGeneration(expectedGeneration)
+        try requireWorkSession()
+        let manageURL = AO3Client.seriesManageURL(seriesID: seriesID)
+        let csrf = try csrfToken(from: try await workFormHTML(at: manageURL, using: client))
+        try requireSessionGeneration(expectedGeneration)
+        let request = try writeRequest(
+            to: AO3Client.serialWorkURL(serialWorkID: serialWorkID),
+            body: Self.formEncoded([
+                (AO3WorkFormField.authenticityToken, csrf), (AO3WorkFormField.methodOverride, "delete")
+            ]),
+            csrf: csrf,
+            referer: manageURL,
+            ajax: false
+        )
+        let (_, body) = try await submitWrite(request, using: client)
+        if let error = AO3Client.workWriteError(in: body) {
+            throw AO3WorkWriteError.rejected(error)
+        }
+        guard let rows = try? AO3Client.parseSeriesManagePage(
+            from: try await workFormHTML(at: manageURL, using: client)
+        ), !rows.contains(where: { $0.serialWorkID == serialWorkID }) else {
+            throw AO3WorkWriteError.unconfirmed
+        }
+        return rows
+    }
+
     // MARK: Bulk edit
 
     /// Bulk edit, in two halves — because AO3's bulk form cannot express one of them.
