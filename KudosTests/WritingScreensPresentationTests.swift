@@ -156,6 +156,23 @@ struct WritingScreensPresentationTests {
         #expect(controller.takeCheckpoint() == "<p>one three\nfour</p>")
     }
 
+    /// Grok P1: a chapter write refreshes chapter 1's text but keeps a
+    /// backdate picked on the work form and not yet saved.
+    @Test func aChapterRefreshKeepsAnUnsavedBackdate() {
+        let current = AO3WorkChapterDraft(
+            title: "Old", summary: "", content: "<p>old</p>",
+            publishedYear: "2020", publishedMonth: "3", publishedDay: "7"
+        )
+        let fresh = AO3WorkChapterDraft(title: "New", summary: "S", content: "<p>new</p>", publishedYear: "2024")
+        let kept = WorkEditView.refreshedChapter(current, fresh: fresh)
+        #expect(kept?.content == "<p>new</p>")
+        #expect(kept?.title == "New")
+        #expect(kept?.summary == "S")
+        #expect([kept?.publishedYear, kept?.publishedMonth, kept?.publishedDay] == ["2020", "3", "7"])
+        #expect(WorkEditView.refreshedChapter(nil, fresh: fresh) == fresh)
+        #expect(WorkEditView.refreshedChapter(current, fresh: nil) == nil)
+    }
+
     // MARK: Fixtures
 
     private func work(_ id: Int, isComplete: Bool? = nil) -> AO3WorkSummary {
