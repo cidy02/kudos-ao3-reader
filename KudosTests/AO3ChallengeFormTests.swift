@@ -104,6 +104,71 @@ struct AO3ChallengeFormTests {
         #expect(form.validated().isValid)
     }
 
+    /// potential_match_settings/_potential_match_settings_form (Q9) as Rails
+    /// renders it: selects with "All" = -1, and each check_box preceded by a
+    /// hidden "0" with the same name.
+    @Test func matchSettingsRoundTripAllFifteenFields() throws {
+        let base = "gift_exchange[potential_match_settings_attributes]"
+        func select(_ name: String, _ selected: Int) -> String {
+            let options = [-1, 0, 1, 2, 3, 4, 5].map {
+                "<option value=\"\($0)\"\($0 == selected ? " selected=\"selected\"" : "")>\($0 == -1 ? "All" : String($0))</option>"
+            }.joined()
+            return "<select name=\"\(base)[\(name)]\">\(options)</select>"
+        }
+        func check(_ type: String, _ on: Bool) -> String {
+            "<input name=\"\(base)[include_optional_\(type)]\" type=\"hidden\" value=\"0\">"
+                + "<input type=\"checkbox\" value=\"1\" name=\"\(base)[include_optional_\(type)]\"\(on ? " checked=\"checked\"" : "")>"
+        }
+        let required = ["fandoms": 1, "characters": 0, "relationships": -1, "freeforms": 0,
+                        "categories": 0, "ratings": 0, "archive_warnings": 0]
+        let fieldset = "<fieldset id=\"match_settings\">"
+            + select("num_required_prompts", 2)
+            + AO3PotentialMatchSettings.tagTypes.map { select("num_required_\($0)", required[$0] ?? 0) }.joined()
+            + AO3PotentialMatchSettings.tagTypes.map { check($0, $0 == "characters") }.joined()
+            + "<input type=\"hidden\" name=\"\(base)[id]\" value=\"44\"></fieldset>"
+        let html = """
+        <form action="/collections/fest/gift_exchange" method="post">
+          <input type="hidden" name="_method" value="put">
+          <input type="hidden" name="authenticity_token" value="csrf">
+          \(fieldset)
+        </form>
+        """
+        let form = try AO3Client.parseChallengeSettingsForm(html, slug: "fest", kind: .giftExchange)
+        let match = try #require(form.settings.matchSettings)
+        #expect(match.id == "44")
+        #expect(match.numRequiredPrompts == 2)
+        #expect(match.numRequired == required)
+        #expect(match.includeOptional["characters"] == true)
+        #expect(match.includeOptional["fandoms"] == false)
+        #expect(match.matchOn == ["fandoms", "relationships"])
+
+        var edited = form
+        edited.settings.matchSettings?.numRequired["characters"] = 1
+        let params = AO3Client.challengeSettingsParameters(edited)
+        let posted = Dictionary(params, uniquingKeysWith: { first, _ in first })
+        #expect(posted["\(base)[id]"] == "44")
+        #expect(posted["\(base)[num_required_prompts]"] == "2")
+        #expect(posted["\(base)[num_required_characters]"] == "1")
+        #expect(posted["\(base)[num_required_relationships]"] == "-1")
+        // A checked box posts "1" once; the hidden "0" is not sent after it.
+        #expect(params.filter { $0.0 == "\(base)[include_optional_characters]" }.map(\.1) == ["1"])
+        #expect(params.filter { $0.0 == "\(base)[include_optional_fandoms]" }.map(\.1) == ["0"])
+        #expect(params.filter { $0.0.hasPrefix(base) }.count == 16)
+
+        // A prompt meme's form has no matcher.
+        let meme = try AO3Client.parseChallengeSettingsForm(
+            html.replacingOccurrences(of: fieldset, with: ""), slug: "fest", kind: .giftExchange
+        )
+        #expect(meme.settings.matchSettings == nil)
+    }
+
+    @Test func introductionWordCountIgnoresMarkup() {
+        #expect(ChallengeSettingsEditView.wordCountText("<p>Slow burn, any fandom.</p><p>Two <em>weeks</em>.</p>")
+            == "6 words")
+        #expect(ChallengeSettingsEditView.wordCountText("<p></p>") == "None")
+        #expect(ChallengeSettingsEditView.wordCountText("One") == "1 word")
+    }
+
     /// 1cb: defaulted-and-uncovered rows are the open pinch hits; AO3's Pinch
     /// Hits list is the claimed ones. Open lead, numbered straight through.
     @Test func pinchHitRowsPutOpenOnesFirst() {

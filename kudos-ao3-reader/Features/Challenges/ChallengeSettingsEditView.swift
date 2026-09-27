@@ -10,19 +10,12 @@ import SwiftUI
 /// codebase's only existing example of an editable, validated AO3 form, so its
 /// load/save/error shape is the one this view follows.
 ///
-/// A few rows the mockup shows are not here on purpose:
-/// - Name, Host byline and Tagline are collection fields, not challenge fields —
-///   `AO3ChallengeSettings` carries no `name`/owner/tagline of its own, and this
-///   screen does not invent them. The collection's own name is already in the
-///   header subtitle above.
-/// - FAQ lives on `collection[collection_profile_attributes][faq]`
-///   (`AO3CollectionForm.faq`), so its "edit" affordance opens
-///   `AO3CollectionFormView` (1bl/1cg) rather than duplicating that state here.
-/// - "Unrevealed until reveal", "Moderated sign-ups" and "Closed to new sign-ups"
-///   are `AO3CollectionForm.isUnrevealed/isModerated/isClosed` — collection
-///   preferences, not challenge settings — so they stay on 1cg too.
-/// - "Match on" has no backing field on `AO3PromptRestrictionSnapshot` at all,
-///   so it is dropped rather than faked.
+/// Name, Tagline, Introduction and FAQ are collection fields, read from the
+/// collection's edit page and edited on 1cg (`AO3CollectionFormView`); the host
+/// byline is not drawn because that page carries owner pseud ids, not names.
+/// The moderation switches are collection preferences and save through the
+/// collection form after the challenge form. Matching reads and posts AO3's
+/// potential-match settings (see `ChallengeSettingsEditSections.swift`).
 ///
 /// Matching itself (`potential_matches#generate`) and challenge deletion are not
 /// client writes — AO3ChallengeActions never exposes them — so "Run matching"
@@ -38,7 +31,15 @@ struct ChallengeSettingsEditView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
 
-    @State private var form: AO3ChallengeSettingsForm?
+    @State var form: AO3ChallengeSettingsForm?
+    /// The collection's own edit form (Basics, moderation switches), and the
+    /// copy it loaded as, so Save posts it only when a switch changed.
+    @State var collectionForm: AO3CollectionForm?
+    @State var loadedCollectionForm: AO3CollectionForm?
+    @State var collectionLoadFailed = false
+    /// The AO3 session the collection form was read under.
+    @State private var loadedGeneration: Int?
+    @State private var confirmReveal = false
     @State private var tagSetLinks: [AO3CollectionTagSetLink] = []
     /// The challenge's total, not page 1's count; `nil` leaves it out.
     @State private var signUpTotal: Int?
@@ -53,10 +54,10 @@ struct ChallengeSettingsEditView: View {
         case failed(String)
     }
 
-    private var gutter: CGFloat { SubjectMetrics.accountGutter }
+    var gutter: CGFloat { SubjectMetrics.accountGutter }
     private var selfGuttered: CGFloat { 0 }
 
-    private var palette: SubjectPalette {
+    var palette: SubjectPalette {
         theme.appTheme.subjectPalette(
             hue: CoverArt.workHue(fandoms: [], title: effectiveTitle)
         )
@@ -66,7 +67,7 @@ struct ChallengeSettingsEditView: View {
         collectionTitle.isEmpty ? collectionSlug : collectionTitle
     }
 
-    private var settings: AO3ChallengeSettings {
+    var settings: AO3ChallengeSettings {
         form?.settings ?? AO3ChallengeSettings(collectionSlug: collectionSlug, kind: .giftExchange)
     }
 
@@ -120,6 +121,15 @@ struct ChallengeSettingsEditView: View {
         }
         .task { await loadIfNeeded() }
         .refreshable { await load() }
+        .alert("Reveal now?", isPresented: $confirmReveal) {
+            Button("Save and reveal", role: .destructive) {
+                Task { await save() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Turning off Unrevealed shows this collection's works to everyone, and turning off "
+                + "Anonymous shows their creators. The app can't hide them again.")
+        }
     }
 
     // MARK: - Header
@@ -148,9 +158,12 @@ struct ChallengeSettingsEditView: View {
     private var contentSections: some View {
         Section {
             SectionRuleHeader(title: "Basics")
+                .padding(.bottom, 8)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            introductionCard.pageBodyRow(top: 8, gutter: gutter)
-            faqPanel.pageBodyRow(top: 8, gutter: gutter)
+        }
+        Section {
+            basicsRows
+            instructionsCard.pageBodyRow(top: 12, gutter: gutter)
         }
 
         Section {
@@ -186,6 +199,9 @@ struct ChallengeSettingsEditView: View {
         Section {
             SectionRuleHeader(title: "Matching")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
+            matchSettingsPanels
+            SubjectFieldLabel(text: "Request fandoms", style: .formGroup)
+                .pageBodyRow(top: 12, gutter: gutter)
             matchingPanel.pageBodyRow(top: 8, gutter: gutter)
             matchingFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
@@ -193,7 +209,7 @@ struct ChallengeSettingsEditView: View {
         Section {
             SectionRuleHeader(title: "Anonymity and moderation")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
-            anonymityPanel.pageBodyRow(top: 8, gutter: gutter)
+            moderationPanel.pageBodyRow(top: 8, gutter: gutter)
         }
 
         Section {
@@ -205,19 +221,22 @@ struct ChallengeSettingsEditView: View {
 
     // MARK: - Basics
 
-    private var introductionBinding: Binding<String> {
+    private var instructionsBinding: Binding<String> {
         Binding(
             get: { form?.settings.signupInstructionsGeneral ?? "" },
             set: { form?.settings.signupInstructionsGeneral = $0 }
         )
     }
 
-    private var introductionCard: some View {
+    /// The challenge's own prose: AO3's "General Sign-up Instructions"
+    /// (`signup_instructions_general`). The collection's Introduction is a
+    /// different field, shown in the rows above.
+    private var instructionsCard: some View {
         VStack(alignment: .leading, spacing: 7) {
-            SubjectFieldLabel(text: "Introduction", style: .formGroup)
+            SubjectFieldLabel(text: "Sign-up instructions", style: .formGroup)
 
             ZStack(alignment: .topLeading) {
-                if introductionBinding.wrappedValue.isEmpty {
+                if instructionsBinding.wrappedValue.isEmpty {
                     Text("Describe the challenge for people signing up…")
                         .font(.system(size: 14, design: .serif))
                         .foregroundStyle(.secondary.opacity(0.6))
@@ -225,7 +244,7 @@ struct ChallengeSettingsEditView: View {
                         .padding(.vertical, 8)
                 }
 
-                TextEditor(text: introductionBinding)
+                TextEditor(text: instructionsBinding)
                     .font(.system(size: 14, design: .serif))
                     .frame(minHeight: 100)
                     .scrollContentBackground(.hidden)
@@ -234,17 +253,6 @@ struct ChallengeSettingsEditView: View {
         }
         .padding(14)
         .subjectPanel()
-    }
-
-    /// FAQ is a collection-profile field (`AO3CollectionForm.faq`), not a
-    /// challenge field, so editing it opens the collection's own form rather
-    /// than a duplicate control here.
-    private var faqPanel: some View {
-        SubjectFormRow(label: "FAQ", value: "Edit on collection", showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "FAQ") {
-                AO3CollectionFormView(slug: collectionSlug)
-            }
-            .subjectPanel()
     }
 
     // MARK: - Schedule
@@ -377,32 +385,11 @@ struct ChallengeSettingsEditView: View {
         }
     }
 
-    /// A `Menu`, as `WritingChoiceRow` uses: it answers only its own label, so
-    /// two in one row cannot open each other.
+    /// Two menus in one row: each answers only its own label.
     private func countMenu(_ title: String, _ keyPath: WritableKeyPath<AO3ChallengeSignUpLimits, Int>) -> some View {
-        let value = settings.limits[keyPath: keyPath]
-        return Menu {
-            Picker(title, selection: Binding(
-                get: { value },
-                set: { form?.settings.limits[keyPath: keyPath] = $0 }
-            )) {
-                ForEach(0...20, id: \.self) { Text("\($0)").tag($0) }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
-        } label: {
-            HStack(spacing: 4) {
-                Text("\(value)")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .foregroundStyle(palette.accent)
+        optionMenu(title, value: settings.limits[keyPath: keyPath], options: Array(0...20)) {
+            form?.settings.limits[keyPath: keyPath] = $0
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue("\(value)")
     }
 
     private func requestRestrictionToggleBinding(_ keyPath: WritableKeyPath<AO3PromptRestrictionSnapshot, Bool>) -> Binding<Bool> {
@@ -469,10 +456,8 @@ struct ChallengeSettingsEditView: View {
 
     // MARK: - Matching
     //
-    // AO3PromptRestrictionSnapshot has no "match on" field at all — the mockup's
-    // row is dropped rather than invented. What it does carry are the fandom
-    // per-request range and `allowAnyFandom`, which is what actually feeds the
-    // matcher on AO3's side.
+    // The matcher's own settings are `matchSettingsPanels`; these are the
+    // request restriction's fandom range and "Any", which also feed it.
 
     private var matchingPanel: some View {
         VStack(spacing: 0) {
@@ -492,47 +477,34 @@ struct ChallengeSettingsEditView: View {
                 form?.settings.requestRestriction.fandomAllowed = $0
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Allow any fandom", arrangement: .control) {
-                Toggle("", isOn: requestRestrictionToggleBinding(\.allowAnyFandom))
-                    .labelsHidden()
-                    .tint(palette.accent)
+            // The spec's caption; the caption is the toggle's own label.
+            Toggle(isOn: requestRestrictionToggleBinding(\.allowAnyFandom)) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Allow any fandom")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.primary)
+                    Text("Signing up with “any” matches a participant to everything in the tag set")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .toggleStyle(.switch)
+            .tint(palette.accent)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
         }
         .subjectPanel()
     }
 
     private var matchingFootnote: some View {
         Text("Matching itself runs on AO3 and is not exposed to clients. These settings post to "
-            + "the challenge; running the match is an Open on AO3 link.")
+            + "the challenge; running the match is an Open on AO3 link. Changed after potential matches "
+            + "were generated, they apply only once matches are regenerated on AO3.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
-    }
-
-    // MARK: - Anonymity and moderation
-    //
-    // "Unrevealed until reveal", "Moderated sign-ups" and "Closed to new
-    // sign-ups" are collection preferences (AO3CollectionForm.isUnrevealed /
-    // isModerated / isClosed) — not fields on AO3ChallengeSettings — so they
-    // are not duplicated here. They belong on 1cg (AO3CollectionFormView).
-
-    private var anonymousBinding: Binding<Bool> {
-        Binding(
-            get: { form?.settings.isAnonymous ?? false },
-            set: { form?.settings.isAnonymous = $0 }
-        )
-    }
-
-    private var anonymityPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Anonymous until reveal", arrangement: .control) {
-                Toggle("", isOn: anonymousBinding)
-                    .labelsHidden()
-                    .tint(palette.accent)
-            }
-        }
-        .subjectPanel()
     }
 
     // MARK: - At AO3
@@ -563,7 +535,7 @@ struct ChallengeSettingsEditView: View {
 
     private var bottomActionBar: some View {
         Button {
-            Task { await save() }
+            saveTapped()
         } label: {
             HStack(spacing: 6) {
                 if isSaving {
@@ -696,6 +668,14 @@ struct ChallengeSettingsEditView: View {
                 slug: collectionSlug, request: profileRequest
             )) ?? []
 
+            // Basics and the moderation switches. Best-effort: the challenge
+            // form stays editable if the collection's page fails.
+            loadedGeneration = auth.sessionGeneration
+            let collection = try? await auth.collectionEditForm(slug: collectionSlug)
+            collectionForm = collection
+            loadedCollectionForm = collection
+            collectionLoadFailed = collection == nil
+
             phase = .loaded
         } catch {
             phase = .failed(error.localizedDescription)
@@ -718,6 +698,7 @@ struct ChallengeSettingsEditView: View {
             case let .saved(message, updatedForm):
                 form = updatedForm
                 saveNotice = message
+                await saveCollectionSwitches()
             case let .invalid(invalidForm):
                 form = invalidForm
             }
@@ -727,5 +708,40 @@ struct ChallengeSettingsEditView: View {
             form = updated
         }
         isSaving = false
+    }
+
+    /// The moderation switches post through the collection's own form, and only
+    /// when one changed. The session that loaded that form is re-checked.
+    private func saveCollectionSwitches() async {
+        guard collectionFormChanged, let collection = collectionForm, let loadedGeneration else { return }
+        do {
+            switch try await auth.updateCollection(
+                slug: collectionSlug, form: collection, expectedGeneration: loadedGeneration
+            ) {
+            case let .saved(message, updated):
+                collectionForm = updated
+                loadedCollectionForm = updated
+                saveNotice = [saveNotice, message].compactMap { $0 }.joined(separator: " ")
+            case let .invalid(invalid):
+                appendError(invalid.generalErrors.first ?? "AO3 didn't save the collection settings.")
+            }
+        } catch is CancellationError {
+            appendError("You changed AO3 accounts, so the collection settings were not saved. Reload and try again.")
+        } catch {
+            appendError("Collection settings: \(error.localizedDescription)")
+        }
+    }
+
+    private func appendError(_ message: String) {
+        form?.generalErrors.append(message)
+    }
+
+    /// Save, after a confirmation when it would reveal works or creators.
+    private func saveTapped() {
+        if saveRevealsSomething {
+            confirmReveal = true
+        } else {
+            Task { await save() }
+        }
     }
 }
