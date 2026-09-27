@@ -36,10 +36,9 @@ nonisolated enum AO3ChallengeKind: String, Hashable, Sendable, Codable {
 
 // MARK: - UTC wire dates
 
-/// Challenge dates are UTC on AO3. Round-trip through the device timezone by
-/// converting the stored `Date` (an instant) locally at display time — never by
-/// parsing/formatting the **wire** value with `DateFormatter.autoupdatingCurrent`,
-/// which would drift as the zone or DST offset changes.
+/// POSIX parsing and formatting with a fixed GMT formatter, so the device zone
+/// never touches a wire value. `AO3ChallengeInstant` uses it to carry AO3's
+/// wall-clock digits unchanged; which zone those digits are in is its concern.
 ///
 /// Wire formatters are ISO 8601 and POSIX `en_US_POSIX` + GMT. Built per call
 /// so they are not shared mutable `DateFormatter` state.
@@ -109,37 +108,66 @@ nonisolated enum AO3ChallengeUTCDate {
     }
 }
 
-/// One of the five challenge schedule instants, kept as a UTC `Date` plus the
-/// original wire string so an untouched field round-trips without reformatting.
+/// One challenge schedule date. AO3's `*_at_string` fields are wall-clock times
+/// in the challenge's own `time_zone` (the form's select), not UTC, so the digits
+/// are kept as they are and posted back with that zone: an untouched date cannot
+/// move. `wallClock` carries those digits in a `Date` read as UTC — format it in
+/// UTC to get AO3's own text back; it is not the moment itself (`instant` is).
 nonisolated struct AO3ChallengeInstant: Hashable, Sendable {
-    var date: Date?
+    var wallClock: Date?
     var wireString: String
-    /// ActiveSupport zone name from the challenge form (`UTC`, `Eastern Time (US & Canada)`, …).
+    /// The challenge form's zone (`UTC`, an IANA id, or a Rails name such as
+    /// `Eastern Time (US & Canada)`).
     var timeZoneName: String
+    /// AO3 renders works_reveal_at only for unrevealed collections and
+    /// authors_reveal_at only for anonymous ones (Q4). A date whose input was not
+    /// on the form is never posted: an empty value would clear it.
+    var isOnForm: Bool = true
 
-    init(date: Date? = nil, wireString: String = "", timeZoneName: String = "UTC") {
-        self.date = date
+    init(wallClock: Date? = nil, wireString: String = "", timeZoneName: String = "UTC", isOnForm: Bool = true) {
+        self.wallClock = wallClock
         self.wireString = wireString
         self.timeZoneName = timeZoneName.isEmpty ? "UTC" : timeZoneName
+        self.isOnForm = isOnForm
     }
 
-    static func parse(_ raw: String?, timeZoneName: String = "UTC") -> AO3ChallengeInstant {
+    static func parse(_ raw: String?, timeZoneName: String = "UTC", isOnForm: Bool = true) -> AO3ChallengeInstant {
         let wire = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return AO3ChallengeInstant(
-            date: AO3ChallengeUTCDate.parse(wire),
+            wallClock: AO3ChallengeUTCDate.parse(wire),
             wireString: wire,
-            timeZoneName: timeZoneName
+            timeZoneName: timeZoneName,
+            isOnForm: isOnForm
         )
     }
 
-    /// Value posted on `gift_exchange[signups_open_at_string]` and friends.
-    /// If the instant was edited (`date` set), emit POSIX UTC; otherwise keep
-    /// the original wire string so an untouched field cannot drift.
+    /// The moment itself, for comparing with now.
+    ///
+    /// ponytail: resolves only zones Foundation knows (UTC and IANA ids). A Rails
+    /// name such as "Eastern Time (US & Canada)" gives `nil`, so no late claim is
+    /// made; add ActiveSupport's zone MAPPING if challenges turn out to use them.
+    var instant: Date? {
+        guard let wallClock, let zone = TimeZone(identifier: timeZoneName) else { return nil }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        var local = utc
+        local.timeZone = zone
+        return local.date(from: utc.dateComponents([.year, .month, .day, .hour, .minute, .second], from: wallClock))
+    }
+
+    /// Value posted on `gift_exchange[signups_open_at_string]` and friends, in
+    /// `timeZoneName`: the edited digits, or the original text if unparsed.
     var postedString: String {
-        if let date {
-            return AO3ChallengeUTCDate.wireString(from: date)
+        if let wallClock {
+            return AO3ChallengeUTCDate.wireString(from: wallClock)
         }
         return wireString
+    }
+
+    /// AO3's own date, as its profile page prints it in the challenge's zone.
+    var dateText: String? {
+        guard let wallClock else { return wireString.isEmpty ? nil : wireString }
+        return wallClock.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: .gmt))
     }
 }
 
@@ -254,16 +282,16 @@ nonisolated struct AO3ChallengeSettingsForm: Hashable, Sendable {
         copy.fieldErrors = [:]
         copy.generalErrors = []
         let dates: [(String, Date?)] = [
-            ("signups_open_at", settings.signupsOpenAt.date),
-            ("signups_close_at", settings.signupsCloseAt.date),
-            ("assignments_due_at", settings.assignmentsDueAt.date),
-            ("works_reveal_at", settings.worksRevealAt.date),
-            ("authors_reveal_at", settings.authorsRevealAt.date)
+            ("signups_open_at", settings.signupsOpenAt.wallClock),
+            ("signups_close_at", settings.signupsCloseAt.wallClock),
+            ("assignments_due_at", settings.assignmentsDueAt.wallClock),
+            ("works_reveal_at", settings.worksRevealAt.wallClock),
+            ("authors_reveal_at", settings.authorsRevealAt.wallClock)
         ]
+        // All five are in the challenge's one zone, so wall clocks compare.
         for (index, current) in dates.enumerated() where index > 0 {
             if let earlier = dates[index - 1].1, let later = current.1, later < earlier {
-                copy.fieldErrors[current.0] =
-                    "This date is before the previous deadline. AO3 stores all five as UTC instants."
+                copy.fieldErrors[current.0] = "This date is before the previous deadline."
             }
         }
         if settings.limits.requestsRequired < 1 {
