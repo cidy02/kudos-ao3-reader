@@ -43,6 +43,13 @@ struct AccountInboxScreen: View {
                 .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+
+                if !availablePills.isEmpty {
+                    pillRail
+                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
 
             Section {
@@ -105,6 +112,32 @@ struct AccountInboxScreen: View {
             Text(model.actionError ?? "AO3 couldn't update your Inbox.")
         }
         .task(id: metadataTaskID) { await onEnrichVisible() }
+    }
+
+    private var availablePills: [AO3InboxPill] {
+        AO3InboxPill.available(in: model.filterForm)
+    }
+
+    /// 1l's All / Unread / Awaiting reply / Replied — AO3's own filters, so a
+    /// pill reloads page 1 from the server. The dashed chip opens the full sheet.
+    private var pillRail: some View {
+        let selected = AO3InboxPill.selected(in: model.currentFilterValues)
+        return SubjectFilterRail(onOpenFilters: { showingFilters = true }) {
+            ForEach(availablePills) { pill in
+                Button {
+                    model.applyFilters(pill.values, auth: auth)
+                } label: {
+                    SubjectChip(
+                        text: pill.title,
+                        style: .pill(isSelected: selected == pill),
+                        palette: theme.scopePalette
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isPerformingBulkAction)
+                .accessibilityAddTraits(selected == pill ? [.isButton, .isSelected] : .isButton)
+            }
+        }
     }
 
     /// 1l heads the page with what is waiting rather than only what it is.
