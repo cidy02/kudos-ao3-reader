@@ -53,14 +53,11 @@ struct ChallengeSignUpView: View {
         collectionTitle.isEmpty ? collectionSlug : collectionTitle
     }
 
-    var limits: AO3ChallengeSignUpLimits {
-        form?.limits ?? AO3ChallengeSignUpLimits(
-            requestsRequired: 1,
-            requestsAllowed: 3,
-            offersRequired: 1,
-            offersAllowed: 5
-        )
-    }
+    /// AO3's own counts from the form; `nil` (not loaded, or not printed) caps nothing.
+    var limits: AO3ChallengeSignUpLimits? { form?.limits }
+
+    /// A prompt meme's sign-up is requests only.
+    var takesOffers: Bool { form?.takesOffers ?? true }
 
     var liveRequests: [AO3ChallengePrompt] {
         form?.requests.filter { !$0.destroy } ?? []
@@ -154,11 +151,19 @@ struct ChallengeSignUpView: View {
         SubjectHeaderBlock(
             kicker: effectiveTitle,
             title: "Your sign-up",
-            subtitle: "Request \(liveRequests.count) of \(limits.requestsAllowed) · "
-                + "Offer \(liveOffers.count) of \(limits.offersAllowed)",
+            subtitle: headerSubtitle,
             palette: palette,
             gutter: SubjectMetrics.accountGutter
         )
+    }
+
+    private var headerSubtitle: String {
+        func count(_ noun: String, _ live: Int, of allowed: Int?) -> String {
+            allowed.map { "\(noun) \(live) of \($0)" } ?? AO3ChallengeCountText.plural(live, noun.lowercased())
+        }
+        let requests = count("Request", liveRequests.count, of: limits?.requestsAllowed)
+        guard takesOffers else { return requests }
+        return requests + " · " + count("Offer", liveOffers.count, of: limits?.offersAllowed)
     }
 
     // MARK: - Content Sections
@@ -175,6 +180,9 @@ struct ChallengeSignUpView: View {
             Section {
                 SectionRuleHeader(title: "Request \(index + 1)")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
+                if let tagError = form?.fieldErrors[AO3ChallengeSignUpForm.errorKey(for: request)] {
+                    errorCard(tagError).pageBodyRow(top: 8, gutter: gutter)
+                }
                 requestPanel(position: index, prompt: request)
                     .pageBodyRow(top: 8, gutter: gutter)
                 promptDescriptionCard(prompt: request)
@@ -186,16 +194,20 @@ struct ChallengeSignUpView: View {
             requestsFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
 
-        Section {
-            SectionRuleHeader(title: "Offers")
-                .pageBodyRow(top: 18, gutter: selfGuttered)
+        if takesOffers {
+            Section {
+                SectionRuleHeader(title: "Offers")
+                    .pageBodyRow(top: 18, gutter: selfGuttered)
 
-            if let offerError = form?.fieldErrors["offers"] {
-                errorCard(offerError).pageBodyRow(top: 8, gutter: gutter)
+                let offerErrors = [form?.fieldErrors["offers"]].compactMap { $0 }
+                    + liveOffers.compactMap { form?.fieldErrors[AO3ChallengeSignUpForm.errorKey(for: $0)] }
+                ForEach(offerErrors, id: \.self) { offerError in
+                    errorCard(offerError).pageBodyRow(top: 8, gutter: gutter)
+                }
+
+                offersPanel.pageBodyRow(top: 8, gutter: gutter)
+                offersFootnote.pageBodyRow(top: 8, gutter: gutter)
             }
-
-            offersPanel.pageBodyRow(top: 8, gutter: gutter)
-            offersFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
 
         if form?.signUpID != nil {
@@ -319,10 +331,28 @@ extension ChallengeSignUpView {
         .subjectPanel()
     }
 
+    /// The spec's "3 to 5 fandoms and 1 to 3 relationships per request", from
+    /// the form's own labels; a limit AO3 did not print is not claimed.
     var requestsFootnote: some View {
-        Text("The challenge asks for \(limits.requestsRequired) to \(limits.requestsAllowed) requests "
-            + "and \(limits.offersRequired) to \(limits.offersAllowed) offers per sign-up. "
-            + "Those limits are checked locally before submit, so a rejected sign-up is not a round trip.")
+        var sentences: [String] = []
+        if let limits {
+            var counts = "\(limits.requestsRequired) to \(limits.requestsAllowed) requests"
+            if takesOffers { counts += " and \(limits.offersRequired) to \(limits.offersAllowed) offers" }
+            sentences.append("The challenge asks for \(counts) per sign-up.")
+        }
+        if let tags = form?.requestTagLimits {
+            let perType = AO3PromptTagType.allCases.compactMap { type -> String? in
+                guard let range = tags[type], range.upperBound > 0 else { return nil }
+                return range.lowerBound == range.upperBound
+                    ? "\(range.lowerBound) \(type.plural)"
+                    : "\(range.lowerBound) to \(range.upperBound) \(type.plural)"
+            }
+            if !perType.isEmpty {
+                sentences.append("Each request takes \(perType.joined(separator: ", ")).")
+            }
+        }
+        sentences.append("Those limits are checked here before submit, so a rejected sign-up is not a round trip.")
+        return Text(sentences.joined(separator: " "))
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -345,7 +375,7 @@ extension ChallengeSignUpView {
                 }
             }
 
-            if liveOffers.count < limits.offersAllowed {
+            if liveOffers.count < (limits?.offersAllowed ?? .max) {
                 if !liveOffers.isEmpty {
                     SubjectRowSeparator()
                 }
@@ -447,7 +477,7 @@ extension ChallengeSignUpView {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(liveRequests.count >= limits.requestsAllowed || isSubmitting)
+            .disabled(liveRequests.count >= (limits?.requestsAllowed ?? .max) || isSubmitting)
 
             Button {
                 Task { await submitSignUp() }
@@ -596,7 +626,7 @@ extension ChallengeSignUpView {
         if currentForm.requests.isEmpty {
             currentForm.requests.append(AO3ChallengePrompt(id: currentForm.nextDraftPromptID, kind: .request))
         }
-        if currentForm.offers.isEmpty {
+        if currentForm.offers.isEmpty, currentForm.takesOffers {
             currentForm.offers.append(AO3ChallengePrompt(id: currentForm.nextDraftPromptID, kind: .offer))
         }
         form = currentForm
