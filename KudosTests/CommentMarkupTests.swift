@@ -152,15 +152,15 @@ struct CommentMarkupTests {
         #expect(CommentMarkupTag.Group.text.tags.map(\.tagLabel)
             == ["strong", "em", "u", "s", "sup", "sub", "small", "code"])
         #expect(CommentMarkupTag.Group.blocksAndLinks.tags.map(\.tagLabel)
-            == ["blockquote", "ul", "ol", "h3", "hr", "a href", "details"])
+            == ["blockquote", "ul", "ol", "h1–h6", "hr", "a href", "details"])
     }
 
-    /// The artboard labels the heading "h1–h6", which is a range rather than
-    /// something anyone can type. One level is written, and the tray prints the
-    /// level it writes.
-    @Test func theHeadingWritesOneLevelAndPrintsIt() {
-        #expect(CommentMarkupTag.heading.element == "h3")
-        #expect(CommentMarkupTag.heading.tagLabel == "h3")
+    /// The tile is labelled with the range. A tap with no chip still writes h3,
+    /// the level that does not outrank the work. The chips write the rest —
+    /// see `CommentPolishTests`.
+    @Test func theHeadingTilePrintsTheRangeAndDefaultsToH3() {
+        #expect(CommentMarkupTag.heading.tagLabel == CommentMarkup.headingRangeLabel)
+        #expect(CommentMarkupTag.heading.tagLabel == "h1–h6")
         #expect(apply(.heading, "Part two", 0, 8).text == "<h3>Part two</h3>")
     }
 }
