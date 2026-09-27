@@ -413,6 +413,7 @@ struct WritingTagsDestination: View {
 struct WritingBulkEditDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let workIDs: [Int]
+    var focus: EditMultipleWorksView.Focus?
     @State private var form: AO3BulkEditForm?
     @State private var loadedGeneration: Int?
     @State private var errorMessage: String?
@@ -421,7 +422,7 @@ struct WritingBulkEditDestination: View {
     var body: some View {
         Group {
             if let form, loadedGeneration == auth.sessionGeneration {
-                EditMultipleWorksView(form: form).id(auth.sessionGeneration)
+                EditMultipleWorksView(form: form, focus: focus).id(auth.sessionGeneration)
             } else if let errorMessage {
                 VStack {
                     Text(errorMessage)
