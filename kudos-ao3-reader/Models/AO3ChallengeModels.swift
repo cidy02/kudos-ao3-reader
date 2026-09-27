@@ -220,6 +220,40 @@ nonisolated struct AO3PromptRestrictionSnapshot: Hashable, Sendable {
     }
 }
 
+/// fieldset#match_settings on the gift-exchange form (otwarchive Q9,
+/// potential_match_settings/_potential_match_settings_form): the minimum match
+/// AO3's matcher needs, per request and per tag type, and whether optional tags
+/// count. Posted whole, with the record's id, so a save never clears a box the
+/// app did not show. `all` (-1) is AO3's "All".
+nonisolated struct AO3PotentialMatchSettings: Hashable, Sendable {
+    static let all = -1
+    /// AO3's seven tag types, pluralised as the field names are.
+    static let tagTypes = ["fandoms", "characters", "relationships", "freeforms", "categories", "ratings", "archive_warnings"]
+    /// `REQUIRED_MATCH_OPTIONS`; the request count drops 0 ("at least one must match").
+    static let requestOptions = [all, 1, 2, 3, 4, 5]
+    static let tagOptions = [all, 0, 1, 2, 3, 4, 5]
+
+    var id: String = ""
+    var numRequiredPrompts: Int = 1
+    var numRequired: [String: Int] = [:]
+    var includeOptional: [String: Bool] = [:]
+
+    static func label(_ type: String) -> String {
+        switch type {
+        case "freeforms": "Additional tags"
+        case "archive_warnings": "Warnings"
+        default: type.prefix(1).uppercased() + type.dropFirst()
+        }
+    }
+
+    static func optionTitle(_ value: Int) -> String { value == all ? "All" : String(value) }
+
+    /// The spec's "Match on": the types a match needs at least one of.
+    var matchOn: [String] {
+        Self.tagTypes.filter { (numRequired[$0] ?? 0) != 0 }
+    }
+}
+
 /// Gift-exchange / prompt-meme settings as AO3 stores them on the challenge
 /// object. Matching is **not** a client write — use `matchingOpenOnAO3`.
 nonisolated struct AO3ChallengeSettings: Hashable, Sendable, Identifiable {
@@ -246,6 +280,9 @@ nonisolated struct AO3ChallengeSettings: Hashable, Sendable, Identifiable {
     var requestRestriction: AO3PromptRestrictionSnapshot = AO3PromptRestrictionSnapshot()
     var offerRestriction: AO3PromptRestrictionSnapshot = AO3PromptRestrictionSnapshot()
     var assignmentsSentAt: Date?
+    /// A gift exchange's matcher settings; `nil` where the form has none (a
+    /// prompt meme has no matching).
+    var matchSettings: AO3PotentialMatchSettings?
 
     var id: String { collectionSlug }
 
