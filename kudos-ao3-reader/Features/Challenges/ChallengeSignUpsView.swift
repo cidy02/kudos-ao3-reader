@@ -528,8 +528,6 @@ private struct ChallengeSignUpDetailView: View {
             Section {
                 SectionRuleHeader(title: "\(noun) \(index + 1)")
                     .pageBodyRow(top: 18, gutter: 0)
-                // "Any <type>" choices are not parsed, so a prompt with nothing
-                // else shows no panel rather than claiming it chose nothing.
                 let tags = tagRows(prompt)
                 if !tags.isEmpty || !prompt.promptText.isEmpty {
                     promptPanel(tags: tags, text: prompt.promptText).pageBodyRow(top: 8, gutter: gutter)
@@ -538,10 +536,15 @@ private struct ChallengeSignUpDetailView: View {
         }
     }
 
+    /// AO3's "Any <type>" choice reads as "Any" in that type's row.
     private func tagRows(_ prompt: AO3ChallengePrompt) -> [(title: String, tags: [String])] {
-        [
-            ("Fandoms", prompt.fandoms), ("Relationships", prompt.relationships),
-            ("Characters", prompt.characters), ("Additional tags", prompt.freeforms)
+        func with(_ tags: [String], any: Bool) -> [String] { tags + (any ? ["Any"] : []) }
+        return [
+            ("Fandoms", with(prompt.fandoms, any: prompt.anyFandom)),
+            ("Relationships", with(prompt.relationships, any: prompt.anyRelationship)),
+            ("Characters", with(prompt.characters, any: prompt.anyCharacter)),
+            ("Additional tags", with(prompt.freeforms, any: prompt.anyFreeform)),
+            ("Optional tags", prompt.optionalTags)
         ].filter { !$0.tags.isEmpty }
     }
 

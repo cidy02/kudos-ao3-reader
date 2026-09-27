@@ -21,8 +21,17 @@ struct ChallengeSignUpView: View {
     @State var isWithdrawing: Bool = false
     @State var confirmWithdraw: Bool = false
     @State var statusNotice: String?
-    @State var editingPromptIndex: Int?
-    @State var isEditingOffer: Bool = false
+    @State var editingPrompt: EditingPrompt?
+
+    /// The prompt whose tags sheet is open, by id: a row's position among the
+    /// live prompts is not its position in the form's arrays.
+    struct EditingPrompt: Identifiable {
+        let promptID: Int
+        let kind: AO3ChallengePromptKind
+        /// 0-based position among the live prompts, for the sheet's "Request 2".
+        let position: Int
+        var id: String { "\(kind.rawValue)\(promptID)" }
+    }
 
     enum Phase: Equatable {
         case idle
@@ -125,14 +134,18 @@ struct ChallengeSignUpView: View {
             // assignment) that this screen does not make yet, so it isn't promised.
             Text("Withdrawing removes your requests and offers from \(effectiveTitle).")
         }
-        .sheet(isPresented: Binding(
-            get: { editingPromptIndex != nil },
-            set: { if !$0 { editingPromptIndex = nil } }
-        )) {
-            if let index = editingPromptIndex {
-                promptTagsEditor(index: index, isOffer: isEditingOffer)
-            }
+        .sheet(item: $editingPrompt) { editing in
+            promptTagsEditor(editing)
         }
+    }
+
+    /// A live binding to one prompt, found by id. A prompt that has gone reads
+    /// as a blank draft with the same id and writes nowhere.
+    func promptBinding(id: Int, kind: AO3ChallengePromptKind) -> Binding<AO3ChallengePrompt> {
+        Binding(
+            get: { form?.prompt(id: id, kind: kind) ?? AO3ChallengePrompt(id: id, kind: kind) },
+            set: { form?.updatePrompt($0) }
+        )
     }
 
     // MARK: - Header
@@ -162,9 +175,9 @@ struct ChallengeSignUpView: View {
             Section {
                 SectionRuleHeader(title: "Request \(index + 1)")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
-                requestPanel(index: index, prompt: request)
+                requestPanel(position: index, prompt: request)
                     .pageBodyRow(top: 8, gutter: gutter)
-                promptDescriptionCard(index: index, isOffer: false)
+                promptDescriptionCard(prompt: request)
                     .pageBodyRow(top: 8, gutter: gutter)
             }
         }
@@ -199,16 +212,15 @@ struct ChallengeSignUpView: View {
 
 extension ChallengeSignUpView {
 
-    func requestPanel(index: Int, prompt: AO3ChallengePrompt) -> some View {
-        VStack(spacing: 0) {
+    func requestPanel(position: Int, prompt: AO3ChallengePrompt) -> some View {
+        let editTags = { editingPrompt = EditingPrompt(promptID: prompt.id, kind: .request, position: position) }
+        return VStack(spacing: 0) {
             SubjectFormRow(
                 label: "Fandoms",
                 value: prompt.fandoms.isEmpty ? "None chosen" : prompt.fandoms.joined(separator: ", "),
-                showsDisclosure: true
-            ) {
-                isEditingOffer = false
-                editingPromptIndex = index
-            }
+                showsDisclosure: true,
+                action: editTags
+            )
 
             SubjectRowSeparator()
 
@@ -217,11 +229,9 @@ extension ChallengeSignUpView {
                 value: prompt.relationships.isEmpty
                     ? "Optional"
                     : "\(prompt.relationships.count) chosen",
-                showsDisclosure: true
-            ) {
-                isEditingOffer = false
-                editingPromptIndex = index
-            }
+                showsDisclosure: true,
+                action: editTags
+            )
 
             SubjectRowSeparator()
 
@@ -230,11 +240,9 @@ extension ChallengeSignUpView {
                 value: prompt.characters.isEmpty
                     ? "Optional"
                     : "\(prompt.characters.count) chosen",
-                showsDisclosure: true
-            ) {
-                isEditingOffer = false
-                editingPromptIndex = index
-            }
+                showsDisclosure: true,
+                action: editTags
+            )
 
             SubjectRowSeparator()
 
@@ -243,17 +251,16 @@ extension ChallengeSignUpView {
                 value: prompt.freeforms.isEmpty
                     ? "Optional"
                     : "\(prompt.freeforms.count) chosen",
-                showsDisclosure: true
-            ) {
-                isEditingOffer = false
-                editingPromptIndex = index
-            }
+                showsDisclosure: true,
+                action: editTags
+            )
 
             SubjectRowSeparator()
 
             // AO3's any_relationship: the request takes any relationship, not
-            // only the ones chosen above. Two lines, as 1by's Type rows.
-            HStack(spacing: 10) {
+            // only the ones chosen above. The caption is the toggle's own label,
+            // so it names the switch for VoiceOver and on the Mac.
+            Toggle(isOn: promptBinding(id: prompt.id, kind: .request).anyRelationship) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Any of these is fine")
                         .font(.system(size: 15))
@@ -263,36 +270,19 @@ extension ChallengeSignUpView {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-                Toggle("", isOn: Binding(
-                    get: { form?.requests[index].anyRelationship ?? false },
-                    set: { form?.requests[index].anyRelationship = $0 }
-                ))
-                .labelsHidden()
-                .tint(palette.accent)
             }
+            .toggleStyle(.switch)
+            .tint(palette.accent)
+            .accessibilityLabel("Any of these is fine")
+            .accessibilityHint("Any relationship matches, not only the ones chosen")
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
         }
         .subjectPanel()
     }
 
-    func promptDescriptionCard(index: Int, isOffer: Bool) -> some View {
-        let binding = Binding<String>(
-            get: {
-                if isOffer {
-                    return form?.offers[index].promptText ?? ""
-                }
-                return form?.requests[index].promptText ?? ""
-            },
-            set: {
-                if isOffer {
-                    form?.offers[index].promptText = $0
-                } else {
-                    form?.requests[index].promptText = $0
-                }
-            }
-        )
+    func promptDescriptionCard(prompt: AO3ChallengePrompt) -> some View {
+        let binding = promptBinding(id: prompt.id, kind: prompt.kind).promptText
 
         return VStack(alignment: .leading, spacing: 7) {
             SubjectFieldLabel(text: "Prompt", style: .formGroup)
@@ -351,8 +341,7 @@ extension ChallengeSignUpView {
                     value: offerSummary(offer),
                     showsDisclosure: true
                 ) {
-                    isEditingOffer = true
-                    editingPromptIndex = index
+                    editingPrompt = EditingPrompt(promptID: offer.id, kind: .offer, position: index)
                 }
             }
 
@@ -499,26 +488,12 @@ extension ChallengeSignUpView {
         )
     }
 
-    func promptTagsEditor(index: Int, isOffer: Bool) -> some View {
+    func promptTagsEditor(_ editing: EditingPrompt) -> some View {
         PromptTagsEditorView(
-            prompt: Binding(
-                get: {
-                    if isOffer {
-                        return form?.offers[index] ?? AO3ChallengePrompt(id: index, kind: .offer)
-                    }
-                    return form?.requests[index] ?? AO3ChallengePrompt(id: index, kind: .request)
-                },
-                set: {
-                    if isOffer {
-                        form?.offers[index] = $0
-                    } else {
-                        form?.requests[index] = $0
-                    }
-                }
-            ),
+            prompt: promptBinding(id: editing.promptID, kind: editing.kind),
             palette: palette,
-            isOffer: isOffer,
-            index: index
+            isOffer: editing.kind == .offer,
+            index: editing.position
         )
     }
 

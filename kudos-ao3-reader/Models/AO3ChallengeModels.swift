@@ -366,6 +366,8 @@ nonisolated struct AO3ChallengePrompt: Hashable, Sendable, Identifiable {
     var anyRelationship: Bool = false
     var anyFreeform: Bool = false
     var destroy: Bool = false
+    /// Read-only, from the sign-ups index's `ul.optional.tags` (1bz detail).
+    var optionalTags: [String] = []
 }
 
 nonisolated struct AO3ChallengeAssignment: Hashable, Sendable, Identifiable {
@@ -416,7 +418,8 @@ nonisolated struct AO3ChallengeSignUp: Hashable, Sendable, Identifiable {
     /// The distinct fandoms the sign-up requests, in order (1bz's one-liner).
     var requestTagSummary: String {
         var seen = Set<String>()
-        return requests.flatMap(\.fandoms).filter { seen.insert($0).inserted }.joined(separator: ", ")
+        return requests.flatMap { $0.fandoms + ($0.anyFandom ? ["Any Fandom"] : []) }
+            .filter { seen.insert($0).inserted }.joined(separator: ", ")
     }
 }
 
@@ -446,6 +449,21 @@ nonisolated struct AO3ChallengeSignUpForm: Hashable, Sendable {
     /// Unsaved prompts take negative ids, one below the lowest in use, so
     /// `ForEach` identity stays unique. Only AO3's own (positive) ids are posted.
     var nextDraftPromptID: Int { min(0, (requests + offers).map(\.id).min() ?? 0) - 1 }
+
+    /// Rows list only live prompts (`destroy` filtered out), so a row's position
+    /// is not a position in `requests`/`offers`: prompts are found by id and kind.
+    func prompt(id: Int, kind: AO3ChallengePromptKind) -> AO3ChallengePrompt? {
+        (kind == .request ? requests : offers).first { $0.id == id }
+    }
+
+    /// Writes back the prompt with the same id and kind; one that has gone is not recreated.
+    mutating func updatePrompt(_ prompt: AO3ChallengePrompt) {
+        if prompt.kind == .request, let index = requests.firstIndex(where: { $0.id == prompt.id }) {
+            requests[index] = prompt
+        } else if prompt.kind == .offer, let index = offers.firstIndex(where: { $0.id == prompt.id }) {
+            offers[index] = prompt
+        }
+    }
 
     func validated() -> AO3ChallengeSignUpForm {
         var copy = self
