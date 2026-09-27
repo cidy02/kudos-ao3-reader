@@ -252,6 +252,7 @@ nonisolated struct AO3CollectionForm: Hashable, Sendable {
     var showRandom: Bool
     var emailNotify: Bool
     var challengeType: String
+    var challengeOptions: [AO3FormOption]
     var preferenceID: String
     // Profile
     var introduction: String
@@ -300,6 +301,7 @@ nonisolated struct AO3CollectionForm: Hashable, Sendable {
             showRandom: false,
             emailNotify: false,
             challengeType: "",
+            challengeOptions: [],
             preferenceID: "",
             introduction: "",
             faq: "",
@@ -352,6 +354,7 @@ nonisolated struct AO3CollectionForm: Hashable, Sendable {
             && lhs.showRandom == rhs.showRandom
             && lhs.emailNotify == rhs.emailNotify
             && lhs.challengeType == rhs.challengeType
+            && lhs.challengeOptions == rhs.challengeOptions
             && lhs.preferenceID == rhs.preferenceID
             && lhs.introduction == rhs.introduction
             && lhs.faq == rhs.faq

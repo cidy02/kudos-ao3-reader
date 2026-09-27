@@ -56,6 +56,16 @@ struct AO3CollectionItemsView: View {
         slug == nil ? .invited : .unreviewed
     }
 
+    /// Reset returns to `defaultTab`, so it has nothing to do while on it.
+    static func resetIsDisabled(slug: String?, tab: AO3CollectionItemTab) -> Bool {
+        tab == defaultTab(slug: slug)
+    }
+
+    /// Each card in its collection's own hue — the rule `AO3CollectionCard` uses.
+    static func cardHue(for item: AO3CollectionItem) -> Double {
+        CoverArt.workHue(fandoms: [], title: item.collectionTitle)
+    }
+
     init(slug: String?, title: String) {
         self.slug = slug
         self.title = title
@@ -236,7 +246,8 @@ struct AO3CollectionItemsView: View {
     }
 
     private var tabStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let resetIsDisabled = Self.resetIsDisabled(slug: slug, tab: tab)
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Self.tabs, id: \.self) { option in
                     Button {
@@ -262,11 +273,11 @@ struct AO3CollectionItemsView: View {
                         style: .pill(isSelected: false),
                         systemImage: "xmark"
                     )
-                    .opacity(tab == .unreviewed ? 0.45 : 0.7)
+                    .opacity(resetIsDisabled ? 0.45 : 0.7)
                 }
                 .buttonStyle(.plain)
                 .minimumHitTarget(28)
-                .disabled(tab == .unreviewed)
+                .disabled(resetIsDisabled)
                 .accessibilityLabel("Reset filters")
             }
             .padding(.horizontal, 16)
@@ -314,7 +325,7 @@ struct AO3CollectionItemsView: View {
                     AO3CollectionItemCard(
                         item: item,
                         staging: $staging,
-                        palette: palette
+                        palette: theme.appTheme.subjectPalette(hue: Self.cardHue(for: item))
                     )
                     .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
                 }

@@ -110,6 +110,32 @@ struct AO3CollectionsFilterTests {
         #expect(names(filter, input) == ["some"])
     }
 
+    @Test func everyClientSideSortAndFilterNeedsTheWholeIndex() {
+        #expect(!AO3CollectionsFilter().needsWholeIndex)
+
+        var directionOnly = AO3CollectionsFilter()
+        directionOnly.order = .ascending
+        #expect(!directionOnly.needsWholeIndex)
+
+        for sort in AO3CollectionsFilter.Sort.allCases where sort != .asReturned {
+            var filter = AO3CollectionsFilter()
+            filter.sort = sort
+            #expect(filter.needsWholeIndex)
+        }
+
+        let flags: [WritableKeyPath<AO3CollectionsFilter, Bool>] = [
+            \AO3CollectionsFilter.showsOpenOnly,
+            \AO3CollectionsFilter.showsUnrevealedOnly,
+            \AO3CollectionsFilter.showsModeratedOnly,
+            \AO3CollectionsFilter.showsWithWorksOnly
+        ]
+        for flag in flags {
+            var filter = AO3CollectionsFilter()
+            filter[keyPath: flag] = true
+            #expect(filter.needsWholeIndex)
+        }
+    }
+
     // MARK: Chips
 
     @Test func onlyNonDefaultSettingsProduceAChip() {
@@ -122,5 +148,36 @@ struct AO3CollectionsFilterTests {
         // The direction label follows the sort — Title must not offer "Newest".
         #expect(filter.summaryLabels == ["Title · A–Z"])
         #expect(filter.hasActiveFilters)
+    }
+
+    @Test func filterDraftCancelApplyAndResetResolveIndependently() {
+        var initial = AO3CollectionsFilter()
+        initial.showsOpenOnly = true
+        var editor = AO3CollectionsFilterDraft(initial: initial)
+        editor.draft.sort = .title
+        editor.draft.showsModeratedOnly = true
+
+        #expect(editor.resolved(.cancel) == initial)
+        #expect(editor.resolved(.apply) == editor.draft)
+
+        editor.reset()
+        #expect(editor.draft == AO3CollectionsFilter())
+        #expect(editor.resolved(.cancel) == initial)
+        #expect(editor.resolved(.apply) == AO3CollectionsFilter())
+    }
+
+    @Test func collectionStatusLabelsAlwaysNameVisibilityAndOptionallyAnonymity() {
+        #expect(AO3CollectionCardCopy.statusLabels(
+            isUnrevealed: false, isAnonymous: false
+        ) == ["Revealed"])
+        #expect(AO3CollectionCardCopy.statusLabels(
+            isUnrevealed: true, isAnonymous: false
+        ) == ["Unrevealed"])
+        #expect(AO3CollectionCardCopy.statusLabels(
+            isUnrevealed: false, isAnonymous: true
+        ) == ["Revealed", "Anonymous"])
+        #expect(AO3CollectionCardCopy.statusLabels(
+            isUnrevealed: true, isAnonymous: true
+        ) == ["Unrevealed", "Anonymous"])
     }
 }

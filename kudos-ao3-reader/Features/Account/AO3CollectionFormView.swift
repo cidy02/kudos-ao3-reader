@@ -1,8 +1,13 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let ao3CollectionDeleted = Notification.Name("AO3CollectionDeleted")
+}
+
 /// Navigation value for the collection form. `slug == nil` is New Collection.
 struct AO3CollectionFormDestination: Hashable {
     var slug: String?
+    var viewerIsOwner = false
 }
 
 /// Artboards **1bl** — AO3's New Collection and Edit Collection forms.
@@ -13,12 +18,13 @@ struct AO3CollectionFormDestination: Hashable {
 /// Profile) and every row maps to a field `AO3CollectionForm` already carries and
 /// `AO3Client.collectionFormParameters` already posts.
 ///
-/// **Closing and deleting stay on AO3.** Neither is reversible from the app, and
-/// the spec says so too. Both open the website rather than being offered here as a
-/// button that cannot be undone.
+/// Closing stays on AO3. Owners can delete after a destructive confirmation;
+/// AO3's owner-gated edit form is what makes that action available here.
 struct AO3CollectionFormView: View {
     /// Editing an existing collection, or creating one.
     let slug: String?
+    let viewerIsOwner: Bool
+    var onDeleted: (() -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -37,6 +43,15 @@ struct AO3CollectionFormView: View {
     @State private var saveMessage: String?
     @State private var nameAvailability: AO3CollectionNameAvailability?
     @State private var nameCheckTask: Task<Void, Never>?
+    @State private var showingDeleteConfirmation = false
+
+    init(
+        slug: String?, viewerIsOwner: Bool = false, onDeleted: (() -> Void)? = nil
+    ) {
+        self.slug = slug
+        self.viewerIsOwner = viewerIsOwner
+        self.onDeleted = onDeleted
+    }
 
     private enum Phase: Equatable { case idle, loading, ready, saving, failed(String) }
 
@@ -62,6 +77,17 @@ struct AO3CollectionFormView: View {
         .subjectScreenWash(palette: palette)
         .task { if phase == .idle { await loadForm() } }
         .onDisappear { nameCheckTask?.cancel() }
+        .alert(
+            "Delete \u{201c}\(deletionName)\u{201d}?",
+            isPresented: $showingDeleteConfirmation
+        ) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete Collection", role: .destructive) {
+                Task { await deleteCollection() }
+            }
+        } message: {
+            Text("This permanently deletes the collection from AO3. Its works remain on AO3. This cannot be undone.")
+        }
     }
 
     @ViewBuilder
@@ -98,6 +124,9 @@ struct AO3CollectionFormView: View {
                 SubjectRowSeparator()
                 textRow("Contact email", text: binding.email,
                         placeholder: "Optional", errorKey: AO3CollectionParam.email)
+                SubjectRowSeparator()
+                textRow("Tagline", text: binding.description,
+                        placeholder: "Optional", errorKey: AO3CollectionParam.description)
             }
 
             group("Images", note: nil) {
@@ -122,6 +151,32 @@ struct AO3CollectionFormView: View {
                 toggleRow("Unrevealed", isOn: binding.isUnrevealed)
                 SubjectRowSeparator()
                 toggleRow("Anonymous", isOn: binding.isAnonymous)
+                SubjectRowSeparator()
+                // AO3's `email_notify` mails the contact email when an item is
+                // added (CollectionMailer#item_added_notification), not members.
+                toggleRow("Email new items", isOn: binding.emailNotify)
+            }
+
+            // AO3 prints the select only while it offers one; no field, no row.
+            if !binding.wrappedValue.challengeOptions.isEmpty {
+                group("Challenge", note: nil) {
+                    SubjectFormRow(
+                        label: "Set up a challenge",
+                        arrangement: .control,
+                        trailing: {
+                            Picker("Set up a challenge", selection: binding.challengeType) {
+                                ForEach(binding.wrappedValue.challengeOptions) { option in
+                                    // AO3's blank option may print no text.
+                                    Text(option.title.isEmpty ? "None" : option.title)
+                                        .tag(option.value)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    )
+                }
             }
 
             group("Profile", note: nil) {
@@ -159,6 +214,12 @@ struct AO3CollectionFormView: View {
 
     private var palette: SubjectPalette {
         theme.scopePalette
+    }
+
+    private var deletionName: String {
+        let title = form?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !title.isEmpty { return title }
+        return form?.name ?? "collection"
     }
 
     // MARK: Rows
@@ -307,8 +368,9 @@ struct AO3CollectionFormView: View {
     }
 
     private var preferencesNote: String {
-        "These four are independent on AO3, so they are four switches rather than one "
-            + "choice. Unrevealed shows works as Mystery Work; anonymous hides creators."
+        "These are independent on AO3, so each is its own switch rather than one "
+            + "choice. Unrevealed shows works as Mystery Work; anonymous hides creators; "
+            + "new-item emails go to the contact email."
     }
 
     // MARK: Actions
@@ -334,13 +396,13 @@ struct AO3CollectionFormView: View {
         return hasTitle && hasName && nameAvailability != .taken && nameAvailability != .invalid
     }
 
-    /// Closing and deleting are irreversible from the app, so they leave for the
-    /// website rather than being offered as a button here. Spec 1bl says the same.
+    /// Closing remains on AO3; deletion is shown only when the collection index or
+    /// show page marked this reader as an owner.
     private var openOnAO3Card: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Closing and deleting stay on AO3")
+            Text("Collection actions")
                 .font(.system(size: 15, weight: .semibold))
-            Text("Neither can be undone from the app, so both open the website signed in.")
+            Text("Closing stays on AO3. Deleting removes the collection, not its works.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -350,6 +412,14 @@ struct AO3CollectionFormView: View {
                 }
                     .buttonStyle(.borderless)
                     .font(.system(size: 13, weight: .semibold))
+                if viewerIsOwner {
+                    Button("Delete Collection", role: .destructive) {
+                        showingDeleteConfirmation = true
+                    }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 13, weight: .semibold))
+                        .disabled(phase == .saving)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -458,6 +528,39 @@ struct AO3CollectionFormView: View {
             let result = try? await AO3Client.shared.collectionNameAvailable(trimmed)
             guard !Task.isCancelled else { return }
             nameAvailability = result
+        }
+    }
+}
+
+// Out of the struct body only for its length; `private` state is file-scoped.
+extension AO3CollectionFormView {
+    private func deleteCollection() async {
+        guard let slug, let loaded = formGeneration else { return }
+        let generation = AO3CollectionSessionReload.formSaveGeneration(
+            loaded: loaded, loadedUsername: formUsername,
+            current: auth.sessionGeneration, currentUsername: auth.username
+        )
+        formGeneration = generation
+        phase = .saving
+        do {
+            _ = try await auth.deleteCollection(slug: slug, expectedGeneration: generation)
+            // The collection is gone whoever is signed in now, so the form
+            // always closes; only the same account's list drops the row.
+            if let formUsername,
+               auth.username?.caseInsensitiveCompare(formUsername) == .orderedSame {
+                NotificationCenter.default.post(name: .ao3CollectionDeleted, object: slug)
+            }
+            if let onDeleted {
+                onDeleted()
+            } else {
+                dismiss()
+            }
+        } catch is CancellationError {
+            saveFailed("Not deleted: your AO3 session changed since this form opened.")
+        } catch let error as AO3CollectionWriteError {
+            saveFailed(error.errorDescription ?? "The collection could not be deleted.")
+        } catch {
+            saveFailed(error.localizedDescription)
         }
     }
 }

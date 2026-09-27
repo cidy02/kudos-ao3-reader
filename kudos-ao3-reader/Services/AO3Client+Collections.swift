@@ -203,6 +203,16 @@ extension AO3Client {
         let rules = profileSection("rules", in: doc)
         let maintainers = parseMaintainerIdentities(in: doc)
         let dashboard = parseDashboard(in: doc, slug: slug)
+        let editPath = AO3CollectionURL.edit(slug: slug).path
+        let viewerIsOwner = ((try? doc.select("a[href]").array()) ?? []).contains { link in
+            guard let href = try? link.attr("href") else { return false }
+            return AO3URLResolver.resolve(href)?.path == editPath
+        }
+        let header = try doc.select("div.primary.header.module").first()
+        let worksCount = header.flatMap { intStat("works", in: $0) }
+            ?? navCount(in: doc, path: "/collections/\(slug)/works")
+        let bookmarksCount = header.flatMap { intStat("bookmarks", in: $0) }
+            ?? navCount(in: doc, path: "/collections/\(slug)/bookmarks")
         // Every `ul.navigation.actions` on the page, not just the first.
         //
         // A collection show page carries four of them (probed against a live
@@ -238,9 +248,12 @@ extension AO3Client {
             isModerated: flags.moderated,
             isUnrevealed: flags.unrevealed,
             isAnonymous: flags.anonymous,
+            worksCount: worksCount,
+            bookmarksCount: bookmarksCount,
             iconURL: iconURL,
             summary: description,
-            challengeKind: flags.kind
+            challengeKind: flags.kind,
+            viewerIsOwner: viewerIsOwner
         )
         if collection.title.isEmpty { collection.title = slug }
         return AO3CollectionShow(
@@ -656,6 +669,7 @@ extension AO3Client {
             showRandom: isChecked(form, name: AO3CollectionParam.showRandom),
             emailNotify: isChecked(form, name: AO3CollectionParam.emailNotify),
             challengeType: selectedValue(form, name: AO3CollectionParam.challengeType),
+            challengeOptions: selectOptions(form, name: AO3CollectionParam.challengeType),
             preferenceID: inputValue(form, AO3CollectionParam.preferenceID),
             introduction: textAreaValue(form, AO3CollectionParam.intro),
             faq: textAreaValue(form, AO3CollectionParam.faq),
@@ -888,6 +902,21 @@ extension AO3Client {
         return selectedOptionValue(select)
     }
 
+    static func selectOptions(_ root: Element, name: String) -> [AO3FormOption] {
+        let nodes = (try? root.select("select").array()) ?? []
+        guard let select = nodes.first(where: { (try? $0.attr("name")) == name }) else { return [] }
+        return ((try? select.select("option").array()) ?? []).map { option in
+            let value = (try? option.attr("value")) ?? ""
+            let title = ((try? option.text()) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return AO3FormOption(
+                value: value,
+                title: title.isEmpty ? value : title,
+                isSelected: option.hasAttr("selected")
+            )
+        }
+    }
+
     static func selectedValue(_ root: Element, nameSuffix: String) -> String {
         let nodes = (try? root.select("select").array()) ?? []
         guard let select = nodes.first(where: { ((try? $0.attr("name")) ?? "").hasSuffix(nameSuffix) }) else {
@@ -947,6 +976,21 @@ extension AO3Client {
             value = (try? select.select("option").first()?.attr("value")) ?? ""
         }
         return AO3CollectionItemApproval(ao3: value)
+    }
+
+    /// The collection nav's "Works (1,234)" / "Bookmarked Items (56)": the
+    /// parenthesised figure on the link to that exact collection page.
+    /// ponytail: AO3's sidebar wording as remembered, not re-read from otwarchive
+    /// (no network this batch); absent markup leaves the count nil, never a guess.
+    private static func navCount(in doc: Document, path: String) -> Int? {
+        for link in (try? doc.select("ul.navigation a[href]").array()) ?? [] {
+            guard AO3URLResolver.resolve(try? link.attr("href"))?.path == path,
+                  let text = try? link.text(), text.hasSuffix(")"),
+                  let open = text.lastIndex(of: "(") else { continue }
+            let digits = text[open...].filter(\.isNumber)
+            if !digits.isEmpty { return Int(digits) }
+        }
+        return nil
     }
 
     private static func intStat(_ kind: String, in element: Element) -> Int? {

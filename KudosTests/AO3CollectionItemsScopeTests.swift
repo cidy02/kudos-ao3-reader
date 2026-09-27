@@ -130,12 +130,22 @@ struct AO3CollectionItemsScopeTests {
             bookmarksCount: nil,
             isModerated: true,
             isClosed: false,
-            isUnrevealed: false,
             challengeName: nil
         )
         #expect(facts == ["12 works", "Moderated"])
         #expect(facts.allSatisfy { !$0.localizedCaseInsensitiveContains("await") })
         #expect(facts.allSatisfy { !$0.localizedCaseInsensitiveContains("your work") })
+    }
+
+    @Test func accountWideCardsUseEachCollectionTitleForHue() {
+        var first = sampleItem()
+        first.collectionTitle = "Collection A"
+        var second = sampleItem()
+        second.collectionTitle = "Collection B"
+
+        #expect(AO3CollectionItemsView.cardHue(for: first) == CoverArt.hue(for: "Collection A"))
+        #expect(AO3CollectionItemsView.cardHue(for: second) == CoverArt.hue(for: "Collection B"))
+        #expect(AO3CollectionItemsView.cardHue(for: first) != AO3CollectionItemsView.cardHue(for: second))
     }
 
     private func sampleItem() -> AO3CollectionItem {

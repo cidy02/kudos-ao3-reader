@@ -7,6 +7,8 @@ import Testing
 private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
     struct Hit: Sendable {
         var method: String?
+        var url: URL?
+        var body: String?
         var cookie: String?
         var preparedWriteSession: String?
         var handlesCookies: Bool
@@ -14,10 +16,12 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
 
     private static let lock = NSLock()
     private static var hits: [Hit] = []
+    private static var postResponseBody = "fence-ok"
 
-    static func reset() {
+    static func reset(postBody: String = "fence-ok") {
         lock.lock()
         hits = []
+        postResponseBody = postBody
         lock.unlock()
     }
 
@@ -31,9 +35,25 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
+    /// URLSession hands a protocol the POST body as a stream, not `httpBody`.
+    private static func bodyText(of request: URLRequest) -> String? {
+        if let data = request.httpBody { return String(data: data, encoding: .utf8) }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while case let count = stream.read(&buffer, maxLength: buffer.count), count > 0 {
+            data.append(buffer, count: count)
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
     override func startLoading() {
         let hit = Hit(
             method: request.httpMethod,
+            url: request.url,
+            body: Self.bodyText(of: request),
             cookie: request.value(forHTTPHeaderField: "Cookie"),
             preparedWriteSession: request.value(
                 forHTTPHeaderField: AO3Client.preparedWriteSessionHeader
@@ -42,6 +62,7 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
         )
         Self.lock.lock()
         Self.hits.append(hit)
+        let postBody = Self.postResponseBody
         Self.lock.unlock()
 
         // A GET is a write's CSRF fetch: answer with a page carrying the token.
@@ -54,7 +75,7 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
-        let body = isGET ? #"<meta name="csrf-token" content="probe-csrf">"# : "fence-ok"
+        let body = isGET ? #"<meta name="csrf-token" content="probe-csrf">"# : postBody
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)
@@ -246,6 +267,11 @@ struct AO3WriteDispatchFenceTests {
                 slug: "alice_fest", form: collectionForm(), expectedGeneration: formGeneration, using: client
             )
         }
+        await #expect(throws: CancellationError.self) {
+            try await auth.deleteCollection(
+                slug: "alice_fest", expectedGeneration: formGeneration, using: client
+            )
+        }
         #expect(AO3WriteDispatchProbe.recorded().isEmpty)
     }
 
@@ -286,5 +312,55 @@ struct AO3WriteDispatchFenceTests {
             #expect(auth.username == "bob")
             #expect(AO3WriteDispatchProbe.recorded().map(\.method) == ["GET"])
         }
+    }
+
+    /// Collection deletion follows AO3's owner flow: confirmation GET, then one
+    /// method-override POST. The protocol stub keeps both requests local.
+    @Test func collectionDeleteUsesTheConfirmationRouteAndOneDeletePost() async throws {
+        AO3WriteDispatchProbe.reset(
+            postBody: #"<div class="flash notice">Collection was successfully deleted.</div>"#
+        )
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let generation = auth.sessionGeneration
+        let client = AO3Client(session: probeSession(), paceSleep: { _ in })
+
+        let message = try await auth.deleteCollection(
+            slug: "alice_fest", expectedGeneration: generation, using: client
+        )
+
+        #expect(message == "Collection was successfully deleted.")
+        let hits = AO3WriteDispatchProbe.recorded()
+        #expect(hits.map(\.method) == ["GET", "POST"])
+        #expect(hits.first?.url?.path == "/collections/alice_fest/confirm_delete")
+        #expect(hits.last?.url?.path == "/collections/alice_fest")
+        #expect(hits.last?.body?.contains("_method=delete") == true)
+        #expect(hits.last?.body?.contains("authenticity_token=probe-csrf") == true)
+    }
+
+    /// Bob signs in while alice's confirmation GET is out. Only the check after
+    /// the GET stops the POST: the dispatch fence would pass bob's own stamp.
+    @Test func aSessionChangeDuringTheDeleteCSRFFetchPostsNothing() async throws {
+        AO3WriteDispatchProbe.reset()
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let generation = auth.sessionGeneration
+        let client = AO3Client(
+            session: probeSession(),
+            nextAllowedRequestAt: Date().addingTimeInterval(60),
+            paceSleep: { @MainActor _ in
+                guard auth.username == "alice" else { return }
+                await auth.logout()
+                await auth.login(username: "bob", password: "pw")
+            }
+        )
+
+        await #expect(throws: CancellationError.self) {
+            try await auth.deleteCollection(
+                slug: "alice_fest", expectedGeneration: generation, using: client
+            )
+        }
+        #expect(auth.username == "bob")
+        #expect(AO3WriteDispatchProbe.recorded().map(\.method) == ["GET"])
     }
 }

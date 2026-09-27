@@ -181,7 +181,10 @@ struct AccountView: View {
                     AO3CollectionDetailView(slug: $0.slug, title: $0.title)
                 }
                 .navigationDestination(for: AO3CollectionFormDestination.self) {
-                    AO3CollectionFormView(slug: $0.slug)
+                    AO3CollectionFormView(
+                        slug: $0.slug,
+                        viewerIsOwner: $0.viewerIsOwner
+                    )
                 }
                 .navigationDestination(for: AO3CollectionItemsDestination.self) {
                     AO3CollectionItemsView(slug: $0.slug, title: $0.title)

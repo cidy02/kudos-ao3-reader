@@ -26,20 +26,32 @@ struct AO3CollectionDetailView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dismiss) private var dismiss
 
     @State private var show: AO3CollectionShow?
     @State private var segment: Segment = .works
     @State private var works: [AO3WorkSummary] = []
     @State private var bookmarks: [AO3WorkSummary] = []
     @State private var people: [AO3CollectionPerson] = []
+    @State private var currentPages: [Segment: Int] = [:]
+    @State private var totalPages: [Segment: Int] = [:]
     /// Which segments have already been fetched, so switching back to one does not
     /// re-request it. Keyed by segment rather than a set of booleans so a fourth
     /// segment cannot be added without deciding this.
     @State private var loaded: Set<Segment> = []
     @State private var phase: Phase = .idle
     @State private var expandAll = false
+    @State private var loadGeneration = 0
+    @State private var loadedSessionGeneration: Int?
+    @State private var pageLoadTask: Task<Void, Never>?
 
     private enum Phase: Equatable { case idle, loading, loaded, failed(String) }
+
+    private struct LoadID: Equatable {
+        var segment: Segment
+        var sessionGeneration: Int
+        var isLoggedIn: Bool
+    }
 
     nonisolated enum Segment: String, CaseIterable, Hashable, Sendable {
         case works
@@ -85,20 +97,46 @@ struct AO3CollectionDetailView: View {
             }
 
             switch phase {
-            case .loading:
+            case .loading where segmentRowsAreEmpty:
                 Section { loadingRow.pageBodyRow(top: 20, gutter: SubjectMetrics.accountGutter) }
             case let .failed(message):
                 Section { failureCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter) }
             default:
                 segmentContent
+                if totalPage(for: segment) > 1 {
+                    Section {
+                        paginationBar(for: segment)
+                            .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                    }
+                }
             }
         }
         .cardList()
         .subjectScreenWash(palette: palette)
-        .task(id: segment) { await loadIfNeeded() }
+        .task(id: LoadID(
+            segment: segment,
+            sessionGeneration: auth.sessionGeneration,
+            isLoggedIn: auth.isLoggedIn
+        )) {
+            pageLoadTask?.cancel()
+            loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+            if loadedSessionGeneration != auth.sessionGeneration {
+                clearLoadedSession()
+                loadedSessionGeneration = auth.sessionGeneration
+            }
+            if loaded.contains(segment) {
+                phase = .loaded
+            } else {
+                await loadIfNeeded()
+            }
+        }
         .refreshable {
             loaded.remove(segment)
             await loadIfNeeded()
+        }
+        .onDisappear {
+            pageLoadTask?.cancel()
+            loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
         }
     }
 
@@ -124,8 +162,8 @@ struct AO3CollectionDetailView: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Works / Bookmarks / Members. Each cell is dropped when AO3 gave no figure,
-    /// rather than shown as zero.
+    /// Works / Bookmarks. Each cell is dropped when AO3 gave no exact figure,
+    /// rather than substituting the number of rows loaded from one page.
     private func statCells(for show: AO3CollectionShow) -> [SubjectStatStrip.Cell] {
         var cells: [SubjectStatStrip.Cell] = []
         if let works = show.collection.worksCount {
@@ -133,9 +171,6 @@ struct AO3CollectionDetailView: View {
         }
         if let bookmarks = show.collection.bookmarksCount {
             cells.append(SubjectStatStrip.Cell(value: "\(bookmarks)", label: "Bookmarks"))
-        }
-        if !people.isEmpty {
-            cells.append(SubjectStatStrip.Cell(value: "\(people.count)", label: "Members"))
         }
         return cells
     }
@@ -159,21 +194,29 @@ struct AO3CollectionDetailView: View {
     @ViewBuilder
     private var segmentContent: some View {
         switch segment {
-        case .works: workRows(works, emptyMessage: "This collection has no works yet.")
-        case .bookmarks: workRows(bookmarks, emptyMessage: "This collection has no bookmarks yet.")
+        case .works:
+            workRows(works, segment: .works, emptyMessage: "This collection has no works yet.")
+        case .bookmarks:
+            workRows(
+                bookmarks,
+                segment: .bookmarks,
+                emptyMessage: "This collection has no bookmarks yet."
+            )
         case .people: peopleRows
         }
     }
 
     @ViewBuilder
-    private func workRows(_ rows: [AO3WorkSummary], emptyMessage: String) -> some View {
+    private func workRows(
+        _ rows: [AO3WorkSummary], segment: Segment, emptyMessage: String
+    ) -> some View {
         if rows.isEmpty {
             Section {
                 emptyCard(emptyMessage).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
             }
         } else {
             Section {
-                SectionRuleHeader(title: segment.title, count: rows.count)
+                SectionRuleHeader(title: "Recent", count: exactTotal(for: segment))
                     .pageBodyRow(top: 18, gutter: 0)
                 ForEach(rows) { work in
                     EnrichingAO3WorkRow(
@@ -233,7 +276,14 @@ struct AO3CollectionDetailView: View {
             }
         } else {
             Section {
-                SectionRuleHeader(title: "People", count: people.count)
+                SectionRuleHeader(
+                    title: "People",
+                    countText: Self.peopleCountLabel(
+                        count: people.count,
+                        currentPage: currentPage(for: .people),
+                        totalPages: totalPage(for: .people)
+                    )
+                )
                     .pageBodyRow(top: 18, gutter: 0)
                 ForEach(people) { person in
                     AO3CollectionPersonRow(person: person, palette: palette)
@@ -256,7 +306,9 @@ struct AO3CollectionDetailView: View {
     /// carries one for this collection to hand it. That wiring waits until
     /// something in the model surfaces an id.
     private var manageRows: [AnyView] {
-        guard let show else { return [] }
+        // A new session renders before the load task clears `show`; the
+        // previous account's owner rows must not draw for that pass.
+        guard let show, loadedSessionGeneration == auth.sessionGeneration else { return [] }
         var rows: [AnyView] = []
 
         if show.isMaintainer {
@@ -267,7 +319,11 @@ struct AO3CollectionDetailView: View {
                 CollectionModerationView(collectionSlug: slug, collectionTitle: title)
             }))
             rows.append(AnyView(manageRow("Collection Settings") {
-                AO3CollectionFormView(slug: slug)
+                AO3CollectionFormView(
+                    slug: slug,
+                    viewerIsOwner: show.collection.viewerIsOwner,
+                    onDeleted: { dismiss() }
+                )
             }))
         }
         // 1bz is explicitly the moderator's read, so gate it on maintainer too,
@@ -351,7 +407,7 @@ struct AO3CollectionDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 loaded.remove(segment)
-                Task { await loadIfNeeded() }
+                startPageLoad(segment: segment, page: currentPage(for: segment))
             }
             .buttonStyle(.borderless)
             .font(.system(size: 13, weight: .semibold))
@@ -370,7 +426,15 @@ struct AO3CollectionDetailView: View {
     /// anonymously otherwise — a collection is public, and requiring a login to
     /// look at one would be a regression against the website.
     private func loadIfNeeded() async {
-        guard !loaded.contains(segment) else { return }
+        let requestedSegment = segment
+        guard !loaded.contains(requestedSegment) else { return }
+        await load(segment: requestedSegment, page: currentPage(for: requestedSegment))
+    }
+
+    private func load(segment requestedSegment: Segment, page: Int) async {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let generation = loadGeneration
+        let expectedSessionGeneration = auth.sessionGeneration
         phase = .loading
         // Built from the collection's own URL when there is a session; the fetches
         // below each retarget it (`request.url = …`), which is the established
@@ -381,24 +445,148 @@ struct AO3CollectionDetailView: View {
             return try? auth.authenticatedRequest(for: url)
         }()
         do {
+            // Kept as soon as it passes the fence, so a failed segment page does
+            // not hide the header and Manage rows or refetch the show on retry.
             if show == nil {
-                show = try await AO3Client.shared.collectionShow(slug: slug, request: request)
+                let fetched = try await AO3Client.shared.collectionShow(slug: slug, request: request)
+                guard shouldApplyLoad(
+                    generation: generation,
+                    expectedSessionGeneration: expectedSessionGeneration,
+                    requestedSegment: requestedSegment
+                ) else { return }
+                show = fetched
             }
-            switch segment {
+            switch requestedSegment {
             case .works:
-                works = try await AO3Client.shared.collectionWorks(slug: slug, request: request).works
+                let result = try await AO3Client.shared.collectionWorks(
+                    slug: slug, page: page, request: request
+                )
+                guard shouldApplyLoad(
+                    generation: generation,
+                    expectedSessionGeneration: expectedSessionGeneration,
+                    requestedSegment: requestedSegment
+                ) else { return }
+                works = result.works
+                currentPages[.works] = result.currentPage
+                totalPages[.works] = result.totalPages
             case .bookmarks:
-                bookmarks = try await AO3Client.shared
-                    .collectionBookmarks(slug: slug, request: request).works
+                let result = try await AO3Client.shared.collectionBookmarks(
+                    slug: slug, page: page, request: request
+                )
+                guard shouldApplyLoad(
+                    generation: generation,
+                    expectedSessionGeneration: expectedSessionGeneration,
+                    requestedSegment: requestedSegment
+                ) else { return }
+                bookmarks = result.works
+                currentPages[.bookmarks] = result.currentPage
+                totalPages[.bookmarks] = result.totalPages
             case .people:
-                people = try await AO3Client.shared.collectionPeople(slug: slug, request: request).people
+                let result = try await AO3Client.shared.collectionPeople(
+                    slug: slug, page: page, request: request
+                )
+                guard shouldApplyLoad(
+                    generation: generation,
+                    expectedSessionGeneration: expectedSessionGeneration,
+                    requestedSegment: requestedSegment
+                ) else { return }
+                people = result.people
+                currentPages[.people] = result.currentPage
+                totalPages[.people] = result.totalPages
             }
-            loaded.insert(segment)
+            loaded.insert(requestedSegment)
             phase = .loaded
+        } catch is CancellationError {
+        } catch let urlError as URLError where urlError.code == .cancelled {
         } catch let error as AO3Error {
+            guard shouldApplyLoad(
+                generation: generation,
+                expectedSessionGeneration: expectedSessionGeneration,
+                requestedSegment: requestedSegment
+            ) else { return }
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
+            guard shouldApplyLoad(
+                generation: generation,
+                expectedSessionGeneration: expectedSessionGeneration,
+                requestedSegment: requestedSegment
+            ) else { return }
             phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func startPageLoad(segment: Segment, page: Int) {
+        pageLoadTask?.cancel()
+        pageLoadTask = Task { await load(segment: segment, page: page) }
+    }
+
+    private func shouldApplyLoad(
+        generation: Int, expectedSessionGeneration: Int, requestedSegment: Segment
+    ) -> Bool {
+        !Task.isCancelled && requestedSegment == segment
+            && AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: generation,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: expectedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            )
+    }
+
+    private func clearLoadedSession() {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        show = nil
+        works = []
+        bookmarks = []
+        people = []
+        currentPages = [:]
+        totalPages = [:]
+        loaded = []
+        phase = .idle
+    }
+}
+
+// Paging helpers. Out of the struct body only for its length.
+extension AO3CollectionDetailView {
+    /// One page is the whole list, so its count is a total; a paged list only
+    /// knows the rows on the page it loaded.
+    nonisolated static func peopleCountLabel(
+        count: Int, currentPage: Int, totalPages: Int
+    ) -> String {
+        totalPages > 1 ? "\(count) on this page · page \(currentPage) of \(totalPages)" : "\(count)"
+    }
+
+    private func exactTotal(for segment: Segment) -> Int? {
+        switch segment {
+        case .works: show?.collection.worksCount
+        case .bookmarks: show?.collection.bookmarksCount
+        case .people: nil
+        }
+    }
+
+    private func currentPage(for segment: Segment) -> Int {
+        currentPages[segment] ?? 1
+    }
+
+    private func totalPage(for segment: Segment) -> Int {
+        totalPages[segment] ?? 1
+    }
+
+    private var segmentRowsAreEmpty: Bool {
+        switch segment {
+        case .works: works.isEmpty
+        case .bookmarks: bookmarks.isEmpty
+        case .people: people.isEmpty
+        }
+    }
+
+    private func paginationBar(for segment: Segment) -> some View {
+        SearchPaginationBar(
+            currentPage: currentPage(for: segment),
+            totalPages: totalPage(for: segment),
+            isLoading: phase == .loading,
+            palette: palette
+        ) { page in
+            startPageLoad(segment: segment, page: page)
         }
     }
 }
