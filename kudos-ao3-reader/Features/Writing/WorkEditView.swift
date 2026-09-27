@@ -25,6 +25,7 @@ struct WorkEditView: View {
     /// waits until the refresh lands.
     @State private var needsTagRefresh = false
     @State private var tagRetry = 0
+    @State private var preview: AO3PreviewHTML?
 
     init(form: AO3WorkForm) {
         self._form = State(initialValue: form)
@@ -153,6 +154,9 @@ struct WorkEditView: View {
                 form.chapterTotal = fresh.chapterTotal
                 form.chaptersPosted = fresh.chaptersPosted
                 form.isChaptered = fresh.isChaptered
+                // Save posts `work[chapter_attributes]` for a one-chapter work,
+                // so a chapter just edited from Chapters would be put back.
+                form.chapter = fresh.chapter
                 needsPublicationRefresh = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -216,6 +220,21 @@ struct WorkEditView: View {
         } message: {
             if let imp = deleteImplications {
                 Text(imp.cautionText)
+            }
+        }
+        .navigationDestination(isPresented: Binding(
+            get: { preview != nil }, set: { if !$0 { preview = nil } }
+        )) {
+            if let preview {
+                WritingPreviewView(
+                    preview: preview,
+                    subtitle: Self.subtitle(for: form),
+                    postTitle: form.isPosted ? "Update" : "Post work",
+                    confirmation: form.isPosted ? nil : (
+                        "Post this work?", Self.postConfirmationMessage(missing: form.missingRequiredFields())
+                    ),
+                    post: { try await perform(submit: form.isPosted ? .update : Self.postSubmit) }
+                )
             }
         }
     }
@@ -381,7 +400,7 @@ struct WorkEditView: View {
     private var textRows: some View {
         let showsWorkText = form.kind == .new || form.isDraft
         let postedWorkID: Int? = form.isPosted ? form.workID : nil
-        let count = 4 + (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 2)
+        let count = 4 + (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 3)
         let afterNotes = showsWorkText ? 4 : 3
         WritingTextEditorRow(
             title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary", previewsText: true
@@ -402,13 +421,23 @@ struct WorkEditView: View {
             .panelSegment(3, of: count, gutter: gutter)
         }
         if let workID = postedWorkID {
+            // 1bo's Chapters row. Posted works only, like the two below: a
+            // draft's text is its Work text row, and a second way into chapter
+            // 1 would let this form's Save put back what the chapter form saved.
+            SubjectFormRow(
+                label: "Chapters", value: form.chaptersPosted.map(String.init) ?? "", showsDisclosure: true
+            )
+            .subjectRowNavigation(accessibilityLabel: "Chapters") {
+                WritingChaptersView(workID: workID, workTitle: form.title) { needsPublicationRefresh = true }
+            }
+            .panelSegment(afterNotes, of: count, gutter: gutter)
             SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
                 .subjectRowNavigation(accessibilityLabel: "Add chapter") {
                     WritingChapterDestination(workID: workID, workTitle: form.title) {
                         needsPublicationRefresh = true
                     }
                 }
-                .panelSegment(afterNotes, of: count, gutter: gutter)
+                .panelSegment(afterNotes + 1, of: count, gutter: gutter)
             // 1bp's own page, reachable at last. Gated exactly like Add chapter
             // rather than on `workID` alone: AO3 keeps `/works/<id>/edit_tags`
             // for a work that exists publicly, and a draft's tags are already
@@ -417,7 +446,7 @@ struct WorkEditView: View {
                 .subjectRowNavigation(accessibilityLabel: "Edit tags") {
                     WritingTagsDestination(workID: workID) { needsTagRefresh = true }
                 }
-                .panelSegment(afterNotes + 1, of: count, gutter: gutter)
+                .panelSegment(afterNotes + 2, of: count, gutter: gutter)
         }
         WritingChoiceRow(
             title: "Work skin",
@@ -485,22 +514,8 @@ struct WorkEditView: View {
 
     private func save(submit: AO3WorkSubmitAction) {
         guard !isSaving && !isPosting && !needsPublicationRefresh && !needsTagRefresh else { return }
-        guard editingGeneration == auth.sessionGeneration else {
-            errorMessage = "Your AO3 session changed. Reopen this form before saving."
-            return
-        }
-        let isPost = submit == .post || submit == .postWithoutPreview
-        if isPost { isPosting = true } else { isSaving = true }
-
         Task {
-            do {
-                guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
-                try await auth.saveWork(form, submit: submit)
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-                if isPost { isPosting = false } else { isSaving = false }
-            }
+            do { try await perform(submit: submit) } catch { errorMessage = error.localizedDescription }
         }
     }
 
@@ -515,6 +530,54 @@ struct WorkEditView: View {
                     try await auth.deleteWork(workID: workID)
                 }
                 dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+// MARK: - Save path and AO3's preview
+
+extension WorkEditView {
+    /// The one save path, for the toolbar, the Post group and the preview's
+    /// Post alike. Closes the form — and a preview above it — on success.
+    private func perform(submit: AO3WorkSubmitAction) async throws {
+        // Checked here, not only in `save`: its Task starts a beat after the
+        // tap, and a second tap in that beat must not post twice.
+        guard !isSaving && !isPosting else { return }
+        guard editingGeneration == auth.sessionGeneration else {
+            throw AO3WorkWriteError.rejected("Your AO3 session changed. Reopen this form before saving.")
+        }
+        let isPost = submit == .post || submit == .postWithoutPreview
+        if isPost { isPosting = true } else { isSaving = true }
+        do {
+            try await auth.saveWork(form, submit: submit)
+            preview = nil
+            dismiss()
+        } catch {
+            if isPost { isPosting = false } else { isSaving = false }
+            throw error
+        }
+    }
+
+    /// AO3's preview path for an unposted work. A NEW work is saved by AO3
+    /// as a draft to preview it (`works#create` redirects to its preview), so
+    /// the form adopts that draft first — Post from the preview then updates
+    /// it instead of creating a second work.
+    private func openPreview() {
+        guard !isSaving && !isPosting && !needsPublicationRefresh && !needsTagRefresh else { return }
+        guard editingGeneration == auth.sessionGeneration else {
+            errorMessage = "Your AO3 session changed. Reopen this form before saving."
+            return
+        }
+        isSaving = true
+        Task {
+            defer { isSaving = false }
+            do {
+                let page = try await auth.previewWork(form)
+                form = try form.adopting(page)
+                preview = page
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -590,13 +653,15 @@ extension WorkEditView {
     /// anything else as a draft, which is what "Post work" used to do.
     static let postSubmit = AO3WorkSubmitAction.post
 
-    /// 1bs's Post group: "Post work", then "Delete draft" once AO3 has the
-    /// draft. Post asks first (`showPostConfirmation`).
+    /// 1bs's Post group: "Post work", AO3's "Preview", then "Delete draft"
+    /// once AO3 has the draft. Post asks first (`showPostConfirmation`).
     private var postPanel: some View {
         VStack(spacing: 0) {
             postPanelRow("Post work", icon: "arrow.up.circle.fill", color: theme.appTheme.statusSuccessColor) {
                 showPostConfirmation = true
             }
+            SubjectRowSeparator()
+            postPanelRow("Preview on AO3", icon: "eye", color: .primary) { openPreview() }
             if form.workID != nil {
                 SubjectRowSeparator()
                 postPanelRow("Delete draft", icon: "trash.fill", color: .red) { confirmDelete() }

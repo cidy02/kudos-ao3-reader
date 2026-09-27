@@ -151,6 +151,36 @@ final class WritingTextController: NSObject {
         #endif
     }
 
+    /// 1bv's "Paste as plain text": only the pasteboard's plain-text flavour is
+    /// read, so none of the styling a copied page carried can arrive.
+    func pastePlainText() {
+        #if os(iOS)
+        let plain = UIPasteboard.general.string
+        #else
+        let plain = NSPasteboard.general.string(forType: .string)
+        #endif
+        if let plain { insertPlainText(plain) }
+    }
+
+    /// Replaces the selection, caret after, undoable like a paste.
+    func insertPlainText(_ plain: String) {
+        commitComposition()
+        #if os(iOS)
+        let range = textView.selectedRange
+        #else
+        let range = textView.selectedRange()
+        #endif
+        replace(range, with: plain)
+        let caret = NSRange(location: range.location + (plain as NSString).length, length: 0)
+        #if os(iOS)
+        textView.selectedRange = caret
+        textView.scrollRangeToVisible(caret)
+        #else
+        textView.setSelectedRange(caret)
+        textView.scrollRangeToVisible(caret)
+        #endif
+    }
+
     /// Recovery is an ordinary undoable replacement, never an implicit load.
     func restore(_ value: String) {
         commitComposition()
