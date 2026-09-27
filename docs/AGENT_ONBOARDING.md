@@ -40,7 +40,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 | Pitfall | Rule |
 |---|---|
 | `isDeleted` on `@Model` | Collides with CoreData's reserved `NSManagedObject.isDeleted`; silently resets on save. Use `isPendingDeletion`. Backup JSON key stays `isDeleted` (plain Codable structs are fine). |
-| Multiple `.fileImporter` on one view node | Only one file-dialog presenter per node; siblings silently fail. SettingsView uses ONE enum-driven importer (`FileImportKind`) — extend it, never add a sibling. |
+| Multiple `.fileImporter` on one view node | Only one file-dialog presenter per node; siblings silently fail. Since the 1ab hub each Settings page is its own view with at most one importer (fonts via `readerFontImporter`; backup, sync folder and import each on their own page) — a second picker gets its own page or one enum-driven importer, never a sibling. `Scripts/check-invariants.sh` enforces it. |
 | Actor ≠ serial | Actors are reentrant across `await`. `AO3Client` politeness comes from `pace()` (slot-claiming, ≥0.6s between request starts), not from being an actor. |
 | Fire-and-forget `Task {}` touching `@Model` | Model may be invalidated before/while the task runs → SwiftData assertion crash. Guard `work.modelContext != nil` at entry AND after awaits (see `WorkTags.refreshFromAO3`, `WorkSearchIndex.rebuildIfNeeded`, `PersistenceMigrationService`). |
 | `.iso8601` JSON dates | Truncate to whole seconds → merge decisions become unorderable. `KudosBackup` uses a fractional-seconds encoder with whole-second decode fallback. Don't change either direction. |

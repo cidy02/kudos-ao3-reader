@@ -28,8 +28,9 @@ Inspected files/classes:
   read-only if one is still present.
 - `kudos-ao3-reader/Services/PersistenceSync.swift` owns the local migration,
   sync timestamps, tombstones, merge helpers, and operation gate.
-- `kudos-ao3-reader/Settings/SettingsView.swift` exposes manual backup controls,
-  Library Sync Folder controls, and local metadata readiness.
+- `kudos-ao3-reader/Settings/SettingsBackupPage.swift` exposes manual backup
+  controls; `SettingsSyncFolderPage.swift` the Library Sync Folder controls and
+  local metadata readiness.
 
 Reading progress is stored on `SavedWork`: macOS legacy reader uses
 `lastSpineIndex` and `lastScrollFraction`; iOS Readium stores `readiumLocator`.

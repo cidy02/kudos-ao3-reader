@@ -74,8 +74,8 @@ struct SyncFolderOnboardingView: View {
             OnboardingPointRow(
                 symbol: "signature", title: "Using More Than One Device?",
                 message: "Deletes are signed on each device so only devices you've paired can remove "
-                    + "things from your library. Pair your devices anytime in Settings → Deletion "
-                    + "signing — it takes a few seconds."
+                    + "things from your library. Pair your devices anytime in Settings → Sync Folder "
+                    + "→ Deletion signing — it takes a few seconds."
             )
             if let connectionError {
                 OnboardingPointRow(

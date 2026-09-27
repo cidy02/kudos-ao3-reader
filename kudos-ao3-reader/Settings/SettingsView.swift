@@ -5,138 +5,103 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
-private final class SecurityScopedURL: Sendable {
-    let url: URL
-    let accessed: Bool
+/// The reader's display options — theme, text size, layout, read-aloud and font —
+/// in the reader's options sheet (iOS) and inspector (macOS).
+///
+/// Settings shows the same Reader, Listening and Font sections on its own pages
+/// (`SettingsReaderPage`, `SettingsListeningPage`, `SettingsFontPage`) through the
+/// shared views below, so the two always show the same controls and stay in sync
+/// via `@AppStorage`. App-wide settings live on those pages, not here.
+struct ReaderOptionsForm: View {
+    /// Whether the two-page spread can take effect (the reader passes its window
+    /// width).
+    var twoPageAvailable: Bool = true
 
-    init(_ url: URL) {
-        self.url = url
-        accessed = url.startAccessingSecurityScopedResource()
+    @Environment(ThemeManager.self) private var themeManager
+    @State private var isImportingFonts = false
+    @State private var showCustomize = false
+
+    private var readerThemeBinding: Binding<ReaderTheme> {
+        Binding(get: { themeManager.readerTheme }, set: { themeManager.readerTheme = $0 })
     }
 
-    deinit {
-        if accessed {
-            url.stopAccessingSecurityScopedResource()
+    var body: some View {
+        Form {
+            // Group so .appThemedRows() (a .listRowBackground) reaches every section's
+            // rows — it does NOT propagate from the Form container, only from a Group/
+            // Section/ForEach around the rows.
+            Group {
+                Section("Appearance") {
+                    // Inside the reader: this picks the reader theme (which re-themes
+                    // the app too while App & Reader are matched).
+                    ReaderThemePicker(title: "Theme", selection: readerThemeBinding)
+
+                    #if os(iOS)
+                    Button {
+                        showCustomize = true
+                    } label: {
+                        Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                    }
+                    #endif
+                }
+
+                #if os(iOS)
+                Section("Text Size") {
+                    TextSizeSlider()
+                }
+                #endif
+
+                ReaderLayoutSection(twoPageAvailable: twoPageAvailable)
+
+                #if os(iOS)
+                // Voice / rate / pitch for the Readium read-aloud mini player.
+                // macOS still uses the legacy WKWebView reader without TTS.
+                ReaderSpeechSettingsSection()
+                #endif
+
+                ReaderFontSection(onAddFont: { isImportingFonts = true })
+            }
+            .appThemedRows()
         }
+        .formStyle(.grouped)
+        .appThemedScroll()
+        .readerFontImporter(isPresented: $isImportingFonts)
+        #if os(iOS)
+        .sheet(isPresented: $showCustomize) {
+            CustomizeThemeView()
+                .environment(themeManager)
+                .tint(themeManager.effectiveTint)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        #endif
     }
 }
 
-/// Confirm-time handle: scoped URL + manifest + identity. Full contents
-/// are read only at execute so a hostile archive cannot sit decoded in
-/// `@State` for the whole Merge/Replace extra step.
-private struct PendingBackupImport: Identifiable {
-    let id = UUID()
-    let scopedURL: SecurityScopedURL
-    let manifest: KudosBackupManifest
-    let identity: KudosBackupContents.SourceIdentity
+/// A segmented Light/Sepia/Dark/OLED picker bound to the given selection.
+struct ReaderThemePicker: View {
+    let title: String
+    @Binding var selection: ReaderTheme
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelStyle(.titleOnly)
+    }
 }
 
-// Lint: this existing form is kept together to avoid behavior refactors.
-// swiftlint:disable file_length
-/// The toggleable reading options, grouped into categories. Shared between the
-/// reader's inspector (quick access while reading) and the Settings page, so the
-/// two always show the same controls and stay in sync via `@AppStorage`.
-struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
+/// Layout, two-page spread and keep screen awake — the reader's sheet and
+/// Settings › Reader.
+struct ReaderLayoutSection: View {
     /// Whether the two-page spread can take effect (the reader passes its window
     /// width; Settings has no window context, so it allows the toggle freely).
     var twoPageAvailable: Bool = true
-    /// When true, also shows app-wide settings (e.g. Library) that don't belong in
-    /// the reader's quick Display sheet. The Settings page opts in; the reader doesn't.
-    var includeAppSettings: Bool = false
 
-    @Environment(\.modelContext) private var context
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(AO3AuthService.self) private var auth
-    @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
-    @Query(sort: \SavedWork.dateAdded) private var works: [SavedWork]
-    @Query(sort: \Bookmark.dateAdded) private var bookmarks: [Bookmark]
-    @Query(sort: \WorkCollection.dateAdded) private var collections: [WorkCollection]
-    @Query(sort: \ReadingQueue.sortOrder) private var readingQueues: [ReadingQueue]
-    @Query private var syncTombstones: [SyncTombstone]
-    @Query(sort: \ReadingAnnotation.createdAt) private var readingAnnotations: [ReadingAnnotation]
-    @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
-    @Query(sort: \ReadingSession.startedAt) private var readingSessions: [ReadingSession]
-    @Query(sort: \ReadingFavorite.createdAt) private var readingFavorites: [ReadingFavorite]
-    @Query(sort: \FandomReadWatermark.lastVisitedAt)
-    private var fandomReadWatermarks: [FandomReadWatermark]
-
-    @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("keepScreenAwake") private var keepScreenAwake = false
-    /// 1ab's Downloads toggle. Read at the one place a subscribe can turn
-    /// into a download — `WorkDetailView.downloadIfSubscribedWithoutEPUB`.
-    @AppStorage("downloadOnSubscribe") private var downloadOnSubscribe = false
-    @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
-    @AppStorage("showsZeroStats") private var showsZeroStats = true
-    @AppStorage("hideMatureContent") private var hideMatureContent = true
-    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-    @AppStorage("requireBiometricToReveal") private var requireBiometric = false
-    @AppStorage("autoPreserveSmallSeriesOnSaveForLater")
-    private var autoPreserveSmallSeriesOnSaveForLater = false
-    @AppStorage("autoPreserveSeriesWorkThreshold")
-    private var autoPreserveSeriesWorkThreshold = 5
-
-    @State private var activeImport: FileImportKind?
-    /// The kind most recently presented — only ever overwritten, never cleared — so
-    /// the shared importer's completion can still route its result if dismissal
-    /// already niled `activeImport`. Recorded by the `.onChange` below the importer.
-    @State private var lastPresentedImport: FileImportKind?
-    @State private var showCustomize = false
-    @State private var showAO3Login = false
-    @State private var showAbout = false
-    @State private var showingBugReport = false
-    @State private var exportingBackup = false
-    @State private var isImportingEPUB = false
-    @State private var epubImportProgress: String?
-    @State private var showSavedWorkMigrationConfirmation = false
-    @State private var isMigratingSavedWorks = false
-    @State private var savedWorkMigrationProgress: String?
-    @State private var savedWorkMigrationCompleted = 0
-    @State private var savedWorkMigrationTotal = 0
-    @State private var savedWorkMigrationTask: Task<Void, Never>?
-    @State private var backupExportURL: URL?
-    @State private var isPreparingBackupExport = false
-    @State private var isImportingBackup = false
-    /// Pre-confirm holds the scoped URL + manifest only. Full contents are
-    /// read at execute inside `restorePendingBackup` (M4). The identity
-    /// snapshot refuses a swapped file between confirm and restore (FIX-5).
-    @State private var pendingImport: PendingBackupImport?
-
-    /// Whether Replace has anything to take away, which decides whether it is
-    /// offered at all.
-    ///
-    /// Asking only "are there works?" was too narrow: saved links, saved
-    /// searches, collections and the reader's own queues all outlive the last
-    /// work and are all pruned by Replace. A library emptied of works but still
-    /// holding those was shown Merge alone — and Merge cannot remove anything,
-    /// so there was no way left to make the library match the file. The
-    /// built-in Saved for Later queue is excluded: it always exists, so
-    /// counting it would make this permanently true.
-    private var hasAnythingReplaceWouldRemove: Bool {
-        works.contains { !$0.isPendingDeletion }
-            || !bookmarks.isEmpty
-            || !savedSearches.isEmpty
-            || !collections.isEmpty
-            || readingQueues.contains { $0.kind != .savedForLater }
-    }
-    @State private var backupNotice: BackupNotice?
-    @State private var epubNotice: BackupNotice?
-    @State private var fontNotice: BackupNotice?
-    /// Assets `writeArchive` had to skip, carried to the export confirmation.
-    @State private var backupExportSkippedAssets = 0
-    @State private var persistenceStatus = PersistenceStatusStore.snapshot()
-    @State private var isPreparingPersistence = false
-    @State private var folderSyncStatus = FolderSyncService.snapshot()
-    @State private var isFolderSyncing = false
-    @State private var showingSyncDetails = false
-    @State private var showingAvailabilitySweep = false
-    @State private var lastFolderSyncResult: FolderSyncResult?
-
-    /// All selectable fonts: built-ins followed by imported ones.
-    private var fontOptions: [ReaderFontOption] {
-        ReaderFontOption.options(customFonts: customFonts)
-    }
 
     /// Two-page spread is offered on iPad and macOS but never on iPhone. (iPad
     /// compiles under `os(iOS)`, so this is a runtime idiom check.)
@@ -148,571 +113,79 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         #endif
     }
 
-    private var legacySavedWorksForQueueMigration: [SavedWork] {
-        // Recently Deleted works aren't migrated into Saved for Later — queueing one
-        // would resurrect a record the user explicitly deleted.
-        works.filter { $0.isSaved && !$0.isQueuedForLater && !$0.isPendingDeletion }
-    }
+    var body: some View {
+        Section {
+            Picker("Layout", selection: $readingMode) {
+                ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelStyle(.titleOnly)
 
-    /// Bindings into the central ThemeManager (an @Observable in the environment).
-    private var appThemeBinding: Binding<ReaderTheme> {
-        Binding(get: { themeManager.appTheme }, set: { themeManager.appTheme = $0 })
-    }
+            // Two-page spread is hidden on iPhone (no practical use); shown on
+            // iPad and macOS.
+            if twoPageSpreadAvailable {
+                Toggle("Two-page spread", isOn: $twoPageEnabled)
+                    .disabled(readingMode != .paged || !twoPageAvailable)
+            }
 
-    private var readerThemeBinding: Binding<ReaderTheme> {
-        Binding(get: { themeManager.readerTheme }, set: { themeManager.readerTheme = $0 })
-    }
-
-    private var matchThemeBinding: Binding<Bool> {
-        Binding(get: { themeManager.matchAppAndReader },
-                set: { themeManager.matchAppAndReader = $0 })
-    }
-
-    private var accentBinding: Binding<Color> {
-        Binding(get: { themeManager.accentColor }, set: { themeManager.setAccent($0) })
-    }
-
-    /// A segmented Light/Sepia/Dark/OLED picker bound to the given selection.
-    private func themePicker(_ title: String, selection: Binding<ReaderTheme>) -> some View {
-        Picker(title, selection: selection) {
-            ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+            // 1ab files this under Reading. iOS only: macOS has no idle
+            // timer to hold open, and a switch that did nothing there
+            // would be worse than its absence.
+            #if os(iOS)
+            Toggle("Keep screen awake", isOn: $keepScreenAwake)
+            #endif
+        } header: {
+            Text("Reading")
+        } footer: {
+            Text(twoPageSpreadAvailable
+                ? "Two-page spread is available in Paged mode on wider windows."
+                : "Choose how pages turn while reading.")
         }
-        .pickerStyle(.segmented)
-        .labelStyle(.titleOnly)
+    }
+}
+
+/// The font list — the reader's sheet and Settings › Font. The host presents
+/// the file picker (`readerFontImporter`), because a view node honours only one
+/// file-dialog presenter and the host is where that one lives.
+struct ReaderFontSection: View {
+    let onAddFont: () -> Void
+
+    @Environment(\.modelContext) private var context
+    @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
+    @AppStorage("readerFontID") private var fontID: String = "system"
+
+    /// All selectable fonts: built-ins followed by imported ones.
+    private var fontOptions: [ReaderFontOption] {
+        ReaderFontOption.options(customFonts: customFonts)
     }
 
     var body: some View {
-        Form {
-            // Group so .appThemedRows() (a .listRowBackground) reaches every section's
-            // rows — it does NOT propagate from the Form container, only from a Group/
-            // Section/ForEach around the rows.
-            Group {
-                // Artboard 1ab puts this under the title: everything on this
-                // screen is the app's own, and none of it is written to AO3.
-                // Worth stating rather than leaving a reader to infer it from a
-                // page that also holds their account — the one section here that
-                // *does* touch AO3 is the login directly below, and it says so.
-                if includeAppSettings {
-                    Section {
-                        SettingsHeaderBlock()
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
+        Section("Font") {
+            ForEach(fontOptions) { option in
+                Button {
+                    fontID = option.id
+                } label: {
+                    HStack {
+                        Text(option.name).foregroundStyle(.primary)
+                        if option.isCustom {
+                            Image(systemName: "person.crop.circle")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if option.id == fontID {
+                            Image(systemName: "checkmark").foregroundStyle(.tint)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
-
-                // App-wide theme lives in the main Settings page. The reader's own theme
-                // picker (below, in Appearance) is shown only inside the reader, since here
-                // it's covered by this section.
-                if includeAppSettings {
-                    Section {
-                        themePicker("App Theme", selection: appThemeBinding)
-                        Toggle("Match App & Reader Theme", isOn: matchThemeBinding)
-                        if !themeManager.matchAppAndReader {
-                            themePicker("Reader Theme", selection: readerThemeBinding)
-                        }
-                        ColorPicker("Accent Color", selection: accentBinding, supportsOpacity: false)
-                        Button("Reset to AO3 Red") { themeManager.resetAccent() }
-                            .disabled(themeManager.accentHex.caseInsensitiveCompare(ThemeManager.ao3Red)
-                                == .orderedSame)
-                        #if os(iOS)
-                        Button {
-                            showCustomize = true
-                        } label: {
-                            Label("Customize Theme…", systemImage: "slider.horizontal.3")
-                        }
-                        TextSizeSlider()
-                        #endif
-                    } header: {
-                        Text("Theme")
-                    } footer: {
-                        Text((themeManager.matchAppAndReader
-                                ? "Light, Sepia, Dark, or OLED across the whole app. The reader uses the same theme."
-                                : "The app and reader use separate themes.")
-                            + " The accent colour applies in Light, Dark, and OLED; Sepia keeps its warm tint.")
-                    }
-                }
-
-                // Appearance is a reader-only group now: in app settings its single
-                // row, Customize Theme…, sits in the Theme group above, where 1ab
-                // keeps everything that changes how reading looks.
-                if !includeAppSettings {
-                    Section("Appearance") {
-                        // Inside the reader: this picks the reader theme (which re-themes
-                        // the app too while App & Reader are matched).
-                        themePicker("Theme", selection: readerThemeBinding)
-
-                        #if os(iOS)
-                        Button {
-                            showCustomize = true
-                        } label: {
-                            Label("Customize Theme…", systemImage: "slider.horizontal.3")
-                        }
-                        #endif
-                    }
-                }
-
-                // Text size lives in the group above when these are app
-                // settings; 1ab keeps theme, accent, font and text size together
-                // under Reading. The reader keeps its own copy, where the group
-                // above is not shown.
-                #if os(iOS)
-                if !includeAppSettings {
-                    Section("Text Size") {
-                        TextSizeSlider()
-                    }
-                }
-                #endif
-
-                Section {
-                    Picker("Layout", selection: $readingMode) {
-                        ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelStyle(.titleOnly)
-
-                    // Two-page spread is hidden on iPhone (no practical use); shown on
-                    // iPad and macOS.
-                    if twoPageSpreadAvailable {
-                        Toggle("Two-page spread", isOn: $twoPageEnabled)
-                            .disabled(readingMode != .paged || !twoPageAvailable)
-                    }
-
-                    // 1ab files this under Reading. iOS only: macOS has no idle
-                    // timer to hold open, and a switch that did nothing there
-                    // would be worse than its absence.
-                    #if os(iOS)
-                    Toggle("Keep screen awake", isOn: $keepScreenAwake)
-                    #endif
-                } header: {
-                    Text("Reading")
-                } footer: {
-                    Text(twoPageSpreadAvailable
-                        ? "Two-page spread is available in Paged mode on wider windows."
-                        : "Choose how pages turn while reading.")
-                }
-
-                #if os(iOS)
-                // Voice / rate / pitch for the Readium read-aloud mini player.
-                // macOS still uses the legacy WKWebView reader without TTS.
-                ReaderSpeechSettingsSection()
-                #endif
-
-                Section("Font") {
-                    ForEach(fontOptions) { option in
-                        Button {
-                            fontID = option.id
-                        } label: {
-                            HStack {
-                                Text(option.name).foregroundStyle(.primary)
-                                if option.isCustom {
-                                    Image(systemName: "person.crop.circle")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if option.id == fontID {
-                                    Image(systemName: "checkmark").foregroundStyle(.tint)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .onDelete(perform: deleteCustomFonts)
-
-                    Button {
-                        activeImport = .fonts
-                    } label: {
-                        Label("Add Font…", systemImage: "plus")
-                    }
-                }
-
-                if includeAppSettings {
-                    Section {
-                        Toggle("Confirm before deleting", isOn: $confirmBeforeDelete)
-                        Toggle("Show zero counts", isOn: $showsZeroStats)
-                    } header: {
-                        Text("Library")
-                    } footer: {
-                        Text(
-                            """
-                            Ask before a swipe-to-delete removes a work from your Library. \
-                            Show zero counts keeps every stat on a work card in place when \
-                            it is zero — turn it off to hide empty stats instead.
-                            """
-                        )
-                    }
-
-                    BackupSettingsSection(
-                        isPreparingExport: isPreparingBackupExport,
-                        isImporting: isImportingBackup,
-                        onExport: exportBackup,
-                        onImport: { activeImport = .backup }
-                    )
-
-                    TombstoneTrustSettingsSection()
-
-                    FolderSyncSettingsSection(
-                        persistenceStatus: persistenceStatus,
-                        folderStatus: folderSyncStatus,
-                        isPreparing: isPreparingPersistence,
-                        isSyncing: isFolderSyncing,
-                        onChooseFolder: { activeImport = .syncFolder },
-                        onSyncNow: startFolderSyncNow,
-                        onDisconnect: disconnectSyncFolder,
-                        onRetryPreparation: preparePersistenceForSync,
-                        onToggleAutoSync: setAutoSyncEnabled,
-                        onShowSyncDetails: { showingSyncDetails = true }
-                    )
-
-                    EPUBImportSettingsSection(
-                        isImporting: isImportingEPUB,
-                        progressText: epubImportProgress,
-                        onImport: { activeImport = .epub }
-                    )
-
-                    Section {
-                        Button {
-                            showingAvailabilitySweep = true
-                        } label: {
-                            Label("Check Availability…", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                    } header: {
-                        Text("Preservation")
-                    } footer: {
-                        // Deliberately a button, never a background task: it is one AO3
-                        // request per work and AO3 offers no "what changed" feed, so the
-                        // user decides when that cost is worth paying.
-                        Text("Asks AO3 which of your saved works still exist, so deleted ones are "
-                            + "marked as the last copy you have. One request per work, sent slowly — "
-                            + "start it when it suits you.")
-                    }
-
-                    Section {
-                        NavigationLink {
-                            ReadingQueueStorageView()
-                        } label: {
-                            Label("Queue Storage", systemImage: "externaldrive")
-                        }
-
-                        Toggle(
-                            "Auto-preserve small series",
-                            isOn: $autoPreserveSmallSeriesOnSaveForLater
-                        )
-                        Stepper(
-                            "Series limit: \(autoPreserveSeriesWorkThreshold)",
-                            value: $autoPreserveSeriesWorkThreshold,
-                            in: 2 ... 25
-                        )
-                        .disabled(!autoPreserveSmallSeriesOnSaveForLater)
-
-                        if !legacySavedWorksForQueueMigration.isEmpty {
-                            Button {
-                                showSavedWorkMigrationConfirmation = true
-                            } label: {
-                                Label("Add Saved Works to Saved for Later", systemImage: "arrow.right.doc.on.clipboard")
-                            }
-                            .disabled(isMigratingSavedWorks)
-                        }
-
-                        if isMigratingSavedWorks {
-                            VStack(alignment: .leading, spacing: 8) {
-                                ProgressView(
-                                    value: Double(savedWorkMigrationCompleted),
-                                    total: Double(max(savedWorkMigrationTotal, 1))
-                                )
-                                HStack(spacing: 12) {
-                                    Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    Button("Cancel") {
-                                        cancelSavedWorkMigration()
-                                    }
-                                }
-                            }
-                        }
-                    } header: {
-                        Text("Reading Queues")
-                    } footer: {
-                        Text("Saved for Later keeps a local EPUB. Series preservation asks first "
-                            + "unless this option is enabled and the series is within the limit.")
-                    }
-
-                    Section {
-                        Toggle("Hide mature content", isOn: $hideMatureContent)
-                        if hideMatureContent {
-                            Picker("When locked", selection: $matureMode) {
-                                ForEach(MaturePrivacyMode.allCases) { Text($0.title).tag($0) }
-                            }
-                            .pickerStyle(.segmented)
-
-                            Toggle("Require Face ID to reveal", isOn: $requireBiometric)
-                        }
-                        NavigationLink(value: SettingsRoute.privacy) {
-                            Label("Privacy & Local Data", systemImage: "hand.raised")
-                        }
-                    } header: {
-                        Text("Privacy")
-                    } footer: {
-                        Text(hideMatureContent
-                            ? (matureMode == .hide
-                                ? "Mature and Explicit works are hidden from your Library, "
-                                + "History, and Favorites until you reveal them."
-                                : "Mature and Explicit works are blurred in your Library, "
-                                + "History, and Favorites until you tap to reveal them.")
-                            : "Mature and Explicit works are shown normally.")
-                    }
-
-                    // Artboard 1ab groups the library's disk cost under
-                    // "Downloads". Only this row of that group is real — see
-                    // `StorageUsedRow` for why the other two are absent.
-                    if includeAppSettings {
-                        Section {
-                            Toggle("Download on subscribe", isOn: $downloadOnSubscribe)
-                            StorageUsedRow()
-                        } header: {
-                            Text("Downloads")
-                        } footer: {
-                            Text("Applies to works already in your library without "
-                                + "their EPUB. Privacy and local data breaks storage "
-                                + "down and can free space a title at a time.")
-                        }
-                    }
-
-                    // Moved from Account's own "Help & Project" section as part of
-                    // folding Account's App/Help rows into Settings.
-                    AO3AccountSettingsSection(onLogIn: { showAO3Login = true })
-
-                    AboutSettingsSection(
-                        onShowAbout: { showAbout = true },
-                        onReportBug: { showingBugReport = true }
-                    )
-                }
+                .buttonStyle(.plain)
             }
-            .appThemedRows()
-        }
-        .formStyle(.grouped)
-        .appThemedScroll()
-        .onAppear {
-            persistenceStatus = PersistenceStatusStore.snapshot()
-            folderSyncStatus = FolderSyncService.snapshot()
-        }
-        // A view node honors only one file-dialog presenter, so every import
-        // shares this modifier and an enum picks the configuration.
-        .fileImporter(
-            isPresented: Binding(
-                get: { activeImport != nil },
-                set: { if !$0 { activeImport = nil } }
-            ),
-            allowedContentTypes: activeImportContentTypes,
-            allowsMultipleSelection: activeImportAllowsMultipleSelection
-        ) { result in
-            // Dismissal nils activeImport via the binding, and whether that happens
-            // before or after this closure is an OS implementation detail — fall back
-            // to the kind recorded at presentation time so the result is never dropped.
-            let kind = activeImport ?? lastPresentedImport
-            switch kind {
-            case .fonts:
-                if case let .success(urls) = result { urls.forEach(importFont) }
-            case .backup:
-                importBackup(result)
-            case .epub:
-                importEPUBSelection(result)
-            case .syncFolder:
-                connectSyncFolder(result)
-            case nil:
-                break
+            .onDelete(perform: deleteCustomFonts)
+
+            Button(action: onAddFont) {
+                Label("Add Font…", systemImage: "plus")
             }
         }
-        .onChange(of: activeImport) { _, kind in
-            if let kind { lastPresentedImport = kind }
-        }
-        // Item-based exporter: the archive is already streamed to a temp file,
-        // so saving is a file copy — the archive never lives in memory.
-        .sheet(isPresented: $showingAvailabilitySweep) {
-            AvailabilitySweepView()
-        }
-        .fileExporter(
-            isPresented: $exportingBackup,
-            item: backupExportURL.map(KudosBackupArchiveFile.init),
-            contentTypes: [.kudosBackup],
-            // Derived from the archive's own filename so the two can never
-            // disagree — that URL is what this exporter actually presents.
-            defaultFilename: backupExportURL?.deletingPathExtension().lastPathComponent
-        ) { result in
-            cleanUpBackupExportFile()
-            switch result {
-            case .success:
-                backupNotice = BackupNotice(
-                    title: "Backup Exported",
-                    message: Self.exportSuccessMessage(
-                        recordCount: works.count,
-                        missingAssets: backupExportSkippedAssets
-                    )
-                )
-            case let .failure(error):
-                backupNotice = BackupNotice(
-                    title: "Couldn't Export Backup",
-                    message: error.localizedDescription
-                )
-            }
-        } onCancellation: {
-            cleanUpBackupExportFile()
-        }
-        // An `.alert`, not a `.confirmationDialog`: importing merges into the
-        // user's whole library, so it wants a modal centred decision with both
-        // choices spelled out. Presented from a List row, a confirmationDialog
-        // renders as an anchored popover on iPhone and its `.cancel` button is
-        // dropped entirely (dismiss-by-tapping-outside is the only way out) —
-        // an alert always renders Cancel explicitly.
-        // ONE alert modifier for this whole screen. SwiftUI honours only a
-        // single `.alert` per view: this chain previously carried three
-        // (import-confirmation, `backupNotice`, `epubNotice`), so the extras
-        // were silently dropped and *no* backup ever reported its result —
-        // export and import both looked like they had done nothing. Everything
-        // is funnelled through `activeAlert` instead, so adding a future alert
-        // means adding a case here rather than another competing modifier.
-        .alert(item: activeAlertBinding) { alert in
-            switch alert {
-            case let .notice(notice):
-                Alert(
-                    title: Text(notice.title),
-                    message: Text(notice.message),
-                    dismissButton: .default(Text("OK"))
-                )
-            }
-        }
-        .confirmationDialog(
-            "Add saved works to Saved for Later?",
-            isPresented: $showSavedWorkMigrationConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(savedWorkMigrationButtonTitle) {
-                startSavedWorkMigration()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            // Split out of the ViewBuilder so the type checker can finish
-            // (the surrounding modifier chain otherwise times out).
-            let migrationMessage =
-                "Kudos will add existing saved works to the native Saved for Later queue. "
-                + "It keeps their current saved state and preserves EPUBs one at a time, "
-                + "with a pause between AO3 requests."
-            Text(migrationMessage)
-        }
-        // One sheet for the whole import decision. It replaces an alert on an
-        // empty library, a confirmation dialog on a non-empty one, and the
-        // separate sheet Replace used to open on top of that. Presenting is
-        // simply `pendingImport` being non-nil, so nothing can get out of step
-        // with it — which is what the old boolean-plus-optional pairing did.
-        .sheet(item: $pendingImport) { pending in
-            BackupImportSheet(
-                manifest: pending.manifest,
-                localWorks: works.filter { !$0.isPendingDeletion },
-                hasReplaceableRecords: hasAnythingReplaceWouldRemove,
-                syncIsConnected: folderSyncStatus.isConnected,
-                onMerge: { restorePendingBackup(mode: .merge) },
-                onReplace: { pauseSync in
-                    if pauseSync { setAutoSyncEnabled(false) }
-                    restorePendingBackup(mode: .replaceLibrary)
-                },
-                onCancel: { pendingImport = nil },
-                makePreReplaceBackup: makePreReplaceBackup
-            )
-        }
-        #if os(iOS)
-        .sheet(isPresented: $showCustomize) {
-            CustomizeThemeView()
-                .environment(themeManager)
-                .tint(themeManager.effectiveTint)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        #endif
-        .sheet(isPresented: $showAO3Login) {
-            AO3LoginView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showAbout) {
-            NavigationStack { AboutView() }
-                .environment(themeManager)
-                .tint(themeManager.effectiveTint)
-        }
-        .sheet(isPresented: $showingBugReport) {
-            BugReportView()
-                .environment(themeManager)
-                .tint(themeManager.effectiveTint)
-        }
-        .sheet(isPresented: $showingSyncDetails) {
-            NavigationStack {
-                FolderSyncDetailsView(folderStatus: folderSyncStatus, lastResult: lastFolderSyncResult)
-            }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-        }
-    }
-
-    // MARK: Font import / delete
-
-    private func importFont(_ url: URL) {
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-
-        guard let data = try? Data(contentsOf: url) else {
-            fontNotice = BackupNotice(
-                title: "Couldn't Add Font",
-                message: "That file couldn't be read."
-            )
-            return
-        }
-        let ext = url.pathExtension.isEmpty ? "ttf" : url.pathExtension
-        let fileName = "\(UUID().uuidString).\(ext)"
-
-        // Checked against the rules a restore enforces, before anything is
-        // written. Nothing used to check: the picker's `.font` type accepts
-        // `.ttc`, `.woff` and the rest, and no size was looked at — so a font
-        // the app installed happily could make the reader's whole library
-        // backup refuse to restore, discovered only on the new phone.
-        if let reason = KudosBackupContents.fontRejectionReason(fileName: fileName, data: data) {
-            fontNotice = BackupNotice(
-                title: "Couldn't Add Font",
-                message: reason + " Keeping it would stop your library backup from restoring."
-            )
-            return
-        }
-        if let reason = fontTotalRejectionReason(adding: data.count) {
-            fontNotice = BackupNotice(title: "Couldn't Add Font", message: reason)
-            return
-        }
-
-        let destination = Storage.fontsDirectory.appendingPathComponent(fileName)
-        guard (try? data.write(to: destination)) != nil else {
-            fontNotice = BackupNotice(
-                title: "Couldn't Add Font",
-                message: "The font couldn't be saved to this device."
-            )
-            return
-        }
-
-        let font = CustomFont(name: url.deletingPathExtension().lastPathComponent, fileName: fileName)
-        context.insert(font)
-        try? context.save()
-        fontID = font.selectionID
-    }
-
-    /// Restore caps the *total* font payload too, and rejects the whole backup
-    /// when the set is over it — so fonts that are each perfectly valid can
-    /// still cost a library between them. Measured against what is installed.
-    private func fontTotalRejectionReason(adding newBytes: Int) -> String? {
-        let installed = customFonts.reduce(0) { total, font in
-            total + ((try? font.fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        }
-        guard installed + newBytes > KudosBackupContents.maxTotalFontBytes else { return nil }
-        let limit = KudosBackupContents.maxTotalFontBytes / (1024 * 1024)
-        return "Your fonts would go over the \(limit) MB a backup can carry, "
-            + "which would stop your library backup from restoring."
     }
 
     private func deleteCustomFonts(at offsets: IndexSet) {
@@ -727,903 +200,93 @@ struct ReaderOptionsForm: View { // swiftlint:disable:this type_body_length
         }
         try? context.save()
     }
+}
 
-    // MARK: EPUB import
+extension View {
+    /// The font file picker and its result alert, for a host of `ReaderFontSection`.
+    func readerFontImporter(isPresented: Binding<Bool>) -> some View {
+        modifier(ReaderFontImporter(isPresented: isPresented))
+    }
+}
 
-    private func importEPUBSelection(_ result: Result<[URL], Error>) {
-        do {
-            let urls = try result.get()
-            guard !urls.isEmpty else { return }
-            Task { await importEPUBs(urls) }
-        } catch {
-            guard !error.isUserCancellation else {
-                return
+private struct ReaderFontImporter: ViewModifier {
+    @Binding var isPresented: Bool
+
+    @Environment(\.modelContext) private var context
+    @AppStorage("readerFontID") private var fontID: String = "system"
+    @State private var fontNotice: SettingsNotice?
+
+    func body(content: Content) -> some View {
+        content
+            .fileImporter(
+                isPresented: $isPresented,
+                allowedContentTypes: [.font],
+                allowsMultipleSelection: true
+            ) { result in
+                if case let .success(urls) = result { urls.forEach(importFont) }
             }
-            epubNotice = BackupNotice(
-                title: "Couldn't Import EPUB",
-                message: error.localizedDescription
+            .settingsNoticeAlert($fontNotice)
+    }
+
+    private func importFont(_ url: URL) {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url) else {
+            fontNotice = SettingsNotice(
+                title: "Couldn't Add Font",
+                message: "That file couldn't be read."
             )
+            return
         }
-    }
+        let ext = url.pathExtension.isEmpty ? "ttf" : url.pathExtension
+        let fileName = "\(UUID().uuidString).\(ext)"
 
-    @MainActor
-    private func importEPUBs(_ urls: [URL]) async {
-        isImportingEPUB = true
-        epubImportProgress = nil
-        defer {
-            isImportingEPUB = false
-            epubImportProgress = nil
-        }
-
-        // Security scope is held for the whole pass (download wait + import), not
-        // just the read — a not-yet-downloaded iCloud Drive file needs access while
-        // it materializes, not only once it's finally readable.
-        let accessedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
-        defer { accessedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
-
-        // Kick off iCloud materialization for every file up front, so files later
-        // in the list are already downloading by the time their turn comes instead
-        // of each one only starting once the previous file's full import finishes.
-        for url in urls {
-            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-        }
-
-        var summary = EPUBImportNoticeSummary()
-        for (index, url) in urls.enumerated() {
-            do {
-                epubImportProgress = "Waiting for iCloud Drive… (\(index + 1) of \(urls.count))"
-                try await waitForUbiquitousDownload(of: url)
-                epubImportProgress = "Importing \(index + 1) of \(urls.count)…"
-                // Accepts any supported format, converting non-EPUBs on the way in.
-                let result = try await UserDocumentImport.perform(url, into: context)
-                summary.record(result.outcome, convertedFrom: result.convertedFrom)
-            } catch {
-                summary.recordFailure(fileName: url.lastPathComponent, message: error.localizedDescription)
-            }
-        }
-
-        epubNotice = BackupNotice(title: summary.title, message: summary.message)
-    }
-
-    /// What the archive actually contains, including what it does not.
-    ///
-    /// A converted import keeps the exact file it came from
-    /// (`UserDocumentImport.preserveOriginal`), described there as "insurance".
-    /// Both exporters enumerate works and fonts only, so that insurance does
-    /// not survive the one event it exists for: migrating to a new phone and
-    /// erasing the old one. Saying so at export time is the difference between
-    /// a reader who can copy the files off and one who finds out afterwards.
-    private static func exportSuccessMessage(recordCount: Int, missingAssets: Int) -> String {
-        var parts = ["\(recordCount.formatted()) Library records were included."]
-        if missingAssets > 0 {
-            let noun = missingAssets == 1 ? "file was" : "files were"
-            parts.append("\(missingAssets.formatted()) \(noun) listed but could not be read, "
-                + "so they are not in this backup. Those works restore without their EPUB.")
-        }
-        return parts.joined(separator: "\n\n")
-    }
-
-    // MARK: Backup export / import
-
-    private func exportBackup() {
-        guard !isPreparingBackupExport else { return }
-        let plan: KudosBackupExportPlan
-        do {
-            plan = try KudosBackupService.makeExportPlan(
-                works: works,
-                bookmarks: bookmarks,
-                fonts: customFonts,
-                collections: collections,
-                readingQueues: readingQueues,
-                annotations: readingAnnotations,
-                savedSearches: savedSearches,
-                readingSessions: readingSessions,
-                readingFavorites: readingFavorites,
-                fandomReadWatermarks: fandomReadWatermarks,
-                tombstones: syncTombstones
+        // Checked against the rules a restore enforces, before anything is
+        // written. Nothing used to check: the picker's `.font` type accepts
+        // `.ttc`, `.woff` and the rest, and no size was looked at — so a font
+        // the app installed happily could make the reader's whole library
+        // backup refuse to restore, discovered only on the new phone.
+        if let reason = KudosBackupContents.fontRejectionReason(fileName: fileName, data: data) {
+            fontNotice = SettingsNotice(
+                title: "Couldn't Add Font",
+                message: reason + " Keeping it would stop your library backup from restoring."
             )
-        } catch {
-            backupNotice = BackupNotice(
-                title: "Couldn't Create Backup",
-                message: error.localizedDescription
+            return
+        }
+        if let reason = fontTotalRejectionReason(adding: data.count) {
+            fontNotice = SettingsNotice(title: "Couldn't Add Font", message: reason)
+            return
+        }
+
+        let destination = Storage.fontsDirectory.appendingPathComponent(fileName)
+        guard (try? data.write(to: destination)) != nil else {
+            fontNotice = SettingsNotice(
+                title: "Couldn't Add Font",
+                message: "The font couldn't be saved to this device."
             )
             return
         }
 
-        // The archive streams to a temp file off the main actor — constant
-        // memory and no UI stall, however large the library is. The exporter
-        // sheet is presented only once the file is complete.
-        //
-        // The temp file is given the name the user should see in the save
-        // sheet, because the item-based `fileExporter` takes the presented
-        // filename from the exported file's URL — `defaultFilename:` below is
-        // not consulted for it. The UUID therefore lives in a wrapping
-        // *directory* rather than in the filename, so concurrent or same-day
-        // exports still can't collide while the file itself stays readable.
-        let exportDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("KudosBackupExport-\(UUID().uuidString)", isDirectory: true)
-        let destination = exportDirectory
-            .appendingPathComponent("Kudos Backup \(Self.backupDateFormatter.string(from: Date()))")
-            .appendingPathExtension("kudosbackup")
-        do {
-            try FileManager.default.createDirectory(
-                at: exportDirectory, withIntermediateDirectories: true
-            )
-        } catch {
-            backupNotice = BackupNotice(
-                title: "Couldn't Create Backup",
-                message: error.localizedDescription
-            )
-            return
+        let font = CustomFont(name: url.deletingPathExtension().lastPathComponent, fileName: fileName)
+        context.insert(font)
+        try? context.save()
+        fontID = font.selectionID
+    }
+
+    /// Restore caps the *total* font payload too, and rejects the whole backup
+    /// when the set is over it — so fonts that are each perfectly valid can
+    /// still cost a library between them. Measured against what is installed,
+    /// fetched at the add itself (a modifier has no `@Query` of its own).
+    private func fontTotalRejectionReason(adding newBytes: Int) -> String? {
+        let customFonts = (try? context.fetch(FetchDescriptor<CustomFont>())) ?? []
+        let installed = customFonts.reduce(0) { total, font in
+            total + ((try? font.fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
         }
-        isPreparingBackupExport = true
-        Task {
-            let result = await Task.detached(priority: .userInitiated) {
-                Result { try KudosBackupService.writeArchive(plan, to: destination) }
-            }.value
-            isPreparingBackupExport = false
-            switch result {
-            case let .success(skipped):
-                backupExportSkippedAssets = skipped.count
-                backupExportURL = destination
-                exportingBackup = true
-            case let .failure(error):
-                backupNotice = BackupNotice(
-                    title: "Couldn't Create Backup",
-                    message: error.localizedDescription
-                )
-            }
-        }
-    }
-
-    private func cleanUpBackupExportFile() {
-        if let url = backupExportURL {
-            // Removes the per-export wrapping directory, not just the archive
-            // inside it (see `exportBackup()`), so nothing is left behind in tmp.
-            try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
-        }
-        backupExportURL = nil
-    }
-
-    private func importBackup(_ result: Result<[URL], Error>) {
-        do {
-            guard let url = try result.get().first else { return }
-            // Keep the security scope alive across the confirm UI; the
-            // execute Task captures the same helper so access is not dropped
-            // when `@State` is niled at the start of restore.
-            let scoped = SecurityScopedURL(url)
-            let manifest = try KudosBackupContents.preConfirmManifest(from: scoped.url)
-            let identity = try KudosBackupContents.sourceIdentity(
-                of: scoped.url,
-                manifest: manifest
-            )
-            pendingImport = PendingBackupImport(
-                scopedURL: scoped,
-                manifest: manifest,
-                identity: identity
-            )
-            // Presenting is `pendingImport` being non-nil — one sheet, which
-            // asks the question and owns Replace's gate as its second step.
-        } catch {
-            pendingImport = nil
-            backupNotice = BackupNotice(
-                title: "Couldn't Read Backup",
-                message: error.localizedDescription
-            )
-        }
-    }
-
-    /// Posts a backup alert from inside the confirmation alert's own button.
-    ///
-    /// Through a `Task` for exactly the reason the success path is — see below.
-    /// A notice assigned synchronously from that button races the confirmation
-    /// alert's dismissal, SwiftUI drops the second presentation, and the failure
-    /// becomes as silent as the bug this whole path exists to report. Yielding
-    /// once lets the confirmation finish dismissing first.
-    private func postBackupNotice(_ title: String, _ message: String) {
-        Task { @MainActor in
-            backupNotice = BackupNotice(title: title, message: message)
-        }
-    }
-
-    /// Runs the merge and reports what changed.
-    ///
-    /// Deliberately hops through a `Task` before doing any work. The call site
-    /// is the confirmation alert's own button, and setting `backupNotice`
-    /// straight from there raced that alert's dismissal — SwiftUI dropped the
-    /// second presentation, so the "Backup Imported" summary silently never
-    /// appeared and an import looked like it had done nothing. Yielding once
-    /// lets the confirmation finish dismissing, after which the result alert
-    /// presents reliably. The hop also gives the progress indicator on the
-    /// Import row a chance to render before the merge begins.
-    private func restorePendingBackup(mode: BackupImportMode = .merge) {
-        let pending = pendingImport
-        pendingImport = nil
-        guard let pending else {
-            // Never silent. Returning empty-handed here is precisely how a
-            // failed restore looked like a no-op: the reader tapped Restore,
-            // nothing happened, and nothing said why.
-            postBackupNotice(
-                "Couldn't Import Backup",
-                "Kudos lost track of the backup you chose before the restore "
-                    + "began. Pick the file again."
-            )
-            return
-        }
-        guard PersistenceOperationGate.begin(.backupImport) else {
-            postBackupNotice(
-                "Import Already Busy",
-                "Kudos is already running "
-                    + "\(PersistenceOperationGate.active?.title ?? "another persistence operation")."
-            )
-            return
-        }
-        isImportingBackup = true
-        Task { @MainActor in
-            // Hold the security scope open for the duration of the read+restore.
-            // Clearing `@State` above would otherwise drop the last reference
-            // and stop access before `readForConfirmedImport` runs.
-            let scopedURL = pending.scopedURL
-            defer {
-                _ = scopedURL
-                PersistenceOperationGate.end(.backupImport)
-                isImportingBackup = false
-            }
-            do {
-                let backup = try KudosBackupContents.readForConfirmedImport(
-                    from: scopedURL.url,
-                    expectedIdentity: pending.identity,
-                    manifest: pending.manifest
-                )
-                let summary = try KudosBackupService.restore(
-                    backup, into: context, mode: mode
-                )
-                if mode != .replaceLibrary {
-                    applyRestoredTheme(pending.manifest.settings)
-                }
-                let verb = mode == .replaceLibrary ? "Replaced" : "Merged"
-                let title = mode == .replaceLibrary ? "Library Replaced" : "Backup Imported"
-                let conflictMessage = summary.conflictMessage
-                backupNotice = BackupNotice(
-                    title: title,
-                    message: "\(verb) into your library:\n\(summary.changeMessage)"
-                        + (conflictMessage.isEmpty ? "" : "\n\n\(conflictMessage)")
-                )
-            } catch {
-                backupNotice = BackupNotice(
-                    title: "Couldn't Import Backup",
-                    message: error.localizedDescription
-                )
-            }
-        }
-    }
-
-    /// Writes a copy of the current library so Replace can be undone by importing
-    /// that file. Returns a user-visible filename or the error to show.
-    ///
-    /// **This is the only undo a Replace has**, so it is written defensively:
-    ///
-    /// - The name carries a time, not just a date, and the write refuses to
-    ///   overwrite. It used to be `yyyy-MM-dd` written with plain `.atomic`, so
-    ///   *opening* the Replace sheet a second time on the same day — this runs
-    ///   from `onAppear`, and cancelling still ran it — silently wrote the
-    ///   ALREADY-REPLACED library over the original copy. The one file that
-    ///   could undo the first replace was destroyed by considering a second.
-    /// - It retries. A single failure is not proof that the disk cannot take a
-    ///   copy, and the alternative to a copy is an unrecoverable replace.
-    ///
-    /// `PreReplaceBackupNaming` owns the naming so it can be tested without a
-    /// SwiftUI view.
-    private func makePreReplaceBackup() -> Result<String, Error> {
-        var lastError: Error?
-        for attempt in 0 ..< PreReplaceBackupNaming.attemptLimit {
-            do {
-                let contents = try KudosBackupService.makeContents(
-                    works: works,
-                    bookmarks: bookmarks,
-                    fonts: customFonts,
-                    collections: collections,
-                    readingQueues: readingQueues,
-                    annotations: readingAnnotations,
-                    savedSearches: savedSearches,
-                    readingSessions: readingSessions,
-                    readingFavorites: readingFavorites,
-                    fandomReadWatermarks: fandomReadWatermarks,
-                    tombstones: syncTombstones
-                )
-                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let url = PreReplaceBackupNaming.url(in: docs, at: Date(), attempt: attempt)
-                // Staged, then moved into place.
-                //
-                // This used to be `write(options: [.atomic, .withoutOverwriting])`,
-                // which looks like it gives both guarantees and in fact gives
-                // neither: Foundation TRAPS on that combination — "withoutOverwriting
-                // is not supported with atomic" — so the one path that exists to
-                // protect the only undo a Replace has would have taken the app down
-                // instead of writing a copy.
-                //
-                // An atomic write to a scratch name cannot leave a partial file, and
-                // `moveItem` refuses an existing destination, so even two attempts
-                // inside the same second cannot clobber each other.
-                let staged = FileManager.default.temporaryDirectory
-                    .appendingPathComponent(
-                        "\(UUID().uuidString).\(PreReplaceBackupNaming.fileExtension)"
-                    )
-                try contents.zipData().write(to: staged, options: .atomic)
-                do {
-                    try FileManager.default.moveItem(at: staged, to: url)
-                } catch {
-                    try? FileManager.default.removeItem(at: staged)
-                    throw error
-                }
-                return .success(url.lastPathComponent)
-            } catch {
-                lastError = error
-            }
-        }
-        return .failure(lastError ?? CocoaError(.fileWriteUnknown))
-    }
-
-    private func applyRestoredTheme(_ settings: KudosBackupSettings) {
-        themeManager.matchAppAndReader = false
-        themeManager.appTheme = ReaderTheme(rawValue: settings.appTheme) ?? .light
-        themeManager.readerTheme = ReaderTheme(rawValue: settings.readerTheme) ?? .light
-        themeManager.accentHex = settings.accentColorHex
-        themeManager.matchAppAndReader = settings.matchAppReaderTheme
-    }
-
-    private func preparePersistenceForSync() {
-        guard !isPreparingPersistence else { return }
-        isPreparingPersistence = true
-        Task { @MainActor in
-            let state = await PersistenceMigrationService.run(in: context)
-            persistenceStatus = PersistenceStatusStore.snapshot()
-            isPreparingPersistence = false
-            if state == .failedRecoverable {
-                backupNotice = BackupNotice(
-                    title: "Folder Sync Prep Needs Retry",
-                    message: persistenceStatus.detail
-                )
-            }
-        }
-    }
-
-    private func connectSyncFolder(_ result: Result<[URL], Error>) {
-        do {
-            guard let url = try result.get().first else { return }
-            try FolderSyncService.connect(to: url)
-            folderSyncStatus = FolderSyncService.snapshot()
-            startFolderSyncNow()
-        } catch {
-            folderSyncStatus = FolderSyncService.snapshot()
-            backupNotice = BackupNotice(
-                title: "Couldn't Connect Sync Folder",
-                message: error.localizedDescription
-            )
-        }
-    }
-
-    private func startFolderSyncNow() {
-        guard !isFolderSyncing else { return }
-        isFolderSyncing = true
-        Task { @MainActor in
-            defer {
-                folderSyncStatus = FolderSyncService.snapshot()
-                persistenceStatus = PersistenceStatusStore.snapshot()
-                isFolderSyncing = false
-            }
-            do {
-                lastFolderSyncResult = try await FolderSyncService.syncNow(in: context)
-            } catch {
-                backupNotice = BackupNotice(
-                    title: "Folder Sync Couldn't Finish",
-                    message: error.localizedDescription
-                )
-            }
-        }
-    }
-
-    private func disconnectSyncFolder() {
-        FolderSyncService.disconnect()
-        folderSyncStatus = FolderSyncService.snapshot()
-    }
-
-    private func setAutoSyncEnabled(_ enabled: Bool) {
-        FolderSyncService.setAutoSyncEnabled(enabled)
-        folderSyncStatus = FolderSyncService.snapshot()
-    }
-
-    private var savedWorkMigrationButtonTitle: String {
-        let count = legacySavedWorksForQueueMigration.count
-        return "Add \(count) Work\(count == 1 ? "" : "s")"
-    }
-
-    private func startSavedWorkMigration() {
-        guard savedWorkMigrationTask == nil else { return }
-        savedWorkMigrationTask = Task(priority: .utility) { @MainActor in
-            await migrateLegacySavedWorksToSavedForLater()
-            savedWorkMigrationTask = nil
-        }
-    }
-
-    private func cancelSavedWorkMigration() {
-        savedWorkMigrationTask?.cancel()
-        savedWorkMigrationProgress = "Cancelling after the current work…"
-    }
-
-    @MainActor
-    private func migrateLegacySavedWorksToSavedForLater() async {
-        let candidates = legacySavedWorksForQueueMigration
-        guard !candidates.isEmpty, !isMigratingSavedWorks else { return }
-
-        isMigratingSavedWorks = true
-        savedWorkMigrationCompleted = 0
-        savedWorkMigrationTotal = candidates.count
-        savedWorkMigrationProgress = "Preparing Saved for Later…"
-        defer {
-            isMigratingSavedWorks = false
-            savedWorkMigrationProgress = nil
-            savedWorkMigrationCompleted = 0
-            savedWorkMigrationTotal = 0
-        }
-
-        var added = 0
-        var unavailableOffline = 0
-        var cancelled = false
-
-        for (index, work) in candidates.enumerated() {
-            if Task.isCancelled {
-                cancelled = true
-                break
-            }
-
-            savedWorkMigrationProgress = "Updating \(index + 1) of \(candidates.count)…"
-            _ = await ReadingQueueService.addToSavedForLater(work, in: context)
-            if work.isInSavedForLaterQueue { added += 1 }
-            if !work.hasEPUB || work.epubPreservationStatus == .failed
-                || work.epubPreservationStatus == .missingFile {
-                unavailableOffline += 1
-            }
-            savedWorkMigrationCompleted = index + 1
-
-            if Task.isCancelled {
-                cancelled = true
-                break
-            }
-
-            guard index + 1 < candidates.count else { continue }
-            savedWorkMigrationProgress = "Pausing before the next AO3 request…"
-            do {
-                try await Task.sleep(nanoseconds: ReadingQueueService.preservationRequestPauseNanos)
-            } catch {
-                cancelled = true
-                break
-            }
-        }
-
-        var message = "Added \(added.formatted()) saved work"
-            + "\(added == 1 ? "" : "s") to Saved for Later."
-        if unavailableOffline > 0 {
-            message += " \(unavailableOffline.formatted()) need preservation retry before offline reading."
-        }
-        if cancelled {
-            message += " Migration was cancelled before the remaining works were touched."
-        }
-
-        backupNotice = BackupNotice(
-            title: cancelled ? "Migration Cancelled" : "Saved for Later Updated",
-            message: message
-        )
-    }
-
-    private struct BackupNotice: Identifiable {
-        let id = UUID()
-        let title: String
-        let message: String
-    }
-
-    /// Every alert this screen can present, so they share one `.alert` modifier
-    /// (see the call site — SwiftUI drops all but one per view).
-    private enum SettingsAlert: Identifiable {
-        case notice(BackupNotice)
-
-        var id: String {
-            switch self {
-            case let .notice(notice): "notice-\(notice.id)"
-            }
-        }
-    }
-
-    /// Projects the notice states onto the single modifier. Writing `nil` back
-    /// (the reader dismissed) clears whichever one produced the alert.
-    ///
-    /// Import confirmation used to live here too, and carried a subtle bug with
-    /// it: dismissal writes this binding, and on iOS 27 that happens BEFORE the
-    /// alert's own button action runs, so clearing `pendingImport` here
-    /// destroyed the import the button was about to perform. That whole class
-    /// of problem left with the alert — the decision is a sheet now.
-    private var activeAlertBinding: Binding<SettingsAlert?> {
-        Binding(
-            get: {
-                if let backupNotice { return .notice(backupNotice) }
-                if let epubNotice { return .notice(epubNotice) }
-                if let fontNotice { return .notice(fontNotice) }
-                return nil
-            },
-            set: { newValue in
-                guard newValue == nil else { return }
-                if backupNotice != nil {
-                    backupNotice = nil
-                } else if epubNotice != nil {
-                    epubNotice = nil
-                } else {
-                    fontNotice = nil
-                }
-            }
-        )
-    }
-
-    private enum FileImportKind { case fonts, backup, epub, syncFolder }
-
-    private var activeImportContentTypes: [UTType] {
-        switch activeImport {
-        case .fonts: [.font]
-        // `.folder` keeps the pre-archive directory-form backups from older
-        // versions selectable — `KudosBackupContents.read(from:)` handles both
-        // formats, and a plain directory is exactly what such a backup resolves
-        // to. It cannot be narrowed to a package type: nothing declares
-        // `.kudosbackup` as a package, so the system types those directories as
-        // `public.folder` (verified on a real legacy backup). The previous
-        // `UTType(filenameExtension:conformingTo: .package)` matched neither
-        // them nor anything else, so legacy import was silently broken too.
-        case .backup: [.kudosBackup, .folder]
-        case .epub: Self.workImportContentTypes
-        case .syncFolder: [.folder]
-        case nil: [.item] // never presented; keeps the modifier well-formed
-        }
-    }
-
-    private var activeImportAllowsMultipleSelection: Bool {
-        switch activeImport {
-        case .fonts, .epub: true
-        case .backup, .syncFolder, nil: false
-        }
-    }
-
-    private static let backupDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    private static let epubContentType: UTType = {
-        UTType(filenameExtension: "epub")
-            ?? UTType(importedAs: "org.idpf.epub-container", conformingTo: .data)
-    }()
-
-    /// Everything the work importer can read. Wider than the formats T-152
-    /// converts on purpose: a community copy arrives as whatever someone had, and
-    /// a picker that greys the file out is a dead end, whereas letting it through
-    /// produces a message naming the format and what to do about it.
-    ///
-    /// `.zip` matters more than it looks — forums and chat apps reject `.epub`
-    /// attachments, so zipping the file is the normal way fanfic gets passed
-    /// around, and `.data` catches the extensionless files Discord leaves behind.
-    private static let workImportContentTypes: [UTType] = [
-        epubContentType,
-        .html,
-        .plainText,
-        .text,
-        .zip,
-        .pdf,
-        .rtf,
-        UTType(filenameExtension: "xhtml") ?? .html,
-        UTType(filenameExtension: "md") ?? .plainText,
-        UTType(filenameExtension: "docx") ?? .data,
-        UTType(filenameExtension: "mobi") ?? .data,
-        UTType(filenameExtension: "azw3") ?? .data,
-        .data
-    ]
-}
-
-struct BackupSettingsSection: View {
-    var isPreparingExport = false
-    var isImporting = false
-    let onExport: () -> Void
-    let onImport: () -> Void
-
-    private var isBusy: Bool {
-        isPreparingExport || isImporting
-    }
-
-    var body: some View {
-        Section {
-            Button(action: onExport) {
-                HStack {
-                    Label("Export Backup…", systemImage: "square.and.arrow.up")
-                    if isPreparingExport {
-                        Spacer()
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(isBusy)
-            Button(action: onImport) {
-                HStack {
-                    Label("Import Backup…", systemImage: "square.and.arrow.down")
-                    if isImporting {
-                        Spacer()
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(isBusy)
-            // A full-width bar while either side is working. Indeterminate on
-            // purpose: neither `writeArchive` nor `restore` reports per-record
-            // progress today, and a bar that invented a percentage would be
-            // lying about how far along the merge actually is.
-            if isBusy {
-                ProgressView()
-                    .progressViewStyle(.linear)
-                    .accessibilityLabel(isImporting ? "Importing backup" : "Preparing backup")
-            }
-        } header: {
-            Text("Backup")
-        } footer: {
-            Text("Backups include Library records, Reading Queues, preserved EPUBs, "
-                + "User Tags, saved links, custom fonts, and app settings. Import "
-                + "merges without deleting items already on this device. AO3 sessions "
-                + "and passwords are never included.")
-        }
-    }
-}
-
-struct FolderSyncSettingsSection: View {
-    let persistenceStatus: PersistenceStatusSnapshot
-    let folderStatus: FolderSyncSnapshot
-    let isPreparing: Bool
-    let isSyncing: Bool
-    let onChooseFolder: () -> Void
-    let onSyncNow: () -> Void
-    let onDisconnect: () -> Void
-    let onRetryPreparation: () -> Void
-    let onToggleAutoSync: (Bool) -> Void
-    let onShowSyncDetails: () -> Void
-
-    var body: some View {
-        Section {
-            LabeledContent {
-                Text(persistenceStatus.migrationState.title)
-            } label: {
-                Label("Metadata", systemImage: "externaldrive")
-            }
-
-            if folderStatus.isConnected {
-                LabeledContent {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(folderStatus.folderDisplayName)
-                        if !folderStatus.folderPath.isEmpty {
-                            Text(folderStatus.folderPath)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                } label: {
-                    Label("Folder", systemImage: "folder")
-                }
-
-                Toggle(isOn: Binding(
-                    get: { folderStatus.autoSyncEnabled },
-                    set: onToggleAutoSync
-                )) {
-                    Label("Auto Sync", systemImage: "arrow.triangle.2.circlepath.circle")
-                }
-
-                Button(action: onSyncNow) {
-                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
-                }
-                .disabled(isSyncing || isPreparing)
-
-                Button(action: onChooseFolder) {
-                    Label("Change Folder", systemImage: "folder.badge.gearshape")
-                }
-                .disabled(isSyncing || isPreparing)
-
-                Button(action: onShowSyncDetails) {
-                    Label("Sync Details", systemImage: "list.bullet.rectangle")
-                }
-
-                Button(role: .destructive, action: onDisconnect) {
-                    Label("Disconnect", systemImage: "xmark.circle")
-                }
-                .disabled(isSyncing)
-            } else {
-                Button(action: onChooseFolder) {
-                    Label("Choose Sync Folder", systemImage: "folder.badge.plus")
-                }
-                .disabled(isSyncing || isPreparing)
-            }
-
-            if let date = persistenceStatus.lastMigrationAttempt {
-                LabeledContent("Last Checked", value: date.formatted(date: .abbreviated, time: .shortened))
-            }
-
-            if let date = folderStatus.lastSyncAt {
-                LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .shortened))
-            }
-
-            Button(action: onRetryPreparation) {
-                Label(
-                    persistenceStatus.migrationState == .completed ? "Check Metadata" : "Retry Metadata Prep",
-                    systemImage: "arrow.clockwise"
-                )
-            }
-            .disabled(isPreparing || isSyncing)
-
-            if isPreparing || isSyncing {
-                HStack(spacing: 12) {
-                    ProgressView()
-                    Text(isSyncing ? "Syncing library…" : "Preparing metadata…")
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !folderStatus.lastError.isEmpty {
-                Text(folderStatus.lastError)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Library Sync Folder")
-        } footer: {
-            Text(persistenceStatus.detail + " Your library data — including reading history — is written "
-                + "to the folder you choose. If that folder is in iCloud Drive, Apple syncs it to your "
-                + "other devices through your personal iCloud account. Kudos still works fully offline. "
-                + "This is folder-based sync using the existing backup format, not real-time CloudKit sync. "
-                + "Turning off Auto Sync stops automatic background/launch syncing — Sync Now still works.")
-        }
-    }
-}
-
-/// Lightweight diagnostics, mainly useful during development/testing — deliberately
-/// tucked behind its own screen rather than cluttering the main Settings list.
-struct FolderSyncDetailsView: View {
-    let folderStatus: FolderSyncSnapshot
-    let lastResult: FolderSyncResult?
-
-    var body: some View {
-        Form {
-            Section("Status") {
-                LabeledContent("Connected", value: folderStatus.isConnected ? "Yes" : "No")
-                LabeledContent("Auto Sync", value: folderStatus.autoSyncEnabled ? "On" : "Off")
-                LabeledContent("Pending Changes", value: folderStatus.isDirty ? "Yes" : "No")
-                if let date = folderStatus.lastSyncAt {
-                    LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .standard))
-                }
-                if !folderStatus.lastError.isEmpty {
-                    LabeledContent("Last Error", value: folderStatus.lastError)
-                }
-            }
-            if let lastResult {
-                Section("Last Sync Result") {
-                    LabeledContent("Read Remote File", value: lastResult.didReadRemoteFile ? "Yes" : "No")
-                    LabeledContent("Wrote Remote File", value: lastResult.didWriteRemoteFile ? "Yes" : "No")
-                    LabeledContent("Missing Remote File", value: lastResult.missingRemoteFile ? "Yes" : "No")
-                    LabeledContent("Conflicts Folded", value: "\(lastResult.foldedConflicts)")
-                    LabeledContent("Works Restored", value: "\(lastResult.restoredWorks)")
-                    LabeledContent("Queues Suppressed", value: "\(lastResult.suppressedQueues)")
-                    LabeledContent("Queues Revived", value: "\(lastResult.revivedQueues)")
-                    LabeledContent("Ambiguous Queue Conflicts", value: "\(lastResult.ambiguousQueueConflicts)")
-                }
-            } else {
-                Section {
-                    Text("No sync has run yet this session.")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .navigationTitle("Sync Details")
-        #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
-    }
-}
-
-struct EPUBImportSettingsSection: View {
-    let isImporting: Bool
-    let progressText: String?
-    let onImport: () -> Void
-
-    var body: some View {
-        Section {
-            Button(action: onImport) {
-                Label("Import Files", systemImage: "doc.badge.plus")
-            }
-            .disabled(isImporting)
-            .accessibilityLabel("Import files")
-
-            if isImporting {
-                HStack(spacing: 12) {
-                    ProgressView()
-                    Text(progressText ?? "Importing…")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        } header: {
-            Text("Import")
-        } footer: {
-            Text("Import EPUB, HTML, or text files — including zipped chapters — into your "
-                + "local Library. Anything that isn't already an EPUB is converted to one, "
-                + "and the original file is kept alongside it. Files are copied into Kudos "
-                + "storage and remain readable offline.")
-        }
-    }
-}
-
-private struct EPUBImportNoticeSummary {
-    var imported = 0
-    var restored = 0
-    var duplicates = 0
-    /// How many files were converted to EPUB on the way in, by source format, so
-    /// the notice can say what happened rather than silently changing the file.
-    var converted: [ImportedFileFormat: Int] = [:]
-    var failures: [(fileName: String, message: String)] = []
-
-    var title: String {
-        failures.isEmpty ? "Import Complete" : "Import Finished"
-    }
-
-    var message: String {
-        var parts: [String] = []
-        if imported > 0 { parts.append("Imported \(imported.formatted()).") }
-        if !converted.isEmpty { parts.append(conversionSentence) }
-        if restored > 0 {
-            parts.append("Restored \(restored.formatted()) existing Library file\(restored == 1 ? "" : "s").")
-        }
-        if duplicates > 0 {
-            parts.append("Skipped \(duplicates.formatted()) duplicate\(duplicates == 1 ? "" : "s").")
-        }
-        if failures.isEmpty {
-            return parts.isEmpty ? "No files were selected." : parts.joined(separator: " ")
-        }
-        let failureText = failures.prefix(3)
-            .map { "\($0.fileName): \($0.message)" }
-            .joined(separator: "\n")
-        let extra = failures.count > 3 ? "\n…and \(failures.count - 3) more." : ""
-        return (parts.isEmpty ? "Nothing was imported." : parts.joined(separator: " "))
-            + "\n\n" + failureText + extra
-    }
-
-    /// "Converted 2 from HTML, 1 from plain text." Formats are sorted by name so
-    /// the sentence is stable rather than dictionary-ordered.
-    private var conversionSentence: String {
-        let clauses = converted
-            .sorted { $0.key.displayName < $1.key.displayName }
-            .map { "\($0.value.formatted()) from \($0.key.displayName)" }
-        return "Converted \(clauses.joined(separator: ", ")). The original file\(converted.count == 1 ? "" : "s")"
-            + " \(converted.values.reduce(0, +) == 1 ? "was" : "were") kept."
-    }
-
-    mutating func record(_ outcome: UserEPUBImportOutcome, convertedFrom format: ImportedFileFormat? = nil) {
-        switch outcome {
-        case .imported:
-            imported += 1
-        case .restored:
-            restored += 1
-        case .duplicate:
-            duplicates += 1
-        }
-        // A duplicate is not counted as a conversion: nothing new was stored, so
-        // claiming "the original was kept" would be a lie.
-        if let format, case .imported = outcome {
-            converted[format, default: 0] += 1
-        }
-    }
-
-    mutating func recordFailure(fileName: String, message: String) {
-        failures.append((fileName, message))
+        guard installed + newBytes > KudosBackupContents.maxTotalFontBytes else { return nil }
+        let limit = KudosBackupContents.maxTotalFontBytes / (1024 * 1024)
+        return "Your fonts would go over the \(limit) MB a backup can carry, "
+            + "which would stop your library backup from restoring."
     }
 }
 
@@ -1899,108 +562,5 @@ nonisolated enum PreReplaceBackupNaming {
         directory
             .appendingPathComponent(fileName(at: date, attempt: attempt))
             .appendingPathExtension(fileExtension)
-    }
-}
-
-private extension Error {
-    var isUserCancellation: Bool {
-        let error = self as NSError
-        return error.domain == NSCocoaErrorDomain
-            && error.code == CocoaError.Code.userCancelled.rawValue
-    }
-}
-
-/// Artboard 1ab's About group.
-///
-/// Its own `View` rather than another `Section` inside `ReaderOptionsForm`'s
-/// body: that body already carries around twenty sections, and adding this one
-/// inline pushed Swift's type checker into an inference that never terminated —
-/// the compile hung on this file rather than failing. A separate type gives the
-/// solver a boundary to stop at.
-private struct AboutSettingsSection: View {
-    var onShowAbout: () -> Void
-    var onReportBug: () -> Void
-
-    var body: some View {
-        Section {
-            // 1ab states the running version on the page. It was reachable only
-            // by opening the About sheet — the one place you cannot read it from
-            // while writing a bug report about it.
-            LabeledContent("Version", value: Changelog.currentVersion)
-
-            NavigationLink(value: SettingsRoute.privacy) {
-                Label("Privacy and local data", systemImage: "hand.raised")
-            }
-
-            Button(action: onShowAbout) {
-                Label("About Kudos", systemImage: "info.circle")
-            }
-
-            Button(action: onReportBug) {
-                Label("Report a Bug", systemImage: "ladybug")
-            }
-
-            if let url = URL(string: AppLinks.repository) {
-                Link(destination: url) {
-                    Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                }
-            }
-        } header: {
-            Text("About")
-        } footer: {
-            // 1ab's closing line. The last sentence is the one worth stating:
-            // the accent chosen here is what tints the Account tab's wash, which
-            // neither screen says on its own.
-            Text("App settings only. Anything AO3 stores on the account is in AO3 "
-                + "Preferences. The accent colour set here is what tints the whole tab.")
-        }
-    }
-}
-
-/// The AO3 session rows, extracted for the same reason as `AboutSettingsSection`
-/// and moved to sit beside it: 1ab files the account under About, and leading the
-/// page with it pushed Reading — the thing people actually come here to change —
-/// below the fold.
-private struct AO3AccountSettingsSection: View {
-    var onLogIn: () -> Void
-
-    @Environment(AO3AuthService.self) private var auth
-
-    var body: some View {
-        Section {
-            switch auth.status {
-            case .restoring:
-                // Restoring the AO3 session — show the shape of the signed-in row.
-                SkeletonListRow(width: 96, trailingWidth: 120)
-
-            case let .signedIn(username):
-                LabeledContent {
-                    Text(username)
-                } label: {
-                    Label("Signed In", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
-
-                Button(role: .destructive) {
-                    Task { await auth.logout() }
-                } label: {
-                    Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-
-            case .signedOut, .signingIn, .usingFallback:
-                Button(action: onLogIn) {
-                    Label("Log In to AO3…", systemImage: "person.badge.key")
-                }
-            }
-        } header: {
-            Text("AO3 Account")
-        } footer: {
-            if let notice = auth.noticeMessage {
-                Text(notice)
-            } else {
-                Text("A login enables future synced bookmarks, history, subscriptions, "
-                    + "kudos, comments, and restricted works.")
-            }
-        }
     }
 }
