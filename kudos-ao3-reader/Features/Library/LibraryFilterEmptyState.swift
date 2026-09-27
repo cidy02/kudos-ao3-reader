@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Actionable empty state when Library filters hide every work on the page.
-/// States the hidden count, names the filters that collide, offers single-filter
+/// States the hidden count, names the filters that collide (the smallest set that
+/// matches nothing, 1ay.3), offers single-filter
 /// drops with real remaining counts, and keeps Clear as the last resort.
 struct LibraryFilterCollisionCard: View {
     let sectionTitle: String
@@ -136,7 +137,9 @@ struct LibraryFilterCollisionCard: View {
             ? "The 1 work in \(sectionTitle) is hidden."
             : "All \(hiddenCount) works in \(sectionTitle) are hidden."
         guard activeLabels.count >= 2 else { return hidden }
-        return hidden + " " + joinedList(activeLabels) + " have no works in common here."
+        let colliding = filters.collidingFilterLabels(in: works)
+        if colliding.count == 1 { return hidden + " " + colliding[0] + " matches no works here." }
+        return hidden + " " + joinedList(colliding) + " have no works in common here."
     }
 
     private var clearLabelColor: Color {

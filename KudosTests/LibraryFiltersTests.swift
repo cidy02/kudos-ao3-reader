@@ -165,6 +165,57 @@ struct LibraryFiltersTests {
         #expect(drops.first { $0.filterLabel == "Complete" }?.remainingFilters.rating == .teen)
     }
 
+    /// 1ad.3: each pill counts what it would show with the other filters held,
+    /// whichever pill is selected.
+    @Test func completionPillCountsHoldTheOtherFilters() throws {
+        let context = try makeContext()
+        let wipEnglish = work(in: context, title: "WIPEnglish")
+        wipEnglish.isComplete = false
+        wipEnglish.language = "English"
+        let doneEnglish = work(in: context, title: "DoneEnglish")
+        doneEnglish.isComplete = true
+        doneEnglish.language = "English"
+        let wipFrench = work(in: context, title: "WIPFrench")
+        wipFrench.isComplete = false
+        wipFrench.language = "Français"
+
+        var filters = LibraryFilters()
+        let works = [wipEnglish, doneEnglish, wipFrench]
+        #expect(filters.completionPillCounts(in: works) == (all: 3, wip: 2))
+        filters.language = "English"
+        filters.completion = .inProgress
+        #expect(filters.completionPillCounts(in: works) == (all: 2, wip: 1))
+        #expect(!filters.summaryLabels(includesInProgress: false).map(\.text).contains("In Progress"))
+        #expect(filters.summaryLabels().map(\.text).contains("In Progress"))
+    }
+
+    /// 1ay.3: three filters where only two are disjoint names those two, not
+    /// the bystander that every work passes.
+    @Test func collidingFilterLabelsNamesTheDisjointPair() throws {
+        let context = try makeContext()
+        let completeExplicit = work(in: context, title: "CompleteExplicit")
+        completeExplicit.isComplete = true
+        completeExplicit.rating = "Explicit"
+        completeExplicit.language = "English"
+        let wipTeen = work(in: context, title: "WIPTeen")
+        wipTeen.isComplete = false
+        wipTeen.rating = "Teen And Up Audiences"
+        wipTeen.language = "English"
+
+        var filters = LibraryFilters()
+        filters.language = "English"
+        filters.completion = .complete
+        filters.rating = .teen
+
+        let works = [completeExplicit, wipTeen]
+        #expect(filters.apply(to: works).isEmpty)
+        #expect(filters.collidingFilterLabels(in: works) == ["Teen And Up", "Complete"])
+
+        // A filter no work passes on its own is named alone.
+        filters.language = "Français"
+        #expect(filters.collidingFilterLabels(in: works) == ["Français"])
+    }
+
     @Test func droppingEachActiveFilterTreatsWordBoundsAsOneMember() throws {
         let context = try makeContext()
         let shortComplete = work(in: context, title: "Short")
