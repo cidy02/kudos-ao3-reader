@@ -7,6 +7,8 @@ import Testing
 private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
     struct Hit: Sendable {
         var method: String?
+        var path: String?
+        var body: String?
         var cookie: String?
         var preparedWriteSession: String?
         var handlesCookies: Bool
@@ -34,6 +36,8 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let hit = Hit(
             method: request.httpMethod,
+            path: request.url?.path,
+            body: Self.bodyText(of: request),
             cookie: request.value(forHTTPHeaderField: "Cookie"),
             preparedWriteSession: request.value(
                 forHTTPHeaderField: AO3Client.preparedWriteSessionHeader
@@ -61,6 +65,22 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+
+    /// URLSession hands a protocol the body as a stream, not `httpBody`.
+    private static func bodyText(of request: URLRequest) -> String? {
+        if let body = request.httpBody { return String(data: body, encoding: .utf8) }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            guard read > 0 else { break }
+            data.append(buffer, count: read)
+        }
+        return String(data: data, encoding: .utf8)
+    }
 }
 
 /// `submitWrite` used to await `pace()` and then POST the Cookie it was handed.
@@ -215,6 +235,47 @@ struct AO3WriteDispatchFenceTests {
             try await auth.submitWrite(request, using: client)
         }
         #expect(AO3WriteDispatchProbe.recorded().isEmpty)
+    }
+
+    /// 1o.4's Unmark: one CSRF GET of the work page, then one POST to
+    /// `/works/:id/mark_as_read` carrying `_method=patch` (Q19). Stub only.
+    @Test func unmarkForLaterPatchesMarkAsReadOnce() async throws {
+        AO3WriteDispatchProbe.reset()
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let client = AO3Client(session: probeSession(), paceSleep: { _ in })
+
+        let message = try await auth.unmarkForLater(workID: 42, using: client)
+
+        #expect(message == "Unmarked.")
+        let hits = AO3WriteDispatchProbe.recorded()
+        #expect(hits.map(\.method) == ["GET", "POST"])
+        #expect(hits.map(\.path) == ["/works/42", "/works/42/mark_as_read"])
+        #expect(hits.last?.body?.contains("_method=patch") == true)
+        #expect(hits.last?.body?.contains("authenticity_token=probe-csrf") == true)
+    }
+
+    /// Bob signs in while alice's CSRF GET is out: alice's unmark must not post
+    /// under bob's session.
+    @Test func aSessionChangeDuringTheUnmarkCSRFFetchPostsNothing() async throws {
+        AO3WriteDispatchProbe.reset()
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let client = AO3Client(
+            session: probeSession(),
+            nextAllowedRequestAt: Date().addingTimeInterval(60),
+            paceSleep: { @MainActor _ in
+                guard auth.username == "alice" else { return }
+                await auth.logout()
+                await auth.login(username: "bob", password: "pw")
+            }
+        )
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await auth.unmarkForLater(workID: 42, using: client)
+        }
+        #expect(auth.username == "bob")
+        #expect(AO3WriteDispatchProbe.recorded().map(\.method) == ["GET"])
     }
 
     private func collectionForm() -> AO3CollectionForm {
