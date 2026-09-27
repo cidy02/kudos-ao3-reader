@@ -112,29 +112,62 @@ extension AO3AuthService {
         )
     }
 
+    /// Covers a defaulted assignment with a pinch hitter: the Pinch Hitter field
+    /// `cover_<id>` on the maintainer's Defaulted list (1cb "Claim a pinch hit",
+    /// with the viewer's own byline). Collection owners only on AO3.
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt. Single-shot `submitWrite`; never retried or coalesced.
-    func claimPinchHit(slug: String, assignmentID: Int, byline: String) async throws {
-        guard isLoggedIn else { throw AO3ChallengeWriteError.notSignedIn }
+    func claimPinchHit(
+        slug: String, assignmentID: Int, byline: String,
+        expectedGeneration: Int? = nil, using client: AO3Client = .shared
+    ) async throws {
         let pinch = byline.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pinch.isEmpty else {
             throw AO3ChallengeWriteError.rejected("Name a pinch hitter.")
         }
-        let referer = AO3ChallengeURL.assignments(slug: slug, list: .pinchHits, page: 1)
-        let (_, token) = try await fetchCSRFPage(at: referer)
-        let params: [(String, String)] = [
-            ("_method", "put"),
-            ("authenticity_token", token),
-            ("cover_\(assignmentID)", pinch)
-        ]
+        try await updateAssignments(
+            slug: slug, list: .defaults, field: ("cover_\(assignmentID)", pinch),
+            fallback: "AO3 couldn't claim that pinch hit.",
+            expectedGeneration: expectedGeneration, using: client
+        )
+    }
+
+    /// Marks someone else's open assignment defaulted: the Default checkbox
+    /// `default_<id>` on the maintainer's Open list (1cb "Report a default").
+    /// Collection owners only on AO3; the giver's own default is the separate
+    /// `reportAssignmentDefault` route. Unexercised against a live AO3 session —
+    /// a release gate, not a reason this endpoint is unbuilt.
+    func markAssignmentDefaulted(
+        slug: String, assignmentID: Int,
+        expectedGeneration: Int? = nil, using client: AO3Client = .shared
+    ) async throws {
+        try await updateAssignments(
+            slug: slug, list: .unfulfilled, field: ("default_\(assignmentID)", "1"),
+            fallback: "AO3 couldn't record the default.",
+            expectedGeneration: expectedGeneration, using: client
+        )
+    }
+
+    /// otwarchive's `challenge_assignments#update_multiple`: `PUT
+    /// /collections/:slug/assignments/update_multiple`, one `<action>_<id>` field
+    /// per change, from the list page that renders that field. The session that
+    /// loaded the screen is re-checked around the CSRF fetch.
+    private func updateAssignments(
+        slug: String, list: AO3ChallengeAssignmentList, field: (String, String),
+        fallback: String, expectedGeneration: Int?, using client: AO3Client
+    ) async throws {
+        if let expectedGeneration { try requireSessionGeneration(expectedGeneration) }
+        guard isLoggedIn else { throw AO3ChallengeWriteError.notSignedIn }
+        let referer = AO3ChallengeURL.assignments(slug: slug, list: list, page: 1)
+        let (_, token) = try await fetchCSRFPage(at: referer, using: client)
+        if let expectedGeneration { try requireSessionGeneration(expectedGeneration) }
+        let params: [(String, String)] = [("_method", "put"), ("authenticity_token", token), field]
         let request = try writeRequest(
             to: AO3ChallengeURL.assignmentUpdateMultiple(slug: slug),
             body: Self.formEncoded(params), csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await submitWrite(request)
-        try throwIfChallengeWriteFailed(
-            status: status, body: body, fallback: "AO3 couldn't claim that pinch hit."
-        )
+        let (status, body) = try await submitWrite(request, using: client)
+        try throwIfChallengeWriteFailed(status: status, body: body, fallback: fallback)
     }
 
     /// Unexercised against a live AO3 session — a release gate, not a reason this
