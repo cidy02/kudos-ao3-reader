@@ -17,13 +17,22 @@ fail() {
   printf 'INVARIANT VIOLATED: %s\n%s\n\n' "$1" "$2"
 }
 
-# 1. Exactly one .fileImporter in SettingsView — SwiftUI honors one file-dialog
-#    presenter per view node; a sibling silently kills the others (T-73).
+# 1. At most one .fileImporter per Settings file — SwiftUI honors one file-dialog
+#    presenter per view node; a sibling silently kills the others (T-73). Since
+#    the 1ab hub (T-266) each Settings page is its own file with its own node;
+#    SettingsView keeps exactly one (the font picker, via `readerFontImporter`).
 COUNT=$(grep -c "\.fileImporter(" "$APP/Settings/SettingsView.swift" || true)
 if [ "$COUNT" != "1" ]; then
   fail "SettingsView must have exactly one .fileImporter (found $COUNT)" \
-    "Extend the FileImportKind enum instead. docs/AGENT_ONBOARDING.md (pitfalls)."
+    "Route the pick through readerFontImporter. docs/AGENT_ONBOARDING.md (pitfalls)."
 fi
+for f in "$APP"/Settings/*.swift; do
+  COUNT=$(grep -c "\.fileImporter(" "$f" || true)
+  if [ "$COUNT" -gt 1 ]; then
+    fail "$(basename "$f") has $COUNT .fileImporter modifiers" \
+      "One per page: give the other picker its own page, or one enum-driven importer. docs/AGENT_ONBOARDING.md (pitfalls)."
+  fi
+done
 
 # 2. One User-Agent definition, in AO3AuthService (AO3RequestDefaults.userAgent).
 #    Per-request headers override session defaults, forking the app's identity.

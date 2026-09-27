@@ -13,8 +13,8 @@ struct SettingsHeaderBlock: View {
         // Settings has no subject of its own to take a hue from — it is the
         // app's page, not a work's or a collection's — so it takes the accent
         // the reader chose, which is the only colour on this screen that is
-        // theirs.
-        theme.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: [], title: "Settings"))
+        // theirs. The same palette as the hub's wash, so kicker and wash agree.
+        theme.scopePalette
     }
 
     var body: some View {

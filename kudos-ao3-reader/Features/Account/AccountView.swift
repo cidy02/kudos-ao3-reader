@@ -173,11 +173,7 @@ struct AccountView: View {
                 }
                 .navigationDestination(for: Route.self, destination: destination)
                 .navigationDestination(item: $editingWorkID) { WritingWorkDestination(workID: $0) }
-                .navigationDestination(for: SettingsRoute.self) { route in
-                    switch route {
-                    case .privacy: PrivacyDataView()
-                    }
-                }
+                .navigationDestination(for: SettingsRoute.self) { SettingsDestination(route: $0) }
                 .navigationDestination(for: AO3AccountWorksList.Kind.self) {
                     AO3AccountWorksList(kind: $0)
                 }
@@ -462,7 +458,7 @@ struct AccountView: View {
         case .myCollections: AO3CollectionsList()
         case .preferences: AO3PreferencesView()
         case .moreOnAO3: AccountMoreOnAO3View()
-        case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
+        case .settings: SettingsHubView()
         case .dashboard: AO3DashboardView()
         case .drafts: WritingDraftsView()
         case .myWorks: ownProfile(title: "Works", tab: .works)
