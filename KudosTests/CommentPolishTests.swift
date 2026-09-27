@@ -60,6 +60,26 @@ struct CommentPolishTests {
         #expect(String(wrapped.text[wrapped.selection]) == "Part two")
     }
 
+    /// The Heading tile then an h1 chip re-levels the heading; tapping chips
+    /// in turn never stacks one heading inside another.
+    @Test func aHeadingChipRelevelsTheHeadingAroundTheSelection() {
+        let tiled = applyHeading(CommentMarkup.defaultHeadingLevel)
+        let chipped = CommentMarkup.apply(
+            .heading, to: tiled.text, in: tiled.selection, headingLevel: 1
+        )
+        #expect(chipped.text == "<h1>Part two</h1>")
+        #expect(String(chipped.text[chipped.selection]) == "Part two")
+        let again = CommentMarkup.apply(
+            .heading, to: chipped.text, in: chipped.selection, headingLevel: 5
+        )
+        #expect(again.text == "<h5>Part two</h5>")
+        // Not a wrapper of the selection itself: a heading elsewhere is kept.
+        let prose = "<h2>Title</h2> body"
+        let body = prose.range(of: "body")!
+        #expect(CommentMarkup.apply(.heading, to: prose, in: body, headingLevel: 1).text
+            == "<h2>Title</h2> <h1>body</h1>")
+    }
+
     // MARK: - Signed-out action row
 
     @Test func aSignedOutStripDoesNotReserveTheReplyBand() {
