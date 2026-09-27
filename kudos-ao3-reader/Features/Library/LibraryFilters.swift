@@ -149,8 +149,10 @@ struct LibraryFilters: Equatable {
     // MARK: Collision drops
 
     /// One active filter removed, with how many works would remain. Sort is not
-    /// a narrowing predicate, so it is never a candidate.
-    struct FilterDrop: Equatable {
+    /// a narrowing predicate, so it is never a candidate. `id` names the facet
+    /// too, so a user tag and a language both called "English" stay two rows.
+    struct FilterDrop: Equatable, Identifiable {
+        var id: String
         var filterLabel: String
         var remainingCount: Int
         var remainingFilters: LibraryFilters
@@ -164,6 +166,7 @@ struct LibraryFilters: Equatable {
             var remaining = self
             member.clear(&remaining)
             return FilterDrop(
+                id: member.id,
                 filterLabel: member.label,
                 remainingCount: works.filter(remaining.matches).count,
                 remainingFilters: remaining
@@ -196,26 +199,42 @@ struct LibraryFilters: Equatable {
         return members.map(\.label)
     }
 
+    private struct Member {
+        /// "<facet>:<value>", unique among the active filters.
+        var id: String
+        var label: String
+        /// Added to `label` only when another active filter reads the same.
+        var facet: String
+        var clear: (inout LibraryFilters) -> Void
+    }
+
     /// Every active narrowing filter, labelled as `summaryLabels` labels it,
-    /// with how to clear just that one. Sort is not a
-    /// narrowing predicate, so it is never a member.
-    private var activeMembers: [(label: String, clear: (inout LibraryFilters) -> Void)] {
-        var members: [(label: String, clear: (inout LibraryFilters) -> Void)] = []
-        for name in userTags.sorted() { members.append((name, { $0.userTags.remove(name) })) }
-        for name in fandoms.sorted() { members.append((name, { $0.fandoms.remove(name) })) }
-        for name in characters.sorted() { members.append((name, { $0.characters.remove(name) })) }
-        for name in relationships.sorted() { members.append((name, { $0.relationships.remove(name) })) }
-        for name in additionalTags.sorted() { members.append((name, { $0.additionalTags.remove(name) })) }
-        for name in excludeTags.sorted() { members.append(("−\(name)", { $0.excludeTags.remove(name) })) }
-        if rating != .any { members.append((rating.title, { $0.rating = .any })) }
+    /// with how to clear just that one. Sort is not a narrowing predicate, so
+    /// it is never a member. Two members that would read the same (a user tag
+    /// and a language both "English") are told apart by their facet.
+    private var activeMembers: [Member] {
+        var members: [Member] = []
+        func add(
+            _ facet: String, _ key: String, _ label: String,
+            _ clear: @escaping (inout LibraryFilters) -> Void
+        ) {
+            members.append(Member(id: "\(facet):\(key)", label: label, facet: facet, clear: clear))
+        }
+        for name in userTags.sorted() { add("your tag", name, name) { $0.userTags.remove(name) } }
+        for name in fandoms.sorted() { add("fandom", name, name) { $0.fandoms.remove(name) } }
+        for name in characters.sorted() { add("character", name, name) { $0.characters.remove(name) } }
+        for name in relationships.sorted() { add("relationship", name, name) { $0.relationships.remove(name) } }
+        for name in additionalTags.sorted() { add("tag", name, name) { $0.additionalTags.remove(name) } }
+        for name in excludeTags.sorted() { add("excluded tag", name, "−\(name)") { $0.excludeTags.remove(name) } }
+        if rating != .any { add("rating", rating.rawValue, rating.title) { $0.rating = .any } }
         for warning in AO3SearchFilters.Warning.allCases where warnings.contains(warning) {
-            members.append((warning.title, { $0.warnings.remove(warning) }))
+            add("warning", warning.rawValue, warning.title) { $0.warnings.remove(warning) }
         }
         for category in AO3SearchFilters.Category.allCases where categories.contains(category) {
-            members.append((category.title, { $0.categories.remove(category) }))
+            add("category", category.rawValue, category.title) { $0.categories.remove(category) }
         }
-        if completion != .any { members.append((completion.title, { $0.completion = .any })) }
-        if !language.isEmpty { members.append((language, { $0.language = "" })) }
+        if completion != .any { add("status", completion.rawValue, completion.title) { $0.completion = .any } }
+        if !language.isEmpty { add("language", language, language) { $0.language = "" } }
         let lowerWordBound = wordsFrom.trimmingCharacters(in: .whitespaces)
         let upperWordBound = wordsTo.trimmingCharacters(in: .whitespaces)
         let wordLabel: String? = switch (lowerWordBound.isEmpty, upperWordBound.isEmpty) {
@@ -225,12 +244,17 @@ struct LibraryFilters: Equatable {
         case (true, true): nil
         }
         if let wordLabel {
-            members.append((wordLabel, {
+            add("words", wordLabel, wordLabel) {
                 $0.wordsFrom = ""
                 $0.wordsTo = ""
-            }))
+            }
         }
-        return members
+        let repeated = Dictionary(grouping: members, by: \.label).filter { $0.value.count > 1 }.keys
+        return members.map { member in
+            var member = member
+            if repeated.contains(member.label) { member.label += " (\(member.facet))" }
+            return member
+        }
     }
 
     // MARK: Applying
