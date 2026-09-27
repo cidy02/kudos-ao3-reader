@@ -120,6 +120,12 @@ struct AccountInboxScreen: View {
 
     /// 1l's All / Unread / Awaiting reply / Replied — AO3's own filters, so a
     /// pill reloads page 1 from the server. The dashed chip opens the full sheet.
+    /// A pill waits while a page is on its way: the lit one names the rows shown.
+    private var isLoadingPage: Bool {
+        if case .loading = model.phase { return true }
+        return false
+    }
+
     private var pillRail: some View {
         let selected = AO3InboxPill.selected(in: model.currentFilterValues)
         return SubjectFilterRail(onOpenFilters: { showingFilters = true }) {
@@ -134,7 +140,7 @@ struct AccountInboxScreen: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .disabled(model.isPerformingBulkAction)
+                .disabled(model.isPerformingBulkAction || isLoadingPage)
                 .accessibilityAddTraits(selected == pill ? [.isButton, .isSelected] : .isButton)
             }
         }

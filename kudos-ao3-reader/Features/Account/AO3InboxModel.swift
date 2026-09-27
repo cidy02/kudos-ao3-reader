@@ -165,9 +165,13 @@ final class AO3InboxModel {
     var canSelectItems: Bool { bulkForm != nil && !selectableItemIDs.isEmpty }
     var canFilter: Bool { filterForm != nil }
 
-    /// The form's checked values under whatever the reader has picked since.
+    /// The filters of the page on screen (1l's lit pill).
+    ///
+    /// Read off the form of the page on screen, not `filterValues`: those are
+    /// what was *asked* for, and a slow or failed request would light its pill
+    /// over the old rows. The form is replaced only when a page lands.
     var currentFilterValues: [String: String] {
-        (filterForm?.selectedValues ?? [:]).merging(filterValues) { $1 }
+        filterForm?.selectedValues ?? [:]
     }
 
     func workContext(for workID: Int) -> AO3CommentsWorkContext? {
