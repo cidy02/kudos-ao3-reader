@@ -15,13 +15,27 @@ struct AddChapterView: View {
     @State private var chapterSaved = false
     @State private var savedTotal: Int?
     @State private var workTitle: String
+    /// 1bq's switch, drawn off: posting goes by AO3's preview first.
+    @State private var postWithoutPreview = false
+    @State private var preview: AO3PreviewHTML?
+    /// The work's chapter count when opened from its Chapters list; nil from
+    /// Add chapter. Gates Delete chapter.
+    let chapterCount: Int?
     var onSaved: () -> Void = {}
 
-    init(form: AO3ChapterForm, workTitle: String, onSaved: @escaping () -> Void = {}) {
+    init(
+        form: AO3ChapterForm, workTitle: String, chapterCount: Int? = nil,
+        onSaved: @escaping () -> Void = {}
+    ) {
         self._form = State(initialValue: form)
         self.workTitle = workTitle
+        self.chapterCount = chapterCount
         self.onSaved = onSaved
     }
+
+    /// Whether the main button posts (a new or draft chapter) rather than
+    /// updates a posted one. Only a post has a preview-first choice to make.
+    private var posts: Bool { form.chapterID == nil || form.isDraft }
 
     private var accountPalette: SubjectPalette {
         theme.scopePalette
@@ -110,6 +124,20 @@ struct AddChapterView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: { Text(errorMessage ?? "") }
+        .navigationDestination(isPresented: Binding(
+            get: { preview != nil }, set: { if !$0 { preview = nil } }
+        )) {
+            if let preview {
+                WritingPreviewView(
+                    preview: preview,
+                    subtitle: Self.subtitle(workTitle: workTitle, chapterTitle: form.title, position: form.position),
+                    postTitle: posts ? "Post chapter" : "Update",
+                    // AO3's preview page names its buttons `post_button` /
+                    // `update_button`; `chapters#update` takes either post name.
+                    post: { try await perform(submit: posts ? .post : .update) }
+                )
+            }
+        }
     }
 
     @ViewBuilder
@@ -191,7 +219,13 @@ struct AddChapterView: View {
         WritingTextEditorRow(
             title: "Chapter text", text: $form.content, target: recoveryTarget, field: "content",
             emptyHint: "opens the editor with plain text, AO3’s HTML tags, or a paste from elsewhere.",
-            ruleTitle: Self.chapterNumber(form.position).map { "Chapter \($0)" }
+            ruleTitle: Self.chapterNumber(form.position).map { "Chapter \($0)" },
+            chapterActions: WritingChapterEditorActions(
+                preview: { openPreview() },
+                deleteName: Self.offersDelete(chapterID: form.chapterID, chapterCount: chapterCount)
+                    ? Self.chapterName(position: form.position, title: form.title) : nil,
+                delete: { deleteChapter() }
+            )
         )
         .panelSegment(0, of: 4, gutter: gutter)
         WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
@@ -221,7 +255,7 @@ struct AddChapterView: View {
     @ViewBuilder
     private var publicationRows: some View {
         let showsDate = !form.publishedYear.isEmpty
-        let count = showsDate ? 3 : 2
+        let count = (showsDate ? 3 : 2) + (posts ? 1 : 0)
         SubjectFormRow(label: "Set a different publication date", arrangement: .control) {
             Toggle("Custom publication date", isOn: Binding(
                 get: { !form.publishedYear.isEmpty },
@@ -241,6 +275,12 @@ struct AddChapterView: View {
         }
         // Titled even though hidden: `labelsHidden` keeps the title for
         // VoiceOver, and an empty one announced a bare "switch".
+        if posts {
+            SubjectFormRow(label: "Post without preview", arrangement: .control) {
+                Toggle("Post without preview", isOn: $postWithoutPreview).labelsHidden()
+            }
+            .panelSegment(count - 2, of: count, gutter: gutter)
+        }
         SubjectFormRow(label: "This is the last chapter", arrangement: .control) {
             Toggle("This is the last chapter", isOn: $isLastChapter)
                 .labelsHidden()
@@ -257,7 +297,11 @@ struct AddChapterView: View {
                     .font(.caption).foregroundStyle(.secondary).padding()
             } else {
             Button {
-                save(submit: form.chapterID != nil && !form.isDraft ? .update : .postWithoutPreview)
+                // AO3's two buttons on this form: `post_without_preview_button`
+                // posts at once, `preview_button` goes by the preview page.
+                if posts && !postWithoutPreview { openPreview() } else {
+                    save(submit: posts ? .postWithoutPreview : .update)
+                }
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -302,43 +346,126 @@ struct AddChapterView: View {
 
     private func save(submit: AO3WorkSubmitAction) {
         guard !isSaving && !isPosting else { return }
+        Task {
+            do { try await perform(submit: submit) } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// The one save path, run by this form's buttons and by the preview's
+    /// Post alike. Closes the form — and a preview above it — on success.
+    private func perform(submit: AO3WorkSubmitAction) async throws {
+        // Checked here, not only in `save`: its Task starts a beat after the
+        // tap, and a second tap in that beat must not post twice.
+        guard !isSaving && !isPosting else { return }
         guard editingGeneration == auth.sessionGeneration else {
-            errorMessage = "Your AO3 session changed. Reopen this form before saving."
-            return
+            throw AO3WorkWriteError.rejected("Your AO3 session changed. Reopen this form before saving.")
         }
         let isPost = submit == .post || submit == .postWithoutPreview
         if isPost { isPosting = true } else { isSaving = true }
 
-        Task {
-            defer { if chapterSaved { onSaved() } }
-            do {
-                if !chapterSaved {
-                    savedTotal = nil
-                    if isLastChapter {
-                        guard let total = Int(form.position), total > 0 else {
-                            throw AO3WorkWriteError.rejected("Enter this chapter’s position to mark it as the last chapter.")
-                        }
-                        savedTotal = total
+        defer { if chapterSaved { onSaved() } }
+        do {
+            if !chapterSaved {
+                savedTotal = nil
+                if isLastChapter {
+                    guard let total = Int(form.position), total > 0 else {
+                        throw AO3WorkWriteError.rejected("Enter this chapter’s position to mark it as the last chapter.")
                     }
-                    try await AO3RequestCoordinator.shared.withSlot {
-                        guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
-                        if form.chapterID == nil { return try await auth.createChapter(form, submit: submit) } else { return try await auth.updateChapter(form, submit: submit) }
-                    }
-                    chapterSaved = true
+                    savedTotal = total
                 }
-                if let savedTotal {
+                try await AO3RequestCoordinator.shared.withSlot {
                     guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
-                    try await AO3RequestCoordinator.shared.withSlot {
-                        guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
-                        return try await auth.updateWorkTotals(workID: form.workID, posted: nil, total: savedTotal)
-                    }
+                    if form.chapterID == nil { return try await auth.createChapter(form, submit: submit) } else { return try await auth.updateChapter(form, submit: submit) }
                 }
-                dismiss()
-            } catch {
-                errorMessage = (chapterSaved ? "The chapter was saved, but the work total was not updated. " : "")
+                chapterSaved = true
+            }
+            if let savedTotal {
+                guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
+                try await AO3RequestCoordinator.shared.withSlot {
+                    guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
+                    return try await auth.updateWorkTotals(workID: form.workID, posted: nil, total: savedTotal)
+                }
+            }
+            preview = nil
+            dismiss()
+        } catch {
+            if isPost { isPosting = false } else { isSaving = false }
+            throw AO3WorkWriteError.rejected(
+                (chapterSaved ? "The chapter was saved, but the work total was not updated. " : "")
                     + error.localizedDescription
-                if isPost { isPosting = false } else { isSaving = false }
+            )
+        }
+    }
+}
+
+// MARK: - 1bq preview path, 1bv chapter menu
+
+extension AddChapterView {
+    /// AO3 saves a NEW chapter as a draft to preview it (`chapters#create`
+    /// redirects to its preview), so the form adopts that draft before
+    /// anything else is sent — Post from the preview then updates it rather
+    /// than creating a second chapter. A chapter AO3 already has only renders.
+    private func openPreview() {
+        guard !isSaving && !isPosting else { return }
+        guard editingGeneration == auth.sessionGeneration else {
+            errorMessage = "Your AO3 session changed. Reopen this form before saving."
+            return
+        }
+        isSaving = true
+        Task {
+            defer { isSaving = false }
+            do {
+                let wasNew = form.chapterID == nil
+                let page = try await AO3RequestCoordinator.shared.withSlot {
+                    guard editingGeneration == auth.sessionGeneration else { throw AO3WorkWriteError.notSignedIn }
+                    return try await auth.previewChapter(form)
+                }
+                form = try form.adopting(page)
+                if wasNew { onSaved() }
+                preview = page
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// Asked for in the editor, whose alert names the chapter.
+    private func deleteChapter() {
+        guard let chapterID = form.chapterID, let generation = editingGeneration,
+              !isSaving, !isPosting else { return }
+        isSaving = true
+        Task {
+            do {
+                try await AO3RequestCoordinator.shared.withSlot {
+                    try await auth.deleteChapter(
+                        workID: form.workID, chapterID: chapterID, expectedGeneration: generation
+                    )
+                }
+                onSaved()
+                dismiss()
+            } catch is CancellationError {
+                errorMessage = "Your AO3 session changed, so nothing was deleted."
+                isSaving = false
+            } catch {
+                errorMessage = "The chapter was not deleted. " + error.localizedDescription
+                isSaving = false
+            }
+        }
+    }
+
+    /// AO3 deletes neither a work's only chapter nor its only posted one
+    /// (`chapters#destroy`, and `chapters/manage` draws Delete only past one
+    /// chapter). The second needs each chapter's posted state, which the
+    /// chapter index doesn't carry — AO3's refusal flash covers that case.
+    static func offersDelete(chapterID: Int?, chapterCount: Int?) -> Bool {
+        chapterID != nil && (chapterCount ?? 0) > 1
+    }
+
+    /// otwarchive's `chapter_header` ("Chapter 3") plus the title, as its
+    /// `full_chapter_title` joins them.
+    static func chapterName(position: String, title: String) -> String {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let number = chapterNumber(position) else { return title.isEmpty ? "this chapter" : title }
+        return title.isEmpty ? "Chapter \(number)" : "Chapter \(number): \(title)"
     }
 }
