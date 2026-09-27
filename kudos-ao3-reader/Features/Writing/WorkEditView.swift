@@ -156,7 +156,7 @@ struct WorkEditView: View {
                 form.isChaptered = fresh.isChaptered
                 // Save posts `work[chapter_attributes]` for a one-chapter work,
                 // so a chapter just edited from Chapters would be put back.
-                form.chapter = fresh.chapter
+                form.chapter = Self.refreshedChapter(form.chapter, fresh: fresh.chapter)
                 needsPublicationRefresh = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -652,6 +652,20 @@ extension WorkEditView {
     /// `post_button` (`@work.posted = … if params[:post_button]`) and save
     /// anything else as a draft, which is what "Post work" used to do.
     static let postSubmit = AO3WorkSubmitAction.post
+
+    /// Chapter 1 after a chapter write: its text, title and summary from AO3,
+    /// its publication date from this form. The date is the backdate row's,
+    /// which a chapter write does not touch — taking AO3's too threw away a
+    /// date picked here and not yet saved, and Save then wrote the old one.
+    static func refreshedChapter(
+        _ current: AO3WorkChapterDraft?, fresh: AO3WorkChapterDraft?
+    ) -> AO3WorkChapterDraft? {
+        guard var kept = current, let fresh else { return fresh }
+        kept.content = fresh.content
+        kept.title = fresh.title
+        kept.summary = fresh.summary
+        return kept
+    }
 
     /// 1bs's Post group: "Post work", AO3's "Preview", then "Delete draft"
     /// once AO3 has the draft. Post asks first (`showPostConfirmation`).
