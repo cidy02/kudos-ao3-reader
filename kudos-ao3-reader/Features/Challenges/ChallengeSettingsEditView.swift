@@ -449,8 +449,8 @@ struct ChallengeSettingsEditView: View {
     ///
     /// `isModerator: true` here: this is the maintainer's edit form, only
     /// reachable by someone AO3 already let load `challengeSettings` for the
-    /// collection, so "moderator" is the honest kicker. 1by, the read view, is
-    /// open to any reader and passes `false`.
+    /// collection, so "moderator" is the honest kicker. 1by, the owners' read
+    /// view, passes `true` for the same reason.
     ///
     /// Editing the tag set's own fields stays on 1ch — `AO3TagSetSave` is the
     /// only tag-set write in the Services layer and it belongs to that screen.
