@@ -47,6 +47,42 @@ struct AO3InboxPaginationFailureTests {
         AO3AuthorProfileFetcher.Page(html: html, isStale: false)
     }
 
+    /// 1l: the lit pill is the page on screen. A Replied request that fails
+    /// leaves the All page's rows, so All stays lit.
+    @Test func aFailedPillRequestKeepsThePillOfTheRowsShown() async throws {
+        let auth = Self.makeAuthService()
+        await auth.login(username: "alice", password: "password")
+        let form = """
+        <form id="inbox-filters" action="/users/alice/inbox" method="get">
+          <input type="radio" name="filters[read]" value="all" id="r_all" checked="checked">
+          <input type="radio" name="filters[read]" value="false" id="r_false">
+          <input type="radio" name="filters[replied_to]" value="all" id="p_all" checked="checked">
+          <input type="radio" name="filters[replied_to]" value="false" id="p_false">
+          <input type="radio" name="filters[replied_to]" value="true" id="p_true">
+        </form>
+        """
+        let html = Self.inboxHTML(total: 5).replacingOccurrences(of: "</body>", with: form + "</body>")
+        let model = AO3InboxModel(pageLoader: { url, _, _, _, _ in
+            let query = url.absoluteString.removingPercentEncoding ?? url.absoluteString
+            if query.contains("filters[replied_to]=true") {
+                throw AO3Error.network("Connection lost.")
+            }
+            return Self.page(html)
+        })
+
+        model.syncAuthenticationContext(auth: auth)
+        await Task { await model.refresh(auth: auth) }.value
+        #expect(AO3InboxPill.selected(in: model.currentFilterValues) == .all)
+
+        model.applyFilters(AO3InboxPill.replied.values, auth: auth)
+        let deadline = ContinuousClock.now + Duration.seconds(2)
+        while ContinuousClock.now < deadline {
+            if case .loading = model.phase {} else if case .loaded = model.phase {} else { break }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(AO3InboxPill.selected(in: model.currentFilterValues) == .all)
+    }
+
     @Test func failedPage2RequestPreservesPage1ItemsAndReportsAPage2Error() async throws {
         let auth = Self.makeAuthService()
         await auth.login(username: "alice", password: "password")
