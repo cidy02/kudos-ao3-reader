@@ -10,12 +10,11 @@ import SwiftUI
 /// series with their `isSelected` state, so these edit arrays the form will post
 /// back rather than asking AO3 anything.
 ///
-/// **What 1bw draws that this does not build:** the "Search all collections by
-/// name" field. The form carries the collections AO3 offers *this* work; there is
-/// no endpoint here for searching every collection on the site, and a field that
-/// filtered only the offered list would be a different control wearing that
-/// label. Filtering the offered list is what the search field here actually does,
-/// and it is named accordingly.
+/// 1bw's "Search all collections by name" is AO3's own: the work form's
+/// collection field autocompletes from `/autocomplete/open_collection_names`
+/// (`AO3Client.openCollections`). The same query filters the collections the
+/// form offers and, debounced, asks AO3 for other open ones; picking one adds
+/// it to what the form posts.
 struct WorkCollectionsGiftsView: View {
     @Binding var collections: [AO3CollectionOffer]
     @Binding var gifts: [AO3GiftRecipient]
@@ -26,6 +25,7 @@ struct WorkCollectionsGiftsView: View {
 
     @Environment(ThemeManager.self) private var theme
     @State private var query = ""
+    @State private var searchResults: [AO3CollectionOffer] = []
     @State private var newRecipient = ""
 
     private var palette: SubjectPalette { theme.scopePalette }
@@ -89,22 +89,42 @@ struct WorkCollectionsGiftsView: View {
         #if os(macOS)
         .navigationTitle("Collections and gifts")
         #endif
+        .task(id: query) { await search() }
+    }
+
+    /// One paced GET per pause in typing: a new keystroke cancels the wait.
+    private func search() async {
+        searchResults = []
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        try? await Task.sleep(for: .milliseconds(AO3TagAutocomplete.debounceMilliseconds))
+        guard !Task.isCancelled,
+              let found = try? await AO3Client.shared.openCollections(matching: query),
+              !Task.isCancelled
+        else { return }
+        searchResults = Self.newOffers(found, excluding: collections)
+    }
+
+    /// AO3's answers the list doesn't already hold — a collection is one name.
+    static func newOffers(_ found: [AO3CollectionOffer], excluding held: [AO3CollectionOffer]) -> [AO3CollectionOffer] {
+        found.filter { offer in
+            !held.contains { $0.name.caseInsensitiveCompare(offer.name) == .orderedSame }
+        }
     }
 
     private var collectionsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Filter", arrangement: .control) {
-                TextField("Filter your collections by name", text: $query)
+            SubjectFormRow(label: "Search", arrangement: .control) {
+                TextField("Search all collections by name", text: $query)
                     .multilineTextAlignment(.trailing)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     #endif
             }
-            if visibleCollections.isEmpty {
+            if visibleCollections.isEmpty && searchResults.isEmpty {
                 SubjectRowSeparator()
                 SubjectFormRow(
-                    label: collections.isEmpty
+                    label: collections.isEmpty && query.isEmpty
                         ? "AO3 offers this work no collections"
                         : "No collection matches “\(query)”",
                     value: "",
@@ -115,8 +135,42 @@ struct WorkCollectionsGiftsView: View {
                 SubjectRowSeparator()
                 collectionRow(offer)
             }
+            ForEach(searchResults) { offer in
+                SubjectRowSeparator()
+                searchResultRow(offer)
+            }
         }
         .subjectPanel()
+    }
+
+    /// A collection found on AO3: adding it ticks it, for the next save.
+    private func searchResultRow(_ offer: AO3CollectionOffer) -> some View {
+        Button {
+            var added = offer
+            added.isSelected = true
+            collections.append(added)
+            searchResults.removeAll { $0.id == offer.id }
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: "plus.circle").foregroundStyle(palette.accent)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(offer.title.isEmpty ? offer.name : offer.title)
+                        .font(.system(size: 14.5, weight: .medium))
+                        .foregroundStyle(.primary)
+                    // The autocomplete set is AO3's open collections; whether
+                    // one is moderated is not in the answer.
+                    Text("Open to new works · on AO3")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add \(offer.title.isEmpty ? offer.name : offer.title)")
     }
 
     /// 1bw: "Collections show their state on the row — moderated, closed, open —
