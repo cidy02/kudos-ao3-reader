@@ -98,12 +98,12 @@ extension AO3AuthService {
     }
 
     func loadChapterDeleteImplications(
-        workID: Int, chapterID: Int
+        workID: Int, chapterID: Int, using client: AO3Client = .shared
     ) async throws -> AO3DeleteImplications {
         try requireWorkSession()
         return try AO3Client.parseDeleteImplications(
             from: try await workFormHTML(
-                at: AO3Client.chapterConfirmDeleteURL(workID: workID, chapterID: chapterID)
+                at: AO3Client.chapterConfirmDeleteURL(workID: workID, chapterID: chapterID), using: client
             )
         )
     }
@@ -349,35 +349,50 @@ extension AO3AuthService {
         try await deleteWork(workID: workID)
     }
 
+    /// AO3's own two steps: GET `confirm_delete` for its form, then the
+    /// `_method=delete` POST. AO3 refuses the only chapter, or the only posted
+    /// one (`chapters#destroy`); that refusal comes back as its error flash.
+    /// `expectedGeneration` is the session the editor was opened under, checked
+    /// before the GET and again after it, so a sign-in during the GET cannot
+    /// send the new account's cookie with the old account's delete (T-240).
+    /// Unexercised against a live AO3 session (release gate).
     @discardableResult
-    func deleteChapter(workID: Int, chapterID: Int) async throws -> String {
+    func deleteChapter(
+        workID: Int, chapterID: Int, expectedGeneration: Int, using client: AO3Client = .shared
+    ) async throws -> String {
+        try requireSessionGeneration(expectedGeneration)
         try requireWorkSession()
         let implications = try await loadChapterDeleteImplications(
-            workID: workID, chapterID: chapterID
+            workID: workID, chapterID: chapterID, using: client
         )
-        return try await submitDelete(implications)
+        try requireSessionGeneration(expectedGeneration)
+        return try await submitDelete(implications, using: client)
     }
 
     // MARK: Preview
 
-    /// POSTs AO3's preview action and returns the rendered HTML. Unexercised
-    /// against a live session. Does not build a text editor.
-    func previewWork(_ form: AO3WorkForm) async throws -> AO3PreviewHTML {
+    /// POSTs AO3's `preview_button` and returns the rendered page. For
+    /// something already on AO3 this only renders (`#update`); for something
+    /// new AO3 saves it as a draft first (`#create`) — apply the result with
+    /// `adopting(_:)`. Unexercised against a live session.
+    func previewWork(_ form: AO3WorkForm, using client: AO3Client = .shared) async throws -> AO3PreviewHTML {
         try requireWorkSession()
         let body = try await postPreview(
             url: form.actionURL,
             parameters: form.parameters(submit: .preview),
-            referer: form.actionURL
+            referer: form.actionURL,
+            using: client
         )
         return try AO3Client.parsePreviewHTML(from: body)
     }
 
-    func previewChapter(_ form: AO3ChapterForm) async throws -> AO3PreviewHTML {
+    func previewChapter(_ form: AO3ChapterForm, using client: AO3Client = .shared) async throws -> AO3PreviewHTML {
         try requireWorkSession()
         let body = try await postPreview(
             url: form.actionURL,
             parameters: form.parameters(submit: .preview),
-            referer: form.actionURL
+            referer: form.actionURL,
+            using: client
         )
         return try AO3Client.parsePreviewHTML(from: body)
     }
@@ -398,9 +413,9 @@ extension AO3AuthService {
         return form
     }
 
-    private func workFormHTML(at url: URL) async throws -> String {
+    private func workFormHTML(at url: URL, using client: AO3Client = .shared) async throws -> String {
         let request = try authenticatedRequest(for: url)
-        return try await AO3Client.shared.authenticatedPageHTML(for: request)
+        return try await client.authenticatedPageHTML(for: request)
     }
 
     private func csrfPage(at url: URL) async throws -> (html: String, token: String) {
@@ -428,7 +443,7 @@ extension AO3AuthService {
     /// Unexercised against a live AO3 session (release gate).
     @discardableResult
     private func submitWorkForm(
-        _ url: URL, _ params: [(String, String)], referer: URL
+        _ url: URL, _ params: [(String, String)], referer: URL, using client: AO3Client = .shared
     ) async throws -> String {
         let csrf = params.first { $0.0 == AO3WorkFormField.authenticityToken }?.1 ?? ""
         let request = try writeRequest(
@@ -438,7 +453,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, body) = try await submitWrite(request)
+        let (status, body) = try await submitWrite(request, using: client)
         if let error = AO3Client.writeErrorMessage(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
@@ -459,7 +474,9 @@ extension AO3AuthService {
         throw AO3WorkWriteError.rejected("AO3 didn't accept the change.")
     }
 
-    private func submitDelete(_ implications: AO3DeleteImplications) async throws -> String {
+    private func submitDelete(
+        _ implications: AO3DeleteImplications, using client: AO3Client = .shared
+    ) async throws -> String {
         var params: [(String, String)] = [
             (AO3WorkFormField.authenticityToken, implications.csrfToken)
         ]
@@ -469,12 +486,12 @@ extension AO3AuthService {
             params.append((AO3WorkFormField.methodOverride, "delete"))
         }
         return try await submitWorkForm(
-            implications.actionURL, params, referer: implications.actionURL
+            implications.actionURL, params, referer: implications.actionURL, using: client
         )
     }
 
     private func postPreview(
-        url: URL, parameters: [(String, String)], referer: URL
+        url: URL, parameters: [(String, String)], referer: URL, using client: AO3Client
     ) async throws -> String {
         let csrf = parameters.first { $0.0 == AO3WorkFormField.authenticityToken }?.1 ?? ""
         let request = try writeRequest(
@@ -484,7 +501,7 @@ extension AO3AuthService {
             referer: referer,
             ajax: false
         )
-        let (status, body) = try await submitWrite(request)
+        let (status, body) = try await submitWrite(request, using: client)
         if let error = AO3Client.writeErrorMessage(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }

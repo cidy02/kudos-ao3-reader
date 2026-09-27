@@ -1,0 +1,380 @@
+import Foundation
+import Testing
+@testable import Kudos
+
+/// T-267: AO3's preview page, the draft a first preview makes, and the
+/// chapter delete. Markup follows otwarchive's `chapters/preview.html.erb`,
+/// `works/preview.html.erb`, `chapters/_chapter.html.erb`,
+/// `*/_posting_fieldset.html.erb` and `chapters/confirm_delete.html.erb`.
+@MainActor
+struct WritingPreviewParsingTests {
+    static let chapterPreview = """
+    <html><head><meta name="csrf-token" content="fresh=="></head><body>
+    <form action="/works/search" method="get"><input name="work_search[query]"></form>
+    <div id="main">
+    <div class="flash notice">This is a draft chapter in a posted work. It will be kept unless the work is deleted.</div>
+    <h2 class="heading">Preview</h2>
+    <div id="previewpane"><div class="work"><div id="work-skin" class="wrapper"><div id="workskin">
+      <div id="chapters"><div class="chapter draft" id="chapter-13">
+        <div class="chapter group">
+          <h3 class="title"><a href="/works/424242/chapters/9001">Chapter 13</a>: What the tide leaves</h3>
+          <h4 class="heading byline">Chapter by <a rel="author" href="/users/w/pseuds/w">w</a></h4>
+          <div id="summary" class="summary module">
+            <h3 class="heading">Summary:</h3>
+            <blockquote class="userstuff"><p>Later that night.</p></blockquote>
+          </div>
+        </div>
+        <div class="userstuff module" role="article">
+          <h3 class="landmark heading" id="work">Chapter Text</h3>
+          <p>The tide came in <em>without asking</em>.</p>
+          <p><img src="https://example.com/tide.png" alt="">He had been early.</p>
+        </div>
+        <div class="chapter preface group">
+          <div class="end notes module" id="chapter_13_endnotes">
+            <h3 class="heading">Notes:</h3>
+            <blockquote class="userstuff"><p>Thanks for reading.</p></blockquote>
+          </div>
+        </div>
+      </div></div>
+    </div></div></div></div>
+    <form class="edit_chapter" id="edit_chapter_9001" action="/works/424242/chapters/9001" method="post">
+      <input type="hidden" name="_method" value="patch">
+      <input type="hidden" name="authenticity_token" value="fresh==">
+      <fieldset><ul class="actions">
+        <li><input type="submit" name="save_button" value="Save Draft"></li>
+        <li><input type="submit" name="edit_button" value="Edit"></li>
+        <li><input type="submit" name="post_button" value="Post"></li>
+      </ul></fieldset>
+    </form>
+    </div></body></html>
+    """
+
+    /// Headings as "# …", everything else as its plain text.
+    static func lines(_ preview: AO3PreviewHTML) -> [String] {
+        preview.blocks.map { block in
+            switch block {
+            case let .heading(text): "# " + text
+            case let .label(text): text
+            case let .text(document): document.blocks.flatMap(\.runs).map(\.text).joined()
+            }
+        }
+    }
+
+    @Test func aChapterPreviewNamesTheDraftAndReadsInOrder() throws {
+        let preview = try AO3Client.parsePreviewHTML(from: Self.chapterPreview)
+        // The form after the pane is the preview's own; the header search is not.
+        #expect(preview.workID == 424242)
+        #expect(preview.chapterID == 9001)
+        #expect(preview.csrfToken == "fresh==")
+        #expect(preview.notice?.hasPrefix("This is a draft chapter") == true)
+        #expect(Self.lines(preview) == [
+            "# Chapter 13: What the tide leaves", "Summary:", "Later that night.",
+            "The tide came in without asking.", "He had been early.",
+            "Notes:", "Thanks for reading."
+        ])
+        #expect(!preview.html.contains("tide.png"))
+    }
+
+    @Test func aWorkPreviewReadsTheFormInsideThePane() throws {
+        let html = """
+        <html><head><meta name="csrf-token" content="w=="></head><body><div id="main">
+        <div id="previewpane"><div class="draft work">
+          <dl class="work meta group"><dd class="rating tags">Teen And Up Audiences</dd></dl>
+          <div id="work-skin" class="wrapper"><div id="workskin">
+            <div class="preface group">
+              <h2 class="title heading">The Weight of Water</h2>
+              <h3 class="byline heading"><a rel="author" href="/users/w">w</a></h3>
+              <div class="summary module"><h3 class="heading">Summary:</h3>
+                <blockquote class="userstuff"><p>Gojo teaches.</p></blockquote></div>
+            </div>
+            <div id="chapters"><div class="userstuff"><p>It rained.</p></div></div>
+          </div></div>
+        </div>
+        <form class="edit_work" id="edit_work_77" action="/works/77" method="post">
+          <input type="hidden" name="_method" value="patch">
+          <fieldset><ul class="actions">
+            <li><input type="submit" name="save_button" value="Save As Draft"></li>
+            <li><input type="submit" name="edit_button" value="Edit"></li>
+            <li><input type="submit" name="post_button" value="Post"></li>
+          </ul></fieldset>
+        </form></div>
+        </div></body></html>
+        """
+        let preview = try AO3Client.parsePreviewHTML(from: html)
+        #expect(preview.workID == 77)
+        #expect(preview.chapterID == nil)
+        #expect(Self.lines(preview) == ["# The Weight of Water", "Summary:", "Gojo teaches.", "It rained."])
+        #expect(!preview.html.contains("edit_button"))
+    }
+
+    /// `render :new` on a validation failure is the form again, not a preview.
+    @Test func aReRenderedFormIsNotAPreview() {
+        let refused = """
+        <html><body><div id="main"><div id="error" class="error">
+          <h4>Sorry! We couldn't save this chapter because:</h4><ul><li>Content can't be blank</li></ul>
+        </div><div id="chapter-form"><form action="/works/1/chapters"></form></div></div></body></html>
+        """
+        #expect(throws: AO3WorkWriteError.rejected("Content can't be blank")) {
+            try AO3Client.parsePreviewHTML(from: refused)
+        }
+        #expect(throws: AO3WorkWriteError.previewUnavailable) {
+            try AO3Client.parsePreviewHTML(from: "<html><body><div id=\"main\"></div></body></html>")
+        }
+    }
+
+    // MARK: Adopting the draft a first preview made
+
+    private func newChapterForm() -> AO3ChapterForm {
+        AO3ChapterForm(
+            workID: 424242, chapterID: nil,
+            actionURL: AO3Client.chaptersURL(workID: 424242),
+            httpMethodOverride: nil, csrfToken: "old==", title: "What the tide leaves",
+            position: "13", content: "<p>The tide came in.</p>", isDraft: true
+        )
+    }
+
+    @Test func aNewChapterAdoptsTheDraftItsPreviewMade() throws {
+        let preview = try AO3Client.parsePreviewHTML(from: Self.chapterPreview)
+        let form = try newChapterForm().adopting(preview)
+        #expect(form.chapterID == 9001)
+        #expect(form.actionURL == AO3Client.chapterURL(workID: 424242, chapterID: 9001))
+        #expect(form.isDraft)
+        // Post from the preview updates the draft: AO3's own preview form is a
+        // PATCH carrying `post_button`, which `chapters#update` posts on.
+        let params = Dictionary(form.parameters(submit: .post), uniquingKeysWith: { $1 })
+        #expect(params[AO3WorkFormField.methodOverride] == "patch")
+        #expect(params[AO3WorkFormField.authenticityToken] == "fresh==")
+        #expect(params["post_button"] == "1")
+        #expect(params[AO3WorkFormField.chapterOnlyContent] == "<p>The tide came in.</p>")
+    }
+
+    @Test func aPreviewThatDoesNotNameTheDraftIsUnconfirmed() throws {
+        var preview = try AO3Client.parsePreviewHTML(from: Self.chapterPreview)
+        preview.workID = 5
+        #expect(throws: AO3WorkWriteError.unconfirmed) { try newChapterForm().adopting(preview) }
+        preview.workID = 424242
+        preview.chapterID = nil
+        #expect(throws: AO3WorkWriteError.unconfirmed) { try newChapterForm().adopting(preview) }
+    }
+
+    /// Previewing what AO3 already has only renders; nothing moves.
+    @Test func anExistingChapterKeepsItsIdentity() throws {
+        var existing = newChapterForm()
+        existing.chapterID = 12
+        existing.actionURL = AO3Client.chapterURL(workID: 424242, chapterID: 12)
+        existing.httpMethodOverride = "patch"
+        let preview = try AO3Client.parsePreviewHTML(from: Self.chapterPreview)
+        let adopted = try existing.adopting(preview)
+        #expect(adopted.chapterID == 12)
+        #expect(adopted.actionURL == existing.actionURL)
+    }
+
+    @Test func aNewWorkAdoptsTheDraftItsPreviewMade() throws {
+        let form = AO3WorkForm(
+            kind: .new, workID: nil, actionURL: URL(string: "https://archiveofourown.org/works")!,
+            httpMethodOverride: nil, csrfToken: "old==", isDraft: true, isPosted: false
+        )
+        var preview = AO3PreviewHTML(html: "")
+        #expect(throws: AO3WorkWriteError.unconfirmed) { try form.adopting(preview) }
+        preview.workID = 77
+        let adopted = try form.adopting(preview)
+        #expect(adopted.workID == 77)
+        #expect(adopted.kind == .draft)
+        #expect(adopted.actionURL == AO3Client.workURL(workID: 77))
+        #expect(adopted.parameters(submit: WorkEditView.postSubmit).contains { $0 == ("_method", "patch") })
+    }
+}
+
+// MARK: - Writes, against a local stub only
+
+/// Answers every request locally from `routes`; nothing reaches AO3.
+private final class WritingWriteStub: URLProtocol, @unchecked Sendable {
+    struct Hit: Sendable {
+        var method: String
+        var path: String
+        var body: String
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var hits: [Hit] = []
+    /// "METHOD path" → body; status 200.
+    nonisolated(unsafe) private static var routes: [String: String] = [:]
+
+    static func reset(_ newRoutes: [String: String]) {
+        lock.lock()
+        hits = []
+        routes = newRoutes
+        lock.unlock()
+    }
+
+    static func recorded() -> [Hit] {
+        lock.lock()
+        defer { lock.unlock() }
+        return hits
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let method = request.httpMethod ?? "GET"
+        let path = request.url?.path ?? ""
+        var data = request.httpBody ?? Data()
+        if data.isEmpty, let stream = request.httpBodyStream {
+            stream.open()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                data.append(buffer, count: count)
+            }
+            stream.close()
+        }
+        Self.lock.lock()
+        Self.hits.append(Hit(method: method, path: path, body: String(decoding: data, as: UTF8.self)))
+        let body = Self.routes["\(method) \(path)"]
+        Self.lock.unlock()
+        guard let url = request.url, let body,
+              let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+@Suite(.serialized)
+@MainActor
+struct WritingWriteStubTests {
+    private func makeAuth() -> AO3AuthService {
+        AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: InboxTestSessionValidator(),
+            loginPerformer: DynamicInboxTestLoginPerformer(),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+    }
+
+    private func stubClient(paceSleep: (@Sendable (TimeInterval) async throws -> Void)? = nil) -> AO3Client {
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        config.protocolClasses = [WritingWriteStub.self]
+        return AO3Client(
+            session: URLSession(configuration: config),
+            nextAllowedRequestAt: paceSleep == nil ? .distantPast : Date().addingTimeInterval(60),
+            paceSleep: paceSleep ?? { _ in }
+        )
+    }
+
+    static let confirmPath = "/works/424242/chapters/9001/confirm_delete"
+    /// `chapters/confirm_delete.html.erb`: `form_for(@chapter, method: :delete)`
+    /// resolves to the shallow `/chapters/:id`.
+    static let confirmPage = """
+    <html><head><meta name="csrf-token" content="del=="></head><body><div id="main">
+    <h2 class="heading">Delete Chapter</h2>
+    <form class="simple destroy" action="/chapters/9001" method="post">
+      <input type="hidden" name="_method" value="delete">
+      <input type="hidden" name="authenticity_token" value="del==">
+      <p class="caution notice">Are you sure you want to <strong><em>delete</em></strong> Chapter 13 of
+      The Weight of Water? This will delete all comments on the chapter as well and cannot be undone!</p>
+      <p class="actions"><input type="submit" name="commit" value="Yes, Delete Chapter"></p>
+    </form></div></body></html>
+    """
+
+    private func page(flash kind: String, _ text: String) -> String {
+        "<html><body><div id=\"main\"><div class=\"flash \(kind)\">\(text)</div></div></body></html>"
+    }
+
+    @Test func deletingAChapterSendsAO3sOwnDeleteForm() async throws {
+        WritingWriteStub.reset([
+            "GET \(Self.confirmPath)": Self.confirmPage,
+            "POST /chapters/9001": page(flash: "notice", "The chapter was successfully deleted.")
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let result = try await auth.deleteChapter(
+            workID: 424242, chapterID: 9001, expectedGeneration: auth.sessionGeneration, using: stubClient()
+        )
+        #expect(result == "The chapter was successfully deleted.")
+        let hits = WritingWriteStub.recorded()
+        #expect(hits.map { "\($0.method) \($0.path)" } == ["GET \(Self.confirmPath)", "POST /chapters/9001"])
+        let body = try #require(hits.last?.body)
+        #expect(body.contains("_method=delete"))
+        #expect(body.contains("authenticity_token=del%3D%3D"))
+    }
+
+    /// `chapters#destroy` refuses the only chapter with a flash error.
+    @Test func aRefusedDeleteSurfacesAO3sReason() async throws {
+        let reason = "You can't delete the only chapter in your work."
+        WritingWriteStub.reset([
+            "GET \(Self.confirmPath)": Self.confirmPage,
+            "POST /chapters/9001": page(flash: "error", reason)
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        await #expect(throws: AO3WorkWriteError.rejected(reason)) {
+            try await auth.deleteChapter(
+                workID: 424242, chapterID: 9001, expectedGeneration: auth.sessionGeneration, using: stubClient()
+            )
+        }
+    }
+
+    @Test func aDeleteFromAnEarlierSessionSendsNothing() async throws {
+        WritingWriteStub.reset(["GET \(Self.confirmPath)": Self.confirmPage])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let opened = auth.sessionGeneration
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        await #expect(throws: CancellationError.self) {
+            try await auth.deleteChapter(workID: 424242, chapterID: 9001, expectedGeneration: opened, using: stubClient())
+        }
+        #expect(WritingWriteStub.recorded().isEmpty)
+    }
+
+    /// Bob signs in while alice's confirm page is loading. The write fence
+    /// alone would pass bob's cookie with alice's delete; the check after the
+    /// GET stops it.
+    @Test func aSessionChangeDuringTheConfirmPageDeletesNothing() async throws {
+        WritingWriteStub.reset([
+            "GET \(Self.confirmPath)": Self.confirmPage,
+            "POST /chapters/9001": page(flash: "notice", "The chapter was successfully deleted.")
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let opened = auth.sessionGeneration
+        let client = stubClient(paceSleep: { @MainActor _ in
+            guard auth.username == "alice" else { return }
+            await auth.logout()
+            await auth.login(username: "bob", password: "pw")
+        })
+        await #expect(throws: CancellationError.self) {
+            try await auth.deleteChapter(workID: 424242, chapterID: 9001, expectedGeneration: opened, using: client)
+        }
+        #expect(auth.username == "bob")
+        #expect(WritingWriteStub.recorded().map(\.method) == ["GET"])
+    }
+
+    /// Previewing a new chapter is AO3's `preview_button` on create; the page
+    /// that comes back names the draft it made.
+    @Test func previewingANewChapterPostsPreviewAndLearnsTheDraft() async throws {
+        WritingWriteStub.reset(["POST /works/424242/chapters": WritingPreviewParsingTests.chapterPreview])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let form = AO3ChapterForm(
+            workID: 424242, chapterID: nil, actionURL: AO3Client.chaptersURL(workID: 424242),
+            httpMethodOverride: nil, csrfToken: "old==", content: "<p>The tide.</p>"
+        )
+        let preview = try await auth.previewChapter(form, using: stubClient())
+        let hits = WritingWriteStub.recorded()
+        #expect(hits.map(\.method) == ["POST"])
+        #expect(hits.first?.body.contains("preview_button=1") == true)
+        #expect(hits.first?.body.contains("post_without_preview_button") == false)
+        #expect(try form.adopting(preview).chapterID == 9001)
+    }
+}
