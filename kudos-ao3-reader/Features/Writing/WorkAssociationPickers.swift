@@ -296,6 +296,9 @@ struct WorkSeriesPickerView: View {
     @Binding var series: [AO3SeriesMembership]
     @Binding var newSeriesTitle: String
     let workTitle: String
+    /// AO3's "Current Series". Shown, never posted: a tick on one of these
+    /// would be a no-op on AO3, so they cannot be ticked.
+    var currentSeries: [AO3CurrentSeries] = []
 
     @Environment(ThemeManager.self) private var theme
 
@@ -309,7 +312,26 @@ struct WorkSeriesPickerView: View {
         if let title = AO3WorkForm.newSeriesTitle(newSeriesTitle) {
             return "Saving creates \(title) with \(workTitle) in it"
         }
+        if !currentSeries.isEmpty { return Self.membershipText(workTitle: workTitle, count: currentSeries.count) }
         return "Choose a series to add \(workTitle) to"
+    }
+
+    /// 1bw's "The Weight of Water is part of one series".
+    static func membershipText(workTitle: String, count: Int) -> String {
+        "\(workTitle) is part of \(count == 1 ? "one series" : "\(count) series")"
+    }
+
+    private func isCurrent(_ membership: AO3SeriesMembership) -> Bool {
+        currentSeries.contains { $0.seriesID == membership.seriesID }
+    }
+
+    /// Where "Reorder the series" points: the series being added to, else the
+    /// first one the work is already in.
+    private var orderedSeries: AO3SeriesMembership? {
+        if let selected { return selected }
+        guard let current = currentSeries.first else { return nil }
+        return series.first { $0.seriesID == current.seriesID }
+            ?? AO3SeriesMembership(seriesID: current.seriesID, title: current.title)
     }
 
     /// Ticking a row picks it alone; ticking the picked row clears it.
@@ -340,20 +362,20 @@ struct WorkSeriesPickerView: View {
                     .pageBodyRow(top: 18, gutter: 0)
                 seriesPanel.pageBodyRow(top: 8, gutter: gutter)
                 footnote("AO3 adds a work to one series per save, and saving never takes it out "
-                    + "of a series it is already in.")
+                    + "of a series it is already in — that is Remove works on the series’ Edit screen.")
             }
 
-            if let selected {
+            if let ordered = orderedSeries {
                 Section {
-                    SectionRuleHeader(title: "Position in \(selected.title)")
+                    SectionRuleHeader(title: "Position in \(ordered.title)")
                         .pageBodyRow(top: 18, gutter: 0)
                     SubjectFormRow(
                         label: "Reorder the series",
-                        value: selected.workCount.map { "\($0) work\($0 == 1 ? "" : "s")" } ?? "",
+                        value: ordered.workCount.map { "\($0) work\($0 == 1 ? "" : "s")" } ?? "",
                         showsDisclosure: true
                     )
                     .subjectRowNavigation(accessibilityLabel: "Reorder the series") {
-                        SeriesReorderDestination(seriesID: selected.seriesID, seriesTitle: selected.title)
+                        SeriesReorderDestination(seriesID: ordered.seriesID, seriesTitle: ordered.title)
                     }
                     .subjectPanel()
                     .pageBodyRow(top: 8, gutter: gutter)
@@ -403,18 +425,20 @@ struct WorkSeriesPickerView: View {
     }
 
     private func seriesRow(_ membership: AO3SeriesMembership) -> some View {
-        Button {
+        let isCurrent = isCurrent(membership)
+        return Button {
             series = Self.selecting(membership.id, in: series)
             if series.contains(where: \.isSelected) { newSeriesTitle = "" }
         } label: {
             HStack(spacing: 11) {
-                Image(systemName: membership.isSelected ? "checkmark.circle.fill" : "circle")
+                Image(systemName: isCurrent ? "checkmark" : membership.isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(membership.isSelected ? palette.accent : Color.secondary)
+                    .frame(minWidth: 17)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(membership.title)
                         .font(.system(size: 14.5, weight: .medium))
                         .foregroundStyle(.primary)
-                    if let detail = Self.detailText(membership) {
+                    if let detail = isCurrent ? "This work is in it" : Self.detailText(membership) {
                         Text(detail)
                             .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
@@ -427,8 +451,9 @@ struct WorkSeriesPickerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(isCurrent)
         .accessibilityLabel(membership.title)
-        .accessibilityValue(membership.isSelected ? "Added on save" : "Not selected")
+        .accessibilityValue(isCurrent ? "This work is in it" : membership.isSelected ? "Added on save" : "Not selected")
         .accessibilityAddTraits(membership.isSelected ? .isSelected : [])
     }
 

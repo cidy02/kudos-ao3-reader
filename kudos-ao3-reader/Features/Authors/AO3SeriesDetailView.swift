@@ -93,7 +93,7 @@ struct AO3SeriesDetailView: View {
                 ])
             }
             .navigationDestination(isPresented: $isEditingSeries) {
-                SeriesEditDestination(series: series)
+                SeriesEditDestination(series: series, works: works)
             }
             .refreshable {
                 // bypassCache clears the app-level AO3AuthorPageCache; this clears the

@@ -283,13 +283,14 @@ struct WorkEditView: View {
         // These three rows drew a chevron and opened nothing until 1bw; the form
         // already carries every option they need, so the pickers edit what it
         // will post back rather than fetching anything.
-        // "Add to series", not "Series": the form reads only AO3's pending-add
-        // select, not the work's Current Series list, so a work already in a
-        // series would otherwise read "Series: None".
-        SubjectFormRow(label: "Add to series", value: seriesValue, showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "Add to series") {
+        // 1bo's "Series": the series AO3's form lists as Current Series, then
+        // what this save adds. It read "Add to series" / "No addition" while
+        // the form carried only the pending-add select.
+        SubjectFormRow(label: "Series", value: seriesValue, showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Series") {
                 WorkSeriesPickerView(
-                    series: $form.series, newSeriesTitle: $form.newSeriesTitle, workTitle: form.title
+                    series: $form.series, newSeriesTitle: $form.newSeriesTitle, workTitle: form.title,
+                    currentSeries: form.currentSeries
                 )
             }
             .panelSegment(0, of: 5, gutter: gutter)
@@ -371,12 +372,11 @@ struct WorkEditView: View {
         return named
     }
 
-    /// What this save will add — AO3's form adds one series per save (see
-    /// `WorkSeriesPickerView`), so a name rather than a count.
     private var seriesValue: String {
-        form.series.first(where: \.isSelected)?.title
-            ?? AO3WorkForm.newSeriesTitle(form.newSeriesTitle)
-            ?? "No addition"
+        Self.seriesValue(
+            current: form.currentSeries.map(\.title),
+            adding: form.series.first(where: \.isSelected)?.title ?? AO3WorkForm.newSeriesTitle(form.newSeriesTitle)
+        )
     }
 
     private var recoveryTarget: String { form.workID.map { "work:\($0)" } ?? "work:new" }
@@ -665,6 +665,19 @@ extension WorkEditView {
         kept.title = fresh.title
         kept.summary = fresh.summary
         return kept
+    }
+
+    /// "Water", "Water + Salt", "Adding Salt", "None". The addition is a name:
+    /// AO3's form adds one series per save (see `WorkSeriesPickerView`). 1bo's
+    /// ", 2 of 3" is left off — the edit form carries no position.
+    static func seriesValue(current: [String], adding: String?) -> String {
+        let now = current.joined(separator: ", ")
+        switch (now.isEmpty, adding) {
+        case (true, nil): return "None"
+        case let (true, adding?): return "Adding \(adding)"
+        case (false, nil): return now
+        case let (false, adding?): return "\(now) + \(adding)"
+        }
     }
 
     /// 1bs's Post group: "Post work", AO3's "Preview", then "Delete draft"
