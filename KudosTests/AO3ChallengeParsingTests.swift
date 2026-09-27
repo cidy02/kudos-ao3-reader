@@ -427,24 +427,76 @@ struct AO3ChallengeParsingTests {
         #expect(invalid.fieldErrors["signups_close_at"] != nil)
     }
 
-    @Test func promptMemeAnonymousHidesOwnerEvenIfPresent() throws {
+    /// challenge/shared/_challenge_requests rendering prompts/_prompt_blurb and
+    /// _prompt_controls (otwarchive 00ad85b4): the li has no "prompt" class, the
+    /// id is only on the Claim button or the owner's prompt links, and the
+    /// viewer's own claim is the Drop Claim link.
+    @Test func promptMemeReadsAO3sPromptBlurbs() throws {
         let html = """
         <html><body>
-        <h2 class="heading">Prompts</h2>
-        <ul class="index group">
-          <li class="prompt blurb anonymous" id="prompt_5">
-            <h4 class="heading"><a href="/users/hiddenowner">HiddenOwner</a></h4>
-            <blockquote class="userstuff">A quiet prompt.</blockquote>
-            <a class="tag">Fandom</a>
+        <h2 class="heading">Prompts for Winter Meme</h2>
+        <ul class="prompt index group">
+          <li class="blurb group" role="article">
+            <div class="header module">
+              <h4 class="heading">Request by Anonymous</h4>
+              <h5 class="fandoms heading"><span class="landmark">Fandom:</span>
+                <a class="tag" href="/tags/Good%20Omens%20(TV)/works">Good Omens (TV)</a> &nbsp;</h5>
+              <p class="datetime">04 Nov 2026</p>
+            </div>
+            <h6 class="landmark heading">Tags</h6>
+            <ul class="tags commas"><li class="freeforms"><a class="tag" href="/tags/x/works">Slow Burn</a></li>
+              <li class="tag">Any Character</li></ul>
+            <h6 class="optional heading">Optional Tags:</h6>
+            <ul class="optional tags commas"><li><a class="tag" href="/tags/y/works">No Beta</a></li></ul>
+            <h6 class="landmark heading">Summary</h6>
+            <blockquote class="userstuff summary"><p>A bookshop that rearranges itself.</p></blockquote>
+            <ul class="actions" role="menu"><li><form class="button_to" method="post"
+              action="/collections/meme/claims?prompt_id=12"><button type="submit">Claim</button></form></li></ul>
+          </li>
+          <li class="own blurb group" role="article">
+            <div class="header module">
+              <h4 class="heading">Four days of silence by ninesofswords (nine)</h4>
+              <h5 class="fandoms heading"><span class="landmark">Fandom:</span>
+                <a class="tag" href="/tags/sw/works">Star Wars</a>, <a class="tag" href="/tags/t/works">Trek</a></h5>
+            </div>
+            <ul class="tags commas"></ul>
+            <blockquote class="userstuff summary"><p>Two pilots, one ship.</p></blockquote>
+            <ul class="actions" role="menu">
+              <li><a href="/collections/meme/prompts/13/edit">Edit Prompt</a></li>
+              <li><a href="/collections/meme/works/new?claim_id=7">Fulfill</a></li>
+              <li><a data-confirm="Do you really want to drop this claim?" rel="nofollow" data-method="delete"
+                href="/collections/meme/claims/7">Drop Claim</a></li>
+            </ul>
+            <div class="claims listbox group"><h5 class="heading">Claimed By</h5>
+              <ul class="commas index group"><li>nine</li><li>kestrel</li></ul></div>
           </li>
         </ul>
         </body></html>
         """
         let page = try AO3Client.parsePromptMemePage(html, slug: "meme", page: 1)
-        let prompt = try #require(page.prompts.first)
-        #expect(prompt.isAnonymous)
-        #expect(prompt.displayedOwner == nil)
-        #expect(prompt.promptText.contains("quiet prompt"))
+        try #require(page.prompts.count == 2)
+        let anonymous = page.prompts[0]
+        #expect(anonymous.id == 12)
+        #expect(anonymous.canClaim && !anonymous.isClaimed)
+        #expect(anonymous.isAnonymous && anonymous.displayedOwner == nil)
+        #expect(anonymous.title.isEmpty)
+        // The fandom is the kicker, kept off the tag line; optional tags stay out.
+        #expect(anonymous.fandoms == ["Good Omens (TV)"])
+        #expect(anonymous.tagSummary == "Slow Burn, Any Character")
+        #expect(anonymous.promptText == "A bookshop that rearranges itself.")
+        let mine = page.prompts[1]
+        #expect(mine.id == 13)
+        #expect(mine.title == "Four days of silence")
+        #expect(mine.displayedOwner == "ninesofswords (nine)")
+        #expect(mine.fandoms == ["Star Wars", "Trek"])
+        #expect(mine.claimedByCurrentUser && mine.claimID == 7)
+        #expect(mine.claimantCount == 2 && !mine.canClaim)
+        // A page with no prompts is recognised by its heading, not treated as broken.
+        let empty = try AO3Client.parsePromptMemePage(
+            "<h2 class='heading'>Prompts for Winter Meme</h2><ul class='prompt index group'></ul>",
+            slug: "meme", page: 1
+        )
+        #expect(empty.prompts.isEmpty)
     }
 
     @Test func tagSetFourFieldsAndAssociationURLHaveNoWrite() throws {
