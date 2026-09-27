@@ -221,40 +221,6 @@ struct ChallengeAssignmentsView: View {
         }
     }
 
-    /// The spec's "Pinch hit #1 · open / Requested by …" and "Pinch hit #2 ·
-    /// claimed / Claimed by … · due …".
-    private func pinchHitRow(_ row: AO3PinchHitRow) -> some View {
-        HStack(alignment: .center, spacing: 11) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Text("Pinch hit #\(row.number)")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    Text(row.isOpen ? "OPEN" : "CLAIMED")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .tracking(8.5 * 0.07)
-                        .foregroundStyle(row.isOpen ? palette.accent : Color.secondary.opacity(0.7))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(row.isOpen ? palette.accent.opacity(0.18) : Color.secondary.opacity(0.12))
-                        )
-                }
-                Text(row.detail(dueText: worksDueAt?.dateText))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Color.secondary.opacity(0.85))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if row.isOpen, auth.isLoggedIn {
-                claimButton(for: row.assignment)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-    }
-
     private var unmatchedSection: some View {
         Section {
             SectionRuleHeader(title: "Unmatched sign-ups", count: unmatched.count)
@@ -575,6 +541,44 @@ struct ChallengeAssignmentsView: View {
             loadErrors[segment] = error.localizedDescription
             return []
         }
+    }
+}
+
+// MARK: - Pinch-hit rows and 1cb's two writes
+
+extension ChallengeAssignmentsView {
+    /// The spec's "Pinch hit #1 · open / Requested by …" and "Pinch hit #2 ·
+    /// claimed / Claimed by … · due …".
+    private func pinchHitRow(_ row: AO3PinchHitRow) -> some View {
+        HStack(alignment: .center, spacing: 11) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Text("Pinch hit #\(row.number)")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(row.isOpen ? "OPEN" : "CLAIMED")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .tracking(8.5 * 0.07)
+                        .foregroundStyle(row.isOpen ? palette.accent : Color.secondary.opacity(0.7))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(row.isOpen ? palette.accent.opacity(0.18) : Color.secondary.opacity(0.12))
+                        )
+                }
+                Text(row.detail(dueText: worksDueAt?.dateText))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color.secondary.opacity(0.85))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if row.isOpen, auth.isLoggedIn {
+                claimButton(for: row.assignment)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 
     /// Runs a confirmed write, then reloads: both writes move the assignment
