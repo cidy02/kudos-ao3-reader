@@ -193,6 +193,33 @@ extension AO3AuthService {
         )
     }
 
+    /// Takes the work off the user's Marked-for-Later list — the mirror of
+    /// `markForLater`: `patch :mark_as_read` beside `patch :mark_for_later`
+    /// (otwarchive `config/routes.rb:398-399`), which runs
+    /// `Reading.mark_to_read_later(work, current_user, false)` and redirects
+    /// back (Q19). Same `button_to` shape, so the same POST with
+    /// `_method=patch`, CSRF from the work page. The session generation is held
+    /// across the GET so a sign-in change in between posts nothing.
+    ///
+    /// The POST itself has not been sent against a live session.
+    func unmarkForLater(workID: Int, using client: AO3Client = .shared) async throws -> String {
+        let generation = sessionGeneration
+        guard isLoggedIn else { throw AO3WriteError.notSignedIn }
+        let workURL = Self.workURL(workID)
+        let (_, token) = try await fetchCSRFPage(at: workURL, using: client)
+        try requireSessionGeneration(generation)
+        let body = Self.formEncoded([("_method", "patch"), ("authenticity_token", token)])
+        let request = try writeRequest(
+            to: Self.markAsReadEndpoint(workID: workID),
+            body: body, csrf: token, referer: workURL, ajax: false
+        )
+        let (status, responseBody) = try await submitWrite(request, using: client)
+        if (200 ... 399).contains(status) { return "Unmarked." }
+        throw AO3WriteError.rejected(
+            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't unmark that work."
+        )
+    }
+
     /// Removes one row from AO3's reading history.
     ///
     /// Routes confirmed 2026-09-21 against otwarchive master, not guessed:
@@ -448,6 +475,10 @@ extension AO3AuthService {
 
     static func markForLaterEndpoint(workID: Int) -> URL {
         URL(string: "https://archiveofourown.org/works/\(workID)/mark_for_later")!
+    }
+
+    static func markAsReadEndpoint(workID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/works/\(workID)/mark_as_read")!
     }
 
     static func bookmarksEndpoint(workID: Int) -> URL {

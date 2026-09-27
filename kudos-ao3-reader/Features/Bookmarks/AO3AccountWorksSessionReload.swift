@@ -40,6 +40,8 @@ enum AO3AccountWorksSessionReload {
         var historyWriteInFlight = false
         var subscriptionWriteError: String?
         var subscriptionWriteInFlight = false
+        var markedForLaterWriteError: String?
+        var markedForLaterWriteInFlight = false
     }
 
     static let cleared = ClearedAccount()
