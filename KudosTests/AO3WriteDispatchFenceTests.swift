@@ -84,22 +84,6 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
-
-    /// URLSession hands a protocol the body as a stream, not `httpBody`.
-    private static func bodyText(of request: URLRequest) -> String? {
-        if let body = request.httpBody { return String(data: body, encoding: .utf8) }
-        guard let stream = request.httpBodyStream else { return nil }
-        stream.open()
-        defer { stream.close() }
-        var data = Data()
-        var buffer = [UInt8](repeating: 0, count: 1024)
-        while stream.hasBytesAvailable {
-            let read = stream.read(&buffer, maxLength: buffer.count)
-            guard read > 0 else { break }
-            data.append(buffer, count: read)
-        }
-        return String(data: data, encoding: .utf8)
-    }
 }
 
 /// `submitWrite` used to await `pace()` and then POST the Cookie it was handed.
