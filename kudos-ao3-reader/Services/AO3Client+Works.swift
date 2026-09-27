@@ -70,6 +70,17 @@ extension AO3Client {
         URL(string: "https://archiveofourown.org/series/\(seriesID)")!
     }
 
+    /// The work form's own collection field autocomplete —
+    /// `autocomplete_options("open_collection_names")` in `works/_standard_form`
+    /// — built like `autocompleteURL(kind:term:)`. nil for a blank term.
+    static func openCollectionNamesURL(term: String) -> URL? {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var components = URLComponents(string: "https://archiveofourown.org/autocomplete/open_collection_names")
+        components?.queryItems = [URLQueryItem(name: "term", value: trimmed)]
+        return components?.url
+    }
+
     static func newSeriesURL() -> URL {
         URL(string: "https://archiveofourown.org/series/new")!
     }
@@ -404,6 +415,27 @@ extension AO3Client {
         }
         if rows.isEmpty { throw AO3Error.parse }
         return rows
+    }
+
+    /// 1bw's "Search all collections by name": collections open to new works
+    /// (otwarchive's `autocomplete_collection_open` set — not closed; whether
+    /// one is moderated is not in the answer). Anonymous, paced like any GET.
+    func openCollections(matching term: String) async throws -> [AO3CollectionOffer] {
+        guard let url = Self.openCollectionNamesURL(term: term) else { return [] }
+        return try Self.parseOpenCollectionNames(Data(try await getHTML(url).utf8))
+    }
+
+    /// `AutocompleteController#open_collection_names` answers
+    /// `[{id: name, name: "Title (name)"}]`: `id` is what the form posts.
+    static func parseOpenCollectionNames(_ data: Data) throws -> [AO3CollectionOffer] {
+        struct Row: Decodable { let id: String; let name: String }
+        return try JSONDecoder().decode([Row].self, from: data).compactMap { row in
+            let name = row.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            let suffix = " (\(name))"
+            let title = row.name.hasSuffix(suffix) ? String(row.name.dropLast(suffix.count)) : row.name
+            return AO3CollectionOffer(name: name, title: title, access: AO3CollectionAccess(isOpen: true))
+        }
     }
 
     // MARK: Bulk edit
