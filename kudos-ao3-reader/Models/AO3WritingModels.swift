@@ -516,6 +516,14 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
         return copy
     }
 
+    /// What `work[collection_names]` posts. The collections picker edits
+    /// `collections` (every parsed name is in it, selected), so that is the
+    /// truth once it exists; this used to post `collectionNames` as parsed, and
+    /// ticking or unticking a collection changed nothing on save.
+    var postedCollectionNames: [String] {
+        collections.isEmpty ? collectionNames : collections.filter(\.isSelected).map(\.name)
+    }
+
     /// Full replacement body AO3's work form expects, plus the chosen submit.
     func parameters(submit: AO3WorkSubmitAction) -> [(String, String)] {
         var pairs: [(String, String)] = [
@@ -531,7 +539,7 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
         pairs.append((AO3WorkFormField.notes, notes))
         pairs.append((AO3WorkFormField.endnotes, endnotes))
         pairs.append(
-            (AO3WorkFormField.collectionNames, AO3TagListDiff.joined(collectionNames))
+            (AO3WorkFormField.collectionNames, AO3TagListDiff.joined(postedCollectionNames))
         )
         pairs.append(
             (AO3WorkFormField.recipients, AO3TagListDiff.joined(gifts.map(\.name)))
