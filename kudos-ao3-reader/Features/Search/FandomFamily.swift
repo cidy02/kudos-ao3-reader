@@ -138,6 +138,19 @@ extension FandomFamily {
     }
 }
 
+extension FandomFamily {
+    /// 1al's "Group variants" off: the raw tag list, each tag its own row
+    /// titled by its full AO3 name, so the same sorts, letter sections and
+    /// filters apply unchanged. Duplicates are dropped as `grouped` drops them.
+    static func ungrouped(fandoms: [AO3Fandom]) -> [FandomFamily] {
+        var seen = Set<String>()
+        return fandoms.compactMap { fandom in
+            guard seen.insert(fandom.name).inserted else { return nil }
+            return FandomFamily(parsedTitle: fandom.name, members: [Member(fandom: fandom)])
+        }
+    }
+}
+
 // MARK: - Sort / letter groups
 
 nonisolated enum FandomFamilySort: String, CaseIterable, Hashable, Sendable {

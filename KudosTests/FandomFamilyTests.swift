@@ -15,6 +15,19 @@ struct FandomFamilyTests {
         #expect(Set(families.map(\.parsedTitle)) == ["Naruto", "Bleach"])
     }
 
+    /// 1al's "Group variants" off: siblings that would group stay separate
+    /// rows, titled by the raw AO3 name; a repeated tag is still one row.
+    @Test func ungroupedListsEveryRawTagOnItsOwn() {
+        let families = FandomFamily.ungrouped(fandoms: [
+            AO3Fandom(name: "Doctor Who (1963)", workCount: 4_000),
+            AO3Fandom(name: "Doctor Who (2005)", workCount: 12_000),
+            AO3Fandom(name: "Doctor Who (2005)", workCount: 12_000),
+        ])
+        #expect(families.map(\.parsedTitle) == ["Doctor Who (1963)", "Doctor Who (2005)"])
+        #expect(families.allSatisfy { $0.memberCount == 1 })
+        #expect(families.map(\.includedFilterNames) == [["Doctor Who (1963)"], ["Doctor Who (2005)"]])
+    }
+
     @Test func twoTagsWithTheSameParsedTitleGroupAndKeepOriginals() {
         let fandoms = [
             AO3Fandom(name: "Doctor Who (1963)", workCount: 4_000),
