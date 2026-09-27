@@ -206,6 +206,8 @@ struct AO3AccountWorksList: View {
     @State private var pendingUnsubscribe: CanonicalWork?
     @State private var subscriptionWriteError: String?
     @State private var subscriptionWriteInFlight = false
+    @State private var markedForLaterWriteError: String?
+    @State private var markedForLaterWriteInFlight = false
     /// Chapter-count fetches for the subscriptions page on screen. Not part of
     /// `AO3AccountWorksSessionReload.cleared`: a task is not that value. A new
     /// generation cancels it from `clearLoadedAccount`, and a new page replaces it.
@@ -437,6 +439,17 @@ struct AO3AccountWorksList: View {
             } message: {
                 Text(subscriptionWriteError ?? "")
             }
+            .alert(
+                "Couldn't unmark",
+                isPresented: Binding(
+                    get: { markedForLaterWriteError != nil },
+                    set: { if !$0 { markedForLaterWriteError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { markedForLaterWriteError = nil }
+            } message: {
+                Text(markedForLaterWriteError ?? "")
+            }
     }
 
     // MARK: Signed in
@@ -564,7 +577,9 @@ struct AO3AccountWorksList: View {
                     totalPages: totalPages,
                     isLoading: phase == .loading,
                     filter: $markedForLaterFilter,
-                    onPage: { page in Task { await load(page: page) } }
+                    isUnmarking: markedForLaterWriteInFlight,
+                    onPage: { page in Task { await load(page: page) } },
+                    onUnmark: { entry in Task { await unmarkForLater(entry) } }
                 )
                 .onDisappear { persistMarkedForLaterLook() }
             } else if kind == .bookmarks {
@@ -1106,6 +1121,8 @@ struct AO3AccountWorksList: View {
         pendingUnsubscribe = nil
         subscriptionWriteError = cleared.subscriptionWriteError
         subscriptionWriteInFlight = cleared.subscriptionWriteInFlight
+        markedForLaterWriteError = cleared.markedForLaterWriteError
+        markedForLaterWriteInFlight = cleared.markedForLaterWriteInFlight
     }
 
     /// Stores a subscription row's work-page summary and, the first time that
@@ -1159,6 +1176,32 @@ struct AO3AccountWorksList: View {
                 sessionGeneration: { auth.sessionGeneration },
                 note: noteEnrichedSubscription
             )
+        }
+    }
+}
+
+// Out of the struct body only for its length; `private` state is file-scoped.
+extension AO3AccountWorksList {
+    /// 1o.4's Unmark. No confirm, like AO3's own button: the work is only
+    /// taken off a reading list, and Mark for Later puts it back.
+    private func unmarkForLater(_ entry: CanonicalWork) async {
+        guard !markedForLaterWriteInFlight, let workID = entry.ao3WorkID else { return }
+        let generation = auth.sessionGeneration
+        markedForLaterWriteInFlight = true
+        defer {
+            if writeResultStillOwnsScreen(generation) {
+                markedForLaterWriteInFlight = false
+            }
+        }
+        do {
+            _ = try await auth.unmarkForLater(workID: workID)
+            guard writeResultStillOwnsScreen(generation) else { return }
+            works.removeAll { $0.id == workID }
+        } catch is CancellationError {
+            // Session changed between the form GET and the POST. Nothing landed.
+        } catch {
+            guard writeResultStillOwnsScreen(generation) else { return }
+            markedForLaterWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }
