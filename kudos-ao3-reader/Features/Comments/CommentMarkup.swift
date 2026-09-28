@@ -120,8 +120,9 @@ enum CommentMarkup {
     /// Anything outside `headingLevels` does too, so the buffer never grows an
     /// `<h7>` AO3 would strip.
     ///
-    /// A heading over text that is already exactly one heading re-levels it:
-    /// the Heading tile then an h1 chip gives `<h1>…</h1>`, never
+    /// A heading over text inside a heading re-levels that heading, whole body
+    /// kept: the Heading tile then an h1 chip gives `<h1>…</h1>`, and a chip
+    /// over one word of `<h3>one two</h3>` gives `<h1>one two</h1>` — never
     /// `<h3><h1>…</h1></h3>`.
     static func apply(
         _ tag: CommentMarkupTag,
@@ -129,8 +130,10 @@ enum CommentMarkup {
         in selection: Range<String.Index>,
         headingLevel: Int? = nil
     ) -> CommentMarkupResult {
-        let range = AO3Markup.validRange(selection, in: text)
-        let replaced = tag == .heading ? (enclosingHeading(around: range, in: text) ?? range) : range
+        let selected = AO3Markup.validRange(selection, in: text)
+        let enclosing = tag == .heading ? enclosingHeading(around: selected, in: text) : nil
+        let replaced = enclosing?.whole ?? selected
+        let range = enclosing?.body ?? selected
         let splice = renderedSplice(tag, in: text, over: range, headingLevel: headingLevel)
 
         var out = text
@@ -147,25 +150,36 @@ enum CommentMarkup {
         return CommentMarkupResult(text: out, selection: lower..<upper)
     }
 
-    /// The `<hN>…</hN>` pair wrapped directly around `range`, tags included, or
-    /// nil. Matched on UTF-8 so a body starting with a combining mark (which
-    /// would merge with the `>` as one Character) finds no wrapper and simply
-    /// nests, rather than cutting a tag in half.
+    /// The `<hN>…</hN>` pair that contains `range` — the whole pair and its
+    /// body — or nil. The selection may be part of the body, sit beside inline
+    /// markup, or be inside a list item; it must not cross that heading's own
+    /// tags. Matched on UTF-8 so a body starting with a combining mark (which
+    /// would merge with the `>` as one Character) never cuts a tag in half.
     static func enclosingHeading(
         around range: Range<String.Index>, in text: String
-    ) -> Range<String.Index>? {
-        let before = text.utf8[..<range.lowerBound]
-        let after = text.utf8[range.upperBound...]
+    ) -> (whole: Range<String.Index>, body: Range<String.Index>)? {
+        let bytes = Array(text.utf8)
+        let lower = text.utf8.distance(from: text.utf8.startIndex, to: range.lowerBound)
+        let upper = text.utf8.distance(from: text.utf8.startIndex, to: range.upperBound)
+        func find(_ needle: String, in window: Range<Int>, last: Bool = false) -> Int? {
+            let tag = Array(needle.utf8)
+            guard window.count >= tag.count else { return nil }
+            let starts = window.lowerBound...(window.upperBound - tag.count)
+            let hit = { (at: Int) in bytes[at..<at + tag.count].elementsEqual(tag) }
+            return last ? starts.reversed().first(where: hit) : starts.first(where: hit)
+        }
+        func index(_ offset: Int) -> String.Index {
+            text.utf8.index(text.utf8.startIndex, offsetBy: offset)
+        }
         for level in headingLevels {
-            let open = Array("<h\(level)>".utf8)
-            let close = Array("</h\(level)>".utf8)
-            guard before.count >= open.count, after.count >= close.count,
-                  Array(before.suffix(open.count)) == open,
-                  Array(after.prefix(close.count)) == close
+            let open = "<h\(level)>", close = "</h\(level)>"
+            guard let start = find(open, in: 0..<lower, last: true),
+                  find(close, in: (start + open.utf8.count)..<lower) == nil,
+                  find(open, in: lower..<upper) == nil, find(close, in: lower..<upper) == nil,
+                  let end = find(close, in: upper..<bytes.count)
             else { continue }
-            let lower = text.utf8.index(range.lowerBound, offsetBy: -open.count)
-            let upper = text.utf8.index(range.upperBound, offsetBy: close.count)
-            return lower..<upper
+            return (index(start)..<index(end + close.utf8.count),
+                    index(start + open.utf8.count)..<index(end))
         }
         return nil
     }

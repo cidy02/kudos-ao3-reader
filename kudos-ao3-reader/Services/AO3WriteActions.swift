@@ -316,9 +316,8 @@ extension AO3AuthService {
         }
         if AO3Client.writeSuccessMessage(in: body) != nil { return success }
         if (300 ... 399).contains(status) { return success }
-        if (200 ... 299).contains(status), body.localizedCaseInsensitiveContains("successfully") {
-            return success
-        }
+        // No prose fallback: a flashless page whose text says "successfully"
+        // (a work's own summary, say) is not AO3 confirming this write.
         if (200 ... 399).contains(status) { throw AO3WriteError.unconfirmed }
         throw AO3WriteError.rejected(rejectedFallback)
     }

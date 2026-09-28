@@ -165,6 +165,17 @@ struct AO3HistoryScreenTests {
         } throws: { error in
             (error as? AO3WriteError) == .unconfirmed
         }
+        // Page prose is not a flash: a flashless 200 whose text happens to
+        // say "successfully" (a work's own summary) stays unconfirmed.
+        #expect {
+            try AO3AuthService.readingsWriteResult(
+                status: 200,
+                body: "<blockquote class=\"userstuff\">She successfully hid it.</blockquote>",
+                success: "Removed.", rejectedFallback: "Couldn't remove."
+            )
+        } throws: { error in
+            (error as? AO3WriteError) == .unconfirmed
+        }
         // Outside 2xx/3xx entirely: a real rejection, using the fallback
         // message since AO3 sent no specific reason.
         #expect {
