@@ -3858,11 +3858,12 @@ approved, so it is the owner's call.
 > either way. Its rule lives on `AO3TagAutocomplete.freeTypedTerm` rather than
 > in the view, with five tests.
 >
-> **Not built:** the count (above), and 1bu's "drag to reorder". Order is
-> preserved because appends land at the end, but there is no reorder gesture and
-> the subtitle does not promise one. 1bu's local "Recently used" / "From your
-> other works" sections are also not built — its own footer calls them local
-> conveniences, and nothing stores that history yet.
+> **Not built:** the count (above). Drag to reorder is built: dropping a chip
+> moves it in front of the target, and that array is what
+> `work[relationship_string]` (and the other three strings) post.
+> "Recently used" is a UserDefaults JSON list, 20 per kind.
+> "From your other works" reads tags on works the profile has already loaded
+> and does not fetch. Per-suggestion work counts stay absent.
 >
 > **Verified on the simulator** (Account → Drafts → New work → a tag row):
 > typed-term row in orange above canonical rows in green, no count column, chip
