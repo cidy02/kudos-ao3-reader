@@ -5,6 +5,16 @@ import Testing
 /// 1cd (C2-1, C2-3, C2-7): what the moderation screen says and posts.
 struct CollectionModerationCopyTests {
 
+    @Test func declineConfirmationNamesTheParticipant() {
+        #expect(CollectionModerationCopy.declineTitle(participant: "WriterName (alice)")
+            == "Decline WriterName (alice)?")
+    }
+
+    @Test func recentlyDecidedStartsOnApproved() {
+        #expect(AO3CollectionItemsView.startingTab(slug: "fest", initialTab: .approved) == .approved)
+        #expect(AO3CollectionItemsView.startingTab(slug: "fest", initialTab: nil) == .unreviewed)
+    }
+
     @Test func reviewTallyLabelsAPagedQueueAsThisPage() {
         #expect(CollectionModerationCopy.reviewTally(count: 4, page: 1, totalPages: 1) == "4 works awaiting review")
         #expect(CollectionModerationCopy.reviewTally(count: 1, page: 1, totalPages: 1) == "1 work awaiting review")

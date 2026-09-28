@@ -453,47 +453,56 @@ nonisolated enum AO3CollectionParam {
 
 nonisolated enum AO3CollectionURL {
     static let host = "https://archiveofourown.org"
+    private static let baseURL = URL(string: host)!
+
+    private static func path(_ components: String...) -> URL {
+        components.reduce(baseURL) { $0.appendingPathComponent($1) }
+    }
+
+    private static func collection(_ slug: String) -> URL {
+        path("collections", slug)
+    }
 
     static func show(slug: String) -> URL? {
         let slug = slug.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !slug.isEmpty else { return nil }
-        return URL(string: "\(host)/collections/\(slug)")
+        return collection(slug)
     }
 
     static func edit(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/edit")!
+        collection(slug).appendingPathComponent("edit")
     }
 
     static func `new`() -> URL {
-        URL(string: "\(host)/collections/new")!
+        path("collections", "new")
     }
 
     static func create() -> URL {
-        URL(string: "\(host)/collections")!
+        path("collections")
     }
 
     static func confirmDelete(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/confirm_delete")!
+        collection(slug).appendingPathComponent("confirm_delete")
     }
 
     static func profile(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/profile")!
+        collection(slug).appendingPathComponent("profile")
     }
 
     static func bookmarks(slug: String, page: Int = 1) -> URL? {
-        paged("/collections/\(slug)/bookmarks", page: page)
+        paged(collection(slug).appendingPathComponent("bookmarks"), page: page)
     }
 
     static func people(slug: String, page: Int = 1) -> URL? {
-        paged("/collections/\(slug)/people", page: page)
+        paged(collection(slug).appendingPathComponent("people"), page: page)
     }
 
     static func items(slug: String, tab: AO3CollectionItemTab, page: Int = 1) -> URL {
         itemsURL(
-            path: "/collections/\(slug)/items",
+            base: collection(slug).appendingPathComponent("items"),
             status: tab.statusQuery(scope: .collection),
             page: page
-        )!
+        )
     }
 
     /// `GET /users/:login/collection_items` — the signed-in user's items across
@@ -502,20 +511,20 @@ nonisolated enum AO3CollectionURL {
     static func userItems(username: String, tab: AO3CollectionItemTab, page: Int = 1) -> URL? {
         guard let name = login(username) else { return nil }
         return itemsURL(
-            path: "/users/\(name)/collection_items",
+            base: path("users", name, "collection_items"),
             status: tab.statusQuery(scope: .account),
             page: page
         )
     }
 
     static func itemsUpdateMultiple(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/items/update_multiple")!
+        collection(slug).appendingPathComponent("items").appendingPathComponent("update_multiple")
     }
 
     /// `PATCH /users/:login/collection_items/update_multiple`.
     static func userItemsUpdateMultiple(username: String) -> URL? {
         guard let name = login(username) else { return nil }
-        return URL(string: "\(host)/users/\(name)/collection_items/update_multiple")
+        return path("users", name, "collection_items", "update_multiple")
     }
 
     private static func login(_ username: String) -> String? {
@@ -524,8 +533,7 @@ nonisolated enum AO3CollectionURL {
         return name
     }
 
-    private static func itemsURL(path: String, status: String?, page: Int) -> URL? {
-        var components = URLComponents(string: "\(host)\(path)")
+    private static func itemsURL(base: URL, status: String?, page: Int) -> URL {
         var items: [URLQueryItem] = []
         if let status {
             items.append(URLQueryItem(name: "status", value: status))
@@ -533,36 +541,32 @@ nonisolated enum AO3CollectionURL {
         if page > 1 {
             items.append(URLQueryItem(name: "page", value: String(page)))
         }
-        if !items.isEmpty { components?.queryItems = items }
-        return components?.url
+        // `appending(queryItems: [])` still writes a bare "?".
+        return items.isEmpty ? base : base.appending(queryItems: items)
     }
 
     static func participants(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/participants")!
+        collection(slug).appendingPathComponent("participants")
     }
 
     static func participantsJoin(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/participants/join")!
+        participants(slug: slug).appendingPathComponent("join")
     }
 
     static func participantsAdd(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/participants/add")!
+        participants(slug: slug).appendingPathComponent("add")
     }
 
     static func participant(slug: String, id: Int) -> URL {
-        URL(string: "\(host)/collections/\(slug)/participants/\(id)")!
+        participants(slug: slug).appendingPathComponent(String(id))
     }
 
     static func workCollectionItems(workID: Int) -> URL {
-        URL(string: "\(host)/works/\(workID)/collection_items")!
+        path("works", String(workID), "collection_items")
     }
 
-    static func paged(_ path: String, page: Int) -> URL? {
-        var components = URLComponents(string: "\(host)\(path)")
-        if page > 1 {
-            components?.queryItems = [URLQueryItem(name: "page", value: String(page))]
-        }
-        return components?.url
+    static func paged(_ url: URL, page: Int) -> URL? {
+        page > 1 ? url.appending(queryItems: [URLQueryItem(name: "page", value: String(page))]) : url
     }
 
     static let reservedSlugs: Set<String> = [

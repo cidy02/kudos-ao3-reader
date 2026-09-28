@@ -634,6 +634,19 @@ struct AO3CollectionSessionReloadTests {
         #expect(screen.phase == .loaded)
     }
 
+    @Test func challengeScreensRejectLoadsFromThePreviousSession() {
+        let retiredLoad = AO3CollectionSessionReload.nextLoadGeneration(8)
+        #expect(!AO3CollectionSessionReload.ownsScreen(
+            boundGeneration: 4, sessionGeneration: 5
+        ))
+        #expect(!AO3CollectionSessionReload.shouldApplyLoad(
+            capturedLoadGeneration: 8,
+            loadGeneration: retiredLoad,
+            capturedSessionGeneration: 4,
+            sessionGeneration: 5
+        ))
+    }
+
     /// A collection form loaded as alice saves under a later session only if
     /// alice is the one signed in: never bob's, never a signed-out one.
     @Test func aCollectionFormSavesUnderANewSessionOnlyForTheSameAccount() {
