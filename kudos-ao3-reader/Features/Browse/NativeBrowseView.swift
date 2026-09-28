@@ -81,6 +81,7 @@ struct BrowseView: View {
 /// filters; a single tag still uses AO3's tag listing. Reuses `AO3WorkRow`,
 /// `SearchPaginationBar`, and the polite `AO3Client.search`.
 struct FandomWorksView: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
     /// Display title — parsed family title, or the raw tag for a single fandom.
     let fandom: String
     /// Raw original tag names included in the search. Identity lives here.
@@ -394,6 +395,9 @@ struct FandomWorksView: View {
                                       filterHelp: "Filter works in this fandom",
                                       onClearFilters: resetFilters)),
                 AnyView(WorkListMoreMenu {
+                    if hideMature {
+                        MatureRevealToggle()
+                    }
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
                     }
@@ -419,6 +423,7 @@ struct FandomWorksView: View {
 /// with the request instead. The counts are AO3's answer to the actual question,
 /// the full panel applies, and sorting works across the whole tag.
 struct TagWorksView: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
     let request: AO3TagWorksRequest
 
     @Environment(AO3AuthService.self) private var auth
@@ -520,6 +525,9 @@ struct TagWorksView: View {
                                       showingFilters: $showingFilters,
                                       onClearFilters: resetFilters)),
                 AnyView(WorkListMoreMenu {
+                    if hideMature {
+                        MatureRevealToggle()
+                    }
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
                     }

@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct AuthorProfileView: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
@@ -805,6 +806,11 @@ private extension AuthorProfileView {
                 // Expand All acts on cards, so it has nothing to do in Compact.
                 if displayMode != .compact {
                     ExpandAllMenuItem(expandAll: $expandAll)
+                }
+            }
+            if model.selectedTab != .about || showsDashboard {
+                if hideMature {
+                    MatureRevealToggle()
                 }
             }
             if showsDashboard {

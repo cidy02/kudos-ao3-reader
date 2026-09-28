@@ -118,6 +118,7 @@ struct NewCollectionCard: View {
 /// long-press menu. Swipe removes a work from the collection (it isn't deleted). The
 /// menu renames or deletes the collection itself.
 struct CollectionDetailView: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
     let collection: WorkCollection
 
     @Environment(\.modelContext) private var context
@@ -388,6 +389,9 @@ struct CollectionDetailView: View {
                                                     onClearFilters: { filters = LibraryFilters() }))
                             : nil,
                         AnyView(WorkListMoreMenu {
+                            if hideMature {
+                                MatureRevealToggle()
+                            }
                             if !works.isEmpty {
                                 ExpandAllMenuItem(expandAll: $expandAll)
                                 Button {

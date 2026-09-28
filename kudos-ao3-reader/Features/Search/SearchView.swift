@@ -6,6 +6,7 @@ import SwiftUI
 /// paged like AO3 (numbered pages + first/prev/next/last), and a filter sidebar
 /// for fandom, rating, sort, and completion.
 struct SearchView: View { // swiftlint:disable:this type_body_length
+    @AppStorage("hideMatureContent") private var hideMature = true
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
@@ -184,6 +185,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                                   badgeCount: SearchFilterBadge.count(for: filters))),
                             (phase == .loaded && !results.isEmpty)
                                 ? AnyView(WorkListMoreMenu {
+                                    if hideMature {
+                                        MatureRevealToggle()
+                                    }
                                     Button { bulkSelection.isSelecting = true } label: {
                                         Label("Select", systemImage: "checklist")
                                     }

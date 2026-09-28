@@ -235,8 +235,6 @@ struct AO3AuthorWorksSection: View {
     var isSelecting: Bool = false
     var selection: Set<Int> = []
     var onToggleSelection: (AO3WorkSummary) -> Void = { _ in }
-    /// Lets an embedding surface scope its Mature-reveal control to these rows.
-    var onAdultContentVisibilityChange: (Bool) -> Void = { _ in }
     /// Own-profile hosts opt into the same in-card strip as Dashboard (1y).
     var showsPerformance: Bool = false
     /// 1u's swipe actions. `nil` on someone else's works, where AO3 would refuse
@@ -263,9 +261,6 @@ struct AO3AuthorWorksSection: View {
             } else {
                 listBody
             }
-        }
-        .onChange(of: hasVisibleAdultContent, initial: true) { _, hasVisibleAdultContent in
-            onAdultContentVisibilityChange(hasVisibleAdultContent)
         }
     }
 
@@ -362,11 +357,6 @@ struct AO3AuthorWorksSection: View {
                 !gate.isHidden($0, enabled: hideMature, mode: matureMode)
             }
         )
-    }
-
-    private var hasVisibleAdultContent: Bool {
-        canonicalEntries(localLibrary: localWorks)
-            .contains { $0.local?.isAdult == true }
     }
 
     private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
