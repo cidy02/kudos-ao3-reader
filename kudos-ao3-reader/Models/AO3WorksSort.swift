@@ -145,4 +145,35 @@ nonisolated struct AO3WorksSort: Equatable, Sendable {
         }
         return items
     }
+
+    /// 1v's caption under the chosen sort. Counted from `allColumns` so the
+    /// sheet cannot keep saying "9" after the list changes.
+    static var fieldsHint: String { "\(allColumns.count) fields" }
+
+    /// What the merged 1v sheet asks AO3 for.
+    ///
+    /// Sort, direction and completion are `queryItems`. The refine facets in
+    /// `filters` are the other half of that same sheet and are deliberately
+    /// not parameters: they narrow blurbs the app has already parsed.
+    /// `AO3Client.workSearchQueryItems` is the Search tab's list — appending
+    /// it here would change this index's URL.
+    static func indexQueryItems(sort: AO3WorksSort, filters: AO3SearchFilters) -> [URLQueryItem] {
+        _ = filters
+        return sort.queryItems
+    }
+
+    /// A fandom works URL is still this index, so it takes the same items
+    /// rather than dropping the sort when the reader taps a fandom.
+    static func appending(
+        _ sort: AO3WorksSort,
+        filters: AO3SearchFilters = AO3SearchFilters(),
+        to url: URL
+    ) -> URL {
+        let items = indexQueryItems(sort: sort, filters: filters)
+        guard !items.isEmpty,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+        components.queryItems = (components.queryItems ?? []) + items
+        return components.url ?? url
+    }
 }

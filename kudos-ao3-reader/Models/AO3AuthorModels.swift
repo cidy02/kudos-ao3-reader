@@ -116,11 +116,19 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
         Self.makeURL(segments: ["users", username, "profile"])
     }
 
-    /// 1v's sort rides here rather than on the sheet, because AO3 sorts this
-    /// index server-side: the control cannot mean anything until the URL it
-    /// builds carries `work_search[...]`. Applies only where AO3 actually
+    /// 1v's sort rides here rather than only on the sheet, because AO3 sorts
+    /// this index server-side: the control cannot mean anything until the URL
+    /// it builds carries `work_search[...]`. Applies only where AO3 actually
     /// drives the index with `WorkSearchForm` — see `Content.acceptsWorkSearch`.
-    func contentURL(_ content: Content, page: Int = 1, sort: AO3WorksSort? = nil) -> URL {
+    ///
+    /// `filters` is the refine half of the same sheet. `indexQueryItems` is
+    /// what decides which of the two halves become parameters.
+    func contentURL(
+        _ content: Content,
+        page: Int = 1,
+        sort: AO3WorksSort? = nil,
+        filters: AO3SearchFilters = AO3SearchFilters()
+    ) -> URL {
         var segments = ["users", username]
         if let pseud {
             segments += ["pseuds", pseud]
@@ -131,7 +139,7 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
             queryItems.append(URLQueryItem(name: "page", value: String(page)))
         }
         if content.acceptsWorkSearch, let sort {
-            queryItems += sort.queryItems
+            queryItems += AO3WorksSort.indexQueryItems(sort: sort, filters: filters)
         }
         return Self.makeURL(segments: segments, queryItems: queryItems)
     }

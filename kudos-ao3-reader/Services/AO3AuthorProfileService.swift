@@ -282,20 +282,9 @@ final class AO3AuthorProfileModel {
     /// carrying a filter the new page cannot honour.
     private var worksBaseURL: URL {
         if worksScope == .works, let fandomURL = selectedFandom?.url {
-            return Self.appending(worksSort, to: fandomURL)
+            return AO3WorksSort.appending(worksSort, filters: worksFilters, to: fandomURL)
         }
-        return route.contentURL(worksScope, sort: worksSort)
-    }
-
-    /// A fandom URL is still a works index, so it takes the same
-    /// `work_search[...]` items rather than losing the sort on every facet tap.
-    private static func appending(_ sort: AO3WorksSort, to url: URL) -> URL {
-        let items = sort.queryItems
-        guard !items.isEmpty,
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        else { return url }
-        components.queryItems = (components.queryItems ?? []) + items
-        return components.url ?? url
+        return route.contentURL(worksScope, sort: worksSort, filters: worksFilters)
     }
 
     func selectWorksScope(_ scope: AO3AuthorRoute.Content, auth: AO3AuthService) {
