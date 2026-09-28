@@ -318,6 +318,20 @@ struct AO3CollectionSessionReloadTests {
         ) == 3)
     }
 
+    @Test func aCappedCrawlSaysItIsPartial() {
+        let cap = AO3CollectionsWholeIndex.maximumPages
+        #expect(AO3CollectionsWholeIndex.partialNote(
+            reportedTotalPages: cap + 6, lastPageWasEmpty: false
+        ) == "first \(cap) of \(cap + 6) pages")
+        #expect(AO3CollectionsWholeIndex.partialNote(
+            reportedTotalPages: cap, lastPageWasEmpty: false
+        ) == nil)
+        // An empty page ended the crawl early: AO3 has nothing past it.
+        #expect(AO3CollectionsWholeIndex.partialNote(
+            reportedTotalPages: cap + 6, lastPageWasEmpty: true
+        ) == nil)
+    }
+
     @Test func filteredRefreshRestartsAtPageOneAndTheCrawlReusesIt() {
         #expect(AO3CollectionsWholeIndex.refreshPage(currentPage: 4, needsWholeIndex: true) == 1)
         #expect(AO3CollectionsWholeIndex.refreshPage(currentPage: 4, needsWholeIndex: false) == 4)

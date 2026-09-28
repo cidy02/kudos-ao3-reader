@@ -28,6 +28,7 @@ struct AO3CollectionsList: View {
     @State private var wholeIndexPhase: Phase = .idle
     @State private var wholeIndexRetry = 0
     @State private var wholeIndexLoadGeneration = 0
+    @State private var wholeIndexPartialNote: String?
 
     private enum Phase: Equatable { case idle, loading, loaded, failed(String) }
 
@@ -300,20 +301,6 @@ struct AO3CollectionsList: View {
         )
     }
 
-    /// Counts what is on screen, not what was fetched — a tally that ignored the
-    /// filters would contradict the rows under it.
-    private var tallyLine: String {
-        let shown = visibleCollections.count
-        var line = "\(shown) collection\(shown == 1 ? "" : "s")"
-        if shown != displayedCollections.count {
-            line += " · \(displayedCollections.count) in all"
-        }
-        if showPagination {
-            line += " · page \(currentPage) of \(totalPages)"
-        }
-        return line
-    }
-
     /// 1r's two scopes. "Collections" is this list. "Your items" is AO3's
     /// account-wide collection-items page, not a sum the app builds itself.
     /// Nothing caches a pending-item count, so the pill has no badge.
@@ -514,6 +501,23 @@ struct AO3CollectionsList: View {
 
 // Out of the struct body only for its length; `private` state is file-scoped.
 extension AO3CollectionsList {
+    /// Counts what is on screen, not what was fetched — a tally that ignored the
+    /// filters would contradict the rows under it.
+    private var tallyLine: String {
+        let shown = visibleCollections.count
+        var line = "\(shown) collection\(shown == 1 ? "" : "s")"
+        if shown != displayedCollections.count {
+            line += " · \(displayedCollections.count) in all"
+        }
+        if showPagination {
+            line += " · page \(currentPage) of \(totalPages)"
+        }
+        if filters.needsWholeIndex, hasCurrentWholeIndex, let note = wholeIndexPartialNote {
+            line += " · \(note)"
+        }
+        return line
+    }
+
     /// Loads every collections-index page strictly in sequence. The surrounding
     /// SwiftUI task owns cancellation; each landed page also passes the existing
     /// list load/session fence before it can join the accumulator.
@@ -543,6 +547,7 @@ extension AO3CollectionsList {
         var accumulated = canReusePageOne ? collections : []
         var page = canReusePageOne ? 2 : 1
         var reportedTotalPages = canReusePageOne ? totalPages : 1
+        var lastPageWasEmpty = false
 
         do {
             while page <= min(
@@ -564,6 +569,7 @@ extension AO3CollectionsList {
                     sessionGeneration: auth.sessionGeneration
                 ) else { return }
                 reportedTotalPages = max(reportedTotalPages, result.currentPage, result.totalPages)
+                lastPageWasEmpty = result.collections.isEmpty
                 guard let next = AO3CollectionsWholeIndex.nextPage(
                     after: page,
                     reportedTotalPages: reportedTotalPages,
@@ -581,6 +587,9 @@ extension AO3CollectionsList {
                   )
             else { return }
             wholeIndex = accumulated
+            wholeIndexPartialNote = AO3CollectionsWholeIndex.partialNote(
+                reportedTotalPages: reportedTotalPages, lastPageWasEmpty: lastPageWasEmpty
+            )
             wholeIndexSessionGeneration = expectedSessionGeneration
             wholeIndexPhase = .loaded
         } catch AO3Error.authenticationRequired {
