@@ -59,18 +59,38 @@ struct AO3NamedSubscriptionsList: View {
 
     @Environment(AO3AuthService.self) private var auth
     @State private var page = 1
-    @State private var loaded: AO3NamedSubscriptionsPage?
-    @State private var loadError: String?
+    /// Tagged with the key it was fetched for. A page or error whose key is
+    /// not the current one is not drawn, so a scope or account switch never
+    /// shows the old rows for the frame before the new task runs.
+    @State private var result: (key: LoadKey, outcome: Result<AO3NamedSubscriptionsPage, LoadFailure>)?
+    /// Paths this screen unsubscribed. A fetch that was already in flight
+    /// when the POST landed can still hand back the row.
+    @State private var unsubscribed: Set<String> = []
     @State private var pendingUnsubscribe: AO3NamedSubscription?
     @State private var writeError: String?
     @State private var writeInFlight = false
 
-    /// A new scope, page or session is a new fetch. Rows from the old one
-    /// are dropped first, so account A's series never sit under B's header.
+    struct LoadFailure: Error {
+        let message: String
+    }
+
+    /// A new scope, page or session is a new fetch.
     private struct LoadKey: Hashable {
         let scope: AO3SubscriptionsScope
         let page: Int
         let generation: Int
+    }
+
+    private var loaded: AO3NamedSubscriptionsPage? {
+        guard let result, result.key == currentKey, case let .success(page) = result.outcome else { return nil }
+        var visible = page
+        visible.rows.removeAll { unsubscribed.contains($0.path) }
+        return visible
+    }
+
+    private var loadError: String? {
+        guard let result, result.key == currentKey, case let .failure(failure) = result.outcome else { return nil }
+        return failure.message
     }
 
     var body: some View {
@@ -101,6 +121,8 @@ struct AO3NamedSubscriptionsList: View {
         .cardList()
         .subjectScreenWash(palette: palette)
         .onChange(of: scope) { page = 1 }
+        // Another account can subscribe to the same series path.
+        .onChange(of: auth.sessionGeneration) { unsubscribed = [] }
         .task(id: LoadKey(scope: scope, page: page, generation: auth.sessionGeneration)) {
             await load()
         }
@@ -206,18 +228,21 @@ struct AO3NamedSubscriptionsList: View {
     }
 
     private func load() async {
-        let requested = LoadKey(scope: scope, page: page, generation: auth.sessionGeneration)
-        loaded = nil
-        loadError = nil
+        let requested = currentKey
         do {
-            let result = try await auth.accountNamedSubscriptions(scope: requested.scope, page: requested.page)
+            let page = try await auth.accountNamedSubscriptions(scope: requested.scope, page: requested.page)
             guard !Task.isCancelled, requested == currentKey else { return }
-            loaded = result ?? AO3NamedSubscriptionsPage(rows: [], currentPage: 1, totalPages: 1)
+            if let page {
+                result = (requested, .success(page))
+            } else {
+                result = (requested, .failure(LoadFailure(message: "Log in to AO3 to see your subscriptions.")))
+            }
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled, requested == currentKey else { return }
-            loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            result = (requested, .failure(LoadFailure(message: message)))
         }
     }
 
@@ -231,9 +256,10 @@ struct AO3NamedSubscriptionsList: View {
         writeInFlight = true
         defer { writeInFlight = false }
         do {
+            // `unsubscribe` re-checks the session before its POST.
             _ = try await auth.unsubscribe(path: path, page: page)
             guard auth.sessionGeneration == generation else { return }
-            loaded?.rows.removeAll { $0.id == row.id }
+            unsubscribed.insert(row.path)
         } catch is CancellationError {
             // The session changed between the form GET and the POST. Nothing landed.
         } catch {
