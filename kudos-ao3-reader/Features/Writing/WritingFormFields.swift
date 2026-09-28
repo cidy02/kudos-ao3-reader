@@ -51,16 +51,83 @@ struct WritingTagsRow: View {
     var options: [AO3FormOption] = []
     var kind: AO3TagKind?
     var isRequired = false
+    /// 1bp draws the tags on the row, with Add as the way into the picker.
+    /// The disclosure row stays the default: Work Edit and bulk edit are one
+    /// field per row, and a chip wrap there would be a second design.
+    var showsInlineChips = false
+    var onAdd: (() -> Void)?
+
+    @Environment(ThemeManager.self) private var theme
 
     var body: some View {
-        SubjectFormRow(
-            label: title,
-            value: values.isEmpty ? "None" : "\(values.count)",
-            showsDisclosure: true,
-            isRequired: isRequired
-        )
-        .subjectRowNavigation(accessibilityLabel: isRequired ? "\(title), required" : title) {
-            WritingTagsEditor(title: title, values: $values, options: options, kind: kind)
+        if showsInlineChips {
+            inlineChips
+        } else {
+            SubjectFormRow(
+                label: title,
+                value: values.isEmpty ? "None" : "\(values.count)",
+                showsDisclosure: true,
+                isRequired: isRequired
+            )
+            .subjectRowNavigation(accessibilityLabel: isRequired ? "\(title), required" : title) {
+                WritingTagsEditor(title: title, values: $values, options: options, kind: kind)
+            }
+        }
+    }
+
+    /// The count stays, so a long wrap does not hide how many tags there are.
+    /// Add is a button rather than a link: a `NavigationLink` in this row would
+    /// fire for every chip tap.
+    private var inlineChips: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                titleLabel
+                    .font(.system(size: 15))
+                    .accessibilityLabel(isRequired ? "\(title), required" : title)
+                Spacer(minLength: 8)
+                Text(values.isEmpty ? "None" : "\(values.count)")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            FlowLayout(spacing: 8, rowSpacing: 8) {
+                ForEach(values, id: \.self) { value in
+                    Button {
+                        values.removeAll { $0 == value }
+                    } label: {
+                        SubjectChip(
+                            text: value,
+                            style: .neutral,
+                            trailingImage: "xmark",
+                            palette: theme.scopePalette
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove \(value)")
+                }
+                Button {
+                    onAdd?()
+                } label: {
+                    SubjectChip(
+                        text: "Add",
+                        style: .dashed,
+                        systemImage: "plus",
+                        palette: theme.scopePalette
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add \(title)")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private var titleLabel: Text {
+        if isRequired {
+            Text("\(title) \(Text("∗").foregroundStyle(.tint))")
+        } else {
+            Text(title)
         }
     }
 }

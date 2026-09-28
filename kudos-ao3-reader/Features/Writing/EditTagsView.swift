@@ -10,13 +10,16 @@ struct EditTagsView: View {
     @State private var originalTags: AO3WorkTagSet
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var addingKind: AO3TagKind?
     /// Told after AO3 accepts the save, before this screen dismisses — so a
     /// work editor that pushed it can refresh the tags it is holding.
+    let workTitle: String
     let onSaved: () -> Void
 
-    init(form: AO3EditTagsForm, onSaved: @escaping () -> Void = {}) {
+    init(form: AO3EditTagsForm, workTitle: String = "", onSaved: @escaping () -> Void = {}) {
         self._form = State(initialValue: form)
         self._originalTags = State(initialValue: form.tags)
+        self.workTitle = workTitle
         self.onSaved = onSaved
     }
 
@@ -33,7 +36,7 @@ struct EditTagsView: View {
                 SubjectHeaderBlock(
                     kicker: "AO3 Account",
                     title: "Edit tags",
-                    subtitle: "changes here do not touch the text",
+                    subtitle: subtitle,
                     palette: accountPalette,
                     gutter: gutter
                 )
@@ -51,8 +54,7 @@ struct EditTagsView: View {
                     .pageBodyRow(top: 18, gutter: selfGuttered)
             }
             Section {
-                WritingChoiceRow(title: "Rating", value: $form.tags.rating, options: form.ratingOptions)
-                    .panelSegment(0, of: 1, gutter: gutter)
+                ratingSlots
             }
 
             Section {
@@ -61,7 +63,7 @@ struct EditTagsView: View {
                     .pageBodyRow(top: 18, gutter: selfGuttered)
             }
             Section {
-                checkRows(form.warningOptions, values: $form.tags.warnings)
+                checkSlots(form.warningOptions, values: $form.tags.warnings)
                 // "At least one", not the "exactly one of these six" this used
                 // to say: otwarchive's `Work` validates `archive_warning_string`
                 // for presence only ("Please select at least one warning"), and
@@ -105,10 +107,14 @@ struct EditTagsView: View {
             }
         }
         .cardList()
+        .environment(\.writingEditedWorkID, form.workID)
         #if os(macOS)
         .navigationTitle("Edit tags")
         #endif
         .subjectScreenWash(palette: accountPalette)
+        .navigationDestination(item: $addingKind) { kind in
+            tagsEditor(kind)
+        }
         // The error was set and never shown, so a failed save only re-enabled
         // Save and looked like nothing had happened.
         .alert("AO3 could not save the change", isPresented: Binding(
@@ -124,6 +130,59 @@ struct EditTagsView: View {
                 .disabled(isSaving)
             }
         }
+    }
+
+    /// 1bp: "<title> · changes here do not touch the text". A missing title
+    /// keeps the second half alone rather than a leading dot.
+    private var subtitle: String {
+        let note = "changes here do not touch the text"
+        let title = workTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return note }
+        return "\(title) · \(note)"
+    }
+
+    /// One rating, so a tap selects and a second tap on the same row stays.
+    /// The check occupies 15pt either way, which is the slot the row draws.
+    private var ratingSlots: some View {
+        let options = form.ratingOptions
+        return ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+            checkSlotRow(option, isOn: form.tags.rating == option.value) {
+                form.tags.rating = option.value
+            }
+            .panelSegment(index, of: max(options.count, 1), gutter: gutter)
+        }
+    }
+
+    /// Warnings stay a multi-select. otwarchive checks that at least one is
+    /// present, not that exactly one is, so a second check does not clear the
+    /// first. Categories keep the switch — this slot is rating and warnings.
+    private func checkSlots(
+        _ options: [AO3FormOption], values: Binding<[String]>
+    ) -> some View {
+        ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+            checkSlotRow(option, isOn: values.wrappedValue.contains(option.value)) {
+                if values.wrappedValue.contains(option.value) {
+                    values.wrappedValue.removeAll { $0 == option.value }
+                } else {
+                    values.wrappedValue.append(option.value)
+                }
+            }
+            .panelSegment(index, of: max(options.count, 1), gutter: gutter)
+        }
+    }
+
+    private func checkSlotRow(
+        _ option: AO3FormOption, isOn: Bool, action: @escaping () -> Void
+    ) -> some View {
+        SubjectFormRow(label: option.title, action: action) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(accountPalette.accent)
+                .opacity(isOn ? 1 : 0)
+                .frame(width: 15, height: 15)
+                .accessibilityHidden(true)
+        }
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 
     /// A toggle row per option, each its own `List` row. Titled even though
@@ -152,14 +211,52 @@ struct EditTagsView: View {
 
     @ViewBuilder
     private var tagsRows: some View {
-        WritingTagsRow(title: "Fandoms", values: $form.tags.fandoms, kind: .fandom)
+        inlineTags("Fandoms", values: $form.tags.fandoms, kind: .fandom, isRequired: true)
             .panelSegment(0, of: 4, gutter: gutter)
-        WritingTagsRow(title: "Relationships", values: $form.tags.relationships, kind: .relationship)
+        inlineTags("Characters", values: $form.tags.characters, kind: .character)
             .panelSegment(1, of: 4, gutter: gutter)
-        WritingTagsRow(title: "Characters", values: $form.tags.characters, kind: .character)
+        inlineTags("Relationships", values: $form.tags.relationships, kind: .relationship)
             .panelSegment(2, of: 4, gutter: gutter)
-        WritingTagsRow(title: "Additional tags", values: $form.tags.additionalTags, kind: .freeform)
+        inlineTags("Additional tags", values: $form.tags.additionalTags, kind: .freeform)
             .panelSegment(3, of: 4, gutter: gutter)
+    }
+
+    private func inlineTags(
+        _ title: String,
+        values: Binding<[String]>,
+        kind: AO3TagKind,
+        isRequired: Bool = false
+    ) -> some View {
+        WritingTagsRow(
+            title: title,
+            values: values,
+            kind: kind,
+            isRequired: isRequired,
+            showsInlineChips: true,
+            onAdd: { addingKind = kind }
+        )
+    }
+
+    @ViewBuilder
+    private func tagsEditor(_ kind: AO3TagKind) -> some View {
+        switch kind {
+        case .fandom:
+            WritingTagsEditor(title: "Fandoms", values: $form.tags.fandoms, options: [], kind: kind)
+        case .character:
+            WritingTagsEditor(
+                title: "Characters", values: $form.tags.characters, options: [], kind: kind
+            )
+        case .relationship:
+            WritingTagsEditor(
+                title: "Relationships", values: $form.tags.relationships, options: [], kind: kind
+            )
+        case .freeform:
+            WritingTagsEditor(
+                title: "Additional tags", values: $form.tags.additionalTags, options: [], kind: kind
+            )
+        case .tag:
+            EmptyView()
+        }
     }
 
     private func save() {

@@ -210,14 +210,14 @@ struct AO3AuthorFandomFilterSection: View {
 /// swipe button does not work, so the host turns this into a navigation.
 nonisolated enum AO3OwnWorkAction: Identifiable, Hashable, Sendable {
     case edit(workID: Int)
-    case tags(workID: Int)
+    case tags(workID: Int, title: String)
     case chapter(workID: Int, title: String)
     case delete(workID: Int, title: String)
 
     var id: String {
         switch self {
         case let .edit(id): "edit-\(id)"
-        case let .tags(id): "tags-\(id)"
+        case let .tags(id, _): "tags-\(id)"
         case let .chapter(id, _): "chapter-\(id)"
         case let .delete(id, _): "delete-\(id)"
         }
@@ -404,7 +404,7 @@ struct AO3AuthorWorksSection: View {
             }
 
             Button {
-                onOwnWorkAction(.tags(workID: remote.id))
+                onOwnWorkAction(.tags(workID: remote.id, title: remote.title))
             } label: {
                 Label("Tags", systemImage: "tag")
             }
