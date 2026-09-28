@@ -136,6 +136,39 @@ struct WorksSortFilterSheetTests {
         #expect(values["work_search[language_id]"] == nil)
     }
 
+    /// A cancelled Kudos draft must not still be the draft when the sheet
+    /// appears again, and Apply posts nothing unless this showing changed it.
+    @Test func aCancelledSortIsReseededAndOnlyThisShowingCommits() {
+        var presentation = WorksSortPresentation(applied: .default)
+        var kudos = AO3WorksSort.default
+        kudos.select(.kudos)
+        presentation.draft = kudos
+
+        presentation.appear(applied: .default)
+        #expect(presentation.draft == .default)
+        #expect(presentation.sortToCommit == nil)
+
+        presentation.draft = kudos
+        #expect(presentation.sortToCommit == kudos)
+
+        presentation.draft = .default
+        #expect(presentation.sortToCommit == nil)
+
+        var incomplete = AO3WorksSort.default
+        incomplete.completion = .incomplete
+        presentation.draft = incomplete
+        #expect(presentation.sortToCommit == incomplete)
+    }
+
+    /// Author works already have completion chips on the sort draft. The page
+    /// facet is the second control, and it is hidden while the sheet owns sort.
+    @Test func theWorksSheetHidesThePageCompletionFacet() {
+        #expect(AO3FilterPanel.showsPageCompletionFacet(worksSort: nil))
+        var sort = AO3WorksSort.default
+        sort.completion = .incomplete
+        #expect(!AO3FilterPanel.showsPageCompletionFacet(worksSort: sort))
+    }
+
     @Test func indexesThatIgnoreWorkSearchStillIgnoreTheMergedSheet() throws {
         var sort = AO3WorksSort.default
         sort.select(.hits)
