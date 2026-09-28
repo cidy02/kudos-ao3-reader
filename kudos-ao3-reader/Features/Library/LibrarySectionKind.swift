@@ -151,9 +151,13 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
             // stays and a queue-only work you never opened never arrives; the
             // `!isQueuedForLater` guard that kept those out is no longer what does
             // the work. Ordered most-recently-read, which is the order
-            // `LibraryHistoryGrouping` buckets assume.
+            // `LibraryHistoryGrouping` buckets assume. A work the reader removed
+            // from History (1ah, `hiddenFromHistoryAt`) stays out until they read
+            // it again.
             works
-                .filter { ($0.hasStartedReading || $0.isFinished) && visible($0) }
+                .filter {
+                    ($0.hasStartedReading || $0.isFinished) && $0.hiddenFromHistoryAt == nil && visible($0)
+                }
                 .sorted { recency($0) > recency($1) }
         case .favorites:
             works

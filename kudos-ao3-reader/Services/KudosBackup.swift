@@ -925,6 +925,12 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// as JSON null (`.some(nil)`); only an absent key — an older build, or Android,
     /// which strips unknown keys — decodes as nil, and that leaves the local value.
     let legacyReaderProgress: Double??
+    /// 1ah's hide marker (`SavedWork.hiddenFromHistoryAt`). Additive on v8 and
+    /// shaped like `legacyReaderProgress`: always written, a work shown in
+    /// History as JSON null (`.some(nil)`) so reading it again on one device
+    /// returns it on the others; only an absent key — an older build, Android —
+    /// decodes as nil, and that leaves the local value.
+    let hiddenFromHistoryAt: Date??
     /// SHA-256 of the EPUB this record was exported with, when known.
     ///
     /// Optional, and absent in every archive written before this — which is
@@ -1002,6 +1008,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         // reading position of every work that had one.
         readiumLocator = work.readiumLocator
         legacyReaderProgress = .some(work.legacyReaderProgress)
+        hiddenFromHistoryAt = .some(work.hiddenFromHistoryAt)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
     }
 
@@ -1062,6 +1069,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case userTags
         case readiumLocator
         case legacyReaderProgress
+        case hiddenFromHistoryAt
         case epubDigest
     }
 
@@ -1140,6 +1148,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         readiumLocator = try container.decodeIfPresent(String.self, forKey: .readiumLocator)
         legacyReaderProgress = container.contains(.legacyReaderProgress)
             ? .some(try container.decode(Double?.self, forKey: .legacyReaderProgress)) : nil
+        hiddenFromHistoryAt = container.contains(.hiddenFromHistoryAt)
+            ? .some(try container.decode(Date?.self, forKey: .hiddenFromHistoryAt)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
     }
 }
@@ -1438,6 +1448,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// in — unpinned, and never asked about offline.
     let isPinned: Bool?
     let keepsWorksOffline: Bool?
+    /// 1h's queue description (`ReadingQueue.notes`). Optional and additive like
+    /// `hue`: an older archive or Android carries none, and `nil` there is "no
+    /// description", never an instruction to clear one.
+    let notes: String?
 
     @MainActor
     init(queue: ReadingQueue) {
@@ -1455,6 +1469,7 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         tagNames = queue.tags.map(\.name).sorted()
         isPinned = queue.isPinned
         keepsWorksOffline = queue.keepsWorksOffline
+        notes = queue.notes
     }
 
     func effectiveModifiedAt(memberships: [KudosBackupReadingQueueMembership]) -> Date? {
@@ -2808,6 +2823,10 @@ enum KudosBackupService {
             if let archivedOffline = archived.keepsWorksOffline,
                incomingWins || queue.keepsWorksOffline == nil {
                 queue.keepsWorksOffline = archivedOffline
+            }
+            // The description fills in, and a winning archive's "" clears it.
+            if let archivedNotes = archived.notes, incomingWins || queue.notes == nil {
+                queue.notes = archivedNotes
             }
             // Union-only under merge and reconcile, exactly like SavedWork's
             // user tags above: there is no per-tag tombstone, so absence from a
@@ -4357,6 +4376,10 @@ enum KudosBackupService {
         // expressed here, however new that archive is.
         if let archivedKeepInProgress = archived.keepInProgressOverride, incomingWins {
             work.keepInProgressOverride = archivedKeepInProgress
+        }
+        // Same rule for 1ah's hide marker; a present null is "shown in History".
+        if let archivedHidden = archived.hiddenFromHistoryAt, incomingWins {
+            work.hiddenFromHistoryAt = archivedHidden
         }
         work.isComplete = incomingWins ? archived.isComplete : work.isComplete
         work.deletedAt = newest(work.deletedAt, archived.deletedAt)
