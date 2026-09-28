@@ -47,8 +47,11 @@ struct LocalDataClearingTests {
         kept.isSaved = true
         let favorite = finishedWork(title: "Favorite", in: context)
         favorite.isFavorite = true
+        // T-276: a queue that keeps downloads protects its works; the flag alone does not.
+        let queue = ReadingQueue(name: "Keeps")
+        context.insert(queue)
         let queued = finishedWork(title: "Queued", in: context)
-        queued.isQueuedForLater = true
+        ReadingQueueService.add(queued, to: queue, in: context)
         let unfinished = finishedWork(title: "Unfinished", in: context)
         unfinished.isFinished = false
         let alreadyFreed = finishedWork(title: "AlreadyFreed", in: context)
