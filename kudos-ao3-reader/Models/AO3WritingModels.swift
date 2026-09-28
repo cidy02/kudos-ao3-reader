@@ -277,9 +277,12 @@ nonisolated struct AO3CollectionAccess: Equatable, Sendable {
     var isModerated: Bool = false
     var isUnrevealed: Bool = false
     var isAnonymous: Bool = false
+    /// False for a search hit: AO3's autocomplete says only "not closed".
+    var isDescribed: Bool = true
 
     var rowState: AO3CollectionRowState {
         if !isOpen { return .closed }
+        if !isDescribed { return .unknown }
         if isModerated { return .moderated }
         return .open
     }
@@ -511,8 +514,9 @@ nonisolated struct AO3WorkForm: Equatable, Sendable {
         var seen = Set<String>()
         for offer in offers {
             var row = offer
+            // By name only: `work[collection_names]` holds names, and a title
+            // is not one — the writer's "Salt" (`salt_exchange`) is not `salt`.
             row.isSelected = selected.contains(offer.name.lowercased())
-                || selected.contains(offer.title.lowercased())
             merged.append(row)
             seen.insert(offer.name.lowercased())
         }

@@ -159,18 +159,35 @@ struct WritingScreensPresentationTests {
     /// Grok P1: a chapter write refreshes chapter 1's text but keeps a
     /// backdate picked on the work form and not yet saved.
     @Test func aChapterRefreshKeepsAnUnsavedBackdate() {
-        let current = AO3WorkChapterDraft(
+        let loaded = AO3WorkChapterDraft(
             title: "Old", summary: "", content: "<p>old</p>",
-            publishedYear: "2020", publishedMonth: "3", publishedDay: "7"
+            publishedYear: "2019", publishedMonth: "1", publishedDay: "1"
         )
+        var current = loaded
+        current.publishedYear = "2020"
+        current.publishedMonth = "3"
+        current.publishedDay = "7"
         let fresh = AO3WorkChapterDraft(title: "New", summary: "S", content: "<p>new</p>", publishedYear: "2024")
-        let kept = WorkEditView.refreshedChapter(current, fresh: fresh)
+        let kept = WorkEditView.refreshedChapter(current, loaded: loaded, fresh: fresh)
         #expect(kept?.content == "<p>new</p>")
         #expect(kept?.title == "New")
         #expect(kept?.summary == "S")
         #expect([kept?.publishedYear, kept?.publishedMonth, kept?.publishedDay] == ["2020", "3", "7"])
-        #expect(WorkEditView.refreshedChapter(nil, fresh: fresh) == fresh)
-        #expect(WorkEditView.refreshedChapter(current, fresh: nil) == nil)
+        #expect(WorkEditView.refreshedChapter(nil, loaded: nil, fresh: fresh) == fresh)
+        #expect(WorkEditView.refreshedChapter(current, loaded: loaded, fresh: nil) == nil)
+    }
+
+    /// Grok (M1b): chapter 1's date changed on the chapter screen, and this
+    /// form's date untouched since it loaded — AO3's new date is taken, or the
+    /// next Save would write the old one back.
+    @Test func aChapterRefreshTakesAChapterScreenDateThisFormDidNotChange() {
+        let loaded = AO3WorkChapterDraft(
+            title: "Old", content: "<p>old</p>", publishedYear: "2019", publishedMonth: "1", publishedDay: "1"
+        )
+        let fresh = AO3WorkChapterDraft(
+            title: "Old", content: "<p>old</p>", publishedYear: "2021", publishedMonth: "6", publishedDay: "30"
+        )
+        #expect(WorkEditView.refreshedChapter(loaded, loaded: loaded, fresh: fresh) == fresh)
     }
 
     /// 1bn's bulk Delete names the count and every title; one work reads
