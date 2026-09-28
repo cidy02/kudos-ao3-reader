@@ -187,6 +187,7 @@ struct WritingTagsEditor: View {
                 style: .pill(isSelected: false),
                 palette: palette
             )
+            .minimumHitTarget()
             .draggable(value)
             .dropDestination(for: String.self) { dropped, _ in
                 guard let name = dropped.first else { return false }
@@ -450,6 +451,8 @@ struct WritingTagsEditor: View {
         values = outcome.values
         term = outcome.term
         if let recorded = outcome.recordedName, let kind {
+            // Another editor window may have saved since this one opened.
+            recent = RecentWritingTags.load(from: .standard)
             recent.record(recorded, kind: kind)
             recent.save(to: .standard)
         }
