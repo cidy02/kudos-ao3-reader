@@ -77,7 +77,10 @@ struct AuthorProfileView: View {
                 AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
             }
             .navigationDestination(isPresented: $isBulkEditing) { bulkEditDestination }
-            .navigationDestination(item: ownWorkPushBinding) { ownWorkDestination($0) }
+            .navigationDestination(item: ownWorkPushBinding) { action in
+                ownWorkDestination(action)
+                    .environment(\.writingOtherWorks, WritingOtherWorkTags.sources(from: model.works))
+            }
             .confirmationDialog(
                 "Delete “\(pendingDeleteWork?.title ?? "this work")”?",
                 isPresented: deleteConfirmationBinding,
@@ -554,8 +557,8 @@ private extension AuthorProfileView {
         switch action {
         case let .edit(workID):
             WritingWorkDestination(workID: workID)
-        case let .tags(workID):
-            WritingTagsDestination(workID: workID)
+        case let .tags(workID, title):
+            WritingTagsDestination(workID: workID, workTitle: title)
         case let .chapter(workID, title):
             WritingChapterDestination(workID: workID, workTitle: title) {
                 Task { await model.refresh(auth: auth) }

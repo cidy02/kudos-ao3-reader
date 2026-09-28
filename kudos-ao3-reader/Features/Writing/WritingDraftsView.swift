@@ -362,6 +362,8 @@ struct WritingWorkDestination: View {
 struct WritingTagsDestination: View {
     @Environment(AO3AuthService.self) private var auth
     let workID: Int
+    /// 1bp's header is "<title> · changes here do not touch the text".
+    var workTitle: String = ""
     /// Forwarded to `EditTagsView` — see `WorkEditView.needsTagRefresh`.
     var onSaved: () -> Void = {}
     @State private var form: AO3EditTagsForm?
@@ -372,7 +374,8 @@ struct WritingTagsDestination: View {
     var body: some View {
         Group {
             if let form, loadedGeneration == auth.sessionGeneration {
-                EditTagsView(form: form, onSaved: onSaved).id(auth.sessionGeneration)
+                EditTagsView(form: form, workTitle: workTitle, onSaved: onSaved)
+                    .id(auth.sessionGeneration)
             } else if let errorMessage {
                 VStack {
                     Text(errorMessage)
