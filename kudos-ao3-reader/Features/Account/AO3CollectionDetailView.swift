@@ -138,6 +138,11 @@ struct AO3CollectionDetailView: View {
             pageLoadTask?.cancel()
             loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionDeleted)) { notification in
+            guard notification.deletesCollection(slug: slug) else { return }
+            pageLoadTask?.cancel()
+            dismiss()
+        }
     }
 
     // MARK: Header
@@ -321,7 +326,6 @@ struct AO3CollectionDetailView: View {
             rows.append(AnyView(manageRow("Collection Settings") {
                 AO3CollectionFormView(
                     slug: slug,
-                    viewerIsOwner: show.collection.viewerIsOwner,
                     onDeleted: { dismiss() }
                 )
             }))
@@ -545,12 +549,11 @@ struct AO3CollectionDetailView: View {
 
 // Paging helpers. Out of the struct body only for its length.
 extension AO3CollectionDetailView {
-    /// One page is the whole list, so its count is a total; a paged list only
-    /// knows the rows on the page it loaded.
+    /// This page's row count is never presented as the collection's total.
     nonisolated static func peopleCountLabel(
         count: Int, currentPage: Int, totalPages: Int
     ) -> String {
-        totalPages > 1 ? "\(count) on this page · page \(currentPage) of \(totalPages)" : "\(count)"
+        "\(count) on this page · page \(currentPage) of \(totalPages)"
     }
 
     private func exactTotal(for segment: Segment) -> Int? {

@@ -183,7 +183,7 @@ struct AccountView: View {
                 .navigationDestination(for: AO3CollectionFormDestination.self) {
                     AO3CollectionFormView(
                         slug: $0.slug,
-                        viewerIsOwner: $0.viewerIsOwner
+                        onDeleted: { if !path.isEmpty { path.removeLast() } }
                     )
                 }
                 .navigationDestination(for: AO3CollectionItemsDestination.self) {

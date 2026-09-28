@@ -18,11 +18,16 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private static var hits: [Hit] = []
     private static var postResponseBody = "fence-ok"
+    private static var getResponseBody = #"<meta name="csrf-token" content="probe-csrf">"#
 
-    static func reset(postBody: String = "fence-ok") {
+    static func reset(
+        postBody: String = "fence-ok",
+        getBody: String = #"<meta name="csrf-token" content="probe-csrf">"#
+    ) {
         lock.lock()
         hits = []
         postResponseBody = postBody
+        getResponseBody = getBody
         lock.unlock()
     }
 
@@ -65,6 +70,7 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
         Self.lock.lock()
         Self.hits.append(hit)
         let postBody = Self.postResponseBody
+        let getBody = Self.getResponseBody
         Self.lock.unlock()
 
         // A GET is a write's CSRF fetch: answer with a page carrying the token.
@@ -77,7 +83,7 @@ private final class AO3WriteDispatchProbe: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
-        let body = isGET ? #"<meta name="csrf-token" content="probe-csrf">"# : postBody
+        let body = isGET ? getBody : postBody
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)
@@ -361,7 +367,14 @@ struct AO3WriteDispatchFenceTests {
     /// method-override POST. The protocol stub keeps both requests local.
     @Test func collectionDeleteUsesTheConfirmationRouteAndOneDeletePost() async throws {
         AO3WriteDispatchProbe.reset(
-            postBody: #"<div class="flash notice">Collection was successfully deleted.</div>"#
+            postBody: #"<div class="flash notice">Collection was successfully deleted.</div>"#,
+            getBody: """
+            <meta name="csrf-token" content="wrong-page-token">
+            <form class="simple destroy" action="/collections/alice_fest" method="post">
+              <input name="authenticity_token" value="probe-csrf">
+              <input type="submit" value="Yes, Delete Collection">
+            </form>
+            """
         )
         let auth = makeAuth()
         await auth.login(username: "alice", password: "pw")
@@ -381,10 +394,34 @@ struct AO3WriteDispatchFenceTests {
         #expect(hits.last?.body?.contains("authenticity_token=probe-csrf") == true)
     }
 
+    @Test func collectionDeleteRefusesAConfirmResponseWithoutTheDestroyForm() async throws {
+        AO3WriteDispatchProbe.reset(
+            getBody: #"<meta name="csrf-token" content="probe-csrf"><h2>Collections</h2>"#
+        )
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let client = AO3Client(session: probeSession(), paceSleep: { _ in })
+
+        await #expect(throws: AO3CollectionWriteError.self) {
+            try await auth.deleteCollection(
+                slug: "alice_fest", expectedGeneration: auth.sessionGeneration, using: client
+            )
+        }
+        #expect(AO3WriteDispatchProbe.recorded().map(\.method) == ["GET"])
+    }
+
     /// Bob signs in while alice's confirmation GET is out. Only the check after
     /// the GET stops the POST: the dispatch fence would pass bob's own stamp.
     @Test func aSessionChangeDuringTheDeleteCSRFFetchPostsNothing() async throws {
-        AO3WriteDispatchProbe.reset()
+        // Every AO3 page carries the layout's csrf meta tag; the confirm page
+        // adds the destroy form whose token the delete posts.
+        AO3WriteDispatchProbe.reset(getBody: """
+        <meta name="csrf-token" content="probe-csrf">
+        <form class="simple destroy" action="/collections/alice_fest" method="post">
+          <input name="authenticity_token" value="probe-csrf">
+          <input type="submit" value="Yes, Delete Collection">
+        </form>
+        """)
         let auth = makeAuth()
         await auth.login(username: "alice", password: "pw")
         let generation = auth.sessionGeneration

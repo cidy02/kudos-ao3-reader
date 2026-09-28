@@ -4,14 +4,14 @@ import Foundation
 /// store. Both are decisions the views draw from, so a test can call them
 /// without a screen.
 enum AO3CollectionCardCopy {
-    /// "You moderate" only when AO3 marked the blurb `own`. Otherwise the
+    /// "You own" only when AO3 marked the blurb `own`. Otherwise the
     /// first maintainer name, then whatever byline text survived parsing.
     static func eyebrow(
         viewerIsOwner: Bool,
         maintainerNames: [String],
         byline: String
     ) -> String {
-        if viewerIsOwner { return "You moderate" }
+        if viewerIsOwner { return "You own" }
         if let name = maintainerNames.first(where: { !$0.isEmpty }) { return name }
         return byline.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -45,6 +45,12 @@ enum AO3CollectionCardCopy {
         var labels = [isUnrevealed ? "Unrevealed" : "Revealed"]
         if isAnonymous { labels.append("Anonymous") }
         return labels
+    }
+}
+
+enum AO3CollectionDeleteDecision {
+    static func canStart(allowsDelete: Bool, isDeleting: Bool, isSaving: Bool) -> Bool {
+        allowsDelete && !isDeleting && !isSaving
     }
 }
 

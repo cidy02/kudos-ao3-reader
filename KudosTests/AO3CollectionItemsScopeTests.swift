@@ -117,7 +117,7 @@ struct AO3CollectionItemsScopeTests {
     @Test func cardEyebrowAndMetaUseOnlyBlurbFacts() {
         #expect(AO3CollectionCardCopy.eyebrow(
             viewerIsOwner: true, maintainerNames: ["Ada"], byline: "Ada"
-        ) == "You moderate")
+        ) == "You own")
         #expect(AO3CollectionCardCopy.eyebrow(
             viewerIsOwner: false, maintainerNames: ["Ada", "Bea"], byline: ""
         ) == "Ada")
@@ -146,6 +146,21 @@ struct AO3CollectionItemsScopeTests {
         #expect(AO3CollectionItemsView.cardHue(for: first) == CoverArt.hue(for: "Collection A"))
         #expect(AO3CollectionItemsView.cardHue(for: second) == CoverArt.hue(for: "Collection B"))
         #expect(AO3CollectionItemsView.cardHue(for: first) != AO3CollectionItemsView.cardHue(for: second))
+    }
+
+    @Test func collectionDeleteRequiresTheFetchedControlAndOneIdleAttempt() {
+        #expect(AO3CollectionDeleteDecision.canStart(
+            allowsDelete: true, isDeleting: false, isSaving: false
+        ))
+        #expect(!AO3CollectionDeleteDecision.canStart(
+            allowsDelete: false, isDeleting: false, isSaving: false
+        ))
+        #expect(!AO3CollectionDeleteDecision.canStart(
+            allowsDelete: true, isDeleting: true, isSaving: false
+        ))
+        #expect(!AO3CollectionDeleteDecision.canStart(
+            allowsDelete: true, isDeleting: false, isSaving: true
+        ))
     }
 
     private func sampleItem() -> AO3CollectionItem {

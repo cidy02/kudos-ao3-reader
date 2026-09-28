@@ -273,6 +273,7 @@ struct AO3CollectionParsingTests {
         <html>
         <head><meta name="csrf-token" content="csrf-form"></head>
         <body>
+        <a href="/collections/fest/confirm_delete">Delete Collection</a>
         <form class="verbose post collection" action="/collections/fest" method="post">
           <input type="hidden" name="_method" value="put">
           <input type="hidden" name="authenticity_token" value="csrf-form">
@@ -332,6 +333,7 @@ struct AO3CollectionParsingTests {
         #expect(form.faq == "FAQ")
         #expect(form.rules == "Be kind")
         #expect(form.isClosed && form.isModerated && form.isUnrevealed && form.isAnonymous)
+        #expect(form.allowsDelete)
         #expect(form.deleteOpenOnAO3?.path.hasSuffix("/collections/fest/confirm_delete") == true)
         #expect(form.closeOpenOnAO3?.path.hasSuffix("/collections/fest/edit") == true)
         var edited = form
@@ -347,6 +349,42 @@ struct AO3CollectionParsingTests {
         #expect(params[AO3CollectionParam.emailNotify] == "0")
         #expect(params[AO3CollectionParam.challengeType] == "GiftExchange")
         #expect(params[AO3CollectionParam.intro] == "Hello")
+    }
+
+    @Test func absentCollectionControlsAreNotPosted() throws {
+        let html = """
+        <html><body>
+        <form class="verbose post collection" action="/collections/fest" method="post">
+          <input type="hidden" name="authenticity_token" value="csrf-form">
+          <input name="collection[name]" value="fest">
+          <input name="collection[title]" value="Winter Fest">
+        </form>
+        </body></html>
+        """
+        let form = try AO3Client.parseCollectionForm(html, slug: "fest")
+        let names = AO3Client.collectionFormParameters(form).map(\.0)
+
+        #expect(!form.allowsDelete)
+        #expect(!names.contains(AO3CollectionParam.challengeType))
+        #expect(!names.contains(AO3CollectionParam.emailNotify))
+    }
+
+    @Test func selectedBlankChallengeOptionWinsEvenWhenItIsNotFirst() throws {
+        let html = """
+        <html><body>
+        <form class="verbose post collection" action="/collections" method="post">
+          <input type="hidden" name="authenticity_token" value="csrf-form">
+          <input name="collection[name]" value="fest">
+          <input name="collection[title]" value="Winter Fest">
+          <select name="challenge_type">
+            <option value="GiftExchange">Gift Exchange</option>
+            <option value="" selected>None</option>
+          </select>
+        </form>
+        </body></html>
+        """
+        let form = try AO3Client.parseCollectionForm(html, slug: "")
+        #expect(form.challengeType == "")
     }
 
     @Test func nameAvailabilityHeuristic() {
@@ -543,6 +581,6 @@ extension AO3CollectionParsingTests {
         #expect(label == "20 on this page · page 2 of 4")
         #expect(AO3CollectionDetailView.peopleCountLabel(
             count: 7, currentPage: 1, totalPages: 1
-        ) == "7")
+        ) == "7 on this page · page 1 of 1")
     }
 }
