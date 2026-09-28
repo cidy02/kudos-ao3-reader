@@ -233,80 +233,6 @@ struct AO3FilterPanel: View {
         SubjectFieldLabel(text: text, style: .formGroup)
     }
 
-    /// 1v's sort, direction and completion, above the refine facets. The "N
-    /// fields" caption sits under the chosen column, not under the row label.
-    @ViewBuilder
-    private var worksSortSections: some View {
-        if worksSort != nil {
-            Section {
-                Menu {
-                    Picker("Sort by", selection: worksColumnBinding) {
-                        ForEach(AO3WorksSort.allColumns) { column in
-                            Text(column.title).tag(column)
-                        }
-                    }
-                } label: {
-                    LabeledContent("Sort by") {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(sortPresentation.draft.column.title)
-                            Text(AO3WorksSort.fieldsHint)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Sort by")
-                .accessibilityValue(
-                    "\(sortPresentation.draft.column.title), \(AO3WorksSort.fieldsHint)"
-                )
-                Picker("Direction", selection: $sortPresentation.draft.direction) {
-                    ForEach(AO3WorksSortDirection.allCases) { direction in
-                        Text(direction.title).tag(direction)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-            Section {
-                worksCompletionChips
-            } header: {
-                groupLabel("Completion")
-            } footer: {
-                Text("Completion is applied by AO3 rather than to the page already "
-                    + "loaded, so it counts every match across every page.")
-            }
-        }
-    }
-
-    /// Choosing a column adopts that column's own default direction, the way
-    /// AO3 does when no direction is sent.
-    private var worksColumnBinding: Binding<AO3WorksSortColumn> {
-        Binding(
-            get: { sortPresentation.draft.column },
-            set: { sortPresentation.draft.select($0) }
-        )
-    }
-
-    private var worksCompletionChips: some View {
-        FlowLayout(spacing: 8) {
-            ForEach(AO3WorksCompletion.allCases) { option in
-                Button {
-                    sortPresentation.draft.completion = option
-                } label: {
-                    SubjectChip(
-                        text: option.title,
-                        style: .pill(isSelected: sortPresentation.draft.completion == option),
-                        palette: theme.scopePalette
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(option.title)
-                .accessibilityAddTraits(sortPresentation.draft.completion == option ? [.isSelected] : [])
-            }
-        }
-        .padding(12)
-    }
-
     private var form: some View {
         Form {
             // Group so .appThemedRows() reaches every section's rows (it doesn't
@@ -688,5 +614,83 @@ struct AO3FilterPanel: View {
             filters.categories.remove(category)
             filters.excludedCategories.remove(category)
         }
+    }
+}
+
+// MARK: - 1v works sort
+
+extension AO3FilterPanel {
+    /// 1v's sort, direction and completion, above the refine facets. The "N
+    /// fields" caption sits under the chosen column, not under the row label.
+    @ViewBuilder
+    private var worksSortSections: some View {
+        if worksSort != nil {
+            Section {
+                Menu {
+                    Picker("Sort by", selection: worksColumnBinding) {
+                        ForEach(AO3WorksSort.allColumns) { column in
+                            Text(column.title).tag(column)
+                        }
+                    }
+                } label: {
+                    LabeledContent("Sort by") {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(sortPresentation.draft.column.title)
+                            Text(AO3WorksSort.fieldsHint)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Sort by")
+                .accessibilityValue(
+                    "\(sortPresentation.draft.column.title), \(AO3WorksSort.fieldsHint)"
+                )
+                Picker("Direction", selection: $sortPresentation.draft.direction) {
+                    ForEach(AO3WorksSortDirection.allCases) { direction in
+                        Text(direction.title).tag(direction)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            Section {
+                worksCompletionChips
+            } header: {
+                groupLabel("Completion")
+            } footer: {
+                Text("Completion is applied by AO3 rather than to the page already "
+                    + "loaded, so it counts every match across every page.")
+            }
+        }
+    }
+
+    /// Choosing a column adopts that column's own default direction, the way
+    /// AO3 does when no direction is sent.
+    private var worksColumnBinding: Binding<AO3WorksSortColumn> {
+        Binding(
+            get: { sortPresentation.draft.column },
+            set: { sortPresentation.draft.select($0) }
+        )
+    }
+
+    private var worksCompletionChips: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(AO3WorksCompletion.allCases) { option in
+                Button {
+                    sortPresentation.draft.completion = option
+                } label: {
+                    SubjectChip(
+                        text: option.title,
+                        style: .pill(isSelected: sortPresentation.draft.completion == option),
+                        palette: theme.scopePalette
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.title)
+                .accessibilityAddTraits(sortPresentation.draft.completion == option ? [.isSelected] : [])
+            }
+        }
+        .padding(12)
     }
 }
