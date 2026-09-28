@@ -457,7 +457,8 @@ struct AO3AccountWorksList: View {
     @ViewBuilder
     private var signedInContent: some View {
         switch phase {
-        case .loaded where works.isEmpty:
+        // Subscriptions keeps its screen: Series and Authors are its own pills.
+        case .loaded where works.isEmpty && kind != .subscriptions:
             ContentUnavailableView {
                 Label(kind.emptyTitle, systemImage: kind.emptySymbol)
             } description: {

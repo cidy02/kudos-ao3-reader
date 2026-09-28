@@ -668,12 +668,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// `<dl>` of work/series/user subscriptions — not work-blurb markup — so it needs
     /// `parseSubscriptionsPage`, not `parseSearchPage`. `?type=works` narrows it to
     /// work subscriptions server-side (so pagination counts works too).
-    static func subscriptionsURL(username: String, page: Int) -> URL? {
+    static func subscriptionsURL(username: String, page: Int, type: String = "works") -> URL? {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
         var components = URLComponents(string: "https://archiveofourown.org")
         components?.path = "/users/\(name)/subscriptions"
-        var items = [URLQueryItem(name: "type", value: "works")]
+        var items = [URLQueryItem(name: "type", value: type)]
         if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
         components?.queryItems = items
         return components?.url
@@ -1254,13 +1254,21 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// The same GET as `subscriptionsPage`, keeping each row's unsubscribe form.
     ///
-    /// The action is already in that HTML. This does not post, and it does not
-    /// ask AO3 for series or user subscriptions. Those are not work rows.
+    /// The action is already in that HTML. This does not post. Series and user
+    /// subscriptions are `namedSubscriptions`: those are not work rows.
     func subscriptionsIndex(
         for request: URLRequest, page: Int
     ) async throws -> AO3SubscriptionsIndex {
         let html = try await authenticatedHTML(for: request)
         return try Self.parseSubscriptionsIndex(html, page: page)
+    }
+
+    /// The same authenticated GET for 1p.4's Series and Authors scopes.
+    func namedSubscriptions(
+        for request: URLRequest, scope: AO3SubscriptionsScope, page: Int
+    ) async throws -> AO3NamedSubscriptionsPage {
+        let html = try await authenticatedHTML(for: request)
+        return try Self.parseNamedSubscriptions(html, scope: scope, page: page)
     }
 
     /// Downloads a work's EPUB to a temp file. AO3 accepts any filename slug, so
@@ -1792,7 +1800,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// The unsubscribe form AO3 puts in the `<dd>` after a subscription `<dt>`.
     /// Nil when that sibling is missing, is not a `<dd>`, or has no action.
-    private static func unsubscribeAction(after heading: Element) throws -> String? {
+    static func unsubscribeAction(after heading: Element) throws -> String? {
         guard let details = try heading.nextElementSibling(), details.tagName() == "dd",
               let form = try details.select("form").first()
         else { return nil }
