@@ -37,6 +37,17 @@ enum WorkLifecycle {
         context.saveBestEffort(reason: "Saving keep-in-progress override failed")
     }
 
+    /// 1ah's "Remove from history" — "the only destructive thing this page can
+    /// do", and it must not delete the work. Sets a hide marker and nothing else:
+    /// the record, its EPUB, its progress and its reading log all stay, and
+    /// reading it again clears the marker (`SavedWork.markProgressModified`).
+    @MainActor
+    static func removeFromHistory(_ work: SavedWork, in context: ModelContext, at date: Date = Date()) {
+        work.hiddenFromHistoryAt = date
+        work.markModified(date)
+        context.saveBestEffort(reason: "Saving remove-from-history failed")
+    }
+
     /// Frees a finished, unprotected work's EPUB if it still has one. Safe to call
     /// repeatedly (e.g. when leaving the reader). Saves only if something changed.
     @MainActor
