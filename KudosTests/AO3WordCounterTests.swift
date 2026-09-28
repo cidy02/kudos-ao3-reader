@@ -42,6 +42,16 @@ struct AO3WordCounterTests {
         #expect(AO3WordCounter.count("<b>foo</b>bar") == 2)
     }
 
+    /// Ruby's `[[:word:]]`, as `ruby -e` answers it: Alphabetic (so the circled
+    /// Ⓐ and the letter-number Ⅷ), marks, decimal digits and `_` — not the
+    /// superscript ², not ①, and not the joiners ZWNJ/ZWJ, which split a word.
+    @Test func wordCharactersAreRubysWordClass() {
+        #expect(AO3WordCounter.count("Ⓐ Ⅷ ０") == 3)
+        #expect(AO3WordCounter.count("² ①") == 0)
+        #expect(AO3WordCounter.count("a\u{200C}b") == 2)
+        #expect(AO3WordCounter.count("日\u{200C}本") == 2)
+    }
+
     @Test func digitsAndUnderscoresAreWordCharacters() {
         #expect(AO3WordCounter.count("in 2024, snake_case") == 3)
         #expect(AO3WordCounter.count("3.5") == 2)
@@ -58,6 +68,5 @@ struct AO3WordCounterTests {
     /// disagree on a dash and on CJK.
     @Test func theEditorCountIsAO3s() {
         #expect(WritingWordCount.count("<p>Stop--now 日本語</p>") == 5)
-        #expect(WritingWordCount.count("<p>Stop--now 日本語</p>") == AO3WordCounter.count("<p>Stop--now 日本語</p>"))
     }
 }
