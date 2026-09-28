@@ -297,11 +297,9 @@ extension AO3AuthService {
         if let error = AO3Client.workWriteError(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
-        guard let rows = try? AO3Client.parseSeriesManagePage(
-            from: try await workFormHTML(at: manageURL, using: client)
-        ), rows.sorted(by: { $0.position < $1.position }).map(\.serialWorkID) == orderedSerialWorkIDs else {
-            throw AO3WorkWriteError.unconfirmed
-        }
+        guard let rows = await readBackManagePage(manageURL, expectedGeneration: expectedGeneration, using: client),
+              rows.sorted(by: { $0.position < $1.position }).map(\.serialWorkID) == orderedSerialWorkIDs
+        else { throw AO3WorkWriteError.unconfirmed }
         return rows
     }
 
@@ -310,7 +308,8 @@ extension AO3AuthService {
     /// work stays posted. `serial_works#destroy` redirects with no flash, so
     /// the manage page is read back as the evidence: the row must be gone, and
     /// the fresh rows are returned. AO3 deletes the series with its last work
-    /// (`SerialWork#delete_empty_series`) — the caller never offers that one.
+    /// (`SerialWork#delete_empty_series`), and the screen's list can be stale,
+    /// so the live manage page (the token GET) must list this work and another.
     /// `expectedGeneration`: as `deleteChapter`. Unexercised against a live
     /// AO3 session (release gate).
     func removeWorkFromSeries(
@@ -319,8 +318,20 @@ extension AO3AuthService {
         try requireSessionGeneration(expectedGeneration)
         try requireWorkSession()
         let manageURL = AO3Client.seriesManageURL(seriesID: seriesID)
-        let csrf = try csrfToken(from: try await workFormHTML(at: manageURL, using: client))
+        let manageHTML = try await workFormHTML(at: manageURL, using: client)
         try requireSessionGeneration(expectedGeneration)
+        let csrf = try csrfToken(from: manageHTML)
+        let listed = ((try? AO3Client.parseSeriesManagePage(from: manageHTML)) ?? []).map(\.serialWorkID)
+        guard listed.contains(serialWorkID) else {
+            throw AO3WorkWriteError.rejected(
+                "The series changed on AO3 since this screen opened. Reopen it and try again."
+            )
+        }
+        guard listed.count > 1 else {
+            throw AO3WorkWriteError.rejected(
+                "It is the series' last work on AO3, and AO3 deletes a series with its last work."
+            )
+        }
         let request = try writeRequest(
             to: AO3Client.serialWorkURL(serialWorkID: serialWorkID),
             body: Self.formEncoded([
@@ -334,12 +345,21 @@ extension AO3AuthService {
         if let error = AO3Client.workWriteError(in: body) {
             throw AO3WorkWriteError.rejected(error)
         }
-        guard let rows = try? AO3Client.parseSeriesManagePage(
-            from: try await workFormHTML(at: manageURL, using: client)
-        ), !rows.contains(where: { $0.serialWorkID == serialWorkID }) else {
-            throw AO3WorkWriteError.unconfirmed
-        }
+        guard let rows = await readBackManagePage(manageURL, expectedGeneration: expectedGeneration, using: client),
+              !rows.contains(where: { $0.serialWorkID == serialWorkID })
+        else { throw AO3WorkWriteError.unconfirmed }
         return rows
+    }
+
+    /// The manage page read back after a series write, or nil. Read under
+    /// the session that wrote: another account's page proves nothing.
+    private func readBackManagePage(
+        _ url: URL, expectedGeneration: Int, using client: AO3Client
+    ) async -> [AO3SeriesWorkRow]? {
+        guard let html = try? await workFormHTML(at: url, using: client),
+              sessionGeneration == expectedGeneration
+        else { return nil }
+        return try? AO3Client.parseSeriesManagePage(from: html)
     }
 
     // MARK: Bulk edit
@@ -549,11 +569,9 @@ extension AO3AuthService {
             return "Saved."
         }
         if (200 ... 299).contains(status) {
-            // Redirect-followed 200 with no flash is common; do not claim a
-            // specific success string without evidence.
-            if body.localizedCaseInsensitiveContains("successfully") {
-                return "Saved."
-            }
+            // Every AO3 work, chapter and series success flashes a notice. A
+            // 200 without one proves nothing — and a re-rendered form carries
+            // the writer's own text, "successfully" and all.
             throw AO3WorkWriteError.unconfirmed
         }
         throw AO3WorkWriteError.rejected("AO3 didn't accept the change.")

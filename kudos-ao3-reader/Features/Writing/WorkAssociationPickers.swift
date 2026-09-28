@@ -14,7 +14,7 @@ import SwiftUI
 /// collection field autocompletes from `/autocomplete/open_collection_names`
 /// (`AO3Client.openCollections`). The same query filters the collections the
 /// form offers and, debounced, asks AO3 for other open ones; picking one adds
-/// it to what the form posts.
+/// it to the list unticked, and only a tick posts it.
 struct WorkCollectionsGiftsView: View {
     @Binding var collections: [AO3CollectionOffer]
     @Binding var gifts: [AO3GiftRecipient]
@@ -111,6 +111,15 @@ struct WorkCollectionsGiftsView: View {
         }
     }
 
+    /// A search hit joins the list unticked. AO3's answer is every collection
+    /// not closed — moderated, unrevealed and anonymous ones included — so
+    /// posting the work into one is the writer's tick, not the add.
+    static func adding(_ offer: AO3CollectionOffer, to held: [AO3CollectionOffer]) -> [AO3CollectionOffer] {
+        var added = offer
+        added.isSelected = false
+        return held + [added]
+    }
+
     private var collectionsPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(label: "Search", arrangement: .control) {
@@ -143,12 +152,10 @@ struct WorkCollectionsGiftsView: View {
         .subjectPanel()
     }
 
-    /// A collection found on AO3: adding it ticks it, for the next save.
+    /// A collection found on AO3: adding it lists it, unticked.
     private func searchResultRow(_ offer: AO3CollectionOffer) -> some View {
         Button {
-            var added = offer
-            added.isSelected = true
-            collections.append(added)
+            collections = Self.adding(offer, to: collections)
             searchResults.removeAll { $0.id == offer.id }
         } label: {
             HStack(spacing: 11) {
@@ -157,9 +164,7 @@ struct WorkCollectionsGiftsView: View {
                     Text(offer.title.isEmpty ? offer.name : offer.title)
                         .font(.system(size: 14.5, weight: .medium))
                         .foregroundStyle(.primary)
-                    // The autocomplete set is AO3's open collections; whether
-                    // one is moderated is not in the answer.
-                    Text("Open to new works · on AO3")
+                    Text(Self.stateText(offer.access))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
@@ -171,6 +176,7 @@ struct WorkCollectionsGiftsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add \(offer.title.isEmpty ? offer.name : offer.title)")
+        .accessibilityValue(Self.stateText(offer.access))
     }
 
     /// 1bw: "Collections show their state on the row — moderated, closed, open —
@@ -213,7 +219,7 @@ struct WorkCollectionsGiftsView: View {
         case .moderated: text = "Moderated — a maintainer approves the work"
         case .closed: text = "Closed to new works"
         case .open: text = "Open"
-        case .unknown: text = "State unknown"
+        case .unknown: text = "Open to new works · may be moderated or unrevealed"
         }
         if access.isUnrevealed { text += " · Unrevealed until reveal" }
         if access.isAnonymous { text += " · Anonymous" }

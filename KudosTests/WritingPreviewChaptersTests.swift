@@ -710,4 +710,132 @@ struct WritingWriteStubTests {
         #expect(hits[1].body.contains("edited"))
         #expect(hits[2].body.contains("_method=patch") && hits[2].body.contains("post_button=1"))
     }
+
+    // MARK: Grok review of M1b (T-277)
+
+    private func draftChapter() throws -> AO3ChapterForm {
+        try newChapter().adopting(try AO3Client.parsePreviewHTML(from: WritingPreviewParsingTests.chapterPreview))
+    }
+
+    /// `chapters#update` previews an unposted chapter with `flash[:notice]`,
+    /// not `flash.now`, so its draft banner shows again on the next page. When
+    /// that page is the Post's `render :edit`, the `error_messages_for` list
+    /// beside the banner is still AO3 refusing — the banner made it read as posted.
+    @Test func aRefusalBesideALeftoverDraftNoticeStillRefuses() async throws {
+        let refused = """
+        <html><body><div id="main"><div class="flash notice">This is a draft chapter in a posted work. \
+        It will be kept unless the work is deleted.</div><div class="flash"></div>
+        <h2 class="heading">Edit Chapter</h2>
+        <div id="error" class="error"><h4>Sorry! We couldn't save this chapter because:</h4>
+        <ul><li>Content must be less than 510000 characters long.</li></ul></div>
+        <form class="edit_chapter" action="/works/424242/chapters/9001" method="post">
+        <textarea name="chapter[content]">It went successfully.</textarea></form>
+        </div></body></html>
+        """
+        WritingWriteStub.reset(["POST /works/424242/chapters/9001": refused])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let form = try draftChapter()
+        await #expect(throws: AO3WorkWriteError.rejected("Content must be less than 510000 characters long.")) {
+            try await auth.updateChapter(form, submit: .post, using: stubClient())
+        }
+    }
+
+    /// Only AO3's notice says a write went through; the writer's own
+    /// "successfully" in a re-rendered form is not it.
+    @Test func theWritersOwnSuccessfullyIsNotAO3SayingSo() async throws {
+        WritingWriteStub.reset(["POST /works/424242/chapters/9001": """
+        <html><body><div id="main"><h2 class="heading">Edit Chapter</h2>
+        <form class="edit_chapter" action="/works/424242/chapters/9001" method="post">
+        <textarea name="chapter[content]">It went successfully.</textarea></form></div></body></html>
+        """])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let form = try draftChapter()
+        await #expect(throws: AO3WorkWriteError.unconfirmed) {
+            try await auth.updateChapter(form, submit: .post, using: stubClient())
+        }
+    }
+
+    /// With no notice and no `#previewpane` to stand behind, only `#main`'s
+    /// own children refuse: a writer may keep `class="flash error"` (AO3 keeps
+    /// writer classes) but cannot set `id="error"`.
+    @Test func aWritersOwnErrorClassesOnTheWorkPageDoNotRefuse() {
+        let page = """
+        <html><body><div id="main"><div class="work"><div id="workskin"><div class="userstuff">
+        <div class="flash error">No.</div><div class="error"><ul><li>Title can't be blank</li></ul></div>
+        </div></div></div></div></body></html>
+        """
+        #expect(AO3Client.workWriteError(in: page) == nil)
+    }
+
+    /// AO3 deletes a series with its last work (`SerialWork#delete_empty_series`),
+    /// and the screen's list can be stale, so the live manage page — the token
+    /// GET — must still list this work and another.
+    @Test func theLastWorkOnTheLiveManagePageIsNeverRemoved() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        for live in [[(22, "The Weight of Water")], [(11, "Salt and Static"), (33, "Long Way")]] {
+            WritingWriteStub.reset(["GET \(Self.managePath)": Self.managePage(live)])
+            await #expect(throws: AO3WorkWriteError.self) {
+                try await auth.removeWorkFromSeries(
+                    seriesID: 77, serialWorkID: 22, expectedGeneration: auth.sessionGeneration, using: stubClient()
+                )
+            }
+            #expect(WritingWriteStub.recorded().map(\.method) == ["GET"])
+        }
+    }
+
+    /// The proof is AO3's own `#sortable_series_list`: another list earlier on
+    /// the page that never held the work does not show it gone.
+    @Test func aRemovalIsJudgedFromTheSortableListItself() async throws {
+        let before = Self.managePage([(11, "Salt and Static"), (22, "The Weight of Water")])
+        let decoy = before.replacingOccurrences(
+            of: "<div id=\"manage-series\">",
+            with: "<ul class=\"serial-works\"><li id=\"serial_11\"><h3 class=\"heading\">Salt</h3></li></ul>"
+                + "<div id=\"manage-series\">"
+        )
+        WritingWriteStub.reset(sequences: [
+            "GET \(Self.managePath)": [before, decoy],
+            "POST /serial_works/22": ["<html><body><div id=\"main\">Water</div></body></html>"]
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        await #expect(throws: AO3WorkWriteError.unconfirmed) {
+            try await auth.removeWorkFromSeries(
+                seriesID: 77, serialWorkID: 22, expectedGeneration: auth.sessionGeneration, using: stubClient()
+            )
+        }
+    }
+
+    /// Bob signs in while alice's read-back loads: his page cannot confirm her removal.
+    @Test func aReadBackUnderAnotherSessionConfirmsNothing() async throws {
+        WritingWriteStub.reset(sequences: [
+            "GET \(Self.managePath)": [
+                Self.managePage([(11, "Salt and Static"), (22, "The Weight of Water")]),
+                Self.managePage([(11, "Salt and Static")])
+            ],
+            "POST /serial_works/22": ["<html><body><div id=\"main\">Water</div></body></html>"]
+        ])
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let paces = PaceCount()
+        let client = stubClient(paceSleep: { @MainActor _ in
+            paces.value += 1
+            guard paces.value == 3 else { return }
+            await auth.logout()
+            await auth.login(username: "bob", password: "pw")
+        })
+        await #expect(throws: AO3WorkWriteError.unconfirmed) {
+            try await auth.removeWorkFromSeries(
+                seriesID: 77, serialWorkID: 22, expectedGeneration: auth.sessionGeneration, using: client
+            )
+        }
+        #expect(WritingWriteStub.recorded().map(\.method) == ["GET", "POST", "GET"])
+    }
+}
+
+@MainActor
+private final class PaceCount {
+    var value = 0
 }
