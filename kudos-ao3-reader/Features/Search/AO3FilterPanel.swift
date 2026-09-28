@@ -2,7 +2,8 @@ import SwiftUI
 
 /// The shared AO3 work-filter form: sort, rating, warnings, categories, crossovers,
 /// completion, word count, language, and include/exclude tag pickers. Used by the
-/// Search tab's inspector and by Browse → Category → Fandom → Works.
+/// Search tab's inspector, by Browse → Category → Fandom → Works, and — with
+/// `worksSort` set — by the author works list's one sort-and-filter sheet.
 ///
 /// Pure UI over a bound `AO3SearchFilters`: the host runs the actual search via
 /// `onApply` and decides what "reset" means via `onReset` (Search clears everything;
@@ -12,6 +13,10 @@ struct AO3FilterPanel: View {
     /// Fandom); `.refine` narrows the already-loaded works on the page in place, so it
     /// hides the facets that need a fresh query (Sort, Crossover, Updated) and its
     /// primary button just confirms rather than searching.
+    ///
+    /// The author works list is the exception that still refetches: it passes
+    /// `worksSort`, and Apply commits that draft. Those nine columns are AO3's
+    /// works-index sort, not Search's Best Match menu, which stays hidden here.
     enum Mode { case search, refine }
 
     @Environment(ThemeManager.self) private var theme
@@ -51,6 +56,47 @@ struct AO3FilterPanel: View {
     /// Rows the host shows but could not judge yet (Subscriptions' index-only
     /// rows). Not in `refineMatchCount`; the line names them separately.
     var refinePendingCount = 0
+    /// 1v's works-index sort, when this panel is that sheet. Nil on Search and
+    /// Browse, which have their own sort and must not grow a second one.
+    ///
+    /// Held as a draft: a live binding would refetch on every tap of the menu.
+    /// Refine facets stay on `filters` and still apply as they are tapped,
+    /// because those cost no request.
+    var worksSort: AO3WorksSort?
+    /// Commits `worksSort` when Apply finds it changed. The host refetches.
+    var onApplyWorksSort: ((AO3WorksSort) -> Void)?
+    @State private var worksSortDraft: AO3WorksSort
+
+    init(
+        filters: Binding<AO3SearchFilters>,
+        mode: Mode = .search,
+        allowsRelevanceSort: Bool = true,
+        showFandomPicker: Bool = true,
+        canReset: Bool,
+        onApply: @escaping () -> Void,
+        onSave: (() -> Void)? = nil,
+        onReset: @escaping () -> Void,
+        refineSource: [AO3WorkSummary] = [],
+        refineMatchCount: Int? = nil,
+        refinePendingCount: Int = 0,
+        worksSort: AO3WorksSort? = nil,
+        onApplyWorksSort: ((AO3WorksSort) -> Void)? = nil
+    ) {
+        _filters = filters
+        self.mode = mode
+        self.allowsRelevanceSort = allowsRelevanceSort
+        self.showFandomPicker = showFandomPicker
+        self.canReset = canReset
+        self.onApply = onApply
+        self.onSave = onSave
+        self.onReset = onReset
+        self.refineSource = refineSource
+        self.refineMatchCount = refineMatchCount
+        self.refinePendingCount = refinePendingCount
+        self.worksSort = worksSort
+        self.onApplyWorksSort = onApplyWorksSort
+        _worksSortDraft = State(initialValue: worksSort ?? .default)
+    }
 
     /// The panel owns its own `NavigationStack`, because a presented panel has no
     /// navigation container of its own and a bare `.toolbar` there renders nothing.
@@ -67,7 +113,7 @@ struct AO3FilterPanel: View {
                 refineMatchLine
                 form
             }
-            .navigationTitle(mode == .refine ? "Refine" : "Filters")
+            .navigationTitle(worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and filter")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -121,9 +167,10 @@ struct AO3FilterPanel: View {
             .accessibilityLabel("Reset filters")
         }
         ToolbarItem(placement: .confirmationAction) {
-            Button(action: onApply) {
+            Button(action: confirm) {
                 // Refine narrows live as facets change, so its button just confirms;
-                // search needs a query/filter before it can run.
+                // search needs a query/filter before it can run. The works sheet's
+                // checkmark also commits the sort draft, which is the refetch.
                 Image(systemName: mode == .refine ? "checkmark" : "magnifyingglass")
             }
             // 1au draws this one ACCENT-FILLED with a dark glyph, against the
@@ -132,7 +179,7 @@ struct AO3FilterPanel: View {
             // and one secondary rather than two equal buttons.
             .buttonStyle(.borderedProminent)
             .disabled(mode == .search && !filters.isSearchable)
-            .accessibilityLabel(mode == .refine ? "Done" : "Apply filters")
+            .accessibilityLabel(confirmLabel)
         }
     }
 
@@ -141,8 +188,96 @@ struct AO3FilterPanel: View {
     /// form artboards use over a group of rows. A bare `Section("Warnings")` gave
     /// sentence case with no tracking, and that mismatch was the loudest remaining
     /// "this is the old app" signal on the panel.
+    /// Swipe-to-dismiss drops the sort draft. Reset still clears only the
+    /// facets: that button never reset the sort when the two sheets were apart.
+    private func confirm() {
+        if let worksSort, worksSortDraft != worksSort {
+            onApplyWorksSort?(worksSortDraft)
+        }
+        onApply()
+    }
+
+    private var confirmLabel: String {
+        if worksSort != nil { return "Apply" }
+        return mode == .refine ? "Done" : "Apply filters"
+    }
+
     private func groupLabel(_ text: String) -> some View {
         SubjectFieldLabel(text: text, style: .formGroup)
+    }
+
+    /// 1v's sort, direction and completion, above the refine facets. The "N
+    /// fields" caption sits under the chosen column, not under the row label.
+    @ViewBuilder
+    private var worksSortSections: some View {
+        if worksSort != nil {
+            Section {
+                Menu {
+                    Picker("Sort by", selection: worksColumnBinding) {
+                        ForEach(AO3WorksSort.allColumns) { column in
+                            Text(column.title).tag(column)
+                        }
+                    }
+                } label: {
+                    LabeledContent("Sort by") {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(worksSortDraft.column.title)
+                            Text(AO3WorksSort.fieldsHint)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Sort by")
+                .accessibilityValue(
+                    "\(worksSortDraft.column.title), \(AO3WorksSort.fieldsHint)"
+                )
+                Picker("Direction", selection: $worksSortDraft.direction) {
+                    ForEach(AO3WorksSortDirection.allCases) { direction in
+                        Text(direction.title).tag(direction)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            Section {
+                worksCompletionChips
+            } header: {
+                groupLabel("Completion")
+            } footer: {
+                Text("Completion is applied by AO3 rather than to the page already "
+                    + "loaded, so it counts every match across every page.")
+            }
+        }
+    }
+
+    /// Choosing a column adopts that column's own default direction, the way
+    /// AO3 does when no direction is sent.
+    private var worksColumnBinding: Binding<AO3WorksSortColumn> {
+        Binding(
+            get: { worksSortDraft.column },
+            set: { worksSortDraft.select($0) }
+        )
+    }
+
+    private var worksCompletionChips: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(AO3WorksCompletion.allCases) { option in
+                Button {
+                    worksSortDraft.completion = option
+                } label: {
+                    SubjectChip(
+                        text: option.title,
+                        style: .pill(isSelected: worksSortDraft.completion == option),
+                        palette: theme.scopePalette
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.title)
+                .accessibilityAddTraits(worksSortDraft.completion == option ? [.isSelected] : [])
+            }
+        }
+        .padding(12)
     }
 
     private var form: some View {
@@ -150,9 +285,10 @@ struct AO3FilterPanel: View {
             // Group so .appThemedRows() reaches every section's rows (it doesn't
             // propagate from the Form container, only from a Group/Section/ForEach).
             Group {
+                worksSortSections
                 Section {
                     // Sort needs AO3 to re-order results, so it only appears when the panel
-                    // actually issues a query.
+                    // actually issues a query. Search's menu, not 1v's nine columns.
                     if mode == .search {
                         Picker("Sort by", selection: $filters.sort) {
                             ForEach(sortOptions) { Text($0.title).tag($0) }
