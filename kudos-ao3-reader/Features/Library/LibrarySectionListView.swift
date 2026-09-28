@@ -908,6 +908,15 @@ struct LibrarySectionListView: View {
                         Label("Unstar", systemImage: "star.slash")
                     }
                     .tint(.subjectFavoriteGold)
+                } else if kind == .history {
+                    // 1ah: "Remove clears it from history, which is the only
+                    // destructive thing this page can do." A hide marker, never a
+                    // delete — reading the work again brings it back.
+                    Button(role: .destructive) {
+                        WorkLifecycle.removeFromHistory(work, in: context)
+                    } label: {
+                        Label("Remove from History", systemImage: "clock.badge.xmark")
+                    }
                 } else if work.isQueueOnlyWork {
                     // Queue-only works keep a preserved EPUB and must never be hard-deleted
                     // by a generic Library swipe. Removing the queue membership is
