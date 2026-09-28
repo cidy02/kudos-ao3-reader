@@ -103,6 +103,7 @@ struct WritingTagsRow: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .minimumHitTarget()
                     .accessibilityLabel("Remove \(value)")
                 }
                 Button {
@@ -116,6 +117,7 @@ struct WritingTagsRow: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .minimumHitTarget()
                 .accessibilityLabel("Add \(title)")
             }
         }

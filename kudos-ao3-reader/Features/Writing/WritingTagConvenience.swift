@@ -6,13 +6,59 @@ import SwiftUI
 /// and keeps the order it was given, so the array after a drag is the posted
 /// field — `AO3TagListDiff.joined` does not sort.
 enum WritingTagReorder {
+    /// Drops `name` in front of `target`. Dropping on the last chip lands
+    /// after it, which is the only way a forward drag can make a chip last.
     static func move(_ names: inout [String], name: String, before target: String) {
-        guard name != target,
-              let from = names.firstIndex(of: name)
-        else { return }
+        guard name != target, let from = names.firstIndex(of: name) else { return }
+        let targetIndex = names.firstIndex(of: target)
+        let landsLast = names.last == target && targetIndex.map { from < $0 } == true
         names.remove(at: from)
+        if landsLast {
+            names.append(name)
+            return
+        }
         let destination = names.firstIndex(of: target) ?? names.endIndex
         names.insert(name, at: destination)
+    }
+
+    static func moveEarlier(_ names: inout [String], name: String) {
+        guard let index = names.firstIndex(of: name), index > names.startIndex else { return }
+        names.swapAt(names.index(before: index), index)
+    }
+
+    static func moveLater(_ names: inout [String], name: String) {
+        guard let index = names.firstIndex(of: name) else { return }
+        let next = names.index(after: index)
+        guard next < names.endIndex else { return }
+        names.swapAt(index, next)
+    }
+}
+
+// MARK: - Adding
+
+/// Exact-string uniqueness for the posted list. A different spelling is a
+/// different chip. Casefolding is for the recent list and for hiding a
+/// suggestion, not for refusing the add.
+enum WritingTagAddition {
+    struct Outcome: Equatable {
+        var values: [String]
+        /// Unchanged when the add is a no-op, so the field stays put.
+        var term: String
+        var recordedName: String?
+    }
+
+    static func apply(name: String, values: [String], term: String) -> Outcome {
+        let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, !values.contains(value) else {
+            return Outcome(values: values, term: term, recordedName: nil)
+        }
+        return Outcome(values: values + [value], term: "", recordedName: value)
+    }
+
+    static func excludesSuggestion(_ name: String, chosen: [String]) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return chosen.contains { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
     }
 }
 

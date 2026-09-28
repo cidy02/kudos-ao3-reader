@@ -104,4 +104,82 @@ struct WritingTagPickerTests {
             ).isEmpty
         )
     }
+
+    /// "Fluff" and "fluff" are both posted. Repeating the exact chip leaves
+    /// the field alone. Suggestions still hide a case-variant of a chosen tag.
+    @Test func exactSpellingsBothStayAndARepeatLeavesTheField() {
+        let variant = WritingTagAddition.apply(name: "fluff", values: ["Fluff"], term: "fluff")
+        #expect(variant.values == ["Fluff", "fluff"])
+        #expect(variant.term.isEmpty)
+        #expect(variant.recordedName == "fluff")
+
+        let same = WritingTagAddition.apply(name: "Fluff", values: ["Fluff"], term: "Fluff")
+        #expect(same.values == ["Fluff"])
+        #expect(same.term == "Fluff")
+        #expect(same.recordedName == nil)
+
+        let padded = WritingTagAddition.apply(name: "  Fluff  ", values: ["Fluff"], term: "  Fluff  ")
+        #expect(padded.values == ["Fluff"])
+        #expect(padded.term == "  Fluff  ")
+        #expect(padded.recordedName == nil)
+
+        let blank = WritingTagAddition.apply(name: "   ", values: ["Fluff"], term: "   ")
+        #expect(blank.values == ["Fluff"])
+        #expect(blank.term == "   ")
+
+        #expect(WritingTagAddition.excludesSuggestion("fluff", chosen: ["Fluff"]))
+        #expect(!WritingTagAddition.excludesSuggestion("Angst", chosen: ["Fluff"]))
+        #expect(!WritingTagAddition.excludesSuggestion("  ", chosen: ["Fluff"]))
+    }
+
+    /// Dragging onto the last chip used to insert in front of it, so the
+    /// dragged chip could not become last.
+    @Test func droppingOnTheLastChipPlacesTheDraggedChipLast() {
+        var names = ["Zukka", "Zutara", "Kataang"]
+        WritingTagReorder.move(&names, name: "Zukka", before: "Kataang")
+        #expect(names == ["Zutara", "Kataang", "Zukka"])
+
+        names = ["Zukka", "Zutara", "Kataang"]
+        WritingTagReorder.move(&names, name: "Zutara", before: "Kataang")
+        #expect(names == ["Zukka", "Kataang", "Zutara"])
+
+        names = ["Zukka", "Zutara", "Kataang"]
+        WritingTagReorder.move(&names, name: "Kataang", before: "Zutara")
+        #expect(names == ["Zukka", "Kataang", "Zutara"])
+    }
+
+    /// Add and remove stay at least 44pt, and the editor's remove mark is a
+    /// button of its own rather than a tap on the dragged chip.
+    @Test func addAndRemoveChipsKeepAMinimumHitTarget() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let form = try String(
+            contentsOf: root.appending(path: "kudos-ao3-reader/Features/Writing/WritingFormFields.swift"),
+            encoding: .utf8
+        )
+        let editor = try String(
+            contentsOf: root.appending(path: "kudos-ao3-reader/Features/Writing/WritingTagsEditor.swift"),
+            encoding: .utf8
+        )
+        #expect(form.contains(".minimumHitTarget()"))
+        #expect(editor.contains(".minimumHitTarget()"))
+        #expect(editor.contains("accessibilityLabel(\"Remove \\(value)\")"))
+        #expect(!editor.contains(".onTapGesture"))
+    }
+
+    @Test func accessibilityMovesAChipEarlierOrLater() {
+        var names = ["Zukka", "Zutara", "Kataang"]
+        WritingTagReorder.moveLater(&names, name: "Zukka")
+        #expect(names == ["Zutara", "Zukka", "Kataang"])
+        WritingTagReorder.moveLater(&names, name: "Zukka")
+        #expect(names == ["Zutara", "Kataang", "Zukka"])
+        WritingTagReorder.moveEarlier(&names, name: "Zukka")
+        #expect(names == ["Zutara", "Zukka", "Kataang"])
+
+        WritingTagReorder.moveEarlier(&names, name: "Zutara")
+        #expect(names == ["Zutara", "Zukka", "Kataang"])
+        WritingTagReorder.moveLater(&names, name: "Kataang")
+        #expect(names == ["Zutara", "Zukka", "Kataang"])
+    }
 }

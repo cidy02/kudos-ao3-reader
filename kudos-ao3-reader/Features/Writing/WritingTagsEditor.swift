@@ -168,36 +168,62 @@ struct WritingTagsEditor: View {
         .subjectPanel(cornerRadius: 12)
     }
 
-    /// Order is what AO3 posts. A drag moves that chip in front of the one it
-    /// is dropped on; a tap still removes it. The same gesture pair is the
+    /// Order is what AO3 posts. A drag lands in front of the chip it is dropped
+    /// on, and after it when that chip is last. The remove mark is its own
+    /// button, so a drag does not also delete. The same gestures are the
     /// system drag on macOS — nothing here is iOS-only.
     private var chosenChips: some View {
         FlowLayout(spacing: 8, rowSpacing: 8) {
             ForEach(values, id: \.self) { value in
-                SubjectChip(
-                    text: value,
-                    style: .pill(isSelected: false),
-                    trailingImage: "xmark",
-                    palette: palette
-                )
-                .contentShape(Capsule())
-                .onTapGesture { values.removeAll { $0 == value } }
-                .draggable(value)
-                .dropDestination(for: String.self) { dropped, _ in
-                    guard let name = dropped.first else { return false }
-                    var next = values
-                    WritingTagReorder.move(&next, name: name, before: value)
-                    values = next
-                    return true
-                }
-                .accessibilityLabel(value)
-                .accessibilityHint("Drag to reorder. Activate to remove.")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction(named: "Remove") {
-                    values.removeAll { $0 == value }
-                }
+                chosenChip(value)
             }
         }
+    }
+
+    private func chosenChip(_ value: String) -> some View {
+        HStack(spacing: 2) {
+            SubjectChip(
+                text: value,
+                style: .pill(isSelected: false),
+                palette: palette
+            )
+            .draggable(value)
+            .dropDestination(for: String.self) { dropped, _ in
+                guard let name = dropped.first else { return false }
+                var next = values
+                WritingTagReorder.move(&next, name: name, before: value)
+                values = next
+                return true
+            }
+            .accessibilityLabel(value)
+            .accessibilityHint("Drag to reorder.")
+            .accessibilityAction(named: "Move Earlier") {
+                reorder(value, later: false)
+            }
+            .accessibilityAction(named: "Move Later") {
+                reorder(value, later: true)
+            }
+            Button {
+                values.removeAll { $0 == value }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .opacity(0.75)
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel("Remove \(value)")
+        }
+    }
+
+    private func reorder(_ value: String, later: Bool) {
+        var next = values
+        if later {
+            WritingTagReorder.moveLater(&next, name: value)
+        } else {
+            WritingTagReorder.moveEarlier(&next, name: value)
+        }
+        values = next
     }
 
     /// Recently used, and tags from works already on screen. Both add; neither
@@ -216,6 +242,7 @@ struct WritingTagsEditor: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .minimumHitTarget()
                 .accessibilityLabel("Add \(name)")
             }
         }
@@ -223,7 +250,7 @@ struct WritingTagsEditor: View {
 
     private func recentNames(_ kind: AO3TagKind) -> [String] {
         recent.names(kind: kind).filter { name in
-            !values.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+            !WritingTagAddition.excludesSuggestion(name, chosen: values)
         }
     }
 
@@ -394,7 +421,9 @@ struct WritingTagsEditor: View {
             return
         }
         if let cached = cache[key] {
-            suggestions = cached.filter { !values.contains($0.name) }
+            suggestions = cached.filter {
+                !WritingTagAddition.excludesSuggestion($0.name, chosen: values)
+            }
             return
         }
         // Left standing rather than cleared: the stale list for a prefix of this
@@ -404,7 +433,9 @@ struct WritingTagsEditor: View {
             let loaded = try await AO3TagAutocomplete.suggest(kind: kind, term: term)
             guard !Task.isCancelled else { return }
             cache[key] = loaded
-            suggestions = loaded.filter { !values.contains($0.name) }
+            suggestions = loaded.filter {
+                !WritingTagAddition.excludesSuggestion($0.name, chosen: values)
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -415,15 +446,12 @@ struct WritingTagsEditor: View {
     }
 
     private func add(_ name: String) {
-        let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        if !values.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) {
-            values.append(value)
-        }
-        if let kind {
-            recent.record(value, kind: kind)
+        let outcome = WritingTagAddition.apply(name: name, values: values, term: term)
+        values = outcome.values
+        term = outcome.term
+        if let recorded = outcome.recordedName, let kind {
+            recent.record(recorded, kind: kind)
             recent.save(to: .standard)
         }
-        term = ""
     }
 }
