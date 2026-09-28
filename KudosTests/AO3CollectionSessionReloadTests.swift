@@ -304,6 +304,38 @@ struct AO3CollectionSessionReloadTests {
         ])
     }
 
+    @Test func theWholeIndexStopsAtItsCapAndOnAnEmptyPage() {
+        #expect(AO3CollectionsWholeIndex.nextPage(
+            after: AO3CollectionsWholeIndex.maximumPages,
+            reportedTotalPages: AO3CollectionsWholeIndex.maximumPages + 100,
+            pageWasEmpty: false
+        ) == nil)
+        #expect(AO3CollectionsWholeIndex.nextPage(
+            after: 2, reportedTotalPages: 10, pageWasEmpty: true
+        ) == nil)
+        #expect(AO3CollectionsWholeIndex.nextPage(
+            after: 2, reportedTotalPages: 10, pageWasEmpty: false
+        ) == 3)
+    }
+
+    @Test func filteredRefreshRestartsAtPageOneAndTheCrawlReusesIt() {
+        #expect(AO3CollectionsWholeIndex.refreshPage(currentPage: 4, needsWholeIndex: true) == 1)
+        #expect(AO3CollectionsWholeIndex.refreshPage(currentPage: 4, needsWholeIndex: false) == 4)
+        #expect(AO3CollectionsWholeIndex.canReusePageOne(
+            currentPage: 1, ownsScreen: true, listIsLoaded: true
+        ))
+        #expect(!AO3CollectionsWholeIndex.canReusePageOne(
+            currentPage: 2, ownsScreen: true, listIsLoaded: true
+        ))
+    }
+
+    @Test func collectionDeletionNotificationsTargetOnlyTheMatchingCollection() {
+        let notification = Notification(name: .ao3CollectionDeleted, object: "winter_fest")
+        #expect(notification.deletesCollection(slug: "winter_fest"))
+        #expect(!notification.deletesCollection(slug: "summer_fest"))
+        #expect(!notification.deletesCollection(slug: nil))
+    }
+
     /// Account A is on screen. Sign-out and the next login each bump the
     /// generation before status is signed-in, so those runs drop A's rows and
     /// must not fetch. The open-only filter is a client-side choice and stays.

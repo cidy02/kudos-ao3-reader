@@ -4,10 +4,16 @@ extension Notification.Name {
     static let ao3CollectionDeleted = Notification.Name("AO3CollectionDeleted")
 }
 
+extension Notification {
+    func deletesCollection(slug: String?) -> Bool {
+        guard let slug else { return false }
+        return name == .ao3CollectionDeleted && object as? String == slug
+    }
+}
+
 /// Navigation value for the collection form. `slug == nil` is New Collection.
 struct AO3CollectionFormDestination: Hashable {
     var slug: String?
-    var viewerIsOwner = false
 }
 
 /// Artboards **1bl** — AO3's New Collection and Edit Collection forms.
@@ -23,7 +29,6 @@ struct AO3CollectionFormDestination: Hashable {
 struct AO3CollectionFormView: View {
     /// Editing an existing collection, or creating one.
     let slug: String?
-    let viewerIsOwner: Bool
     var onDeleted: (() -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
@@ -44,12 +49,10 @@ struct AO3CollectionFormView: View {
     @State private var nameAvailability: AO3CollectionNameAvailability?
     @State private var nameCheckTask: Task<Void, Never>?
     @State private var showingDeleteConfirmation = false
+    @State private var isDeleting = false
 
-    init(
-        slug: String?, viewerIsOwner: Bool = false, onDeleted: (() -> Void)? = nil
-    ) {
+    init(slug: String?, onDeleted: (() -> Void)? = nil) {
         self.slug = slug
-        self.viewerIsOwner = viewerIsOwner
         self.onDeleted = onDeleted
     }
 
@@ -396,8 +399,8 @@ struct AO3CollectionFormView: View {
         return hasTitle && hasName && nameAvailability != .taken && nameAvailability != .invalid
     }
 
-    /// Closing remains on AO3; deletion is shown only when the collection index or
-    /// show page marked this reader as an owner.
+    /// Closing remains on AO3; deletion is shown only when the fetched form carries
+    /// AO3's owner-only delete control.
     private var openOnAO3Card: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Collection actions")
@@ -412,13 +415,17 @@ struct AO3CollectionFormView: View {
                 }
                     .buttonStyle(.borderless)
                     .font(.system(size: 13, weight: .semibold))
-                if viewerIsOwner {
+                if AO3CollectionDeleteDecision.canStart(
+                    allowsDelete: form?.allowsDelete == true,
+                    isDeleting: false,
+                    isSaving: false
+                ) {
                     Button("Delete Collection", role: .destructive) {
                         showingDeleteConfirmation = true
                     }
                         .buttonStyle(.borderless)
                         .font(.system(size: 13, weight: .semibold))
-                        .disabled(phase == .saving)
+                        .disabled(phase == .saving || isDeleting)
                 }
             }
         }
@@ -535,7 +542,14 @@ struct AO3CollectionFormView: View {
 // Out of the struct body only for its length; `private` state is file-scoped.
 extension AO3CollectionFormView {
     private func deleteCollection() async {
-        guard let slug, let loaded = formGeneration else { return }
+        guard AO3CollectionDeleteDecision.canStart(
+            allowsDelete: form?.allowsDelete == true,
+            isDeleting: isDeleting,
+            isSaving: phase == .saving
+        ),
+              let slug, let loaded = formGeneration else { return }
+        isDeleting = true
+        defer { isDeleting = false }
         let generation = AO3CollectionSessionReload.formSaveGeneration(
             loaded: loaded, loadedUsername: formUsername,
             current: auth.sessionGeneration, currentUsername: auth.username

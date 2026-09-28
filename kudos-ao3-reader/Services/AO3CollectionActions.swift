@@ -13,6 +13,7 @@ import Foundation
 enum AO3CollectionWriteError: LocalizedError, Equatable {
     case notSignedIn
     case noCSRFToken
+    case deleteUnavailable
     case rejected(String)
     case unconfirmed
     case emptyRejectReason
@@ -22,6 +23,8 @@ enum AO3CollectionWriteError: LocalizedError, Equatable {
         switch self {
         case .notSignedIn: "Log in to AO3 first."
         case .noCSRFToken: "Couldn't prepare the request. Try again, or open the collection on AO3."
+        case .deleteUnavailable:
+            "AO3 did not offer the collection delete confirmation. It was not deleted."
         case let .rejected(reason): reason
         case .unconfirmed:
             "AO3 replied but didn't confirm the change went through. Check on AO3 before trying again."
@@ -102,8 +105,11 @@ extension AO3AuthService {
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         guard let action = AO3CollectionURL.show(slug: slug) else { throw AO3Error.parse }
         let referer = AO3CollectionURL.confirmDelete(slug: slug)
-        let (_, token) = try await fetchCSRFPage(at: referer, using: client)
+        let (html, _) = try await fetchCSRFPage(at: referer, using: client)
         try requireSessionGeneration(expectedGeneration)
+        guard let token = AO3Client.collectionDestroyToken(from: html) else {
+            throw AO3CollectionWriteError.deleteUnavailable
+        }
         let request = try writeRequest(
             to: action,
             body: Self.formEncoded([

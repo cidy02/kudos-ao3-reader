@@ -203,6 +203,24 @@ nonisolated struct AO3CollectionsFilterDraft: Equatable, Sendable {
 /// Appends one fetched page only while the list load and AO3 session still
 /// match. `append(contentsOf:)` retains AO3's page and row order.
 enum AO3CollectionsWholeIndex {
+    static let maximumPages = 25
+
+    static func refreshPage(currentPage: Int, needsWholeIndex: Bool) -> Int {
+        needsWholeIndex ? 1 : currentPage
+    }
+
+    static func canReusePageOne(currentPage: Int, ownsScreen: Bool, listIsLoaded: Bool) -> Bool {
+        currentPage == 1 && ownsScreen && listIsLoaded
+    }
+
+    static func nextPage(
+        after page: Int, reportedTotalPages: Int, pageWasEmpty: Bool
+    ) -> Int? {
+        guard !pageWasEmpty else { return nil }
+        let next = page + 1
+        return next <= min(max(reportedTotalPages, 1), maximumPages) ? next : nil
+    }
+
     // Lint: the six values are `shouldApplyLoad`'s four generations plus the page.
     @discardableResult
     static func append( // swiftlint:disable:this function_parameter_count

@@ -28,6 +28,7 @@ struct AO3CollectionItemsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dismiss) private var dismiss
 
     @State private var tab: AO3CollectionItemTab
     @State private var items: [AO3CollectionItem] = []
@@ -214,6 +215,12 @@ struct AO3CollectionItemsView: View {
             }
         }
         .refreshable { await load(page: currentPage, replacing: false) }
+        .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionDeleted)) { notification in
+            guard notification.deletesCollection(slug: slug) else { return }
+            loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+            staging.clearAll()
+            dismiss()
+        }
     }
 
     // MARK: Header

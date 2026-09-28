@@ -668,8 +668,10 @@ extension AO3Client {
             isAnonymous: flags.anonymous,
             showRandom: isChecked(form, name: AO3CollectionParam.showRandom),
             emailNotify: isChecked(form, name: AO3CollectionParam.emailNotify),
+            emailNotifyIsPresent: hasControl(form, name: AO3CollectionParam.emailNotify),
             challengeType: selectedValue(form, name: AO3CollectionParam.challengeType),
             challengeOptions: selectOptions(form, name: AO3CollectionParam.challengeType),
+            allowsDelete: ((try? doc.select("a[href*=\"confirm_delete\"], form.simple.destroy").isEmpty()) == false),
             preferenceID: inputValue(form, AO3CollectionParam.preferenceID),
             introduction: textAreaValue(form, AO3CollectionParam.intro),
             faq: textAreaValue(form, AO3CollectionParam.faq),
@@ -698,6 +700,15 @@ extension AO3Client {
         return result
     }
 
+    static func collectionDestroyToken(from html: String) -> String? {
+        guard let document = try? SwiftSoup.parse(html),
+              let form = try? document.select("form.simple.destroy").first(),
+              let token = try? form.select("input[name=authenticity_token]").first()?.attr("value"),
+              !token.isEmpty
+        else { return nil }
+        return token
+    }
+
     // MARK: - Form encoding helpers
 
     static func collectionFormParameters(_ form: AO3CollectionForm) -> [(String, String)] {
@@ -714,13 +725,11 @@ extension AO3Client {
             (AO3CollectionParam.tagString, form.tagString),
             (AO3CollectionParam.multifandom, form.isMultifandom ? "1" : "0"),
             (AO3CollectionParam.deleteIcon, form.deleteIcon ? "1" : "0"),
-            (AO3CollectionParam.challengeType, form.challengeType),
             (AO3CollectionParam.moderated, form.isModerated ? "1" : "0"),
             (AO3CollectionParam.closed, form.isClosed ? "1" : "0"),
             (AO3CollectionParam.unrevealed, form.isUnrevealed ? "1" : "0"),
             (AO3CollectionParam.anonymous, form.isAnonymous ? "1" : "0"),
             (AO3CollectionParam.showRandom, form.showRandom ? "1" : "0"),
-            (AO3CollectionParam.emailNotify, form.emailNotify ? "1" : "0"),
             (AO3CollectionParam.intro, form.introduction),
             (AO3CollectionParam.faq, form.faq),
             (AO3CollectionParam.rules, form.rules),
@@ -732,6 +741,12 @@ extension AO3Client {
         }
         if !form.preferenceID.isEmpty {
             params.append((AO3CollectionParam.preferenceID, form.preferenceID))
+        }
+        if !form.challengeOptions.isEmpty {
+            params.append((AO3CollectionParam.challengeType, form.challengeType))
+        }
+        if form.emailNotifyIsPresent {
+            params.append((AO3CollectionParam.emailNotify, form.emailNotify ? "1" : "0"))
         }
         if !form.profileID.isEmpty {
             params.append((AO3CollectionParam.profileID, form.profileID))
@@ -931,6 +946,11 @@ extension AO3Client {
         return (try? input.hasAttr("checked")) ?? false
     }
 
+    private static func hasControl(_ root: Element, name: String) -> Bool {
+        let nodes = (try? root.select("input, select, textarea").array()) ?? []
+        return nodes.contains { (try? $0.attr("name")) == name }
+    }
+
     static func isChecked(_ root: Element, nameSuffix: String) -> Bool {
         guard let input = checkbox(root, nameSuffix: nameSuffix) else { return false }
         return isChecked(input)
@@ -961,8 +981,9 @@ extension AO3Client {
     }
 
     private static func selectedOptionValue(_ select: Element) -> String {
-        if let selected = try? select.select("option[selected]").first()?.attr("value"), !selected.isEmpty {
-            return selected
+        let selected = try? select.select("option[selected]").first()
+        if let selected {
+            return (try? selected.attr("value")) ?? ""
         }
         return (try? select.select("option").first()?.attr("value")) ?? ""
     }

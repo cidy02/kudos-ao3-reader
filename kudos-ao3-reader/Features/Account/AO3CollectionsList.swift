@@ -27,6 +27,7 @@ struct AO3CollectionsList: View {
     @State private var wholeIndexSessionGeneration: Int?
     @State private var wholeIndexPhase: Phase = .idle
     @State private var wholeIndexRetry = 0
+    @State private var wholeIndexLoadGeneration = 0
 
     private enum Phase: Equatable { case idle, loading, loaded, failed(String) }
 
@@ -106,7 +107,6 @@ struct AO3CollectionsList: View {
         .navigationDestination(item: $editingCollection) { destination in
             AO3CollectionFormView(
                 slug: destination.slug,
-                viewerIsOwner: destination.viewerIsOwner,
                 onDeleted: { editingCollection = nil }
             )
         }
@@ -143,7 +143,8 @@ struct AO3CollectionsList: View {
         }
         .sheet(isPresented: $showLogin) { AO3LoginView() }
         .onReceive(NotificationCenter.default.publisher(for: .ao3CollectionDeleted)) { notification in
-            guard let slug = notification.object as? String else { return }
+            guard let slug = notification.object as? String,
+                  notification.deletesCollection(slug: slug) else { return }
             refreshAfterDelete(slug: slug)
         }
         // A failed page change (page 2+, say) while `collections` still holds
@@ -237,7 +238,17 @@ struct AO3CollectionsList: View {
         .cardList()
         .subjectScreenWash(palette: palette)
         .refreshable {
-            if !filters.needsWholeIndex {
+            if filters.needsWholeIndex {
+                wholeIndexLoadGeneration = AO3CollectionSessionReload.nextLoadGeneration(
+                    wholeIndexLoadGeneration
+                )
+                wholeIndexSessionGeneration = nil
+                wholeIndexPhase = .idle
+                await load(page: AO3CollectionsWholeIndex.refreshPage(
+                    currentPage: currentPage, needsWholeIndex: true
+                ))
+                wholeIndexRetry += 1
+            } else {
                 await load(page: currentPage)
             }
         }
@@ -272,10 +283,7 @@ struct AO3CollectionsList: View {
     }
 
     private func editDestination(for collection: AO3Collection) -> AO3CollectionFormDestination {
-        AO3CollectionFormDestination(
-            slug: collection.name,
-            viewerIsOwner: collection.viewerIsOwner
-        )
+        AO3CollectionFormDestination(slug: collection.name)
     }
 
     private func itemsDestination(for collection: AO3Collection) -> AO3CollectionItemsDestination {
@@ -414,6 +422,9 @@ struct AO3CollectionsList: View {
         wholeIndex = []
         wholeIndexSessionGeneration = nil
         wholeIndexPhase = .idle
+        wholeIndexLoadGeneration = AO3CollectionSessionReload.nextLoadGeneration(
+            wholeIndexLoadGeneration
+        )
     }
 
     /// The delete form can be reached from this list or through collection
@@ -424,6 +435,9 @@ struct AO3CollectionsList: View {
         wholeIndex.removeAll { $0.name == slug }
         guard auth.isLoggedIn else { return }
         if filters.needsWholeIndex {
+            wholeIndexLoadGeneration = AO3CollectionSessionReload.nextLoadGeneration(
+                wholeIndexLoadGeneration
+            )
             wholeIndexSessionGeneration = nil
             wholeIndexPhase = .idle
             wholeIndexRetry += 1
@@ -511,15 +525,29 @@ extension AO3CollectionsList {
               let username = auth.username
         else { return }
 
-        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
-        let generation = loadGeneration
+        wholeIndexLoadGeneration = AO3CollectionSessionReload.nextLoadGeneration(
+            wholeIndexLoadGeneration
+        )
+        let generation = wholeIndexLoadGeneration
         wholeIndexPhase = .loading
-        var accumulated: [AO3Collection] = []
-        var page = 1
-        var lastPage = 1
+        defer {
+            if generation == wholeIndexLoadGeneration, wholeIndexPhase == .loading {
+                wholeIndexPhase = .idle
+            }
+        }
+        let canReusePageOne = AO3CollectionsWholeIndex.canReusePageOne(
+            currentPage: currentPage,
+            ownsScreen: sessionOwnsScreen,
+            listIsLoaded: phase == .loaded
+        )
+        var accumulated = canReusePageOne ? collections : []
+        var page = canReusePageOne ? 2 : 1
+        var reportedTotalPages = canReusePageOne ? totalPages : 1
 
         do {
-            repeat {
+            while page <= min(
+                max(reportedTotalPages, 1), AO3CollectionsWholeIndex.maximumPages
+            ) {
                 try Task.checkCancellation()
                 guard let url = AO3Client.collectionsURL(username: username, page: page) else {
                     throw AO3Error.network("Couldn't build the collections page address.")
@@ -531,18 +559,23 @@ extension AO3CollectionsList {
                     result,
                     to: &accumulated,
                     capturedLoadGeneration: generation,
-                    loadGeneration: loadGeneration,
+                    loadGeneration: wholeIndexLoadGeneration,
                     capturedSessionGeneration: expectedSessionGeneration,
                     sessionGeneration: auth.sessionGeneration
                 ) else { return }
-                lastPage = max(result.currentPage, max(result.totalPages, 1))
-                page += 1
-            } while page <= lastPage
+                reportedTotalPages = max(reportedTotalPages, result.currentPage, result.totalPages)
+                guard let next = AO3CollectionsWholeIndex.nextPage(
+                    after: page,
+                    reportedTotalPages: reportedTotalPages,
+                    pageWasEmpty: result.collections.isEmpty
+                ) else { break }
+                page = next
+            }
 
             guard filters.needsWholeIndex,
                   AO3CollectionSessionReload.shouldApplyLoad(
                       capturedLoadGeneration: generation,
-                      loadGeneration: loadGeneration,
+                      loadGeneration: wholeIndexLoadGeneration,
                       capturedSessionGeneration: expectedSessionGeneration,
                       sessionGeneration: auth.sessionGeneration
                   )
@@ -551,7 +584,7 @@ extension AO3CollectionsList {
             wholeIndexSessionGeneration = expectedSessionGeneration
             wholeIndexPhase = .loaded
         } catch AO3Error.authenticationRequired {
-            guard generation == loadGeneration else { return }
+            guard generation == wholeIndexLoadGeneration else { return }
             guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else {
                 return
             }
@@ -559,7 +592,7 @@ extension AO3CollectionsList {
         } catch let error where error is CancellationError || (error as? URLError)?.code == .cancelled {
             if AO3CollectionSessionReload.shouldApplyLoad(
                 capturedLoadGeneration: generation,
-                loadGeneration: loadGeneration,
+                loadGeneration: wholeIndexLoadGeneration,
                 capturedSessionGeneration: expectedSessionGeneration,
                 sessionGeneration: auth.sessionGeneration
             ) {
@@ -568,7 +601,7 @@ extension AO3CollectionsList {
         } catch let error as AO3Error {
             guard AO3CollectionSessionReload.shouldApplyLoad(
                 capturedLoadGeneration: generation,
-                loadGeneration: loadGeneration,
+                loadGeneration: wholeIndexLoadGeneration,
                 capturedSessionGeneration: expectedSessionGeneration,
                 sessionGeneration: auth.sessionGeneration
             ) else { return }
@@ -576,7 +609,7 @@ extension AO3CollectionsList {
         } catch {
             guard AO3CollectionSessionReload.shouldApplyLoad(
                 capturedLoadGeneration: generation,
-                loadGeneration: loadGeneration,
+                loadGeneration: wholeIndexLoadGeneration,
                 capturedSessionGeneration: expectedSessionGeneration,
                 sessionGeneration: auth.sessionGeneration
             ) else { return }

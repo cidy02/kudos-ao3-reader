@@ -251,8 +251,10 @@ nonisolated struct AO3CollectionForm: Hashable, Sendable {
     var isAnonymous: Bool
     var showRandom: Bool
     var emailNotify: Bool
+    var emailNotifyIsPresent: Bool
     var challengeType: String
     var challengeOptions: [AO3FormOption]
+    var allowsDelete: Bool
     var preferenceID: String
     // Profile
     var introduction: String
@@ -300,8 +302,10 @@ nonisolated struct AO3CollectionForm: Hashable, Sendable {
             isAnonymous: false,
             showRandom: false,
             emailNotify: false,
+            emailNotifyIsPresent: false,
             challengeType: "",
             challengeOptions: [],
+            allowsDelete: false,
             preferenceID: "",
             introduction: "",
             faq: "",
@@ -353,8 +357,10 @@ nonisolated struct AO3CollectionForm: Hashable, Sendable {
             && lhs.isAnonymous == rhs.isAnonymous
             && lhs.showRandom == rhs.showRandom
             && lhs.emailNotify == rhs.emailNotify
+            && lhs.emailNotifyIsPresent == rhs.emailNotifyIsPresent
             && lhs.challengeType == rhs.challengeType
             && lhs.challengeOptions == rhs.challengeOptions
+            && lhs.allowsDelete == rhs.allowsDelete
             && lhs.preferenceID == rhs.preferenceID
             && lhs.introduction == rhs.introduction
             && lhs.faq == rhs.faq
