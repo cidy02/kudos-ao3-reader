@@ -237,6 +237,17 @@ struct PersistenceSyncTests {
             dropping: "legacyReaderProgress"
         )
         #expect(noise.legacyReaderProgress == 0.42)
+
+        // A Mac-only read has no locator here; the other device's locator moved.
+        let macOnlyContainer = try container()
+        let macOnly = try restore(
+            progressWork(mac: nil, locatorTotal: 0.8, at: 200),
+            over: progressWork(mac: 0.42, locatorTotal: nil, at: 100),
+            in: macOnlyContainer.mainContext,
+            dropping: "legacyReaderProgress"
+        )
+        #expect(macOnly.legacyReaderProgress == nil)
+        #expect(macOnly.publicationProgress == 0.8)
     }
 
     @Test func clearedMacPercentIsExportedAsNull() throws {
