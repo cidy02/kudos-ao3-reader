@@ -43,144 +43,6 @@ struct WorksScopeSegments: View {
     }
 }
 
-/// Artboard **1v**: sort and filter as a sheet over the list.
-///
-/// The nine sort fields collapse into a menu rather than a nine-row list, which
-/// is 1v's own instruction — direction stays a segmented pair and completion
-/// stays chips, so each kind of choice keeps one grammar. Cancel and Apply are
-/// icon-only to match the filter popup elsewhere in the app.
-///
-/// The sheet edits a copy and hands it back only on Apply. A live binding would
-/// refetch from AO3 on every tap of a nine-item menu.
-struct WorksSortSheet: View {
-    let initial: AO3WorksSort
-    let onApply: (AO3WorksSort) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(ThemeManager.self) private var theme
-    @State private var draft: AO3WorksSort
-
-    init(initial: AO3WorksSort, onApply: @escaping (AO3WorksSort) -> Void) {
-        self.initial = initial
-        self.onApply = onApply
-        self._draft = State(initialValue: initial)
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                // One `List` row per control, as segments of one card. A
-                // `Section`'s children are separate rows, so `.subjectPanel()`
-                // and `.pageBodyRow` on the `Section` reached each of them: the
-                // card drew as three panels — two rows and a stray hairline —
-                // each with its own 18pt gap above it.
-                Section {
-                    SubjectFormRow(label: "Sort by", arrangement: .control) {
-                        Menu {
-                            Picker("Sort by", selection: sortColumnBinding) {
-                                ForEach(AO3WorksSort.allColumns) { column in
-                                    Text(column.title).tag(column)
-                                }
-                            }
-                            .labelsHidden()
-                        } label: {
-                            Text(draft.column.title)
-                                .font(.system(size: 14))
-                        }
-                    }
-                    .panelSegment(0, of: 2, gutter: SubjectMetrics.accountGutter)
-
-                    SubjectFormRow(label: "Direction", arrangement: .control) {
-                        Picker("Direction", selection: $draft.direction) {
-                            ForEach(AO3WorksSortDirection.allCases) { direction in
-                                Text(direction.title).tag(direction)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: 190)
-                    }
-                    .panelSegment(1, of: 2, gutter: SubjectMetrics.accountGutter)
-                }
-
-                Section {
-                    completionChips
-                        .subjectPanel()
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                } header: {
-                    SectionRuleHeader(title: "Completion")
-                        .pageBodyRow(top: 18, gutter: 0)
-                } footer: {
-                    Text("Completion is applied by AO3 rather than to the page already "
-                        + "loaded, so it counts every match across every page.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary.opacity(0.7))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                }
-            }
-            .cardList()
-            .navigationTitle("Sort and filter")
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .subjectScreenWash(palette: theme.scopePalette)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                        }
-                        .accessibilityLabel("Cancel")
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button {
-                            onApply(draft)
-                            dismiss()
-                        } label: {
-                            Image(systemName: "checkmark")
-                        }
-                        .accessibilityLabel("Apply")
-                        .disabled(draft == initial)
-                    }
-                }
-        }
-    }
-
-    /// Choosing a column adopts that column's own default direction, the way AO3
-    /// does when no direction is sent — so this goes through `select` rather
-    /// than assigning `column` and leaving a stale direction behind.
-    private var sortColumnBinding: Binding<AO3WorksSortColumn> {
-        Binding(
-            get: { draft.column },
-            set: { draft.select($0) }
-        )
-    }
-
-    private var completionChips: some View {
-        FlowLayout(spacing: 8) {
-            ForEach(AO3WorksCompletion.allCases) { option in
-                Button {
-                    draft.completion = option
-                } label: {
-                    SubjectChip(
-                        text: option.title,
-                        style: .pill(isSelected: draft.completion == option),
-                        palette: theme.scopePalette
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(option.title)
-                .accessibilityAddTraits(draft.completion == option ? [.isSelected] : [])
-            }
-        }
-        .padding(12)
-    }
-}
-
 /// 1u's segment control and 1v's sort funnel, as a section that sits above the
 /// works list.
 ///
@@ -201,7 +63,6 @@ struct AO3AuthorWorksScopeSection: View {
     var onWillChange: () -> Void = {}
 
     @Environment(AO3AuthService.self) private var auth
-    @State private var showingSort = false
     @State private var showingFilters = false
 
     var body: some View {
@@ -212,14 +73,12 @@ struct AO3AuthorWorksScopeSection: View {
                         .padding(.horizontal, CardListMetrics.sideMargin
                             + CardListMetrics.innerHorizontal)
                 }
-                .sheet(isPresented: $showingSort) { sortSheet }
-                .filterPanelPresentation(isPresented: $showingFilters) { refinePanel }
+                .filterPanelPresentation(isPresented: $showingFilters) { sortAndFilterSheet }
             } else {
                 Section {
                     controls.cardRow()
                 }
-                .sheet(isPresented: $showingSort) { sortSheet }
-                .filterPanelPresentation(isPresented: $showingFilters) { refinePanel }
+                .filterPanelPresentation(isPresented: $showingFilters) { sortAndFilterSheet }
             }
         }
     }
@@ -230,28 +89,32 @@ struct AO3AuthorWorksScopeSection: View {
                 WorksScopeSegments(scope: scopeBinding)
             }
             Spacer(minLength: 0)
-            refineButton
-            sortButton
+            sortAndFilterButton
         }
     }
 
-    /// Refine sits beside the sort control rather than inside its sheet. 1v draws
-    /// both on one surface and merging them is the right end state, but the two
-    /// carry different costs — a sort change refetches from AO3, these facets
-    /// narrow pages already parsed — and the panel that renders every facet
-    /// correctly already exists. Kept separate until that panel is redesigned to
-    /// 1au's card grammar.
-    private var refineButton: some View {
+    /// One funnel. The badge counts both halves: the sort, which refetches, and
+    /// the facets, which narrow the loaded page. Clear still drops only the
+    /// facets — the sort has no clear of its own, and a long-press that reset
+    /// it would refetch a list the reader had not asked to put back.
+    private var sortAndFilterButton: some View {
         FilterButton(
-            filtersActive: model.worksFilters.refineActiveCount > 0,
+            filtersActive: sheetActiveCount > 0,
             showingFilters: $showingFilters,
-            filterHelp: "Refine the works on this page",
-            onClearFilters: { model.applyWorksFilters(AO3SearchFilters()) },
-            badgeCount: model.worksFilters.refineActiveCount
+            filterHelp: "Sort and filter the works on this page",
+            onClearFilters: model.worksFilters.refineActiveCount > 0
+                ? { model.applyWorksFilters(AO3SearchFilters()) }
+                : nil,
+            badgeCount: sheetActiveCount
         )
+        .accessibilityLabel("Sort and filter")
     }
 
-    private var refinePanel: some View {
+    private var sheetActiveCount: Int {
+        model.worksSort.activeCount + model.worksFilters.refineActiveCount
+    }
+
+    private var sortAndFilterSheet: some View {
         AO3FilterPanel(
             filters: filtersBinding,
             mode: .refine,
@@ -260,14 +123,19 @@ struct AO3AuthorWorksScopeSection: View {
             onReset: { model.applyWorksFilters(AO3SearchFilters()) },
             // The same array `AO3AuthorWorksSection` narrows, so 1au's match line
             // and the list behind it cannot disagree.
-            refineSource: model.works
+            refineSource: model.works,
+            worksSort: model.worksSort,
+            onApplyWorksSort: { sort in
+                onWillChange()
+                model.applyWorksSort(sort, auth: auth)
+            }
         )
         .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
     }
 
     /// Writes straight through to the model. No draft copy, unlike the sort
-    /// sheet: applying a facet costs no request, so the match line and the list
-    /// can both move as the reader taps.
+    /// half of the same sheet: applying a facet costs no request, so the match
+    /// line and the list can both move as the reader taps.
     private var filtersBinding: Binding<AO3SearchFilters> {
         Binding(
             get: { model.worksFilters },
@@ -276,42 +144,6 @@ struct AO3AuthorWorksScopeSection: View {
                 model.applyWorksFilters(filters)
             }
         )
-    }
-
-    /// Sort takes the up/down arrows and leaves the funnel to Refine beside it.
-    /// Both drew `line.3.horizontal.decrease` when Refine arrived, which put two
-    /// identical glyphs side by side with nothing to tell them apart.
-    ///
-    /// ponytail: 1v draws ONE control for both, and merging them is the right end
-    /// state — the count would then ride on a single funnel as its prose says.
-    /// That needs the redesigned panel to host AO3's nine sort fields, so until
-    /// then two legible controls beat one ambiguous pair.
-    private var sortButton: some View {
-        Button {
-            showingSort = true
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "arrow.up.arrow.down")
-                if model.worksSort.activeCount > 0 {
-                    Text("\(model.worksSort.activeCount)")
-                        .font(.system(size: 11, weight: .semibold))
-                        .monospacedDigit()
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .minimumHitTarget()
-        .accessibilityLabel("Sort and filter")
-        .accessibilityValue(model.worksSort.activeCount > 0
-            ? "\(model.worksSort.activeCount) active"
-            : "default")
-    }
-
-    private var sortSheet: some View {
-        WorksSortSheet(initial: model.worksSort) { sort in
-            onWillChange()
-            model.applyWorksSort(sort, auth: auth)
-        }
     }
 
     private var scopeBinding: Binding<AO3AuthorRoute.Content> {
