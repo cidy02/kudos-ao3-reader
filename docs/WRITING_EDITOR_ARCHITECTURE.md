@@ -241,6 +241,14 @@ The editor's count SHOULD match (OD3). E1 keeps the current whitespace count, mo
 the main thread. E2 implements AO3's algorithm once, with shared fixtures, and each
 platform's HTML mode ports it.
 
+**E2's Swift counter is done (T-279):** `AO3WordCounter` (`Models/AO3WordCounter.swift`)
+implements the five steps over SwiftSoup's text nodes, counted per node as AO3 does. The
+editor's rule reads it through `WritingWordCount`, off the main thread at checkpoints. The
+golden fixtures are `KudosTests/AO3WordCounterTests.swift` (hyphens and apostrophes, `--`,
+Han/Hiragana/Katakana/Thai, Hangul, mixed scripts, attributes and comments, entities,
+empty). `lib/word_counter.rb` itself was not in the local otwarchive copy, so the port
+follows this section; an Android port should share the fixtures.
+
 ---
 
 ## 4. Alternatives rejected, and why
