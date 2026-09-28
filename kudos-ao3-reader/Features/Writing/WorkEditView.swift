@@ -139,6 +139,7 @@ struct WorkEditView: View {
             }
         }
         .cardList()
+        .environment(\.writingEditedWorkID, form.workID)
         .disabled(isSaving || isPosting)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         #if os(macOS)
@@ -444,7 +445,9 @@ struct WorkEditView: View {
             // editable in the form above this row.
             SubjectFormRow(label: "Edit tags", value: "", showsDisclosure: true)
                 .subjectRowNavigation(accessibilityLabel: "Edit tags") {
-                    WritingTagsDestination(workID: workID) { needsTagRefresh = true }
+                    WritingTagsDestination(workID: workID, workTitle: form.title) {
+                        needsTagRefresh = true
+                    }
                 }
                 .panelSegment(afterNotes + 2, of: count, gutter: gutter)
         }
