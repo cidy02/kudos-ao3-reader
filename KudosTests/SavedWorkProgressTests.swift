@@ -169,6 +169,27 @@ struct SavedWorkProgressTests {
         #expect(reading.publicationProgress == 0.7)
     }
 
+    /// The open stamp and a close whose locator string did not change. Both go
+    /// through `ReadiumSessionStamp`, which is what `ReadiumReaderView` calls.
+    /// `applyDebouncedReadiumLocator` is a different path and stays out of this.
+    @Test func openStampAndUnchangedLocatorShelfFlushKeepTheMacPercent() {
+        let reading = work()
+        reading.legacyReaderProgress = 0.7
+        reading.readiumLocator = Self.readiumLocator(total: 0.2)
+        let opened = Date(timeIntervalSince1970: 1_000)
+        ReadiumSessionStamp.noteOpened(reading, at: opened)
+        #expect(reading.legacyReaderProgress == 0.7)
+        #expect(reading.lastReadDate == opened)
+        #expect(reading.readiumLocator == Self.readiumLocator(total: 0.2))
+
+        let closed = Date(timeIntervalSince1970: 2_000)
+        ReadiumSessionStamp.noteUnchangedLocatorShelf(reading, at: closed)
+        #expect(reading.legacyReaderProgress == 0.7)
+        #expect(reading.lastReadDate == closed)
+        #expect(reading.progressModifiedAt == closed)
+        #expect(reading.readiumLocator == Self.readiumLocator(total: 0.2))
+    }
+
     // MARK: readingState — one partition for the whole reading lifecycle
 
     @Test func readingStatePartitionsTheLifecycle() {

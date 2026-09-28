@@ -79,12 +79,17 @@ final class ReaderProgressBridge {
 
     private var lastPersistedFraction: Double?
     private var lastPersistAt: Date?
-    /// Where the session opened. The card percent waits until the reader leaves
-    /// it: another chapter, or reading forward past the opening fraction. Not
-    /// backward — the restore itself lands at or before it (paged floors to a
-    /// page, scrolled clamps to the last screen), so a lower report can be layout.
+    /// Where the session opened. The card percent stays until the reader leaves
+    /// the restore landing: another chapter, or any later change of at least
+    /// `minPersistDelta` in either direction. Paged mode posts page 1 before
+    /// `readerRestore`; that pair is one settle, not a move.
     private var opening: (spine: Int, fraction: Double)?
     private var hasMoved = false
+    /// Fraction the restore landing settled on. Nil while a page-1 prelude is
+    /// still waiting for `readerRestore`.
+    private var settledFraction: Double?
+    /// Paged layout posts fraction 0 before the host calls `readerRestore`.
+    private var awaitingRestoredPage = false
 
     /// Seeds session memory from the persisted position (the work's saved
     /// chapter + fraction) before the first chapter load, so reopening
@@ -101,7 +106,12 @@ final class ReaderProgressBridge {
     func beginChapter(spine: Int) -> Double {
         let restore = fractionBySpine[spine] ?? 0
         if let opening {
-            hasMoved = hasMoved || spine != opening.spine
+            if spine != opening.spine { hasMoved = true }
+            // A later load is outside the original page-1 / readerRestore pair.
+            awaitingRestoredPage = false
+            if let settled = settledFraction, abs(restore - settled) >= Self.minPersistDelta {
+                hasMoved = true
+            }
         } else {
             opening = (spine, restore)
         }
@@ -123,7 +133,36 @@ final class ReaderProgressBridge {
         let clamped = min(max(fraction, 0), 1)
         currentFraction = clamped
         fractionBySpine[spine] = clamped
-        if let opening, clamped >= opening.fraction + Self.minPersistDelta { hasMoved = true }
+        guard let opening, !hasMoved else { return }
+        noteMovement(clamped, openingFraction: opening.fraction)
+    }
+
+    /// The landing settles before a later move counts. A leading 0 while the
+    /// open is away from the top is page 1 posted before `readerRestore`, not
+    /// a scroll back to the start.
+    private func noteMovement(_ fraction: Double, openingFraction: Double) {
+        if awaitingRestoredPage {
+            awaitingRestoredPage = false
+            finishLanding(fraction, openingFraction: openingFraction)
+            return
+        }
+        if let settled = settledFraction {
+            if abs(fraction - settled) >= Self.minPersistDelta { hasMoved = true }
+            return
+        }
+        if fraction < Self.minPersistDelta, openingFraction >= Self.minPersistDelta {
+            awaitingRestoredPage = true
+            return
+        }
+        finishLanding(fraction, openingFraction: openingFraction)
+    }
+
+    private func finishLanding(_ fraction: Double, openingFraction: Double) {
+        if fraction >= openingFraction + Self.minPersistDelta {
+            hasMoved = true
+        } else {
+            settledFraction = fraction
+        }
     }
 
     /// The fraction to write for an ordinary streamed update, or nil while the

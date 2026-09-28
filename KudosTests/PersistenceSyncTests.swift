@@ -204,6 +204,41 @@ struct PersistenceSyncTests {
         #expect(restored.legacyReaderProgress == 0.42)
     }
 
+    /// An older build or Android read further and exported no Mac-percent key.
+    /// The card prefers that percent, so a locator that moved has to clear it.
+    /// The same key missing while the locator stays put — or moves by less than
+    /// the Readium delta — still leaves the percent alone.
+    @Test func newerKeylessSnapshotClearsTheMacPercentWhenTheLocatorMoves() throws {
+        let movedContainer = try container()
+        let moved = try restore(
+            progressWork(mac: nil, locatorTotal: 0.8, at: 200),
+            over: progressWork(mac: 0.42, locatorTotal: 0.2, at: 100),
+            in: movedContainer.mainContext,
+            dropping: "legacyReaderProgress"
+        )
+        #expect(moved.readiumProgress == 0.8)
+        #expect(moved.legacyReaderProgress == nil)
+        #expect(moved.publicationProgress == 0.8)
+
+        let heldContainer = try container()
+        let held = try restore(
+            progressWork(mac: nil, locatorTotal: 0.2, at: 200),
+            over: progressWork(mac: 0.42, locatorTotal: 0.2, at: 100),
+            in: heldContainer.mainContext,
+            dropping: "legacyReaderProgress"
+        )
+        #expect(held.legacyReaderProgress == 0.42)
+
+        let noiseContainer = try container()
+        let noise = try restore(
+            progressWork(mac: nil, locatorTotal: 0.2005, at: 200),
+            over: progressWork(mac: 0.42, locatorTotal: 0.2, at: 100),
+            in: noiseContainer.mainContext,
+            dropping: "legacyReaderProgress"
+        )
+        #expect(noise.legacyReaderProgress == 0.42)
+    }
+
     @Test func clearedMacPercentIsExportedAsNull() throws {
         let contents = try KudosBackupService.makeContents(
             works: [progressWork(mac: nil, locatorTotal: 0.8, at: 100)],
