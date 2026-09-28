@@ -221,6 +221,14 @@ enum AO3CollectionsWholeIndex {
         return next <= min(max(reportedTotalPages, 1), maximumPages) ? next : nil
     }
 
+    /// The tally's note when the crawl stopped at `maximumPages` while AO3
+    /// reported more: sort and filter then see only those pages, and a silent
+    /// cap would read as the whole account. `nil` when nothing was cut off.
+    static func partialNote(reportedTotalPages: Int, lastPageWasEmpty: Bool) -> String? {
+        guard !lastPageWasEmpty, reportedTotalPages > maximumPages else { return nil }
+        return "first \(maximumPages) of \(reportedTotalPages) pages"
+    }
+
     // Lint: the six values are `shouldApplyLoad`'s four generations plus the page.
     @discardableResult
     static func append( // swiftlint:disable:this function_parameter_count
