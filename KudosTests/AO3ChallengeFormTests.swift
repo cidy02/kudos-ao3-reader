@@ -162,6 +162,37 @@ struct AO3ChallengeFormTests {
         #expect(meme.settings.matchSettings == nil)
     }
 
+    /// prompt_restrictions/_prompt_restriction_form's tag options: each
+    /// `check_box` is a hidden "0" then the box. The settings screen draws none
+    /// of them, so a Save must post what a browser would — the tick, not the
+    /// companion "0" — and nothing for a box AO3 disabled.
+    @Test func undrawnRestrictionBoxesKeepTheirTickOnSave() throws {
+        let base = "gift_exchange[offer_restriction_attributes]"
+        func box(_ field: String, on: Bool, disabled: Bool = false) -> String {
+            let off = disabled ? " disabled=\"disabled\"" : ""
+            return "<input name=\"\(base)[\(field)]\" type=\"hidden\" value=\"0\"\(off)>"
+                + "<input type=\"checkbox\" value=\"1\" name=\"\(base)[\(field)]\""
+                + "\(on ? " checked=\"checked\"" : "")\(off)>"
+        }
+        let html = """
+        <form action="/collections/fest/gift_exchange" method="post">
+          <input type="hidden" name="_method" value="put">
+          <input type="hidden" name="authenticity_token" value="csrf">
+          \(box("character_restrict_to_fandom", on: true))
+          \(box("relationship_restrict_to_tag_set", on: false))
+          \(box("character_restrict_to_tag_set", on: true, disabled: true))
+        </form>
+        """
+        let form = try AO3Client.parseChallengeSettingsForm(html, slug: "fest", kind: .giftExchange)
+        let params = AO3Client.challengeSettingsParameters(form)
+        func posted(_ field: String) -> [String] {
+            params.filter { $0.0 == "\(base)[\(field)]" }.map(\.1)
+        }
+        #expect(posted("character_restrict_to_fandom") == ["1"])
+        #expect(posted("relationship_restrict_to_tag_set") == ["0"])
+        #expect(posted("character_restrict_to_tag_set").isEmpty)
+    }
+
     @Test func introductionWordCountIgnoresMarkup() {
         #expect(ChallengeSettingsEditView.wordCountText("<p>Slow burn, any fandom.</p><p>Two <em>weeks</em>.</p>")
             == "6 words")
