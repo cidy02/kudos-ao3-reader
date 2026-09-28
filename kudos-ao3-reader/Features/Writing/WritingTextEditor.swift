@@ -1,3 +1,4 @@
+import SwiftSoup
 import SwiftUI
 
 /// Shared chapter/summary/notes editor. Done updates the parent form; only that
@@ -39,6 +40,10 @@ struct WritingTextEditor: View {
     @State private var showLink = false
     @State private var link = "https://"
     @State private var showDeleteChapter = false
+    /// OD1's read-only preview. The text view stays mounted under it, so the
+    /// selection and the undo stack survive a round trip.
+    @State private var isPreviewing = false
+    @State private var previewDocument = AO3RichText()
     private let store = WritingTextRecovery()
 
     init(
@@ -74,33 +79,42 @@ struct WritingTextEditor: View {
             )
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            if let controller {
-                WritingNativeTextView(controller: controller)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else { ProgressView() }
+            ZStack {
+                if let controller {
+                    WritingNativeTextView(controller: controller)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .opacity(isPreviewing ? 0 : 1)
+                        .accessibilityHidden(isPreviewing)
+                } else { ProgressView() }
+                if isPreviewing { preview }
+            }
             Text("Local recovery · Save on the work form")
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal)
-            ScrollView(.horizontal) {
-                HStack(spacing: 16) {
-                    ForEach(AO3MarkupTag.Group.allCases) { group in
-                        HStack(spacing: 6) {
-                            Text(group.title).font(.caption).foregroundStyle(.secondary)
-                            ForEach(group.tags(in: AO3MarkupTag.writing)) { tag in
-                                tagButton(tag)
-                            }
-                        }
-                    }
-                }
-                .buttonStyle(.bordered).padding()
-            }
+            #if os(iOS)
+            // Above the keyboard: the screen avoids it, so the bar rides on top.
+            tagBar
+            #endif
+            // 1bv's footnote under the bar.
+            Text("AO3 accepts a limited set of HTML. Anything else is stripped on post, "
+                + "so the bar inserts tags rather than styling text.")
+                .font(.caption2).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal).padding(.bottom, 6)
         }
         .tint(theme.scopePalette.accent)
         .navigationTitle(title)
         .subjectScreenWash(palette: theme.scopePalette)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                #if os(macOS)
+                formatMenu
+                #endif
+                Button(
+                    isPreviewing ? "Edit" : "Preview",
+                    systemImage: isPreviewing ? "chevron.left.forwardslash.chevron.right" : "eye"
+                ) { togglePreview() }
                 Button("Undo", systemImage: "arrow.uturn.backward") { controller?.command("undo") }
                 Button("Redo", systemImage: "arrow.uturn.forward") { controller?.command("redo") }
                 moreMenu
@@ -174,6 +188,72 @@ struct WritingTextEditor: View {
         }
     }
 
+    /// The buffer through the renderer AO3 HTML already has here
+    /// (`AO3RichTextView`, as work summaries and the T-267 preview draw it).
+    private var preview: some View {
+        ScrollView {
+            AO3RichTextView(document: previewDocument)
+                .font(.system(size: editorFontSize, design: .serif))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16).padding(.vertical, 16)
+        }
+        .accessibilityLabel("Preview")
+    }
+
+    /// Into preview: the composition is committed and the keyboard put away,
+    /// then the current buffer is parsed off the main thread. Back to edit:
+    /// the text view was never removed, so it is exactly as it was left.
+    private func togglePreview() {
+        guard let controller else { return }
+        if isPreviewing {
+            isPreviewing = false
+            return
+        }
+        controller.commitComposition()
+        controller.endEditing()
+        let value = controller.text
+        isPreviewing = true
+        Task {
+            previewDocument = await Task.detached(priority: .userInitiated) {
+                WritingBufferPreview.document(value)
+            }.value
+        }
+    }
+
+    /// The tag bar: every AO3-allowed tag, as 1bv draws it (the tag over what it does).
+    private var tagBar: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 16) {
+                ForEach(AO3MarkupTag.Group.allCases) { group in
+                    HStack(spacing: 6) {
+                        Text(group.title).font(.caption).foregroundStyle(.secondary)
+                        ForEach(group.tags(in: AO3MarkupTag.writing)) { tag in
+                            tagButton(tag)
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.bordered).padding(.horizontal).padding(.vertical, 6)
+        }
+        .disabled(isPreviewing)
+    }
+
+    #if os(macOS)
+    /// The same tags, in the window toolbar.
+    private var formatMenu: some View {
+        Menu("Format", systemImage: "textformat") {
+            ForEach(AO3MarkupTag.Group.allCases) { group in
+                Section(group.title) {
+                    ForEach(group.tags(in: AO3MarkupTag.writing)) { tag in
+                        Button("\(tag.name)  <\(tag.tagLabel)>", systemImage: tag.symbol) { apply(tag) }
+                    }
+                }
+            }
+        }
+        .disabled(isPreviewing)
+    }
+    #endif
+
     /// Done's checkpoint, then `action` — after it, the form holds this text.
     private func close(then action: (() -> Void)? = nil) {
         controller?.commitComposition()
@@ -190,10 +270,18 @@ struct WritingTextEditor: View {
     /// opens the alert that asks for the URL and validates it. Everything else
     /// goes straight to the buffer.
     private func tagButton(_ tag: AO3MarkupTag) -> some View {
-        Button("<\(tag.tagLabel)>") {
-            if tag == .link { showLink = true } else { controller?.command(tag.element) }
+        Button { apply(tag) } label: {
+            VStack(spacing: 1) {
+                Text("<\(tag.tagLabel)>").font(.caption.monospaced())
+                Text(tag.name.lowercased()).font(.caption2).foregroundStyle(.secondary)
+            }
         }
+        .minimumHitTarget()
         .accessibilityLabel(tag.name)
+    }
+
+    private func apply(_ tag: AO3MarkupTag) {
+        if tag == .link { showLink = true } else { controller?.command(tag.element) }
     }
 
     private var recoverySheet: some View {
@@ -391,5 +479,16 @@ struct WritingTextEditorRow: View {
         guard previewsText else { return nil }
         let plain = text.strippingHTML().trimmingCharacters(in: .whitespacesAndNewlines)
         return plain.isEmpty ? nil : plain
+    }
+}
+
+/// OD1's preview model: the buffer parsed as AO3 HTML and reduced to the blocks
+/// `AO3RichTextView` draws, with the same parser AO3's pages use here.
+nonisolated enum WritingBufferPreview {
+    static func document(_ html: String) -> AO3RichText {
+        guard let body = try? SwiftSoup.parseBodyFragment(html).body(),
+              let document = try? AO3Client.parseRichText(body)
+        else { return AO3RichText() }
+        return document
     }
 }

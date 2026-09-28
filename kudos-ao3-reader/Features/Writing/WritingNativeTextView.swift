@@ -39,6 +39,9 @@ final class WritingTextController: NSObject {
         textView.smartInsertDeleteType = .no
         textView.autocorrectionType = .no
         textView.autocapitalizationType = .none
+        // OD6: spelling underlined, as AO3's own textarea is. Correction stays
+        // off: an autocorrect inside a tag would break the markup.
+        textView.spellCheckingType = .yes
         textView.accessibilityLabel = "HTML text"
         #else
         scrollView.hasVerticalScroller = true
@@ -59,6 +62,8 @@ final class WritingTextController: NSObject {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
+        // OD6: spelling underlined; correction stays off, as on iOS.
+        textView.isContinuousSpellCheckingEnabled = true
         textView.setAccessibilityLabel("HTML text")
         scrollView.drawsBackground = false
         #endif
@@ -185,6 +190,15 @@ final class WritingTextController: NSObject {
     func restore(_ value: String) {
         commitComposition()
         replace(NSRange(location: 0, length: (text as NSString).length), with: value)
+    }
+
+    /// Puts the keyboard away (the preview toggle).
+    func endEditing() {
+        #if os(iOS)
+        textView.resignFirstResponder()
+        #else
+        textView.window?.makeFirstResponder(nil)
+        #endif
     }
 
     /// Ends an IME composition, keeping what it composed. Only explicit

@@ -148,4 +148,56 @@ struct WritingTextRecoveryBoundsTests {
 
         #expect(try store.copies(for: key).first?.entry.text == last)
     }
+
+    // MARK: T-279 toolbar transforms and preview
+
+    private func apply(_ tag: String, _ text: String, _ selected: String?) -> (String, String)? {
+        let range = selected.flatMap { text.range(of: $0) } ?? text.endIndex..<text.endIndex
+        guard let insertion = WritingMarkup.insertion(tag: tag, in: text, over: range) else { return nil }
+        var out = text
+        out.replaceSubrange(range, with: insertion.text)
+        let start = out.utf16.index(
+            out.utf16.startIndex,
+            offsetBy: text.utf16.distance(from: text.utf16.startIndex, to: range.lowerBound) + insertion.contentOffset
+        )
+        let end = out.utf16.index(start, offsetBy: insertion.contentLength)
+        return (out, String(out[start..<end]))
+    }
+
+    /// A tag inside another nests inside it; the words stay selected.
+    @Test func aTagNestsInsideAnEnclosingOne() throws {
+        let result = try #require(apply("strong", "<em>word</em>", "word"))
+        #expect(result.0 == "<em><strong>word</strong></em>")
+        #expect(result.1 == "word")
+    }
+
+    /// Selections at the first and last character of the buffer, and a bare caret.
+    @Test func selectionsAtTheBufferEdgesAndACaret() throws {
+        let start = try #require(apply("em", "first rest", "first"))
+        #expect(start.0 == "<em>first</em> rest")
+        let end = try #require(apply("em", "rest last", "last"))
+        #expect(end.0 == "rest <em>last</em>")
+        // No selection: an empty pair with the caret between its tags.
+        let caret = try #require(apply("u", "text ", nil))
+        #expect(caret.0 == "text <u></u>")
+        #expect(caret.1 == "")
+        // A tag the vocabulary does not offer is refused, never written.
+        #expect(apply("script", "text", "text") == nil)
+    }
+
+    /// OD1's preview reads the buffer through AO3's parser: paragraphs, bold,
+    /// italic and links survive; tags AO3 strips do not show as text.
+    @Test func thePreviewParsesTheBufferAsAO3HTML() throws {
+        let document = WritingBufferPreview.document(
+            #"<p>One <strong>two</strong></p><p><em>three</em> <a href="https://example.com">four</a></p>"#
+        )
+        #expect(document.blocks.count == 2)
+        let runs = document.blocks.flatMap(\.runs)
+        #expect(runs.contains { $0.text.contains("two") && $0.isBold })
+        #expect(runs.contains { $0.text.contains("three") && $0.isItalic })
+        #expect(runs.contains { $0.link?.host == "example.com" })
+        #expect(!runs.contains { $0.text.contains("<") })
+        #expect(WritingBufferPreview.document("").isEmpty)
+    }
+
 }
