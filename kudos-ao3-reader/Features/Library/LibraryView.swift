@@ -522,7 +522,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             ToolbarItem(placement: .confirmationAction) {
                 SelectAllButton(allSelected: allSelectableSelected, action: toggleSelectAll)
             }
-            if PrivacyGate.hasVisibleMatureWorks(in: selectableWorks, hideMature: hideMature) {
+            if hideMature {
                 ToolbarItem(placement: .primaryAction) {
                     MatureRevealToggle()
                 }
@@ -548,9 +548,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
             #endif
         } else {
-            let showsMature = PrivacyGate.hasVisibleMatureWorks(
-                in: visibleDashboardWorksUnbounded, hideMature: hideMature
-            )
+            let showsMature = hideMature
             let showsStatistics = !statisticsWorks.isEmpty
             let showsSelect = !works.isEmpty
             let showsMoreMenu = showsStatistics || showsSelect || showsMature

@@ -140,13 +140,10 @@ struct WorkRow: View {
             titleSymbolTint: .subjectFavoriteGold,
             metadataSegments: ledgerMetadataSegments,
             leading: {
-                if let positionNumber {
-                    Text("\(positionNumber)")
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .frame(minWidth: 17, alignment: .leading)
-                        .accessibilityLabel("Position \(positionNumber)")
-                } else {
+                // A queue's position number sits outside the card, to its left
+                // (1h.1) — `.cardRow(leadingNumber:)` draws it. The card has
+                // nothing in this slot then.
+                if positionNumber == nil {
                     WorkProgressRing(
                         progress: work.readingProgress ?? 0,
                         state: ledgerProgressState,

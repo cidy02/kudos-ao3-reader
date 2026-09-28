@@ -86,6 +86,9 @@ struct AO3SeriesDetailView: View {
                             if !works.isEmpty {
                                 ExpandAllMenuItem(expandAll: $expandAll)
                             }
+                            if hideMature {
+                                MatureRevealToggle()
+                            }
                         } label: {
                             Label("Series actions", systemImage: "ellipsis")
                         }

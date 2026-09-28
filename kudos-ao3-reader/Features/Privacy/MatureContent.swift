@@ -64,24 +64,6 @@ final class PrivacyGate {
         enabled && work.isAdult && mode == .hide && !isRevealed(work)
     }
 
-    /// Whether a Privacy button should show for this currently-visible/filtered work
-    /// list — the single rule every toolbar's Privacy-button condition shares.
-    static func hasVisibleMatureWorks(in works: [SavedWork], hideMature: Bool) -> Bool {
-        shouldShowMatureReveal(
-            hideMature: hideMature,
-            hasVisibleMatureWorks: works.contains(where: \.isAdult)
-        )
-    }
-
-    /// Use this when the surface owns only the visibility result, rather than the
-    /// local work collection itself (for example a remote list merged with local rows).
-    static func shouldShowMatureReveal(
-        hideMature: Bool,
-        hasVisibleMatureWorks: Bool
-    ) -> Bool {
-        hideMature && hasVisibleMatureWorks
-    }
-
     private func authenticate(_ onSuccess: @escaping () -> Void) {
         guard UserDefaults.standard.bool(forKey: "requireBiometricToReveal") else {
             onSuccess(); return

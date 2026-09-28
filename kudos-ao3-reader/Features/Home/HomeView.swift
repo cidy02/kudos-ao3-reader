@@ -232,7 +232,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         ToolbarItem(placement: .confirmationAction) {
                             SelectAllButton(allSelected: allLocalSelected, action: toggleSelectAll)
                         }
-                        if PrivacyGate.hasVisibleMatureWorks(in: selectedWorks, hideMature: hideMature) {
+                        if hideMature {
                             ToolbarItem(placement: .primaryAction) {
                                 MatureRevealToggle()
                             }
@@ -247,9 +247,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         }
                         #endif
                     } else {
-                        let hasMature = PrivacyGate.hasVisibleMatureWorks(
-                            in: allLocalSectionWorks, hideMature: hideMature
-                        )
+                        let hasMature = hideMature
                         // Gated as a whole, not just its inner pieces — an empty HStack
                         // still reserves an (empty-looking) toolbar slot, which is
                         // exactly what showed a blank button when the Library was empty.

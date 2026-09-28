@@ -193,7 +193,7 @@ struct LibrarySectionListView: View {
                     }
                     #endif
                 } else {
-                    let hasMature = PrivacyGate.hasVisibleMatureWorks(in: visibleItems, hideMature: hideMature)
+                    let hasMature = hideMature
                     // Gated as a whole, not just its inner pieces — an empty HStack
                     // still reserves an (empty-looking) toolbar slot when the section
                     // has no works and no mature works to reveal.
