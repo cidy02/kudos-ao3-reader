@@ -259,15 +259,19 @@ extension AO3AuthService {
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt.
     func updateChallengeSettings(
-        _ form: AO3ChallengeSettingsForm
+        _ form: AO3ChallengeSettingsForm,
+        expectedGeneration: Int,
+        using client: AO3Client = .shared
     ) async throws -> AO3ChallengeSettingsSaveOutcome {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3ChallengeWriteError.notSignedIn }
         let checked = form.validated()
         if !checked.isValid { return .invalid(checked) }
         let referer = form.kind == .giftExchange
             ? AO3ChallengeURL.giftExchangeEdit(slug: form.collectionSlug)
             : AO3ChallengeURL.promptMemeEdit(slug: form.collectionSlug)
-        let (html, token) = try await fetchCSRFPage(at: referer)
+        let (html, token) = try await fetchCSRFPage(at: referer, using: client)
+        try requireSessionGeneration(expectedGeneration)
         var posted = checked
         posted.csrfToken = token
         let request = try writeRequest(
@@ -275,7 +279,7 @@ extension AO3AuthService {
             body: Self.formEncoded(AO3Client.challengeSettingsParameters(posted)),
             csrf: token, referer: referer, ajax: false
         )
-        let (status, body) = try await submitWrite(request)
+        let (status, body) = try await submitWrite(request, using: client)
         if let error = AO3Client.writeErrorMessage(in: body) {
             var invalid = (try? AO3Client.parseChallengeSettingsForm(
                 body, slug: form.collectionSlug, kind: form.kind
@@ -313,11 +317,13 @@ extension AO3AuthService {
     }
 
     private func throwIfChallengeWriteFailed(status: Int, body: String, fallback: String) throws {
-        if let error = AO3Client.writeErrorMessage(in: body) {
-            throw AO3ChallengeWriteError.rejected(error)
-        }
-        guard (200...399).contains(status) else {
-            throw AO3ChallengeWriteError.rejected(fallback)
+        guard let verdict = Self.collectionWriteVerdict(
+            status: status, body: body, fallback: fallback
+        ) else { return }
+        switch verdict {
+        case let .rejected(message): throw AO3ChallengeWriteError.rejected(message)
+        case .unconfirmed: throw AO3ChallengeWriteError.unconfirmed
+        default: throw AO3ChallengeWriteError.rejected(fallback)
         }
     }
 }

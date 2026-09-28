@@ -258,6 +258,8 @@ struct AO3ChallengeParsingTests {
         #expect(AO3ChallengeSignUpMatching.ownSignUpID(in: rows, login: "bobby") == 12)
         #expect(AO3ChallengeSignUpMatching.ownSignUpID(in: rows, login: "bob") == nil)
         #expect(AO3ChallengeSignUpMatching.ownSignUpID(in: rows, login: "") == nil)
+        #expect(AO3ChallengeSignUpMatching.owns(byline: "WriterName (alice)", login: "alice"))
+        #expect(!AO3ChallengeSignUpMatching.owns(byline: "WriterName (bob)", login: "alice"))
     }
 
     @Test func assignmentBadgeDerivesLateFromWorksDue() {

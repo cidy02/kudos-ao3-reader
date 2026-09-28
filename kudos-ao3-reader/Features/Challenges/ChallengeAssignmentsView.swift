@@ -15,6 +15,7 @@ import SwiftUI
 struct ChallengeAssignmentsView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
+    var viewerIsOwner: Bool
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -39,6 +40,7 @@ struct ChallengeAssignmentsView: View {
     @State private var pendingWrite: PendingWrite?
     /// The AO3 session the lists were read under; a write under another is refused.
     @State private var loadedGeneration: Int?
+    @State private var loadGeneration = 0
 
     private enum Phase: Equatable {
         case idle
@@ -100,11 +102,12 @@ struct ChallengeAssignmentsView: View {
             #endif
             .subjectScreenWash(palette: palette)
 
-            if auth.isLoggedIn, phase == .loaded {
+            if auth.isLoggedIn, phase == .loaded,
+               AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
                 bottomActionBar
             }
         }
-        .task { await loadIfNeeded() }
+        .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
         .confirmationDialog(
             picking?.title ?? "",
@@ -419,6 +422,101 @@ struct ChallengeAssignmentsView: View {
             .padding(.horizontal, 4)
     }
 
+    // MARK: - Helpers & Actions
+
+    private func mediumDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
+    private func load() async {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let capturedLoadGeneration = loadGeneration
+        let capturedSessionGeneration = auth.sessionGeneration
+        clearLoadedState()
+        guard auth.isLoggedIn else {
+            phase = .failed("Sign in to AO3 to view assignments.")
+            return
+        }
+        phase = .loading
+
+        // Matched is every sent assignment: otwarchive's Complete (?fulfilled)
+        // plus Open (?unfulfilled). Each list fails on its own.
+        let matchedResult = await allPages(of: AO3ChallengeAssignmentList.sent)
+        guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
+        matched = matchedResult.rows
+        if let error = matchedResult.error { loadErrors[.matched] = error }
+
+        let unmatchedResult = await allPages(of: [.defaults])
+        guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
+        unmatched = unmatchedResult.rows
+        if let error = unmatchedResult.error { loadErrors[.unmatched] = error }
+
+        let pinchHitResult = await allPages(of: [.pinchHits])
+        guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
+        pinchHits = pinchHitResult.rows
+        if let error = pinchHitResult.error { loadErrors[.pinchHits] = error }
+
+        // Works-due is read off the owner-only settings form, best-effort: a
+        // failure just leaves the header/rows without a due date (and no "late").
+        if let request = try? auth.authenticatedRequest(
+            for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
+        ), let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request) {
+            guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
+            worksDueAt = form.settings.worksDueAt
+        }
+
+        guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
+        loadedGeneration = capturedSessionGeneration
+        phase = .loaded
+    }
+
+    private func allPages(
+        of lists: [AO3ChallengeAssignmentList]
+    ) async -> (rows: [AO3ChallengeAssignment], error: String?) {
+        do {
+            let request = try auth.authenticatedRequest(
+                for: AO3ChallengeURL.assignments(slug: collectionSlug, list: lists[0])
+            )
+            let rows = try await AO3Client.shared.allChallengeAssignments(
+                slug: collectionSlug, lists: lists, request: request
+            )
+            return (rows, nil)
+        } catch {
+            return ([], error.localizedDescription)
+        }
+    }
+
+    private func shouldApply(_ capturedLoad: Int, _ capturedSession: Int) -> Bool {
+        AO3CollectionSessionReload.shouldApplyLoad(
+            capturedLoadGeneration: capturedLoad,
+            loadGeneration: loadGeneration,
+            capturedSessionGeneration: capturedSession,
+            sessionGeneration: auth.sessionGeneration
+        )
+    }
+
+    private func clearLoadedState() {
+        matched = []
+        unmatched = []
+        pinchHits = []
+        loadErrors = [:]
+        worksDueAt = nil
+        loadedGeneration = nil
+        itemInFlight = nil
+        actionErrorMessage = nil
+        picking = nil
+        pendingWrite = nil
+    }
+}
+
+// MARK: - Pinch-hit rows and 1cb's two writes
+
+extension ChallengeAssignmentsView {
     // MARK: - State Cards
 
     private var loadingRow: some View {
@@ -485,68 +583,6 @@ struct ChallengeAssignmentsView: View {
         .subjectPanel()
     }
 
-    // MARK: - Helpers & Actions
-
-    private func mediumDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeZone = .autoupdatingCurrent
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
-    }
-
-    private func loadIfNeeded() async {
-        guard phase == .idle else { return }
-        await load()
-    }
-
-    private func load() async {
-        guard auth.isLoggedIn else {
-            phase = .failed("Sign in to AO3 to view assignments.")
-            return
-        }
-        phase = .loading
-        loadErrors = [:]
-        loadedGeneration = auth.sessionGeneration
-
-        // Matched is every sent assignment: otwarchive's Complete (?fulfilled)
-        // plus Open (?unfulfilled). Each list fails on its own.
-        matched = await allPages(of: AO3ChallengeAssignmentList.sent, for: .matched)
-        unmatched = await allPages(of: [.defaults], for: .unmatched)
-        pinchHits = await allPages(of: [.pinchHits], for: .pinchHits)
-
-        // Works-due is read off the owner-only settings form, best-effort: a
-        // failure just leaves the header/rows without a due date (and no "late").
-        if let request = try? auth.authenticatedRequest(
-            for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
-        ), let form = try? await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request) {
-            worksDueAt = form.settings.worksDueAt
-        }
-
-        phase = .loaded
-    }
-
-    private func allPages(
-        of lists: [AO3ChallengeAssignmentList], for segment: Segment
-    ) async -> [AO3ChallengeAssignment] {
-        do {
-            let request = try auth.authenticatedRequest(
-                for: AO3ChallengeURL.assignments(slug: collectionSlug, list: lists[0])
-            )
-            return try await AO3Client.shared.allChallengeAssignments(
-                slug: collectionSlug, lists: lists, request: request
-            )
-        } catch {
-            loadErrors[segment] = error.localizedDescription
-            return []
-        }
-    }
-}
-
-// MARK: - Pinch-hit rows and 1cb's two writes
-
-extension ChallengeAssignmentsView {
     /// The spec's "Pinch hit #1 · open / Requested by …" and "Pinch hit #2 ·
     /// claimed / Claimed by … · due …".
     private func pinchHitRow(_ row: AO3PinchHitRow) -> some View {
@@ -573,7 +609,8 @@ extension ChallengeAssignmentsView {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if row.isOpen, auth.isLoggedIn {
+            if row.isOpen, auth.isLoggedIn,
+               AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
                 claimButton(for: row.assignment)
             }
         }
@@ -584,6 +621,7 @@ extension ChallengeAssignmentsView {
     /// Runs a confirmed write, then reloads: both writes move the assignment
     /// between AO3's lists, so the lists are re-read rather than patched.
     private func perform(_ write: PendingWrite) async {
+        guard let loadedGeneration else { return }
         itemInFlight = write.assignment.id
         actionErrorMessage = nil
         do {
@@ -598,11 +636,11 @@ extension ChallengeAssignmentsView {
                     slug: collectionSlug, assignmentID: write.assignment.id, expectedGeneration: loadedGeneration
                 )
             }
+            try auth.requireSessionGeneration(loadedGeneration)
             itemInFlight = nil
             await load()
         } catch is CancellationError {
-            itemInFlight = nil
-            actionErrorMessage = "You changed AO3 accounts, so nothing was sent. Reload and try again."
+            return
         } catch {
             itemInFlight = nil
             actionErrorMessage = "\(write.kind.failure): \(error.localizedDescription)"

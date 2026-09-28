@@ -15,11 +15,16 @@ private final class ChallengeWriteStub: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private static var hits: [Hit] = []
     private static var postBody = ""
+    private static var onGET: (@Sendable () async -> Void)?
 
-    static func reset(postBody: String = #"<div class="flash notice">Assignment updates complete!</div>"#) {
+    static func reset(
+        postBody: String = #"<div class="flash notice">Assignment updates complete!</div>"#,
+        onGET: (@Sendable () async -> Void)? = nil
+    ) {
         lock.lock()
         hits = []
         Self.postBody = postBody
+        Self.onGET = onGET
         lock.unlock()
     }
 
@@ -43,14 +48,22 @@ private final class ChallengeWriteStub: URLProtocol, @unchecked Sendable {
         Self.lock.lock()
         Self.hits.append(hit)
         let postBody = Self.postBody
+        let onGET = Self.onGET
         Self.lock.unlock()
 
         let isGET = method == "GET"
-        let page = isGET ? #"<html><head><meta name="csrf-token" content="stub-csrf"></head></html>"# : postBody
-        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(page.utf8))
-        client?.urlProtocolDidFinishLoading(self)
+        Task {
+            if isGET { await onGET?() }
+            let page = isGET
+                ? #"<html><head><meta name="csrf-token" content="stub-csrf"></head></html>"#
+                : postBody
+            let response = HTTPURLResponse(
+                url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(page.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
     }
 
     override func stopLoading() {}
@@ -163,6 +176,62 @@ struct AO3ChallengeWriteStubTests {
                 slug: "fest", assignmentID: 82, byline: "zed",
                 expectedGeneration: auth.sessionGeneration, using: stubClient()
             )
+        }
+    }
+
+    @Test func aBare200DoesNotConfirmAnAssignmentWrite() async throws {
+        ChallengeWriteStub.reset(postBody: "<html><body>Ambiguous response</body></html>")
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        await #expect(throws: AO3ChallengeWriteError.unconfirmed) {
+            try await auth.markAssignmentDefaulted(
+                slug: "fest", assignmentID: 81,
+                expectedGeneration: auth.sessionGeneration, using: stubClient()
+            )
+        }
+    }
+
+    @Test func challengeSettingsSaveStopsWhenTheSessionChangesDuringCSRF() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let loaded = auth.sessionGeneration
+        ChallengeWriteStub.reset(onGET: { await auth.logout() })
+        let form = AO3ChallengeSettingsForm(
+            actionURL: AO3ChallengeURL.giftExchange(slug: "fest"),
+            httpMethodOverride: "put",
+            csrfToken: "old",
+            kind: .giftExchange,
+            collectionSlug: "fest",
+            settings: AO3ChallengeSettings(collectionSlug: "fest", kind: .giftExchange)
+        )
+        await #expect(throws: CancellationError.self) {
+            try await auth.updateChallengeSettings(
+                form, expectedGeneration: loaded, using: stubClient()
+            )
+        }
+        #expect(ChallengeWriteStub.recorded().map(\.method) == ["GET"])
+    }
+
+    @Test func membershipAcceptAndDeclineStopWhenTheSessionChangesDuringCSRF() async throws {
+        for action in ["accept", "decline"] {
+            let auth = makeAuth()
+            await auth.login(username: "alice", password: "pw")
+            let loaded = auth.sessionGeneration
+            ChallengeWriteStub.reset(onGET: { await auth.logout() })
+            await #expect(throws: CancellationError.self) {
+                if action == "accept" {
+                    try await auth.acceptMember(
+                        slug: "fest", participantID: 4,
+                        expectedGeneration: loaded, using: stubClient()
+                    )
+                } else {
+                    try await auth.declineMember(
+                        slug: "fest", participantID: 4,
+                        expectedGeneration: loaded, using: stubClient()
+                    )
+                }
+            }
+            #expect(ChallengeWriteStub.recorded().map(\.method) == ["GET"])
         }
     }
 }

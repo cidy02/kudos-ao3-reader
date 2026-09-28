@@ -10,6 +10,7 @@ import SwiftUI
 struct ChallengeSettingsView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
+    var viewerIsOwner: Bool
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -107,13 +108,19 @@ struct ChallengeSettingsView: View {
     private var contentSections: some View {
         // Only collection owners reach this read (AO3CollectionDetailView), and
         // the edit form (1cf) is theirs as well.
-        Section {
-            SubjectFormRow(label: "Edit settings", showsDisclosure: true) { EmptyView() }
-                .subjectRowNavigation(accessibilityLabel: "Edit settings") {
-                    ChallengeSettingsEditView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
-                }
-                .subjectPanel()
-                .pageBodyRow(top: 14, gutter: gutter)
+        if AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
+            Section {
+                SubjectFormRow(label: "Edit settings", showsDisclosure: true) { EmptyView() }
+                    .subjectRowNavigation(accessibilityLabel: "Edit settings") {
+                        ChallengeSettingsEditView(
+                            collectionSlug: collectionSlug,
+                            collectionTitle: effectiveTitle,
+                            viewerIsOwner: viewerIsOwner
+                        )
+                    }
+                    .subjectPanel()
+                    .pageBodyRow(top: 14, gutter: gutter)
+            }
         }
 
         Section {

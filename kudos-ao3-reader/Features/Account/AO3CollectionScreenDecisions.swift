@@ -54,6 +54,10 @@ enum AO3CollectionDeleteDecision {
     }
 }
 
+enum AO3CollectionOwnerControls {
+    static func areVisible(viewerIsOwner: Bool) -> Bool { viewerIsOwner }
+}
+
 enum AO3CollectionItemSubmission {
     /// Rows on this page whose creator or moderators have not decided.
     static func decisionsNeeded(_ items: [AO3CollectionItem]) -> Int {

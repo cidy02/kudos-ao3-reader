@@ -15,6 +15,7 @@ import SwiftUI
 struct CollectionModerationView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
+    var viewerIsOwner: Bool
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -32,11 +33,14 @@ struct CollectionModerationView: View {
     @State private var participantInFlight: Int?
     @State private var actionErrorMessage: String?
     @State private var itemToReject: AO3CollectionItem?
+    @State private var participantToDecline: AO3CollectionParticipant?
     @State private var confirmReveal = false
     @State private var confirmUnanon = false
     @State private var isRevealing = false
     @State private var isUnanonymizing = false
     @State private var revealErrorMessage: String?
+    @State private var loadedGeneration: Int?
+    @State private var loadGeneration = 0
 
     private enum Phase: Equatable {
         case idle
@@ -85,7 +89,7 @@ struct CollectionModerationView: View {
         .navigationTitle("Moderation")
         #endif
         .subjectScreenWash(palette: palette)
-        .task { await loadIfNeeded() }
+        .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
         // AO3 has no reason field and sends no mail on rejection (Q6), so this
         // is a plain confirmation rather than a reason sheet.
@@ -101,6 +105,21 @@ struct CollectionModerationView: View {
         } message: { item in
             Text("“\(item.workTitle)” leaves the review queue as rejected. AO3 sends the creator no reason "
                 + "and no email, and the work stays on AO3; only its place in this collection changes.")
+        }
+        .alert(
+            participantToDecline.map { CollectionModerationCopy.declineTitle(participant: $0.pseud) } ?? "",
+            isPresented: Binding(
+                get: { participantToDecline != nil },
+                set: { if !$0 { participantToDecline = nil } }
+            ),
+            presenting: participantToDecline
+        ) { participant in
+            Button("Decline", role: .destructive) {
+                Task { await declineRequest(participant) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { participant in
+            Text("\(participant.pseud)'s membership request will be removed, and they will need to apply again.")
         }
         .alert("Reveal this collection?", isPresented: $confirmReveal) {
             Button("Reveal", role: .destructive) {
@@ -185,7 +204,7 @@ struct CollectionModerationView: View {
                 EmptyView()
             }
             .subjectRowNavigation(accessibilityLabel: "Recently decided") {
-                AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle)
+                AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle, initialTab: .approved)
             }
             .subjectPanel()
             .pageBodyRow(top: 12, gutter: gutter)
@@ -216,7 +235,8 @@ struct CollectionModerationView: View {
             SectionRuleHeader(title: "Reveal and anonymity")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             revealInfoPanel.pageBodyRow(top: 8, gutter: gutter)
-            if isUnrevealed || isAnonymous {
+            if isUnrevealed || isAnonymous,
+               AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
                 revealActionsPanel.pageBodyRow(top: 8, gutter: gutter)
             }
             if let revealErrorMessage {
@@ -437,7 +457,7 @@ struct CollectionModerationView: View {
 
     private func declineButton(for participant: AO3CollectionParticipant) -> some View {
         Button {
-            Task { await declineRequest(participant) }
+            participantToDecline = participant
         } label: {
             Text("Decline")
                 .font(.system(size: 13, weight: .semibold))
@@ -673,25 +693,27 @@ struct CollectionModerationView: View {
 
     // MARK: - Actions
 
-    private func loadIfNeeded() async {
-        guard phase == .idle else { return }
-        await load()
-    }
-
     private func load() async {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let capturedLoadGeneration = loadGeneration
+        let capturedSessionGeneration = auth.sessionGeneration
+        clearLoadedState()
         phase = .loading
         actionErrorMessage = nil
         do {
             let request = try auth.authenticatedRequest(for: AO3CollectionURL.participants(slug: collectionSlug))
             let moderation = try await AO3Client.shared.collectionModeration(slug: collectionSlug, request: request)
+            guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
             awaitingReview = moderation.awaitingReview
             reviewPage = moderation.itemsForm?.currentPage ?? 1
             reviewTotalPages = moderation.itemsForm?.totalPages ?? 1
             membershipRequests = moderation.membershipRequests
             maintainers = moderation.maintainers
             revealScheduleText = moderation.revealScheduleText
+            loadedGeneration = capturedSessionGeneration
             phase = .loaded
         } catch {
+            guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
             phase = .failed(error.localizedDescription)
         }
     }
@@ -699,8 +721,15 @@ struct CollectionModerationView: View {
     /// Only the review queue's page: participants and the show page are not
     /// refetched for a page change.
     private func loadReviewPage(_ page: Int) async {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let capturedLoadGeneration = loadGeneration
+        let capturedSessionGeneration = auth.sessionGeneration
         isLoadingReviewPage = true
-        defer { isLoadingReviewPage = false }
+        defer {
+            if shouldApply(capturedLoadGeneration, capturedSessionGeneration) {
+                isLoadingReviewPage = false
+            }
+        }
         do {
             let request = try auth.authenticatedRequest(
                 for: AO3CollectionURL.items(slug: collectionSlug, tab: .unreviewed, page: page)
@@ -708,10 +737,12 @@ struct CollectionModerationView: View {
             let items = try await AO3Client.shared.collectionItems(
                 slug: collectionSlug, tab: .unreviewed, page: page, request: request
             )
+            guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
             awaitingReview = items.items
             reviewPage = items.currentPage
             reviewTotalPages = items.totalPages
         } catch {
+            guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
             actionErrorMessage = "Couldn't load that page: \(error.localizedDescription)"
         }
     }
@@ -755,13 +786,21 @@ struct CollectionModerationView: View {
     }
 
     private func acceptRequest(_ participant: AO3CollectionParticipant) async {
+        guard let loadedGeneration else { return }
         participantInFlight = participant.id
         actionErrorMessage = nil
         do {
-            try await auth.acceptMember(slug: collectionSlug, participantID: participant.id)
+            try await auth.acceptMember(
+                slug: collectionSlug,
+                participantID: participant.id,
+                expectedGeneration: loadedGeneration
+            )
+            try auth.requireSessionGeneration(loadedGeneration)
             withAnimation {
                 membershipRequests.removeAll { $0.id == participant.id }
             }
+        } catch is CancellationError {
+            return
         } catch {
             actionErrorMessage = "Failed to accept: \(error.localizedDescription)"
         }
@@ -769,13 +808,21 @@ struct CollectionModerationView: View {
     }
 
     private func declineRequest(_ participant: AO3CollectionParticipant) async {
+        guard let loadedGeneration else { return }
         participantInFlight = participant.id
         actionErrorMessage = nil
         do {
-            try await auth.declineMember(slug: collectionSlug, participantID: participant.id)
+            try await auth.declineMember(
+                slug: collectionSlug,
+                participantID: participant.id,
+                expectedGeneration: loadedGeneration
+            )
+            try auth.requireSessionGeneration(loadedGeneration)
             withAnimation {
                 membershipRequests.removeAll { $0.id == participant.id }
             }
+        } catch is CancellationError {
+            return
         } catch {
             actionErrorMessage = "Failed to decline: \(error.localizedDescription)"
         }
@@ -783,6 +830,7 @@ struct CollectionModerationView: View {
     }
 
     private func performReveal() async {
+        guard AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) else { return }
         isRevealing = true
         revealErrorMessage = nil
         do {
@@ -795,6 +843,7 @@ struct CollectionModerationView: View {
     }
 
     private func performUnanon() async {
+        guard AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) else { return }
         isUnanonymizing = true
         revealErrorMessage = nil
         do {
@@ -805,10 +854,40 @@ struct CollectionModerationView: View {
         }
         isUnanonymizing = false
     }
+
+    private func shouldApply(_ capturedLoad: Int, _ capturedSession: Int) -> Bool {
+        AO3CollectionSessionReload.shouldApplyLoad(
+            capturedLoadGeneration: capturedLoad,
+            loadGeneration: loadGeneration,
+            capturedSessionGeneration: capturedSession,
+            sessionGeneration: auth.sessionGeneration
+        )
+    }
+
+    private func clearLoadedState() {
+        awaitingReview = []
+        reviewPage = 1
+        reviewTotalPages = 1
+        isLoadingReviewPage = false
+        membershipRequests = []
+        maintainers = []
+        revealScheduleText = ""
+        loadedGeneration = nil
+        itemInFlight = nil
+        participantInFlight = nil
+        itemToReject = nil
+        participantToDecline = nil
+        actionErrorMessage = nil
+        revealErrorMessage = nil
+    }
 }
 
 /// 1cd's wording, kept pure so it can be pinned by tests.
 enum CollectionModerationCopy {
+    static func declineTitle(participant: String) -> String {
+        "Decline \(participant)?"
+    }
+
     /// Page one's rows are not the queue: a paged queue says which page.
     static func reviewTally(count: Int, page: Int, totalPages: Int) -> String {
         let works = count == 1 ? "1 work awaiting review" : "\(count) works awaiting review"
