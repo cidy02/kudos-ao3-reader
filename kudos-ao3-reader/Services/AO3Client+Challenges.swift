@@ -219,13 +219,6 @@ extension AO3Client {
         }
         settings.matchSettings = parseMatchSettings(form, prefix: "\(prefix)[potential_match_settings_attributes]")
         let (fieldErrors, general) = parseChallengeFormErrors(in: doc)
-        var hidden: [(String, String)] = []
-        for input in try form.select("input[type=hidden]").array() {
-            let name = (try? input.attr("name")) ?? ""
-            let value = (try? input.attr("value")) ?? ""
-            guard !name.isEmpty, name != "authenticity_token" else { continue }
-            hidden.append((name, value))
-        }
         return AO3ChallengeSettingsForm(
             actionURL: actionURL,
             httpMethodOverride: method?.nilIfBlank,
@@ -235,8 +228,30 @@ extension AO3Client {
             settings: settings,
             fieldErrors: fieldErrors,
             generalErrors: general,
-            hiddenFields: hidden
+            hiddenFields: submittedHiddenFields(form)
         )
+    }
+
+    /// The hidden inputs a browser would submit, carried through a Save. A Rails
+    /// `check_box` renders a hidden "0" before the box; ticked, the box's value
+    /// follows it and Rails keeps the last. Posting the bare "0" for a box this
+    /// screen doesn't draw — prompt_restrictions' "Fandom only?" / "Tag set
+    /// fandom only?" — cleared it on every Save, so a ticked box's value replaces
+    /// its companion. A browser sends no disabled input, so neither does this.
+    static func submittedHiddenFields(_ form: Element) -> [(name: String, value: String)] {
+        let enabled = { (input: Element) in (try? input.hasAttr("disabled")) != true }
+        var fields: [(name: String, value: String)] = []
+        for input in (try? form.select("input[type=hidden][name]").array()) ?? [] where enabled(input) {
+            let name = (try? input.attr("name")) ?? ""
+            guard !name.isEmpty, name != "authenticity_token" else { continue }
+            fields.append((name, (try? input.attr("value")) ?? ""))
+        }
+        for box in (try? form.select("input[type=checkbox][checked][name]").array()) ?? [] where enabled(box) {
+            let name = (try? box.attr("name")) ?? ""
+            guard let index = fields.firstIndex(where: { $0.name == name }) else { continue }
+            fields[index].value = (try? box.attr("value")) ?? "1"
+        }
+        return fields
     }
 
     static func challengeSettingsParameters(_ form: AO3ChallengeSettingsForm) -> [(String, String)] {
@@ -299,7 +314,8 @@ extension AO3Client {
                 params.append(("\(base)[include_optional_\(type)]", match.includeOptional[type] == true ? "1" : "0"))
             }
         }
-        for hidden in form.hiddenFields where !params.contains(where: { $0.0 == hidden.name }) {
+        let explicit = Set(params.map(\.0))
+        for hidden in form.hiddenFields where !explicit.contains(hidden.name) {
             params.append(hidden)
         }
         return params
