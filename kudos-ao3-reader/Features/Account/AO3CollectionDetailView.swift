@@ -21,6 +21,7 @@ struct AO3CollectionDestination: Hashable {
 /// no explanation learns nothing, and one who sees a badge learns that this
 /// collection is hiding creators.
 struct AO3CollectionDetailView: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
     let slug: String
     let title: String
 
@@ -113,6 +114,12 @@ struct AO3CollectionDetailView: View {
         }
         .cardList()
         .subjectScreenWash(palette: palette)
+        .toolbar {
+            // Its works are a works screen too: Show/Hide mature, like every other.
+            if hideMature {
+                ActionToolbar(items: [AnyView(WorkListMoreMenu { MatureRevealToggle() })])
+            }
+        }
         .task(id: LoadID(
             segment: segment,
             sessionGeneration: auth.sessionGeneration,

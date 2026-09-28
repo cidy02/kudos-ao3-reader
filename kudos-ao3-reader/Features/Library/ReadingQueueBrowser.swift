@@ -18,6 +18,7 @@ struct ReadingQueueBrowserView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @AppStorage("hideMatureContent") private var hideMature = true
     @Environment(ThemeManager.self) var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
@@ -218,7 +219,7 @@ struct ReadingQueueBrowserView: View {
         works.firstIndex { $0.id == work.id }.map { $0 + 1 }
     }
 
-    private func ledgerRow(_ work: SavedWork) -> some View {
+    private func ledgerRow(_ work: SavedWork, position: Int? = nil) -> some View {
         SensitiveWorkRow(
             work: work,
             openMode: .reader,
@@ -240,8 +241,11 @@ struct ReadingQueueBrowserView: View {
         }
         .cardRow(
             isSelected: isSelecting && selection.contains(work.id),
-            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title),
+            leadingNumber: position
         )
+        // The number is drawn in the row's background, outside the card.
+        .accessibilityValue(position.map { "Position \($0)" } ?? "")
     }
 
     /// 1bg: "The title bar takes the count" while selecting. Otherwise empty on
@@ -452,7 +456,7 @@ extension ReadingQueueBrowserView {
                 // each row's position number and the live handle.
                 if isSelecting { subjectHeaderSection }
                 ForEach(displayedWorks) { work in
-                    ledgerRow(work)
+                    ledgerRow(work, position: queuePosition(of: work))
                         .environment(\.ledgerPositionNumber, queuePosition(of: work))
                 }
                 .onMove(perform: moveAction)
@@ -470,7 +474,7 @@ extension ReadingQueueBrowserView {
                         inLineHeader
                             .pageBodyRow(top: 18, gutter: 0)
                         ForEach(inLineWorks) { work in
-                            ledgerRow(work)
+                            ledgerRow(work, position: queuePosition(of: work))
                                 .environment(\.ledgerPositionNumber, queuePosition(of: work))
                         }
                     }
@@ -538,20 +542,28 @@ extension ReadingQueueBrowserView {
     /// Reordering drops the split: a drag has to reach every work, Up next too.
     private var compactGrid: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            // The same gaps `detailedList` gets from its row insets, so switching
+            // Ledger ↔ Compact does not move the text: 20 above the header, 8 (12
+            // selecting) above its details, 18 above a section rule, and half the
+            // inter-card gap (6) between a rule and what follows it.
+            VStack(alignment: .leading, spacing: 0) {
                 subjectHeader.padding(.top, 20)
                 if isSelecting {
                     selectionStatusRow
                         .padding(.horizontal, SubjectMetrics.gutter)
+                        .padding(.top, 12)
                 } else {
-                    headerDetails
+                    headerDetails.padding(.top, 8)
                 }
                 if isReordering || isSelecting {
                     SectionRuleHeader(title: "Works", count: compactDisplayedWorks.count)
+                        .padding(.top, Self.ruleTop)
                     coverGrid(compactDisplayedWorks)
+                        .padding(.top, Self.afterRule)
                 } else {
                     if let upNextWork {
                         SectionRuleHeader(title: "Up Next")
+                            .padding(.top, Self.ruleTop)
                         SensitiveWorkRow(
                             work: upNextWork,
                             openMode: .reader,
@@ -560,14 +572,18 @@ extension ReadingQueueBrowserView {
                             onToggleSelection: { toggleSelection(upNextWork) },
                             presentation: .ledger,
                             usesInlineNavigation: true,
-                            contentInsets: EdgeInsets(top: 15, leading: 16, bottom: 15, trailing: 16)
+                            contentInsets: EdgeInsets(
+                                top: CardListMetrics.innerVertical, leading: CardListMetrics.innerHorizontal,
+                                bottom: CardListMetrics.innerVertical, trailing: CardListMetrics.innerHorizontal
+                            )
                         )
                         .background(WorkLedgerCardBackground(work: upNextWork))
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, CardListMetrics.sideMargin)
+                        .padding(.vertical, Self.afterRule)
                     }
                     if !inLineWorks.isEmpty {
-                        inLineHeader
-                        coverGrid(inLineWorks)
+                        inLineHeader.padding(.top, Self.ruleTop)
+                        coverGrid(inLineWorks).padding(.top, Self.afterRule)
                     }
                 }
             }
@@ -575,6 +591,11 @@ extension ReadingQueueBrowserView {
         }
         .subjectScreenWash(palette: subjectPalette)
     }
+
+    /// `detailedList`'s `pageBodyRow(top: 18)` above a rule, and the half of
+    /// `interCardSpacing` a card row keeps above itself.
+    private static let ruleTop: CGFloat = 18
+    private static let afterRule: CGFloat = CardListMetrics.interCardSpacing / 2
 
     private func coverGrid(_ gridWorks: [SavedWork]) -> some View {
         LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
@@ -676,6 +697,9 @@ extension ReadingQueueBrowserView {
                         onClearFilters: { filters = LibraryFilters() }
                     )),
                     AnyView(WorkListMoreMenu {
+                        if hideMature {
+                            MatureRevealToggle()
+                        }
                         Button {
                             setReordering(true)
                         } label: {
