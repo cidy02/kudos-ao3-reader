@@ -12,8 +12,20 @@ import SwiftUI
 /// subject, including the rule that matters most here: a tag is looked up by name
 /// before it is created, because `Tag.name` is `@Attribute(.unique)` and
 /// inserting a second one by the same name throws.
+///
+/// 1i's select mode opens it over several queues at once. A tag is then on every
+/// selected queue, on some, or on none — `WorkBulkTagSheet`'s three states — and
+/// a tap on "some" applies it to the rest rather than clearing it.
 struct QueueTagSheet: View {
-    let queue: ReadingQueue
+    let queues: [ReadingQueue]
+
+    init(queue: ReadingQueue) {
+        queues = [queue]
+    }
+
+    init(queues: [ReadingQueue]) {
+        self.queues = queues
+    }
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -21,13 +33,23 @@ struct QueueTagSheet: View {
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var newTagName = ""
 
-    private var queueTagIDs: Set<PersistentIdentifier> {
-        Set(queue.tags.map(\.persistentModelID))
+    private enum Coverage {
+        case all, some, none
     }
 
-    /// The queue's own colour, as Queue Details — which opens this — draws it.
+    private func coverage(of tag: Tag) -> Coverage {
+        let tagged = queues.count(where: { queue in
+            queue.tags.contains { $0.persistentModelID == tag.persistentModelID }
+        })
+        if tagged == 0 { return .none }
+        return tagged == queues.count ? .all : .some
+    }
+
+    /// One queue's own colour, as Queue Details — which opens this — draws it;
+    /// a selection of several has no one colour, so it takes the app's accent.
     private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+        guard queues.count == 1, let queue = queues.first else { return themeManager.scopePalette }
+        return themeManager.appTheme.subjectPalette(hue: queue.displayHue)
     }
 
     private var gutter: CGFloat { SubjectMetrics.gutter }
@@ -42,7 +64,8 @@ struct QueueTagSheet: View {
                 Section {
                     groupLabel("Add")
                     addPanel.pageBodyRow(top: 8, gutter: gutter)
-                    footnote("Tags are shared with your works, so one word means the "
+                    footnote((queues.count > 1 ? "Applies to all \(queues.count) selected queues. " : "")
+                        + "Tags are shared with your works, so one word means the "
                         + "same thing wherever you use it.")
                 }
 
@@ -119,25 +142,47 @@ struct QueueTagSheet: View {
     }
 
     private func row(for tag: Tag) -> some View {
-        let isOn = queueTagIDs.contains(tag.persistentModelID)
-        return SubjectFormRow(label: tag.name, action: { toggle(tag, isOn: isOn) }) {
-            if isOn {
+        let coverage = coverage(of: tag)
+        return SubjectFormRow(label: tag.name, action: { toggle(tag, coverage: coverage) }) {
+            switch coverage {
+            case .all:
                 Image(systemName: "checkmark")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(palette.accent)
+            case .some:
+                Text("some")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            case .none:
+                EmptyView()
             }
         }
         .accessibilityLabel(tag.name)
-        .accessibilityValue(isOn ? "on this queue" : "not on this queue")
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+        .accessibilityValue(accessibilityValue(for: coverage))
+        .accessibilityAddTraits(coverage == .all ? [.isButton, .isSelected] : .isButton)
     }
 
-    private func toggle(_ tag: Tag, isOn: Bool) {
-        if isOn {
-            queue.removeTag(tag)
-        } else {
-            queue.tags.append(tag)
-            queue.markModified()
+    private func accessibilityValue(for coverage: Coverage) -> String {
+        switch (coverage, queues.count == 1) {
+        case (.all, true): "on this queue"
+        case (.all, false): "on every selected queue"
+        case (.some, _): "on some selected queues"
+        case (.none, true): "not on this queue"
+        case (.none, false): "not on the selected queues"
+        }
+    }
+
+    /// "Some" applies to the rest rather than clearing, which is the direction
+    /// that cannot lose a tag the reader already put on a queue.
+    private func toggle(_ tag: Tag, coverage: Coverage) {
+        for queue in queues {
+            let has = queue.tags.contains { $0.persistentModelID == tag.persistentModelID }
+            if coverage == .all {
+                queue.removeTag(tag)
+            } else if !has {
+                queue.tags.append(tag)
+                queue.markModified()
+            }
         }
         context.saveBestEffort(reason: "Saving queue tags failed")
     }
@@ -147,7 +192,8 @@ struct QueueTagSheet: View {
     }
 
     private func addTypedTag() {
-        guard queue.addTag(named: trimmedNewTag, in: context) != nil else { return }
+        let added = queues.compactMap { $0.addTag(named: trimmedNewTag, in: context) }
+        guard !added.isEmpty else { return }
         context.saveBestEffort(reason: "Saving new queue tag failed")
         newTagName = ""
     }

@@ -60,6 +60,14 @@ enum ReadingQueueFacts {
         "\(origin) › Queues" + (isDetails ? " › Queue details" : "")
     }
 
+    /// Whether the queue page's drag handles are live. Reorder always shows the
+    /// whole queue (filters step aside), so its drag is live. 1bg: selecting
+    /// keeps the handle live too — select and reorder are no longer exclusive —
+    /// except under a filter, whose narrowed order can't be written back.
+    static func isDragLive(isReordering: Bool, isSelecting: Bool, isNarrowed: Bool) -> Bool {
+        isReordering || (isSelecting && !isNarrowed)
+    }
+
     /// The strip's legend — spec 1h: "2 finished · 1 in progress · 9 unread ·
     /// 9 of 12 kept offline".
     static func legend(_ progress: Progress, offlineCount: Int) -> String {
