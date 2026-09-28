@@ -119,6 +119,56 @@ struct ReadingQueueTests {
         #expect(queue.memberships.count == 1)
     }
 
+    /// 1h's "Add N": picked works go on the end of the queue, in the order
+    /// picked, and a work already in the queue (or picked twice) is not added
+    /// again.
+    @Test func appendAddsAtTheEndInOrderWithoutDuplicates() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Append Test", in: context)
+        let works = (1 ... 4).map { SavedWork(title: "Work \($0)", author: "Writer") }
+        for work in works {
+            context.insert(work)
+        }
+        ReadingQueueService.add(works[0], to: queue, in: context)
+        ReadingQueueService.add(works[1], to: queue, in: context)
+
+        ReadingQueueService.append([works[3], works[0], works[2], works[3]], to: queue, in: context)
+
+        #expect(ReadingQueueService.orderedWorks(in: queue).map(\.title) == ["Work 1", "Work 2", "Work 4", "Work 3"])
+        #expect(queue.memberships.count == 4)
+        #expect(works.allSatisfy { $0.queueMemberships.count == 1 })
+        #expect(AddLibraryWorksSheet.confirmationTitle(count: 0) == "Add")
+        #expect(AddLibraryWorksSheet.confirmationTitle(count: 3) == "Add 3")
+    }
+
+    /// The picker never offers a work the queue already has, nor a queue-only
+    /// preservation record that isn't in the Library.
+    @Test func appendCandidatesSkipMembersAndQueueOnlyWorks() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Picker Test", in: context)
+        let other = ReadingQueueService.createQueue(named: "Other", in: context)
+        let member = SavedWork(title: "Member", author: "Writer")
+        let saved = SavedWork(title: "Saved", author: "Writer")
+        let queueOnly = SavedWork(title: "Queue Only", author: "Writer")
+        let savedElsewhere = SavedWork(title: "Saved Elsewhere", author: "Writer")
+        for work in [member, saved, queueOnly, savedElsewhere] {
+            context.insert(work)
+        }
+        member.isSaved = true
+        saved.isSaved = true
+        savedElsewhere.isSaved = true
+        queueOnly.isSaved = false
+        ReadingQueueService.add(member, to: queue, in: context)
+        ReadingQueueService.add(queueOnly, to: other, in: context)
+        ReadingQueueService.add(savedElsewhere, to: other, in: context)
+
+        let candidates = ReadingQueueService.appendCandidates(
+            from: [member, saved, queueOnly, savedElsewhere], notIn: queue
+        )
+
+        #expect(candidates.map(\.title) == ["Saved", "Saved Elsewhere"])
+    }
+
     @Test func reorderRewritesSortOrderAndMarksMembershipsPending() throws {
         let context = try makeContext()
         let queue = ReadingQueueService.createQueue(named: "Reorder Test", in: context)

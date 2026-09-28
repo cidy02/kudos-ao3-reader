@@ -103,33 +103,7 @@ struct ReadingQueueCard: View {
     // (that's what the shimmer promises elsewhere), just a static placeholder
     // shape showing where works will land once the queue has some.
     private var skeletonGrid: some View {
-        gridFrame {
-            HStack(spacing: 4) {
-                skeletonCell()
-                skeletonCell()
-            }
-            HStack(spacing: 4) {
-                skeletonCell()
-                skeletonCell()
-            }
-        }
-    }
-
-    /// The empty queue's 2×2 grid chrome (padding, material background, border,
-    /// shadow).
-    private func gridFrame(@ViewBuilder rows: () -> some View) -> some View {
-        VStack(spacing: 4, content: rows)
-            .padding(6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                .regularMaterial,
-                in: RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(.quaternary, lineWidth: 0.75)
-            }
-            .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
+        QueuePeekTile { _ in skeletonCell() }
     }
 
     /// One skeleton cell: title placeholder, a 2×2 of status-tile-sized blocks,
@@ -163,6 +137,42 @@ struct ReadingQueueCard: View {
                 SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
             }
         }
+    }
+}
+
+/// A queue's 2×2 "tab group" tile: padding, glass, hairline and shadow around
+/// four cells. `ReadingQueueCard` fills it with skeleton cells for an empty
+/// queue; 1i's organizer rows fill it with the queue's first four works at 44pt.
+/// One frame, so the two stay the same shape at any size.
+struct QueuePeekTile<Cell: View>: View {
+    var spacing: CGFloat = 4
+    var inset: CGFloat = 6
+    var cornerRadius: CGFloat = CarouselCardMetrics.cornerRadius
+    /// The queue's own colour over the glass (`carouselQueueTint`); nil is plain glass.
+    var tint: Color?
+    /// Cell 0 is top-left, then reading order.
+    @ViewBuilder var cell: (Int) -> Cell
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        VStack(spacing: spacing) {
+            HStack(spacing: spacing) {
+                cell(0)
+                cell(1)
+            }
+            HStack(spacing: spacing) {
+                cell(2)
+                cell(3)
+            }
+        }
+        .padding(inset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            shape.fill(.regularMaterial)
+                .overlay(shape.fill(tint ?? .clear))
+        }
+        .overlay { shape.strokeBorder(.quaternary, lineWidth: 0.75) }
+        .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
     }
 }
 

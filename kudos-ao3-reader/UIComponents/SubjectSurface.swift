@@ -545,6 +545,8 @@ struct SectionRuleHeader: View {
     /// A count that is not a bare number: 1bn's "3 / 12", 1bv's "2,140 words".
     /// Wins over `count` when both are set.
     var countText: String?
+    /// A quiet phrase after the count — 1i's "All queues 5 · Drag to reorder".
+    var note: String?
     var isCollapsed: Bool = false
     var onToggleCollapse: (() -> Void)?
     var onSeeAll: (() -> Void)?
@@ -569,6 +571,13 @@ struct SectionRuleHeader: View {
                 Text("\(count)")
                     .font(.system(size: labelSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary)
+            }
+
+            if let note {
+                Text("· " + note)
+                    .font(.system(size: labelSize, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
 
             if let onToggleCollapse {

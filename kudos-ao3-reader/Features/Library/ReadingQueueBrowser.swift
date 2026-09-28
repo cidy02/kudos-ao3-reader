@@ -49,6 +49,8 @@ struct ReadingQueueBrowserView: View {
     /// 1h's All · Unread · Offline · WIP, applied before `filters`.
     @State private var quickFilter: QueueQuickFilter = .all
     @State private var showingQueueTags = false
+    /// 1h's "+": the Library picker (`AddLibraryWorksSheet`).
+    @State private var showingAddWorks = false
     /// Cover grid stays the default. 1h's In line switch sets it per queue;
     /// `ReadingQueue` has no field for it, so it lives in UserDefaults under
     /// the queue's id (`displayModeKey`), loaded when the selected queue changes.
@@ -60,11 +62,7 @@ struct ReadingQueueBrowserView: View {
     private var rowPresentation: WorkRow.Presentation {
         displayMode == .ledger ? .ledger : .standard
     }
-    #if os(iOS)
-    @State private var reorderEditMode: EditMode = .inactive
-    #else
-    @State private var isReorderingMac = false
-    #endif
+    @State private var isReordering = false
     @State private var refreshTask: Task<Void, Never>?
     @State private var draggedWorkID: UUID?
     @State private var pendingCompactOrder: [UUID]?
@@ -110,12 +108,10 @@ struct ReadingQueueBrowserView: View {
         filters.hasActiveFilters || quickFilter != .all
     }
 
-    private var isReordering: Bool {
-        #if os(iOS)
-        reorderEditMode.isEditing
-        #else
-        isReorderingMac
-        #endif
+    /// 1bg: selecting keeps the drag handle live, so select and reorder are
+    /// no longer exclusive states. See `ReadingQueueFacts.isDragLive`.
+    private var isDragLive: Bool {
+        ReadingQueueFacts.isDragLive(isReordering: isReordering, isSelecting: isSelecting, isNarrowed: isNarrowed)
     }
 
     /// While reordering, filters step aside — move/drag need index-stable unfiltered order.
@@ -293,6 +289,7 @@ struct ReadingQueueBrowserView: View {
             .sheet(isPresented: $showingQueueTags) {
                 if let selectedQueue { QueueTagSheet(queue: selectedQueue) }
             }
+            .sheet(isPresented: $showingAddWorks) { addWorksSheet }
             .navigationDestination(isPresented: $showingQueueDetails) {
                 if let selectedQueue {
                     ReadingQueueSettingsView(queue: selectedQueue, originKicker: originKicker)
@@ -407,6 +404,12 @@ extension ReadingQueueBrowserView {
                 )
             } description: {
                 Text("Works you add to this queue will keep a local EPUB for offline reading.")
+            } actions: {
+                Button {
+                    showingAddWorks = true
+                } label: {
+                    Label("Add Works", systemImage: "plus")
+                }
             }
         } else {
             Group {
@@ -441,30 +444,18 @@ extension ReadingQueueBrowserView {
 
     private var detailedList: some View {
         List {
-            if isReordering {
-                // Flat and unsectioned, exactly as before the redesign: `.onMove`
-                // only reorders within the `ForEach` it is attached to, so a drag
-                // that should be able to promote any work into "Up next" needs one
-                // `ForEach` over the whole queue, not two split across sections.
+            if isReordering || isSelecting {
+                // Flat and unsectioned: `.onMove` only reorders within the
+                // `ForEach` it is attached to, so a drag that should be able to
+                // promote any work into "Up next" needs one `ForEach` over the
+                // whole queue, not two split across sections. 1bg: selecting keeps
+                // each row's position number and the live handle.
+                if isSelecting { subjectHeaderSection }
                 ForEach(displayedWorks) { work in
-                    SensitiveWorkRow(
-                        work: work,
-                        openMode: .reader,
-                        presentation: rowPresentation
-                    )
-                    .swipeActions(edge: .trailing) {
-                        if let queue = selectedQueue {
-                            Button(role: .destructive) {
-                                ReadingQueueService.removeFromQueue(work, from: queue, in: context)
-                            } label: {
-                                Label("Remove from Queue", systemImage: "minus.circle")
-                            }
-                        }
-                    }
-                    .moveDisabled(!isReordering)
+                    ledgerRow(work)
+                        .environment(\.ledgerPositionNumber, queuePosition(of: work))
                 }
-                .onMove(perform: moveWorks)
-                .cardRow()
+                .onMove(perform: moveAction)
             } else {
                 subjectHeaderSection
                 if let upNextWork {
@@ -489,7 +480,7 @@ extension ReadingQueueBrowserView {
         .cardList()
         .subjectScreenWash(palette: subjectPalette)
         #if os(iOS)
-            .environment(\.editMode, $reorderEditMode)
+            .environment(\.editMode, dragEditMode)
         #endif
     }
 
@@ -555,8 +546,8 @@ extension ReadingQueueBrowserView {
                 } else {
                     headerDetails
                 }
-                if isReordering {
-                    SectionRuleHeader(title: "Works", count: works.count)
+                if isReordering || isSelecting {
+                    SectionRuleHeader(title: "Works", count: compactDisplayedWorks.count)
                     coverGrid(compactDisplayedWorks)
                 } else {
                     if let upNextWork {
@@ -597,19 +588,27 @@ extension ReadingQueueBrowserView {
 
     @ViewBuilder
     private func compactCard(_ work: SavedWork) -> some View {
-        if isSelecting {
-            SensitiveWorkCoverCard(
-                work: work,
-                isSelecting: true,
-                isSelected: selection.contains(work.id),
-                onToggleSelection: { toggleSelection(work) }
-            )
-        } else if isReordering, let queue = selectedQueue {
-            ZStack(alignment: .topTrailing) {
-                SensitiveWorkCoverCard(work: work)
-                    .opacity(draggedWorkID == work.id ? 0.4 : 1)
-                    .allowsHitTesting(false)
-                dragHandle(for: work)
+        if isSelecting || isReordering, let queue = selectedQueue {
+            // 1bg: while selecting, the handle stays live beside the selection
+            // bubble, which owns the top-trailing corner.
+            ZStack(alignment: isSelecting ? .topLeading : .topTrailing) {
+                Group {
+                    if isSelecting {
+                        SensitiveWorkCoverCard(
+                            work: work,
+                            isSelecting: true,
+                            isSelected: selection.contains(work.id),
+                            onToggleSelection: { toggleSelection(work) }
+                        )
+                    } else {
+                        SensitiveWorkCoverCard(work: work)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .opacity(draggedWorkID == work.id ? 0.4 : 1)
+                if isDragLive {
+                    dragHandle(for: work)
+                }
             }
             .onDrop(of: [.text], delegate: WorkReorderDropDelegate(
                 target: work,
@@ -619,10 +618,14 @@ extension ReadingQueueBrowserView {
                 queue: queue,
                 context: context
             ))
-            .accessibilityAction(named: "Move Up") { moveWork(work, toIndex: currentIndex(of: work) - 1) }
-            .accessibilityAction(named: "Move Down") { moveWork(work, toIndex: currentIndex(of: work) + 1) }
-            .accessibilityAction(named: "Move to Top") { moveWork(work, toIndex: 0) }
-            .accessibilityAction(named: "Move to Bottom") { moveWork(work, toIndex: works.count - 1) }
+            .accessibilityActions {
+                if isDragLive {
+                    Button("Move Up") { moveWork(work, toIndex: currentIndex(of: work) - 1) }
+                    Button("Move Down") { moveWork(work, toIndex: currentIndex(of: work) + 1) }
+                    Button("Move to Top") { moveWork(work, toIndex: 0) }
+                    Button("Move to Bottom") { moveWork(work, toIndex: works.count - 1) }
+                }
+            }
         } else {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 SensitiveWorkCoverCard(work: work)
@@ -665,6 +668,7 @@ extension ReadingQueueBrowserView {
                 #endif
             } else {
                 ActionToolbar(items: [
+                    AnyView(addWorksButton),
                     AnyView(FilterButton(
                         filtersActive: filters.hasActiveFilters,
                         showingFilters: $showingFilters,
@@ -693,11 +697,12 @@ extension ReadingQueueBrowserView {
                 ])
             }
         } else if selectedQueue != nil {
-            // Empty queue: still allow seeing its details, and (custom only)
-            // renaming/deleting it, from the toolbar.
-            ToolbarItem(placement: .primaryAction) {
-                WorkListMoreMenu { queueMenuItems }
-            }
+            // Empty queue: still allow adding works, seeing its details, and
+            // (custom only) renaming/deleting it, from the toolbar.
+            ActionToolbar(items: [
+                AnyView(addWorksButton),
+                AnyView(WorkListMoreMenu { queueMenuItems })
+            ])
         }
 
         // Not nested in the branches above: the switcher must stay reachable even
@@ -710,6 +715,30 @@ extension ReadingQueueBrowserView {
             }
         }
         #endif
+    }
+
+    @ViewBuilder
+    private var addWorksSheet: some View {
+        if let queue = selectedQueue {
+            AddLibraryWorksSheet(
+                destinationName: queue.displayName,
+                scopeName: "queue",
+                candidates: { ReadingQueueService.appendCandidates(from: $0, notIn: queue) },
+                onAdd: { ReadingQueueService.append($0, to: queue, in: context) }
+            )
+        }
+    }
+
+    /// 1h: "an accent-filled + for adding works" in the page's glass chrome.
+    private var addWorksButton: some View {
+        Button {
+            showingAddWorks = true
+        } label: {
+            Label("Add Works", systemImage: "plus")
+        }
+        .buttonStyle(.glassProminent)
+        .tint(subjectPalette.accent)
+        .help("Add works from your library")
     }
 
     private var bulkActionBar: some View {
@@ -793,17 +822,27 @@ extension ReadingQueueBrowserView {
     }
 
     private func setReordering(_ active: Bool) {
-        #if os(iOS)
-        reorderEditMode = active ? .active : .inactive
-        #else
-        isReorderingMac = active
-        #endif
+        isReordering = active
         draggedWorkID = nil
         pendingCompactOrder = nil
     }
 
+    /// Nil while no drag is live, so the list offers no handles.
+    private var moveAction: ((IndexSet, Int) -> Void)? {
+        guard isDragLive else { return nil }
+        return { moveWorks(from: $0, to: $1) }
+    }
+
+    #if os(iOS)
+    /// Derived, not stored: edit mode is exactly "a drag is live", which
+    /// select mode now turns on too (1bg).
+    private var dragEditMode: Binding<EditMode> {
+        .constant(isDragLive ? .active : .inactive)
+    }
+    #endif
+
     private func moveWorks(from source: IndexSet, to destination: Int) {
-        guard isReordering, let queue = selectedQueue else { return }
+        guard isDragLive, let queue = selectedQueue else { return }
         var ids = works.map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
         ReadingQueueService.reorder(ids, in: queue, context: context)
@@ -814,7 +853,7 @@ extension ReadingQueueBrowserView {
     }
 
     private func moveWork(_ work: SavedWork, toIndex newIndex: Int) {
-        guard isReordering,
+        guard isDragLive,
               let queue = selectedQueue,
               let (from, to) = ReadingQueueService.moveOffsets(
                   currentIndex: currentIndex(of: work),
@@ -855,6 +894,8 @@ extension ReadingQueueBrowserView {
     private func exitSelectMode() {
         isSelecting = false
         selection = []
+        draggedWorkID = nil
+        pendingCompactOrder = nil
     }
 
     private func bulkRemove() {

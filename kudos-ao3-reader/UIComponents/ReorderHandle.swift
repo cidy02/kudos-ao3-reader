@@ -3,8 +3,8 @@ import SwiftUI
 /// The only view any drag gesture is ever attached to for manual reordering — card
 /// bodies and their `.contextMenu` stay completely untouched, so press-and-hold on
 /// the card always opens the context menu; only dragging this small handle reorders.
-/// Shown only while a view's reorder mode is active (mutually exclusive with select
-/// mode), matching `WorkSelectionBubble`'s corner placement and sizing.
+/// Shown only while a view's drag is live — reorder mode, and on a queue page
+/// select mode too (1bg) — matching `WorkSelectionBubble`'s sizing.
 struct ReorderHandleView: View {
     var body: some View {
         Image(systemName: "line.3.horizontal")

@@ -437,7 +437,12 @@ struct CollectionDetailView: View {
                 .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
             .sheet(isPresented: $showingAddWorks) {
-                AddWorksToCollectionView(collection: collection)
+                AddLibraryWorksSheet(
+                    destinationName: collection.name,
+                    scopeName: "collection",
+                    candidates: { CollectionWorkPicker.candidates(from: $0, notIn: collection) },
+                    onAdd: { CollectionWorkPicker.add($0, to: collection, in: context) }
+                )
             }
             .sheet(isPresented: $showingDetails) { detailsSheet }
             .sheet(isPresented: $showingReorder) {
@@ -657,7 +662,7 @@ struct AddToCollectionView: View {
 
 // MARK: - Add works to a collection (from inside the collection)
 
-/// The membership rules behind `AddWorksToCollectionView`, kept free of view/@Query
+/// The membership rules behind a collection's `AddLibraryWorksSheet`, kept free of view/@Query
 /// state so they're unit-testable. Privacy filtering stays in the view (it needs the
 /// live `PrivacyGate`); everything here is pure eligibility + the add mutation.
 enum CollectionWorkPicker {
@@ -680,145 +685,5 @@ enum CollectionWorkPicker {
         }
         collection.markMembershipChanged(now)
         try? context.save()
-    }
-}
-
-/// A sheet, opened from a collection's own page, to pick existing Library works and
-/// add them to that collection. The complement to `AddToCollectionView` (which starts
-/// from a work and picks collections); this starts from a collection and picks works —
-/// the missing "Add Works from here" path. Adding is a pure grouping change (no EPUB
-/// preservation, unlike Reading Queues), so it just appends the relationship.
-struct AddWorksToCollectionView: View {
-    let collection: WorkCollection
-
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
-    @Environment(PrivacyGate.self) private var gate
-    @AppStorage("hideMatureContent") private var hideMature = true
-    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-
-    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
-    private var allWorks: [SavedWork]
-
-    @State private var selection = Set<UUID>()
-    @State private var query = ""
-
-    /// Real Library works not already in this collection — the same universe
-    /// LibraryView's select mode uses (excludes queue-only preservation records and,
-    /// in Hide mode, mature works), so the picker never offers a work twice or leaks
-    /// a hidden one. Eligibility rules live in `CollectionWorkPicker`; the privacy
-    /// filter stays here since it needs the live gate.
-    private var candidates: [SavedWork] {
-        CollectionWorkPicker.candidates(from: allWorks, notIn: collection)
-            .filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
-    }
-
-    /// Narrows the candidates through the precomputed `WorkSearchIndex` text —
-    /// the same case-/diacritic-insensitive AND-across-terms matching as Global
-    /// Search (title, author, series, tags, …), replacing a per-keystroke
-    /// lowercase rescan of title/author/every fandom of every library work.
-    private func filteredWorks(in eligible: [SavedWork]) -> [SavedWork] {
-        let terms = WorkSearchIndex.terms(from: query)
-        guard !terms.isEmpty else { return eligible }
-        return eligible.filter { WorkSearchIndex.matches($0, terms: terms) }
-    }
-
-    var body: some View {
-        // Evaluated once per render — eligibility (library scan + privacy gate)
-        // and the query match are shared by every branch below instead of being
-        // recomputed by each `candidates`/`filtered` mention.
-        let eligible = candidates
-        let matches = filteredWorks(in: eligible)
-        NavigationStack {
-            Group {
-                if eligible.isEmpty {
-                    ContentUnavailableView {
-                        Label("No works to add", systemImage: "square.stack")
-                    } description: {
-                        Text("Every work in your library is already in this collection, "
-                            + "or there are no works to add yet.")
-                    }
-                } else {
-                    List {
-                        ForEach(matches) { work in
-                            Button { toggle(work) } label: { row(work) }
-                                .buttonStyle(.plain)
-                        }
-                        .appThemedRows()
-                        if matches.isEmpty {
-                            Text("No works match “\(query)”.")
-                                .foregroundStyle(.secondary)
-                                .appThemedRows()
-                        }
-                    }
-                    .appThemedScroll()
-                    // Default placement — .navigationBarDrawer is iOS-only and would
-                    // break the macOS build.
-                    .searchable(text: $query, prompt: "Filter works")
-                }
-            }
-            .navigationTitle("Add to \(collection.name)")
-            #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(selection.isEmpty ? "Add" : "Add (\(selection.count))") { addSelected() }
-                            .disabled(selection.isEmpty)
-                    }
-                }
-        }
-        .presentationDragIndicator(.visible)
-    }
-
-    private func row(_ work: SavedWork) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(work.title)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                if !work.author.isEmpty {
-                    AO3AuthorBylineView(
-                        displayText: work.author,
-                        identities: work.verifiedAuthorIdentities,
-                        font: .caption,
-                        compact: true,
-                        onOpenRoute: { route in
-                            dismiss()
-                            router.openAuthorProfile(route)
-                        }
-                    )
-                }
-            }
-            Spacer(minLength: 8)
-            Image(systemName: selection.contains(work.id) ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(selection.contains(work.id) ? Color.accentColor : Color.secondary)
-                .imageScale(.large)
-                .accessibilityHidden(true)
-        }
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
-        .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
-    }
-
-    private func toggle(_ work: SavedWork) {
-        if selection.contains(work.id) {
-            selection.remove(work.id)
-        } else {
-            selection.insert(work.id)
-        }
-    }
-
-    private func addSelected() {
-        let chosen = candidates.filter { selection.contains($0.id) }
-        guard !chosen.isEmpty else { dismiss(); return }
-        CollectionWorkPicker.add(chosen, to: collection, in: context)
-        dismiss()
     }
 }

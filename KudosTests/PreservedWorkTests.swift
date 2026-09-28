@@ -205,6 +205,90 @@ struct PreservedWorkTests {
         #expect(try context.fetch(FetchDescriptor<WorkCollection>()).count == 1)
     }
 
+    /// 1bj's Select → Restore: every selected record comes back through its own
+    /// per-kind restore, whatever its kind; what was not selected stays deleted.
+    @Test func recentlyDeletedBulkRestoreRestoresOnlyTheSelection() throws {
+        let container = try container()
+        let context = container.mainContext
+        let work = try insertWork(into: context, title: "Chosen Work", ao3WorkID: 7101)
+        let left = try insertWork(into: context, title: "Left Work", ao3WorkID: 7102)
+        let collection = WorkCollection(name: "Chosen Shelf")
+        let queue = ReadingQueue(name: "Chosen Queue")
+        context.insert(collection)
+        context.insert(queue)
+        try context.save()
+        PreservedWorkService.softDelete(work, in: context)
+        PreservedWorkService.softDelete(left, in: context)
+        PreservedWorkService.softDelete(collection, in: context)
+        PreservedWorkService.softDelete(queue, in: context)
+        let entries = [
+            RecentlyDeletedEntry.work(work, in: context),
+            RecentlyDeletedEntry.work(left, in: context),
+            RecentlyDeletedEntry.collection(collection, in: context),
+            RecentlyDeletedEntry.queue(queue, in: context)
+        ]
+
+        let failed = RecentlyDeletedView.restore([work.id, collection.id, queue.id], in: entries)
+
+        #expect(failed.isEmpty)
+        #expect(!work.isPendingDeletion && !collection.isPendingDeletion && !queue.isPendingDeletion)
+        #expect(left.isPendingDeletion)
+        #expect(!(try context.fetch(FetchDescriptor<SyncTombstone>()).contains { $0.recordID == queue.id }))
+    }
+
+    /// 1bj's Select → Delete Permanently: each selected record through its own
+    /// permanent delete, behind one alert naming the count.
+    @Test func recentlyDeletedBulkDeleteRemovesOnlyTheSelection() throws {
+        let container = try container()
+        let context = container.mainContext
+        let chosen = WorkCollection(name: "Gone Shelf")
+        let spared = WorkCollection(name: "Spared Shelf")
+        let queue = ReadingQueue(name: "Gone Queue")
+        context.insert(chosen)
+        context.insert(spared)
+        context.insert(queue)
+        try context.save()
+        for collection in [chosen, spared] {
+            PreservedWorkService.softDelete(collection, in: context)
+        }
+        PreservedWorkService.softDelete(queue, in: context)
+        let entries = [
+            RecentlyDeletedEntry.collection(chosen, in: context),
+            RecentlyDeletedEntry.collection(spared, in: context),
+            RecentlyDeletedEntry.queue(queue, in: context)
+        ]
+
+        RecentlyDeletedView.deletePermanently([chosen.id, queue.id], in: entries)
+
+        let collections = try context.fetch(FetchDescriptor<WorkCollection>())
+        #expect(collections.map(\.name) == ["Spared Shelf"])
+        #expect(collections.first?.isPendingDeletion == true)
+        #expect(try context.fetch(FetchDescriptor<ReadingQueue>()).isEmpty)
+        #expect(RecentlyDeletedView.bulkDeleteTitle(count: 2) == "Delete 2 items permanently?")
+        #expect(RecentlyDeletedView.bulkDeleteTitle(count: 1) == "Delete 1 item permanently?")
+        #expect(RecentlyDeletedView.restoreFailureMessage([entries[0]])
+            == "Kudos could not save the restored collection. It is still scheduled for permanent deletion, so try again.")
+    }
+
+    @Test func recentlyDeletedContainerRowsNameKindCountAndDate() throws {
+        let container = try container()
+        let context = container.mainContext
+        let collection = WorkCollection(name: "Shelf")
+        collection.deletedAt = try #require(Calendar.current.date(
+            from: DateComponents(year: 2026, month: 8, day: 30, hour: 12)
+        ))
+        context.insert(collection)
+
+        let entry = RecentlyDeletedEntry.collection(collection, in: context)
+
+        #expect(entry.kicker == "Local collection")
+        #expect(RecentlyDeletedEntry.containerDetail(
+            8,
+            deletedAt: collection.deletedAt,
+            locale: Locale(identifier: "en_GB")
+        ) == "8 works · deleted 30 Aug")
+    }
+
     @Test func recentlyDeletedTurnsAmberUnderAWeek() {
         #expect(RecentlyDeletedView.isUrgent(daysRemaining: 0))
         #expect(RecentlyDeletedView.isUrgent(daysRemaining: 6))
