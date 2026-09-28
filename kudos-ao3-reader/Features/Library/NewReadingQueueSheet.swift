@@ -105,7 +105,7 @@ struct NewReadingQueueSheet: View {
                 Section {
                     groupLabel("Offline")
                     offlinePanel.pageBodyRow(top: 8, gutter: gutter)
-                    footnote(offlineFootnote)
+                    footnote(Self.offlineFootnote)
                 }
 
                 Section {
@@ -221,33 +221,10 @@ struct NewReadingQueueSheet: View {
         .subjectPanel()
     }
 
-    /// 1j's copy for this group is "On, every work you add downloads an EPUB.
-    /// Off, the queue is just a list — nothing is preserved." **Neither half is
-    /// true of this app yet, and the sentence that used to sit here claimed the
-    /// falser one.**
-    ///
-    /// `SavedWork.isProtected` is `isSaved || isFavorite || isQueuedForLater ||
-    /// ao3WorkID == nil`, so membership of *any* queue already exempts a work
-    /// from `WorkLifecycle.freeEPUB`, toggle or no toggle. And nothing anywhere
-    /// reads `ReadingQueue.keepsWorksOffline` or
-    /// `WorkCollection.keepsWorksOffline` to decide anything — grepped to zero
-    /// decision sites (an independent adversarial pass over the whole repo,
-    /// Android included, could not find one either). The field is written by
-    /// `createQueue` and `ReadingQueueSettingsView`, read back by that screen's
-    /// toggle, and carried by the backup DTO — nothing else. The download side
-    /// ignores it too: `ReadingQueueService.preserve` checks only
-    /// `isQueuedForLater`. So the old promise ("keep their download even after
-    /// they leave it") named precisely the behaviour the app does not have.
-    ///
-    /// ponytail: the copy now says what is true today. Making the toggle bite —
-    /// letting a queue opt its works out of preservation, and keeping them
-    /// preserved after they leave — changes how much disk the app uses, on three
-    /// surfaces, and that is the owner's call, not a restyle's.
-    private var offlineFootnote: String {
-        "A work keeps its download for as long as it is in any queue. This records "
-            + "your choice for this queue; Kudos does not vary preservation per "
-            + "queue yet."
-    }
+    /// 1j's copy for this group, and what the toggle does since T-276
+    /// (`KeepOffline`, `SavedWork.isKeptOffline`).
+    static let offlineFootnote = "On, every work you add downloads an EPUB. "
+        + "Off, the queue is just a list — nothing is preserved and nothing counts against storage."
 
     private var seedPanel: some View {
         VStack(spacing: 0) {
@@ -362,7 +339,8 @@ nonisolated enum NewQueueSeed: String, CaseIterable, Identifiable, Sendable {
 
 /// What the sheet collects beyond name and colour.
 nonisolated struct NewQueueOptions: Equatable, Sendable {
-    var keepsWorksOffline = false
+    /// 1j draws it on: a new queue keeps its works, as queues always have.
+    var keepsWorksOffline = true
     var seed: NewQueueSeed = .empty
     /// Tag names, resolved to `Tag`s only when the queue is created.
     var tagNames: [String] = []
