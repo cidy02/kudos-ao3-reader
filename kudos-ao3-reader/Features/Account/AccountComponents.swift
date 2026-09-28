@@ -589,9 +589,6 @@ struct AccountWorksInlineSection: View {
     var layout: AccountWorksLayout = .list
     /// Bumped by the host's pull-to-refresh; a change forces a cache bypass.
     var reloadToken: Int
-    /// Reports whether this page's rendered canonical entries include a local
-    /// Mature/Explicit work before Hide mode omits it.
-    var onAdultContentVisibilityChange: (Bool) -> Void = { _ in }
     /// Pushes the full `AO3AccountWorksList(kind:)` screen — this inline section
     /// is a lightweight preview with no refine-filter panel or Mature-content
     /// reveal toggle of its own, so those stay reachable one tap away.
@@ -625,11 +622,6 @@ struct AccountWorksInlineSection: View {
         )
     }
 
-    private var hasVisibleAdultContent: Bool {
-        canonicalEntries(localLibrary: localWorks)
-            .contains { $0.local?.isAdult == true }
-    }
-
     private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
         CanonicalWorkMerge.remoteLed(remote: works, localLibrary: localLibrary)
     }
@@ -647,9 +639,6 @@ struct AccountWorksInlineSection: View {
             }
         }
         .task(id: loadTaskID) { await runLoadTask() }
-        .onChange(of: hasVisibleAdultContent, initial: true) { _, hasVisibleAdultContent in
-            onAdultContentVisibilityChange(hasVisibleAdultContent)
-        }
     }
 
     private var listBody: some View {

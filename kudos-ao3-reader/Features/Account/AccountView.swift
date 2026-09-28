@@ -49,11 +49,6 @@ struct AccountView: View {
     @State private var postingPseudName: String?
     /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
     @State private var listReloadToken = 0
-    /// Supplied by the child list that is currently on screen. This must never
-    /// use the library-wide query: an unrelated adult work must not enable an
-    /// inert Mature-reveal button on another Account list.
-    @State private var currentListHasAdultContent = false
-    @State private var adultContentScope: String?
 
     enum Route: Hashable {
         case myCollections
@@ -529,33 +524,10 @@ struct AccountView: View {
         }
     }
 
-    /// Eye toggle when Hide Mature is on and the library has adult works that
-    /// can appear in the currently rendered Account list.
+    /// Every works screen offers Show/Hide mature whenever Hide Mature is on.
     private var showsMatureRevealControl: Bool {
         showsWorkListControls
-            && adultContentScope == matureContentScope
-            && PrivacyGate.shouldShowMatureReveal(
-                hideMature: hideMature,
-                hasVisibleMatureWorks: currentListHasAdultContent
-            )
-    }
-
-    private var matureContentScope: String {
-        [
-            auth.username ?? "",
-            selectedTab.rawValue,
-            readingTab.rawValue,
-            writingTab.rawValue,
-            activityTab.rawValue
-        ].joined(separator: "|")
-    }
-
-    private func adultContentVisibilityHandler(for scope: String) -> (Bool) -> Void {
-        { hasAdultContent in
-            guard scope == matureContentScope else { return }
-            adultContentScope = scope
-            currentListHasAdultContent = hasAdultContent
-        }
+            && hideMature
     }
 
     // MARK: Profile card
@@ -718,8 +690,7 @@ struct AccountView: View {
     private func profileContentSections(
         profileTab: AO3AuthorProfileTab,
         sectionTitle: String,
-        layout: AccountWorksLayout = .list,
-        onAdultContentVisibilityChange: @escaping (Bool) -> Void = { _ in }
+        layout: AccountWorksLayout = .list
     ) -> some View {
         if let model = profileModel {
             switch model.headerPhase {
@@ -771,7 +742,6 @@ struct AccountView: View {
                         expandAll: expandAll,
                         displayMode: displayMode,
                         layout: layout,
-                        onAdultContentVisibilityChange: onAdultContentVisibilityChange,
                         filters: filters
                     )
                 } else {

@@ -281,7 +281,7 @@ struct AO3AccountWorksList: View {
                 // reserves an (empty-looking) toolbar slot, most commonly hit here
                 // while signed out (no local matches to reveal, no filter/menu cluster
                 // since nothing's loaded yet).
-                let hasMature = hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true })
+                let hasMature = hideMature
                 // Series and Authors are not this page: its filter and menu act on Works.
                 let hasWorks = auth.isLoggedIn && phase == .loaded && !works.isEmpty
                     && (kind != .subscriptions || subscriptionsScope == .works)

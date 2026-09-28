@@ -257,38 +257,60 @@ private struct CardRow: ViewModifier {
     var cornerRadius: CGFloat
     var verticalPadding: CGFloat
     var interCardSpacing: CGFloat
+    /// 1h.1's queue position, drawn left of the card rather than inside it.
+    var leadingNumber: Int?
+
+    /// 1h.1: a 17pt number column, then 9pt, then the card.
+    static let numberWidth: CGFloat = 17
+    static let numberGap: CGFloat = 9
+    private var gutter: CGFloat { leadingNumber == nil ? 0 : Self.numberWidth + Self.numberGap }
 
     func body(content: Content) -> some View {
-        content
+        var insets = CardListMetrics.rowInsets(verticalPadding: verticalPadding, interCardSpacing: interCardSpacing)
+        insets.leading += gutter
+        var cardInsets = CardListMetrics.cardInsets(interCardSpacing: interCardSpacing)
+        cardInsets.leading += gutter
+        return content
             .listRowSeparator(.hidden)
-            .listRowInsets(CardListMetrics.rowInsets(
-                verticalPadding: verticalPadding, interCardSpacing: interCardSpacing
-            ))
+            .listRowInsets(insets)
             .listRowBackground(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(theme.appTheme.cardSurface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(cardFill)
-                    )
-                    // Hairline edge for crisp separation on flat Light/Sepia backdrops —
-                    // or the accent-color selection outline, at the same true card edge.
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(
-                                isSelected ? Color.accentColor : cardBorder,
-                                lineWidth: isSelected ? 2 : 0.5
-                            )
-                    )
-                    // Subtle elevation (Light/Sepia only).
-                    .shadow(color: theme.appTheme.cardShadow.color,
-                            radius: theme.appTheme.cardShadow.radius,
-                            x: 0, y: theme.appTheme.cardShadow.y)
-                    // Inset the fill so adjacent cards leave `interCardSpacing` between
-                    // them and `sideMargin` from the screen edges (and leave room for
-                    // the shadow within the gap).
-                    .padding(CardListMetrics.cardInsets(interCardSpacing: interCardSpacing))
+                ZStack(alignment: .leading) {
+                    if let leadingNumber {
+                        Text("\(leadingNumber)")
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                            .frame(width: Self.numberWidth, alignment: .trailing)
+                            .padding(.leading, CardListMetrics.sideMargin)
+                    }
+                    card.padding(cardInsets)
+                }
             )
+    }
+
+    private var card: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(theme.appTheme.cardSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(cardFill)
+            )
+            // Hairline edge for crisp separation on flat Light/Sepia backdrops —
+            // or the accent-color selection outline, at the same true card edge.
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.accentColor : cardBorder,
+                        lineWidth: isSelected ? 2 : 0.5
+                    )
+            )
+            // Subtle elevation (Light/Sepia only).
+            .shadow(color: theme.appTheme.cardShadow.color,
+                    radius: theme.appTheme.cardShadow.radius,
+                    x: 0, y: theme.appTheme.cardShadow.y)
+            // Inset by the caller (`cardInsets`) so adjacent cards leave
+            // `interCardSpacing` between them and `sideMargin` from the
+            // screen edges (and leave room for the shadow within the gap).
     }
 
     /// A tinted row is the subject's wash composited over the ordinary card
@@ -322,14 +344,16 @@ extension View {
         tintHue: Double? = nil,
         cornerRadius: CGFloat = CardListMetrics.cornerRadius,
         verticalPadding: CGFloat = CardListMetrics.innerVertical,
-        interCardSpacing: CGFloat = CardListMetrics.interCardSpacing
+        interCardSpacing: CGFloat = CardListMetrics.interCardSpacing,
+        leadingNumber: Int? = nil
     ) -> some View {
         modifier(CardRow(
             isSelected: isSelected,
             tintHue: tintHue,
             cornerRadius: cornerRadius,
             verticalPadding: verticalPadding,
-            interCardSpacing: interCardSpacing
+            interCardSpacing: interCardSpacing,
+            leadingNumber: leadingNumber
         ))
     }
 
