@@ -26,6 +26,7 @@ import SwiftUI
 struct ChallengeSettingsEditView: View {
     let collectionSlug: String
     var collectionTitle: String = ""
+    var viewerIsOwner: Bool
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
@@ -44,6 +45,7 @@ struct ChallengeSettingsEditView: View {
     /// The challenge's total, not page 1's count; `nil` leaves it out.
     @State private var signUpTotal: Int?
     @State private var phase: Phase = .idle
+    @State private var loadGeneration = 0
     @State private var isSaving: Bool = false
     @State private var saveNotice: String?
 
@@ -69,6 +71,10 @@ struct ChallengeSettingsEditView: View {
 
     var settings: AO3ChallengeSettings {
         form?.settings ?? AO3ChallengeSettings(collectionSlug: collectionSlug, kind: .giftExchange)
+    }
+
+    static func canStartSave(isSaving: Bool, hasForm: Bool) -> Bool {
+        !isSaving && hasForm
     }
 
     var body: some View {
@@ -119,7 +125,7 @@ struct ChallengeSettingsEditView: View {
 
             bottomActionBar
         }
-        .task { await loadIfNeeded() }
+        .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
         .alert("Reveal now?", isPresented: $confirmReveal) {
             Button("Save and reveal", role: .destructive) {
@@ -186,6 +192,9 @@ struct ChallengeSettingsEditView: View {
             SubjectFieldLabel(text: "Request restrictions", style: .formGroup)
                 .pageBodyRow(top: 12, gutter: gutter)
             requestRestrictionTogglesPanel.pageBodyRow(top: 8, gutter: gutter)
+            if restrictionControlsLocked {
+                restrictionLockNote.pageBodyRow(top: 8, gutter: gutter)
+            }
         }
 
         if !tagSetLinks.isEmpty {
@@ -269,7 +278,11 @@ struct ChallengeSettingsEditView: View {
     private func dateRow(label: String, keyPath: WritableKeyPath<AO3ChallengeSettings, AO3ChallengeInstant>) -> some View {
         let instant = settings[keyPath: keyPath]
         return SubjectFormRow(label: label, arrangement: .control) {
-            if let wallClock = instant.wallClock {
+            if !settings.scheduleIsEditable {
+                Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            } else if let wallClock = instant.wallClock {
                 DatePicker("", selection: Binding(
                     get: { wallClock },
                     set: { form?.settings[keyPath: keyPath].wallClock = $0 }
@@ -319,14 +332,19 @@ struct ChallengeSettingsEditView: View {
                 }
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Time zone", value: settings.timeZoneName)
+            SubjectFormRow(
+                label: "Time zone",
+                value: settings.scheduleIsEditable ? settings.timeZoneName : "Unavailable"
+            )
         }
         .subjectPanel()
     }
 
     private var scheduleFootnote: some View {
-        Text("Dates are in the challenge’s time zone, as on AO3’s own form. AO3 runs reveals "
-            + "server-side, so the app cannot bring a reveal forward once it has fired.")
+        Text(settings.scheduleIsEditable
+            ? "Dates are in the challenge’s time zone, as on AO3’s own form. AO3 runs reveals "
+                + "server-side, so the app cannot bring a reveal forward once it has fired."
+            : "AO3's time zone was missing or unreadable, so dates are read-only and won't be included in this save.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -345,15 +363,17 @@ struct ChallengeSettingsEditView: View {
         label: String,
         value: Int,
         range: ClosedRange<Int>,
+        isDisabled: Bool = false,
         onChange: @escaping (Int) -> Void
     ) -> some View {
-        SubjectFormRow(label: label, arrangement: .value) {
+        SubjectFormRow(label: label, arrangement: .value, isDisabled: isDisabled) {
             HStack(spacing: 10) {
                 Text("\(value)")
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary)
                 Stepper("", value: Binding(get: { value }, set: onChange), in: range)
                     .labelsHidden()
+                    .disabled(isDisabled)
             }
         }
     }
@@ -392,7 +412,9 @@ struct ChallengeSettingsEditView: View {
         }
     }
 
-    private func requestRestrictionToggleBinding(_ keyPath: WritableKeyPath<AO3PromptRestrictionSnapshot, Bool>) -> Binding<Bool> {
+    private func requestRestrictionToggleBinding(
+        _ keyPath: WritableKeyPath<AO3PromptRestrictionSnapshot, Bool>
+    ) -> Binding<Bool> {
         Binding(
             get: { form?.settings.requestRestriction[keyPath: keyPath] ?? false },
             set: { form?.settings.requestRestriction[keyPath: keyPath] = $0 }
@@ -405,21 +427,42 @@ struct ChallengeSettingsEditView: View {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.urlAllowed))
                     .labelsHidden()
                     .tint(palette.accent)
+                    .disabled(!restrictionIsEditable("url_allowed"))
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Description required", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.descriptionRequired))
                     .labelsHidden()
                     .tint(palette.accent)
+                    .disabled(!restrictionIsEditable("description_required"))
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Optional tags allowed", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.optionalTagsAllowed))
                     .labelsHidden()
                     .tint(palette.accent)
+                    .disabled(!restrictionIsEditable("optional_tags_allowed"))
             }
         }
         .subjectPanel()
+    }
+
+    private func restrictionIsEditable(_ field: String) -> Bool {
+        settings.requestRestriction.isEditable(field)
+    }
+
+    private var restrictionControlsLocked: Bool {
+        ["url_allowed", "description_required", "optional_tags_allowed",
+         "fandom_num_required", "fandom_num_allowed", "allow_any_fandom"]
+            .contains { settings.requestRestriction.controlState($0) == .disabled }
+    }
+
+    private var restrictionLockNote: some View {
+        Text("Prompts have been added so these settings can no longer be changed.")
+            .font(.system(size: 11.5))
+            .foregroundStyle(Color.secondary.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
     }
 
     // MARK: - Tag sets
@@ -464,7 +507,8 @@ struct ChallengeSettingsEditView: View {
             stepperRow(
                 label: "Fandoms required per request",
                 value: settings.requestRestriction.fandomRequired,
-                range: 0...10
+                range: 0...10,
+                isDisabled: !restrictionIsEditable("fandom_num_required")
             ) {
                 form?.settings.requestRestriction.fandomRequired = $0
             }
@@ -472,7 +516,8 @@ struct ChallengeSettingsEditView: View {
             stepperRow(
                 label: "Fandoms allowed per request",
                 value: settings.requestRestriction.fandomAllowed,
-                range: 0...10
+                range: 0...10,
+                isDisabled: !restrictionIsEditable("fandom_num_allowed")
             ) {
                 form?.settings.requestRestriction.fandomAllowed = $0
             }
@@ -493,6 +538,7 @@ struct ChallengeSettingsEditView: View {
             .tint(palette.accent)
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
+            .disabled(!restrictionIsEditable("allow_any_fandom"))
         }
         .subjectPanel()
     }
@@ -555,7 +601,10 @@ struct ChallengeSettingsEditView: View {
             )
         }
         .buttonStyle(.plain)
-        .disabled(isSaving || form == nil)
+        .disabled(
+            !AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner)
+                || !Self.canStartSave(isSaving: isSaving, hasForm: form != nil)
+        )
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 26)
@@ -634,12 +683,13 @@ struct ChallengeSettingsEditView: View {
 
     // MARK: - Loading & Saving
 
-    private func loadIfNeeded() async {
-        guard phase == .idle else { return }
-        await load()
-    }
-
     private func load() async {
+        loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
+        let capturedLoadGeneration = loadGeneration
+        let capturedSessionGeneration = auth.sessionGeneration
+        if loadedGeneration != capturedSessionGeneration {
+            clearLoadedState()
+        }
         phase = .loading
         saveNotice = nil
         do {
@@ -647,43 +697,63 @@ struct ChallengeSettingsEditView: View {
                 for: AO3ChallengeURL.giftExchangeEdit(slug: collectionSlug)
             )
             let loaded = try await AO3Client.shared.challengeSettings(slug: collectionSlug, request: request)
-            form = loaded
+            try auth.requireSessionGeneration(capturedSessionGeneration)
 
+            var loadedSignUpTotal: Int?
             if let signUpsRequest = try? auth.authenticatedRequest(
                 for: AO3ChallengeURL.signUps(slug: collectionSlug)
             ), let firstPage = try? await AO3Client.shared.challengeSignUps(
                 slug: collectionSlug, request: signUpsRequest
             ) {
-                signUpTotal = try? await AO3Client.shared.challengeSignUpTotal(
+                loadedSignUpTotal = try? await AO3Client.shared.challengeSignUpTotal(
                     slug: collectionSlug, firstPage: firstPage, request: signUpsRequest
                 )
             }
+            try auth.requireSessionGeneration(capturedSessionGeneration)
 
             // Best-effort: a challenge with no tag set is ordinary, and a failed
             // profile fetch must not take the whole form down with it.
             let profileRequest = try? auth.authenticatedRequest(
                 for: AO3CollectionURL.profile(slug: collectionSlug)
             )
-            tagSetLinks = (try? await AO3Client.shared.collectionTagSets(
+            let loadedTagSetLinks = (try? await AO3Client.shared.collectionTagSets(
                 slug: collectionSlug, request: profileRequest
             )) ?? []
+            try auth.requireSessionGeneration(capturedSessionGeneration)
 
             // Basics and the moderation switches. Best-effort: the challenge
             // form stays editable if the collection's page fails.
-            loadedGeneration = auth.sessionGeneration
             let collection = try? await auth.collectionEditForm(slug: collectionSlug)
+            try auth.requireSessionGeneration(capturedSessionGeneration)
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: capturedLoadGeneration,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: capturedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
+            form = loaded
+            signUpTotal = loadedSignUpTotal
+            tagSetLinks = loadedTagSetLinks
             collectionForm = collection
             loadedCollectionForm = collection
             collectionLoadFailed = collection == nil
-
+            loadedGeneration = capturedSessionGeneration
             phase = .loaded
         } catch {
+            guard AO3CollectionSessionReload.shouldApplyLoad(
+                capturedLoadGeneration: capturedLoadGeneration,
+                loadGeneration: loadGeneration,
+                capturedSessionGeneration: capturedSessionGeneration,
+                sessionGeneration: auth.sessionGeneration
+            ) else { return }
             phase = .failed(error.localizedDescription)
         }
     }
 
     private func save() async {
-        guard let current = form else { return }
+        guard !isSaving else { return }
+        guard AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) else { return }
+        guard let current = form, let loadedGeneration else { return }
         saveNotice = nil
         let validated = current.validated()
         if !validated.isValid {
@@ -692,8 +762,12 @@ struct ChallengeSettingsEditView: View {
         }
 
         isSaving = true
+        defer { isSaving = false }
         do {
-            let outcome = try await auth.updateChallengeSettings(validated)
+            let outcome = try await auth.updateChallengeSettings(
+                validated, expectedGeneration: loadedGeneration
+            )
+            try auth.requireSessionGeneration(loadedGeneration)
             switch outcome {
             case let .saved(message, updatedForm):
                 form = updatedForm
@@ -702,12 +776,25 @@ struct ChallengeSettingsEditView: View {
             case let .invalid(invalidForm):
                 form = invalidForm
             }
+        } catch is CancellationError {
+            return
         } catch {
+            guard auth.sessionGeneration == loadedGeneration else { return }
             var updated = current
             updated.generalErrors = [error.localizedDescription]
             form = updated
         }
-        isSaving = false
+    }
+
+    private func clearLoadedState() {
+        form = nil
+        collectionForm = nil
+        loadedCollectionForm = nil
+        loadedGeneration = nil
+        collectionLoadFailed = false
+        tagSetLinks = []
+        signUpTotal = nil
+        saveNotice = nil
     }
 
     /// The moderation switches post through the collection's own form, and only
@@ -726,8 +813,9 @@ struct ChallengeSettingsEditView: View {
                 appendError(invalid.generalErrors.first ?? "AO3 didn't save the collection settings.")
             }
         } catch is CancellationError {
-            appendError("You changed AO3 accounts, so the collection settings were not saved. Reload and try again.")
+            return
         } catch {
+            guard auth.sessionGeneration == loadedGeneration else { return }
             appendError("Collection settings: \(error.localizedDescription)")
         }
     }

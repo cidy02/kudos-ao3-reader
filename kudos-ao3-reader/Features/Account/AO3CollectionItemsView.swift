@@ -57,6 +57,12 @@ struct AO3CollectionItemsView: View {
         slug == nil ? .invited : .unreviewed
     }
 
+    static func startingTab(
+        slug: String?, initialTab: AO3CollectionItemTab?
+    ) -> AO3CollectionItemTab {
+        initialTab ?? defaultTab(slug: slug)
+    }
+
     /// Reset returns to `defaultTab`, so it has nothing to do while on it.
     static func resetIsDisabled(slug: String?, tab: AO3CollectionItemTab) -> Bool {
         tab == defaultTab(slug: slug)
@@ -67,10 +73,10 @@ struct AO3CollectionItemsView: View {
         CoverArt.workHue(fandoms: [], title: item.collectionTitle)
     }
 
-    init(slug: String?, title: String) {
+    init(slug: String?, title: String, initialTab: AO3CollectionItemTab? = nil) {
         self.slug = slug
         self.title = title
-        _tab = State(initialValue: Self.defaultTab(slug: slug))
+        _tab = State(initialValue: Self.startingTab(slug: slug, initialTab: initialTab))
     }
 
     /// The spec's four pills. `rejectedByUser` is deliberately not one: AO3 keeps

@@ -163,6 +163,11 @@ struct AO3CollectionItemsScopeTests {
         ))
     }
 
+    @Test func ownerOnlyChallengeControlsRequireTheParsedOwnerSignal() {
+        #expect(AO3CollectionOwnerControls.areVisible(viewerIsOwner: true))
+        #expect(!AO3CollectionOwnerControls.areVisible(viewerIsOwner: false))
+    }
+
     private func sampleItem() -> AO3CollectionItem {
         AO3CollectionItem(
             id: 7,

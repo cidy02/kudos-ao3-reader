@@ -193,11 +193,67 @@ struct AO3ChallengeFormTests {
         #expect(posted("character_restrict_to_tag_set").isEmpty)
     }
 
+    @Test func disabledAndAbsentRestrictionFieldsAreNotPosted() throws {
+        let base = "gift_exchange[request_restriction_attributes]"
+        let html = """
+        <form action="/collections/fest/gift_exchange" method="post">
+          <input type="hidden" name="authenticity_token" value="csrf">
+          <input name="\(base)[fandom_num_required]" value="2" disabled>
+          <input name="\(base)[url_allowed]" type="hidden" value="0" disabled>
+          <input type="checkbox" name="\(base)[url_allowed]" value="1" checked disabled>
+          <input name="\(base)[description_required]" type="hidden" value="0">
+          <input type="checkbox" name="\(base)[description_required]" value="1" checked>
+        </form>
+        """
+        let form = try AO3Client.parseChallengeSettingsForm(html, slug: "fest", kind: .giftExchange)
+        let restriction = form.settings.requestRestriction
+        #expect(restriction.controlState("fandom_num_required") == .disabled)
+        #expect(restriction.controlState("url_allowed") == .disabled)
+        #expect(restriction.controlState("description_required") == .enabled)
+        #expect(restriction.controlState("optional_tags_allowed") == .absent)
+        let params = AO3Client.challengeSettingsParameters(form)
+        let names = Set(params.map(\.0))
+        #expect(!names.contains("\(base)[fandom_num_required]"))
+        #expect(!names.contains("\(base)[url_allowed]"))
+        #expect(!names.contains("\(base)[optional_tags_allowed]"))
+        #expect(params.first { $0.0 == "\(base)[description_required]" }?.1 == "1")
+    }
+
+    @Test func missingTimeZoneMakesScheduleReadOnlyAndOmitsItFromSave() throws {
+        let html = """
+        <form action="/collections/fest/gift_exchange" method="post">
+          <input type="hidden" name="authenticity_token" value="csrf">
+          <input name="gift_exchange[signups_open_at_string]" value="2026-10-01 12:00:00">
+        </form>
+        """
+        let form = try AO3Client.parseChallengeSettingsForm(html, slug: "fest", kind: .giftExchange)
+        let params = AO3Client.challengeSettingsParameters(form)
+        #expect(form.settings.timeZoneName.isEmpty)
+        #expect(!form.settings.scheduleIsEditable)
+        #expect(!params.contains { $0.0 == "gift_exchange[time_zone]" })
+        #expect(!params.contains { $0.0.hasSuffix("_at_string]") })
+    }
+
+    @Test func parsedSlugsCannotBecomeAQueryOrFragment() {
+        let challenge = AO3ChallengeURL.giftExchangeEdit(slug: "bad#slug")
+        let collection = AO3CollectionURL.edit(slug: "bad?slug")
+        #expect(challenge.fragment == nil)
+        #expect(challenge.pathComponents.contains("bad#slug"))
+        #expect(collection.query == nil)
+        #expect(collection.pathComponents.contains("bad?slug"))
+    }
+
     @Test func introductionWordCountIgnoresMarkup() {
         #expect(ChallengeSettingsEditView.wordCountText("<p>Slow burn, any fandom.</p><p>Two <em>weeks</em>.</p>")
             == "6 words")
         #expect(ChallengeSettingsEditView.wordCountText("<p></p>") == "None")
         #expect(ChallengeSettingsEditView.wordCountText("One") == "1 word")
+    }
+
+    @Test func challengeSettingsSaveCannotStartTwice() {
+        #expect(ChallengeSettingsEditView.canStartSave(isSaving: false, hasForm: true))
+        #expect(!ChallengeSettingsEditView.canStartSave(isSaving: true, hasForm: true))
+        #expect(!ChallengeSettingsEditView.canStartSave(isSaving: false, hasForm: false))
     }
 
     /// 1cb: defaulted-and-uncovered rows are the open pinch hits; AO3's Pinch

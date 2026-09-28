@@ -321,8 +321,14 @@ struct AO3CollectionDetailView: View {
                 CollectionMaintainersView(collectionSlug: slug, collectionTitle: title)
             }))
             rows.append(AnyView(manageRow("Moderation") {
-                CollectionModerationView(collectionSlug: slug, collectionTitle: title)
+                CollectionModerationView(
+                    collectionSlug: slug,
+                    collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner
+                )
             }))
+        }
+        if AO3CollectionOwnerControls.areVisible(viewerIsOwner: show.collection.viewerIsOwner) {
             rows.append(AnyView(manageRow("Collection Settings") {
                 AO3CollectionFormView(
                     slug: slug,
@@ -339,7 +345,11 @@ struct AO3CollectionDetailView: View {
         }
         if show.dashboard.assignmentsURL != nil, show.isMaintainer {
             rows.append(AnyView(manageRow("Assignments") {
-                ChallengeAssignmentsView(collectionSlug: slug, collectionTitle: title)
+                ChallengeAssignmentsView(
+                    collectionSlug: slug,
+                    collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner
+                )
             }))
         }
         // Not maintainer-gated: any participant claims/fills prompts.
@@ -359,9 +369,14 @@ struct AO3CollectionDetailView: View {
         // link for collection owners alone and refuses its edit page to everyone
         // else, moderators included (otwarchive Q5), so the link is the owner
         // signal. The read (1by) pushes the edit form (1cf).
-        if show.dashboard.challengeSettingsURL != nil, show.isMaintainer {
+        if show.dashboard.challengeSettingsURL != nil,
+           AO3CollectionOwnerControls.areVisible(viewerIsOwner: show.collection.viewerIsOwner) {
             rows.append(AnyView(manageRow("Challenge Settings") {
-                ChallengeSettingsView(collectionSlug: slug, collectionTitle: title)
+                ChallengeSettingsView(
+                    collectionSlug: slug,
+                    collectionTitle: title,
+                    viewerIsOwner: show.collection.viewerIsOwner
+                )
             }))
         }
 

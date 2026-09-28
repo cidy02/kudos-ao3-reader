@@ -68,11 +68,12 @@ struct PromptMemeView: View {
             // claimedByCurrentUser is exactly what it's for; the owner-name match
             // is a fallback so a prompt you posted (but haven't claimed) still
             // shows up here, since AO3 has no other signal for "mine" on this page.
-            let loggedInName = auth.username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let loggedInName = auth.username ?? ""
             return prompts.filter { prompt in
                 if prompt.claimedByCurrentUser { return true }
-                guard let loggedInName, !loggedInName.isEmpty else { return false }
-                return prompt.displayedOwner?.lowercased() == loggedInName
+                return AO3ChallengeSignUpMatching.owns(
+                    byline: prompt.displayedOwner ?? "", login: loggedInName
+                )
             }
         }
     }

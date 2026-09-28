@@ -127,7 +127,7 @@ nonisolated struct AO3ChallengeInstant: Hashable, Sendable {
     init(wallClock: Date? = nil, wireString: String = "", timeZoneName: String = "UTC", isOnForm: Bool = true) {
         self.wallClock = wallClock
         self.wireString = wireString
-        self.timeZoneName = timeZoneName.isEmpty ? "UTC" : timeZoneName
+        self.timeZoneName = timeZoneName
         self.isOnForm = isOnForm
     }
 
@@ -181,6 +181,10 @@ nonisolated struct AO3ChallengeSignUpLimits: Hashable, Sendable {
 }
 
 nonisolated struct AO3PromptRestrictionSnapshot: Hashable, Sendable {
+    enum ControlState: Hashable, Sendable {
+        case absent, enabled, disabled
+    }
+
     var id: String = ""
     var optionalTagsAllowed: Bool = false
     var titleRequired: Bool = false
@@ -212,6 +216,15 @@ nonisolated struct AO3PromptRestrictionSnapshot: Hashable, Sendable {
     var archiveWarningRequired: Int = 0
     var archiveWarningAllowed: Int = 0
     var tagSetsToAdd: String = ""
+    var controlStates: [String: ControlState] = [:]
+
+    func controlState(_ field: String) -> ControlState {
+        controlStates[field] ?? .enabled
+    }
+
+    func isEditable(_ field: String) -> Bool {
+        controlState(field) == .enabled
+    }
 
     /// 1by's "Allow any prompt": whether a request may pick AO3's "Any" option
     /// for any of the four tag types.
@@ -227,6 +240,7 @@ nonisolated struct AO3ChallengeSettings: Hashable, Sendable, Identifiable {
     var kind: AO3ChallengeKind
     var signupOpen: Bool = false
     var timeZoneName: String = "UTC"
+    var scheduleIsEditable: Bool = true
     /// The five dates, in AO3's own order (1by / 1cf).
     var signupsOpenAt: AO3ChallengeInstant = AO3ChallengeInstant()
     var signupsCloseAt: AO3ChallengeInstant = AO3ChallengeInstant()
@@ -692,41 +706,50 @@ nonisolated struct AO3TagSetSave: Hashable, Sendable {
 
 nonisolated enum AO3ChallengeURL {
     static let host = "https://archiveofourown.org"
+    private static let baseURL = URL(string: host)!
+
+    private static func path(_ components: String...) -> URL {
+        components.reduce(baseURL) { $0.appendingPathComponent($1) }
+    }
+
+    private static func collection(_ slug: String) -> URL {
+        path("collections", slug)
+    }
 
     static func giftExchangeEdit(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/gift_exchange/edit")!
+        collection(slug).appendingPathComponent("gift_exchange").appendingPathComponent("edit")
     }
 
     static func giftExchange(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/gift_exchange")!
+        collection(slug).appendingPathComponent("gift_exchange")
     }
 
     static func promptMemeEdit(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/prompt_meme/edit")!
+        collection(slug).appendingPathComponent("prompt_meme").appendingPathComponent("edit")
     }
 
     static func promptMeme(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/prompt_meme")!
+        collection(slug).appendingPathComponent("prompt_meme")
     }
 
     static func signUps(slug: String, page: Int = 1) -> URL {
-        paged("/collections/\(slug)/signups", page: page)
+        paged(collection(slug).appendingPathComponent("signups"), page: page)
     }
 
     static func signUp(slug: String, id: Int) -> URL {
-        URL(string: "\(host)/collections/\(slug)/signups/\(id)")!
+        collection(slug).appendingPathComponent("signups").appendingPathComponent(String(id))
     }
 
     static func newSignUp(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/signups/new")!
+        collection(slug).appendingPathComponent("signups").appendingPathComponent("new")
     }
 
     static func editSignUp(slug: String, id: Int) -> URL {
-        URL(string: "\(host)/collections/\(slug)/signups/\(id)/edit")!
+        signUp(slug: slug, id: id).appendingPathComponent("edit")
     }
 
     static func confirmDeleteSignUp(slug: String, id: Int) -> URL {
-        URL(string: "\(host)/collections/\(slug)/signups/\(id)/confirm_delete")!
+        signUp(slug: slug, id: id).appendingPathComponent("confirm_delete")
     }
 
     static func assignments(slug: String, list: AO3ChallengeAssignmentList, page: Int = 1) -> URL {
@@ -738,62 +761,58 @@ nonisolated enum AO3ChallengeURL {
         case .assignments: items.append(URLQueryItem(name: "fulfilled", value: "true"))
         }
         if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
-        var components = URLComponents(string: "\(host)/collections/\(slug)/assignments")!
-        if !items.isEmpty { components.queryItems = items }
-        return components.url!
+        let url = collection(slug).appendingPathComponent("assignments")
+        // `appending(queryItems: [])` still writes a bare "?".
+        return items.isEmpty ? url : url.appending(queryItems: items)
     }
 
     static func assignmentDefault(slug: String, id: Int) -> URL {
-        URL(string: "\(host)/collections/\(slug)/assignments/\(id)/default")!
+        collection(slug).appendingPathComponent("assignments")
+            .appendingPathComponent(String(id)).appendingPathComponent("default")
     }
 
     static func assignmentUpdateMultiple(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/assignments/update_multiple")!
+        collection(slug).appendingPathComponent("assignments").appendingPathComponent("update_multiple")
     }
 
     static func requests(slug: String, page: Int = 1) -> URL {
-        paged("/collections/\(slug)/requests", page: page)
+        paged(collection(slug).appendingPathComponent("requests"), page: page)
     }
 
     static func claims(slug: String, page: Int = 1, forUser: Bool = false) -> URL {
-        var components = URLComponents(string: "\(host)/collections/\(slug)/claims")!
         var items: [URLQueryItem] = []
         if forUser { items.append(URLQueryItem(name: "for_user", value: "true")) }
         if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
-        if !items.isEmpty { components.queryItems = items }
-        return components.url!
+        let url = collection(slug).appendingPathComponent("claims")
+        return items.isEmpty ? url : url.appending(queryItems: items)
     }
 
     static func claim(slug: String, id: Int) -> URL {
-        URL(string: "\(host)/collections/\(slug)/claims/\(id)")!
+        collection(slug).appendingPathComponent("claims").appendingPathComponent(String(id))
     }
 
     static func potentialMatches(slug: String) -> URL {
-        URL(string: "\(host)/collections/\(slug)/potential_matches")!
+        collection(slug).appendingPathComponent("potential_matches")
     }
 
     static func tagSet(_ id: Int) -> URL {
-        URL(string: "\(host)/tag_sets/\(id)")!
+        path("tag_sets", String(id))
     }
 
     static func tagSetEdit(_ id: Int) -> URL {
-        URL(string: "\(host)/tag_sets/\(id)/edit")!
+        tagSet(id).appendingPathComponent("edit")
     }
 
     static func tagSetNominations(_ id: Int) -> URL {
-        URL(string: "\(host)/tag_sets/\(id)/nominations")!
+        tagSet(id).appendingPathComponent("nominations")
     }
 
     static func tagSetAssociations(id: Int) -> URL {
-        URL(string: "\(host)/tag_sets/\(id)/associations")!
+        tagSet(id).appendingPathComponent("associations")
     }
 
-    static func paged(_ path: String, page: Int) -> URL {
-        var components = URLComponents(string: "\(host)\(path)")!
-        if page > 1 {
-            components.queryItems = [URLQueryItem(name: "page", value: String(page))]
-        }
-        return components.url!
+    static func paged(_ url: URL, page: Int) -> URL {
+        page > 1 ? url.appending(queryItems: [URLQueryItem(name: "page", value: String(page))]) : url
     }
 }
 
@@ -812,12 +831,14 @@ nonisolated enum AO3ChallengeSignUpMatching {
     /// The viewer's own row, by byline: otwarchive prints `name` for a default
     /// pseud and `name (login)` otherwise.
     static func ownSignUpID(in signUps: [AO3ChallengeSignUp], login: String) -> Int? {
-        let login = login.lowercased()
-        guard !login.isEmpty else { return nil }
-        return signUps.first {
-            let byline = $0.pseud.lowercased()
-            return byline == login || byline.hasSuffix("(\(login))")
-        }?.id
+        signUps.first { owns(byline: $0.pseud, login: login) }?.id
+    }
+
+    static func owns(byline: String, login: String) -> Bool {
+        let login = login.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !login.isEmpty else { return false }
+        let byline = byline.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return byline == login || byline.hasSuffix("(\(login))")
     }
 
     static func joining(
