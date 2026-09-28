@@ -199,6 +199,50 @@ struct ReaderProgressBridgeTests {
         }
     }
 
+    /// One chapter, opened at 50%. Paged mode posts page 1 and then the restored
+    /// page; that pair is the landing, not a read. Scrolling back to the start
+    /// and on to 40%, or re-picking this chapter and reading to 40%, has to
+    /// replace the other device's percent. The resume fraction already did.
+    @Test func readingBackFromTheOpeningClaimsThePercent() {
+        let lengths: [Int?] = [1024]
+        let atForty = WorkReadingPosition.publicationProgress(
+            spineIndex: 0, chapterFraction: 0.4, resourceLengths: lengths)
+
+        let scrolledBack = ReaderProgressBridge()
+        let backWork = SavedWork(title: "T", author: "A")
+        backWork.legacyReaderProgress = 0.8
+        scrolledBack.seed(spine: 0, fraction: 0.5)
+        scrolledBack.persist(scrolledBack.beginChapter(spine: 0), to: backWork, resourceLengths: lengths)
+        scrolledBack.recordProgress(0) // page 1, before readerRestore
+        scrolledBack.recordProgress(0.5) // the restored page
+        writeSettled(scrolledBack, to: backWork, lengths: lengths)
+        #expect(backWork.legacyReaderProgress == 0.8)
+
+        scrolledBack.recordProgress(0)
+        scrolledBack.recordProgress(0.4)
+        writeSettled(scrolledBack, to: backWork, lengths: lengths)
+        #expect(backWork.lastScrollFraction == 0.4)
+        #expect(backWork.legacyReaderProgress == atForty)
+
+        let repick = ReaderProgressBridge()
+        let repickWork = SavedWork(title: "T", author: "A")
+        repickWork.legacyReaderProgress = 0.8
+        repick.seed(spine: 0, fraction: 0.5)
+        repick.persist(repick.beginChapter(spine: 0), to: repickWork, resourceLengths: lengths)
+        repick.recordProgress(0)
+        repick.recordProgress(0.5)
+        writeSettled(repick, to: repickWork, lengths: lengths)
+        #expect(repickWork.legacyReaderProgress == 0.8)
+
+        repick.forget(spine: 0)
+        repick.persist(repick.beginChapter(spine: 0), to: repickWork, resourceLengths: lengths)
+        repick.recordProgress(0) // re-pick reloads at the top; no readerRestore
+        repick.recordProgress(0.4)
+        writeSettled(repick, to: repickWork, lengths: lengths)
+        #expect(repickWork.lastScrollFraction == 0.4)
+        #expect(repickWork.legacyReaderProgress == atForty)
+    }
+
     @Test func aLaterChapterLoadClaimsThePercent() {
         let bridge = ReaderProgressBridge()
         let work = SavedWork(title: "T", author: "A")
@@ -213,5 +257,14 @@ struct ReaderProgressBridgeTests {
         bridge.recordProgress(0.9)
         #expect(bridge.fractionForFlush() == nil)
         #expect(bridge.fractionForDebouncedWrite() == nil)
+    }
+
+    private func writeSettled(_ bridge: ReaderProgressBridge, to work: SavedWork, lengths: [Int?]) {
+        if let due = bridge.fractionForDebouncedWrite(at: .distantFuture) {
+            bridge.persist(due, to: work, resourceLengths: lengths)
+        }
+        if let flush = bridge.fractionForFlush() {
+            bridge.persist(flush, to: work, resourceLengths: lengths)
+        }
     }
 }

@@ -636,14 +636,29 @@ nonisolated enum SyncMerge {
         // Absent is not a reset. A snapshot that never carried a locator must
         // not wipe the precise position this device already has — that is how a
         // backup round-tripped through macOS cost every work its exact page.
+        let localProgression = work.readiumProgress
         if let locator = incoming.readiumLocator {
             work.readiumLocator = locator
         }
         if let percent = incoming.legacyReaderProgress {
             work.legacyReaderProgress = percent
+        } else if Self.keylessLocatorMoved(incoming.readiumLocator, from: localProgression) {
+            // No Mac-percent key. A locator that actually moved — an older
+            // build or Android that read on — must not leave the card on the
+            // stale percent. An unmoved locator still keeps it.
+            work.legacyReaderProgress = nil
         }
         work.lastReadDate = incoming.lastReadDate
         work.progressModifiedAt = incomingModifiedAt
         work.markModified(work.progressModifiedAt ?? Date())
+    }
+
+    /// Key absent is not a clear unless the incoming locator's progression
+    /// moved by at least the reader's own delta from this device's locator.
+    private static func keylessLocatorMoved(_ locator: String?, from local: Double?) -> Bool {
+        guard let locator, let local,
+              let incoming = SavedWork.totalProgression(in: locator)
+        else { return false }
+        return abs(incoming - local) >= ReadiumProgressPersistence.minProgressionDelta
     }
 }

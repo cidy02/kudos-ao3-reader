@@ -30,6 +30,24 @@ struct BookReaderView: View {
     }
 }
 
+/// Continue Reading stamps for the Readium reader that leave the macOS percent
+/// in place. `ReadiumReaderView` uses these for the session open and for a
+/// close whose locator string did not change. A locator that moved goes
+/// through `SavedWork.applyDebouncedReadiumLocator`, which clears the percent.
+enum ReadiumSessionStamp {
+    static func noteOpened(_ work: SavedWork, at date: Date) {
+        stamp(work, at: date)
+    }
+
+    static func noteUnchangedLocatorShelf(_ work: SavedWork, at date: Date) {
+        stamp(work, at: date)
+    }
+
+    private static func stamp(_ work: SavedWork, at date: Date) {
+        work.markProgressModified(date)
+    }
+}
+
 /// Full-bleed page skeleton on a solid reader-theme fill — used by the open
 /// path and as a cover over Readium until the first spread paints.
 ///
@@ -905,7 +923,7 @@ struct ReadiumReaderView: View {
         } else if shelfStamp, progressPersistence.hasSessionPosition {
             // Locator already on disk — still bump lastReadDate so the shelf
             // reflects this reading session on a quick open/close.
-            work.markProgressModified(now)
+            ReadiumSessionStamp.noteUnchangedLocatorShelf(work, at: now)
             try? modelContext.save()
         }
     }
@@ -1330,7 +1348,7 @@ struct ReadiumReaderView: View {
         progressPersistence.seed(
             persistedLocatorString: work.readiumLocator.isEmpty ? nil : work.readiumLocator
         )
-        work.markProgressModified(Date())
+        ReadiumSessionStamp.noteOpened(work, at: Date())
         try? context.save()
 
         progressPersistence.onDebouncedWrite = { locatorString in
