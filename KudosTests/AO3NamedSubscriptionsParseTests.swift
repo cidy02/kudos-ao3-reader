@@ -48,6 +48,18 @@ struct AO3NamedSubscriptionsParseTests {
         #expect(page.rows.first?.seriesSummary == nil)
     }
 
+    /// Only `rel="author"` links are the byline; any other link in the row is not a creator.
+    @Test func aNonAuthorLinkInASeriesRowIsNotACreator() throws {
+        let row = """
+        <dl class="subscription index group">
+          <dt><a href="/series/7">S</a> by <a href="/users/a/pseuds/a" rel="author">a</a>
+            in <a href="/users/fandomish">not a byline</a></dt>
+        </dl>
+        """
+        let page = try AO3Client.parseNamedSubscriptions(row, scope: .series, page: 1)
+        #expect(page.rows.first?.creators.map(\.displayName) == ["a"])
+    }
+
     @Test func scopeIsTheTypeParameter() throws {
         let url = try #require(AO3Client.subscriptionsURL(username: "me", page: 2, type: "series"))
         #expect(url.absoluteString == "https://archiveofourown.org/users/me/subscriptions?type=series&page=2")
