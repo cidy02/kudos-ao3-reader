@@ -94,12 +94,11 @@ final class WritingCheckpointScheduler {
     }
 }
 
-/// The editor footer's word count, run off the main thread at checkpoints
-/// (§8.2 step 6). It is the same count as before: tags stripped, then
-/// whitespace-separated runs. Only where it runs changed. AO3's own algorithm
-/// (§3.6) is E2, pending OD3.
+/// The editor rule's word count, run off the main thread at checkpoints
+/// (§8.2 step 6). Since E2 it is AO3's own count (`AO3WordCounter`, OD3), so
+/// the number matches what AO3 prints once the chapter is posted.
 nonisolated enum WritingWordCount {
     static func count(_ html: String) -> Int {
-        html.strippingHTML().split(whereSeparator: \.isWhitespace).count
+        AO3WordCounter.count(html)
     }
 }
