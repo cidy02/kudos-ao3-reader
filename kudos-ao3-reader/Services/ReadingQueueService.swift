@@ -328,6 +328,8 @@ enum ReadingQueueService {
         in context: ModelContext
     ) async -> ReadingQueueMembership {
         let membership = add(work, to: queue, in: context)
+        // T-276: a queue with Keep downloaded off is just a list; nothing is fetched.
+        guard KeepOffline.queueKeeps(queue.keepsWorksOffline) else { return membership }
         do {
             try await preserve(work, in: context)
         } catch {

@@ -211,6 +211,12 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// Setting this true is the undo: the threshold must not re-abandon it.
     var keepInProgressOverride: Bool = false
 
+    /// 1ah's "Remove from history": when the reader took this work off History.
+    /// A hide marker, never a deletion — the work, its file and its reading log
+    /// all stay. `markProgressModified` clears it, so reading the work again
+    /// puts it back. Optional so every record that predates it reads as shown.
+    var hiddenFromHistoryAt: Date?
+
     /// Whether the EPUB is currently on disk. False = a history entry whose file
     /// was freed; revisiting re-downloads it.
     var hasEPUB: Bool = true
@@ -438,7 +444,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         isQueuedForLater && !isSaved && !isFavorite
     }
 
-    /// Kept works (saved, favorited, or queued) never have their EPUB freed. A work
+    /// Kept works (saved, favorited, or held by a Keep-offline queue or
+    /// collection — `isKeptOffline`) never have their EPUB freed. A work
     /// with no known AO3 origin is also always protected — freeing only makes sense
     /// when the EPUB can be re-downloaded, and a plain (non-AO3) import has no way
     /// back if its only copy is deleted.
@@ -451,7 +458,16 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// and does not pass through Recently Deleted: the reader lost the only copy of
     /// a work AO3 had already removed, by reaching the end of it.
     var isProtected: Bool {
-        isSaved || isFavorite || isQueuedForLater || ao3WorkID == nil || ao3Unavailable
+        isSaved || isFavorite || isKeptOffline || ao3WorkID == nil || ao3Unavailable
+    }
+
+    /// T-276: a queue with Keep downloaded on (or never asked, as queues always
+    /// kept) or a collection with Keep downloads on holds this work's EPUB. A
+    /// queue in Recently Deleted still counts, so restoring it finds its works
+    /// as they were. A queue switched off is a plain list and holds nothing.
+    var isKeptOffline: Bool {
+        queueMemberships.contains { KeepOffline.queueKeeps($0.queue?.keepsWorksOffline) }
+            || collections.contains { KeepOffline.collectionKeeps($0.keepsWorksOffline) }
     }
 
     /// Memberships that still point at a queue the reader can actually open.
@@ -617,6 +633,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     func markProgressModified(_ date: Date = Date()) {
         lastReadDate = date
         progressModifiedAt = date
+        // Reading it again returns a work the reader removed from History (1ah).
+        hiddenFromHistoryAt = nil
         markModified(date)
     }
 
@@ -866,13 +884,17 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// 1h's Queue Details lists "offline with its consequence spelled out"
     /// beside colour, order and last read.
     ///
-    /// `nil` means the queue has never been asked — the app's ordinary
-    /// behaviour, where a work's EPUB is freed once it is neither saved,
-    /// favourited nor queued. `true` opts this queue's works out of that.
-    /// Optional rather than a defaulted Bool so "not chosen" stays tellable
-    /// from "chosen no", which is what lets a later default change apply only
-    /// to queues nobody has decided about.
+    /// T-276 (`KeepOffline`): `true`, or `nil` — never asked, which keeps what
+    /// queues always did — holds the queue's works' EPUBs and fetches missing
+    /// ones on toggle and add; `false` makes the queue a plain list that holds
+    /// nothing. Optional rather than a defaulted Bool so "not chosen" stays
+    /// tellable from "chosen no".
     var keepsWorksOffline: Bool?
+
+    /// 1h's description note. Optional so a queue that predates it, or an
+    /// archive that does not carry it, reads as "no description"; an emptied
+    /// note is stored as "" so clearing it travels through sync.
+    var notes: String?
 
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
