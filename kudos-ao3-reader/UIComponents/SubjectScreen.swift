@@ -282,6 +282,10 @@ extension Color {
     /// the reread count on 1ah/1aj's footer. The one mark in the ledger row that is
     /// deliberately *not* the card's hue: it belongs to the star, not to the fandom.
     static let subjectFavoriteGold = Color(red: 0.949, green: 0.784, blue: 0.475)
+
+    /// 1bj's amber, #FF9F0A: a countdown that is a warning, not an act. Fixed
+    /// rather than `.orange`, which is #FF9500 in light mode.
+    static let subjectAmber = Color(red: 1, green: 0.624, blue: 0.039)
 }
 
 extension EnvironmentValues {

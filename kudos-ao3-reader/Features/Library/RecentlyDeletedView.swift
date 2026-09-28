@@ -20,6 +20,10 @@ struct RecentlyDeletedDestination: Hashable {}
 ///
 /// The reassurance line at the top is the spec's and is the most important sentence
 /// here: readers reach this screen worried they have deleted something off AO3.
+///
+/// **Select** (1bj's glass pill) picks several rows for Restore or Delete
+/// Permanently, each through the row's own per-kind path; the permanent one asks
+/// once, naming the count.
 struct RecentlyDeletedView: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
@@ -34,8 +38,12 @@ struct RecentlyDeletedView: View {
     @State private var restoreFailure: String?
     /// The row whose Delete Permanently is waiting on its alert. One slot for all
     /// three kinds: each entry carries its own message and its own delete.
-    @State private var pendingPermanent: DeletedEntry?
+    @State private var pendingPermanent: RecentlyDeletedEntry?
     @State private var confirmingDeleteAll = false
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
+    /// The selection waiting on the bulk alert, captured when it was asked for.
+    @State private var pendingBulkDelete: Set<UUID> = []
 
     /// Spec 1bj splits at a threshold rather than showing a continuous countdown.
     /// Two weeks: long enough that the Expiring soon group is not everything on the
@@ -59,6 +67,16 @@ struct RecentlyDeletedView: View {
             }
         }
         .subjectScreenWash(palette: palette)
+        // 1bg's grammar: the title bar takes the count while selecting.
+        .navigationTitle(isSelecting ? "\(selection.count) selected" : "")
+        .toolbar { toolbarContent(entries) }
+        #if os(iOS)
+        // Select mode owns the bottom edge with its action bar.
+        .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+        #endif
+        .onChange(of: entries.isEmpty) { _, isEmpty in
+            if isEmpty { exitSelectMode() }
+        }
         // 1bj draws an alert, not a sheet, and "repeats it per item with the real
         // numbers" — the title names the record and the message says what goes.
         .alert(
@@ -95,9 +113,85 @@ struct RecentlyDeletedView: View {
                 + "with its download, progress and notes. The works stay on AO3. "
                 + "This cannot be undone.")
         }
+        // One alert for the whole selection, naming the count. `presenting:`
+        // for the same reason as the per-item alert above.
+        .alert(
+            Self.bulkDeleteTitle(count: pendingBulkDelete.count),
+            isPresented: Binding(
+                get: { !pendingBulkDelete.isEmpty },
+                set: { if !$0 { pendingBulkDelete = [] } }
+            ),
+            presenting: pendingBulkDelete
+        ) { ids in
+            Button("Delete Permanently", role: .destructive) {
+                Self.deletePermanently(ids, in: entries)
+                pendingBulkDelete = []
+                exitSelectMode()
+            }
+            Button("Cancel", role: .cancel) { pendingBulkDelete = [] }
+        } message: { _ in
+            Text("Each one is removed from this device, with its download, progress and notes. "
+                + "The works stay on AO3. This cannot be undone.")
+        }
     }
 
-    private func list(_ entries: [DeletedEntry]) -> some View {
+    @ToolbarContentBuilder
+    private func toolbarContent(_ entries: [RecentlyDeletedEntry]) -> some ToolbarContent {
+        if isSelecting {
+            ToolbarItem(placement: .confirmationAction) {
+                let ids = Set(entries.map(\.id))
+                let allSelected = !ids.isEmpty && ids.isSubset(of: selection)
+                SelectAllButton(allSelected: allSelected) {
+                    selection = allSelected ? [] : ids
+                }
+            }
+            #if os(iOS)
+            ToolbarItemGroup(placement: .bottomBar) { selectionBar(entries) }
+            #else
+            ToolbarItemGroup(placement: .primaryAction) { selectionBar(entries) }
+            #endif
+        } else if !entries.isEmpty {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Select") { isSelecting = true }
+            }
+        }
+    }
+
+    /// Restore · Delete Permanently, then Done — the row's two swipe actions,
+    /// in the same order, over the selection.
+    @ViewBuilder
+    private func selectionBar(_ entries: [RecentlyDeletedEntry]) -> some View {
+        let chosen = selection.intersection(entries.map(\.id))
+        Button {
+            let failed = Self.restore(chosen, in: entries)
+            if !failed.isEmpty { restoreFailure = Self.restoreFailureMessage(failed) }
+            exitSelectMode()
+        } label: {
+            Label("Restore", systemImage: "arrow.uturn.backward")
+        }
+        .disabled(chosen.isEmpty)
+        Spacer()
+        Button(role: .destructive) {
+            pendingBulkDelete = chosen
+        } label: {
+            Label("Delete Permanently", systemImage: "trash")
+        }
+        .disabled(chosen.isEmpty)
+        Spacer()
+        Button {
+            exitSelectMode()
+        } label: {
+            Image(systemName: "checkmark")
+        }
+        .accessibilityLabel("Done")
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
+    }
+
+    private func list(_ entries: [RecentlyDeletedEntry]) -> some View {
         let soon = entries.filter { $0.daysRemaining <= Self.expiringSoonDays }
         let later = entries.filter { $0.daysRemaining > Self.expiringSoonDays }
         return List {
@@ -126,8 +220,10 @@ struct RecentlyDeletedView: View {
                 }
             }
 
-            Section {
-                deleteAllButton.pageBodyRow(top: 24, gutter: SubjectMetrics.accountGutter)
+            if !isSelecting {
+                Section {
+                    deleteAllButton.pageBodyRow(top: 24, gutter: SubjectMetrics.accountGutter)
+                }
             }
         }
         .cardList()
@@ -145,9 +241,21 @@ struct RecentlyDeletedView: View {
         }
     }
 
-    private func row(_ entry: DeletedEntry) -> some View {
-        RecentlyDeletedRow(entry: entry, palette: palette) { pendingPermanent = entry }
-            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+    private func row(_ entry: RecentlyDeletedEntry) -> some View {
+        RecentlyDeletedRow(
+            entry: entry,
+            palette: palette,
+            isSelecting: isSelecting,
+            isSelected: selection.contains(entry.id),
+            onToggleSelection: {
+                if selection.contains(entry.id) { selection.remove(entry.id) } else { selection.insert(entry.id) }
+            },
+            onRestore: {
+                if !entry.restore() { restoreFailure = Self.restoreFailureMessage([entry]) }
+            },
+            onDeletePermanently: { pendingPermanent = entry }
+        )
+        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
     }
 
     /// 1bj's footer: an outlined red capsule, behind its own confirmation.
@@ -210,84 +318,38 @@ struct RecentlyDeletedView: View {
     /// spec's grouping cuts across type: a queue expiring in three days belongs next
     /// to a work expiring in three days, not in a Reading Queues section further
     /// down the page.
-    private var entries: [DeletedEntry] {
-        var all: [DeletedEntry] = []
-        for work in deletedWorks {
-            all.append(DeletedEntry(
-                id: work.id,
-                kicker: work.hasEPUB ? "Downloaded work" : "Work",
-                title: work.title,
-                detail: workDetail(work),
-                authorIdentities: work.verifiedAuthorIdentities,
-                daysRemaining: Self.daysRemaining(work.permanentDeletionScheduledAt),
-                onRestore: {
-                    if !PreservedWorkService.restore(work, in: context) {
-                        restoreFailure = "Kudos could not save the restored work. "
-                            + "It is still scheduled for permanent deletion, so try again."
-                    }
-                },
-                deletionMessage: { workDeletionMessage(work) },
-                deletePermanently: { PreservedWorkService.deletePermanently(work, in: context) }
-            ))
-        }
-        for collection in deletedCollections {
-            all.append(DeletedEntry(
-                id: collection.id,
-                // "Local" because AO3 has collections too, and those are never here.
-                kicker: "Local collection",
-                title: collection.name,
-                detail: containerDetail(collection.works.count, deletedAt: collection.deletedAt),
-                daysRemaining: Self.daysRemaining(collection.permanentDeletionScheduledAt),
-                onRestore: {
-                    if !PreservedWorkService.restore(collection, in: context) {
-                        restoreFailure = "Kudos could not save the restored collection. "
-                            + "It is still scheduled for permanent deletion, so try again."
-                    }
-                },
-                deletionMessage: { Self.containerDeletionMessage(workCount: collection.works.count) },
-                deletePermanently: { PreservedWorkService.deletePermanently(collection, in: context) }
-            ))
-        }
-        for queue in deletedQueues {
-            all.append(DeletedEntry(
-                id: queue.id,
-                kicker: "Reading queue",
-                title: queue.displayName,
-                detail: containerDetail(queue.memberships.count, deletedAt: queue.deletedAt),
-                daysRemaining: Self.daysRemaining(queue.permanentDeletionScheduledAt),
-                onRestore: {
-                    if !PreservedWorkService.restore(queue, in: context) {
-                        restoreFailure = "Kudos could not save the restored reading queue. "
-                            + "It is still scheduled for permanent deletion, so try again."
-                    }
-                },
-                deletionMessage: { Self.containerDeletionMessage(workCount: queue.memberships.count) },
-                deletePermanently: { PreservedWorkService.deletePermanently(queue, in: context) }
-            ))
-        }
+    private var entries: [RecentlyDeletedEntry] {
+        let all = deletedWorks.map { RecentlyDeletedEntry.work($0, in: context) }
+            + deletedCollections.map { RecentlyDeletedEntry.collection($0, in: context) }
+            + deletedQueues.map { RecentlyDeletedEntry.queue($0, in: context) }
         return all.sorted { $0.daysRemaining < $1.daysRemaining }
     }
 
-    /// Spec 1bj: "8 works · deleted 30 Aug".
-    private func containerDetail(_ count: Int, deletedAt: Date?) -> String {
-        let works = countPhrase(count, "work")
-        guard let deletedAt else { return works }
-        return works + " · deleted " + deletedAt.formatted(.dateTime.day().month(.abbreviated))
+    // MARK: Select mode
+
+    /// Restores each selected entry through its own per-kind path, and returns
+    /// the ones whose restore did not persist — they are still scheduled, and
+    /// the reader must be told.
+    static func restore(_ selection: Set<UUID>, in entries: [RecentlyDeletedEntry]) -> [RecentlyDeletedEntry] {
+        entries.filter { selection.contains($0.id) && !$0.restore() }
     }
 
-    /// The per-item alert's real numbers for a work. Read only when the alert is
-    /// up, so the annotation fetch is not paid for every row on every render —
-    /// fetched the same way `WorkLifecycle.hardDelete` finds what it deletes.
-    private func workDeletionMessage(_ work: SavedWork) -> String {
-        let workID = work.id
-        let marks = ((try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? [])
-            .filter { $0.work?.id == workID && !$0.isPendingDeletion }
-        return Self.workDeletionMessage(
-            hasDownload: work.hasEPUB,
-            place: work.isFinished ? nil : work.readingProgressLabel,
-            highlights: marks.filter { $0.kind == .highlight }.count,
-            bookmarks: marks.filter { $0.kind == .bookmark }.count
-        )
+    /// Each selected entry's own permanent delete — the per-item path, not a
+    /// second way to delete. Runs only from the bulk alert.
+    static func deletePermanently(_ selection: Set<UUID>, in entries: [RecentlyDeletedEntry]) {
+        for entry in entries where selection.contains(entry.id) {
+            entry.deletePermanently()
+        }
+    }
+
+    static func bulkDeleteTitle(count: Int) -> String {
+        count == 1 ? "Delete 1 item permanently?" : "Delete \(count) items permanently?"
+    }
+
+    static func restoreFailureMessage(_ failed: [RecentlyDeletedEntry]) -> String {
+        let what = failed.count == 1 ? "the restored \(failed[0].noun)" : "\(failed.count) of the restored items"
+        let still = failed.count == 1 ? "It is" : "They are"
+        return "Kudos could not save \(what). \(still) still scheduled for permanent deletion, so try again."
     }
 
     /// 1bj's per-item message: "The download, your place at chapter 4 and your
@@ -323,30 +385,6 @@ struct RecentlyDeletedView: View {
         return works + " This cannot be undone."
     }
 
-    /// Spec 1bj: "sprawl_ghost · 66,410 words · unread". The last fact is the state
-    /// the record was in when it was deleted, which is what tells a reader whether
-    /// restoring gets them back something they had got partway through.
-    private func workDetail(_ work: SavedWork) -> String {
-        var parts: [String] = []
-        if !work.author.isEmpty { parts.append(work.author) }
-        if work.wordCount > 0 { parts.append("\(work.wordCount.formatted()) words") }
-        parts.append(stateWord(work.readingState))
-        return parts.joined(separator: " · ")
-    }
-
-    private func stateWord(_ state: SavedWork.ReadingState) -> String {
-        switch state {
-        case .unread: "unread"
-        case .inProgress: "part-read"
-        case .finished: "finished"
-        case .freedHistory: "read, file freed"
-        }
-    }
-
-    private func countPhrase(_ count: Int, _ noun: String) -> String {
-        "\(count) \(noun)\(count == 1 ? "" : "s")"
-    }
-
     /// 1bj: "amber under a week". Amber, not red — red is the destructive
     /// action's colour on this screen, and a countdown is a warning, not an act.
     static func isUrgent(daysRemaining: Int) -> Bool {
@@ -362,35 +400,148 @@ struct RecentlyDeletedView: View {
     }
 }
 
-/// One pending-deletion record of any kind, reduced to what the row draws.
-private struct DeletedEntry: Identifiable {
+/// One pending-deletion record of any kind, reduced to what the row draws and
+/// the record's own per-kind restore and permanent delete.
+struct RecentlyDeletedEntry: Identifiable {
     let id: UUID
     /// What kind of thing this is — the spec puts it above the title, which is what
     /// lets the list group by expiry instead of by type.
     let kicker: String
+    /// "work", "collection", "reading queue" — for the restore-failure copy.
+    let noun: String
     let title: String
     let detail: String
     var authorIdentities: [AO3AuthorIdentity] = []
     let daysRemaining: Int
-    let onRestore: () -> Void
+    /// `PreservedWorkService.restore` for this kind; false when it did not persist.
+    let restore: () -> Bool
     /// The per-item alert's message — a closure so a work's annotation count is
     /// fetched only once its alert is up.
     let deletionMessage: () -> String
-    /// The existing per-kind permanent delete; runs only from the alert.
+    /// The existing per-kind permanent delete; runs only from an alert.
     let deletePermanently: () -> Void
+}
+
+@MainActor
+extension RecentlyDeletedEntry {
+    static func work(_ work: SavedWork, in context: ModelContext) -> Self {
+        RecentlyDeletedEntry(
+            id: work.id,
+            kicker: work.hasEPUB ? "Downloaded work" : "Work",
+            noun: "work",
+            title: work.title,
+            detail: workDetail(work),
+            authorIdentities: work.verifiedAuthorIdentities,
+            daysRemaining: RecentlyDeletedView.daysRemaining(work.permanentDeletionScheduledAt),
+            restore: { PreservedWorkService.restore(work, in: context) },
+            deletionMessage: { workDeletionMessage(work, in: context) },
+            deletePermanently: { PreservedWorkService.deletePermanently(work, in: context) }
+        )
+    }
+
+    static func collection(_ collection: WorkCollection, in context: ModelContext) -> Self {
+        RecentlyDeletedEntry(
+            id: collection.id,
+            // "Local" because AO3 has collections too, and those are never here.
+            kicker: "Local collection",
+            noun: "collection",
+            title: collection.name,
+            detail: containerDetail(collection.works.count, deletedAt: collection.deletedAt),
+            daysRemaining: RecentlyDeletedView.daysRemaining(collection.permanentDeletionScheduledAt),
+            restore: { PreservedWorkService.restore(collection, in: context) },
+            deletionMessage: { RecentlyDeletedView.containerDeletionMessage(workCount: collection.works.count) },
+            deletePermanently: { PreservedWorkService.deletePermanently(collection, in: context) }
+        )
+    }
+
+    static func queue(_ queue: ReadingQueue, in context: ModelContext) -> Self {
+        RecentlyDeletedEntry(
+            id: queue.id,
+            kicker: "Reading queue",
+            noun: "reading queue",
+            title: queue.displayName,
+            detail: containerDetail(queue.memberships.count, deletedAt: queue.deletedAt),
+            daysRemaining: RecentlyDeletedView.daysRemaining(queue.permanentDeletionScheduledAt),
+            restore: { PreservedWorkService.restore(queue, in: context) },
+            deletionMessage: { RecentlyDeletedView.containerDeletionMessage(workCount: queue.memberships.count) },
+            deletePermanently: { PreservedWorkService.deletePermanently(queue, in: context) }
+        )
+    }
+
+    /// Spec 1bj: "8 works · deleted 30 Aug".
+    static func containerDetail(_ count: Int, deletedAt: Date?, locale: Locale = .current) -> String {
+        let works = "\(count) work\(count == 1 ? "" : "s")"
+        guard let deletedAt else { return works }
+        return works + " · deleted "
+            + deletedAt.formatted(.dateTime.day().month(.abbreviated).locale(locale))
+    }
+
+    /// Spec 1bj: "sprawl_ghost · 66,410 words · unread". The last fact is the state
+    /// the record was in when it was deleted, which is what tells a reader whether
+    /// restoring gets them back something they had got partway through.
+    private static func workDetail(_ work: SavedWork) -> String {
+        var parts: [String] = []
+        if !work.author.isEmpty { parts.append(work.author) }
+        if work.wordCount > 0 { parts.append("\(work.wordCount.formatted()) words") }
+        parts.append(stateWord(work.readingState))
+        return parts.joined(separator: " · ")
+    }
+
+    private static func stateWord(_ state: SavedWork.ReadingState) -> String {
+        switch state {
+        case .unread: "unread"
+        case .inProgress: "part-read"
+        case .finished: "finished"
+        case .freedHistory: "read, file freed"
+        }
+    }
+
+    /// The per-item alert's real numbers for a work. Read only when the alert is
+    /// up, so the annotation fetch is not paid for every row on every render —
+    /// fetched the same way `WorkLifecycle.hardDelete` finds what it deletes.
+    private static func workDeletionMessage(_ work: SavedWork, in context: ModelContext) -> String {
+        let workID = work.id
+        let marks = ((try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? [])
+            .filter { $0.work?.id == workID && !$0.isPendingDeletion }
+        return RecentlyDeletedView.workDeletionMessage(
+            hasDownload: work.hasEPUB,
+            place: work.isFinished ? nil : work.readingProgressLabel,
+            highlights: marks.filter { $0.kind == .highlight }.count,
+            bookmarks: marks.filter { $0.kind == .bookmark }.count
+        )
+    }
 }
 
 /// A single Recently Deleted row on the subject card. Spec 1bj: "Swipe gives
 /// Restore and Delete in that order", both on the trailing edge. The same two
 /// actions live in a context menu — swipes are invisible until tried, and on
 /// macOS they only exist for trackpad users, so the menu is the discoverable path.
+/// While selecting, a tap toggles the row and neither is offered.
 private struct RecentlyDeletedRow: View {
-    let entry: DeletedEntry
+    let entry: RecentlyDeletedEntry
     let palette: SubjectPalette
+    var isSelecting = false
+    var isSelected = false
+    var onToggleSelection: () -> Void = {}
+    let onRestore: () -> Void
     /// Asks for the alert; never deletes by itself.
     let onDeletePermanently: () -> Void
 
     var body: some View {
+        if isSelecting {
+            Button(action: onToggleSelection) {
+                rowContent
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else {
+            idleRow
+        }
+    }
+
+    private var idleRow: some View {
         // authorIdentities.isEmpty: the detail line is a plain, non-interactive Text,
         // so the whole row safely combines into one VoiceOver stop instead of three
         // (HIG audit UI-2). Otherwise it is an AO3AuthorBylineView, whose author names
@@ -412,13 +563,13 @@ private struct RecentlyDeletedRow: View {
             Button(role: .destructive, action: onDeletePermanently) {
                 Label("Delete", systemImage: "trash.fill")
             }
-            Button(action: entry.onRestore) {
+            Button(action: onRestore) {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
             .tint(.blue)
         }
         .contextMenu {
-            Button(action: entry.onRestore) {
+            Button(action: onRestore) {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
             Button(role: .destructive, action: onDeletePermanently) {
@@ -446,10 +597,19 @@ private struct RecentlyDeletedRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             remaining
+            if isSelecting {
+                WorkSelectionBubble(isSelected: isSelected)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .subjectCard(palette: palette)
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+            }
+        }
     }
 
     @ViewBuilder
@@ -477,7 +637,9 @@ private struct RecentlyDeletedRow: View {
             Text("\(entry.daysRemaining)d")
                 .font(.system(size: 15, weight: .semibold, design: .monospaced))
                 .foregroundStyle(
-                    RecentlyDeletedView.isUrgent(daysRemaining: entry.daysRemaining) ? Color.orange : Color.primary
+                    RecentlyDeletedView.isUrgent(daysRemaining: entry.daysRemaining)
+                        ? Color.subjectAmber
+                        : Color.primary
                 )
             Text("left")
                 .font(.system(size: 10))

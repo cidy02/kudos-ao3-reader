@@ -4,7 +4,7 @@ import Testing
 @testable import Kudos
 
 /// Covers `CollectionWorkPicker` — the eligibility + add rules behind the
-/// in-collection "Add Works" picker (`AddWorksToCollectionView`).
+/// in-collection "Add Works" picker (`AddLibraryWorksSheet`).
 @MainActor
 struct CollectionWorkPickerTests {
     // MARK: candidates
