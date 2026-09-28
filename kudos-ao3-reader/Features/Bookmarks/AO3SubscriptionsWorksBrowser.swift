@@ -2,12 +2,11 @@ import SwiftUI
 
 // MARK: - Pills, groups, copy
 
-/// All / Updated. They narrow the loaded page.
+/// All / Updated. They narrow the loaded page of the Works scope.
 ///
-/// AO3's subscriptions index can also scope Works / Series / Authors with
-/// `type=`. This screen does not. A series link and a user link are not work
-/// rows, and that scope is its own fetch. Works is what the list already asks
-/// for (`subscriptionsURL` sends `type=works`).
+/// Works / Series / Authors (`AO3SubscriptionsScope`) sit above these. Only
+/// Works comes through this screen's own page; the other two are
+/// `AO3NamedSubscriptionsList`, each its own `type=` fetch.
 enum AO3SubscriptionsFilter: String, CaseIterable, Identifiable, Sendable {
     case all
     case updated
@@ -206,6 +205,8 @@ struct AO3SubscriptionsWorksBrowser: View {
     let onPage: (Int) -> Void
     let onUnsubscribe: (CanonicalWork) -> Void
     let onEnriched: (AO3WorkSummary) -> Void
+    /// Works is this screen's page. The other scopes swap in their own list.
+    @State private var scope = AO3SubscriptionsScope.works
 
     private var sections: [AO3SubscriptionsSection<CanonicalWork>] {
         AO3SubscriptionsGrouping.sections(entries, filter: filter, isUpdated: isUpdated(_:))
@@ -220,10 +221,22 @@ struct AO3SubscriptionsWorksBrowser: View {
     }
 
     var body: some View {
+        if scope == .works {
+            worksBody
+        } else {
+            AO3NamedSubscriptionsList(scope: $scope, palette: palette, kicker: kicker)
+        }
+    }
+
+    private var worksBody: some View {
         List {
             Section {
                 header
                     .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                AO3SubscriptionsScopeRail(selection: $scope, palette: palette)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 AO3SubscriptionsFilterRail(selection: $filter, palette: palette)
@@ -285,7 +298,22 @@ struct AO3SubscriptionsWorksBrowser: View {
             .padding(.top, 4)
     }
 
+    @ViewBuilder
     private var filterEmpty: some View {
+        // No work subscriptions at all still lands here, so Series and
+        // Authors stay one pill away.
+        if entries.isEmpty {
+            ContentUnavailableView(
+                "No work subscriptions",
+                systemImage: "bell",
+                description: Text("Works you subscribe to on AO3 show up here.")
+            )
+        } else {
+            filterMismatch
+        }
+    }
+
+    private var filterMismatch: some View {
         ContentUnavailableView {
             Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
         } description: {
