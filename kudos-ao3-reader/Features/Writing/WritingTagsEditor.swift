@@ -37,6 +37,8 @@ import SwiftUI
 /// the typed-term row below never claims a tag is non-canonical.
 struct WritingTagsEditor: View {
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.writingOtherWorks) private var otherWorks
+    @Environment(\.writingEditedWorkID) private var editedWorkID
 
     let title: String
     @Binding var values: [String]
@@ -46,6 +48,7 @@ struct WritingTagsEditor: View {
     @State private var term = ""
     @State private var suggestions: [AO3EditorTag] = []
     @State private var errorMessage: String?
+    @State private var recent = RecentWritingTags.load(from: .standard)
     /// A term already asked about must not ask again — the brief's rule, and
     /// with a 300 ms debounce in front of every keystroke, backspacing one
     /// character would otherwise re-run the request that just answered.
@@ -108,6 +111,18 @@ struct WritingTagsEditor: View {
             if !values.isEmpty {
                 chosenChips.pageBodyRow(top: 18, gutter: gutter)
             }
+            if !recentNames(kind).isEmpty {
+                SubjectFieldLabel(text: "Recently used", style: .formGroup)
+                    .pageBodyRow(top: 18, gutter: gutter)
+                convenienceChips(recentNames(kind))
+                    .pageBodyRow(top: 8, gutter: gutter)
+            }
+            if !otherWorkNames(kind).isEmpty {
+                SubjectFieldLabel(text: "From your other works", style: .formGroup)
+                    .pageBodyRow(top: 18, gutter: gutter)
+                convenienceChips(otherWorkNames(kind))
+                    .pageBodyRow(top: 8, gutter: gutter)
+            }
         }
 
         Section {
@@ -127,12 +142,12 @@ struct WritingTagsEditor: View {
         freeTypedTerm != nil || !suggestions.isEmpty || errorMessage != nil
     }
 
-    /// 1bu's subtitle: how many are chosen, and what the list below is. It does
-    /// not describe the ordering — see the type comment for why.
+    /// 1bu's subtitle: how many are chosen, that they can be dragged, and what
+    /// the list below is. The offer stays: autocomplete order is not a ranking.
     private var subtitle: String {
         let offer = "AO3 offers its canonical tags as you type"
         guard !values.isEmpty else { return offer }
-        return "\(values.count) chosen · \(offer)"
+        return "\(values.count) chosen · drag to reorder · \(offer)"
     }
 
     private var field: some View {
@@ -153,25 +168,72 @@ struct WritingTagsEditor: View {
         .subjectPanel(cornerRadius: 12)
     }
 
-    /// Order is what AO3 posts, and appends land at the end, so the chips read
-    /// in the order they will be sent. Reordering them is not built.
+    /// Order is what AO3 posts. A drag moves that chip in front of the one it
+    /// is dropped on; a tap still removes it. The same gesture pair is the
+    /// system drag on macOS — nothing here is iOS-only.
     private var chosenChips: some View {
         FlowLayout(spacing: 8, rowSpacing: 8) {
             ForEach(values, id: \.self) { value in
-                Button {
+                SubjectChip(
+                    text: value,
+                    style: .pill(isSelected: false),
+                    trailingImage: "xmark",
+                    palette: palette
+                )
+                .contentShape(Capsule())
+                .onTapGesture { values.removeAll { $0 == value } }
+                .draggable(value)
+                .dropDestination(for: String.self) { dropped, _ in
+                    guard let name = dropped.first else { return false }
+                    var next = values
+                    WritingTagReorder.move(&next, name: name, before: value)
+                    values = next
+                    return true
+                }
+                .accessibilityLabel(value)
+                .accessibilityHint("Drag to reorder. Activate to remove.")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction(named: "Remove") {
                     values.removeAll { $0 == value }
+                }
+            }
+        }
+    }
+
+    /// Recently used, and tags from works already on screen. Both add; neither
+    /// fetches. Hidden by the caller when the list is empty.
+    private func convenienceChips(_ names: [String]) -> some View {
+        FlowLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(names, id: \.self) { name in
+                Button {
+                    add(name)
                 } label: {
                     SubjectChip(
-                        text: value,
-                        style: .pill(isSelected: false),
-                        trailingImage: "xmark",
+                        text: name,
+                        style: .dashed,
+                        systemImage: "plus",
                         palette: palette
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Remove \(value)")
+                .accessibilityLabel("Add \(name)")
             }
         }
+    }
+
+    private func recentNames(_ kind: AO3TagKind) -> [String] {
+        recent.names(kind: kind).filter { name in
+            !values.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+        }
+    }
+
+    private func otherWorkNames(_ kind: AO3TagKind) -> [String] {
+        WritingOtherWorkTags.names(
+            kind: kind,
+            works: otherWorks,
+            excluding: values,
+            excludingWorkID: editedWorkID
+        )
     }
 
     private var suggestionsPanel: some View {
@@ -355,7 +417,13 @@ struct WritingTagsEditor: View {
     private func add(_ name: String) {
         let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
-        if !values.contains(value) { values.append(value) }
+        if !values.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) {
+            values.append(value)
+        }
+        if let kind {
+            recent.record(value, kind: kind)
+            recent.save(to: .standard)
+        }
         term = ""
     }
 }
