@@ -80,6 +80,24 @@ struct CommentPolishTests {
             == "<h2>Title</h2> <h1>body</h1>")
     }
 
+    /// Part of a heading's body, a word beside inline markup, a heading in a
+    /// list item: each re-levels the heading it sits in, whole body kept.
+    @Test func aHeadingChipRelevelsTheHeadingThatContainsThePartialSelection() {
+        func relevel(_ text: String, selecting word: String, to level: Int) -> CommentMarkupResult {
+            CommentMarkup.apply(.heading, to: text, in: text.range(of: word)!, headingLevel: level)
+        }
+        let partial = relevel("<h3>one two</h3>", selecting: "two", to: 1)
+        #expect(partial.text == "<h1>one two</h1>")
+        #expect(String(partial.text[partial.selection]) == "one two")
+        #expect(relevel("<h3><em>one</em> two</h3>", selecting: "one", to: 2).text
+            == "<h2><em>one</em> two</h2>")
+        #expect(relevel("<ul><li><h4>item</h4></li></ul>", selecting: "item", to: 5).text
+            == "<ul><li><h5>item</h5></li></ul>")
+        // A closed heading earlier on the line does not capture later prose.
+        #expect(relevel("<h3>one</h3> two", selecting: "two", to: 1).text
+            == "<h3>one</h3> <h1>two</h1>")
+    }
+
     // MARK: - Signed-out action row
 
     @Test func aSignedOutStripDoesNotReserveTheReplyBand() {

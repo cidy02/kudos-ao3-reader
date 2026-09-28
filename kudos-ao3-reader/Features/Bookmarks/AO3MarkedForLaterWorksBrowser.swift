@@ -394,7 +394,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
             }
             .buttonStyle(.plain)
             .disabled(isUnmarking)
-            .minimumHitTarget(28)
+            .minimumHitTarget()
             .accessibilityLabel("Unmark \(entry.title)")
         }
     }
