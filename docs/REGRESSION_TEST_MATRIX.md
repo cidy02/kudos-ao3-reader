@@ -36,6 +36,11 @@ selection/undo/redo/recovery without rewriting untouched source. `AO3WorkFormPar
 continues to cover required fields and AO3 payload construction. Live draft/post
 writes, chapter-total partial failures and authenticated navigation remain manual.
 
+`WorksSortFilterSheetTests` pins the merged works sort-and-filter sheet to the
+pre-merge URL: refine facets in that sheet add no `work_search` parameters.
+`WritingTagPickerTests` pins posted tag order, the 20-tag recent list, and
+"From your other works" as a pure read of works already in memory.
+
 `WritingCheckpointTests` (T-262, E1 of `docs/WRITING_EDITOR_ARCHITECTURE.md`) covers
 the checkpoint policy (1.5 s idle, 20 s under continuous typing), the scheduler
 (fires once, `fireNow`, `cancel`), the off-main word count, ordered recovery writes
