@@ -175,6 +175,7 @@ struct AO3AccountWorksList: View {
     /// Subscriptions' All / Updated pills. They narrow the loaded page.
     /// Ignored by every other list kind.
     @State private var subscriptionsFilter = AO3SubscriptionsFilter.all
+    @State private var subscriptionsScope = AO3SubscriptionsScope.works
     /// Each subscription row's unsubscribe form action, keyed by work id the
     /// way `bookmarkDetails` is. Empty for every other list.
     @State private var unsubscribePaths: [Int: String] = [:]
@@ -281,7 +282,9 @@ struct AO3AccountWorksList: View {
                 // while signed out (no local matches to reveal, no filter/menu cluster
                 // since nothing's loaded yet).
                 let hasMature = hideMature && visibleEntries.contains(where: { $0.local?.isAdult == true })
+                // Series and Authors are not this page: its filter and menu act on Works.
                 let hasWorks = auth.isLoggedIn && phase == .loaded && !works.isEmpty
+                    && (kind != .subscriptions || subscriptionsScope == .works)
                 if hasMature || hasWorks {
                     // Matches the pattern already established in LibraryView.swift's
                     // dashboard toolbar. WorkListMoreMenu's own gate widened to
@@ -612,6 +615,7 @@ struct AO3AccountWorksList: View {
                     totalPages: totalPages,
                     isLoading: phase == .loading,
                     filter: $subscriptionsFilter,
+                    scope: $subscriptionsScope,
                     onPage: { page in Task { await load(page: page) } },
                     onUnsubscribe: { pendingUnsubscribe = $0 },
                     onEnriched: noteEnrichedSubscription

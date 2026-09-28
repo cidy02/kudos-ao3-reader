@@ -202,12 +202,12 @@ struct AO3SubscriptionsWorksBrowser: View {
     let totalPages: Int
     let isLoading: Bool
     @Binding var filter: AO3SubscriptionsFilter
+    /// Works is this screen's page. The other scopes swap in their own list.
+    /// The parent owns it: its toolbar acts on Works only.
+    @Binding var scope: AO3SubscriptionsScope
     let onPage: (Int) -> Void
     let onUnsubscribe: (CanonicalWork) -> Void
     let onEnriched: (AO3WorkSummary) -> Void
-    /// Works is this screen's page. The other scopes swap in their own list.
-    @State private var scope = AO3SubscriptionsScope.works
-
     private var sections: [AO3SubscriptionsSection<CanonicalWork>] {
         AO3SubscriptionsGrouping.sections(entries, filter: filter, isUpdated: isUpdated(_:))
     }
