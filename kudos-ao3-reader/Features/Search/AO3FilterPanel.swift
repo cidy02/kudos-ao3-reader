@@ -8,6 +8,26 @@ import SwiftUI
 /// Pure UI over a bound `AO3SearchFilters`: the host runs the actual search via
 /// `onApply` and decides what "reset" means via `onReset` (Search clears everything;
 /// Browse resets back to the page's fixed fandom).
+///
+/// One showing of the works-index sort. Appearing reseeds from the applied
+/// sort, and Apply posts the draft only when this showing changed it.
+struct WorksSortPresentation: Equatable {
+    var draft: AO3WorksSort
+    private var seeded: AO3WorksSort
+
+    init(applied: AO3WorksSort?) {
+        draft = applied ?? .default
+        seeded = draft
+    }
+
+    mutating func appear(applied: AO3WorksSort?) {
+        draft = applied ?? .default
+        seeded = draft
+    }
+
+    var sortToCommit: AO3WorksSort? { draft == seeded ? nil : draft }
+}
+
 struct AO3FilterPanel: View {
     /// How the panel applies. `.search` re-runs an AO3 query (Search tab, Browse →
     /// Fandom); `.refine` narrows the already-loaded works on the page in place, so it
@@ -65,7 +85,7 @@ struct AO3FilterPanel: View {
     var worksSort: AO3WorksSort?
     /// Commits `worksSort` when Apply finds it changed. The host refetches.
     var onApplyWorksSort: ((AO3WorksSort) -> Void)?
-    @State private var worksSortDraft: AO3WorksSort
+    @State private var sortPresentation: WorksSortPresentation
 
     init(
         filters: Binding<AO3SearchFilters>,
@@ -95,7 +115,7 @@ struct AO3FilterPanel: View {
         self.refinePendingCount = refinePendingCount
         self.worksSort = worksSort
         self.onApplyWorksSort = onApplyWorksSort
-        _worksSortDraft = State(initialValue: worksSort ?? .default)
+        _sortPresentation = State(initialValue: WorksSortPresentation(applied: worksSort))
     }
 
     /// The panel owns its own `NavigationStack`, because a presented panel has no
@@ -119,6 +139,7 @@ struct AO3FilterPanel: View {
             #endif
                 .toolbar { actionButtons }
         }
+        .onAppear { sortPresentation.appear(applied: worksSort) }
     }
 
     /// 1au's live count, above the form. Only in refine mode, and only with a page
@@ -183,18 +204,19 @@ struct AO3FilterPanel: View {
         }
     }
 
-    /// 1au draws every group label as `600 11px`, `.07em` tracking, uppercase, at
-    /// 55% — which is exactly `SubjectFieldLabel`'s `.formGroup` style, the one the
-    /// form artboards use over a group of rows. A bare `Section("Warnings")` gave
-    /// sentence case with no tracking, and that mismatch was the loudest remaining
-    /// "this is the old app" signal on the panel.
-    /// Swipe-to-dismiss drops the sort draft. Reset still clears only the
-    /// facets: that button never reset the sort when the two sheets were apart.
+    /// Apply posts a sort only when this showing changed it. `onAppear` already
+    /// reseeded a cancelled draft. Reset still clears only the facets.
     private func confirm() {
-        if let worksSort, worksSortDraft != worksSort {
-            onApplyWorksSort?(worksSortDraft)
+        if worksSort != nil, let sort = sortPresentation.sortToCommit {
+            onApplyWorksSort?(sort)
         }
         onApply()
+    }
+
+    /// The works sheet's chips are the completion AO3 is asked for. The page
+    /// facet is the other control, and the two together can empty the list.
+    static func showsPageCompletionFacet(worksSort: AO3WorksSort?) -> Bool {
+        worksSort == nil
     }
 
     private var confirmLabel: String {
@@ -202,6 +224,11 @@ struct AO3FilterPanel: View {
         return mode == .refine ? "Done" : "Apply filters"
     }
 
+    /// 1au draws every group label as `600 11px`, `.07em` tracking, uppercase, at
+    /// 55% — which is exactly `SubjectFieldLabel`'s `.formGroup` style, the one the
+    /// form artboards use over a group of rows. A bare `Section("Warnings")` gave
+    /// sentence case with no tracking, and that mismatch was the loudest remaining
+    /// "this is the old app" signal on the panel.
     private func groupLabel(_ text: String) -> some View {
         SubjectFieldLabel(text: text, style: .formGroup)
     }
@@ -221,7 +248,7 @@ struct AO3FilterPanel: View {
                 } label: {
                     LabeledContent("Sort by") {
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text(worksSortDraft.column.title)
+                            Text(sortPresentation.draft.column.title)
                             Text(AO3WorksSort.fieldsHint)
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
@@ -231,9 +258,9 @@ struct AO3FilterPanel: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Sort by")
                 .accessibilityValue(
-                    "\(worksSortDraft.column.title), \(AO3WorksSort.fieldsHint)"
+                    "\(sortPresentation.draft.column.title), \(AO3WorksSort.fieldsHint)"
                 )
-                Picker("Direction", selection: $worksSortDraft.direction) {
+                Picker("Direction", selection: $sortPresentation.draft.direction) {
                     ForEach(AO3WorksSortDirection.allCases) { direction in
                         Text(direction.title).tag(direction)
                     }
@@ -255,8 +282,8 @@ struct AO3FilterPanel: View {
     /// AO3 does when no direction is sent.
     private var worksColumnBinding: Binding<AO3WorksSortColumn> {
         Binding(
-            get: { worksSortDraft.column },
-            set: { worksSortDraft.select($0) }
+            get: { sortPresentation.draft.column },
+            set: { sortPresentation.draft.select($0) }
         )
     }
 
@@ -264,17 +291,17 @@ struct AO3FilterPanel: View {
         FlowLayout(spacing: 8) {
             ForEach(AO3WorksCompletion.allCases) { option in
                 Button {
-                    worksSortDraft.completion = option
+                    sortPresentation.draft.completion = option
                 } label: {
                     SubjectChip(
                         text: option.title,
-                        style: .pill(isSelected: worksSortDraft.completion == option),
+                        style: .pill(isSelected: sortPresentation.draft.completion == option),
                         palette: theme.scopePalette
                     )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(option.title)
-                .accessibilityAddTraits(worksSortDraft.completion == option ? [.isSelected] : [])
+                .accessibilityAddTraits(sortPresentation.draft.completion == option ? [.isSelected] : [])
             }
         }
         .padding(12)
@@ -363,8 +390,10 @@ struct AO3FilterPanel: View {
                             ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
                         }
                     }
-                    Picker("Completion", selection: $filters.completion) {
-                        ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
+                    if Self.showsPageCompletionFacet(worksSort: worksSort) {
+                        Picker("Completion", selection: $filters.completion) {
+                            ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
+                        }
                     }
                     // 1au draws "Chapters — Any" too, and `chapterCountMatches` reads
                     // the blurb's own "posted/total" text, so this narrows in refine
