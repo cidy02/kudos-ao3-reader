@@ -636,7 +636,9 @@ nonisolated enum SyncMerge {
         // Absent is not a reset. A snapshot that never carried a locator must
         // not wipe the precise position this device already has — that is how a
         // backup round-tripped through macOS cost every work its exact page.
-        let localProgression = work.readiumProgress
+        // No local locator (a Mac-only read) compares against the Mac percent,
+        // so another device reading on still moves the card.
+        let localProgression = work.readiumProgress ?? work.legacyReaderProgress
         if let locator = incoming.readiumLocator {
             work.readiumLocator = locator
         }
