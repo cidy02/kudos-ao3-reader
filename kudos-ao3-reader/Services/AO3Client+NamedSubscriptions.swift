@@ -44,8 +44,11 @@ nonisolated struct AO3NamedSubscription: Identifiable, Hashable, Sendable {
         seriesID == nil ? AO3AuthorRoute(path: path) : nil
     }
 
-    /// Enough for `AO3SeriesDetailView`, which fetches the series page from
+    /// Enough for `AO3SeriesDetailView`, which fetches the series' works from
     /// `url`. The index has none of the other fields.
+    /// ponytail: the detail header draws this value, so a series opened from
+    /// here shows title and byline only (no fandoms, counts or lock). Parse the
+    /// series page's own meta if that header needs to be full.
     var seriesSummary: AO3SeriesSummary? {
         guard let seriesID, let url = AO3SitePath.absolute(path) else { return nil }
         return AO3SeriesSummary(
@@ -86,9 +89,11 @@ extension AO3Client {
                   namedScope(ofPath: path) == scope,
                   seen.insert(path).inserted
             else { continue }
+            // The byline is AO3's `rel="author"` links. One that does not
+            // parse is skipped, not the whole page.
             let creators = scope == .series
-                ? try links.dropFirst().compactMap { link in
-                    try AO3AuthorIdentity(displayName: link.text(), href: link.attr("href"))
+                ? links.dropFirst().filter { (try? $0.attr("rel")) == "author" }.compactMap { link in
+                    AO3AuthorIdentity(displayName: (try? link.text()) ?? "", href: (try? link.attr("href")) ?? "")
                 }
                 : []
             rows.append(AO3NamedSubscription(
