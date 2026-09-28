@@ -520,13 +520,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// its stored locator JSON. Pure Foundation parsing, so it needs no Readium
     /// dependency (and works on macOS). `nil` when never read in the Readium reader.
     var readiumProgress: Double? {
-        guard !readiumLocator.isEmpty,
-              let data = readiumLocator.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let locations = object["locations"] as? [String: Any],
-              let total = locations["totalProgression"] as? Double
-        else { return nil }
-        return total
+        Self.totalProgression(in: readiumLocator)
     }
 
     /// Whole-publication fraction from whichever reader had the work open last:
@@ -768,7 +762,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         }
         return works.sorted { lhs, rhs in
             switch (order[lhs.id.uuidString], order[rhs.id.uuidString]) {
-            case let (l?, r?): return l < r
+            case let (left?, right?): return left < right
             case (_?, nil): return true
             case (nil, _?): return false
             case (nil, nil): return lhs.dateAdded > rhs.dateAdded
@@ -1117,6 +1111,17 @@ nonisolated enum ReadingAnnotationColor: String, Codable, CaseIterable {
 }
 
 extension SavedWork {
+    /// `locations.totalProgression` from a Readium locator JSON string.
+    static func totalProgression(in locator: String) -> Double? {
+        guard !locator.isEmpty,
+              let data = locator.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let locations = object["locations"] as? [String: Any],
+              let total = locations["totalProgression"] as? Double
+        else { return nil }
+        return total
+    }
+
     /// Parses AO3's "5/10" chapter stat into the posted-chapter count (the "5" side).
     /// Shared by `postedChapterCount` and the queue's metadata baseline.
     static func postedChapterCount(from chapters: String) -> Int {
