@@ -274,22 +274,33 @@ extension AO3AuthService {
 
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt. Single-shot `submitWrite`; never retried or coalesced.
-    func acceptMember(slug: String, participantID: Int) async throws {
-        try await updateParticipantRole(slug: slug, participantID: participantID, role: .member)
+    func acceptMember(
+        slug: String, participantID: Int, expectedGeneration: Int,
+        using client: AO3Client = .shared
+    ) async throws {
+        try await updateParticipantRole(
+            slug: slug, participantID: participantID, role: .member,
+            expectedGeneration: expectedGeneration, using: client
+        )
     }
 
     /// Unexercised against a live AO3 session — a release gate, not a reason this
     /// endpoint is unbuilt. Single-shot `submitWrite`; never retried or coalesced.
-    func declineMember(slug: String, participantID: Int) async throws {
+    func declineMember(
+        slug: String, participantID: Int, expectedGeneration: Int,
+        using client: AO3Client = .shared
+    ) async throws {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         let referer = AO3CollectionURL.participants(slug: slug)
-        let (_, token) = try await fetchCSRFPage(at: referer)
+        let (_, token) = try await fetchCSRFPage(at: referer, using: client)
+        try requireSessionGeneration(expectedGeneration)
         let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
         let request = try writeRequest(
             to: AO3CollectionURL.participant(slug: slug, id: participantID),
             body: body, csrf: token, referer: referer, ajax: false
         )
-        let (status, response) = try await submitWrite(request)
+        let (status, response) = try await submitWrite(request, using: client)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't decline that member."
         )
@@ -389,11 +400,14 @@ extension AO3AuthService {
     }
 
     private func updateParticipantRole(
-        slug: String, participantID: Int, role: AO3CollectionParticipantRole
+        slug: String, participantID: Int, role: AO3CollectionParticipantRole,
+        expectedGeneration: Int, using client: AO3Client
     ) async throws {
+        try requireSessionGeneration(expectedGeneration)
         guard isLoggedIn else { throw AO3CollectionWriteError.notSignedIn }
         let referer = AO3CollectionURL.participants(slug: slug)
-        let (_, token) = try await fetchCSRFPage(at: referer)
+        let (_, token) = try await fetchCSRFPage(at: referer, using: client)
+        try requireSessionGeneration(expectedGeneration)
         let params: [(String, String)] = [
             ("_method", "patch"),
             ("authenticity_token", token),
@@ -403,7 +417,7 @@ extension AO3AuthService {
             to: AO3CollectionURL.participant(slug: slug, id: participantID),
             body: Self.formEncoded(params), csrf: token, referer: referer, ajax: false
         )
-        let (status, response) = try await submitWrite(request)
+        let (status, response) = try await submitWrite(request, using: client)
         try throwIfCollectionWriteFailed(
             status: status, body: response, fallback: "AO3 couldn't update that member."
         )

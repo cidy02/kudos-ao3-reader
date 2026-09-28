@@ -175,7 +175,8 @@ extension AO3Client {
             ?? ((try? form.select("input[name=authenticity_token]").first()?.attr("value")) ?? "")
         guard !csrf.isEmpty else { throw AO3Error.parse }
         let method = try? form.select("input[name=_method]").first()?.attr("value")
-        let zone = selectedValue(form, name: "\(prefix)[time_zone]").nilIfBlank ?? "UTC"
+        let zone = selectedValue(form, name: "\(prefix)[time_zone]").nilIfBlank ?? ""
+        let scheduleIsEditable = !zone.isEmpty
 
         func instant(_ key: String) -> AO3ChallengeInstant {
             let names = ["\(prefix)[\(key)_string]", "\(prefix)[\(key)]"]
@@ -191,6 +192,7 @@ extension AO3Client {
             kind: kind,
             signupOpen: isChecked(form, name: "\(prefix)[signup_open]"),
             timeZoneName: zone,
+            scheduleIsEditable: scheduleIsEditable,
             signupsOpenAt: instant("signups_open_at"),
             signupsCloseAt: instant("signups_close_at"),
             assignmentsDueAt: instant("assignments_due_at"),
@@ -263,16 +265,16 @@ extension AO3Client {
         }
         // The dates are wall clocks in the challenge's zone, so that zone goes
         // back with them; a date with no input on the form is left alone.
-        params.append(contentsOf: [
-            ("\(prefix)[signup_open]", settings.signupOpen ? "1" : "0"),
-            ("\(prefix)[time_zone]", settings.timeZoneName)
-        ])
+        params.append(("\(prefix)[signup_open]", settings.signupOpen ? "1" : "0"))
+        if settings.scheduleIsEditable {
+            params.append(("\(prefix)[time_zone]", settings.timeZoneName))
+        }
         let dates: [(String, AO3ChallengeInstant)] = [
             ("signups_open_at", settings.signupsOpenAt), ("signups_close_at", settings.signupsCloseAt),
             ("assignments_due_at", settings.assignmentsDueAt), ("works_reveal_at", settings.worksRevealAt),
             ("authors_reveal_at", settings.authorsRevealAt)
         ]
-        for (key, instant) in dates where instant.isOnForm {
+        for (key, instant) in dates where settings.scheduleIsEditable && instant.isOnForm {
             params.append(("\(prefix)[\(key)_string]", instant.postedString))
         }
         params.append(contentsOf: [
@@ -608,7 +610,7 @@ extension AO3Client {
     private static func parsePromptRestriction(
         _ form: Element, prefix: String
     ) -> AO3PromptRestrictionSnapshot {
-        AO3PromptRestrictionSnapshot(
+        var snapshot = AO3PromptRestrictionSnapshot(
             id: inputValue(form, "\(prefix)[id]"),
             optionalTagsAllowed: isChecked(form, name: "\(prefix)[optional_tags_allowed]"),
             titleRequired: isChecked(form, name: "\(prefix)[title_required]"),
@@ -635,6 +637,26 @@ extension AO3Client {
             requireUniqueFreeform: isChecked(form, name: "\(prefix)[require_unique_freeform]"),
             tagSetsToAdd: inputValue(form, "\(prefix)[tag_sets_to_add]")
         )
+        let fields = [
+            "id", "optional_tags_allowed", "title_required", "title_allowed",
+            "description_required", "description_allowed", "url_required", "url_allowed",
+            "fandom_num_required", "fandom_num_allowed", "allow_any_fandom", "require_unique_fandom",
+            "character_num_required", "character_num_allowed", "allow_any_character",
+            "require_unique_character", "relationship_num_required", "relationship_num_allowed",
+            "allow_any_relationship", "require_unique_relationship", "freeform_num_required",
+            "freeform_num_allowed", "allow_any_freeform", "require_unique_freeform", "tag_sets_to_add"
+        ]
+        for field in fields {
+            let controls = (try? form.select("[name=\"\(prefix)[\(field)]\"]").array()) ?? []
+            if controls.isEmpty {
+                snapshot.controlStates[field] = .absent
+            } else if controls.allSatisfy({ (try? $0.hasAttr("disabled")) == true }) {
+                snapshot.controlStates[field] = .disabled
+            } else {
+                snapshot.controlStates[field] = .enabled
+            }
+        }
+        return snapshot
     }
 
     /// `nil` when the form has no num_required_prompts select (a prompt meme).
@@ -654,35 +676,36 @@ extension AO3Client {
     private static func promptRestrictionParameters(
         _ snapshot: AO3PromptRestrictionSnapshot, prefix: String
     ) -> [(String, String)] {
-        var params: [(String, String)] = [
-            ("\(prefix)[optional_tags_allowed]", snapshot.optionalTagsAllowed ? "1" : "0"),
-            ("\(prefix)[title_required]", snapshot.titleRequired ? "1" : "0"),
-            ("\(prefix)[title_allowed]", snapshot.titleAllowed ? "1" : "0"),
-            ("\(prefix)[description_required]", snapshot.descriptionRequired ? "1" : "0"),
-            ("\(prefix)[description_allowed]", snapshot.descriptionAllowed ? "1" : "0"),
-            ("\(prefix)[url_required]", snapshot.urlRequired ? "1" : "0"),
-            ("\(prefix)[url_allowed]", snapshot.urlAllowed ? "1" : "0"),
-            ("\(prefix)[fandom_num_required]", String(snapshot.fandomRequired)),
-            ("\(prefix)[fandom_num_allowed]", String(snapshot.fandomAllowed)),
-            ("\(prefix)[allow_any_fandom]", snapshot.allowAnyFandom ? "1" : "0"),
-            ("\(prefix)[require_unique_fandom]", snapshot.requireUniqueFandom ? "1" : "0"),
-            ("\(prefix)[character_num_required]", String(snapshot.characterRequired)),
-            ("\(prefix)[character_num_allowed]", String(snapshot.characterAllowed)),
-            ("\(prefix)[allow_any_character]", snapshot.allowAnyCharacter ? "1" : "0"),
-            ("\(prefix)[require_unique_character]", snapshot.requireUniqueCharacter ? "1" : "0"),
-            ("\(prefix)[relationship_num_required]", String(snapshot.relationshipRequired)),
-            ("\(prefix)[relationship_num_allowed]", String(snapshot.relationshipAllowed)),
-            ("\(prefix)[allow_any_relationship]", snapshot.allowAnyRelationship ? "1" : "0"),
-            ("\(prefix)[require_unique_relationship]", snapshot.requireUniqueRelationship ? "1" : "0"),
-            ("\(prefix)[freeform_num_required]", String(snapshot.freeformRequired)),
-            ("\(prefix)[freeform_num_allowed]", String(snapshot.freeformAllowed)),
-            ("\(prefix)[allow_any_freeform]", snapshot.allowAnyFreeform ? "1" : "0"),
-            ("\(prefix)[require_unique_freeform]", snapshot.requireUniqueFreeform ? "1" : "0"),
-            ("\(prefix)[tag_sets_to_add]", snapshot.tagSetsToAdd)
-        ]
-        if !snapshot.id.isEmpty {
-            params.insert(("\(prefix)[id]", snapshot.id), at: 0)
+        var params: [(String, String)] = []
+        func append(_ field: String, _ value: String) {
+            guard snapshot.isEditable(field) else { return }
+            params.append(("\(prefix)[\(field)]", value))
         }
+        if !snapshot.id.isEmpty { append("id", snapshot.id) }
+        append("optional_tags_allowed", snapshot.optionalTagsAllowed ? "1" : "0")
+        append("title_required", snapshot.titleRequired ? "1" : "0")
+        append("title_allowed", snapshot.titleAllowed ? "1" : "0")
+        append("description_required", snapshot.descriptionRequired ? "1" : "0")
+        append("description_allowed", snapshot.descriptionAllowed ? "1" : "0")
+        append("url_required", snapshot.urlRequired ? "1" : "0")
+        append("url_allowed", snapshot.urlAllowed ? "1" : "0")
+        append("fandom_num_required", String(snapshot.fandomRequired))
+        append("fandom_num_allowed", String(snapshot.fandomAllowed))
+        append("allow_any_fandom", snapshot.allowAnyFandom ? "1" : "0")
+        append("require_unique_fandom", snapshot.requireUniqueFandom ? "1" : "0")
+        append("character_num_required", String(snapshot.characterRequired))
+        append("character_num_allowed", String(snapshot.characterAllowed))
+        append("allow_any_character", snapshot.allowAnyCharacter ? "1" : "0")
+        append("require_unique_character", snapshot.requireUniqueCharacter ? "1" : "0")
+        append("relationship_num_required", String(snapshot.relationshipRequired))
+        append("relationship_num_allowed", String(snapshot.relationshipAllowed))
+        append("allow_any_relationship", snapshot.allowAnyRelationship ? "1" : "0")
+        append("require_unique_relationship", snapshot.requireUniqueRelationship ? "1" : "0")
+        append("freeform_num_required", String(snapshot.freeformRequired))
+        append("freeform_num_allowed", String(snapshot.freeformAllowed))
+        append("allow_any_freeform", snapshot.allowAnyFreeform ? "1" : "0")
+        append("require_unique_freeform", snapshot.requireUniqueFreeform ? "1" : "0")
+        append("tag_sets_to_add", snapshot.tagSetsToAdd)
         return params
     }
 
