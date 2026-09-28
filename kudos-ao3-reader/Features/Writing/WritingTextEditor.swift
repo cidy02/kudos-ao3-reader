@@ -43,7 +43,11 @@ struct WritingTextEditor: View {
     /// OD1's read-only preview. The text view stays mounted under it, so the
     /// selection and the undo stack survive a round trip.
     @State private var isPreviewing = false
-    @State private var previewDocument = AO3RichText()
+    /// What the preview shows: nil while the parse for this preview is running.
+    @State private var previewState: WritingBufferPreview.State?
+    /// Bumped on every entry and exit, so only the parse for the preview on
+    /// screen may publish (`WritingBufferPreview.publishes`).
+    @State private var previewGeneration = 0
     private let store = WritingTextRecovery()
 
     init(
@@ -85,6 +89,8 @@ struct WritingTextEditor: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .opacity(isPreviewing ? 0 : 1)
                         .accessibilityHidden(isPreviewing)
+                        // Nothing may edit the buffer behind the preview.
+                        .allowsHitTesting(!isPreviewing)
                 } else { ProgressView() }
                 if isPreviewing { preview }
             }
@@ -115,8 +121,12 @@ struct WritingTextEditor: View {
                     isPreviewing ? "Edit" : "Preview",
                     systemImage: isPreviewing ? "chevron.left.forwardslash.chevron.right" : "eye"
                 ) { togglePreview() }
+                // Disabled in preview: an undo there would change the buffer
+                // under a preview that still shows the old text.
                 Button("Undo", systemImage: "arrow.uturn.backward") { controller?.command("undo") }
+                    .disabled(isPreviewing)
                 Button("Redo", systemImage: "arrow.uturn.forward") { controller?.command("redo") }
+                    .disabled(isPreviewing)
                 moreMenu
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -190,14 +200,26 @@ struct WritingTextEditor: View {
 
     /// The buffer through the renderer AO3 HTML already has here
     /// (`AO3RichTextView`, as work summaries and the T-267 preview draw it).
+    @ViewBuilder
     private var preview: some View {
-        ScrollView {
-            AO3RichTextView(document: previewDocument)
-                .font(.system(size: editorFontSize, design: .serif))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16).padding(.vertical, 16)
+        switch previewState {
+        case nil:
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .rendered(document):
+            ScrollView {
+                AO3RichTextView(document: document)
+                    .font(.system(size: editorFontSize, design: .serif))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 16)
+            }
+            .accessibilityLabel("Preview")
+        case .failed:
+            ContentUnavailableView(
+                "Couldn't render this HTML",
+                systemImage: "exclamationmark.triangle",
+                description: Text("Your text is unchanged. Tap Edit to go back to it.")
+            )
         }
-        .accessibilityLabel("Preview")
     }
 
     /// Into preview: the composition is committed and the keyboard put away,
@@ -205,6 +227,7 @@ struct WritingTextEditor: View {
     /// the text view was never removed, so it is exactly as it was left.
     private func togglePreview() {
         guard let controller else { return }
+        previewGeneration += 1
         if isPreviewing {
             isPreviewing = false
             return
@@ -212,11 +235,17 @@ struct WritingTextEditor: View {
         controller.commitComposition()
         controller.endEditing()
         let value = controller.text
+        let generation = previewGeneration
+        previewState = nil
         isPreviewing = true
         Task {
-            previewDocument = await Task.detached(priority: .userInitiated) {
-                WritingBufferPreview.document(value)
+            let state = await Task.detached(priority: .userInitiated) {
+                WritingBufferPreview.state(for: value)
             }.value
+            guard WritingBufferPreview.publishes(
+                generation: generation, current: previewGeneration, isPreviewing: isPreviewing
+            ) else { return }
+            previewState = state
         }
     }
 
@@ -485,10 +514,22 @@ struct WritingTextEditorRow: View {
 /// OD1's preview model: the buffer parsed as AO3 HTML and reduced to the blocks
 /// `AO3RichTextView` draws, with the same parser AO3's pages use here.
 nonisolated enum WritingBufferPreview {
-    static func document(_ html: String) -> AO3RichText {
+    enum State: Equatable {
+        case rendered(AO3RichText)
+        /// The HTML did not parse: said so, never drawn as an empty chapter.
+        case failed
+    }
+
+    static func state(for html: String) -> State {
         guard let body = try? SwiftSoup.parseBodyFragment(html).body(),
               let document = try? AO3Client.parseRichText(body)
-        else { return AO3RichText() }
-        return document
+        else { return .failed }
+        return .rendered(document)
+    }
+
+    /// A parse publishes only if it belongs to the preview still on screen:
+    /// leaving preview, or entering it again, starts a new generation.
+    static func publishes(generation: Int, current: Int, isPreviewing: Bool) -> Bool {
+        isPreviewing && generation == current
     }
 }
