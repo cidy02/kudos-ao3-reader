@@ -321,6 +321,27 @@ enum ReadingQueueService {
         return membership
     }
 
+    /// 1h's library picker offers these: real Library works (queue-only
+    /// preservation records excluded, as `CollectionWorkPicker.candidates` does)
+    /// not already in `queue`.
+    static func appendCandidates(from works: [SavedWork], notIn queue: ReadingQueue) -> [SavedWork] {
+        works.filter { work in
+            !work.isQueueOnlyWork
+                && !work.queueMemberships.contains { $0.queue?.id == queue.id }
+        }
+    }
+
+    /// 1h's "Add N": each work goes on the end of `queue`, in the order given,
+    /// through `add` — which skips a work already in the queue. `add`, not
+    /// `addAndPreserve`: picking from the Library is a membership change and
+    /// must not fetch from AO3. A work whose copy is missing is left `.queued`
+    /// for the queue's own offline rules to handle.
+    static func append(_ works: [SavedWork], to queue: ReadingQueue, in context: ModelContext) {
+        for work in works {
+            add(work, to: queue, in: context)
+        }
+    }
+
     @discardableResult
     static func addAndPreserve(
         _ work: SavedWork,

@@ -61,6 +61,16 @@ struct ReadingQueueFactsTests {
         #expect(ReadingQueueFacts.kicker(origin: "Home", isDetails: true) == "Home › Queues › Queue details")
     }
 
+    /// 1bg: select and reorder are no longer exclusive — selecting keeps the
+    /// drag handle live, except under a filter, whose narrowed order can't be
+    /// written back. Reorder shows the whole queue, so it is always live.
+    @Test func selectKeepsTheDragLiveUnlessFiltered() {
+        #expect(ReadingQueueFacts.isDragLive(isReordering: false, isSelecting: true, isNarrowed: false))
+        #expect(!ReadingQueueFacts.isDragLive(isReordering: false, isSelecting: true, isNarrowed: true))
+        #expect(ReadingQueueFacts.isDragLive(isReordering: true, isSelecting: false, isNarrowed: true))
+        #expect(!ReadingQueueFacts.isDragLive(isReordering: false, isSelecting: false, isNarrowed: false))
+    }
+
     @Test func quickFilterCountsAgreeWithTheStripAndTheOfflineSet() throws {
         let context = try makeContext()
         let unread = work(in: context, title: "Unread")
