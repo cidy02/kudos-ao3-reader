@@ -95,9 +95,40 @@ struct WritingSeriesCollectionsTests {
         let found = try AO3Client.parseOpenCollectionNames(json)
         #expect(found.map(\.name) == ["slowburn_2026", "nanami_week"])
         #expect(found.map(\.title) == ["Slow Burn Exchange 2026", "Nanami Week"])
-        #expect(found.allSatisfy { !$0.isSelected && $0.access.rowState == .open })
+        #expect(found.allSatisfy { !$0.isSelected && $0.access.rowState == .unknown })
         let held = [AO3CollectionOffer(name: "Nanami_Week", title: "", access: AO3CollectionAccess())]
         #expect(WorkCollectionsGiftsView.newOffers(found, excluding: held).map(\.name) == ["slowburn_2026"])
+    }
+
+    /// A collection is one name. The work is in `salt`; the writer also runs a
+    /// collection titled "Salt" named `salt_exchange`. Matching titles ticked
+    /// that one too, and Save posted the work into it. What posts is the names
+    /// the form loaded, a closed one missing from the writer's page included.
+    @Test func onlyTheNamesTheFormLoadedAreTicked() throws {
+        var form = try editForm()
+        form.collectionNames = ["salt", "gift_swap_2025"]
+        form = form.applyingCollectionStates([
+            AO3CollectionOffer(name: "salt_exchange", title: "Salt", access: AO3CollectionAccess(isUnrevealed: true)),
+            AO3CollectionOffer(name: "Salt", title: "Salt Flats", access: AO3CollectionAccess())
+        ])
+        #expect(form.collections.map(\.name) == ["salt_exchange", "Salt", "gift_swap_2025"])
+        #expect(form.collections.map(\.isSelected) == [false, true, true])
+        #expect(form.postedCollectionNames == ["Salt", "gift_swap_2025"])
+    }
+
+    /// AO3's open-collection autocomplete is every collection that is not
+    /// closed — moderated, unrevealed and anonymous ones too — so a hit says
+    /// so, and is added unticked: the writer ticks it or it is not posted.
+    @Test func aSearchHitIsAddedUntickedAndSaysWhatAO3DidNotTell() throws {
+        let found = try AO3Client.parseOpenCollectionNames(Data(#"[{"id":"salt_exchange","name":"Salt (salt_exchange)"}]"#.utf8))
+        let hit = try #require(found.first)
+        let text = WorkCollectionsGiftsView.stateText(hit.access)
+        #expect(text.contains("moderated") && text.contains("unrevealed"))
+        var form = try editForm()
+        form.collections = WorkCollectionsGiftsView.adding(hit, to: form.collections)
+        #expect(form.collections.map(\.name) == ["nanami_week", "salt_exchange"])
+        #expect(form.collections.last?.isSelected == false)
+        #expect(form.postedCollectionNames == ["nanami_week"])
     }
 
     // MARK: 1br reorder metadata
@@ -134,5 +165,40 @@ struct WritingSeriesCollectionsTests {
         let kept = SeriesRemoveWorksView.keepingMetadata(of: joined, on: fresh)
         #expect(kept.map(\.serialWorkID) == [11, 33])
         #expect(kept.map(\.metadataText) == ["4,200 words · 09 Jan 2023", "30,280 words · 12 Aug 2024"])
+    }
+
+    /// `series/_series_order` as AO3 renders it: the row is `li#serial_<id>`,
+    /// its title the `h3.heading` text, and only a draft gets
+    /// `draft_work_title` ("%{title} (DRAFT)"). A posted work named "Draft
+    /// Notes" is not a draft, so it still takes its words and date.
+    @Test func manageRowsAreAO3sOwnAndOnlyTheDraftSuffixMarksADraft() throws {
+        let html = """
+        <html><body><div id="main"><h2 class="heading">Manage Series: Water</h2>
+        <div id="manage-series"><form action="/series/77/update_positions" method="post">
+        <ul id="sortable_series_list">
+          <li id="serial_11" class="serial-position-list">
+            <input type="text" name="serial_works[]" size="3" maxlength="3" class="number serial-position-field" id="serial_0">
+            <span id='position-for-11'>1</span>.
+            <h3 class="heading">
+              Draft Notes
+            </h3>
+          </li>
+          <li id="serial_22" class="serial-position-list">
+            <input type="text" name="serial_works[]" size="3" maxlength="3" class="number serial-position-field" id="serial_1">
+            <span id='position-for-22'>2</span>.
+            <h3 class="heading">
+              Tide (DRAFT)
+            </h3>
+          </li>
+        </ul>
+        <p class="submit actions"><input type="submit" name="commit" value="Update Positions"></p>
+        </form></div></div></body></html>
+        """
+        let rows = try AO3Client.parseSeriesManagePage(from: html)
+        #expect(rows.map(\.serialWorkID) == [11, 22])
+        #expect(rows.map(\.title) == ["Draft Notes", "Tide (DRAFT)"])
+        #expect(rows.map(\.isDraft) == [false, true])
+        let joined = AO3SeriesWorkRow.attachingBlurbs([blurb(100, "Draft Notes", words: 900, date: "01 Feb 2024")], to: rows)
+        #expect(joined.map(\.metadataText) == ["900 words · 01 Feb 2024", nil])
     }
 }

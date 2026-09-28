@@ -398,9 +398,12 @@ extension AO3Client {
         )
     }
 
+    /// `series/_series_order`: `ul#sortable_series_list` (AO3 draws no other
+    /// list of serial works), each row `li#serial_<id>` with its title in
+    /// `h3.heading` and `draft_work_title` ("%{title} (DRAFT)") for a draft.
     static func parseSeriesManagePage(from html: String) throws -> [AO3SeriesWorkRow] {
         let doc = try SwiftSoup.parse(html)
-        guard let list = try doc.select("#sortable_series_list, ul.serial-works").first()
+        guard let list = try doc.select("#sortable_series_list").first()
         else { throw AO3Error.parse }
         var rows: [AO3SeriesWorkRow] = []
         for (index, li) in try list.select("li").array().enumerated() {
@@ -416,7 +419,7 @@ extension AO3Client {
                 ?? (index + 1)
             let title = ((try? li.select("h3.heading, h4.heading, a").first()?.text()) ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let isDraft = title.lowercased().contains("draft")
+            let isDraft = title.hasSuffix(" (DRAFT)")
             rows.append(
                 AO3SeriesWorkRow(
                     workID: workID(in: li),
@@ -448,7 +451,7 @@ extension AO3Client {
             guard !name.isEmpty else { return nil }
             let suffix = " (\(name))"
             let title = row.name.hasSuffix(suffix) ? String(row.name.dropLast(suffix.count)) : row.name
-            return AO3CollectionOffer(name: name, title: title, access: AO3CollectionAccess(isOpen: true))
+            return AO3CollectionOffer(name: name, title: title, access: AO3CollectionAccess(isDescribed: false))
         }
     }
 
@@ -647,14 +650,30 @@ extension AO3Client {
     /// work page is not AO3 refusing it — the shared `writeErrorMessage`
     /// matches `.error p` anywhere, and `.flash.caution`, which otwarchive's
     /// work and chapter controllers never set. A page that shows the saved
-    /// thing (`#previewpane`) or says so (a notice) is never a refusal: AO3
-    /// has the draft, and reading it as a failure skipped `adopting`, so the
-    /// next Preview or Post made a second one.
+    /// thing (`#previewpane`) is never a refusal: AO3 has the draft, and
+    /// reading it as a failure skipped `adopting`, so the next Preview or Post
+    /// made a second one. A notice is no such proof: `chapters#update` previews
+    /// a draft chapter with `flash[:notice]`, not `flash.now`, so its banner
+    /// also rides on the next page — a Post's `render :edit` refusal included.
     static func workWriteError(in html: String) -> String? {
         guard let doc = try? SwiftSoup.parse(html),
-              (try? doc.select("#main > #previewpane, #main > .flash.notice").first()) == nil
+              (try? doc.select("#main > #previewpane").first()) == nil
         else { return nil }
-        return mainText(doc, "#main > .flash.error, #main > #error li")
+        // Anywhere under `#main` (a refused form nests its `#error` in the
+        // form), but never inside the writer's own content: AO3 keeps writer
+        // classes, so a chapter may carry `class="flash error"` itself.
+        let refusals = (try? doc.select("#main .flash.error, #main #error li").array()) ?? []
+        return refusals.lazy
+            .filter { !isInsideWriterContent($0) }
+            .compactMap { (try? $0.text())?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+
+    /// `#workskin`, `.userstuff` or `#previewpane`: text the writer wrote.
+    private static func isInsideWriterContent(_ element: Element) -> Bool {
+        element.parents().array().contains { parent in
+            parent.id() == "workskin" || parent.id() == "previewpane" || parent.hasClass("userstuff")
+        }
     }
 
     /// The layout's notice flash — same scoping as `workWriteError`.

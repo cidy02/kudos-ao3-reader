@@ -26,9 +26,13 @@ struct WorkEditView: View {
     @State private var needsTagRefresh = false
     @State private var tagRetry = 0
     @State private var preview: AO3PreviewHTML?
+    /// Chapter 1 as AO3 last gave it to this form — what `refreshedChapter`
+    /// tells an unsaved backdate apart from a date nobody touched here by.
+    @State private var loadedChapter: AO3WorkChapterDraft?
 
     init(form: AO3WorkForm) {
         self._form = State(initialValue: form)
+        self._loadedChapter = State(initialValue: form.chapter)
     }
 
     private var accountPalette: SubjectPalette {
@@ -156,7 +160,8 @@ struct WorkEditView: View {
                 form.isChaptered = fresh.isChaptered
                 // Save posts `work[chapter_attributes]` for a one-chapter work,
                 // so a chapter just edited from Chapters would be put back.
-                form.chapter = Self.refreshedChapter(form.chapter, fresh: fresh.chapter)
+                form.chapter = Self.refreshedChapter(form.chapter, loaded: loadedChapter, fresh: fresh.chapter)
+                loadedChapter = fresh.chapter
                 needsPublicationRefresh = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -653,17 +658,23 @@ extension WorkEditView {
     /// anything else as a draft, which is what "Post work" used to do.
     static let postSubmit = AO3WorkSubmitAction.post
 
-    /// Chapter 1 after a chapter write: its text, title and summary from AO3,
-    /// its publication date from this form. The date is the backdate row's,
-    /// which a chapter write does not touch — taking AO3's too threw away a
-    /// date picked here and not yet saved, and Save then wrote the old one.
+    /// Chapter 1 after a chapter write: AO3's, except a publication date
+    /// picked on this form and not yet saved (it differs from `loaded`, the
+    /// date this form was given). Taking AO3's date always threw that pick
+    /// away; keeping this form's always wrote the old date back over one the
+    /// chapter screen had just saved for chapter 1.
     static func refreshedChapter(
-        _ current: AO3WorkChapterDraft?, fresh: AO3WorkChapterDraft?
+        _ current: AO3WorkChapterDraft?, loaded: AO3WorkChapterDraft?, fresh: AO3WorkChapterDraft?
     ) -> AO3WorkChapterDraft? {
-        guard var kept = current, let fresh else { return fresh }
-        kept.content = fresh.content
-        kept.title = fresh.title
-        kept.summary = fresh.summary
+        guard let current, var kept = fresh else { return fresh }
+        let date = { (chapter: AO3WorkChapterDraft?) in
+            [chapter?.publishedYear, chapter?.publishedMonth, chapter?.publishedDay]
+        }
+        if date(current) != date(loaded) {
+            kept.publishedYear = current.publishedYear
+            kept.publishedMonth = current.publishedMonth
+            kept.publishedDay = current.publishedDay
+        }
         return kept
     }
 
