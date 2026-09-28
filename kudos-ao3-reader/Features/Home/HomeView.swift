@@ -6,7 +6,8 @@ import SwiftUI
 /// horizontal card carousel with a `>` chevron that opens its full vertical list.
 /// Tapping a local card opens the reader; long-press opens management actions,
 /// including Work Details. Remote cards still tap through to Work Details.
-/// Sections, in order: Resume (hero+strip), Reading Queues, Recently Updated,
+/// Sections, in order: Resume (hero+strip), Reading Queues, a shelf per
+/// collection flagged Show on Home (`HomeCollectionShelves`), Recently Updated,
 /// Subscriptions.
 struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
@@ -26,6 +27,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private var works: [SavedWork]
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var readingQueues: [ReadingQueue]
+    @Query(filter: #Predicate<WorkCollection> { $0.showsOnHome && !$0.isPendingDeletion })
+    private var homeCollections: [WorkCollection]
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
@@ -148,6 +151,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         VStack(alignment: .leading, spacing: 24) {
                             resumeSection
                             readingQueuesCarousel
+                            ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
+                                HomeCollectionShelf(
+                                    collection: collection,
+                                    works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
+                                    onSeeAll: { path.append(collection) }
+                                )
+                            }
                             localSection(.recentlyUpdated, works: recentlyUpdated)
                             subscriptionsSection
                         }
@@ -182,6 +192,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     HomeSectionListView(kind: kind, initialSelecting: isSelecting, initialSelection: selection)
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
                 .navigationDestination(for: SubscriptionsRoute.self) { _ in
                     // 1ag: the same screen the Account tab pushes, on Home's own
                     // stack, announcing the tab it was actually opened from.

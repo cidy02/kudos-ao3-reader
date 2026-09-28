@@ -121,6 +121,7 @@ struct CollectionDetailView: View {
     let collection: WorkCollection
 
     @Environment(\.modelContext) private var context
+    @Environment(DownloadQueue.self) private var downloadQueue
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
@@ -223,6 +224,11 @@ struct CollectionDetailView: View {
                         collection.keepsWorksOffline = newValue
                         collection.markModified()
                         context.saveBestEffort(reason: "Saving collection behaviour failed")
+                        // T-276: on fetches the works still missing their EPUB,
+                        // through the paced download queue. Only this tap starts it.
+                        if newValue {
+                            downloadQueue.enqueue(KeepOffline.downloadItems(for: collection.works), into: context)
+                        }
                     }
                 )
             )
@@ -240,12 +246,8 @@ struct CollectionDetailView: View {
         } header: {
             SubjectFieldLabel(text: "Behaviour", style: .formGroup)
         } footer: {
-            // Same caveat NewCollectionSheet states at creation — neither
-            // choice is acted on anywhere yet. See its own footnote for the
-            // full accounting of what was grepped to confirm that.
-            Text("Kudos records both choices with the collection, but does not "
-                + "act on them yet: collection works are not kept offline any "
-                + "differently, and Home has no collection shelves.")
+            // 1bk's copy, as at creation (`NewCollectionSheet.behaviourFootnote`).
+            Text(NewCollectionSheet.behaviourFootnote)
         }
         .appThemedRows()
     }
@@ -441,7 +443,13 @@ struct CollectionDetailView: View {
                     destinationName: collection.name,
                     scopeName: "collection",
                     candidates: { CollectionWorkPicker.candidates(from: $0, notIn: collection) },
-                    onAdd: { CollectionWorkPicker.add($0, to: collection, in: context) }
+                    onAdd: { chosen in
+                        CollectionWorkPicker.add(chosen, to: collection, in: context)
+                        // T-276: a Keep-downloads collection fetches what it just gained.
+                        if KeepOffline.collectionKeeps(collection.keepsWorksOffline) {
+                            downloadQueue.enqueue(KeepOffline.downloadItems(for: chosen), into: context)
+                        }
+                    }
                 )
             }
             .sheet(isPresented: $showingDetails) { detailsSheet }
@@ -549,6 +557,7 @@ struct AddToCollectionView: View {
     }
 
     @Environment(\.modelContext) private var context
+    @Environment(DownloadQueue.self) private var downloadQueue
     @Environment(\.dismiss) private var dismiss
     @Query(
         filter: #Predicate<WorkCollection> { !$0.isPendingDeletion },
@@ -639,6 +648,10 @@ struct AddToCollectionView: View {
             for work in works where !work.collections.contains(where: { $0.id == collection.id }) {
                 work.collections.append(collection)
                 work.markModified(now)
+            }
+            // T-276: a Keep-downloads collection fetches what it just gained.
+            if KeepOffline.collectionKeeps(collection.keepsWorksOffline) {
+                downloadQueue.enqueue(KeepOffline.downloadItems(for: works), into: context)
             }
         }
         collection.markMembershipChanged(now)

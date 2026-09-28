@@ -13,6 +13,10 @@ import SwiftUI
 /// renamed. `nil` still means "take it from the name", so nothing forces a
 /// choice — it just stops being the only option.
 struct NewCollectionSheet: View {
+    /// 1bk's Behaviour footnote.
+    static let behaviourFootnote = "Keep downloads exempts these works from the cache sweep. "
+        + "Show on Home adds a shelf above Recently Updated."
+
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
@@ -42,23 +46,9 @@ struct NewCollectionSheet: View {
                         .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
                     behaviourPanel
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-                    // Both of 1bk's sentences here were untrue, and both
-                    // toggles are write-only. "Keep downloads exempts these works
-                    // from the cache sweep": `SavedWork.isProtected` is `isSaved
-                    // || isFavorite || isQueuedForLater || ao3WorkID == nil` —
-                    // collection membership is not in it — and nothing reads
-                    // `WorkCollection.keepsWorksOffline`. "Show on Home adds a
-                    // shelf above Recently Updated": nothing reads
-                    // `showsOnHome` either; Home draws Resume, Reading Queues and
-                    // Recently Updated and has no collection shelf. Both grepped
-                    // to zero readers outside this sheet and the backup DTO.
-                    // ponytail: the copy says what is true; wiring either toggle
-                    // up is a product change and the owner's call. See
-                    // `NewReadingQueueSheet.offlineFootnote` for the queue twin.
-                    footnote("Kudos records both choices with the collection, but "
-                        + "does not act on them yet: collection works are not kept "
-                        + "offline any differently, and Home has no collection "
-                        + "shelves.")
+                    // 1bk's two sentences, true since T-276: `KeepOffline`
+                    // and `SavedWork.isKeptOffline`; `HomeCollectionShelves`.
+                    footnote(Self.behaviourFootnote)
                 }
 
                 Section {

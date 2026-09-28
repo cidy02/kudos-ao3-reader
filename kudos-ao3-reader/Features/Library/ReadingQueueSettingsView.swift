@@ -14,13 +14,12 @@ import SwiftUI
 /// (`ReadingQueueFacts.lastRead`); TAGS as removable chips with an "Add tag"
 /// chip into `QueueTagSheet` and "Manage all tags N" into `QueueTagManagerView`,
 /// always shown; and a "Keep downloaded" toggle storing
-/// `ReadingQueue.keepsWorksOffline` (`offlinePanel`). The toggle records the
-/// choice only — nothing reads it yet, as the footnote under it says; its
-/// effect is an open owner item.
+/// `ReadingQueue.keepsWorksOffline` (`offlinePanel`). On (or never asked), the
+/// queue's works keep their EPUBs and turning it on fetches missing ones; off,
+/// the queue is a plain list (`KeepOffline`, T-276).
 ///
-/// **What 1h draws that this does not build, and why:** a DESCRIPTION field.
-/// `ReadingQueue` has no description property, and adding one is a schema
-/// change.
+/// **The DESCRIPTION note** is `ReadingQueue.notes` (T-276), drawn in serif and
+/// edited in place (`descriptionPanel`).
 ///
 /// **The colour is editable now.** It used to be derived from the queue's name,
 /// so there was nothing an edit affordance could open; `ReadingQueue.hue` is a
@@ -99,6 +98,30 @@ struct ReadingQueueSettingsView: View {
         .subjectPanel()
     }
 
+    /// 1h's "DESCRIPTION note in serif". The field is the note: it reads as the
+    /// description and edits in place, writing through like Colour does — this
+    /// screen has no Save. Clearing it stores "" rather than nil, so the
+    /// clearing travels through sync (`KudosBackupReadingQueue.notes`).
+    private var descriptionPanel: some View {
+        TextField(
+            "Add a description",
+            text: Binding(
+                get: { queue.notes ?? "" },
+                set: { newValue in
+                    queue.notes = newValue
+                    queue.markModified()
+                    context.saveBestEffort(reason: "Saving queue description failed")
+                }
+            ),
+            axis: .vertical
+        )
+        .font(.system(.body, design: .serif))
+        .accessibilityLabel("Description")
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .subjectPanel()
+    }
+
     /// 1h's queue tags: "the tags as removable chips ... with Manage all tags as
     /// the way out to the shared vocabulary". × takes a tag off this queue only
     /// (`ReadingQueue.removeTag`, `QueueTagSheet`'s own path); "Add tag" opens
@@ -155,6 +178,13 @@ struct ReadingQueueSettingsView: View {
             }
 
             Section {
+                SubjectFieldLabel(text: "Description", style: .formGroup)
+                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
+                descriptionPanel
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+            }
+
+            Section {
                 SubjectFieldLabel(text: "Details", style: .formGroup)
                     .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
                 detailsPanel
@@ -180,14 +210,8 @@ struct ReadingQueueSettingsView: View {
                     .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
                 offlinePanel
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-                // The second sentence used to promise that Keep downloaded
-                // "holds on to it even after the work leaves this queue". Nothing
-                // reads `ReadingQueue.keepsWorksOffline` — see
-                // `NewReadingQueueSheet.offlineFootnote` — so a work that leaves
-                // every queue loses that protection whatever this says.
-                Text("A work in a queue already keeps its download. Keep downloaded "
-                    + "records your choice for this queue; Kudos does not act on it "
-                    + "yet, so a work that leaves every queue can still be freed.")
+                // 1j's sentence, true since T-276 (`KeepOffline`).
+                Text(NewReadingQueueSheet.offlineFootnote)
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
@@ -266,19 +290,33 @@ struct ReadingQueueSettingsView: View {
             SubjectRowSeparator()
             SubjectFormRow(label: "Keep downloaded", arrangement: .control) {
                 Toggle("Keep downloaded", isOn: Binding(
-                    // nil is "never asked", which reads as off but is not a
-                    // choice the reader made — see `ReadingQueue.keepsWorksOffline`.
-                    get: { queue.keepsWorksOffline ?? false },
+                    // nil is "never asked", and a never-asked queue keeps its
+                    // works downloaded as queues always did (`KeepOffline`).
+                    get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },
                     set: { isOn in
                         queue.keepsWorksOffline = isOn
                         queue.markModified()
                         context.saveBestEffort(reason: "Saving queue offline setting failed")
+                        if isOn { fetchMissingDownloads() }
                     }
                 ))
                 .labelsHidden()
             }
         }
         .subjectPanel()
+    }
+
+    /// Turning Keep downloaded on fetches the works still missing their EPUB,
+    /// one at a time through the paced client (`ReadingQueueService.preserve`).
+    /// Only this tap starts it: nothing polls.
+    private func fetchMissingDownloads() {
+        let missing = works.filter { !$0.hasEPUB && !$0.isPendingDeletion }
+        guard !missing.isEmpty else { return }
+        Task {
+            for work in missing {
+                try? await ReadingQueueService.preserve(work, in: context)
+            }
+        }
     }
 
     private var detailsPanel: some View {
