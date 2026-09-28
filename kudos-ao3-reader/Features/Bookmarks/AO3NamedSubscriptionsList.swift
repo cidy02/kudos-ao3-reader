@@ -260,6 +260,8 @@ struct AO3NamedSubscriptionsList: View {
             _ = try await auth.unsubscribe(path: path, page: page)
             guard auth.sessionGeneration == generation else { return }
             unsubscribed.insert(row.path)
+            // The last row of a later page: that page no longer exists.
+            if loaded?.rows.isEmpty == true, page > 1 { page -= 1 }
         } catch is CancellationError {
             // The session changed between the form GET and the POST. Nothing landed.
         } catch {
