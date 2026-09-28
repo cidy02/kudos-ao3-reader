@@ -188,16 +188,30 @@ struct WritingTextRecoveryBoundsTests {
     /// OD1's preview reads the buffer through AO3's parser: paragraphs, bold,
     /// italic and links survive; tags AO3 strips do not show as text.
     @Test func thePreviewParsesTheBufferAsAO3HTML() throws {
-        let document = WritingBufferPreview.document(
-            #"<p>One <strong>two</strong></p><p><em>three</em> <a href="https://example.com">four</a></p>"#
-        )
+        guard case let .rendered(document) = WritingBufferPreview.state(
+            for: #"<p>One <strong>two</strong></p><p><em>three</em> <a href="https://example.com">four</a></p>"#
+                + "<script>hidden words</script>"
+        ) else { Issue.record("expected a rendered preview"); return }
         #expect(document.blocks.count == 2)
         let runs = document.blocks.flatMap(\.runs)
         #expect(runs.contains { $0.text.contains("two") && $0.isBold })
         #expect(runs.contains { $0.text.contains("three") && $0.isItalic })
         #expect(runs.contains { $0.link?.host == "example.com" })
         #expect(!runs.contains { $0.text.contains("<") })
-        #expect(WritingBufferPreview.document("").isEmpty)
+        // Markup AO3 strips shows neither as tags nor as its text.
+        #expect(!runs.contains { $0.text.contains("hidden") })
+        guard case let .rendered(empty) = WritingBufferPreview.state(for: "") else {
+            Issue.record("an empty buffer is an empty preview, not a failure"); return
+        }
+        #expect(empty.isEmpty)
+    }
+
+    /// Only the parse for the preview on screen publishes: leaving preview,
+    /// or entering it again, makes an older parse stale.
+    @Test func onlyTheCurrentPreviewParsePublishes() {
+        #expect(WritingBufferPreview.publishes(generation: 3, current: 3, isPreviewing: true))
+        #expect(!WritingBufferPreview.publishes(generation: 2, current: 3, isPreviewing: true))
+        #expect(!WritingBufferPreview.publishes(generation: 3, current: 3, isPreviewing: false))
     }
 
 }
