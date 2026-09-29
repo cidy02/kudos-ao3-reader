@@ -30,6 +30,9 @@ struct AO3SeriesDetailView: View {
     /// 1br's Edit series, pushed rather than presented — a `NavigationLink` inside
     /// a `Menu` does not reliably push.
     @State private var isEditingSeries = false
+    /// Reorder lives in "…" like every other ordered list (pass2-14); AO3's
+    /// save step keeps it a pushed screen rather than an in-place mode.
+    @State private var isReorderingSeries = false
 
     /// Whether the signed-in account is one of this series' creators — the gate on
     /// 1br's Edit series.
@@ -58,8 +61,12 @@ struct AO3SeriesDetailView: View {
                 }
             }
 
-            Section("Works") {
+            Section {
                 worksContent
+            } header: {
+                SectionRuleHeader(title: "Works", count: works.isEmpty ? nil : works.count)
+                    .textCase(nil)
+                    .listRowInsets(EdgeInsets())
             }
         }
         .cardList()
@@ -70,8 +77,22 @@ struct AO3SeriesDetailView: View {
             .hidesFloatingTabBar()
             .toolbar {
                 ActionToolbar(items: [
+                    // The app's one "…" order (pass2-1): Mature, Reorder, Expand,
+                    // then the page's own items.
                     AnyView(
-                        Menu {
+                        WorkListMoreMenu {
+                            if hideMature {
+                                MatureRevealToggle()
+                            }
+                            if canEditSeries, works.count > 1 {
+                                Button { isReorderingSeries = true } label: {
+                                    Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                }
+                            }
+                            if !works.isEmpty {
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                                Divider()
+                            }
                             if canEditSeries {
                                 Button { isEditingSeries = true } label: {
                                     Label("Edit series", systemImage: "square.and.pencil")
@@ -83,20 +104,15 @@ struct AO3SeriesDetailView: View {
                             ShareLink(item: series.url) {
                                 Label("Share Series", systemImage: "square.and.arrow.up")
                             }
-                            if !works.isEmpty {
-                                ExpandAllMenuItem(expandAll: $expandAll)
-                            }
-                            if hideMature {
-                                MatureRevealToggle()
-                            }
-                        } label: {
-                            Label("Series actions", systemImage: "ellipsis")
                         }
                     )
                 ])
             }
             .navigationDestination(isPresented: $isEditingSeries) {
                 SeriesEditDestination(series: series, works: works)
+            }
+            .navigationDestination(isPresented: $isReorderingSeries) {
+                SeriesReorderDestination(seriesID: series.id, seriesTitle: series.title)
             }
             .refreshable {
                 // bypassCache clears the app-level AO3AuthorPageCache; this clears the

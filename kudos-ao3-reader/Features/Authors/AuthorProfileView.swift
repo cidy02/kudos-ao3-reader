@@ -783,47 +783,42 @@ private extension AuthorProfileView {
         }
     }
 
+    /// The app's one "…" order (pass2-1): Mature, Select, layout and Expand,
+    /// then the page's own items.
     private var profileMenu: some View {
-        Menu {
-            Button { router.open(model.route.dashboardURL) } label: {
-                Label("Open on AO3", systemImage: "safari")
+        WorkListMoreMenu {
+            if (model.selectedTab != .about || showsDashboard) && hideMature {
+                MatureRevealToggle()
             }
-            ShareLink(item: model.route.dashboardURL) {
-                Label("Share Profile", systemImage: "square.and.arrow.up")
-            }
-
-            ForEach(visibleWebActions) { action in
-                Button { router.open(action.url) } label: {
-                    Label(action.label, systemImage: actionSymbol(action.kind))
-                }
-            }
-
             if !showsDashboard, !showsSelectButton, model.selectedTab == .works, !model.works.isEmpty {
-                Divider()
                 Button { bulkSelection.isSelecting = true } label: {
                     Label("Select Works", systemImage: "checklist")
                 }
             }
             if showsDashboard || (!currentContentIsEmpty && model.selectedTab != .about) {
-                Divider()
                 DisplayModeMenuPicker(mode: $displayMode)
                 // Expand All acts on cards, so it has nothing to do in Compact.
                 if displayMode != .compact {
                     ExpandAllMenuItem(expandAll: $expandAll)
                 }
-            }
-            if model.selectedTab != .about || showsDashboard {
-                if hideMature {
-                    MatureRevealToggle()
-                }
+                Divider()
             }
             if showsDashboard {
                 Button { dashboardDestination = .about } label: {
                     Label("About", systemImage: "person.text.rectangle")
                 }
             }
-        } label: {
-            Label("Author actions", systemImage: "ellipsis")
+            Button { router.open(model.route.dashboardURL) } label: {
+                Label("Open on AO3", systemImage: "safari")
+            }
+            ShareLink(item: model.route.dashboardURL) {
+                Label("Share Profile", systemImage: "square.and.arrow.up")
+            }
+            ForEach(visibleWebActions) { action in
+                Button { router.open(action.url) } label: {
+                    Label(action.label, systemImage: actionSymbol(action.kind))
+                }
+            }
         }
     }
 
