@@ -193,7 +193,7 @@ struct WorkProvenanceSections: View {
             try await WorkReconversion.reconvert(work, in: context)
             rebuilt = true
         } catch {
-            rebuildError = error.localizedDescription
+            rebuildError = UserFacingError.message(for: error)
         }
     }
 }

@@ -493,7 +493,7 @@ struct AO3CollectionsList: View {
                 capturedSessionGeneration: expectedSessionGeneration,
                 sessionGeneration: auth.sessionGeneration
             ) else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -622,7 +622,7 @@ extension AO3CollectionsList {
                 capturedSessionGeneration: expectedSessionGeneration,
                 sessionGeneration: auth.sessionGeneration
             ) else { return }
-            wholeIndexPhase = .failed(error.localizedDescription)
+            wholeIndexPhase = .failed(UserFacingError.message(for: error))
         }
     }
 }

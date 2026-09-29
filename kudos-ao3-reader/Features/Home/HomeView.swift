@@ -567,7 +567,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             // unless the task was cancelled (sign-out, tab switch), which is no failure.
             if subscriptions.isEmpty, !Task.isCancelled { subscriptionsLoadFailed = true }
             Log.network.notice(
-                "Subscriptions refresh failed: \(error.localizedDescription, privacy: .public)"
+                "Subscriptions refresh failed: \(UserFacingError.message(for: error), privacy: .public)"
             )
         }
         isLoadingSubscriptions = false

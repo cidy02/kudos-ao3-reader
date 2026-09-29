@@ -1021,7 +1021,7 @@ struct AO3AccountWorksList: View {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -1053,7 +1053,7 @@ struct AO3AccountWorksList: View {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
             guard writeResultStillOwnsScreen(generation) else { return }
-            historyWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            historyWriteError = (error as? LocalizedError)?.errorDescription ?? UserFacingError.message(for: error)
         }
     }
 
@@ -1100,7 +1100,7 @@ struct AO3AccountWorksList: View {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
             guard writeResultStillOwnsScreen(generation) else { return }
-            subscriptionWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            subscriptionWriteError = (error as? LocalizedError)?.errorDescription ?? UserFacingError.message(for: error)
         }
     }
 
@@ -1166,7 +1166,7 @@ struct AO3AccountWorksList: View {
             // Session changed between the confirm-page GET and the POST.
         } catch {
             guard writeResultStillOwnsScreen(generation) else { return }
-            historyWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            historyWriteError = (error as? LocalizedError)?.errorDescription ?? UserFacingError.message(for: error)
         }
     }
 
@@ -1222,7 +1222,7 @@ extension AO3AccountWorksList {
             // Session changed between the form GET and the POST. Nothing landed.
         } catch {
             guard writeResultStillOwnsScreen(generation) else { return }
-            markedForLaterWriteError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            markedForLaterWriteError = UserFacingError.message(for: error)
         }
     }
 

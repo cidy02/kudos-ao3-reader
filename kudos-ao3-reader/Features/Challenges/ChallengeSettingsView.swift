@@ -555,7 +555,7 @@ struct ChallengeSettingsView: View {
 
             phase = .loaded
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 

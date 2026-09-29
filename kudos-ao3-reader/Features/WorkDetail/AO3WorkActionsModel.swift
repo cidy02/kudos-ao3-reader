@@ -141,7 +141,7 @@ final class AO3WorkActionsModel {
     }
 
     private static func message(for error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        (error as? LocalizedError)?.errorDescription ?? UserFacingError.message(for: error)
     }
 }
 

@@ -76,7 +76,7 @@ struct OwnWorksBulkDelete: ViewModifier {
             } catch is CancellationError {
                 errorMessage = "Your AO3 session changed, so nothing was deleted."
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
             isDeleting = false
         }

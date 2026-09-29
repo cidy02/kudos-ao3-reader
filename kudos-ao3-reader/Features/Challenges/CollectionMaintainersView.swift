@@ -442,7 +442,7 @@ struct CollectionMaintainersView: View {
             participants = loaded
             phase = .loaded
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -458,7 +458,7 @@ struct CollectionMaintainersView: View {
             inviteUsername = ""
             await loadMaintainers()
         } catch {
-            inviteErrorMessage = error.localizedDescription
+            inviteErrorMessage = UserFacingError.message(for: error)
         }
         isInviting = false
     }
@@ -482,7 +482,7 @@ struct CollectionMaintainersView: View {
             try await auth.leaveCollection(slug: collectionSlug, participantID: participant.id)
             dismiss()
         } catch {
-            leaveErrorMessage = error.localizedDescription
+            leaveErrorMessage = UserFacingError.message(for: error)
             isLeaving = false
         }
     }

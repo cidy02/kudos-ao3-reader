@@ -536,7 +536,7 @@ struct AO3CollectionDetailView: View {
                 expectedSessionGeneration: expectedSessionGeneration,
                 requestedSegment: requestedSegment
             ) else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 

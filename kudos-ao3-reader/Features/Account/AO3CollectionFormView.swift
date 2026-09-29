@@ -468,7 +468,7 @@ struct AO3CollectionFormView: View {
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -514,7 +514,7 @@ struct AO3CollectionFormView: View {
         } catch let error as AO3CollectionWriteError {
             saveFailed(error.errorDescription ?? "The collection could not be saved.")
         } catch {
-            saveFailed(error.localizedDescription)
+            saveFailed(UserFacingError.message(for: error))
         }
     }
 
@@ -582,7 +582,7 @@ extension AO3CollectionFormView {
         } catch let error as AO3CollectionWriteError {
             saveFailed(error.errorDescription ?? "The collection could not be deleted.")
         } catch {
-            saveFailed(error.localizedDescription)
+            saveFailed(UserFacingError.message(for: error))
         }
     }
 }

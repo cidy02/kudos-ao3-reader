@@ -347,7 +347,7 @@ struct AddChapterView: View {
     private func save(submit: AO3WorkSubmitAction) {
         guard !isSaving && !isPosting else { return }
         Task {
-            do { try await perform(submit: submit) } catch { errorMessage = error.localizedDescription }
+            do { try await perform(submit: submit) } catch { errorMessage = UserFacingError.message(for: error) }
         }
     }
 
@@ -392,7 +392,7 @@ struct AddChapterView: View {
             if isPost { isPosting = false } else { isSaving = false }
             throw AO3WorkWriteError.rejected(
                 (chapterSaved ? "The chapter was saved, but the work total was not updated. " : "")
-                    + error.localizedDescription
+                    + UserFacingError.message(for: error)
             )
         }
     }
@@ -424,7 +424,7 @@ extension AddChapterView {
                 if wasNew { onSaved() }
                 preview = page
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
         }
     }
@@ -447,7 +447,7 @@ extension AddChapterView {
                 errorMessage = "Your AO3 session changed, so nothing was deleted."
                 isSaving = false
             } catch {
-                errorMessage = "The chapter was not deleted. " + error.localizedDescription
+                errorMessage = "The chapter was not deleted. " + UserFacingError.message(for: error)
                 isSaving = false
             }
         }

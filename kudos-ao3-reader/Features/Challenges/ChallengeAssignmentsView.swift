@@ -487,7 +487,7 @@ struct ChallengeAssignmentsView: View {
             )
             return (rows, nil)
         } catch {
-            return ([], error.localizedDescription)
+            return ([], UserFacingError.message(for: error))
         }
     }
 
@@ -643,7 +643,7 @@ extension ChallengeAssignmentsView {
             return
         } catch {
             itemInFlight = nil
-            actionErrorMessage = "\(write.kind.failure): \(error.localizedDescription)"
+            actionErrorMessage = "\(write.kind.failure): \(UserFacingError.message(for: error))"
         }
     }
 

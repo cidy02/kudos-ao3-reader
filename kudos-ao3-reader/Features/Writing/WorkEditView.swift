@@ -166,7 +166,7 @@ struct WorkEditView: View {
                 needsPublicationRefresh = false
             } catch {
                 guard !Task.isCancelled else { return }
-                errorMessage = "Reload chapter totals before saving this work. " + error.localizedDescription
+                errorMessage = "Reload chapter totals before saving this work. " + UserFacingError.message(for: error)
             }
         }
         .task(id: "\(needsTagRefresh):\(tagRetry)") {
@@ -185,7 +185,7 @@ struct WorkEditView: View {
                 needsTagRefresh = false
             } catch {
                 guard !Task.isCancelled else { return }
-                errorMessage = "Reload tags before saving this work. " + error.localizedDescription
+                errorMessage = "Reload tags before saving this work. " + UserFacingError.message(for: error)
             }
         }
         .toolbar {
@@ -523,7 +523,7 @@ struct WorkEditView: View {
     private func save(submit: AO3WorkSubmitAction) {
         guard !isSaving && !isPosting && !needsPublicationRefresh && !needsTagRefresh else { return }
         Task {
-            do { try await perform(submit: submit) } catch { errorMessage = error.localizedDescription }
+            do { try await perform(submit: submit) } catch { errorMessage = UserFacingError.message(for: error) }
         }
     }
 
@@ -539,7 +539,7 @@ struct WorkEditView: View {
                 }
                 dismiss()
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
         }
     }
@@ -587,7 +587,7 @@ extension WorkEditView {
                 form = try form.adopting(page)
                 preview = page
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
         }
     }
@@ -781,7 +781,7 @@ extension WorkEditView {
                 deleteImplications = try await auth.loadDeleteImplications(workID: workID)
                 showDeleteConfirmation = true
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
             isCheckingDelete = false
         }

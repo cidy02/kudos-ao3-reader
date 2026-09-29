@@ -343,7 +343,7 @@ struct WritingTextEditor: View {
                     do {
                         try FileManager.default.removeItem(at: copy.url)
                         recoveries.removeAll { $0.id == copy.id }
-                    } catch { errorMessage = error.localizedDescription }
+                    } catch { errorMessage = UserFacingError.message(for: error) }
                 }
             }
         }
@@ -394,7 +394,7 @@ struct WritingTextEditor: View {
                 do {
                     try await recoveryWriter.write(value, sequence: sequence)
                 } catch {
-                    errorMessage = "Local recovery could not be saved: \(error.localizedDescription)"
+                    errorMessage = "Local recovery could not be saved: \(UserFacingError.message(for: error))"
                 }
             }
         }
@@ -428,7 +428,7 @@ struct WritingTextEditor: View {
                     }
                 }.value
             } catch {
-                errorMessage = "The local recovery copy could not be read: \(error.localizedDescription)"
+                errorMessage = "The local recovery copy could not be read: \(UserFacingError.message(for: error))"
             }
         }
     }

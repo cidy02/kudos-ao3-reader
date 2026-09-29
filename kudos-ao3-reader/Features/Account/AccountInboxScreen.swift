@@ -104,6 +104,10 @@ struct AccountInboxScreen: View {
         .toolbar { toolbarContent }
         .sheet(isPresented: $showingFilters) {
             AccountInboxFilterSheet(model: model)
+            #if os(iOS)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            #endif
         }
         .alert("Couldn't update Inbox", isPresented: actionErrorBinding) {
             Button("OK") { model.clearActionError() }
