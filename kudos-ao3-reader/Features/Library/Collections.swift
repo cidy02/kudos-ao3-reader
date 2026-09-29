@@ -482,23 +482,7 @@ struct CollectionDetailView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             }
-            .confirmationDialog(
-                "Delete “\(collection.name)”?",
-                isPresented: $confirmDelete,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    PreservedWorkService.softDelete(collection, in: context)
-                    dismiss()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(
-                    "The collection moves to Recently Deleted "
-                        + "for \(PreservedWorkService.recoveryWindowText). The works "
-                        + "themselves stay in your Library either way."
-                )
-            }
+            .collectionDeleteConfirmation(collection, isPresented: $confirmDelete) { dismiss() }
             .destructiveConfirmation(
                 for: $pendingRemoval,
                 title: "Remove this work?",
@@ -711,5 +695,65 @@ enum CollectionWorkPicker {
         }
         collection.markMembershipChanged(now)
         try? context.save()
+    }
+}
+
+extension View {
+    /// The one ask before a local collection goes to Recently Deleted — from its
+    /// page or from its card.
+    func collectionDeleteConfirmation(
+        _ collection: WorkCollection,
+        isPresented: Binding<Bool>,
+        onDeleted: @escaping () -> Void = {}
+    ) -> some View {
+        modifier(CollectionDeleteConfirmation(collection: collection, isPresented: isPresented, onDeleted: onDeleted))
+    }
+
+    /// A collection card's long-press menu: Delete, so a collection can leave the
+    /// list that shows it (pass2-10) — cards are not List rows, so no swipe.
+    func collectionCardMenu(_ collection: WorkCollection) -> some View {
+        modifier(CollectionCardMenu(collection: collection))
+    }
+}
+
+private struct CollectionDeleteConfirmation: ViewModifier {
+    let collection: WorkCollection
+    @Binding var isPresented: Bool
+    let onDeleted: () -> Void
+    @Environment(\.modelContext) private var context
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            "Delete “\(collection.name)”?",
+            isPresented: $isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                PreservedWorkService.softDelete(collection, in: context)
+                onDeleted()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "The collection moves to Recently Deleted "
+                    + "for \(PreservedWorkService.recoveryWindowText). The works "
+                    + "themselves stay in your Library either way."
+            )
+        }
+    }
+}
+
+private struct CollectionCardMenu: ViewModifier {
+    let collection: WorkCollection
+    @State private var confirmDelete = false
+
+    func body(content: Content) -> some View {
+        content
+            .contextMenu {
+                Button(role: .destructive) { confirmDelete = true } label: {
+                    Label("Delete Collection", systemImage: "trash")
+                }
+            }
+            .collectionDeleteConfirmation(collection, isPresented: $confirmDelete)
     }
 }

@@ -332,16 +332,16 @@ struct AO3AuthorWorksSection: View {
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
         } header: {
-            if isSelecting {
-                // 1bn: "Your works 3 / 12". "Your" only where these are.
-                HStack(spacing: 8) {
-                    Text(onOwnWorkAction == nil ? "Works" : "Your works")
-                    Text(Self.selectionCountText(selection: selection, works: model.works))
-                        .monospaced()
-                }
-            } else {
-                Text("Works")
-            }
+            // 1bn: "Your works 3 / 12". "Your" only where these are. The rule
+            // header every other list of works uses (pass2-16).
+            SectionRuleHeader(
+                title: isSelecting && onOwnWorkAction != nil ? "Your works" : "Works",
+                count: isSelecting || model.works.isEmpty ? nil : model.works.count,
+                countText: isSelecting ? Self.selectionCountText(selection: selection, works: model.works) : nil
+            )
+            .textCase(nil)
+            .listRowInsets(EdgeInsets())
+            .padding(.bottom, 10)
         }
     }
 
@@ -461,7 +461,7 @@ struct AO3AuthorSeriesSection: View {
     }
 
     private var seriesList: some View {
-        Section("Series") {
+        Section {
             if model.contentPhase == .loading, model.series.isEmpty {
                 AO3AuthorLoadingRows()
             } else if model.series.isEmpty {
@@ -528,6 +528,11 @@ struct AO3AuthorSeriesSection: View {
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
+        } header: {
+            SectionRuleHeader(title: "Series", count: model.series.isEmpty ? nil : model.series.count)
+                .textCase(nil)
+                .listRowInsets(EdgeInsets())
+                .padding(.bottom, 10)
         }
     }
 
