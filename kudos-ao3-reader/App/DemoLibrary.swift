@@ -283,6 +283,12 @@ enum DebugLaunchRoute {
     /// `work:<title>` opens that work's detail page on Home's stack.
     static var opensReader: Bool { value?.hasPrefix("read:") == true }
 
+    /// `homesection:<HomeSectionKind raw value>` pushes that Home section list.
+    static func homeSection() -> HomeSectionKind? {
+        guard let value, value.hasPrefix("homesection:") else { return nil }
+        return HomeSectionKind(rawValue: String(value.dropFirst("homesection:".count)))
+    }
+
     /// With `-KudosFixtureDir`, demo works get the fixture EPUB in place of the
     /// zero-filled placeholder, so the reader has a real book to open.
     static func installFixtureEPUBs(in works: [SavedWork]) {
