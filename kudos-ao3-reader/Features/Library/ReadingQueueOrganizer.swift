@@ -195,13 +195,15 @@ struct AllReadingQueuesGridView: View {
             tagFilter = isSelected ? "" : value
         } label: {
             SubjectChip(
-                text: "\(title) \(count)",
+                text: "\(title) \(count.compactCount)",
                 style: .pill(isSelected: isSelected),
                 palette: organizerPalette
             )
         }
         .buttonStyle(.plain)
+        .minimumHitTarget()
         .accessibilityLabel(title)
+        .accessibilityValue(count == 1 ? "1 queue" : "\(count) queues")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -258,6 +260,7 @@ struct AllReadingQueuesGridView: View {
                     ForEach(pinnedQueues) { queue in
                         organizerRow(queue, isReorderable: false)
                             .organizerCard(queue)
+                            .swipeActions(edge: .trailing) { queueSwipes(queue) }
                     }
                 }
             }
@@ -274,24 +277,25 @@ struct AllReadingQueuesGridView: View {
                 ForEach(customQueues) { queue in
                     organizerRow(queue, isReorderable: true)
                         .organizerCard(queue)
-                        .swipeActions(edge: .trailing) {
-                            if !isSelecting {
-                                Button(role: .destructive) {
-                                    pendingDelete = [queue]
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                                Button {
-                                    renameText = queue.name
-                                    pendingRename = queue
-                                } label: {
-                                    Label("Rename", systemImage: "pencil")
-                                }
-                                .tint(.blue)
-                            }
-                        }
+                        .swipeActions(edge: .trailing) { queueSwipes(queue) }
                 }
                 .onMove(perform: moveAction)
+
+                // A search or tag filter that leaves nothing says so, with the
+                // way back, rather than an empty "All queues 0".
+                if visibleQueues.isEmpty, isSearching || !tagFilter.isEmpty {
+                    ContentUnavailableView {
+                        Label("No matching queues", systemImage: "line.3.horizontal.decrease.circle")
+                    } description: {
+                        Text("No queue matches the current search and tag filter.")
+                    } actions: {
+                        Button("Clear Search and Filters") {
+                            searchText = ""
+                            tagFilter = ""
+                        }
+                    }
+                    .bareListRow()
+                }
 
                 if !isSelecting {
                     newQueueRow
@@ -400,10 +404,10 @@ struct AllReadingQueuesGridView: View {
                         Button {
                             isReordering = true
                         } label: {
-                            Label("Reorder", systemImage: "arrow.up.arrow.down")
+                            Label(canReorder ? "Reorder" : "Clear Filters to Reorder",
+                                  systemImage: "arrow.up.arrow.down")
                         }
                         .disabled(!canReorder)
-                        .help(canReorder ? "Reorder your queues" : "Clear the tag filter and search to reorder")
                     }
                 })
             ])
@@ -449,9 +453,9 @@ struct AllReadingQueuesGridView: View {
     private var statStrip: some View {
         SubjectStatStrip(
             cells: [
-                .init(value: "\(readingQueues.count)", label: "Queues"),
-                .init(value: "\(allWorks.count)", label: "Works"),
-                .init(value: "\(allPreservedWorks.count)", label: "Offline"),
+                .init(value: readingQueues.count.compactCount, label: "Queues"),
+                .init(value: allWorks.count.compactCount, label: "Works"),
+                .init(value: allPreservedWorks.count.compactCount, label: "Offline"),
                 .init(value: queueByteCountString(allPreservedByteCount), label: "Storage")
             ],
             palette: organizerPalette
@@ -469,7 +473,7 @@ struct AllReadingQueuesGridView: View {
                     .foregroundStyle(organizerPalette.accent)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("New Queue")
+                    Text("New queue")
                         .font(.system(size: 15, weight: .semibold))
                     Text("Name it, colour it, tag it")
                         .font(.system(size: 11.5))
@@ -489,6 +493,26 @@ struct AllReadingQueuesGridView: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityHint("Creates a new reading queue")
+    }
+
+    /// Rename and Delete for a custom queue, wherever its row is drawn —
+    /// Pinned and All queues show the same queue. Saved for Later has neither.
+    @ViewBuilder
+    private func queueSwipes(_ queue: ReadingQueue) -> some View {
+        if !isSelecting, queue.kind == .custom {
+            Button(role: .destructive) {
+                pendingDelete = [queue]
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            Button {
+                renameText = queue.name
+                pendingRename = queue
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            .tint(.blue)
+        }
     }
 
     @ViewBuilder
@@ -524,7 +548,7 @@ struct AllReadingQueuesGridView: View {
                         .font(.system(size: 15.5, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    Text("\(works.count)")
+                    Text(works.count.compactCount)
                         .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }

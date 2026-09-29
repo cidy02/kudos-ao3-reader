@@ -94,6 +94,7 @@ struct WorkCoverCard: View {
 
     private var primaryFandom: String? {
         work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map(FandomDisplayName.bareTitle)
     }
 
     private var hue: Double {
@@ -246,6 +247,7 @@ struct AO3WorkCoverCard: View {
     /// row this card used to carry, so no fact left the card with it.
     private var primaryFandom: String? {
         work.fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map(FandomDisplayName.bareTitle)
     }
 
     private var palette: SubjectPalette {

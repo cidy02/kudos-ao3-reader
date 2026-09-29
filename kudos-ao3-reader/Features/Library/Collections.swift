@@ -99,7 +99,7 @@ struct NewCollectionCard: View {
                         .font(.system(size: 34, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-            Text("New Collection")
+            Text("New collection")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
                 .foregroundStyle(.primary)

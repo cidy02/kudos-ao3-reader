@@ -237,12 +237,13 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         return (hours < 0 ? "−" : "+") + String(format: "%.1f", abs(hours))
     }
 
-    /// The spec's `31 min`. Minutes below an hour, then `1 h 12 min`.
+    /// The spec's `31 min` below an hour, then its compact `3h 20m` (1ah's
+    /// facts, 1ak's log line) — the reader keeps its own spelled-out sentence.
     static func durationLabel(_ seconds: Double) -> String {
         let totalMinutes = Int((max(0, seconds) / 60).rounded())
         if totalMinutes < 60 { return "\(totalMinutes) min" }
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
-        return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) min"
+        return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
     }
 }

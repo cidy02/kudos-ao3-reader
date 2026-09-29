@@ -748,8 +748,17 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     // MARK: - Lifecycle toggles (Quick Actions + Library rows)
 
+    /// Download fetches the EPUB and keeps it; on a downloaded work this is
+    /// Remove Download (`WorkDownload`). A remote work is localized with its EPUB.
     func toggleSaved() {
-        withLocalWork { WorkLifecycle.setSaved($0, !$0.isSaved, in: context) }
+        resolveExistingIfNeeded()
+        guard let work = localWork else {
+            withLocalWork(requireEPUB: true) { WorkLifecycle.setSaved($0, true, in: context) }
+            return
+        }
+        if work.isPendingDeletion { PreservedWorkService.restore(work, in: context) }
+        guard let action = WorkDownload.action(for: work) else { return }
+        Task { try? await WorkDownload.perform(action, on: work, in: context) }
     }
 
     func toggleFinished() {

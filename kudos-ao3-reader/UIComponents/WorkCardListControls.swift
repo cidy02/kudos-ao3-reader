@@ -149,10 +149,13 @@ struct ExpandAllMenuItem: View {
 /// needed its own toolbar slot).
 struct DisplayModeMenuPicker: View {
     @Binding var mode: WorkListDisplayMode
+    /// The layouts this page can draw. History has no cover grid (1ah: "the
+    /// tile format cannot carry this much metadata legibly").
+    var modes: [WorkListDisplayMode] = WorkListDisplayMode.allCases
 
     var body: some View {
         Picker("Layout", selection: $mode) {
-            ForEach(WorkListDisplayMode.allCases, id: \.self) { mode in
+            ForEach(modes, id: \.self) { mode in
                 Label(mode.title, systemImage: mode.systemImage).tag(mode)
             }
         }

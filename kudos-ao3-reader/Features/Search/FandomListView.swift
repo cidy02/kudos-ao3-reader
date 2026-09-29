@@ -515,6 +515,14 @@ enum FandomDisplayName {
         let cut: (String) -> Peel?
     }
 
+    /// A kicker's name: the display segment of `a | b | c`, without its
+    /// disambiguation — "Doctor Who", not "Doctor Who (2005)". Display only;
+    /// search and filters keep the raw tag.
+    static func bareTitle(_ name: String) -> String {
+        let title = split(primarySegment(of: name)).title
+        return title.isEmpty ? name : title
+    }
+
     static func split(_ name: String) -> FandomName {
         var title = name.trimmingCharacters(in: .whitespaces)
         guard !title.isEmpty else { return FandomName(original: name, title: name, parts: []) }
