@@ -459,16 +459,6 @@ struct AO3AuthorSeriesSection: View {
     @State private var reorderingSeries: AO3SeriesSummary?
 
     var body: some View {
-        seriesList
-            .navigationDestination(item: $editingSeries) { series in
-                SeriesEditDestination(series: series)
-            }
-            .navigationDestination(item: $reorderingSeries) { series in
-                SeriesReorderDestination(seriesID: series.id, seriesTitle: series.title)
-            }
-    }
-
-    private var seriesList: some View {
         Section {
             if model.contentPhase == .loading, model.series.isEmpty {
                 AO3AuthorLoadingRows()
@@ -537,7 +527,16 @@ struct AO3AuthorSeriesSection: View {
                 AO3AuthorPaginationRows(model: model, auth: auth)
             }
         } header: {
+            // The destinations hang off the header, not the Section: a modifier
+            // on a Section folds it into one plain row, which dropped every
+            // series card to a white full-width panel.
             SectionRuleHeader(title: "Series", count: model.series.isEmpty ? nil : model.series.count)
+                .navigationDestination(item: $editingSeries) { series in
+                    SeriesEditDestination(series: series)
+                }
+                .navigationDestination(item: $reorderingSeries) { series in
+                    SeriesReorderDestination(seriesID: series.id, seriesTitle: series.title)
+                }
                 .textCase(nil)
                 .listRowInsets(EdgeInsets())
                 .padding(.bottom, 10)
