@@ -1029,7 +1029,12 @@ private struct CommentPostRow: View {
                 .frame(minHeight: CommentThreadGeometry.avatarSize(forDepth: depth), alignment: .center)
         } else {
             VStack(alignment: .leading, spacing: 6) {
+                // Owner, 2026-09-28: the name lines up with the avatar in every
+                // row. The byline is exactly the avatar's height and centres what
+                // it holds, so a collapse pill or chapter badge can no longer
+                // push the name down in some rows and not others.
                 byline(timestamp: timestamp)
+                    .frame(minHeight: CommentThreadGeometry.avatarSize(forDepth: depth))
                 parentAttribution
                 if !comment.bodyText.isEmpty {
                     ExpandableCommentBody(text: comment.bodyText)
@@ -1117,7 +1122,7 @@ private struct CommentPostRow: View {
     /// Baseline-aligned, not `.top`: `.top` pinned the chapter badge to the top of
     /// the name's hit box, which sits above the name's own cap height.
     private func byline(timestamp: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
+        HStack(alignment: .center, spacing: 7) {
             authorIdentity
                 .layoutPriority(1)
                 // The name gives up its own 28pt hit box (see `authorIdentity`); the
