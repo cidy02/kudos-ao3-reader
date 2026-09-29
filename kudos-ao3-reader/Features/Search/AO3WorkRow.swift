@@ -22,11 +22,16 @@ struct AO3WorkRow: View {
     var presentation: Presentation = .standard
     /// Own Works and Dashboard put parsed performance figures inside the card.
     var showsPerformance = false
+    /// A bookmark fixes the row to 1q's search-ledger composition: its note
+    /// replaces the work summary, its tags are always visible, and its date
+    /// closes the metadata row.
+    var bookmark: AO3AuthorBookmark?
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
+    @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
     @State private var expanded = false
 
     /// Worth an expand toggle only when there's more to show than the clamped view:
@@ -34,7 +39,8 @@ struct AO3WorkRow: View {
     /// into "+N others". Without that last clause a crossover with a short summary
     /// and no tags would hide its extra fandoms behind no control at all.
     private var isExpandable: Bool {
-        work.summary.count > 120 || work.fandoms.count > 1 || !additionalTags.isEmpty
+        if bookmark != nil { return work.fandoms.count > 1 }
+        return work.summary.count > 120 || work.fandoms.count > 1 || !additionalTags.isEmpty
             || !work.relationships.isEmpty || !work.characters.isEmpty || !work.warnings.isEmpty
     }
 
@@ -64,12 +70,31 @@ struct AO3WorkRow: View {
 
     @ViewBuilder
     private var presentedCard: some View {
-        switch presentation {
-        case .standard:
-            standardCard
-        case .searchLedger:
-            searchLedgerCard
+        if bookmark != nil {
+            bookmarkCard
+        } else {
+            switch presentation {
+            case .standard:
+                standardCard
+            case .searchLedger:
+                searchLedgerCard
+            }
         }
+    }
+
+    /// 1q is one fixed card shape in every Bookmarks layout. Work summary/tags
+    /// stay out: the bookmark's note/tags occupy that middle space instead.
+    private var bookmarkCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            searchLedgerHeading
+            if let bookmark,
+               !bookmark.notes.isEmpty || !bookmark.tags.isEmpty {
+                AO3BookmarkFootnote(bookmark: bookmark)
+            }
+            bookmarkMetadataRow
+        }
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var standardCard: some View {
@@ -270,13 +295,23 @@ struct AO3WorkRow: View {
                     if work.seriesTitle != nil {
                         SubjectStateBadge(title: "Series", color: palette.accent)
                     }
+                    if let bookmark {
+                        if bookmark.isPrivate {
+                            SubjectStateBadge(title: "Private", color: .secondary)
+                        }
+                        if bookmark.isRecommendation {
+                            SubjectStateBadge(title: "Rec", color: .secondary)
+                        }
+                    }
                     if isExpandable {
                         expandButton
                     }
                 }
             }
             Text(work.title)
-                .font(.title3.weight(.semibold))
+                .font(bookmark == nil
+                    ? .title3.weight(.semibold)
+                    : .system(size: bookmarkTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -356,6 +391,38 @@ struct AO3WorkRow: View {
 
     private var searchLedgerMetadata: [String] {
         Self.ledgerMetadata(for: work, showsZeroStats: showsZeroStats, includesPerformance: !showsPerformance)
+    }
+
+    @ViewBuilder
+    private var bookmarkMetadataRow: some View {
+        if let bookmark {
+            let metadata = Self.ledgerMetadata(
+                for: work,
+                showsZeroStats: showsZeroStats,
+                includesPerformance: false
+            )
+            if !metadata.isEmpty || !bookmark.date.isEmpty {
+                HStack(alignment: .lastTextBaseline, spacing: 8) {
+                    if !metadata.isEmpty {
+                        Text(metadata.joined(separator: "  ·  "))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                    if !bookmark.date.isEmpty {
+                        Text(bookmark.date)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    (metadata + (bookmark.date.isEmpty ? [] : ["Bookmarked \(bookmark.date)"]))
+                        .joined(separator: ", ")
+                )
+            }
+        }
     }
 
     /// Pure formatting seam for the ledger's visible text and regression tests.
