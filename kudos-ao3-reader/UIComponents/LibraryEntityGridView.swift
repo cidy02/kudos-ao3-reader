@@ -36,8 +36,15 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
         CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
+    private var tally: String {
+        "\(items.count) \(items.count == 1 ? "collection" : "collections")"
+    }
+
     var body: some View {
         ScrollView {
+            // The header every Library page opens with (pass2-17), not a bar title.
+            SubjectHeaderBlock(kicker: "Library", title: title, subtitle: tally, palette: themeManager.scopePalette)
+                .padding(.top, 20)
             LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
                 Button(action: onNew) { newCard() }
                     .buttonStyle(.plain)
@@ -50,10 +57,9 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             .padding(16)
             .uniformWorkCardHeights()
         }
-        .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
+        .subjectScreenWash(palette: themeManager.scopePalette)
+        #if os(macOS)
         .navigationTitle(title)
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
         #endif
     }
 }
