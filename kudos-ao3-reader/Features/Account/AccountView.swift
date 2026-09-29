@@ -785,46 +785,6 @@ struct AccountView: View {
         }
     }
 
-    @ViewBuilder
-    private var profileSeriesSections: some View {
-        if let model = profileModel {
-            switch model.headerPhase {
-            case .idle, .loading:
-                Section("Series") { AO3AuthorLoadingRows() }
-            case .unavailable:
-                Section {
-                    AO3ProfileMessageRow(
-                        title: "Profile unavailable",
-                        systemImage: "person.slash",
-                        message: "AO3 could not load your profile. It may be temporarily unavailable."
-                    )
-                    .cardRow()
-                }
-            case let .failed(message):
-                Section {
-                    AO3ProfileMessageRow(
-                        title: "Couldn't load your profile",
-                        systemImage: "exclamationmark.triangle",
-                        message: message,
-                        actionTitle: "Try Again",
-                        action: { model.retry(auth: auth) }
-                    )
-                    .cardRow()
-                }
-            case .loaded:
-                if model.isShowingStaleCache {
-                    Section {
-                        Label("Showing cached AO3 data", systemImage: "wifi.slash")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .cardRow()
-                    }
-                }
-                AO3AuthorSeriesSection(model: model, showsNewSeriesOnAO3: true)
-            }
-        }
-    }
-
     // MARK: Nav helpers
 
     private func shortcutGridButton(
