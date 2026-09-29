@@ -15,6 +15,9 @@ struct AuthorProfileView: View {
     @State private var bulkSelection = RemoteWorkSelectionController()
     /// 1bn: pushed rather than presented, so the bulk form gets a real back stack.
     @State private var isBulkEditing = false
+    /// The toolbar "+" on your own Works — Add lives there on every list of
+    /// your own things (queues, collections).
+    @State private var isCreatingWork = false
     /// Which group the bulk bar's button opens the form on.
     @State private var bulkEditFocus: EditMultipleWorksView.Focus?
     /// 1bn's bulk Delete: the works named in the alert, fixed when it opened,
@@ -78,6 +81,7 @@ struct AuthorProfileView: View {
                 AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
             }
             .navigationDestination(isPresented: $isBulkEditing) { bulkEditDestination }
+            .navigationDestination(isPresented: $isCreatingWork) { WritingWorkDestination(workID: nil) }
             .navigationDestination(item: ownWorkPushBinding) { action in
                 ownWorkDestination(action)
                     .environment(\.writingOtherWorks, WritingOtherWorkTags.sources(from: model.works))
@@ -289,14 +293,6 @@ private extension AuthorProfileView {
             if let header = model.header, !header.pseuds.isEmpty {
                 pseudSelector(header.pseuds)
                     .padding(.horizontal, SubjectMetrics.accountGutter)
-            }
-            if isOwnProfile, showsDashboard || model.selectedTab == .works {
-                NavigationLink { WritingWorkDestination(workID: nil) } label: {
-                    SubjectChip(text: "New work", style: .tinted, systemImage: "plus", palette: theme.scopePalette)
-                        .minimumHitTarget()
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, SubjectMetrics.accountGutter)
             }
         }
         .pageBodyRow(top: 16, gutter: 0)
@@ -747,11 +743,19 @@ private extension AuthorProfileView {
                     bulkSelection.selected(in: model.works)
                 }
             }
-        } else if showsSelectButton {
-            ActionToolbar(items: [AnyView(selectButton), AnyView(profileMenu)])
         } else {
-            ActionToolbar(items: [AnyView(profileMenu)])
+            ActionToolbar(items: [
+                showsNewWork
+                    ? AnyView(ToolbarIconButton(title: "New Work", systemImage: "plus") { isCreatingWork = true })
+                    : nil,
+                showsSelectButton ? AnyView(selectButton) : nil,
+                AnyView(profileMenu)
+            ].compactMap { $0 })
         }
+    }
+
+    private var showsNewWork: Bool {
+        isOwnProfile && (showsDashboard || model.selectedTab == .works)
     }
 
     private var ownWorksBar: OwnWorksBulkBar {
