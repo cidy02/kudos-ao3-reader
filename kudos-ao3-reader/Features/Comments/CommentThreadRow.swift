@@ -38,6 +38,10 @@ import SwiftUI
 enum CommentThreadGeometry {
     /// Outer margin, matching the "Comments" section rule above the thread.
     static let sideMargin: CGFloat = 16
+    /// The comment list's own coordinate space. A row's swipe is measured in
+    /// it, so a navigation push or pop — which slides the list and its rows
+    /// together — never reads as a swipe.
+    static let listSpace = "commentList"
     /// Air on either side of the hairline between two top-level conversations
     /// (1f: 18 below one conversation, 18 above the next).
     static let conversationGap: CGFloat = 18
@@ -869,6 +873,10 @@ private struct CommentRowChrome: ViewModifier {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.commentsContentWidth) private var contentWidth
+    /// Where the row sits when nothing is swiping it, and how far it is from
+    /// there now. See `trackSwipe`.
+    @State private var rest: (minX: CGFloat, width: CGFloat)?
+    @State private var swipeOffset: CGFloat = 0
 
     /// Indent for every level this row draws, resolved once so the avatars and
     /// the rails are guaranteed to agree.
@@ -895,14 +903,39 @@ private struct CommentRowChrome: ViewModifier {
                 bottom: 0,
                 trailing: CommentThreadGeometry.sideMargin
             ))
-            // The rails are the row's *background*. That does not hold them still
-            // under a swipe: observed on device (iOS 26.5), the whole row —
-            // background included — translates, so a rail lines up with its
-            // neighbour at rest and desyncs mid-swipe. Accepted 2026-07-29 (owner
-            // call, see TASKS.md): the only fix that keeps cross-row rails is
-            // hand-rolling the gesture, whose failure modes are worse.
+            // The rails are the row's *background*, and a swipe translates the
+            // whole row, background included (iOS 26.5), so a rail that meets its
+            // neighbour at rest breaks mid-swipe. The swipe itself has no API, but
+            // SwiftUI does see the row move (measured on device, 2026-09-29): the
+            // row's global minX leaves its resting value frame by frame and comes
+            // back as it closes. So the swiped row's rails fade out over the first
+            // few points and return with it (owner, 2026-09-29).
+            .onGeometryChange(
+                for: CGRect.self,
+                of: { $0.frame(in: .named(CommentThreadGeometry.listSpace)) },
+                action: trackSwipe
+            )
             .listRowBackground(rowBackground(indents: resolved))
             .listRowSeparator(.hidden)
+    }
+
+    /// Takes the resting position the first time the row is laid out, and again
+    /// whenever its width changes (rotation, split view, a new indent budget). A
+    /// swipe only translates the row, so its width is what tells the two apart;
+    /// vertical scrolling moves minY, never minX.
+    private func trackSwipe(_ frame: CGRect) {
+        guard let rest, abs(rest.width - frame.width) < 0.5 else {
+            rest = (frame.minX, frame.width)
+            swipeOffset = 0
+            return
+        }
+        swipeOffset = frame.minX - rest.minX
+    }
+
+    /// 1 at rest, 0 once the row has moved `fadeDistance` points either way.
+    private var railOpacity: Double {
+        let fadeDistance: CGFloat = 8
+        return Double(max(0, 1 - abs(swipeOffset) / fadeDistance))
     }
 
     /// Rails in the app's hairline tone rather than the accent: at up to five
@@ -920,6 +953,7 @@ private struct CommentRowChrome: ViewModifier {
             indents: indents
         )
         .stroke(theme.appTheme.glassStroke(0.18), lineWidth: CommentThreadGeometry.railWidth)
+        .opacity(railOpacity)
         .overlay(alignment: .top) {
             if startsConversation { conversationRule }
         }
