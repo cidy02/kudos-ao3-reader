@@ -215,11 +215,11 @@ struct WorkEditView: View {
             Text(Self.postConfirmationMessage(missing: form.missingRequiredFields()))
         }
         .confirmationDialog(
-            form.isDraft ? "Delete this draft?" : "Delete Work?",
+            form.isDraft ? "Delete this draft?" : "Delete this work?",
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button(form.isDraft ? "Delete draft" : "Delete work on AO3", role: .destructive) {
+            Button(form.isDraft ? "Delete" : "Delete on AO3", role: .destructive) {
                 deleteWork()
             }
             Button("Cancel", role: .cancel) {}

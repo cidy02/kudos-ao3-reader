@@ -416,6 +416,7 @@ struct ReaderPronunciationEditor: View {
             }
         }
         .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
         .task(id: ipa) { await updatePreview() }
     }
 

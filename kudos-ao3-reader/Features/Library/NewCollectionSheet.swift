@@ -72,6 +72,11 @@ struct NewCollectionSheet: View {
                     }
                 }
         }
+        // The same sheet chrome as New queue.
+        #if os(iOS)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        #endif
     }
 
     private var collectionPanel: some View {

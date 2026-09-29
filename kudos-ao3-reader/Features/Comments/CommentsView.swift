@@ -292,7 +292,7 @@ struct CommentsView: View {
                 Button("Delete", role: .destructive) { delete(pending) }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("This removes the comment on AO3. It can't be undone.")
+                Text("This removes the comment on AO3. It cannot be undone.")
             }
             .alert("AO3", isPresented: bannerBinding) {
                 Button("OK") { actionBanner = nil }
@@ -508,14 +508,14 @@ struct CommentsView: View {
 
         if let total = model.page?.totalComments {
             cells.append(SubjectStatStrip.Cell(
-                value: total.formatted(),
+                value: total.compactCount,
                 label: "Comments",
                 accessibilityText: "\(total.formatted()) comments on AO3"
             ))
         }
 
         cells.append(SubjectStatStrip.Cell(
-            value: figures.threads.formatted(),
+            value: figures.threads.compactCount,
             label: "Threads",
             accessibilityText: "\(figures.threads.formatted()) conversations loaded"
         ))
@@ -526,7 +526,7 @@ struct CommentsView: View {
         // comments.
         if auth.isLoggedIn {
             cells.append(SubjectStatStrip.Cell(
-                value: figures.mine.formatted(),
+                value: figures.mine.compactCount,
                 label: "Yours",
                 isHighlighted: figures.mine > 0,
                 accessibilityText: "\(figures.mine.formatted()) of the loaded comments are yours"

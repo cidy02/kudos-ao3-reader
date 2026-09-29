@@ -139,7 +139,7 @@ struct CollectionModerationView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Unrevealed works and their creators become visible to everyone. "
-                + "This can't be undone from the app.")
+                + "This cannot be undone from the app.")
         }
         .alert("Remove anonymity?", isPresented: $confirmUnanon) {
             Button("Remove Anonymity", role: .destructive) {
@@ -148,7 +148,7 @@ struct CollectionModerationView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Creators become visible to everyone instead of just maintainers. "
-                + "This can't be undone from the app.")
+                + "This cannot be undone from the app.")
         }
     }
 

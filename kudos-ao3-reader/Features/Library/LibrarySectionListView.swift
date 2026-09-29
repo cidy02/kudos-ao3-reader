@@ -32,6 +32,9 @@ struct LibrarySectionListView: View {
     private var works: [SavedWork]
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @State private var pendingDelete: SavedWork?
+    /// A History or queue-only row waiting on its Remove ask (pass2-9): taking a
+    /// work off a list asks first everywhere else, so it asks here too.
+    @State private var pendingRemoval: SavedWork?
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
     /// (see `cancelRefreshOnTabChange`) — this section can list a large number of works.
     @State private var refreshTask: Task<Void, Never>?
@@ -253,6 +256,23 @@ struct LibrarySectionListView: View {
                 confirmLabel: "Delete",
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
                 perform: { PreservedWorkService.softDelete($0, in: context) }
+            )
+            .destructiveConfirmation(
+                for: $pendingRemoval,
+                title: "Remove this work?",
+                confirmLabel: "Remove",
+                message: { work in
+                    kind == .history
+                        ? "“\(work.title)” will leave your reading history. Reading it again brings it back."
+                        : "“\(work.title)” will leave every queue it is in. The work stays on this device."
+                },
+                perform: { work in
+                    if kind == .history {
+                        WorkLifecycle.removeFromHistory(work, in: context)
+                    } else {
+                        ReadingQueueService.removeFromAllQueues(work, in: context)
+                    }
+                }
             )
     }
 
@@ -891,7 +911,7 @@ struct LibrarySectionListView: View {
                 }
                 WorkDownloadButton(work: work)
 
-                // Favorites carries Unstar on the trailing edge instead (1aj), and
+                // Favorites carries Unfavorite on the trailing edge instead (1aj), and
                 // one row offering the same toggle on both edges is two answers to
                 // one question.
                 if !showsFavoriteWorks {
@@ -906,9 +926,10 @@ struct LibrarySectionListView: View {
                     .tint(.yellow)
                 }
             }
-            .swipeActions(edge: .trailing) {
+            // No full swipe: every button here removes something, and each asks.
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 if showsFavoriteWorks {
-                    // 1aj draws Unstar where every other section has Delete: on the
+                    // 1aj draws the unstar where every other section has Delete: on the
                     // page that is *about* the star, taking it off is the removal,
                     // and soft-deleting the whole work from here was out of scale.
                     Button {
@@ -916,27 +937,22 @@ struct LibrarySectionListView: View {
                         work.markModified()
                         try? context.save()
                     } label: {
-                        Label("Unstar", systemImage: "star.slash")
+                        let label = WorkActionLabels.favorite(isFavorite: true)
+                        Label(label.title, systemImage: label.systemImage)
                     }
-                    .tint(.subjectFavoriteGold)
-                } else if kind == .history {
-                    // 1ah: "Remove clears it from history, which is the only
+                    .tint(.yellow)
+                } else if kind == .history || work.isQueueOnlyWork {
+                    // History — 1ah: "Remove clears it from history, which is the only
                     // destructive thing this page can do." A hide marker, never a
                     // delete — reading the work again brings it back.
-                    Button(role: .destructive) {
-                        WorkLifecycle.removeFromHistory(work, in: context)
-                    } label: {
-                        Label("Remove from History", systemImage: "clock.badge.xmark")
-                    }
-                } else if work.isQueueOnlyWork {
                     // Queue-only works keep a preserved EPUB and must never be hard-deleted
                     // by a generic Library swipe. Removing the queue membership is
                     // non-destructive (the record and EPUB survive); explicit deletion of a
                     // preserved copy lives behind confirmation in Queue Storage.
                     Button(role: .destructive) {
-                        ReadingQueueService.removeFromAllQueues(work, in: context)
+                        pendingRemoval = work
                     } label: {
-                        Label("Remove from Queue", systemImage: "minus.circle")
+                        Label("Remove", systemImage: kind == .history ? "clock.badge.xmark" : "minus.circle")
                     }
                 } else {
                     Button(role: .destructive) {

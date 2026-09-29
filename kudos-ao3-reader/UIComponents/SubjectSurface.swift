@@ -568,7 +568,7 @@ struct SectionRuleHeader: View {
                     .font(.system(size: labelSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary)
             } else if let count {
-                Text("\(count)")
+                Text(count.compactCount)
                     .font(.system(size: labelSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
@@ -676,7 +676,7 @@ struct SubjectFieldLabel: View {
                 .tracking(style.tracking)
                 .foregroundStyle(.secondary)
             if let count {
-                Text(count.formatted())
+                Text(count.compactCount)
                     .font(.system(size: style.size))
                     .monospacedDigit()
                     .foregroundStyle(Color.secondary.opacity(0.6))
