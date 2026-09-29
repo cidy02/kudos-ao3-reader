@@ -479,6 +479,10 @@ struct AccountView: View {
                 metadataTaskID: inboxMetadataTaskID,
                 onEnrichVisible: enrichVisibleInboxWorkContexts
             )
+            // Pushed from the hub, the Activity tab is never selected, so
+            // `activateVisibleContent` never started the load and the skeleton
+            // stayed up (T-318). `activate` is a no-op once loaded.
+            .onAppear { inboxModel.activate(auth: auth) }
         }
     }
 
