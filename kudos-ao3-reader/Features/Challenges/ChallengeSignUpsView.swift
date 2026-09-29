@@ -266,12 +266,16 @@ struct ChallengeSignUpsView: View {
     private var emptyFilteredCard: some View {
         let unknown = matchNote != nil && filterSelection != .all
         return VStack(spacing: 6) {
-            Text(unknown ? "Match state unavailable" : "No \(filterSelection.rawValue.lowercased()) sign-ups")
+            // All is not a filter: an empty All is simply no sign-ups yet.
+            Text(unknown ? "Match state unavailable"
+                : filterSelection == .all ? "No sign-ups yet"
+                : "No \(filterSelection.rawValue.lowercased()) sign-ups")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
 
             Text(unknown
                 ? "No sign-up can be shown as matched or unmatched without assignments."
+                : filterSelection == .all ? "Sign-ups will appear here as people join the challenge."
                 : "No sign-ups in this page match the \"\(filterSelection.rawValue)\" filter.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)

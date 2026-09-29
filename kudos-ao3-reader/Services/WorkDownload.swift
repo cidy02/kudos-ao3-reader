@@ -50,11 +50,20 @@ enum WorkDownload {
 
     /// Download fetches the EPUB and keeps it; Remove Download deletes the file
     /// and the keep flag, leaving the record as history. `keptBy` does nothing.
+    /// With a `queue`, Download goes through the app's `DownloadQueue`, whose
+    /// banner shows it running and says if it failed; without one it fetches
+    /// inline and throws.
     @MainActor
-    static func perform(_ action: Action, on work: SavedWork, in context: ModelContext) async throws {
+    static func perform(
+        _ action: Action, on work: SavedWork, in context: ModelContext, queue: DownloadQueue? = nil
+    ) async throws {
         switch action {
         case .download:
             WorkLifecycle.setSaved(work, true, in: context)
+            if let queue {
+                queue.enqueue(KeepOffline.downloadItems(for: [work]), into: context)
+                return
+            }
             try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
         case .removeDownload:
             work.isSaved = false
@@ -84,12 +93,14 @@ enum WorkDownload {
 
     /// One at a time: the same AO3 endpoint per work, never a burst.
     @MainActor
-    static func performBulk(_ action: Action, on works: [SavedWork], in context: ModelContext) async {
+    static func performBulk(
+        _ action: Action, on works: [SavedWork], in context: ModelContext, queue: DownloadQueue? = nil
+    ) async {
         for work in works {
             guard let own = self.action(for: work) else { continue }
             switch (action, own) {
             case (.download, .download), (.removeDownload, .removeDownload):
-                try? await perform(own, on: work, in: context)
+                try? await perform(own, on: work, in: context, queue: queue)
             case (.download, .removeDownload), (.download, .keptBy):
                 WorkLifecycle.setSaved(work, true, in: context)
             default:

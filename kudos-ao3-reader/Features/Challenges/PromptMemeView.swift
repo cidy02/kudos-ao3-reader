@@ -355,11 +355,13 @@ struct PromptMemeView: View {
 
     private var emptyFilteredCard: some View {
         VStack(spacing: 6) {
-            Text("No \(filterSelection.rawValue.lowercased()) prompts")
+            Text(filterSelection == .all ? "No prompts yet" : "No \(filterSelection.rawValue.lowercased()) prompts")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
 
-            Text("No prompts on this page match the \"\(filterSelection.rawValue)\" filter.")
+            Text(filterSelection == .all
+                ? "Prompts will appear here once someone posts one."
+                : "No prompts on this page match the \"\(filterSelection.rawValue)\" filter.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
         }
