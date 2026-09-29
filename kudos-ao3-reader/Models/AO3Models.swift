@@ -536,7 +536,8 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         for category in Category.allCases.filter(categories.contains) { add(category.title) }
         for category in Category.allCases.filter(excludedCategories.contains) { add("−\(category.title)") }
 
-        if crossover != .any { add("Crossover: \(crossover.title)") }
+        // "Exclude crossovers" / "Only crossovers" already name the facet.
+        if crossover != .any { add(crossover.title) }
         if completion != .any { add(completion.title) }
         if chapterCount != .any { add(chapterCount.title) }
 
