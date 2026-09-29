@@ -247,14 +247,9 @@ struct HomeSectionListView: View {
                         // `confirmBeforeDelete` alert this screen does not have, and a
                         // full swipe that destroys a download with no confirmation is
                         // not an affordance worth matching.
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            Button {
-                                WorkLifecycle.setSaved(work, !work.isSaved, in: context)
-                            } label: {
-                                let labels = WorkActionLabels.saved(isSaved: work.isSaved)
-                                Label(labels.title, systemImage: labels.systemImage)
-                            }
-                            .tint(.blue)
+                        // No full swipe: Remove Download deletes a file.
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            WorkDownloadButton(work: work)
 
                             Button {
                                 work.isFavorite.toggle()

@@ -57,8 +57,17 @@ struct ReadingHistoryFactsStrip: View {
     let palette: SubjectPalette
     var style: Style = .history
 
+    /// 1ah: "What this page adds sits on a hairline underneath" — tinted
+    /// words on the rule, not boxed chips.
     var body: some View {
-        FlowLayout(spacing: 8, rowSpacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            SubjectRowSeparator(inset: 0)
+            facts
+        }
+    }
+
+    private var facts: some View {
+        FlowLayout(spacing: 12, rowSpacing: 6) {
             if summary.totalSeconds > 0 {
                 fact(ReadingInsights.durationLabel(summary.totalSeconds))
             }
@@ -87,16 +96,9 @@ struct ReadingHistoryFactsStrip: View {
     }
 
     private func fact(_ text: String, tint: Color? = nil) -> some View {
-        let foreground = tint ?? Color.secondary
-        let fill = tint.map { $0.opacity(0.16) } ?? Color.primary.opacity(0.06)
-        return Text(text)
-            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: SubjectMetrics.chipRadius, style: .continuous)
-                    .fill(fill)
-            )
+        Text(text)
+            .font(.system(size: 11.5, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(tint ?? Color.secondary)
     }
 }

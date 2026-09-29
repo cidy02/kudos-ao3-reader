@@ -856,11 +856,15 @@ struct WorkProgressRing: View {
                 .stroke(progressColor, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 1) {
-                Text("\(percent)%")
-                    .font(.system(size: diameter * 15 / 68, weight: .semibold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                // An unread work has nothing to report: an empty ring, not a
+                // "0%" that reads like a session that never happened.
+                if percent > 0 || state != nil {
+                    Text("\(percent)%")
+                        .font(.system(size: diameter * 15 / 68, weight: .semibold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
                 if let state {
                     Text(state.uppercased())
                         .font(.system(size: diameter * 8 / 68, weight: .semibold))
@@ -875,7 +879,9 @@ struct WorkProgressRing: View {
         .frame(width: diameter, height: diameter)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Reading progress")
-        .accessibilityValue(state.map { "\(percent) percent, \($0)" } ?? "\(percent) percent")
+        .accessibilityValue(
+            state.map { "\(percent) percent, \($0)" } ?? (percent > 0 ? "\(percent) percent" : "Not started")
+        )
     }
 }
 

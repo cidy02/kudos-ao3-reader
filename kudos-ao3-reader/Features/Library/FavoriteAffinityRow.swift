@@ -72,7 +72,7 @@ struct FavoriteAffinityRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(row.name)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .lineLimit(2)
                     // Filled on every row of all three scopes, as the spec draws it:
                     // being on this page *is* the favourite. The explicit
@@ -228,7 +228,7 @@ struct FavoriteAffinityRow: View {
     }
 
     private var tile: some View {
-        Text(usesHashTile ? "#" : String(row.name.prefix(1)).uppercased())
+        Text(usesHashTile ? "#" : Self.initials(row.name))
             .font(.system(size: 15, weight: .bold, design: usesHashTile ? .monospaced : .default))
             .foregroundStyle(palette.accent)
             .frame(width: 38, height: 38)
@@ -376,5 +376,16 @@ struct FavoriteAuthorRow: View {
             return nil
         }
         return cached
+    }
+}
+
+extension FavoriteAffinityRow {
+    /// 1bc's two-letter tiles: "GO" for Good Omens, "HA" for Haikyuu!!.
+    static func initials(_ name: String) -> String {
+        let words = name.split { !$0.isLetter && !$0.isNumber }
+        let letters = words.count >= 2
+            ? String(words[0].prefix(1)) + String(words[1].prefix(1))
+            : String((words.first ?? Substring(name)).prefix(2))
+        return letters.uppercased()
     }
 }

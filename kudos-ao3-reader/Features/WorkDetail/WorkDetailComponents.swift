@@ -98,12 +98,27 @@ enum WorkDetailPresentation {
         return continueReading ? ("Continue Reading", "book") : ("Read", "book")
     }
 
-    /// Compact tile labels for the keep-offline toggle. Menus use
-    /// `WorkActionLabels.saved`'s full wording ("Download" / "Remove Download").
-    static func savedAction(isSaved: Bool) -> (title: String, systemImage: String) {
-        isSaved
-            ? ("Downloaded", WorkActionLabels.downloadedSymbol)
-            : ("Download", WorkActionLabels.downloadEmptySymbol)
+    /// The download tile and row: whether the EPUB is on this device
+    /// (`WorkDownload`), not the keep flag. Nil means not local yet — Download.
+    struct DownloadState: Equatable {
+        let title: String
+        let systemImage: String
+        let isOn: Bool
+        let isEnabled: Bool
+    }
+
+    static func downloadState(_ action: WorkDownload.Action?) -> DownloadState {
+        let filled = WorkActionLabels.downloadedSymbol
+        return switch action {
+        case nil, .download:
+            DownloadState(
+                title: "Download", systemImage: WorkActionLabels.downloadEmptySymbol, isOn: false, isEnabled: true
+            )
+        case .removeDownload:
+            DownloadState(title: "Downloaded", systemImage: filled, isOn: true, isEnabled: true)
+        case .keptBy:
+            DownloadState(title: "Kept Offline", systemImage: filled, isOn: true, isEnabled: false)
+        }
     }
 
     /// Compact tile labels; the Library row uses `WorkActionLabels.savedForLater`'s

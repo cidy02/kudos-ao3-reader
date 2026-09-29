@@ -25,3 +25,27 @@ struct CappedFlowLayoutTests {
         #expect(result.size.height == 20)
     }
 }
+
+/// Kickers print the fandom without its disambiguation (owner, 2026-09-28).
+struct FandomBareTitleTests {
+    @Test func dropsTheQualifierAndKeepsTheDisplaySegment() {
+        #expect(FandomDisplayName.bareTitle("Doctor Who (2005)") == "Doctor Who")
+        #expect(FandomDisplayName.bareTitle("NARUTO (Anime & Manga)") == "NARUTO")
+        #expect(FandomDisplayName.bareTitle("Star Wars - All Media Types") == "Star Wars")
+        #expect(FandomDisplayName.bareTitle("僕のヒーローアカデミア | Boku no Hero Academia | My Hero Academia")
+            == "My Hero Academia")
+        #expect(FandomDisplayName.bareTitle("Haikyuu!!") == "Haikyuu!!")
+    }
+}
+
+struct LibraryChipLabelTests {
+    @Test func aLowerWordBoundReadsAsACompactSize() {
+        #expect(LibraryFilters.minimumWordsLabel("50000") == "50K+ words")
+        #expect(LibraryFilters.minimumWordsLabel("abc") == "Words ≥ abc")
+    }
+
+    @Test func affinityTilesTakeTwoLetters() {
+        #expect(FavoriteAffinityRow.initials("Good Omens") == "GO")
+        #expect(FavoriteAffinityRow.initials("Haikyuu!!") == "HA")
+    }
+}

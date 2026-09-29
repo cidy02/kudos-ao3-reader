@@ -19,6 +19,8 @@ struct ReadingQueueBrowserView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
@@ -41,6 +43,9 @@ struct ReadingQueueBrowserView: View {
     @State private var showingRename = false
     @State private var renameText = ""
     @State private var confirmDelete = false
+    /// A row's Remove from Queue waits here for the same confirmation a
+    /// collection row and the queue's bulk Remove already ask.
+    @State private var pendingRemoval: SavedWork?
     /// Pushes artboard 1h's "Queue details" screen — a restyle of what this
     /// screen's own overflow menu already does (rename, delete, see what's
     /// preserved), not a new destination's worth of new data.
@@ -99,14 +104,23 @@ struct ReadingQueueBrowserView: View {
         selectedQueue.map(ReadingQueueService.orderedWorks(in:)) ?? []
     }
 
+    /// Hide mode drops Mature/Explicit works here, as every other works list
+    /// does — the row wrappers only blur, they never remove.
     private var visibleWorks: [SavedWork] {
-        let quick = quickFilter.apply(to: works, preservedIDs: Set(preservedWorks.map(\.id)))
+        let shown = works.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+        let quick = quickFilter.apply(to: shown, preservedIDs: Set(preservedWorks.map(\.id)))
         return filters.hasActiveFilters ? filters.apply(to: quick) : quick
     }
 
     /// Reorder needs the whole queue in order, so any narrowing blocks it.
     private var isNarrowed: Bool {
         filters.hasActiveFilters || quickFilter != .all
+    }
+
+    /// Reorder draws every work in the queue; while Hide mode is keeping some
+    /// out of sight, it would put them back on screen.
+    private var hidesMatureWorks: Bool {
+        works.contains { gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
     /// 1bg: selecting keeps the drag handle live, so select and reorder are
@@ -219,21 +233,23 @@ struct ReadingQueueBrowserView: View {
         works.firstIndex { $0.id == work.id }.map { $0 + 1 }
     }
 
-    private func ledgerRow(_ work: SavedWork, position: Int? = nil) -> some View {
+    /// `presentation` is the page's choice except for Up Next, which 1h keeps
+    /// "a ringed row either way".
+    private func ledgerRow(
+        _ work: SavedWork, position: Int? = nil, presentation: WorkRow.Presentation? = nil
+    ) -> some View {
         SensitiveWorkRow(
             work: work,
             openMode: .reader,
             isSelecting: isSelecting,
             isSelected: selection.contains(work.id),
             onToggleSelection: { toggleSelection(work) },
-            presentation: rowPresentation
+            presentation: presentation ?? rowPresentation
         )
         .swipeActions(edge: .trailing) {
             if !isSelecting {
                 Button(role: .destructive) {
-                    if let queue = selectedQueue {
-                        ReadingQueueService.removeFromQueue(work, from: queue, in: context)
-                    }
+                    pendingRemoval = work
                 } label: {
                     Label("Remove from Queue", systemImage: "minus.circle")
                 }
@@ -337,6 +353,20 @@ struct ReadingQueueBrowserView: View {
                         + "intact. Works stay in Kudos either way."
                 )
             }
+            .destructiveConfirmation(
+                for: $pendingRemoval,
+                title: "Remove this work?",
+                confirmLabel: "Remove",
+                message: { work in
+                    "“\(work.title)” will no longer be in “\(selectedQueue?.displayName ?? "this queue")”. "
+                        + "The work itself stays in your Library."
+                },
+                perform: { work in
+                    if let queue = selectedQueue {
+                        ReadingQueueService.removeFromQueue(work, from: queue, in: context)
+                    }
+                }
+            )
     }
 
     // MARK: - Compact (iPhone)
@@ -407,7 +437,9 @@ extension ReadingQueueBrowserView {
                         : "list.bullet.rectangle"
                 )
             } description: {
-                Text("Works you add to this queue will keep a local EPUB for offline reading.")
+                Text(KeepOffline.queueKeeps(selectedQueue.keepsWorksOffline)
+                    ? "Works you add to this queue will keep a local EPUB for offline reading."
+                    : "Add works to line them up. This queue is a list — it keeps nothing offline.")
             } actions: {
                 Button {
                     showingAddWorks = true
@@ -467,7 +499,7 @@ extension ReadingQueueBrowserView {
                         SectionRuleHeader(title: "Up Next")
                             .padding(.bottom, Self.listRuleBottom)
                             .pageBodyRow(top: Self.ruleTop, gutter: 0)
-                        ledgerRow(upNextWork)
+                        ledgerRow(upNextWork, presentation: .ledger)
                     }
                 }
                 if !inLineWorks.isEmpty {
@@ -493,7 +525,7 @@ extension ReadingQueueBrowserView {
         // padded it top and bottom and put ~10pt more round each rule than
         // Compact draws.
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: subjectPalette)
+        .subjectScreenWash(palette: subjectPalette, washHeight: 560)
         #if os(iOS)
             .environment(\.editMode, dragEditMode)
         #endif
@@ -505,8 +537,12 @@ extension ReadingQueueBrowserView {
     /// swipe actions here, a `LazyVGrid` there).
     private var subjectHeaderSection: some View {
         Section {
-            subjectHeader
-                .pageBodyRow(top: 20, gutter: 0)
+            // 1bg: selecting, the title bar names the count and one status rule
+            // names the queue — the full hero would say it twice.
+            if !isSelecting {
+                subjectHeader
+                    .pageBodyRow(top: 20, gutter: 0)
+            }
             if isSelecting {
                 // Artboard 1bg's select-mode status line replaces the meta line
                 // and filter rail — narrowing to one work at a time isn't what
@@ -557,7 +593,9 @@ extension ReadingQueueBrowserView {
             // not move the text: 20 above the header, 8 (12 selecting) above its
             // details, then 1h.1's 18 above a section rule and 10 after it.
             VStack(alignment: .leading, spacing: 0) {
-                subjectHeader.padding(.top, 20)
+                if !isSelecting {
+                    subjectHeader.padding(.top, 20)
+                }
                 if isSelecting {
                     selectionStatusRow
                         .padding(.horizontal, SubjectMetrics.gutter)
@@ -599,7 +637,7 @@ extension ReadingQueueBrowserView {
             }
             .padding(.bottom, 16)
         }
-        .subjectScreenWash(palette: subjectPalette)
+        .subjectScreenWash(palette: subjectPalette, washHeight: 560)
     }
 
     /// 1h.1: 18 between blocks, 10 from a section rule to what it heads. Both
@@ -666,7 +704,10 @@ extension ReadingQueueBrowserView {
                 SensitiveWorkCoverCard(work: work)
             }
             .buttonStyle(.plain)
-            .localWorkContextMenu(work: work)
+            .localWorkContextMenu(
+                work: work,
+                scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = work }
+            )
         }
     }
 
@@ -715,19 +756,21 @@ extension ReadingQueueBrowserView {
                             MatureRevealToggle()
                         }
                         Button {
-                            setReordering(true)
-                        } label: {
-                            Label("Reorder", systemImage: "arrow.up.arrow.down")
-                        }
-                        .disabled(isNarrowed)
-                        .help(isNarrowed
-                            ? "Clear filters to reorder"
-                            : "Reorder works in this queue")
-                        Button {
                             isSelecting = true
                         } label: {
                             Label("Select", systemImage: "checklist")
                         }
+                        // The reason is the label: `.help` never shows on iPhone.
+                        Button {
+                            setReordering(true)
+                        } label: {
+                            Label(
+                                isNarrowed ? "Clear Filters to Reorder"
+                                    : hidesMatureWorks ? "Show Mature to Reorder" : "Reorder",
+                                systemImage: "arrow.up.arrow.down"
+                            )
+                        }
+                        .disabled(isNarrowed || hidesMatureWorks)
                         DisplayModeMenuPicker(mode: $displayMode)
                         Divider()
                         queueMenuItems

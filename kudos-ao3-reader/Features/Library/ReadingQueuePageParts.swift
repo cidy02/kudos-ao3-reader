@@ -194,7 +194,7 @@ struct QueueHeaderDetails<FilterRail: View>: View {
             .padding(.bottom, 4)
             SubjectPillRail(
                 options: QueueQuickFilter.allCases,
-                title: { "\($0.title) \(counts[$0] ?? 0)" },
+                title: { "\($0.title) \((counts[$0] ?? 0).compactCount)" },
                 selection: $quickFilter,
                 palette: palette
             )

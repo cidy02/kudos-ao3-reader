@@ -39,6 +39,7 @@ struct LibrarySectionListView: View {
     /// page, not the app-wide Library filter.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
+    @State private var expandAll = false
     @State private var isSelecting: Bool
     @State private var selection: Set<UUID>
     /// Spec 1ah/1ai's Time / State / Fandom / Flat strip. Persisted like
@@ -222,7 +223,11 @@ struct LibrarySectionListView: View {
                                         Label("Select", systemImage: "checklist")
                                     }
                                 }
-                                DisplayModeMenuPicker(mode: $displayMode)
+                                DisplayModeMenuPicker(mode: $displayMode, modes: allowedDisplayModes)
+                                // Expand acts on Detailed cards; the ledger does not expand.
+                                if displayMode == .detailed {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                }
                             })
                         ].compactMap { $0 })
                     }
@@ -273,7 +278,7 @@ struct LibrarySectionListView: View {
             }
         } else {
             Group {
-                if displayMode != .compact {
+                if displayMode != .compact || !allowedDisplayModes.contains(.compact) {
                     detailedList
                 } else {
                     compactGrid
@@ -663,8 +668,14 @@ struct LibrarySectionListView: View {
     /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
     /// separate presentations and a screen shows one of them — this used to pass
     /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
+    private var allowedDisplayModes: [WorkListDisplayMode] {
+        kind == .history ? [.detailed, .ledger] : WorkListDisplayMode.allCases
+    }
+
+    /// History saved as Compact before it lost the grid reads as Ledger.
     private var rowPresentation: WorkRow.Presentation {
-        displayMode == .ledger ? .ledger : .standard
+        let compactUnavailable = displayMode == .compact && !allowedDisplayModes.contains(.compact)
+        return displayMode == .ledger || compactUnavailable ? .ledger : .standard
     }
 
     private var detailedList: some View {
@@ -822,6 +833,7 @@ struct LibrarySectionListView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SensitiveWorkRow(
                     work: work,
+                    expandAll: expandAll,
                     openMode: .reader,
                     isSelecting: true,
                     isSelected: selection.contains(work.id),
@@ -858,6 +870,7 @@ struct LibrarySectionListView: View {
         VStack(alignment: .leading, spacing: 8) {
             SensitiveWorkRow(
                 work: work,
+                expandAll: expandAll,
                 openMode: .reader,
                 onSelect: { isSelecting = true; selection = [work.id] },
                 presentation: rowPresentation,
@@ -869,16 +882,14 @@ struct LibrarySectionListView: View {
                 MoveBackToInProgressButton(work: work)
             }
         }
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                Button {
-                    WorkLifecycle.setSaved(work, !work.isSaved, in: context)
-                } label: {
-                    Label(
-                        WorkActionLabels.saved(isSaved: work.isSaved).title,
-                        systemImage: WorkActionLabels.saved(isSaved: work.isSaved).systemImage
-                    )
+            // No full swipe: Remove Download deletes a file.
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                // 1ah / 1ai / 1aj lead with Queue: Save for Later is the thing to
+                // do with a work you are looking back over.
+                if kind == .history || showsFavoriteWorks {
+                    SaveForLaterButton(work: work)
                 }
-                .tint(.blue)
+                WorkDownloadButton(work: work)
 
                 // Favorites carries Unstar on the trailing edge instead (1aj), and
                 // one row offering the same toggle on both edges is two answers to
