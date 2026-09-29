@@ -1155,16 +1155,32 @@ private struct CommentPostRow: View {
     private var collapseControl: some View {
         if let collapse {
             Button(action: onToggleCollapse) {
+                // One line, full size: squeezed, "Hide" wrapped letter by letter
+                // into a column that made the root's byline four lines tall. The
+                // name is what gives way (see `byline`).
                 Text(collapse.label)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(.quaternary.opacity(0.5), in: Capsule())
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .minimumHitTarget()
+            // The 44pt tap area rides in a background, which takes no layout
+            // space. `.minimumHitTarget()` made the byline 44pt tall on thread
+            // roots only, so their centred name sat below the 30pt avatar while
+            // every other row's lined up (owner, 2026-09-29).
+            .background {
+                // As wide as the pill, 44pt tall.
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onToggleCollapse)
+                    .accessibilityHidden(true)
+            }
             .accessibilityLabel(collapse.accessibilityLabel)
         }
     }

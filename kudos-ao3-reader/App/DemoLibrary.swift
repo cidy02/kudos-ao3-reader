@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import SwiftData
+import SwiftUI
 
 /// Simulator-only sample library for design review: launch with
 /// `-KudosDemoLibrary YES -hasCompletedOnboarding YES` and Home, Library,
@@ -207,6 +208,46 @@ enum DebugLaunchRoute {
         guard let value, value.hasPrefix("work:") else { return nil }
         let title = String(value.dropFirst("work:".count))
         return works.first { $0.title == title }
+    }
+}
+/// `-KudosDebugRoute comments`: real comment rows over sample data, for
+/// checking the byline against the avatar without contacting AO3.
+struct CommentsDemoView: View {
+    private func comment(_ id: Int, _ author: String, chapter: String? = nil, _ body: String) -> AO3Comment {
+        var comment = AO3Comment(id: id, author: author, isGuest: false)
+        comment.userPath = "/users/\(author)"
+        comment.postedText = "Wed 08 Jul 2026 02:38PM UTC"
+        comment.chapterLabel = chapter
+        comment.bodyText = body
+        comment.canReply = true
+        return comment
+    }
+
+    var body: some View {
+        List {
+            row(.post(comment: comment(1, "nine_of_wands", chapter: "Chapter 3", "Root with replies."),
+                      parentAuthor: nil, depth: 0),
+                depth: 0, starts: true, next: 1, collapse: CommentCollapseState(isCollapsed: false, replyCount: 2))
+            row(.post(comment: comment(2, "frostbitten", "A reply."), parentAuthor: "nine_of_wands", depth: 1),
+                depth: 1, starts: false, next: 2)
+            row(.post(comment: comment(3, "undertow", "A reply to the reply."), parentAuthor: "frostbitten",
+                      depth: 2), depth: 2, starts: false, next: 0)
+            row(.post(comment: comment(4, "lanternlight", chapter: "Chapter 1", "Root without replies."),
+                      parentAuthor: nil, depth: 0), depth: 0, starts: true, next: nil)
+        }
+        .cardList()
+        .background(.background)
+    }
+
+    private func row(
+        _ item: CommentConversationItem, depth: Int, starts: Bool, next: Int?,
+        collapse: CommentCollapseState? = nil
+    ) -> some View {
+        CommentConversationRow(
+            item: item, workAuthors: ["nine_of_wands"], showChapterBadge: true,
+            startsConversation: starts, depth: depth, isLastSibling: true,
+            ancestorLines: Array(repeating: false, count: depth), nextDepth: next, collapse: collapse
+        )
     }
 }
 #endif
