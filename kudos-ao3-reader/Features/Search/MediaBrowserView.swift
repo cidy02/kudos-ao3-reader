@@ -67,13 +67,19 @@ struct MediaBrowserView: View {
             case .loading:
                 CategoryCardSkeletonList()
             case let .failed(message):
-                ContentUnavailableView {
-                    Label("Couldn't load fandoms", systemImage: "wifi.slash")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try Again") { Task { await load() } }
+                #if os(iOS)
+                // Jump Back In is local: an AO3 failure must not take it away
+                // with the categories (LOOP-v3, offline Browse).
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        jumpBackInSection
+                        loadFailure(message).padding(.top, 24)
+                    }
+                    .padding(.vertical, 12)
                 }
+                #else
+                loadFailure(message)
+                #endif
             case .loaded:
                 // The names arrive a whole round of requests before the counts
                 // do, so revealing here would show every card with its title
@@ -86,6 +92,16 @@ struct MediaBrowserView: View {
         // Derive per-category stats off the main render path, refired (and debounced)
         // whenever a fandom list lands or the library changes.
         .task(id: statsToken) { await recomputeStats() }
+    }
+
+    private func loadFailure(_ message: String) -> some View {
+        ContentUnavailableView {
+            Label("Couldn't load fandoms", systemImage: "wifi.slash")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("Try Again") { Task { await load() } }
+        }
     }
 
     /// Used by the iOS panels *and* by the card body further down, which is
