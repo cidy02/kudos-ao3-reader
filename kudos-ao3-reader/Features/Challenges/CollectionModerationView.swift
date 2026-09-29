@@ -33,6 +33,9 @@ struct CollectionModerationView: View {
     @State private var participantInFlight: Int?
     @State private var actionErrorMessage: String?
     @State private var itemToReject: AO3CollectionItem?
+    /// 1cd's Message creator: the work's comment composer, "for a fix rather
+    /// than a refusal". It used to open the work in the browser instead.
+    @State private var commentsRoute: AO3CommentsRoute?
     @State private var participantToDecline: AO3CollectionParticipant?
     @State private var confirmReveal = false
     @State private var confirmUnanon = false
@@ -89,6 +92,14 @@ struct CollectionModerationView: View {
         .navigationTitle("Moderation")
         #endif
         .subjectScreenWash(palette: palette)
+        .navigationDestination(item: $commentsRoute) { route in
+            CommentsView(
+                workID: route.workID,
+                context: route.context,
+                initialFocusesChapter: false,
+                initialComposes: route.composes
+            )
+        }
         .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
         // AO3 has no reason field and sends no mail on rejection (Q6), so this
@@ -361,12 +372,12 @@ struct CollectionModerationView: View {
             palette: palette,
             accessibilityName: "Message creator"
         ) {
-            if let workURL = item.workURL {
-                #if os(iOS)
-                UIApplication.shared.open(workURL)
-                #elseif os(macOS)
-                NSWorkspace.shared.open(workURL)
-                #endif
+            if let workID = item.workID ?? item.workURL.flatMap({ WorkTags.ao3WorkID(from: $0.absoluteString) }) {
+                commentsRoute = AO3CommentsRoute(
+                    workID: workID,
+                    context: AO3CommentsWorkContext(title: item.workTitle, authors: []),
+                    composes: true
+                )
             }
         } label: {
             Image(systemName: "bubble.left")

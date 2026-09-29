@@ -49,3 +49,13 @@ struct LibraryChipLabelTests {
         #expect(FavoriteAffinityRow.initials("Haikyuu!!") == "HA")
     }
 }
+
+struct AO3CollectionDeleteConfirmationTests {
+    @Test func deleteNeedsTheNameTypedExactly() {
+        #expect(AO3CollectionFormView.confirmsDeletion(typed: "Slow Burn Exchange", name: "Slow Burn Exchange"))
+        #expect(AO3CollectionFormView.confirmsDeletion(typed: " Slow Burn Exchange ", name: "Slow Burn Exchange"))
+        #expect(!AO3CollectionFormView.confirmsDeletion(typed: "slow burn exchange", name: "Slow Burn Exchange"))
+        #expect(!AO3CollectionFormView.confirmsDeletion(typed: "", name: ""))
+        #expect(AO3CollectionFormView.deletionMessage.contains("anonymous show their creators"))
+    }
+}
