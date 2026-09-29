@@ -22,9 +22,11 @@ nonisolated enum KeepOffline {
     @MainActor
     static func downloadItems(for works: [SavedWork]) -> [DownloadQueue.Item] {
         works.compactMap { work in
-            guard !work.hasEPUB, !work.isPendingDeletion,
-                  let url = URL(string: work.sourceURL),
-                  let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+            // The file, not the flag: a work can say hasEPUB with nothing on disk.
+            guard !WorkReaderPreparation.hasReadableEPUB(for: work), !work.isPendingDeletion,
+                  let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL),
+                  let url = URL(string: work.sourceURL.isEmpty
+                      ? "https://archiveofourown.org/works/\(id)" : work.sourceURL)
             else { return nil }
             return DownloadQueue.Item(
                 id: id, title: work.title, sourceURL: url,

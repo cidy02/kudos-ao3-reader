@@ -15,6 +15,7 @@ struct WorkBulkActionBar: View {
     var onDone: () -> Void = {}
 
     @Environment(\.modelContext) private var context
+    @Environment(DownloadQueue.self) private var downloadQueue
     @State private var confirmDelete = false
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
@@ -53,7 +54,7 @@ struct WorkBulkActionBar: View {
         Menu {
             if let download = WorkDownload.bulkAction(for: selectedWorks) {
                 Button {
-                    Task { await WorkDownload.performBulk(download, on: selectedWorks, in: context) }
+                    Task { await WorkDownload.performBulk(download, on: selectedWorks, in: context, queue: downloadQueue) }
                 } label: {
                     let label = WorkDownload.bulkLabel(download)
                     Label(label.title, systemImage: label.systemImage)
