@@ -14,7 +14,10 @@ enum DemoLibrary {
     static func seedIfRequested(in context: ModelContext) {
         guard UserDefaults.standard.bool(forKey: "KudosDemoLibrary") else { return }
         let existing = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-        guard !existing.contains(where: { $0.title == samples[0].title }) else { return }
+        guard !existing.contains(where: { $0.title == samples[0].title }) else {
+            seedRecentlyDeleted(in: context)
+            return
+        }
 
         let now = Date()
         var works: [SavedWork] = []
@@ -89,6 +92,26 @@ enum DemoLibrary {
         for index in [1, 4, 7] where index < works.count { works[index].collections.append(shelf) }
         for index in [0, 2] where index < works.count { works[index].collections.append(archive) }
 
+        try? context.save()
+        seedRecentlyDeleted(in: context)
+    }
+
+    /// One work and one collection in Recently Deleted, so that screen has rows.
+    /// Separate from the main seed so an already-seeded simulator gets it too.
+    private static func seedRecentlyDeleted(in context: ModelContext) {
+        let title = "Lanterns Over Ba Sing Se"
+        let all = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        guard !all.contains(where: { $0.title == title }) else { return }
+        let work = SavedWork(title: title, author: "paperlantern", summary: "")
+        work.workFandoms = ["Avatar: The Last Airbender"]
+        work.rating = "General Audiences"
+        work.wordCount = 4_310
+        work.chapters = "1/1"
+        context.insert(work)
+        PreservedWorkService.softDelete(work, in: context)
+        let shelf = WorkCollection(name: "Summer 2025")
+        context.insert(shelf)
+        PreservedWorkService.softDelete(shelf, in: context)
         try? context.save()
     }
 
@@ -184,7 +207,9 @@ enum DebugLaunchRoute {
 
     static func applyTab(_ router: AppRouter) {
         guard let value else { return }
-        if value.hasPrefix("section:"),
+        if libraryRoutes.contains(where: value.hasPrefix) {
+            router.selection = .library
+        } else if value.hasPrefix("section:"),
            let kind = LibrarySectionKind(rawValue: String(value.dropFirst("section:".count))) {
             router.showLibrarySection(kind)
         } else if let tab = AppTab(rawValue: value) {
@@ -201,6 +226,23 @@ enum DebugLaunchRoute {
             return queues.first { $0.displayName == name }.map { AllReadingQueuesDestination(initialQueueID: $0.id) }
         }
         return nil
+    }
+
+    private static let libraryRoutes = ["collections", "collection:", "recentlyDeleted", "insights"]
+
+    /// Library's stack: `collections`, `collection:<name>`, `recentlyDeleted`, `insights`.
+    static func applyLibrary(to path: inout NavigationPath, collections: [WorkCollection]) {
+        guard let value else { return }
+        switch value {
+        case "collections": path.append(AllCollectionsDestination())
+        case "recentlyDeleted": path.append(RecentlyDeletedDestination())
+        case "insights": path.append(ReadingInsightsDestination())
+        default:
+            if value.hasPrefix("collection:"),
+               let collection = collections.first(where: { $0.name == String(value.dropFirst("collection:".count)) }) {
+                path.append(collection)
+            }
+        }
     }
 
     /// `work:<title>` opens that work's detail page on Home's stack.
