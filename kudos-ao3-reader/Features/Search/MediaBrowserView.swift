@@ -75,7 +75,6 @@ struct MediaBrowserView: View {
                         jumpBackInSection
                         loadFailure(message).padding(.top, 24)
                     }
-                    .padding(.vertical, 12)
                 }
                 #else
                 loadFailure(message)
