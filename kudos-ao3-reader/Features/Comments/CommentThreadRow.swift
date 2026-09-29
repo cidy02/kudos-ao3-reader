@@ -984,8 +984,8 @@ private struct CommentRowChrome: ViewModifier {
     }
 
     /// How long a closing swipe keeps animating after its frame lands at rest.
-    /// Set by eye on device (owner, 2026-09-29: 0.4s showed the lines early).
-    private static let settleDelay: Duration = .milliseconds(550)
+    /// Set by eye on device (owner, 2026-09-29: 0.4s and 0.55s showed the lines early).
+    private static let settleDelay: Duration = .milliseconds(650)
 
     /// Tells the replies, on the edge only, so a swipe does not re-render every
     /// row on every frame.
