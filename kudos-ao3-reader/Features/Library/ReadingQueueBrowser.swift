@@ -465,14 +465,21 @@ extension ReadingQueueBrowserView {
                 if let upNextWork {
                     Section {
                         SectionRuleHeader(title: "Up Next")
-                            .pageBodyRow(top: 18, gutter: 0)
+                            .padding(.bottom, Self.listRuleBottom)
+                            .pageBodyRow(top: Self.ruleTop, gutter: 0)
                         ledgerRow(upNextWork)
                     }
                 }
                 if !inLineWorks.isEmpty {
                     Section {
+                        // After a card row, that row already keeps half the
+                        // inter-card gap below its card.
                         inLineHeader
-                            .pageBodyRow(top: 18, gutter: 0)
+                            .padding(.bottom, Self.listRuleBottom)
+                            .pageBodyRow(
+                                top: upNextWork == nil ? Self.ruleTop : Self.ruleTop - Self.halfCardGap,
+                                gutter: 0
+                            )
                         ForEach(inLineWorks) { work in
                             ledgerRow(work, position: queuePosition(of: work))
                                 .environment(\.ledgerPositionNumber, queuePosition(of: work))
@@ -482,6 +489,10 @@ extension ReadingQueueBrowserView {
             }
         }
         .cardList()
+        // A one-line rule row is shorter than the default 44pt minimum, which
+        // padded it top and bottom and put ~10pt more round each rule than
+        // Compact draws.
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: subjectPalette)
         #if os(iOS)
             .environment(\.editMode, dragEditMode)
@@ -542,10 +553,9 @@ extension ReadingQueueBrowserView {
     /// Reordering drops the split: a drag has to reach every work, Up next too.
     private var compactGrid: some View {
         ScrollView {
-            // The same gaps `detailedList` gets from its row insets, so switching
-            // Ledger ↔ Compact does not move the text: 20 above the header, 8 (12
-            // selecting) above its details, 18 above a section rule, and half the
-            // inter-card gap (6) between a rule and what follows it.
+            // The same gaps as `detailedList`, so switching Ledger ↔ Compact does
+            // not move the text: 20 above the header, 8 (12 selecting) above its
+            // details, then 1h.1's 18 above a section rule and 10 after it.
             VStack(alignment: .leading, spacing: 0) {
                 subjectHeader.padding(.top, 20)
                 if isSelecting {
@@ -579,7 +589,7 @@ extension ReadingQueueBrowserView {
                         )
                         .background(WorkLedgerCardBackground(work: upNextWork))
                         .padding(.horizontal, CardListMetrics.sideMargin)
-                        .padding(.vertical, Self.afterRule)
+                        .padding(.top, Self.afterRule)
                     }
                     if !inLineWorks.isEmpty {
                         inLineHeader.padding(.top, Self.ruleTop)
@@ -592,10 +602,14 @@ extension ReadingQueueBrowserView {
         .subjectScreenWash(palette: subjectPalette)
     }
 
-    /// `detailedList`'s `pageBodyRow(top: 18)` above a rule, and the half of
-    /// `interCardSpacing` a card row keeps above itself.
+    /// 1h.1: 18 between blocks, 10 from a section rule to what it heads. Both
+    /// layouts draw these; the list gets part of each from its card rows.
     private static let ruleTop: CGFloat = 18
-    private static let afterRule: CGFloat = CardListMetrics.interCardSpacing / 2
+    private static let afterRule: CGFloat = 10
+    private static let halfCardGap: CGFloat = CardListMetrics.interCardSpacing / 2
+    /// A card row's card starts `halfCardGap` below the row, so the rule row
+    /// adds the rest of `afterRule`.
+    private static let listRuleBottom: CGFloat = afterRule - halfCardGap
 
     private func coverGrid(_ gridWorks: [SavedWork]) -> some View {
         LazyVGrid(columns: compactGridColumns, spacing: CarouselCardMetrics.compactGridSpacing) {
