@@ -46,12 +46,14 @@ struct AccountExternalNavCard: View {
         title: String,
         systemImage: String? = nil,
         sitePath: String,
-        isFormRow: Bool = false
+        isFormRow: Bool = false,
+        footnote: String? = nil
     ) {
         self.title = title
         self.systemImage = systemImage
         self.target = .site(path: sitePath)
         self.isFormRow = isFormRow
+        self.footnote = footnote
     }
 
     init(

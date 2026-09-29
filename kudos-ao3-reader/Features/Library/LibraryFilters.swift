@@ -23,7 +23,9 @@ struct LibraryFilters: Equatable {
     var language: String = ""
     var wordsFrom: String = ""
     var wordsTo: String = ""
-    var sort: LibrarySort = .dateAdded
+    /// `.natural` keeps each section's own order — History and Reading Now are
+    /// most-recently-read first, and their headers say so.
+    var sort: LibrarySort = .natural
 
     /// Whether anything beyond the defaults is set — drives the filter button's
     /// "active" icon and the Reset action.
@@ -33,7 +35,7 @@ struct LibraryFilters: Equatable {
             || rating != .any || !warnings.isEmpty || !categories.isEmpty
             || completion != .any || !language.isEmpty
             || !wordsFrom.isLibraryBlank || !wordsTo.isLibraryBlank
-            || sort != .dateAdded
+            || sort != .natural
     }
 
     /// Every stored field, in a fixed order — the filter half of the Library
@@ -126,7 +128,7 @@ struct LibraryFilters: Equatable {
         case (true, true): break
         }
 
-        if includesSort { add("Sort: \(sort.title)") }
+        if includesSort, sort != .natural { add("Sort: \(sort.title)") }
         return labels
     }
 
@@ -261,7 +263,8 @@ struct LibraryFilters: Equatable {
 
     /// Filters and sorts a list of works by the current settings.
     func apply(to works: [SavedWork]) -> [SavedWork] {
-        works.filter(matches).sorted(by: isOrderedBefore)
+        let kept = works.filter(matches)
+        return sort == .natural ? kept : kept.sorted(by: isOrderedBefore)
     }
 
     // Lint: multi-facet predicate reads safest as one guard sequence.
@@ -273,8 +276,13 @@ struct LibraryFilters: Equatable {
     /// (and no faulting of the `tags` relationship).
     func matches(_ work: SavedWork) -> Bool { // swiftlint:disable:this cyclomatic_complexity
         if !userTags.isEmpty, !userTags.isSubset(of: Set(work.tags.map(\.name))) { return false }
+        // By family: "Doctor Who" and "Doctor Who (2005)" are one fandom here,
+        // as Browse (1g) and every kicker already treat them.
         if !fandoms.isEmpty,
-           !fandoms.isSubset(of: tagSet(work.workFandoms, fallback: work.workTags)) { return false }
+           !Set(fandoms.map(FandomDisplayName.bareTitle))
+            .isSubset(of: Set(tagSet(work.workFandoms, fallback: work.workTags).map(FandomDisplayName.bareTitle))) {
+            return false
+        }
         if !characters.isEmpty,
            !characters.isSubset(of: tagSet(work.workCharacters, fallback: work.workTags)) { return false }
         if !relationships.isEmpty,
@@ -320,6 +328,7 @@ struct LibraryFilters: Equatable {
 
     private func isOrderedBefore(_ first: SavedWork, _ second: SavedWork) -> Bool {
         switch sort {
+        case .natural: false
         case .dateAdded: first.dateAdded > second.dateAdded
         case .title: first.title.localizedCaseInsensitiveCompare(second.title) == .orderedAscending
         case .author: first.author.localizedCaseInsensitiveCompare(second.author) == .orderedAscending
@@ -339,13 +348,14 @@ struct LibraryFilters: Equatable {
 /// The Library's sort options — limited to fields stored locally for saved works
 /// (AO3's kudos/hits/comments counts aren't kept, so they aren't offered).
 enum LibrarySort: String, CaseIterable, Identifiable, Equatable {
-    case dateAdded, title, author, wordCount
+    case natural, dateAdded, title, author, wordCount
     var id: String {
         rawValue
     }
 
     var title: String {
         switch self {
+        case .natural: "Default"
         case .dateAdded: "Date Added"
         case .title: "Title"
         case .author: "Author"

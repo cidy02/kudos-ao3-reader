@@ -59,3 +59,16 @@ struct AO3CollectionDeleteConfirmationTests {
         #expect(AO3CollectionFormView.deletionMessage.contains("anonymous show their creators"))
     }
 }
+
+@MainActor
+struct LibraryFandomFamilyFilterTests {
+    @Test func aFamilyChipMatchesEverySiblingTag() {
+        let work = SavedWork(title: "W", author: "A")
+        work.workFandoms = ["Doctor Who (2005)"]
+        var filters = LibraryFilters()
+        filters.fandoms = ["Doctor Who"]
+        #expect(filters.matches(work))
+        filters.fandoms = ["Frozen (Disney Movies)"]
+        #expect(!filters.matches(work))
+    }
+}
