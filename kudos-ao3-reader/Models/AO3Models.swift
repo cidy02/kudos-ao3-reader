@@ -923,7 +923,7 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         var title: String {
             switch self {
             case .any: "Include"
-            case .exclude: "Exclude"
+            case .exclude: "Exclude crossovers"
             case .only: "Only crossovers"
             }
         }

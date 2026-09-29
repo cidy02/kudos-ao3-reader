@@ -110,52 +110,20 @@ struct SaveSearchSheet: View {
     /// same data that gets persisted, and a parallel summary would drift.
     private var summary: [SummaryItem] {
         var items: [SummaryItem] = []
-
-        func appendTags(_ raw: String, isExcluded: Bool) {
-            for tag in raw.split(separator: ",") {
-                let text = tag.trimmingCharacters(in: .whitespaces)
-                guard !text.isEmpty else { continue }
-                items.append(SummaryItem(
-                    id: "\(isExcluded ? "-" : "+")\(text)",
-                    text: isExcluded ? "−\(text)" : text,
-                    isExcluded: isExcluded
-                ))
-            }
-        }
-
         let query = filters.query.trimmingCharacters(in: .whitespaces)
         if !query.isEmpty {
             items.append(SummaryItem(id: "query", text: "\u{201C}\(query)\u{201D}", isExcluded: false))
         }
-        let title = filters.title.trimmingCharacters(in: .whitespaces)
-        if !title.isEmpty {
-            items.append(SummaryItem(id: "title", text: "Title: \(title)", isExcluded: false))
-        }
-        let creators = filters.creators.trimmingCharacters(in: .whitespaces)
-        if !creators.isEmpty {
-            items.append(SummaryItem(id: "creators", text: "By \(creators)", isExcluded: false))
-        }
-
-        appendTags(filters.fandom, isExcluded: false)
-        appendTags(filters.relationships, isExcluded: false)
-        appendTags(filters.characters, isExcluded: false)
-        appendTags(filters.additionalTags, isExcluded: false)
-        appendTags(filters.excludedFandoms, isExcluded: true)
-        appendTags(filters.excludedRelationships, isExcluded: true)
-        appendTags(filters.excludedCharacters, isExcluded: true)
-        appendTags(filters.excludedAdditionalTags, isExcluded: true)
-
-        if filters.rating != .any {
-            // "Teen And Up+" in the artboard: the rating, and whether the search
-            // takes that rating exactly or that rating and above.
-            let suffix = filters.ratingMatch == .exact ? "" : "+"
+        // 1ax: everything the saved search will run with — the same labels the
+        // results rail prints, warnings, ranges, language and the sort included.
+        // A partial copy here is how the sheet came to hide half the search.
+        for (index, label) in filters.summaryLabels().enumerated() {
             items.append(SummaryItem(
-                id: "rating",
-                text: "\(filters.rating.title)\(suffix)",
-                isExcluded: false
+                id: "\(index)-\(label.text)",
+                text: label.text,
+                isExcluded: label.text.hasPrefix("−")
             ))
         }
-
         return items
     }
 }

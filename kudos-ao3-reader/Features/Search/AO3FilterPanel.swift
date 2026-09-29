@@ -163,7 +163,8 @@ struct AO3FilterPanel: View {
         let total = refineSource.count
         let matching = refineMatchCount ?? filters.apply(to: refineSource).count
         let works = total == 1 ? "work" : "works"
-        let line = "\(matching) of the \(total) \(works) on this page match"
+        let verb = matching == 1 ? "matches" : "match"
+        let line = "\(matching) of the \(total) \(works) on this page \(verb)"
         return refinePendingCount > 0 ? "\(line) · \(refinePendingCount) not checked yet" : line
     }
 
@@ -181,7 +182,8 @@ struct AO3FilterPanel: View {
     @ToolbarContentBuilder
     private var actionButtons: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button(role: .destructive, action: onReset) {
+            // Clearing filters is not a delete: no destructive role.
+            Button(action: onReset) {
                 Image(systemName: "arrow.counterclockwise")
             }
             .disabled(!canReset)
