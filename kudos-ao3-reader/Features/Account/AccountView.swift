@@ -27,6 +27,8 @@ struct AccountView: View {
     @State private var path = NavigationPath()
     @State private var showingLogin = false
     @State private var selectedTab: AccountTab = .overview
+    @ScaledMetric(relativeTo: .body) private var scopeRowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var scopeRowSubtitleSize: CGFloat = 11.5
     @State private var readingTab: AccountReadingTab = .later
     @State private var editingWorkID: Int?
     @State private var writingTab: AccountWritingTab = .works
@@ -1200,12 +1202,13 @@ private extension AccountView {
                     .frame(width: 22)
 
                 VStack(alignment: .leading, spacing: 2) {
+                    // 1m/1bt: 15px medium, the same as the Preferences cards.
                     Text(destination.title)
-                        .font(.system(size: 15))
+                        .font(.system(size: scopeRowTitleSize, weight: .medium))
                         .foregroundStyle(.primary)
                     if let subtitle = destination.subtitle {
                         Text(subtitle)
-                            .font(.system(size: 11.5))
+                            .font(.system(size: scopeRowSubtitleSize))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
