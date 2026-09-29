@@ -57,7 +57,7 @@ final class ThemeManager {
     /// The control/link tint for the whole app: Sepia keeps its cohesive warm
     /// brown; Light/Dark use the user's accent (default AO3 red).
     var effectiveTint: Color {
-        appTheme.appTint ?? accentColor
+        SubjectPalette.controlColor(appTheme.appTint ?? accentColor, on: appTheme)
     }
 
     /// The palette every *scope*-level surface in the redesign draws from — the
@@ -82,8 +82,10 @@ final class ThemeManager {
     /// Screens scoped to a *work* rather than to a tab (a work page, a fandom's
     /// search results, a queue) take that subject's own hue instead — there is no
     /// chosen colour there to be faithful to. See `CoverArt.workHue(fandoms:title:)`.
+    /// Built from the accent itself, not `effectiveTint`: the wash is the
+    /// chosen colour (1m); only controls are lifted on dark grounds.
     var scopePalette: SubjectPalette {
-        SubjectPalette(color: effectiveTint, theme: appTheme)
+        SubjectPalette(color: appTheme.appTint ?? accentColor, theme: appTheme)
     }
 
     /// A foreground guaranteed to stay readable on top of `effectiveTint` — the

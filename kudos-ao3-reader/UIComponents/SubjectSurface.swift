@@ -73,7 +73,19 @@ struct SubjectPalette {
     /// app-accent screen tints exactly as the rest of the app; otherwise the
     /// derived `accent`, so a fandom or queue screen's buttons are that
     /// screen's colour rather than the app's.
-    var tint: Color { picked ?? accent }
+    var tint: Color { picked.map { Self.controlColor($0, on: theme) } ?? accent }
+
+    /// A chosen colour as a control colour. On Dark and OLED a deep accent
+    /// (the default AO3 red, #990000) all but disappears on the ground — the
+    /// selected tab read red on near-black — so controls take it halfway to
+    /// white, as the dark artboards do (#E39B9B for crimson). Washes keep the
+    /// colour itself. Light and Sepia use it as is.
+    static func controlColor(_ color: Color, on theme: ReaderTheme) -> Color {
+        switch theme {
+        case .dark, .oled: color.mix(with: .white, by: 0.5)
+        case .light, .sepia: color
+        }
+    }
 
     /// The subject's identity colour: kicker text, the short rule under it, the
     /// filled confirm button, a selected chip's text. Spec `#D9B26A` at hue 38°.
