@@ -112,7 +112,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             onNew: {
                 showingNewCollection = true
             },
-            card: { CollectionCard(collection: $0) },
+            card: { CollectionCard(collection: $0).collectionCardMenu($0) },
             newCard: { NewCollectionCard() }
         )
     }
@@ -414,6 +414,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 ForEach(collections.prefix(12)) { collection in
                     NavigationLink(value: collection) {
                         CollectionCard(collection: collection)
+                            .collectionCardMenu(collection)
                     }
                     .buttonStyle(.plain)
                 }
@@ -431,6 +432,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                             collection: collection,
                             previewWorks: collectionPreviewWorks(for: collection)
                         )
+                        .collectionCardMenu(collection)
                     }
                     .buttonStyle(.plain)
                 }
