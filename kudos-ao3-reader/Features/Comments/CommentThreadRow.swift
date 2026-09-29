@@ -900,6 +900,13 @@ private struct CommentRowChrome: ViewModifier {
     /// there now. See `trackSwipe`.
     @State private var rest: (minX: CGFloat, width: CGFloat)?
     @State private var swipeOffset: CGFloat = 0
+    /// True from the first point of movement until the row has *settled*.
+    /// Not simply `isOffRest`: when a swipe snaps shut, iOS sets the row's
+    /// final position at once and only animates the drawing, so the frame
+    /// reads "at rest" while the row is still visibly sliding back (owner
+    /// screenshot, 2026-09-29). The rails wait out that animation.
+    @State private var isSwiped = false
+    @State private var settleTask: Task<Void, Never>?
 
     /// Indent for every level this row draws, resolved once so the avatars and
     /// the rails are guaranteed to agree.
@@ -928,6 +935,12 @@ private struct CommentRowChrome: ViewModifier {
                 of: { $0.frame(in: .named(CommentThreadGeometry.listSpace)) },
                 action: trackSwipe
             )
+            // Scrolled away mid-settle: never leave the replies without their line.
+            .onDisappear {
+                settleTask?.cancel()
+                settleTask = nil
+                setSwiped(false)
+            }
             .listRowInsets(EdgeInsets(
                 top: topInset,
                 leading: CommentThreadGeometry.sideMargin + (resolved.last ?? 0),
@@ -956,12 +969,34 @@ private struct CommentRowChrome: ViewModifier {
             return
         }
         swipeOffset = frame.minX - rest.minX
-        // Tell the replies. Only on the edge, so a swipe does not re-render
-        // every row on every frame.
+        if isOffRest {
+            settleTask?.cancel()
+            settleTask = nil
+            setSwiped(true)
+        } else if isSwiped, settleTask == nil {
+            settleTask = Task { @MainActor in
+                try? await Task.sleep(for: Self.settleDelay)
+                guard !Task.isCancelled else { return }
+                settleTask = nil
+                if !isOffRest { setSwiped(false) }
+            }
+        }
+    }
+
+    /// How long a closing swipe keeps animating after its frame lands at rest.
+    /// ponytail: a fixed guess at iOS's snap-back spring (~0.35s); raise it if
+    /// lines still show up before the row lands.
+    private static let settleDelay: Duration = .milliseconds(400)
+
+    /// Tells the replies, on the edge only, so a swipe does not re-render every
+    /// row on every frame.
+    private func setSwiped(_ swiped: Bool) {
+        guard isSwiped != swiped else { return }
+        isSwiped = swiped
         guard let swipeTracker, let commentID else { return }
-        if isOffRest, swipeTracker.swipedID != commentID {
+        if swiped {
             swipeTracker.swipedID = commentID
-        } else if !isOffRest, swipeTracker.swipedID == commentID {
+        } else if swipeTracker.swipedID == commentID {
             swipeTracker.swipedID = nil
         }
     }
@@ -977,7 +1012,7 @@ private struct CommentRowChrome: ViewModifier {
 
     /// Gone the moment the row moves, back the moment it rests (owner: no fade).
     private var railOpacity: Double {
-        isOffRest ? 0 : 1
+        isSwiped ? 0 : 1
     }
 
     /// Rails in the app's hairline tone rather than the accent: at up to five
