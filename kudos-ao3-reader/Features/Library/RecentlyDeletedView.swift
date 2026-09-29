@@ -635,14 +635,15 @@ private struct RecentlyDeletedRow: View {
     private var remaining: some View {
         VStack(spacing: 1) {
             Text("\(entry.daysRemaining)d")
-                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .font(.system(size: 13, weight: .bold))
+                .monospacedDigit()
                 .foregroundStyle(
                     RecentlyDeletedView.isUrgent(daysRemaining: entry.daysRemaining)
                         ? Color.subjectAmber
                         : Color.primary
                 )
-            Text("left")
-                .font(.system(size: 10))
+            Text("LEFT")
+                .font(.system(size: 9))
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)

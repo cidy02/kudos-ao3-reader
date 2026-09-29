@@ -59,6 +59,7 @@ struct SubjectHueSwatchRow: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .minimumHitTarget()
                 .accessibilityLabel(swatch.name)
                 .accessibilityAddTraits(
                     SubjectHueSwatches.matches(swatch, selection) ? [.isButton, .isSelected] : .isButton
