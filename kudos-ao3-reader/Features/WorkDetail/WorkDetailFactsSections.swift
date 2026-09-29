@@ -63,15 +63,9 @@ extension WorkDetailView {
                 SubjectFormRow(label: "Published", value: displayPublishedDate, isMonospaced: true)
             )))
         }
-        if let work = localWork {
-            let added = work.dateAdded.formatted(date: .abbreviated, time: .shortened)
-            rows.append(FactRow(id: "added", view: AnyView(
-                SubjectFormRow(label: "Added", value: added, isMonospaced: true)
-            )))
-            // Source and preservation state deliberately absent:
-            // `WorkProvenanceSections` states both further down the page, and
-            // twice on one screen is not density, it is noise.
-        }
+        // The date added, source and preservation are this device's facts, not
+        // the work's: 1a keeps them in My copy (Activity, Storage, Origin), and
+        // the page's card holds only what AO3 says.
         return rows
     }
 
