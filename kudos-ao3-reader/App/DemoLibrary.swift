@@ -223,12 +223,15 @@ enum DebugLaunchRoute {
     static func homeDestination(queues: [ReadingQueue]) -> AllReadingQueuesDestination? {
         guard let value else { return nil }
         if value == "queues" { return AllReadingQueuesDestination(initialQueueID: nil) }
-        if value.hasPrefix("queue:") {
-            let name = String(value.dropFirst("queue:".count))
+        if let prefix = ["queue:", "queue-details:"].first(where: value.hasPrefix) {
+            let name = String(value.dropFirst(prefix.count))
             return queues.first { $0.displayName == name }.map { AllReadingQueuesDestination(initialQueueID: $0.id) }
         }
         return nil
     }
+
+    /// `queue-details:<name>` opens the queue page, then its Details.
+    static var opensQueueDetails: Bool { value?.hasPrefix("queue-details:") == true }
 
     private static let libraryRoutes = ["collections", "collection:", "recentlyDeleted", "insights"]
 

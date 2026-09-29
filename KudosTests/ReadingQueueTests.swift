@@ -158,7 +158,7 @@ struct ReadingQueueTests {
         saved.isSaved = true
         savedElsewhere.isSaved = true
         queueOnly.isSaved = false
-        ReadingQueueService.add(member, to: queue, in: context)
+        _ = ReadingQueueService.add(member, to: queue, in: context)
         ReadingQueueService.add(queueOnly, to: other, in: context)
         ReadingQueueService.add(savedElsewhere, to: other, in: context)
 
@@ -466,6 +466,31 @@ struct ReadingQueueTests {
     /// to keep away from a Save button — measured, not assumed (an earlier
     /// comment guessed the save would throw and poison the context; it does
     /// neither). If this starts failing, the guard's rationale has changed.
+    /// The tag manager's "Remove from N works": off this queue's works and
+    /// vocabulary, and nowhere else — a work outside the queue keeps it.
+    @Test func removeTagFromWorksStaysInsideTheQueue() throws {
+        let context = try makeContext()
+        let comfort = Kudos.Tag(name: "comfort")
+        context.insert(comfort)
+        let member = SavedWork(title: "Member", author: "X")
+        let outsider = SavedWork(title: "Outsider", author: "X")
+        context.insert(member)
+        context.insert(outsider)
+        member.tags.append(comfort)
+        outsider.tags.append(comfort)
+        let queue = ReadingQueueService.createQueue(named: "Q", in: context)
+        _ = ReadingQueueService.add(member, to: queue, in: context)
+        queue.tags.append(comfort)
+        try context.save()
+
+        queue.removeTagFromWorks(comfort)
+        try context.save()
+
+        #expect(member.tags.isEmpty)
+        #expect(outsider.tags.map(\.name) == ["comfort"])
+        #expect(queue.tags.isEmpty)
+    }
+
     @Test func collidingTagRenameCollapsesTheTwoTags() throws {
         let context = try makeContext()
         let slowBurn = Kudos.Tag(name: "slow burn")
