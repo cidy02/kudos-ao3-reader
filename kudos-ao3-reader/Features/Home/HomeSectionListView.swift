@@ -24,6 +24,8 @@ struct HomeSectionListView: View {
     @State private var refreshTask: Task<Void, Never>?
     /// Filters scoped to this one section, applied live to the works on the page.
     @State private var filters = LibraryFilters()
+    /// 1ae's All · Unread · Offline pills (Recently Updated only).
+    @State private var updatePill: HomeUpdatePill = .all
     @State private var showingFilters = false
     @State private var isSelecting: Bool
     @State private var expandAll = false
@@ -64,7 +66,7 @@ struct HomeSectionListView: View {
 
     /// The line under the hero: how many works, and what order they are in.
     private var headerTallyLine: String {
-        if filters.hasActiveFilters, visibleItems.isEmpty, !items.isEmpty {
+        if filters.hasActiveFilters || updatePill != .all, visibleItems.isEmpty, !items.isEmpty {
             let count = items.count
             return "\(count) \(count == 1 ? "work" : "works") · none match the current filters"
         }
@@ -86,8 +88,13 @@ struct HomeSectionListView: View {
 
     /// This section's works after the active filters. With no filter set, the section's
     /// own ordering is kept rather than re-sorted by the filter's default sort.
-    private var visibleItems: [SavedWork] {
+    private var filteredItems: [SavedWork] {
         filters.hasActiveFilters ? filters.apply(to: items) : items
+    }
+
+    /// `filteredItems` narrowed by the quick pill.
+    private var visibleItems: [SavedWork] {
+        updatePill.apply(to: filteredItems)
     }
 
     private var selectedWorks: [SavedWork] {
@@ -294,6 +301,16 @@ struct HomeSectionListView: View {
                         .listRowInsets(EdgeInsets())
                         .padding(.bottom, 10)
                 }
+            } else if updatePill != .all, !filteredItems.isEmpty {
+                Section {
+                    ContentUnavailableView {
+                        Label("No \(updatePill.title.lowercased()) works", systemImage: updatePill.symbol)
+                    } actions: {
+                        Button("Show All") { updatePill = .all }
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
             } else if filters.hasActiveFilters {
                 Section {
                     filterCollisionCard
@@ -339,6 +356,26 @@ struct HomeSectionListView: View {
     /// The count on the dashed chip excludes sort: sort is always set to
     /// something, so counting it would mean the button never reads as "no
     /// filters" even on a page showing everything.
+    /// Counted over the works the Filter panel leaves, like `LibraryCompletionPills`.
+    @ViewBuilder
+    private var updatePills: some View {
+        let base = filteredItems
+        ForEach(HomeUpdatePill.allCases) { pill in
+            let isSelected = updatePill == pill
+            Button {
+                updatePill = pill
+            } label: {
+                SubjectChip(
+                    text: "\(pill.title) \(pill.apply(to: base).count.compactCount)",
+                    style: .pill(isSelected: isSelected),
+                    palette: scopePalette
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        }
+    }
+
     private var filterChipRail: some View {
         SubjectFilterRail(
             onOpenFilters: { showingFilters = true },
@@ -346,6 +383,8 @@ struct HomeSectionListView: View {
         ) {
             if kind == .readingNow {
                 LibraryCompletionPills(filters: $filters, works: items, palette: scopePalette)
+            } else if kind == .recentlyUpdated {
+                updatePills
             }
             // A selected WIP pill already says "In Progress"; no second chip.
             ForEach(filters.summaryLabels(includesInProgress: kind != .readingNow), id: \.self) { label in
@@ -424,4 +463,37 @@ struct HomeSectionListView: View {
         return "+\(work.postedChapterCount - work.knownChapterCount) CH"
     }
 
+}
+
+/// Spec 1ae's quick pills. Unread is "new chapters not yet seen" (`hasUpdate`),
+/// which is every work on Recently Updated — the artboard's "All 5 · Unread 5".
+enum HomeUpdatePill: String, CaseIterable, Identifiable {
+    case all, unread, offline
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .unread: "Unread"
+        case .offline: "Offline"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .all: "books.vertical"
+        case .unread: "sparkles"
+        case .offline: "arrow.down.circle"
+        }
+    }
+
+    @MainActor
+    func apply(to works: [SavedWork]) -> [SavedWork] {
+        switch self {
+        case .all: works
+        case .unread: works.filter(\.hasUpdate)
+        case .offline: works.filter { WorkReaderPreparation.hasReadableEPUB(for: $0) }
+        }
+    }
 }
