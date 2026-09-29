@@ -10,6 +10,7 @@ import SwiftUI
 /// per-category fandom index the detail page uses, cached in `FandomCatalog`),
 /// the user's saved-work count in that category, and recently-read fandom chips.
 struct MediaBrowserView: View {
+    @Environment(AppRouter.self) private var router
     /// Every raw tag to include, and the name to title the page with. A chip
     /// is a family, so it can name several tags; everything else names one.
     var onSelectFandom: (_ names: [String], _ title: String) -> Void
@@ -133,6 +134,8 @@ struct MediaBrowserView: View {
                     .onDisappear { visibleCategoryIDs.remove(category.id) }
                 }
 
+                openWebsiteRow
+
                 instructions
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -147,6 +150,35 @@ struct MediaBrowserView: View {
             await AO3Client.shared.invalidateCachedResponses()
             await refresh()
         }
+    }
+
+    /// 1g's last row: the rest of AO3, a dashed row rather than a card — it
+    /// leaves the native screens.
+    private var openWebsiteRow: some View {
+        Button {
+            router.openWebsite()
+        } label: {
+            HStack {
+                Text("Open AO3 Website")
+                    .font(.system(size: 13.5, weight: .medium))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5]))
+                    .foregroundStyle(.tertiary)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, CardListMetrics.sideMargin)
+        .padding(.top, 2)
     }
 
     private func categoryPanel(_ category: AO3MediaCategory) -> some View {
@@ -244,7 +276,7 @@ struct MediaBrowserView: View {
                 ruleSpacing: 6
             )
 
-            Text(entry.fandom)
+            Text(FandomDisplayName.bareTitle(entry.fandom))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
@@ -540,6 +572,7 @@ struct MediaBrowserView: View {
         let hasBeenRead: Bool
         let dateAdded: Date
         let lastReadDate: Date?
+        var isOnDevice = true
 
         /// When it was last read, or added if it never records a read — the
         /// same fallback the Library's own recency ordering uses.
@@ -599,7 +632,8 @@ struct MediaBrowserView: View {
                 fandomsDisplay: work.workFandoms,
                 hasBeenRead: work.hasBeenRead,
                 dateAdded: work.dateAdded,
-                lastReadDate: work.lastReadDate
+                lastReadDate: work.lastReadDate,
+                isOnDevice: work.hasEPUB
             )
         }
         let inputs = categories.map { category -> CategoryStatsInput in
@@ -709,7 +743,8 @@ struct MediaBrowserView: View {
             let nameSet = Set(input.fandoms.map { $0.name.lowercased() })
 
             var savedCount = 0
-            for work in works where work.fandomsLower.contains(where: nameSet.contains) {
+            // "N downloaded" is the EPUBs on this device (owner, 2026-09-28).
+            for work in works where work.isOnDevice && work.fandomsLower.contains(where: nameSet.contains) {
                 savedCount += 1
             }
 
