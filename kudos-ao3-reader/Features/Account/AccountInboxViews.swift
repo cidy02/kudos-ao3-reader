@@ -167,16 +167,7 @@ struct AccountInboxItemRow: View {
             unavailableContent
         } else {
             interactiveContent
-                .confirmationDialog(
-                    "Remove this notification from your AO3 Inbox?",
-                    isPresented: $confirmDelete,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete From Inbox", role: .destructive, action: onDeleteFromInbox)
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("This removes only the Inbox notification. It does not delete the comment.")
-                }
+                .inboxDeleteConfirmation(isPresented: $confirmDelete, perform: onDeleteFromInbox)
                 .alert("Inbox", isPresented: actionNoticeBinding) {
                     Button("OK") { actionNotice = nil }
                 } message: {
@@ -645,6 +636,7 @@ struct AccountInboxCommentListRow: View {
     var onReply: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
+    @State private var confirmDelete = false
 
     private var readAction: AO3InboxBulkAction {
         item.isUnread ? .markRead : .markUnread
@@ -690,6 +682,16 @@ struct AccountInboxCommentListRow: View {
                 }
                 .tint(.accentColor)
             }
+            // The row's destructive action is its trailing swipe, as on every
+            // other list (pass2-11). It asks, like the overflow does.
+            if !isSelecting && model.canPerformItemAction(.delete, item: item) && !isPerformingAction {
+                Button(role: .destructive) { confirmDelete = true } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .inboxDeleteConfirmation(isPresented: $confirmDelete) {
+            model.startItemAction(.delete, item: item, auth: auth)
         }
         .modifier(InboxPanelSegment(isFirst: isFirst, isLast: isLast))
     }
@@ -877,7 +879,7 @@ struct AccountInboxBulkActionBar: View {
         .accessibilityLabel("Done")
         .disabled(model.isPerformingBulkAction)
         .confirmationDialog(
-            "Remove \(model.selectedItems.count) notification"
+            "Delete \(model.selectedItems.count) notification"
                 + "\(model.selectedItems.count == 1 ? "" : "s") from your AO3 Inbox?",
             isPresented: $confirmDelete,
             titleVisibility: .visible
@@ -894,5 +896,21 @@ struct AccountInboxBulkActionBar: View {
 
     private func perform(_ action: AO3InboxBulkAction) {
         model.startBulkAction(action, auth: auth)
+    }
+}
+
+extension View {
+    /// One ask for deleting a single notification, from the swipe or the overflow.
+    func inboxDeleteConfirmation(isPresented: Binding<Bool>, perform: @escaping () -> Void) -> some View {
+        confirmationDialog(
+            "Delete this notification from your AO3 Inbox?",
+            isPresented: isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete From Inbox", role: .destructive, action: perform)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes only the Inbox notification. It does not delete the comment.")
+        }
     }
 }

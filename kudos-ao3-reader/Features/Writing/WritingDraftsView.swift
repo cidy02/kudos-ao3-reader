@@ -252,7 +252,10 @@ private struct DraftCard: View {
                     if fandoms.first != nil || daysLeft != nil {
                         HStack(alignment: .top, spacing: 6) {
                             if let first = fandoms.first {
-                                SubjectKicker(text: first, palette: palette, trailingCount: fandoms.count - 1)
+                                SubjectKicker(
+                                    text: FandomDisplayName.bareTitle(first), palette: palette,
+                                    trailingCount: fandoms.count - 1
+                                )
                             }
                             if let daysLeft {
                                 SubjectStateBadge(

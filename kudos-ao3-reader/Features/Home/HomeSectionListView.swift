@@ -26,6 +26,9 @@ struct HomeSectionListView: View {
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
     @State private var isSelecting: Bool
+    @State private var expandAll = false
+    @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
+    @State private var pendingDelete: SavedWork?
     @State private var selection: Set<UUID>
     /// Mirrors the scaled width `SensitiveWorkCoverCard`/`WorkCoverCard` actually
     /// render at (see `ScaledCarouselCardSize`), so `compactGrid`'s column count
@@ -189,6 +192,10 @@ struct HomeSectionListView: View {
                                         Label("Select", systemImage: "checklist")
                                     }
                                     DisplayModeMenuPicker(mode: $displayMode)
+                                    // Expand acts on Detailed cards; the ledger does not expand.
+                                    if displayMode == .detailed {
+                                        ExpandAllMenuItem(expandAll: $expandAll)
+                                    }
                                 }
                             })
                         ].compactMap { $0 })
@@ -209,6 +216,13 @@ struct HomeSectionListView: View {
                     .presentationDragIndicator(.visible)
                 #endif
             }
+            .deleteConfirmation(
+                for: $pendingDelete,
+                title: "Delete this work?",
+                confirmLabel: "Delete",
+                message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
+                perform: { PreservedWorkService.softDelete($0, in: context) }
+            )
     }
 
     /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
@@ -227,6 +241,7 @@ struct HomeSectionListView: View {
                     ForEach(visibleItems) { work in
                         SensitiveWorkRow(
                             work: work,
+                            expandAll: expandAll,
                             openMode: .reader,
                             onSelect: isSelecting ? nil : { isSelecting = true; selection = [work.id] },
                             isSelecting: isSelecting,
@@ -241,12 +256,8 @@ struct HomeSectionListView: View {
                             isSelected: isSelecting && selection.contains(work.id),
                             tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
                         )
-                        // The same two local actions Library's ledger rows carry, so a
-                        // row means the same thing wherever it is drawn. Deliberately
-                        // NOT the trailing delete: Library pairs that with a
-                        // `confirmBeforeDelete` alert this screen does not have, and a
-                        // full swipe that destroys a download with no confirmation is
-                        // not an affordance worth matching.
+                        // The same local actions Library's rows carry, so a row means
+                        // the same thing wherever it is drawn.
                         // No full swipe: Remove Download deletes a file.
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             WorkDownloadButton(work: work)
@@ -260,6 +271,21 @@ struct HomeSectionListView: View {
                                 Label(labels.title, systemImage: labels.systemImage)
                             }
                             .tint(.yellow)
+                        }
+                        // Queue-only works are never deleted by a generic swipe (see
+                        // LibrarySectionListView); they leave through their queue.
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if !work.isQueueOnlyWork {
+                                Button(role: .destructive) {
+                                    if confirmBeforeDelete {
+                                        pendingDelete = work
+                                    } else {
+                                        PreservedWorkService.softDelete(work, in: context)
+                                    }
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 } header: {

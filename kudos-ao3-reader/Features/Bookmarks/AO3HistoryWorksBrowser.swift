@@ -141,7 +141,7 @@ struct AO3HistoryWorksBrowser: View {
                 Button(role: .destructive) {
                     onDelete(entry)
                 } label: {
-                    Label("Delete from History", systemImage: "trash")
+                    Label("Delete", systemImage: "trash")
                 }
             }
         }

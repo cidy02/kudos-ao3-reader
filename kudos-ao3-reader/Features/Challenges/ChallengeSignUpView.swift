@@ -410,7 +410,7 @@ extension ChallengeSignUpView {
 
     func offerSummary(_ offer: AO3ChallengePrompt) -> String {
         let tagCount = offer.relationships.count + offer.characters.count + offer.freeforms.count
-        let fandomName = offer.fandoms.first ?? "Any Fandom"
+        let fandomName = offer.fandoms.first.map(FandomDisplayName.bareTitle) ?? "Any Fandom"
         if tagCount > 0 {
             return "\(fandomName) · \(tagCount) \(tagCount == 1 ? "tag" : "tags")"
         }

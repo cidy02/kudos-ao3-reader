@@ -848,7 +848,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             }
             localWork = nil
             queueNotice = work.isPendingDeletion
-                ? "Removed from Saved for Later. Offline copy is in Recently Deleted for 90 days."
+                ? "Removed from Saved for Later. Offline copy is in Recently Deleted "
+                    + "for \(PreservedWorkService.recoveryWindowText)."
                 : "Removed from Saved for Later."
         case .dismiss:
             // No AO3 identity and the local record is soft-deleted — nothing left

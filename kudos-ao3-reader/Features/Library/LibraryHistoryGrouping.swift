@@ -95,7 +95,9 @@ nonisolated enum LibraryHistoryGrouping: String, CaseIterable, Hashable, Sendabl
             // alphabetically, which is stable across renders.
             var byFandom: [String: [UUID]] = [:]
             for work in works {
-                let name = work.workFandoms.first(where: { !$0.isEmpty }) ?? "No fandom"
+                // By family, so "Doctor Who" and "Doctor Who (2005)" are one group.
+                let name = work.workFandoms.first(where: { !$0.isEmpty })
+                    .map(FandomDisplayName.bareTitle) ?? "No fandom"
                 byFandom[name, default: []].append(work.id)
             }
             return byFandom

@@ -494,7 +494,8 @@ struct CollectionDetailView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(
-                    "The collection moves to Recently Deleted for 90 days. The works "
+                    "The collection moves to Recently Deleted "
+                        + "for \(PreservedWorkService.recoveryWindowText). The works "
                         + "themselves stay in your Library either way."
                 )
             }

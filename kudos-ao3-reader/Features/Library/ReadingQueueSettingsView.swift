@@ -263,7 +263,8 @@ struct ReadingQueueSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "The queue moves to Recently Deleted for 90 days, with everything in it "
+                "The queue moves to Recently Deleted "
+                    + "for \(PreservedWorkService.recoveryWindowText), with everything in it "
                     + "intact. Works stay in Kudos either way."
             )
         }

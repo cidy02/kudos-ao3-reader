@@ -83,9 +83,14 @@ struct AddLibraryWorksSheet: View {
                         }
                         .appThemedRows()
                         if matches.isEmpty {
-                            Text("No works match “\(query)”.")
-                                .foregroundStyle(.secondary)
-                                .appThemedRows()
+                            ContentUnavailableView {
+                                Label("No matching works", systemImage: "magnifyingglass")
+                            } description: {
+                                Text("Nothing in your library matches “\(query)”.")
+                            } actions: {
+                                Button("Clear Search") { query = "" }
+                            }
+                            .appThemedRows()
                         }
                     }
                     .appThemedScroll()

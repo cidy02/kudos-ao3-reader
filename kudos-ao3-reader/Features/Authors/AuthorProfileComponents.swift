@@ -261,7 +261,7 @@ struct AO3SeriesRow: View {
     }
 
     private var primaryFandom: String {
-        series.fandoms.first ?? "Series"
+        series.fandoms.first.map(FandomDisplayName.bareTitle) ?? "Series"
     }
 
     private var seriesPalette: SubjectPalette {

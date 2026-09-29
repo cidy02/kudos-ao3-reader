@@ -566,7 +566,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // the Library was empty.
             if !works.isEmpty || showsMoreMenu {
                 // Filter is the only control that stays directly visible —
-                // Privacy now lives behind "..." too (with Reading Insights, Select).
+                // Privacy now lives behind "..." too (with Select and Reading Insights).
                 ActionToolbar(items: [
                     !works.isEmpty
                         ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
@@ -577,13 +577,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         ? AnyView(WorkListMoreMenu {
                             if showsMature {
                                 MatureRevealToggle()
-                            }
-                            if showsStatistics {
-                                NavigationLink {
-                                    ReadingInsightsView(works: statisticsWorks)
-                                } label: {
-                                    Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                                }
                             }
                             if showsSelect {
                                 Button {
@@ -599,6 +592,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                             Picker("Layout", selection: $dashboardLayout) {
                                 ForEach(WorkSectionLayout.allCases, id: \.self) { layout in
                                     Label(layout.title, systemImage: layout.symbol).tag(layout)
+                                }
+                            }
+                            // A page item, so after Select and the layout (pass2-2).
+                            if showsStatistics {
+                                NavigationLink {
+                                    ReadingInsightsView(works: statisticsWorks)
+                                } label: {
+                                    Label("Reading Insights", systemImage: "chart.bar.xaxis")
                                 }
                             }
                         })

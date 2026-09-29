@@ -10,6 +10,8 @@ import SwiftData
 @MainActor
 enum PreservedWorkService {
     static let recoveryWindow: TimeInterval = 90 * 24 * 60 * 60
+    /// The window in the words every ask uses, so they follow the constant.
+    static var recoveryWindowText: String { "\(Int(recoveryWindow / 86_400)) days" }
 
     /// Delete-confirmation copy for a work, escalated when AO3 no longer has it
     /// (`SavedWork.ao3Unavailable`, set from a prior 404 during a tag refresh — no
