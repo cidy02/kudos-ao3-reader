@@ -1269,6 +1269,8 @@ struct EnrichingAO3WorkRow: View {
     let work: AO3WorkSummary
     let expandAll: Bool
     var presentation: AO3WorkRow.Presentation = .standard
+    /// 1q: a bookmark turns the row into the bookmark card (note, tags, date).
+    var bookmark: AO3AuthorBookmark?
     /// Fired when enrichment produced a summary. Nil for every caller except
     /// the subscriptions list, which needs the work page's chapter count for
     /// grouping. The row's own card still uses `enriched` either way.
@@ -1279,7 +1281,7 @@ struct EnrichingAO3WorkRow: View {
     private var displayed: AO3WorkSummary { enriched ?? work }
 
     var body: some View {
-        AO3WorkRow(work: displayed, expandAll: expandAll, presentation: presentation)
+        AO3WorkRow(work: displayed, expandAll: expandAll, presentation: presentation, bookmark: bookmark)
             .cardNavigation(to: displayed, accessibilityLabel: displayed.title)
             .task(id: work.id) {
                 // `.task(id:)` so recycling this row onto a different work cancels
