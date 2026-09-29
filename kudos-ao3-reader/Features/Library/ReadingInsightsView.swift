@@ -12,6 +12,9 @@ import SwiftUI
 /// **Nothing here is sent anywhere.** The header says so, because a page of
 /// statistics about someone's reading is exactly the page where that question
 /// occurs to them.
+/// Reading Insights pushed by value, like every other Library destination.
+struct ReadingInsightsDestination: Hashable {}
+
 struct ReadingInsightsView: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
