@@ -69,6 +69,7 @@ struct ReadingQueueBrowserView: View {
         displayMode == .ledger ? .ledger : .standard
     }
     @State private var isReordering = false
+    @State private var expandAll = false
     @State private var refreshTask: Task<Void, Never>?
     @State private var draggedWorkID: UUID?
     @State private var pendingCompactOrder: [UUID]?
@@ -240,6 +241,7 @@ struct ReadingQueueBrowserView: View {
     ) -> some View {
         SensitiveWorkRow(
             work: work,
+            expandAll: expandAll,
             openMode: .reader,
             isSelecting: isSelecting,
             isSelected: selection.contains(work.id),
@@ -772,6 +774,9 @@ extension ReadingQueueBrowserView {
                         }
                         .disabled(isNarrowed || hidesMatureWorks)
                         DisplayModeMenuPicker(mode: $displayMode)
+                        if displayMode == .detailed {
+                            ExpandAllMenuItem(expandAll: $expandAll)
+                        }
                         Divider()
                         queueMenuItems
                     })

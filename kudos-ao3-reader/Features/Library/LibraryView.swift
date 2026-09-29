@@ -281,9 +281,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
         sectionCache = next
 
+        // One chip per fandom family, counted once per work.
         let counts: [String: Int] = works
             .filter { !$0.isQueueOnlyWork && passesPrivacy($0) }
-            .flatMap(\.workFandoms)
+            .flatMap { Set($0.workFandoms.map(FandomDisplayName.bareTitle)) }
             .reduce(into: [:]) { $0[$1, default: 0] += 1 }
         topFandomsCache = counts
             .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
@@ -343,22 +344,28 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         Button {
             path.append(RecentlyDeletedDestination())
         } label: {
-            HStack {
-                Label("Recently Deleted", systemImage: "trash")
-                    .font(.subheadline.weight(.semibold))
+            // 1c: a subject row on the app's panel ground, not a material tile.
+            HStack(spacing: 10) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                Text("Recently Deleted")
+                    .font(.system(size: 14, weight: .semibold))
                 Spacer()
-                Text("\(recentlyDeletedCount)")
-                    .font(.subheadline)
+                Text(recentlyDeletedCount.compactCount)
+                    .font(.system(size: 13))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+            .subjectPanel()
+            .padding(.horizontal, CardListMetrics.sideMargin)
         }
         .buttonStyle(.plain)
     }

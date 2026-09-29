@@ -7,14 +7,19 @@ import Testing
 /// facet predicate had no unit suite despite backing every Library surface.
 @MainActor
 struct LibraryFiltersTests {
-    @Test func defaultFiltersMatchEverythingAndKeepNewestFirst() throws {
+    /// Default keeps the section's own order (History and Reading Now are most
+    /// recently read first); Date Added, chosen, sorts newest first.
+    @Test func defaultFiltersKeepTheSectionOrderAndDateAddedSorts() throws {
         let context = try makeContext()
         let older = work(in: context, title: "Older", dateAdded: Date(timeIntervalSince1970: 100))
         let newer = work(in: context, title: "Newer", dateAdded: Date(timeIntervalSince1970: 200))
 
-        let result = LibraryFilters().apply(to: [older, newer])
+        #expect(LibraryFilters().apply(to: [older, newer]).map(\.title) == ["Older", "Newer"])
+        #expect(!LibraryFilters().summaryLabels().contains { $0.text.hasPrefix("Sort:") })
 
-        #expect(result.map(\.title) == ["Newer", "Older"])
+        var byDate = LibraryFilters()
+        byDate.sort = .dateAdded
+        #expect(byDate.apply(to: [older, newer]).map(\.title) == ["Newer", "Older"])
     }
 
     @Test func fandomFacetUsesCategorizedTagsAndFallsBackToFlatTags() throws {
@@ -252,7 +257,7 @@ struct LibraryFiltersTests {
         let drops = filters.droppingEachActiveFilter(from: works)
         let byLabel = Dictionary(uniqueKeysWithValues: drops.map { ($0.filterLabel, $0.remainingCount) })
         #expect(byLabel["Complete"] == 1)
-        #expect(byLabel["Words ≥ 50000"] == 1)
+        #expect(byLabel["50K+ words"] == 1)
         #expect(drops.count == 2)
     }
 
