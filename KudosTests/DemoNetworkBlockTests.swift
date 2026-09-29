@@ -21,4 +21,20 @@ import Testing
         UserDefaults.standard.set(false, forKey: key)
         #expect(!DemoNetworkBlock.canInit(with: ao3))
     }
+
+    final class BundleAnchor {}
+
+    /// Browse's fixtures route by path and parse with the real parsers.
+    @Test func browseFixturesRouteAndParse() throws {
+        func route(_ path: String) -> String? {
+            DemoNetworkBlock.fixture(for: URL(string: "https://archiveofourown.org\(path)")!)
+        }
+        #expect(route("/media") == "ao3_media")
+        #expect(route("/media/TV%20Shows/fandoms") == "ao3_media_fandoms")
+        #expect(route("/tags/Doctor%20Who/works") == "ao3_author_works")
+
+        let url = try #require(Bundle(for: BundleAnchor.self).url(forResource: "ao3_media_fandoms", withExtension: "html"))
+        let fandoms = AO3Client.parseFandomIndex(try String(contentsOf: url, encoding: .utf8))
+        #expect(fandoms.count == 5)
+    }
 }
