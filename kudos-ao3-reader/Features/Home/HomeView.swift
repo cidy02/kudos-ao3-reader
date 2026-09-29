@@ -208,6 +208,14 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     }
                 }
                 .ao3AuthorNavigation(path: $path, tab: .home)
+                #if DEBUG
+                .task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    if let destination = DebugLaunchRoute.homeDestination(queues: readingQueues) {
+                        path.append(destination)
+                    }
+                }
+                #endif
                 .task(id: homeSectionsRevision) {
                     await Task.yield()
                     rebuildHomeSectionCache()
