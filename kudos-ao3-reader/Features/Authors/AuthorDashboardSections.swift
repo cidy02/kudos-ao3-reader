@@ -86,7 +86,11 @@ struct AO3DashboardSections: View {
             if let series = header.recentSeries {
                 if series.isEmpty { message("No recent series visible on AO3.") }
                 ForEach(series) { item in
-                    AO3SeriesRow(series: item, presentation: .ledger)
+                    AO3DashboardCompactCard(
+                        fandoms: item.fandoms,
+                        title: item.title,
+                        meta: Self.seriesMeta(item)
+                    )
                         .cardNavigation(to: item, accessibilityLabel: item.title)
                         .cardRow(tintHue: CoverArt.workHue(fandoms: item.fandoms, title: item.title))
                 }
@@ -103,7 +107,13 @@ struct AO3DashboardSections: View {
             if let bookmarks = header.recentBookmarks {
                 if bookmarks.isEmpty { message("No recent bookmarks visible on AO3.") }
                 ForEach(bookmarks) { bookmark in
-                    AO3AuthorBookmarkRow(bookmark: bookmark, expandAll: expandAll, presentation: .searchLedger)
+                    AO3DashboardCompactCard(
+                        fandoms: bookmark.work.fandoms,
+                        title: bookmark.work.title,
+                        meta: ([bookmark.work.authors.joined(separator: ", ")] + [bookmark.date])
+                            .filter { !$0.isEmpty }
+                            .joined(separator: " · ")
+                    )
                         .cardNavigation(to: bookmark.work, accessibilityLabel: bookmark.work.title)
                         .cardRow(tintHue: CoverArt.workHue(
                             fandoms: bookmark.work.fandoms, title: bookmark.work.title
@@ -227,5 +237,56 @@ struct AO3AuthorPerformanceStrip: View {
             work.hits.map { SubjectStatStrip.Cell(value: $0.compactCount, label: "Hits") },
             work.bookmarks.map { SubjectStatStrip.Cell(value: $0.compactCount, label: "Bookmarks") }
         ].compactMap { $0 }
+    }
+}
+
+extension AO3DashboardSections {
+    /// 1y: "4 works · 138,000 words".
+    static func seriesMeta(_ series: AO3SeriesSummary) -> String {
+        var parts: [String] = []
+        if let count = series.workCount { parts.append("\(count) work\(count == 1 ? "" : "s")") }
+        if let words = series.words { parts.append("\(words.formatted()) words") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// 1y's compact series and bookmark cards: fandom kicker, 15pt title, one meta
+/// line. The Dashboard is a summary; the full cards live one tap away.
+struct AO3DashboardCompactCard: View {
+    let fandoms: [String]
+    let title: String
+    let meta: String
+
+    @ScaledMetric(relativeTo: .caption2) private var kickerSize: CGFloat = 9.5
+    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11.5
+    @Environment(ThemeManager.self) private var theme
+
+    private var palette: SubjectPalette {
+        theme.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: fandoms, title: title))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let fandom = fandoms.first(where: { !$0.isEmpty }) {
+                Text(FandomDisplayName.bareTitle(fandom).uppercased())
+                    .font(.system(size: kickerSize, weight: .bold))
+                    .tracking(kickerSize * 0.1)
+                    .foregroundStyle(palette.accent)
+                    .lineLimit(1)
+            }
+            Text(title)
+                .font(.system(size: titleSize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if !meta.isEmpty {
+                Text(meta)
+                    .font(.system(size: metaSize))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
