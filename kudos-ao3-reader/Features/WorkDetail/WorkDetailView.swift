@@ -294,7 +294,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             summarySection
             ao3ActionsSection
             tagSections
-            quickActionsSection
             factsCardSection
         }
         Group {
@@ -406,7 +405,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             ),
             AnyView(
                 Menu {
+                    localWorkMenuItems
                     if let id = ao3WorkID {
+                        Divider()
                         AO3WorkActionsMenu(
                             workID: id, actions: workActions,
                             workContext: commentsWorkContext,
@@ -416,7 +417,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 } label: {
                     Label("More actions", systemImage: "ellipsis")
                 }
-                .disabled(ao3WorkID == nil)
+                // Neutral, as every other "…" in the app (`WorkListMoreMenu`).
+                .tint(Color.primary)
             )
         ])
     }
