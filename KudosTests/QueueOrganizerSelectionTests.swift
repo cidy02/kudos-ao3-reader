@@ -56,17 +56,12 @@ struct QueueOrganizerSelectionTests {
         #expect(QueueOrganizerSelection.deleteMessage(count: 2).hasPrefix("The 2 queues move"))
     }
 
-    /// A filtered list can't write its order back, so the drag is off under a
-    /// tag filter or a search, and the header line says which to clear.
-    @Test func dragIsOffUnderAFilterAndTheHeaderSaysSo() {
+    /// A filtered list can't write its order back, so Reorder is off under a
+    /// tag filter or a search.
+    @Test func reorderIsOffUnderAFilter() {
         #expect(QueueOrganizerSelection.canReorder(tagFilterActive: false, searchActive: false))
         #expect(!QueueOrganizerSelection.canReorder(tagFilterActive: true, searchActive: false))
         #expect(!QueueOrganizerSelection.canReorder(tagFilterActive: false, searchActive: true))
-        #expect(QueueOrganizerSelection.reorderNote(tagFilterActive: false, searchActive: false) == "Drag to reorder")
-        #expect(QueueOrganizerSelection.reorderNote(tagFilterActive: true, searchActive: true)
-            == "Clear the tag filter to reorder")
-        #expect(QueueOrganizerSelection.reorderNote(tagFilterActive: false, searchActive: true)
-            == "Clear the search to reorder")
     }
 
     private func makeContext() throws -> ModelContext {

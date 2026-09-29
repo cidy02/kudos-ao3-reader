@@ -46,6 +46,8 @@ struct AllReadingQueuesGridView: View {
     /// or select mode's whole selection — one dialog, one delete path.
     @State private var pendingDelete: [ReadingQueue] = []
     @State private var isSelecting = false
+    /// Owner, 2026-09-28: the drag is a mode chosen from "...", not always on.
+    @State private var isReordering = false
     @State private var selection = Set<UUID>()
     @State private var showingBulkTags = false
     /// 1i: "search over queues, tags and works". One field over all three,
@@ -261,16 +263,8 @@ struct AllReadingQueuesGridView: View {
             }
 
             Section {
-                SectionRuleHeader(
-                    title: "All queues",
-                    count: visibleQueueCount,
-                    note: readingQueues.count(where: { $0.kind == .custom }) > 1
-                        ? QueueOrganizerSelection.reorderNote(
-                            tagFilterActive: !tagFilter.isEmpty, searchActive: isSearching
-                        )
-                        : nil
-                )
-                .pageBodyRow(top: 18, gutter: 0)
+                SectionRuleHeader(title: "All queues", count: visibleQueueCount)
+                    .pageBodyRow(top: 18, gutter: 0)
 
                 if let savedForLaterQueue {
                     organizerRow(savedForLaterQueue, isReorderable: false)
@@ -313,12 +307,7 @@ struct AllReadingQueuesGridView: View {
         #if os(iOS)
         .environment(
             \.editMode,
-            .constant(
-                QueueOrganizerSelection.canReorder(
-                    tagFilterActive: !tagFilter.isEmpty,
-                    searchActive: isSearching
-                ) ? .active : .inactive
-            )
+            .constant(isReordering && canReorder ? .active : .inactive)
         )
         // Select mode owns the bottom edge with its bulk bar.
         .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
@@ -389,6 +378,10 @@ struct AllReadingQueuesGridView: View {
             #else
             ToolbarItemGroup(placement: .primaryAction) { selectionBar }
             #endif
+        } else if isReordering {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { isReordering = false }
+            }
         } else {
             // 1i: "two glass buttons in the header — new queue, and the overflow
             // menu, which carries select mode".
@@ -402,6 +395,15 @@ struct AllReadingQueuesGridView: View {
                         isSelecting = true
                     } label: {
                         Label("Select", systemImage: "checklist")
+                    }
+                    if readingQueues.count(where: { $0.kind == .custom }) > 1 {
+                        Button {
+                            isReordering = true
+                        } label: {
+                            Label("Reorder", systemImage: "arrow.up.arrow.down")
+                        }
+                        .disabled(!canReorder)
+                        .help(canReorder ? "Reorder your queues" : "Clear the tag filter and search to reorder")
                     }
                 })
             ])
@@ -600,13 +602,16 @@ struct AllReadingQueuesGridView: View {
         .accessibilityHidden(true)
     }
 
-    /// 1i's always-live drag, off under a filter: a drag there reorders only
+    /// Reorder mode only, and off under a filter: a drag there reorders only
     /// the visible ids and rewrites `sortOrder` from 0, scrambling the hidden
-    /// queues' order. The header line says why (`reorderNote`).
+    /// queues' order.
     private var moveAction: ((IndexSet, Int) -> Void)? {
-        guard QueueOrganizerSelection.canReorder(tagFilterActive: !tagFilter.isEmpty, searchActive: isSearching)
-        else { return nil }
+        guard isReordering, canReorder else { return nil }
         return { moveCustomQueues(from: $0, to: $1) }
+    }
+
+    private var canReorder: Bool {
+        QueueOrganizerSelection.canReorder(tagFilterActive: !tagFilter.isEmpty, searchActive: isSearching)
     }
 
     private func moveCustomQueues(from source: IndexSet, to destination: Int) {
@@ -703,13 +708,6 @@ enum QueueOrganizerSelection {
     /// the queues on screen.
     static func canReorder(tagFilterActive: Bool, searchActive: Bool) -> Bool {
         !tagFilterActive && !searchActive
-    }
-
-    /// What 1i's "All queues" header says about the drag.
-    static func reorderNote(tagFilterActive: Bool, searchActive: Bool) -> String {
-        if tagFilterActive { return "Clear the tag filter to reorder" }
-        if searchActive { return "Clear the search to reorder" }
-        return "Drag to reorder"
     }
 }
 
