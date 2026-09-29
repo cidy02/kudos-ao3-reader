@@ -83,14 +83,22 @@ struct WorkStatLabelTests {
             "3,204 kudos", "486 bookmarks", "61,904 hits",
         ])
 
-        work.words = nil
+        // A full blurb: AO3 omits a zero count, so nil reads as 0.
         work.comments = nil
         work.kudos = 0
         work.bookmarks = nil
         work.hits = 0
-        #expect(AO3WorkRow.ledgerMetadata(for: work, showsZeroStats: false) == ["English", "11/11"])
+        #expect(AO3WorkRow.ledgerMetadata(for: work, showsZeroStats: false) == [
+            "English", "84,210 words", "11/11",
+        ])
         #expect(AO3WorkRow.ledgerMetadata(for: work, showsZeroStats: true) == [
-            "English", "0 words", "11/11", "0 comments", "0 kudos", "0 bookmarks", "0 hits",
+            "English", "84,210 words", "11/11", "0 comments", "0 kudos", "0 bookmarks", "0 hits",
+        ])
+
+        // A sparse list row (no word count): unknown stats are not zeros.
+        work.words = nil
+        #expect(AO3WorkRow.ledgerMetadata(for: work, showsZeroStats: true) == [
+            "English", "11/11", "0 kudos", "0 hits",
         ])
     }
 
