@@ -334,7 +334,11 @@ struct QueueTagEditSheet: View {
                     Text(mergeNote(workCount: workCount))
                 }
         }
-            .screenTint(palette)
+        .screenTint(palette)
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #endif
     }
 
     private func groupLabel(_ text: String) -> some View {

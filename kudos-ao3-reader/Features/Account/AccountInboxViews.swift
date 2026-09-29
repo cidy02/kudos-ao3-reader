@@ -288,7 +288,7 @@ struct AccountInboxItemRow: View {
             // so this glyph staying hidden no longer leaves selection unannounced.
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .font(.title3)
-                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                 .frame(width: 24, height: 40)
                 .accessibilityHidden(true)
             avatar
@@ -350,7 +350,7 @@ struct AccountInboxItemRow: View {
         HStack(alignment: .center, spacing: 6) {
             if item.isUnread {
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(.tint)
                     .frame(width: 8, height: 8)
                     .accessibilityLabel("Unread")
             }

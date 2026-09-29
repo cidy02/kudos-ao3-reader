@@ -298,7 +298,7 @@ struct SelectableWorkCoverCard: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
-                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
             }
     }
 }
@@ -311,10 +311,13 @@ struct WorkSelectionBubble: View {
             Circle()
                 .fill(.regularMaterial)
             if isSelected {
-                Circle().fill(Color.accentColor)
+                Circle().fill(.tint)
             }
             Circle()
-                .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.55), lineWidth: 1.25)
+                .strokeBorder(
+                    isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary.opacity(0.55)),
+                    lineWidth: 1.25
+                )
             if isSelected {
                 Image(systemName: "checkmark")
                     .font(.caption.weight(.bold))

@@ -41,7 +41,7 @@ struct HomeResumeHero: View {
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
-                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                            .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
                             .allowsHitTesting(false)
                     }
                     .onTapGesture { onToggleSelection?() }
@@ -72,7 +72,7 @@ struct HomeResumeHero: View {
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
-                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                            .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
                     }
             }
             .buttonStyle(.plain)

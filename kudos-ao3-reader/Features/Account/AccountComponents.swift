@@ -404,7 +404,7 @@ struct AccountShortcutGridTile: View {
                     .frame(width: 22, height: 22)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.16))
+                            .fill(.tint.opacity(0.16))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .strokeBorder(theme.appTheme.glassStroke(0.1), lineWidth: 0.5)

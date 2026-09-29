@@ -293,11 +293,12 @@ struct NewReadingQueueSheet: View {
     private func seedSubtitle(_ seed: NewQueueSeed) -> String? {
         switch seed {
         case .empty:
-            return "An empty queue, ready to add to."
+            // 1j gives Empty no subtitle: the word says it.
+            return nil
         case .savedForLater:
             guard let seedCount else { return nil }
             guard seedCount > 0 else { return "Nothing in Saved for Later to copy." }
-            return "Copy all \(seedCount), in the same order, leaving them in Saved for Later."
+            return "Copy all \(seedCount), leaving them saved"
         }
     }
 
