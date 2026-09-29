@@ -630,27 +630,6 @@ struct AccountInboxRows: View {
     }
 }
 
-/// The second Inbox title, under the screen's own header. Its subtitle is
-/// `AccountInboxRows.headerTallyLine` (messages, unread, awaiting reply, page).
-struct AccountInboxFeedHeader: View {
-    var tally: String
-
-    @Environment(ThemeManager.self) private var theme
-
-    var body: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account",
-            title: "Inbox",
-            subtitle: tally,
-            palette: theme.scopePalette,
-            gutter: SubjectMetrics.accountGutter
-        )
-        .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-    }
-}
-
 /// One comment in the Inbox list. Trailing swipe marks it read or unread.
 /// Delete stays in the overflow and the bulk bar: both already confirm, and a
 /// swipe must not post that write.

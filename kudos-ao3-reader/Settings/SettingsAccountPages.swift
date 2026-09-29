@@ -126,6 +126,7 @@ private struct AO3AccountSettingsSection: View {
     var onLogIn: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
+    @State private var confirmingLogOut = false
 
     var body: some View {
         Section {
@@ -143,10 +144,11 @@ private struct AO3AccountSettingsSection: View {
                 }
 
                 Button(role: .destructive) {
-                    Task { await auth.logout() }
+                    confirmingLogOut = true
                 } label: {
                     Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
+                .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
 
             case .signedOut, .signingIn, .usingFallback:
                 Button(action: onLogIn) {

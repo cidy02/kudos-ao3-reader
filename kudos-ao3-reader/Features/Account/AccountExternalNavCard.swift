@@ -77,10 +77,12 @@ struct AccountExternalNavCard: View {
         let button = Button {
             open()
         } label: {
+            // AO3 opens in the app's own Browse, so this is a push (chevron),
+            // not the arrow that means leaving the app.
             AccountNavCardLabel(
                 title: title,
                 systemImage: systemImage,
-                opensExternally: true
+                opensExternally: false
             )
             .padding(.horizontal, isFormRow ? 14 : 0)
         }
