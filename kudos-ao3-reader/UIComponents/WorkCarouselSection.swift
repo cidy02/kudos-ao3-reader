@@ -96,6 +96,9 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 6)
                         }
+                        // The card shadows fall past the shelf; clipped, they
+                        // ended in a hard-edged band across the page.
+                        .scrollClipDisabled()
                     case .ledger:
                         // No `uniformWorkCardHeights` here: that exists to stop a
                         // shelf of side-by-side cards ragging at different heights.

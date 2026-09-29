@@ -88,6 +88,7 @@ struct TabDashboardShell: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)
             }
+            .scrollClipDisabled()
         }
         .accessibilityHidden(true)
     }
