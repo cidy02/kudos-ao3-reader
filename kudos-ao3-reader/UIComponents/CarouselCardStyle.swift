@@ -44,11 +44,12 @@ enum CarouselCardMetrics {
     /// Work covers use the redesign's softer 16pt silhouette. Queue and
     /// collection tiles intentionally keep the tighter shared tile radius.
     static let workCornerRadius: CGFloat = CardRadius.listRow
-    /// Shared gap for compact cover grids — used as both inter-column spacing
-    /// (`GridItem.spacing`) and inter-row spacing (`LazyVGrid.spacing`) so
-    /// side-by-side cards match stacked cards. Don't invent a second constant
-    /// at call sites.
-    static let compactGridSpacing: CGFloat = 16
+    /// Shared gaps for every compact cover grid; call sites use these, never
+    /// their own numbers.
+    /// 1h's cover grid, the spec's one card grid: `gap:14px 12px` — 14 between
+    /// rows, 12 between columns (the same 12 the shelves put between cards).
+    static let compactGridSpacing: CGFloat = 14
+    static let compactGridColumnSpacing: CGFloat = 12
 }
 
 /// Scales `CarouselCardMetrics`'s fixed sqrt(2):1 tile size in proportion to the
@@ -140,7 +141,7 @@ extension CarouselCardMetrics {
     /// width sits at the trailing edge of a leading-aligned grid instead.
     static func adaptiveCardColumns(
         minimum: CGFloat = CarouselCardMetrics.width,
-        spacing: CGFloat = CarouselCardMetrics.compactGridSpacing,
+        spacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         tolerance: CGFloat = 2
     ) -> [GridItem] {
         let columnMin = max(1, minimum - tolerance)

@@ -65,8 +65,9 @@ struct ReadingQueueBrowserView: View {
     /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
     /// separate presentations and a screen shows one of them — this used to pass
     /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
+    /// Grid mode selects in the numbered ledger (1bg), so it reads as ledger too.
     private var rowPresentation: WorkRow.Presentation {
-        displayMode == .ledger ? .ledger : .standard
+        displayMode == .detailed ? .standard : .ledger
     }
     @State private var isReordering = false
     @State private var expandAll = false
@@ -126,8 +127,15 @@ struct ReadingQueueBrowserView: View {
 
     /// 1bg: selecting keeps the drag handle live, so select and reorder are
     /// no longer exclusive states. See `ReadingQueueFacts.isDragLive`.
+    /// Hidden mature works count as narrowing: the drag maps visible rows onto
+    /// the full order, so with any work hidden it would move the wrong one and
+    /// its preview would show the hidden ones (L3 B2 #2).
     private var isDragLive: Bool {
-        ReadingQueueFacts.isDragLive(isReordering: isReordering, isSelecting: isSelecting, isNarrowed: isNarrowed)
+        ReadingQueueFacts.isDragLive(
+            isReordering: isReordering,
+            isSelecting: isSelecting,
+            isNarrowed: isNarrowed || hidesMatureWorks
+        )
     }
 
     /// While reordering, filters step aside — move/drag need index-stable unfiltered order.
@@ -145,12 +153,15 @@ struct ReadingQueueBrowserView: View {
         CarouselCardMetrics.adaptiveCardColumns(minimum: cardSize.width)
     }
 
+    /// Selection acts on what is on screen: Select hides the filter rail, so a
+    /// filtered-out or hidden work must never be removed, moved, tagged or
+    /// downloaded unseen (L3 B2 #1).
     private var selectedWorks: [SavedWork] {
-        works.filter { selection.contains($0.id) }
+        displayedWorks.filter { selection.contains($0.id) }
     }
 
     private var allSelected: Bool {
-        let ids = Set(works.map(\.id))
+        let ids = Set(displayedWorks.map(\.id))
         return !ids.isEmpty && ids.isSubset(of: selection)
     }
 
@@ -270,7 +281,7 @@ struct ReadingQueueBrowserView: View {
     /// iOS, where `.subjectScreenWash` hides the title and `SubjectHeaderBlock`
     /// names the page; macOS has no wash and needs a real title for its window.
     private var screenTitle: String {
-        if isSelecting { return "\(selection.count) selected" }
+        if isSelecting { return "\(selectedWorks.count) selected" }
         #if os(macOS)
         return horizontalSizeClass == .regular ? "Reading Queues" : (selectedQueue?.displayName ?? "Reading Queues")
         #else
@@ -453,7 +464,8 @@ extension ReadingQueueBrowserView {
             }
         } else {
             Group {
-                if displayMode != .compact {
+                // 1bg: Select is the numbered ledger even when the page is a grid.
+                if displayMode != .compact || isSelecting {
                     detailedList
                 } else {
                     compactGrid
@@ -576,14 +588,17 @@ extension ReadingQueueBrowserView {
     }
 
     private var inLineHeader: some View {
-        QueueInLineHeader(count: inLineWorks.count, mode: $displayMode)
+        // 1h build note: "List and grid are no longer an inline picker — the
+        // view choice lives in the overflow menu, so the section header carries
+        // only its label."
+        SectionRuleHeader(title: "In Line", count: inLineWorks.count)
     }
 
     private var selectionStatusRow: some View {
         QueueSelectionStatusRow(
             queueName: selectedQueue?.displayName ?? "Queue",
-            selectedCount: selection.count,
-            total: works.count
+            selectedCount: selectedWorks.count,
+            total: displayedWorks.count
         )
     }
 
@@ -630,6 +645,12 @@ extension ReadingQueueBrowserView {
                             )
                         )
                         .background(WorkLedgerCardBackground(work: upNextWork))
+                        // The front work leaves the queue the way the covers
+                        // below it do, asking first (L3 B2 #5).
+                        .localWorkContextMenu(
+                            work: upNextWork,
+                            scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = upNextWork }
+                        )
                         .padding(.horizontal, CardListMetrics.sideMargin)
                         .padding(.top, Self.afterRule)
                     }
@@ -966,7 +987,7 @@ extension ReadingQueueBrowserView {
     }
 
     private func toggleSelectAll() {
-        selection = allSelected ? [] : Set(works.map(\.id))
+        selection = allSelected ? [] : Set(displayedWorks.map(\.id))
     }
 
     private func toggleSelection(_ work: SavedWork) {

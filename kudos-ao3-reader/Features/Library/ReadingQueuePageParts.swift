@@ -188,6 +188,8 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                     QueueRowTagLabel(text: "+ Tag", dashed: true)
                 }
                 .buttonStyle(.plain)
+                // The chip stays 1h's size; the tap area is 44pt.
+                .layoutFreeHitTarget(action: onAddTag)
                 .accessibilityLabel("Add a tag to this queue")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -201,31 +203,6 @@ struct QueueHeaderDetails<FilterRail: View>: View {
             )
             .padding(.horizontal, SubjectMetrics.gutter)
             filterRail()
-        }
-    }
-}
-
-/// 1h: "In line carries a list / grid switch in its section header". Grid is
-/// the cover grid; list is the ledger — or Detailed, if the overflow menu set it.
-struct QueueInLineHeader: View {
-    let count: Int
-    @Binding var mode: WorkListDisplayMode
-
-    var body: some View {
-        HStack(spacing: 8) {
-            SectionRuleHeader(title: "In Line", count: count)
-            Picker("Layout", selection: Binding(
-                get: { mode == .compact },
-                set: { mode = $0 ? .compact : .ledger }
-            )) {
-                Image(systemName: "list.bullet").accessibilityLabel("List").tag(false)
-                Image(systemName: "square.grid.2x2").accessibilityLabel("Grid").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .controlSize(.small)
-            .padding(.trailing, SubjectMetrics.gutter)
         }
     }
 }

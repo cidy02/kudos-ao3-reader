@@ -1595,7 +1595,7 @@ private extension View {
         self
             .overlay {
                 if isHighlighted {
-                    shape.fill(Color.accentColor.opacity(0.12))
+                    shape.fill(.tint.opacity(0.12))
                         .allowsHitTesting(false)
                 }
             }
