@@ -85,12 +85,18 @@ struct QueueTagSheet: View {
             #endif
                 .subjectScreenWash(palette: palette)
                 .toolbar {
+                    // Done alone: tags apply as they are toggled, so there is
+                    // nothing for a Cancel to undo.
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { dismiss() }
                     }
                 }
         }
-            .screenTint(palette)
+        .screenTint(palette)
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #endif
     }
 
     private func groupLabel(_ text: String) -> some View {

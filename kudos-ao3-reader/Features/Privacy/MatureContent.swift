@@ -301,7 +301,7 @@ struct SensitiveWorkCoverCard: View {
                     // default, which would otherwise swallow the onTapGesture below.
                     .overlay {
                         RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
-                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                            .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
                             .allowsHitTesting(false)
                     }
                     .onTapGesture { onToggleSelection?() }
