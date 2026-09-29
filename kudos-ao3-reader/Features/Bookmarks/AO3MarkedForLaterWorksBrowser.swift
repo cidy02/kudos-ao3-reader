@@ -326,7 +326,10 @@ struct AO3MarkedForLaterWorksBrowser: View {
     private func sectionBlock(_ section: AO3MarkedForLaterSection<CanonicalWork>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if section.showsHeader {
+                // 22 above a section header, as on the Library pages; the
+                // stack's own 12 put it hard against the pill rail.
                 SectionRuleHeader(title: section.group.title, count: section.items.count)
+                    .padding(.top, 10)
             }
             switch section.layout {
             case .covers:
