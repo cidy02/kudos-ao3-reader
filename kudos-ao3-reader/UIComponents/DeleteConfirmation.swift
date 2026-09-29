@@ -121,3 +121,18 @@ extension View {
         }
     }
 }
+
+extension View {
+    /// Log Out asks first, the same way everywhere it is offered: the session
+    /// leaves this device, and nothing local goes with it.
+    func logOutConfirmation(isPresented: Binding<Bool>, perform: @escaping () -> Void) -> some View {
+        destructiveConfirmation(
+            isPresented: isPresented,
+            style: .alert,
+            title: "Log out of AO3?",
+            confirmLabel: "Log Out",
+            message: "Your AO3 session is removed from this device. Your library, downloads and queues stay.",
+            perform: perform
+        )
+    }
+}
