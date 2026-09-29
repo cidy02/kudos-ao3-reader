@@ -27,14 +27,8 @@ struct SeriesReorderDestination: View {
                     rows: rows
                 )
                 .id(auth.sessionGeneration)
-            } else if let errorMessage {
-                VStack(spacing: 12) {
-                    Text(errorMessage)
-                    Button("Retry") { retry += 1 }
-                }
-                .padding()
             } else {
-                ProgressView("Loading series…")
+                WritingLoaderPage(title: "Reorder series", message: errorMessage) { retry += 1 }
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {

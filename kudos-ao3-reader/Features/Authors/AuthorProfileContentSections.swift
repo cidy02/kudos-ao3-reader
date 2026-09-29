@@ -537,6 +537,13 @@ struct AO3AuthorSeriesSection: View {
                 .navigationDestination(item: $reorderingSeries) { series in
                     SeriesReorderDestination(seriesID: series.id, seriesTitle: series.title)
                 }
+                #if DEBUG
+                .onChange(of: model.series.first?.id) { _, _ in
+                    if DebugLaunchRoute.value == "acct:seriesedit", editingSeries == nil {
+                        editingSeries = model.series.first
+                    }
+                }
+                #endif
                 .textCase(nil)
                 .listRowInsets(EdgeInsets())
                 .padding(.bottom, 10)
