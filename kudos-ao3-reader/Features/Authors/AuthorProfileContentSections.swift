@@ -479,11 +479,11 @@ struct AO3AuthorSeriesSection: View {
                     // earns the trip to AO3 underneath it.
                     VStack(alignment: .leading, spacing: 6) {
                         Text("You have not made a series.")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                         Text("A series groups your works so they read in order. "
                             + "Series are created on AO3; anything you make there "
                             + "appears here on the next refresh.")
-                            .font(.system(size: 12.5))
+                            .font(.system(size: 13.5))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -495,7 +495,9 @@ struct AO3AuthorSeriesSection: View {
                     AccountExternalNavCard(
                         title: "New series on AO3",
                         systemImage: "square.stack.badge.plus",
-                        pathSuffix: "series/new",
+                        // Site-wide: AO3's New Series form is `/series/new`
+                        // (`AO3Client.newSeriesURL`), not under /users/<you>/.
+                        sitePath: "/series/new",
                         footnote: "Opens archiveofourown.org in Browse. Series are made there, not in the app."
                     )
                 } else {
@@ -551,64 +553,6 @@ struct AO3AuthorSeriesSection: View {
             }
             .tint(.blue)
         }
-    }
-}
-
-/// Zero-length series list for the signed-in account. The action leaves for
-/// Safari because creating a series is an AO3 write the app does not do.
-struct AO3SeriesEmptyCard: View {
-    @Environment(\.openURL) private var openURL
-    @Environment(ThemeManager.self) private var themeManager
-
-    /// AO3's New Series form. Constant, not a session — posting stays on the site.
-    static let newSeriesURL = URL(string: "https://archiveofourown.org/series/new")!
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text("You have not made a series.")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.primary)
-                Text(
-                    "A series groups your works so they read in order. "
-                        + "Series are created on AO3; anything you make there appears here on the next refresh."
-                )
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Rectangle()
-                .fill(themeManager.appTheme.glassStroke(0.12))
-                .frame(height: 0.5)
-                .accessibilityHidden(true)
-
-            Button {
-                openURL(Self.newSeriesURL)
-            } label: {
-                HStack(spacing: 7) {
-                    Text("New series on AO3")
-                    Image(systemName: "arrow.up.right")
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .frame(height: 42)
-                .foregroundStyle(buttonLabelColor)
-                .background(Capsule().fill(Color.accentColor))
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens archiveofourown.org in Safari")
-
-            Text("Opens archiveofourown.org in Safari. Posting is not something the app does.")
-                .font(.system(size: 11.5))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(20)
-        .subjectPanel(cornerRadius: 18)
-    }
-
-    private var buttonLabelColor: Color {
-        Color.accentColor.relativeLuminance > 0.45 ? Color.black : Color.white
     }
 }
 

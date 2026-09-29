@@ -179,12 +179,13 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                 }
                 .padding(.horizontal, SubjectMetrics.headerGutter)
             }
+            // The same tag label the organizer's rows draw (1h, 1i).
             FlowLayout(spacing: 6, rowSpacing: 6) {
                 ForEach(tags.sorted { $0.name < $1.name }) { tag in
-                    SubjectChip(text: tag.name)
+                    QueueRowTagLabel(text: tag.name)
                 }
                 Button(action: onAddTag) {
-                    SubjectChip(text: "+ Tag", style: .dashed)
+                    QueueRowTagLabel(text: "+ Tag", dashed: true)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add a tag to this queue")
