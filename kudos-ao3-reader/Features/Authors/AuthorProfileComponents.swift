@@ -510,25 +510,17 @@ struct AO3ProfileMessageRow: View {
     var actionTitle: String?
     var action: (() -> Void)?
 
+    /// The system empty state every other list uses (pass2-23).
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.headline)
-                .multilineTextAlignment(.center)
+        ContentUnavailableView {
+            Label(title, systemImage: systemImage)
+        } description: {
             Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        } actions: {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.bordered)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
     }
 }
 
