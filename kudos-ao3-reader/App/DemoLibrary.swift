@@ -49,18 +49,18 @@ enum DemoLibrary {
             works.append(work)
         }
 
-        let queues: [(String, Double, [String], [Int])] = [
-            ("Neon reread", 0.78, ["Rereads", "Long fic"], [0, 3, 5, 8, 11]),
-            ("Slow burns", 0.07, ["Comfort", "Long fic"], [1, 4, 9, 12]),
-            ("Case fic pile", 0.52, [], [2, 6, 10])
+        let queues: [DemoQueue] = [
+            DemoQueue(name: "Neon reread", hue: 0.78, tags: ["Rereads", "Long fic"], works: [0, 3, 5, 8, 11]),
+            DemoQueue(name: "Slow burns", hue: 0.07, tags: ["Comfort", "Long fic"], works: [1, 4, 9, 12]),
+            DemoQueue(name: "Case fic pile", hue: 0.52, tags: [], works: [2, 6, 10])
         ]
         var tags: [String: Tag] = [:]
         for (order, entry) in queues.enumerated() {
-            let queue = ReadingQueue(name: entry.0, sortOrder: order)
-            queue.hue = entry.1
+            let queue = ReadingQueue(name: entry.name, sortOrder: order)
+            queue.hue = entry.hue
             queue.keepsWorksOffline = order != 2
             context.insert(queue)
-            for name in entry.2 {
+            for name in entry.tags {
                 let tag = tags[name] ?? {
                     let made = Tag(name: name)
                     context.insert(made)
@@ -69,7 +69,7 @@ enum DemoLibrary {
                 }()
                 queue.tags.append(tag)
             }
-            for index in entry.3 where index < works.count {
+            for index in entry.works where index < works.count {
                 _ = ReadingQueueService.add(works[index], to: queue, in: context)
             }
         }
@@ -97,6 +97,13 @@ enum DemoLibrary {
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         try? Data(repeating: 0, count: 2_048).write(to: url)
+    }
+
+    private struct DemoQueue {
+        let name: String
+        let hue: Double
+        let tags: [String]
+        let works: [Int]
     }
 
     private struct Sample {
