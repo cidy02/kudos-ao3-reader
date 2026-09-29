@@ -15,11 +15,17 @@ import SwiftUI
 /// the shared vocabulary" — the same `Tag` a work carries, not a queue-only copy.
 struct QueueTagManagerView: View {
     let queue: ReadingQueue
+    var onShowOnlyTag: (Tag) -> Void = { _ in }
 
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
+    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
+    private var allQueues: [ReadingQueue]
     @State private var newTagName = ""
     @State private var editing: Tag?
+    /// "Remove from N works" asks first, like every other removal (T-288).
+    @State private var pendingRemoval: Tag?
 
     /// The queue's own colour, as Queue Details draws it — this screen is
     /// pushed from there, and 1bh's wash is the queue's.
@@ -91,7 +97,31 @@ struct QueueTagManagerView: View {
                 siblings: queue.tags.filter { $0.persistentModelID != tag.persistentModelID }
             )
         }
+        // The same ask as the edit sheet's Remove row.
+        .confirmationDialog(
+            removalTitle(counts: counts),
+            isPresented: Binding(
+                get: { pendingRemoval != nil },
+                set: { if !$0 { pendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingRemoval
+        ) { tag in
+            Button("Remove", role: .destructive) {
+                queue.removeTagFromWorks(tag)
+                context.saveBestEffort(reason: "Removing tag failed")
+            }
+            Button("Cancel", role: .cancel) {}
+        }
             .screenTint(palette)
+    }
+
+    private func removalTitle(counts: [PersistentIdentifier: Int]) -> String {
+        guard let tag = pendingRemoval else { return "" }
+        let count = counts[tag.persistentModelID, default: 0]
+        return count == 0
+            ? "Remove “\(tag.name)” from this queue?"
+            : "Remove “\(tag.name)” from \(count) work\(count == 1 ? "" : "s")?"
     }
 
     /// 1bh's subtitle, minus its "everyone can add, only you can rename": there
@@ -109,28 +139,82 @@ struct QueueTagManagerView: View {
             .pageBodyRow(top: 18, gutter: gutter)
     }
 
-    /// 1bh's rows: name, and how many works IN THIS QUEUE carry the tag — "18",
-    /// not the library's figure, because the header's "across 42 works" is the
-    /// queue's. Its colour dots are not drawn: `Tag` has no colour, and one
-    /// derived from the name would repaint on rename — the defect
-    /// `ReadingQueue.hue` exists to fix.
+    /// 1bh's rows: name, how many works IN THIS QUEUE carry the tag, and the
+    /// prescribed five-item menu. `Tag` has no colour, so no colour dot is
+    /// invented from its name.
     private func tagPanel(_ tags: [Tag], counts: [PersistentIdentifier: Int]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(tags.enumerated()), id: \.element.persistentModelID) { index, tag in
                 if index > 0 { SubjectRowSeparator() }
                 let count = counts[tag.persistentModelID, default: 0]
-                SubjectFormRow(
-                    label: tag.name,
-                    value: "\(count)",
-                    showsDisclosure: true,
-                    isMonospaced: true,
-                    action: { editing = tag }
-                )
+                Menu {
+                    tagMenu(tag, workCount: count)
+                } label: {
+                    SubjectFormRow(label: tag.name) {
+                        HStack(spacing: 10) {
+                            Text(count.compactCount)
+                                .font(.system(size: 15))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
                 .accessibilityLabel(tag.name)
                 .accessibilityValue("\(count) work\(count == 1 ? "" : "s") in this queue")
             }
         }
         .subjectPanel()
+    }
+
+    @ViewBuilder
+    private func tagMenu(_ tag: Tag, workCount: Int) -> some View {
+        Button {
+            editing = tag
+        } label: {
+            Label("Rename", systemImage: "pencil")
+        }
+        Button {
+            editing = tag
+        } label: {
+            Label("Merge into…", systemImage: "arrow.triangle.merge")
+        }
+        Button {
+            dismiss()
+            onShowOnlyTag(tag)
+        } label: {
+            Label("Show only this tag", systemImage: "line.3.horizontal.decrease.circle")
+        }
+        Menu {
+            ForEach(otherQueues) { destination in
+                Button(destination.displayName) { copy(tag, to: destination) }
+            }
+        } label: {
+            Label("Copy tag to another queue", systemImage: "square.on.square")
+        }
+        .disabled(otherQueues.isEmpty)
+        Divider()
+        Button(role: .destructive) {
+            pendingRemoval = tag
+        } label: {
+            Label(
+                "Remove from \(workCount.compactCount) work\(workCount == 1 ? "" : "s")",
+                systemImage: "trash"
+            )
+        }
+    }
+
+    private var otherQueues: [ReadingQueue] {
+        allQueues.filter { $0.persistentModelID != queue.persistentModelID }
+    }
+
+    private func copy(_ tag: Tag, to destination: ReadingQueue) {
+        guard destination.addTag(named: tag.name, in: context) != nil else { return }
+        context.saveBestEffort(reason: "Copying queue tag failed")
     }
 
     private var addPanel: some View {
@@ -195,6 +279,20 @@ extension ReadingQueue {
             }
         }
         return counts
+    }
+
+    /// Removes a tag from every visible member work and from this queue's tag
+    /// vocabulary. Recently Deleted works keep their data, matching the count
+    /// and merge population shown by the tag manager.
+    @MainActor
+    func removeTagFromWorks(_ tag: Tag) {
+        for work in ReadingQueueService.orderedWorks(in: self) {
+            guard work.tags.contains(where: { $0.persistentModelID == tag.persistentModelID })
+            else { continue }
+            work.tags.removeAll { $0.persistentModelID == tag.persistentModelID }
+            work.markModified()
+        }
+        removeTag(tag)
     }
 }
 
@@ -460,12 +558,7 @@ struct QueueTagEditSheet: View {
     /// The same population as `merge(into:)` and every figure on this sheet —
     /// see its comment.
     private func strip() {
-        for work in ReadingQueueService.orderedWorks(in: queue) {
-            work.tags.removeAll { $0.persistentModelID == tag.persistentModelID }
-            work.markModified()
-        }
-        queue.tags.removeAll { $0.persistentModelID == tag.persistentModelID }
-        queue.markModified()
+        queue.removeTagFromWorks(tag)
         context.saveBestEffort(reason: "Removing tag failed")
         dismiss()
     }
