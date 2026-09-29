@@ -151,6 +151,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             if appearedAt == nil {
                 appearedAt = Date()
                 dismissIfAuthorBylineConflict()
+                #if DEBUG
+                if DebugLaunchRoute.value?.hasPrefix("mycopy:") == true { showingMyCopy = true }
+                #endif
             }
         }
         .onChange(of: router.cardNavigationSuppressed) { _, suppressed in
@@ -361,28 +364,54 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// screen turns on, since everything above it on the page is AO3's and
     /// everything in here is this device's.
     ///
-    /// Its content is `librarySections`, unchanged. That was the Library tab a
-    /// moment ago and it is the same set of facts and actions the artboard
-    /// lists; moving it behind a row rather than a segment is the change, and
-    /// rewriting it at the same time would have made both harder to review.
+    /// Its content is `librarySections`, drawn in 1a's own language: a figure
+    /// strip, then small-caps groups of plain rows rather than a card per row.
     private var myCopySheet: some View {
         NavigationStack {
             List { librarySections }
-                .cardList()
-                .subjectScreenWash(palette: workPalette, washHeight: 220)
-                .navigationTitle("My copy")
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .environment(\.defaultMinListRowHeight, 0)
+                // 1a: the sheet names itself, says whose it is, and closes from a
+                // round glass x — no bar title, no Done.
+                .safeAreaInset(edge: .top, spacing: 0) { myCopyHeaderBar }
+                .background(themeManager.appTheme.cardBackdrop.ignoresSafeArea())
             #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
+                .toolbar(.hidden, for: .navigationBar)
             #endif
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showingMyCopy = false }
-                    }
-                }
         }
+        // The work's colour for the checks, links and chips, as on its page.
+        .screenTint(workPalette)
         #if !os(macOS)
         .presentationDragIndicator(.visible)
         #endif
+    }
+
+    private var myCopyHeaderBar: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("My copy")
+                    .font(.system(size: 19, weight: .semibold))
+                    .accessibilityAddTraits(.isHeader)
+                Text("Private to this device")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button { showingMyCopy = false } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(themeManager.appTheme.glassFill()))
+            }
+            .buttonStyle(.plain)
+            .layoutFreeHitTarget { showingMyCopy = false }
+            .accessibilityLabel("Close")
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 21)
+        .padding(.bottom, 14)
     }
 
     // MARK: - Toolbar (favorite + more)
