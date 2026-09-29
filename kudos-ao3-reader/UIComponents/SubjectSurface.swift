@@ -782,17 +782,29 @@ struct SubjectStatStrip: View {
     /// a strip of four counts does not announce four buttons to VoiceOver.
     @ViewBuilder
     private func cellBody(_ cell: Cell) -> some View {
+        // 1a: the one cell that goes somewhere looks it — accent label and a
+        // chevron on the figure; the counts beside it stay plain.
+        let opens = cell.action != nil
         let figure = VStack(spacing: 5) {
-            Text(cell.value)
-                .font(.system(size: 13, weight: .semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .foregroundStyle(cell.tint ?? (cell.isHighlighted ? palette.accentOnFill : Color.primary))
+            HStack(spacing: 3) {
+                Text(cell.value)
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if opens {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundStyle(
+                cell.tint ?? (opens ? palette.accent : cell.isHighlighted ? palette.accentOnFill : Color.primary)
+            )
             Text(cell.label.uppercased())
                 .font(.system(size: 9))
                 .tracking(0.63)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(opens ? AnyShapeStyle(palette.accent) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }

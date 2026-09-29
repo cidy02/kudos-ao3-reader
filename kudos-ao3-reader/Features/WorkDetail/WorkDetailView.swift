@@ -329,6 +329,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         Text(loadError)
                             .font(.footnote)
                             .foregroundStyle(.red)
+                        // An error names its way back, as every other state does.
+                        if loadError.hasPrefix("Refresh failed") {
+                            Button("Try Again") { Task { await refreshDetails() } }
+                                .font(.footnote.weight(.semibold))
+                                .disabled(working)
+                        }
                     } else if let queueNotice {
                         Text(queueNotice)
                             .font(.footnote)
