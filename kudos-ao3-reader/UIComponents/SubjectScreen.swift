@@ -272,6 +272,7 @@ struct SubjectFilterRail<Chips: View>: View {
             .buttonStyle(.plain)
             .padding(.trailing, 22)
         }
+        .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 }
 

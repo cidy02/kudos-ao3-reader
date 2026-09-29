@@ -144,16 +144,18 @@ struct WorkRow: View {
                 // (1h.1) — `.cardRow(leadingNumber:)` draws it. The card has
                 // nothing in this slot then.
                 if positionNumber == nil {
-                    WorkProgressRing(
-                        progress: work.readingProgress ?? 0,
-                        state: ledgerProgressState,
-                        // Sized to the signal tray facing it across the card. Spec 1ad
-                        // draws this ring at 44 and the tray's tiles at 22, which makes
-                        // the tray ~59 tall — a third bigger than the ring, and it reads
-                        // that way. Both now come from the tray's own constants, so a
-                        // change to tile size keeps them the same size.
-                        diameter: WorkStatusIconGrid.trayHeight(tileSize: Self.ledgerTileSize)
-                    )
+                    // Sized to the signal tray facing it across the card. Spec 1ad
+                    // draws this ring at 44 and the tray's tiles at 22, which makes
+                    // the tray ~59 tall — a third bigger than the ring, and it reads
+                    // that way. Both come from the tray's own constants and Dynamic
+                    // Type scale, so the two stay the same size.
+                    WorkStatusTrayMatched(tileSize: Self.ledgerTileSize) { diameter in
+                        WorkProgressRing(
+                            progress: work.readingProgress ?? 0,
+                            state: ledgerProgressState,
+                            diameter: diameter
+                        )
+                    }
                 }
             },
             trailing: {

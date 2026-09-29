@@ -744,11 +744,13 @@ struct QueueRowTagLabel: View {
     let text: String
     var dashed = false
 
+    @ScaledMetric(relativeTo: .caption2) private var fontSize: CGFloat = 9.5
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         Text(text.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
-            .tracking(0.6)
+            .font(.system(size: fontSize, weight: .semibold))
+            .tracking(fontSize * 0.06)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .padding(.vertical, 3)
