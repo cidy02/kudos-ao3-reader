@@ -428,7 +428,6 @@ struct AO3WorkRow: View {
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.circle)
                 .controlSize(.small)
-                .tint(.accentColor)
                 .minimumHitTarget()
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         }

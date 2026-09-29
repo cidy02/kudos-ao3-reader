@@ -136,6 +136,7 @@ struct ChallengeSettingsEditView: View {
             Text("Turning off Unrevealed shows this collection's works to everyone, and turning off "
                 + "Anonymous shows their creators. The app can't hide them again.")
         }
+            .screenTint(palette)
     }
 
     // MARK: - Header
@@ -426,21 +427,21 @@ struct ChallengeSettingsEditView: View {
             SubjectFormRow(label: "URL allowed in a request", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.urlAllowed))
                     .labelsHidden()
-                    .tint(palette.accent)
+                    .tint(palette.tint)
                     .disabled(!restrictionIsEditable("url_allowed"))
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Description required", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.descriptionRequired))
                     .labelsHidden()
-                    .tint(palette.accent)
+                    .tint(palette.tint)
                     .disabled(!restrictionIsEditable("description_required"))
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Optional tags allowed", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.optionalTagsAllowed))
                     .labelsHidden()
-                    .tint(palette.accent)
+                    .tint(palette.tint)
                     .disabled(!restrictionIsEditable("optional_tags_allowed"))
             }
         }
@@ -535,7 +536,7 @@ struct ChallengeSettingsEditView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
             .disabled(!restrictionIsEditable("allow_any_fandom"))
@@ -647,7 +648,7 @@ struct ChallengeSettingsEditView: View {
                 Task { await load() }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

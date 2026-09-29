@@ -150,6 +150,7 @@ struct AO3CollectionDetailView: View {
             pageLoadTask?.cancel()
             dismiss()
         }
+            .screenTint(palette)
     }
 
     // MARK: Header

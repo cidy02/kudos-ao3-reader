@@ -134,6 +134,7 @@ struct ChallengeSignUpView: View {
         .sheet(item: $editingPrompt) { editing in
             promptTagsEditor(editing)
         }
+            .screenTint(palette)
     }
 
     /// A live binding to one prompt, found by id. A prompt that has gone reads
@@ -284,7 +285,7 @@ extension ChallengeSignUpView {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .accessibilityLabel("Any of these is fine")
             .accessibilityHint("Any relationship matches, not only the ones chosen")
             .padding(.horizontal, 14)
@@ -577,7 +578,7 @@ extension ChallengeSignUpView {
                 Task { await loadSignUp() }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

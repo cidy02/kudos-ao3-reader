@@ -153,7 +153,7 @@ struct FandomListFilterSheet: View {
                     .monospacedDigit()
             }
         }
-        .tint(palette.accent)
+        .tint(palette.tint)
         .padding(.vertical, 11)
     }
 

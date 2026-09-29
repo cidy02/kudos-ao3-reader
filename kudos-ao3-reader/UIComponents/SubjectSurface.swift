@@ -68,6 +68,13 @@ struct SubjectPalette {
         self.picked = color
     }
 
+    /// What a control on this screen is tinted with — a toggle, a prominent
+    /// button, a selected pill. The chosen colour where there is one, so an
+    /// app-accent screen tints exactly as the rest of the app; otherwise the
+    /// derived `accent`, so a fandom or queue screen's buttons are that
+    /// screen's colour rather than the app's.
+    var tint: Color { picked ?? accent }
+
     /// The subject's identity colour: kicker text, the short rule under it, the
     /// filled confirm button, a selected chip's text. Spec `#D9B26A` at hue 38°.
     var accent: Color {
@@ -1072,6 +1079,10 @@ private struct SubjectWashedScreenKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct ScreenTintKey: EnvironmentKey {
+    static let defaultValue: Color? = nil
+}
+
 extension EnvironmentValues {
     /// True anywhere inside a screen whose background is a subject wash.
     ///
@@ -1084,6 +1095,14 @@ extension EnvironmentValues {
     var isOnSubjectWash: Bool {
         get { self[SubjectWashedScreenKey.self] }
         set { self[SubjectWashedScreenKey.self] = newValue }
+    }
+
+    /// The washed screen's tint as a concrete colour, for the few places that
+    /// cannot inherit `.tint` — swipe action buttons are grey without an
+    /// explicit one. Nil off a washed screen: fall back to the app tint.
+    var screenTint: Color? {
+        get { self[ScreenTintKey.self] }
+        set { self[ScreenTintKey.self] = newValue }
     }
 }
 
@@ -1109,6 +1128,7 @@ private struct SubjectWash: ViewModifier {
             // in front of everything here. Reaching it needs the environment —
             // a modifier cannot look at what it has already been applied to.
             .environment(\.isOnSubjectWash, true)
+            .screenTint(palette)
     }
 }
 
@@ -1116,5 +1136,14 @@ extension View {
     /// The full-bleed gradient a pushed, subject-scoped screen sits on.
     func subjectWash(_ palette: SubjectPalette, height: CGFloat = 380) -> some View {
         modifier(SubjectWash(palette: palette, height: height))
+    }
+
+    /// Accented controls take the screen's colour, not the app accent, on a
+    /// screen whose colour comes from a fandom, queue, work or collection.
+    /// The wash applies it to what it wraps; a screen whose toolbar, sheets or
+    /// alerts are attached outside the wash applies it again at the end of
+    /// `body`, since environment only flows inward.
+    func screenTint(_ palette: SubjectPalette) -> some View {
+        tint(palette.tint).environment(\.screenTint, palette.tint)
     }
 }

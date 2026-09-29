@@ -113,12 +113,15 @@ struct CommentsView: View {
     }
 
     var body: some View {
-        if model.belongsToCurrentSession(auth: auth) {
-            commentsBody
-        } else {
-            ProgressView()
-                .task { dismiss() }
+        Group {
+            if model.belongsToCurrentSession(auth: auth) {
+                commentsBody
+            } else {
+                ProgressView()
+                    .task { dismiss() }
+            }
         }
+        .screenTint(palette)
     }
 
     private var commentsBody: some View {
@@ -896,14 +899,16 @@ struct CommentsView: View {
                             Spacer()
                             if let total = model.page?.totalComments {
                                 Text(total.formatted())
-                                    .foregroundStyle(model.scope == .all ? Color.accentColor : .secondary)
+                                    .foregroundStyle(
+                                        model.scope == .all ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary)
+                                    )
                             }
                             if model.scope == .all {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(.tint)
                             }
                         }
-                        .foregroundStyle(model.scope == .all ? Color.accentColor : .primary)
+                        .foregroundStyle(model.scope == .all ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     }
 
                     ForEach(model.chapters) { chapter in
@@ -930,7 +935,7 @@ struct CommentsView: View {
                             }
                             .foregroundStyle(
                                 chapter == model.selectedChapter && model.scope == .byChapter
-                                    ? Color.accentColor : .primary
+                                    ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary)
                             )
                         }
                     }
@@ -1336,6 +1341,7 @@ struct CommentComposerSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(model.submissionGuard.phase.isBusy)
+            .screenTint(palette)
     }
 
     /// The field, taking every point the sheet has left between the quoted

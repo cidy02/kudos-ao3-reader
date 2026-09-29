@@ -109,7 +109,6 @@ struct WritingTextEditor: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal).padding(.bottom, 6)
         }
-        .tint(theme.scopePalette.accent)
         .navigationTitle(title)
         .subjectScreenWash(palette: theme.scopePalette)
         .toolbar {

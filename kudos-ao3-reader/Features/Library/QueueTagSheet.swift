@@ -90,6 +90,7 @@ struct QueueTagSheet: View {
                     }
                 }
         }
+            .screenTint(palette)
     }
 
     private func groupLabel(_ text: String) -> some View {
