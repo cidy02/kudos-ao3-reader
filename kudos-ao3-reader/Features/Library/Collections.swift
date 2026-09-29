@@ -135,6 +135,22 @@ struct CollectionDetailView: View {
     @State private var confirmDelete = false
     @State private var showingAddWorks = false
     @State private var expandAll = false
+    /// Ledger or Detailed, remembered for every local collection (no cover
+    /// grid: a collection page reorders and removes by row).
+    @AppStorage("collection.displayMode") private var displayMode: WorkListDisplayMode = .detailed
+
+    /// The collection's own colour: wash, tint and row accents, as a queue's
+    /// page takes its queue's (1h) — the sibling it should read like.
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: collection.displayHue)
+    }
+
+    private var tallyLine: String {
+        let count = works.count
+        var parts = ["\(count) \(count == 1 ? "work" : "works")"]
+        if KeepOffline.collectionKeeps(collection.keepsWorksOffline) { parts.append("kept offline") }
+        return parts.joined(separator: " · ")
+    }
     @State private var pendingRemoval: SavedWork?
     /// Filters scoped to this one collection, applied live to its works.
     @State private var filters = LibraryFilters()
@@ -293,6 +309,15 @@ struct CollectionDetailView: View {
                 }
             } else {
                 List {
+                    Section {
+                        SubjectHeaderBlock(
+                            kicker: "Library", title: collection.name, subtitle: tallyLine, palette: palette
+                        )
+                            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
+                    Section {
                     ForEach(visibleWorks) { work in
                         SensitiveWorkRow(
                             work: work,
@@ -300,7 +325,8 @@ struct CollectionDetailView: View {
                             openMode: .reader,
                             isSelecting: isSelecting,
                             isSelected: selection.contains(work.id),
-                            onToggleSelection: { toggleSelection(work) }
+                            onToggleSelection: { toggleSelection(work) },
+                            presentation: displayMode == .ledger ? .ledger : .standard
                         )
                         .swipeActions(edge: .trailing) {
                             if !isSelecting {
@@ -315,8 +341,17 @@ struct CollectionDetailView: View {
                                 }
                             }
                         }
+                        .cardRow(
+                            isSelected: isSelecting && selection.contains(work.id),
+                            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+                        )
                     }
-                    .cardRow()
+                    } header: {
+                        SectionRuleHeader(title: "Works", count: visibleWorks.count)
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets())
+                            .padding(.bottom, 10)
+                    }
                 }
                 .cardList()
                 .refreshable {
@@ -339,10 +374,11 @@ struct CollectionDetailView: View {
                 }
             }
         }
-        .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
+        // Named by its header block, on its own colour — the queue page's
+        // language. macOS keeps a real window title (the wash empties it on iOS).
+        .subjectScreenWash(palette: palette)
+        #if os(macOS)
         .navigationTitle(collection.name)
-        #if !os(macOS)
-            .navigationBarTitleDisplayMode(.inline)
         #endif
             .inspector(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
@@ -413,7 +449,10 @@ struct CollectionDetailView: View {
                                 .disabled(filters.hasActiveFilters)
                             }
                             if !works.isEmpty {
-                                ExpandAllMenuItem(expandAll: $expandAll)
+                                DisplayModeMenuPicker(mode: $displayMode, modes: [.ledger, .detailed])
+                                if displayMode == .detailed {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                }
                                 Divider()
                             }
                             Button {
@@ -493,6 +532,7 @@ struct CollectionDetailView: View {
                 },
                 perform: { remove($0) }
             )
+            .screenTint(palette)
     }
 
     private func remove(_ work: SavedWork) {
