@@ -30,6 +30,8 @@ struct WorkDetailIdentityHeader: View {
     let fandoms: [String]
     let palette: SubjectPalette
 
+    @ScaledMetric(relativeTo: .subheadline) private var bylineSize: CGFloat = 15.5
+
     /// The fandom the kicker names. Blank entries are skipped rather than
     /// printed as an empty accent line.
     private var namedFandoms: [String] {
@@ -53,7 +55,7 @@ struct WorkDetailIdentityHeader: View {
                 names: authors,
                 identities: identities,
                 includesBy: false,
-                font: .system(size: 15.5),
+                font: .system(size: bylineSize),
                 expandsHitTarget: false
             )
         }
@@ -178,6 +180,12 @@ struct WorkDetailResumeCard: View {
     let action: () -> Void
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .headline) private var primarySize: CGFloat = 16.5
+    @ScaledMetric(relativeTo: .caption) private var secondarySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .headline) private var ringDiameter: CGFloat = 48
+    @ScaledMetric(relativeTo: .body) private var controlDiameter: CGFloat = 42
+    @ScaledMetric(relativeTo: .body) private var controlIconSize: CGFloat = 16
 
     private var clampedProgress: Double? {
         readingProgress.map { min(1, max(0, $0)) }
@@ -198,28 +206,7 @@ struct WorkDetailResumeCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 15) {
-                if let clampedProgress {
-                    WorkProgressRing(progress: clampedProgress, diameter: 48)
-                        .accessibilityHidden(true)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(primaryLine)
-                        .font(.system(size: 16.5, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    if let secondaryLine {
-                        Text(secondaryLine)
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(Color.primary.opacity(0.6))
-                    }
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                circleControl
-            }
+            cardContent
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -232,6 +219,48 @@ struct WorkDetailResumeCard: View {
         .accessibilityLabel(actionTitle)
         .accessibilityValue(accessibilityValue)
         .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private var cardContent: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                progressRing
+                resumeLabels
+                circleControl.frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        } else {
+            HStack(spacing: 15) {
+                progressRing
+                resumeLabels
+                circleControl
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var progressRing: some View {
+        if let clampedProgress {
+            WorkProgressRing(progress: clampedProgress, diameter: min(ringDiameter, 72))
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var resumeLabels: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(primaryLine)
+                .font(.system(size: primarySize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+            if let secondaryLine {
+                Text(secondaryLine)
+                    .font(.system(size: secondarySize))
+                    .foregroundStyle(Color.primary.opacity(0.6))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+            }
+        }
+        .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var accessibilityValue: String {
@@ -257,11 +286,13 @@ struct WorkDetailResumeCard: View {
                     .tint(palette.solidButtonLabel)
             } else {
                 Image(systemName: hasReadableCopy ? "play.fill" : "arrow.down")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: min(controlIconSize, 22), weight: .semibold))
                     .foregroundStyle(palette.solidButtonLabel)
             }
         }
-        .frame(width: 42, height: 42)
+        // Graphics grow with the text only up to a point: at AX sizes an
+        // uncapped ring and button crowded the words out of the card.
+        .frame(width: min(controlDiameter, 56), height: min(controlDiameter, 56))
     }
 
     private var cardBackground: some View {

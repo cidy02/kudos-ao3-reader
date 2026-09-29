@@ -25,6 +25,7 @@ struct AO3WorkRow: View {
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @State private var expanded = false
 
@@ -207,59 +208,7 @@ struct AO3WorkRow: View {
     /// and summary, one icon signal tray, then plain bullet-delimited metadata.
     private var searchLedgerCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 13) {
-                VStack(alignment: .leading, spacing: 5) {
-                    if primaryFandom != nil || isExpandable {
-                        HStack(alignment: .top, spacing: 5) {
-                            if let primaryFandom {
-                                Button { router.searchAO3(.fandom, primaryFandom) } label: {
-                                    SubjectKicker(
-                                        text: primaryFandom,
-                                        palette: palette,
-                                        trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
-                                    )
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                            // 1u row 2: "Series" beside the kicker. Gift is drawn
-                            // too, but no gift flag is parsed onto the summary yet.
-                            if work.seriesTitle != nil {
-                                SubjectStateBadge(title: "Series", color: palette.accent)
-                            }
-                            if isExpandable {
-                                expandButton
-                            }
-                        }
-                    }
-                    Text(work.title)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    AO3AuthorBylineView(
-                        names: work.authors,
-                        identities: work.authorIdentities,
-                        font: .subheadline,
-                        compact: true
-                    )
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-                VStack(spacing: 8) {
-                    WorkStatusIconGrid(
-                        rating: work.rating.isEmpty ? nil : work.rating,
-                        categories: work.categories,
-                        warnings: work.warnings,
-                        completion: WorkCompletionStatus(isComplete: work.isComplete),
-                        tileSize: 22,
-                        announcesToVoiceOver: true,
-                        showsTray: true
-                    )
-                    if isSelecting {
-                        WorkSelectionBubble(isSelected: isSelected)
-                    }
-                }
-            }
+            searchLedgerHeading
 
             if !work.summary.isEmpty {
                 Text(work.summary)
@@ -285,6 +234,79 @@ struct AO3WorkRow: View {
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var searchLedgerHeading: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                searchLedgerIdentity
+                searchLedgerSignals
+            }
+        } else {
+            HStack(alignment: .top, spacing: 13) {
+                searchLedgerIdentity
+                searchLedgerSignals
+            }
+        }
+    }
+
+    private var searchLedgerIdentity: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if primaryFandom != nil || isExpandable {
+                HStack(alignment: .top, spacing: 5) {
+                    if let primaryFandom {
+                        Button { router.searchAO3(.fandom, primaryFandom) } label: {
+                            SubjectKicker(
+                                text: primaryFandom,
+                                palette: palette,
+                                trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
+                            )
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    // 1u row 2: "Series" beside the kicker. Gift is drawn
+                    // too, but no gift flag is parsed onto the summary yet.
+                    if work.seriesTitle != nil {
+                        SubjectStateBadge(title: "Series", color: palette.accent)
+                    }
+                    if isExpandable {
+                        expandButton
+                    }
+                }
+            }
+            Text(work.title)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                .fixedSize(horizontal: false, vertical: true)
+            AO3AuthorBylineView(
+                names: work.authors,
+                identities: work.authorIdentities,
+                font: .subheadline,
+                compact: !dynamicTypeSize.isAccessibilitySize
+            )
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
+    }
+
+    private var searchLedgerSignals: some View {
+        VStack(spacing: 8) {
+            WorkStatusIconGrid(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.categories,
+                warnings: work.warnings,
+                completion: WorkCompletionStatus(isComplete: work.isComplete),
+                tileSize: 22,
+                announcesToVoiceOver: true,
+                showsTray: true
+            )
+            if isSelecting {
+                WorkSelectionBubble(isSelected: isSelected)
+            }
+        }
     }
 
     private var statsRow: some View {

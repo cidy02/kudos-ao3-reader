@@ -779,7 +779,19 @@ struct SubjectStatStrip: View {
     let cells: [Cell]
     let palette: SubjectPalette
 
+    var body: some View {
+        SubjectStatStripContent(cells: cells, palette: palette)
+            .dynamicTypeSize(.xSmall ... .accessibility2)
+    }
+}
+
+private struct SubjectStatStripContent: View {
+    let cells: [SubjectStatStrip.Cell]
+    let palette: SubjectPalette
+
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .footnote) private var valueSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption2) private var labelSize: CGFloat = 9
 
     var body: some View {
         HStack(spacing: 0) {
@@ -801,20 +813,20 @@ struct SubjectStatStrip: View {
     /// A cell with an action becomes a real button; the rest stay inert text, so
     /// a strip of four counts does not announce four buttons to VoiceOver.
     @ViewBuilder
-    private func cellBody(_ cell: Cell) -> some View {
+    private func cellBody(_ cell: SubjectStatStrip.Cell) -> some View {
         // 1a: the one cell that goes somewhere looks it — accent label and a
         // chevron on the figure; the counts beside it stay plain.
         let opens = cell.action != nil
         let figure = VStack(spacing: 5) {
             HStack(spacing: 3) {
                 Text(cell.value)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: valueSize, weight: .semibold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 if opens {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: labelSize, weight: .semibold))
                         .accessibilityHidden(true)
                 }
             }
@@ -822,8 +834,8 @@ struct SubjectStatStrip: View {
                 cell.tint ?? (opens ? palette.accent : cell.isHighlighted ? palette.accentOnFill : Color.primary)
             )
             Text(cell.label.uppercased())
-                .font(.system(size: 9))
-                .tracking(0.63)
+                .font(.system(size: labelSize))
+                .tracking(labelSize * 0.07)
                 .foregroundStyle(opens ? AnyShapeStyle(palette.accent) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -950,6 +962,9 @@ struct SubjectChip: View {
     var palette: SubjectPalette?
 
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .caption) private var leadingImageSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .footnote) private var textSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption2) private var trailingImageSize: CGFloat = 10
 
     private var theme: ReaderTheme { themeManager.appTheme }
 
@@ -957,15 +972,15 @@ struct SubjectChip: View {
         HStack(spacing: 6) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: leadingImageSize, weight: .semibold))
             }
             Text(text)
-                .font(.system(size: 13, weight: style == .tinted ? .medium : .regular))
+                .font(.system(size: textSize, weight: style == .tinted ? .medium : .regular))
                 .monospacedDigit()
                 .lineLimit(1)
             if let trailingImage {
                 Image(systemName: trailingImage)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: trailingImageSize, weight: .semibold))
                     .opacity(0.75)
             }
         }
@@ -992,7 +1007,7 @@ struct SubjectChip: View {
             // the page — `onEffectiveTint`'s problem, solved the same way: from
             // the fill's luminance rather than from a per-theme case.
             isSelected
-                ? ((palette?.accent ?? Color.accentColor).relativeLuminance > 0.45 ? .black : .white)
+                ? ((palette?.accent ?? themeManager.effectiveTint).relativeLuminance > 0.45 ? .black : .white)
                 : .primary
         }
     }
@@ -1007,8 +1022,13 @@ struct SubjectChip: View {
                 .overlay(shape.strokeBorder(theme.glassStroke(0.14), lineWidth: 0.5))
         case .tinted:
             shape
-                .fill(palette?.chipFill ?? Color.accentColor.opacity(0.24))
-                .overlay(shape.strokeBorder(palette?.chipStroke ?? Color.accentColor.opacity(0.5), lineWidth: 0.5))
+                .fill(palette?.chipFill ?? themeManager.effectiveTint.opacity(0.24))
+                .overlay(
+                    shape.strokeBorder(
+                        palette?.chipStroke ?? themeManager.effectiveTint.opacity(0.5),
+                        lineWidth: 0.5
+                    )
+                )
         case .dashed:
             shape
                 .strokeBorder(

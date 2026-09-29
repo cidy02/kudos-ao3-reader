@@ -166,6 +166,8 @@ struct QueueHeaderDetails<FilterRail: View>: View {
     let onAddTag: () -> Void
     @ViewBuilder var filterRail: () -> FilterRail
 
+    @ScaledMetric(relativeTo: .caption) private var legendSize: CGFloat = 11.5
+
     var body: some View {
         let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
         let counts = QueueQuickFilter.counts(in: works, preservedIDs: preservedIDs)
@@ -174,8 +176,9 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                 VStack(alignment: .leading, spacing: 7) {
                     QueueProgressStrip(progress: progress, palette: palette)
                     Text(ReadingQueueFacts.legend(progress, offlineCount: preservedIDs.count))
-                        .font(.system(size: 11.5))
+                        .font(.system(size: legendSize))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, SubjectMetrics.headerGutter)
             }
@@ -188,7 +191,7 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                     QueueRowTagLabel(text: "+ Tag", dashed: true)
                 }
                 .buttonStyle(.plain)
-                // The chip stays 1h's size; the tap area is 44pt.
+                // The chip follows Dynamic Type; the tap area never drops below 44pt.
                 .layoutFreeHitTarget(action: onAddTag)
                 .accessibilityLabel("Add a tag to this queue")
             }
