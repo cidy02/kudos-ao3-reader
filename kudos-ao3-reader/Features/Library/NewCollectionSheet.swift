@@ -190,7 +190,7 @@ struct CollectionReorderSheet: View {
                     SubjectHeaderBlock(
                         kicker: "Library › Collections",
                         title: "Reorder",
-                        subtitle: "\(collection.name) · drag to change the reading order",
+                        subtitle: collection.name,
                         palette: palette,
                         gutter: gutter
                     )
