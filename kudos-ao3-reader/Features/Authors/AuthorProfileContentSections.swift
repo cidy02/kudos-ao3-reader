@@ -127,6 +127,7 @@ struct AO3AuthorFandomFilterSection: View {
     var layout: AccountWorksLayout = .list
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var theme
 
     var body: some View {
         // The facet is parsed from the plain works index and AO3 offers it only
@@ -139,18 +140,22 @@ struct AO3AuthorFandomFilterSection: View {
            !fandoms.isEmpty {
             if layout == .scroll {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Fandom")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
-                    AccountScrollChromeCard {
-                        chipStrip(fandoms: fandoms)
-                    }
+                    SectionRuleHeader(title: "Fandom")
+                    chipStrip(fandoms: fandoms)
+                        .padding(.horizontal, SubjectMetrics.gutter)
                 }
             } else {
-                Section("Fandom") {
+                // The app's section header, chips on the wash (no panel).
+                Section {
                     chipStrip(fandoms: fandoms)
-                        .cardRow()
+                        .listRowInsets(EdgeInsets(top: 0, leading: SubjectMetrics.gutter,
+                                                  bottom: 0, trailing: SubjectMetrics.gutter))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } header: {
+                    SectionRuleHeader(title: "Fandom")
+                        .textCase(nil)
+                        .listRowInsets(EdgeInsets())
                 }
             }
         }
@@ -163,7 +168,9 @@ struct AO3AuthorFandomFilterSection: View {
                     onWillChange()
                     model.selectFandom(nil, auth: auth)
                 } label: {
-                    TagChip(text: "All", tinted: model.selectedFandom == nil)
+                    // The same pill as the scope chips above it.
+                    SubjectChip(text: "All", style: .pill(isSelected: model.selectedFandom == nil),
+                                palette: theme.scopePalette)
                 }
                 .buttonStyle(.plain)
                 // 44pt (not the 28pt dense-flow floor used elsewhere in Wave 2): this
@@ -181,9 +188,10 @@ struct AO3AuthorFandomFilterSection: View {
                         model.selectFandom(fandom, auth: auth)
                     } label: {
                         let count = fandom.workCount.map { " (\($0.compactCount))" } ?? ""
-                        TagChip(
+                        SubjectChip(
                             text: FandomDisplayName.bareTitle(fandom.name) + count,
-                            tinted: model.selectedFandom == fandom
+                            style: .pill(isSelected: model.selectedFandom == fandom),
+                            palette: theme.scopePalette
                         )
                     }
                     .buttonStyle(.plain)
