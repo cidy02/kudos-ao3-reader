@@ -84,6 +84,10 @@ struct ContentView: View {
                 await Task.yield()
                 await auth.restoreSession()
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
+                #if DEBUG
+                DemoLibrary.seedIfRequested(in: modelContext)
+                DebugLaunchRoute.applyTab(router)
+                #endif
                 // Another yield before walking every SavedWork + fileExists — that used
                 // to hitch the first tab switch if it still had the main actor.
                 await Task.yield()
