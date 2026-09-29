@@ -63,6 +63,7 @@ struct PrivacyDataView: View {
 
     @State private var footprint = LocalStorageFootprint()
     @State private var hasMeasured = false
+    @State private var confirmingLogOut = false
     @State private var confirmClearHistory = false
     @State private var confirmClearDownloads = false
     @State private var confirmClearPositions = false
@@ -368,8 +369,9 @@ struct PrivacyDataView: View {
                         label: "Remove AO3 session",
                         value: "",
                         isDestructive: true,
-                        action: { Task { await auth.logout() } }
+                        action: { confirmingLogOut = true }
                     )
+                    .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
                 default:
                     SubjectFormRow(label: "AO3 account", value: "Not signed in")
                 }

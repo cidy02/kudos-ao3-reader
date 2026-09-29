@@ -57,7 +57,6 @@ struct AccountInboxScreen: View {
                 // every comment from its own body was one row, and a swipe on
                 // a comment inside it does not attach.
                 if showsCommentFeed {
-                    AccountInboxFeedHeader(tally: inboxStatus.headerTallyLine)
                     if model.isShowingStaleCache {
                         AccountInboxStaleCacheRow(isLast: model.items.isEmpty)
                             .id("inbox-stale-\(model.items.isEmpty)")

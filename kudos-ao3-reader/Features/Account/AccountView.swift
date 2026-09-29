@@ -1161,9 +1161,10 @@ private extension AccountView {
     }
 
     private func scopeGroup(_ title: String, _ destinations: [AccountScopeDestination]) -> some View {
+        // 1m: counts sit on the rows, not on the group label.
         AccountScopeGroup(
             title: title,
-            count: destinations.count,
+            count: nil,
             layout: usesLibraryStyleCompactLayout ? .scroll : .list
         ) {
             VStack(spacing: 0) {
@@ -1179,12 +1180,12 @@ private extension AccountView {
     // switches share the same preference without growing AccountView's body.
     struct AccountScopeGroup<Content: View>: View {
         let title: String
-        let count: Int
+        let count: Int?
         let layout: AccountWorksLayout
         let content: Content
         @AppStorage private var isCollapsed: Bool
 
-        init(title: String, count: Int, layout: AccountWorksLayout, @ViewBuilder content: () -> Content) {
+        init(title: String, count: Int?, layout: AccountWorksLayout, @ViewBuilder content: () -> Content) {
             self.title = title
             self.count = count
             self.layout = layout
