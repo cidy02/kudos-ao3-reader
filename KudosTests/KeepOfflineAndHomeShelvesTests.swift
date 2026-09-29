@@ -92,7 +92,13 @@ struct KeepOfflineAndHomeShelvesTests {
     @Test func aKeepDownloadsCollectionFetchesOnlyMissingAO3Works() throws {
         let context = try makeContext()
         let missing = ao3Work(10, in: context, hasEPUB: false)
+        // "Present" means the file is on disk, not just the flag.
         let present = ao3Work(11, in: context)
+        try FileManager.default.createDirectory(
+            at: present.fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try Data([0]).write(to: present.fileURL)
+        defer { try? FileManager.default.removeItem(at: present.fileURL) }
         let deleted = ao3Work(12, in: context, hasEPUB: false)
         deleted.isPendingDeletion = true
         let imported = SavedWork(id: UUID(), title: "Import", author: "Me")

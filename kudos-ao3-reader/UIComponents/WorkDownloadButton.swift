@@ -7,12 +7,14 @@ import SwiftUI
 struct WorkDownloadButton: View {
     let work: SavedWork
     @Environment(\.modelContext) private var context
+    @Environment(DownloadQueue.self) private var downloadQueue
 
     var body: some View {
         if let action = WorkDownload.action(for: work) {
             let label = WorkDownload.label(action)
             Button {
-                Task { try? await WorkDownload.perform(action, on: work, in: context) }
+                // Through the queue, so the download banner shows it — and a failure.
+                Task { try? await WorkDownload.perform(action, on: work, in: context, queue: downloadQueue) }
             } label: {
                 Label(label.title, systemImage: label.systemImage)
             }

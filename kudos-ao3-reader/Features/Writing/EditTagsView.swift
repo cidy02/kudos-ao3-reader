@@ -213,9 +213,10 @@ struct EditTagsView: View {
     private var tagsRows: some View {
         inlineTags("Fandoms", values: $form.tags.fandoms, kind: .fandom, isRequired: true)
             .panelSegment(0, of: 4, gutter: gutter)
-        inlineTags("Characters", values: $form.tags.characters, kind: .character)
-            .panelSegment(1, of: 4, gutter: gutter)
+        // 1bp's order, the same as the work form (1bo) and bulk edit (1bn).
         inlineTags("Relationships", values: $form.tags.relationships, kind: .relationship)
+            .panelSegment(1, of: 4, gutter: gutter)
+        inlineTags("Characters", values: $form.tags.characters, kind: .character)
             .panelSegment(2, of: 4, gutter: gutter)
         inlineTags("Additional tags", values: $form.tags.additionalTags, kind: .freeform)
             .panelSegment(3, of: 4, gutter: gutter)

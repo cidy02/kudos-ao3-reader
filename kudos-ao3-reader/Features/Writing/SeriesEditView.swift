@@ -298,7 +298,7 @@ struct SeriesReorderView: View {
                 SubjectHeaderBlock(
                     kicker: "AO3 Account",
                     title: "Reorder",
-                    subtitle: "\(seriesTitle) · drag to change the reading order",
+                    subtitle: seriesTitle,
                     palette: accountPalette,
                     gutter: gutter
                 )
