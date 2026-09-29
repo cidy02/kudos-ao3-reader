@@ -567,6 +567,9 @@ struct FandomClusterChip: View {
     /// the eye is already looking rather than past a truncation.
     var qualifier: String = ""
     var workCount: Int?
+    /// A family's count summed across its sibling tags, which double-counts a
+    /// work tagged with two of them — drawn with a leading "~".
+    var isApproximateCount: Bool = false
     /// Marks a fandom the reader has actually read from, so a cluster of twenty
     /// names is not uniform. Drawn as a bar rather than a colour change: the
     /// name has to stay equally readable either way.
@@ -603,7 +606,8 @@ struct FandomClusterChip: View {
                     .layoutPriority(-1)
             }
             if let workCount {
-                Text(workCount.formatted())
+                // 1.2K rather than 1,204: the chip is for scanning, not counting.
+                Text((isApproximateCount ? "~" : "") + workCount.formatted(.number.notation(.compactName)))
                     .font(.system(size: 11))
                     .monospacedDigit()
                     .foregroundStyle(palette.accent.opacity(0.62))
@@ -618,7 +622,7 @@ struct FandomClusterChip: View {
     private var accessibilityText: String {
         var spoken = title
         if !qualifier.isEmpty { spoken += ", \(qualifier)" }
-        if let workCount { spoken += ", \(workCount.formatted()) works" }
+        if let workCount { spoken += ", \(isApproximateCount ? "about " : "")\(workCount.formatted()) works" }
         if isFamiliar { spoken += ", read before" }
         return spoken
     }
