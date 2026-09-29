@@ -145,12 +145,12 @@ extension WorkDetailView {
         var cells: [SubjectStatStrip.Cell] = []
         if let kudos = displayKudos {
             cells.append(SubjectStatStrip.Cell(
-                value: kudos.formatted(), label: "Kudos",
+                value: kudos.compactCount, label: "Kudos",
                 accessibilityText: kudos.formatted() + " kudos"
             ))
         }
         if ao3WorkID != nil {
-            let printed = displayComments.map { $0.formatted() } ?? "—"
+            let printed = displayComments.map(\.compactCount) ?? "—"
             cells.append(SubjectStatStrip.Cell(
                 value: printed,
                 label: "Comments",
@@ -160,19 +160,19 @@ extension WorkDetailView {
             ))
         } else if let comments = displayComments {
             cells.append(SubjectStatStrip.Cell(
-                value: comments.formatted(), label: "Comments",
+                value: comments.compactCount, label: "Comments",
                 accessibilityText: comments.formatted() + " comments"
             ))
         }
         if let bookmarks = displayBookmarks {
             cells.append(SubjectStatStrip.Cell(
-                value: bookmarks.formatted(), label: "Bookmarks",
+                value: bookmarks.compactCount, label: "Bookmarks",
                 accessibilityText: bookmarks.formatted() + " bookmarks"
             ))
         }
         if let hits = displayHits {
             cells.append(SubjectStatStrip.Cell(
-                value: hits.formatted(), label: "Hits",
+                value: hits.compactCount, label: "Hits",
                 accessibilityText: hits.formatted() + " hits"
             ))
         }
