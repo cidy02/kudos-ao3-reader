@@ -59,7 +59,8 @@ struct FandomListView: View {
         for work in library {
             let names = work.workFandoms.map { $0.lowercased() }
             if work.isFavorite { favourites.formUnion(names) }
-            if work.isSaved { downloads.formUnion(names) }
+            // 1an.2: "I have downloads from" means on this device now.
+            if work.hasEPUB { downloads.formUnion(names) }
         }
         return FandomLibraryIndex(
             favouriteNamesLowercased: favourites,
@@ -70,7 +71,7 @@ struct FandomListView: View {
     /// Signature of everything `applyFilter` depends on besides the query debounce.
     private var listingToken: String {
         let favs = library.reduce(0) { $0 + ($1.isFavorite ? 1 : 0) }
-        let saved = library.reduce(0) { $0 + ($1.isSaved ? 1 : 0) }
+        let saved = library.reduce(0) { $0 + ($1.hasEPUB ? 1 : 0) }
         return [
             query,
             sort.rawValue,
@@ -140,12 +141,14 @@ struct FandomListView: View {
             .task { if fandoms.isEmpty { await load() } }
     }
 
+    private var isFiltered: Bool {
+        !query.trimmingCharacters(in: .whitespaces).isEmpty || filterOptions.hasActiveFilters
+    }
+
     /// Spec 1al's header line: how big the category is and in what order, or —
     /// once a search or filter narrows it — how much of it is showing (1an).
     private var headerTally: String {
-        let isFiltered = !query.trimmingCharacters(in: .whitespaces).isEmpty
-            || filterOptions.hasActiveFilters
-        return FandomListTally.text(
+        FandomListTally.text(
             totalTags: FandomFamilyFilters.tagCount(in: families),
             families: familiesAreGrouped ? families.count : nil,
             shownTags: FandomFamilyFilters.tagCount(in: filtered),
@@ -182,6 +185,24 @@ struct FandomListView: View {
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+            }
+
+            // A search or filter that leaves nothing says so, with the way back.
+            if displayedFamilies.isEmpty, isFiltered {
+                Section {
+                    ContentUnavailableView {
+                        Label("No matching fandoms", systemImage: "line.3.horizontal.decrease.circle")
+                    } description: {
+                        Text("No fandom in \(category.name) matches the current search and filters.")
+                    } actions: {
+                        Button("Clear Search and Filters") {
+                            query = ""
+                            filterOptions = FandomListFilterOptions()
+                        }
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
             }
 
             if sort == .alphabetical {
