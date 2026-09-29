@@ -71,19 +71,28 @@ struct AccountProfileCard: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 SubjectKicker(
-                    text: postingPseudName.map { "Posting as \($0)" } ?? "AO3 Account",
+                    text: "AO3 Account",
                     palette: theme.scopePalette,
                     ruleWidth: SubjectMetrics.pageRuleWidth,
                     ruleSpacing: 7
                 )
 
-                postingAsMenu(username: username)
+                // 1m: name, session line, then the posting pill with the
+                // account's "…" beside it.
+                Text(username)
+                    .font(.system(size: nameSize, weight: .bold))
+                    .tracking(-0.5)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .foregroundStyle(.primary)
+
+                sessionStatusLine
 
                 HStack(alignment: .center, spacing: 8) {
-                    sessionStatusLine
-
+                    postingAsMenu
                     accountMenu
                 }
+                .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -94,7 +103,7 @@ struct AccountProfileCard: View {
     /// "Posting as <pseud>" — the identity comments are submitted under. The
     /// choices come from the loaded profile header; "Account Default" clears the
     /// preference so AO3's own default pseud applies.
-    private func postingAsMenu(username: String) -> some View {
+    private var postingAsMenu: some View {
         Menu {
             Button {
                 setPostingPseud(nil)
@@ -115,17 +124,15 @@ struct AccountProfileCard: View {
                 }
             }
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(username)
-                    .font(.system(size: nameSize, weight: .bold))
-                    .tracking(-0.5)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
-                    .foregroundStyle(.primary)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: nameSize * 0.4, weight: .semibold))
-                    .foregroundStyle(.tint)
-            }
+            Text("Posting as \(postingPseudName ?? "Account Default")")
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background(theme.appTheme.glassFill(0.12), in: Capsule())
+                // 30pt drawn, 44pt to the finger, no taller row.
+                .contentShape(Capsule().inset(by: -7))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Posting as")
@@ -258,10 +265,14 @@ struct AccountProfileCard: View {
             }
         } label: {
             Image(systemName: "ellipsis")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 30)
+                .background(theme.appTheme.glassFill(0.12), in: Capsule())
+                // 30pt drawn, 44pt to the finger, no taller row.
+                .contentShape(Capsule().inset(by: -7))
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .accessibilityLabel("Account actions")
         .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
     }
