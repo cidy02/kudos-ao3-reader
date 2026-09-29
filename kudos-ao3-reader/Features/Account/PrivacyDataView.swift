@@ -123,7 +123,8 @@ struct PrivacyDataView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Moves your local reading-history records to Recently Deleted for 90 days. "
+            Text("Moves your local reading-history records to Recently Deleted "
+                + "for \(PreservedWorkService.recoveryWindowText). "
                 + "Your saved and downloaded works are not affected, and the works "
                 + "themselves can be re-downloaded from AO3 anytime.")
         }

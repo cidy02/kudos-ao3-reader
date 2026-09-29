@@ -722,9 +722,11 @@ enum QueueOrganizerSelection {
 
     static func deleteMessage(count: Int) -> String {
         count == 1
-            ? "The queue moves to Recently Deleted for 90 days, with everything in it "
+            ? "The queue moves to Recently Deleted "
+                + "for \(PreservedWorkService.recoveryWindowText), with everything in it "
                 + "intact. Works stay in Kudos either way."
-            : "The \(count) queues move to Recently Deleted for 90 days, with everything in them "
+            : "The \(count) queues move to Recently Deleted "
+                + "for \(PreservedWorkService.recoveryWindowText), with everything in them "
                 + "intact. Works stay in Kudos either way."
     }
 
