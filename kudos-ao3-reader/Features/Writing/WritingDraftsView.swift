@@ -320,12 +320,11 @@ struct WritingWorkDestination: View {
     var body: some View {
         Group {
             if let form, loadedGeneration == auth.sessionGeneration { WorkEditView(form: form).id(auth.sessionGeneration) }
-            else if let errorMessage {
-                VStack {
-                    Text(errorMessage)
-                    Button("Retry") { retry += 1 }
-                }.padding()
-            } else { ProgressView("Loading work form…") }
+            else {
+                WritingLoaderPage(title: workID == nil ? "New work" : "Edit work", message: errorMessage) {
+                    retry += 1
+                }
+            }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
             // `.task` re-runs every time this view reappears — including on
@@ -477,12 +476,7 @@ struct WritingChapterDestination: View {
                 AddChapterView(form: form, workTitle: workTitle, chapterCount: chapterCount, onSaved: onSaved)
                     .id(auth.sessionGeneration)
             }
-            else if let errorMessage {
-                VStack {
-                    Text(errorMessage)
-                    Button("Retry") { retry += 1 }
-                }.padding()
-            } else { ProgressView("Loading chapter form…") }
+            else { WritingLoaderPage(title: "Edit chapter", message: errorMessage) { retry += 1 } }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
             // Kept across reappearance — see `WritingWorkDestination`.
@@ -500,5 +494,48 @@ struct WritingChapterDestination: View {
                 errorMessage = UserFacingError.message(for: error)
             }
         }
+    }
+}
+
+/// A writing screen while its AO3 form loads, or after it failed: the page's
+/// own header on the account wash, then a spinner or "Try Again". The bare
+/// black "text + Retry" these loaders used to show dropped the screen's chrome
+/// (the same defect T-317 fixed on the account lists).
+struct WritingLoaderPage: View {
+    let title: String
+    /// Nil while loading.
+    let message: String?
+    let onRetry: () -> Void
+
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                SubjectHeaderBlock(
+                    kicker: "AO3 Account",
+                    title: title,
+                    palette: theme.scopePalette,
+                    gutter: SubjectMetrics.accountGutter
+                )
+                .padding(.top, 20)
+                Group {
+                    if let message {
+                        ContentUnavailableView {
+                            Label("Couldn't load from AO3", systemImage: "exclamationmark.triangle")
+                        } description: {
+                            Text(message)
+                        } actions: {
+                            Button("Try Again", action: onRetry)
+                        }
+                    } else {
+                        ProgressView().controlSize(.large)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+            }
+        }
+        .subjectScreenWash(palette: theme.scopePalette)
     }
 }
