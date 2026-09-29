@@ -23,6 +23,7 @@ struct MoveBackToInProgressButton: View {
         }
         // Borderless so the row's own navigation link does not take the tap.
         .buttonStyle(.borderless)
+        .minimumHitTarget()
         .foregroundStyle(.primary)
     }
 }
