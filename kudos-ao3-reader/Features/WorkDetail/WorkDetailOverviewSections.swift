@@ -18,7 +18,6 @@ extension WorkDetailView {
     var overviewSections: some View {
         summarySection
         ao3ActionsSection
-        quickActionsSection
         // Artboard 1a's own order from here: the grouped facts, the archive
         // tallies, the page's two actions, then everything local behind one row.
         factsCardSection
@@ -101,124 +100,49 @@ extension WorkDetailView {
 
     // MARK: Quick actions
 
-    /// Three columns normally; two at accessibility Dynamic Type sizes so the
-    /// tile labels keep room to grow instead of scaling away.
-    private var quickActionColumns: [GridItem] {
-        let count = dynamicTypeSize.isAccessibilitySize ? 2 : 3
-        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
-    }
-
-    var quickActionsSection: some View {
-        Section {
-            LazyVGrid(columns: quickActionColumns, spacing: 10) {
-                // No Read tile: artboard 1a's resume card at the top of the page
-                // owns that action now (see `WorkDetailView.resumeCardRow`), and
-                // the grid would offer a second, quieter copy of it.
-                if let ao3URL {
-                    quickAction(title: "Open on AO3", systemImage: "safari") {
-                        router.open(ao3URL)
-                    }
-                }
-                savedQuickAction
-                laterQuickAction
-                queueQuickAction
-                collectionQuickAction
-                finishedQuickAction
-                commentsQuickAction
-            }
-            // Each tile owns its card chrome (same treatment as Account's
-            // shortcut grid); the containing row stays transparent.
-            .listRowInsets(EdgeInsets(
-                top: 6,
-                leading: CardListMetrics.sideMargin,
-                bottom: 6,
-                trailing: CardListMetrics.sideMargin
-            ))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-        } header: {
-            Text("Quick Actions")
-        }
-    }
-
-    private func quickAction(
-        title: String, systemImage: String, detail: String? = nil,
-        isBusy: Bool = false, disabled: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            WorkQuickActionTile(
-                title: title, systemImage: systemImage,
-                detail: detail, isBusy: isBusy
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-    }
-
-    private var savedQuickAction: some View {
-        let state = WorkDetailPresentation.downloadState(localWork.flatMap(WorkDownload.action(for:)))
-        return quickAction(
-            title: state.title, systemImage: state.systemImage,
-            disabled: working || !state.isEnabled, action: toggleSaved
-        )
-    }
-
-    private var laterQuickAction: some View {
-        let queued = localWork?.isInSavedForLaterQueue ?? false
-        let label = WorkDetailPresentation.laterAction(isQueued: queued)
-        return quickAction(
-            title: label.title, systemImage: label.systemImage,
-            isBusy: preservingStatusIsBusy && !working,
-            disabled: working || preservingStatusIsBusy
-        ) {
-            if queued {
-                removeFromSavedForLater()
-            } else {
-                saveForLater()
-            }
-        }
-    }
-
-    private var queueQuickAction: some View {
-        quickAction(
-            title: WorkDetailPresentation.queueLabel(count: localWork?.activeQueueMemberships.count ?? 0),
-            systemImage: "list.bullet.rectangle",
-            disabled: working
-        ) {
+    /// 1a: the local half lives behind "…" and the My copy row, not in a grid
+    /// on the page. Open on AO3, Mark as Finished and Comments already have
+    /// their own places on the page.
+    @ViewBuilder
+    var localWorkMenuItems: some View {
+        Button {
             withLocalWork { _ in showingAddToQueue = true }
+        } label: {
+            Label("Add to Queue", systemImage: "list.bullet.rectangle")
         }
-    }
-
-    private var collectionQuickAction: some View {
-        quickAction(
-            title: WorkDetailPresentation.collectionLabel(count: localWork?.collections.count ?? 0),
-            systemImage: "square.stack",
-            disabled: working
-        ) {
+        .disabled(working)
+        Button {
             withLocalWork { _ in showingAddToCollection = true }
+        } label: {
+            Label("Add to Collection", systemImage: "square.stack")
+        }
+        .disabled(working)
+        let queued = localWork?.isInSavedForLaterQueue ?? false
+        let later = WorkActionLabels.savedForLater(isQueued: queued)
+        Button {
+            if queued { removeFromSavedForLater() } else { saveForLater() }
+        } label: {
+            Label(later.title, systemImage: later.systemImage)
+        }
+        .disabled(working || preservingStatusIsBusy)
+        let download = localWork.flatMap(WorkDownload.action(for:))
+        let downloadLabel = download.map(WorkDownload.label) ?? WorkDownload.label(.download)
+        Button(action: toggleSaved) {
+            Label(downloadLabel.title, systemImage: downloadLabel.systemImage)
+        }
+        .disabled(working || download?.isInformational == true)
+        if let ao3URL {
+            Divider()
+            ShareLink(item: ao3URL) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                router.open(ao3URL)
+            } label: {
+                Label("Open on AO3", systemImage: "safari")
+            }
         }
     }
-
-    private var finishedQuickAction: some View {
-        let label = WorkActionLabels.finished(isFinished: localWork?.isFinished ?? false)
-        return quickAction(
-            title: label.title, systemImage: label.systemImage,
-            disabled: working, action: toggleFinished
-        )
-    }
-
-    private var commentsQuickAction: some View {
-        quickAction(
-            title: "Comments",
-            systemImage: "bubble.left.and.bubble.right",
-            detail: displayComments.map { $0.formatted() }
-        ) {
-            workActions.startViewingComments(context: commentsWorkContext)
-        }
-    }
-
-    // MARK: Series
 
     @ViewBuilder
     var seriesSection: some View {
