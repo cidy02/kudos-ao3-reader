@@ -259,6 +259,8 @@ struct MediaBrowserView: View {
                         .buttonStyle(.plain)
                     }
                 }
+                // One height for the row: a two-line name made its card the odd one out.
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, CardListMetrics.sideMargin)
             }
         }
@@ -291,7 +293,7 @@ struct MediaBrowserView: View {
                 ruleSpacing: 6
             )
 
-            Text(FandomDisplayName.bareTitle(entry.fandom))
+            Text(FandomDisplayName.bareTitle(entry.fandom, among: jumpBackInPicks.map(\.fandom)))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
@@ -304,7 +306,7 @@ struct MediaBrowserView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)

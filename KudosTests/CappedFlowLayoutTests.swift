@@ -36,6 +36,15 @@ struct FandomBareTitleTests {
             == "My Hero Academia")
         #expect(FandomDisplayName.bareTitle("Haikyuu!!") == "Haikyuu!!")
     }
+
+    /// Two tags that shorten to one name keep their disambiguation side by side.
+    @Test func keepsTheQualifierWhenTwoNamesWouldCollide() {
+        let names = ["Doctor Who (2005)", "Doctor Who", "Haikyuu!!"]
+        #expect(FandomDisplayName.bareTitle("Doctor Who (2005)", among: names) == "Doctor Who (2005)")
+        #expect(FandomDisplayName.bareTitle("Doctor Who", among: names) == "Doctor Who")
+        #expect(FandomDisplayName.bareTitle("Haikyuu!!", among: names) == "Haikyuu!!")
+        #expect(FandomDisplayName.bareTitle("Doctor Who (2005)", among: ["Doctor Who (2005)"]) == "Doctor Who")
+    }
 }
 
 struct LibraryChipLabelTests {
