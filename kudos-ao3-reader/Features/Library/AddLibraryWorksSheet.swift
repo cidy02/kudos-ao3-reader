@@ -142,7 +142,7 @@ struct AddLibraryWorksSheet: View {
             }
             Spacer(minLength: 8)
             Image(systemName: selection.contains(work.id) ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(selection.contains(work.id) ? Color.accentColor : Color.secondary)
+                .foregroundStyle(selection.contains(work.id) ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                 .imageScale(.large)
                 .accessibilityHidden(true)
         }
