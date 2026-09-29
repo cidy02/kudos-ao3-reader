@@ -213,6 +213,7 @@ enum DebugLaunchRoute {
 /// `-KudosDebugRoute comments`: real comment rows over sample data, for
 /// checking the byline against the avatar without contacting AO3.
 struct CommentsDemoView: View {
+    @State private var swipeTracker = CommentSwipeTracker()
     private func comment(_ id: Int, _ author: String, chapter: String? = nil, _ body: String) -> AO3Comment {
         var comment = AO3Comment(id: id, author: author, isGuest: false)
         comment.userPath = "/users/\(author)"
@@ -229,25 +230,27 @@ struct CommentsDemoView: View {
                       parentAuthor: nil, depth: 0),
                 depth: 0, starts: true, next: 1, collapse: CommentCollapseState(isCollapsed: false, replyCount: 2))
             row(.post(comment: comment(2, "frostbitten", "A reply."), parentAuthor: "nine_of_wands", depth: 1),
-                depth: 1, starts: false, next: 2)
+                depth: 1, starts: false, next: 2, ancestors: [1])
             row(.post(comment: comment(3, "undertow", "A reply to the reply."), parentAuthor: "frostbitten",
-                      depth: 2), depth: 2, starts: false, next: 0)
+                      depth: 2), depth: 2, starts: false, next: 0, ancestors: [1, 2])
             row(.post(comment: comment(4, "lanternlight", chapter: "Chapter 1", "Root without replies."),
                       parentAuthor: nil, depth: 0), depth: 0, starts: true, next: nil)
         }
         .cardList()
         .coordinateSpace(.named(CommentThreadGeometry.listSpace))
+        .environment(swipeTracker)
         .background(.background)
     }
 
     private func row(
         _ item: CommentConversationItem, depth: Int, starts: Bool, next: Int?,
-        collapse: CommentCollapseState? = nil
+        collapse: CommentCollapseState? = nil, ancestors: [Int] = []
     ) -> some View {
         CommentConversationRow(
             item: item, workAuthors: ["nine_of_wands"], showChapterBadge: true,
             startsConversation: starts, depth: depth, isLastSibling: true,
-            ancestorLines: Array(repeating: false, count: depth), nextDepth: next, collapse: collapse
+            ancestorLines: Array(repeating: false, count: depth), nextDepth: next, collapse: collapse,
+            ancestorIDs: ancestors
         )
         .commentSwipeActions(comment: item.actionableComment)
     }

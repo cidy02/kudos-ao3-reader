@@ -59,6 +59,7 @@ struct CommentsView: View {
     /// The comment "Thread"/"Parent Thread" most recently scrolled to, briefly
     /// tinted so the jump is visible even when the target was already on-screen.
     @State private var highlightedCommentID: Int?
+    @State private var swipeTracker = CommentSwipeTracker()
     @State private var highlightClearTask: Task<Void, Never>?
     /// Roots forced open by a "Thread"/"Parent Thread" jump, so a collapsed reply
     /// stack can't hide the comment being scrolled to.
@@ -161,6 +162,7 @@ struct CommentsView: View {
             }
             .cardList()
             .coordinateSpace(.named(CommentThreadGeometry.listSpace))
+            .environment(swipeTracker)
             // Rows need the container width to size their indent, but indent
             // feeds `listRowInsets` — which is resolved before a row lays out,
             // so a row can't measure itself in time. Measure once here.
@@ -711,6 +713,7 @@ struct CommentsView: View {
                         nextDepth: row.nextDepth,
                         showsParentAttribution: row.showsParentAttribution,
                         collapse: row.collapse,
+                        ancestorIDs: row.ancestorIDs,
                         onExpand: { model.expandReplies(rootID: row.rootID) },
                         onContinueThread: { openThread(row.rootID) },
                         onToggleCollapse: { model.toggleCollapsed(rootID: row.rootID) }
