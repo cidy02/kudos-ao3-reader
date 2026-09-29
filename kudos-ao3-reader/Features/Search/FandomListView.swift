@@ -545,6 +545,15 @@ enum FandomDisplayName {
         return title.isEmpty ? name : title
     }
 
+    /// `bareTitle`, unless another name in `names` reduces to the same text —
+    /// "Doctor Who" and "Doctor Who (2005)" side by side keep their
+    /// disambiguation, or the two cards read as one fandom twice.
+    static func bareTitle(_ name: String, among names: [String]) -> String {
+        let bare = bareTitle(name)
+        let collides = names.contains { $0 != name && bareTitle($0) == bare }
+        return collides ? primarySegment(of: name) : bare
+    }
+
     static func split(_ name: String) -> FandomName {
         var title = name.trimmingCharacters(in: .whitespaces)
         guard !title.isEmpty else { return FandomName(original: name, title: name, parts: []) }
