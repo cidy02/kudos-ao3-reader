@@ -170,6 +170,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             Button(action: goBack) {
                                 Image(systemName: "chevron.backward")
                             }
+                            // Neutral like every system back button in the app,
+                            // not the accent (LOOP-v3 B4).
+                            .tint(Color.primary)
                             .accessibilityLabel("Back")
                         }
                         #endif
@@ -560,7 +563,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     // MARK: Search bar + filter button
 
     private var searchField: some View {
-        GlassFieldBar(text: $filters.query, placeholder: "Search your library and AO3", onSubmit: runSearch) {
+        GlassFieldBar(text: $filters.query, placeholder: "Library and AO3", onSubmit: runSearch) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
                 .foregroundStyle(.secondary)
