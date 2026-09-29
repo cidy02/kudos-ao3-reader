@@ -260,8 +260,10 @@ struct AO3BookmarksWorksBrowser: View {
     private func rowStack(_ entry: CanonicalWork, ledger: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             rowBody(entry, ledger: ledger)
-            if let bookmark = bookmark(for: entry), !isBlurred(entry) {
-                AO3BookmarkFootnote(bookmark: bookmark)
+            // A remote row draws its bookmark inside the 1q card. A saved work's
+            // row does not know about bookmarks, so the same pieces sit under it.
+            if entry.local != nil, let bookmark = bookmark(for: entry), !isBlurred(entry) {
+                AO3BookmarkFootnote(bookmark: bookmark, showsStatus: true)
             }
         }
     }
@@ -278,7 +280,8 @@ struct AO3BookmarksWorksBrowser: View {
             EnrichingAO3WorkRow(
                 work: remote,
                 expandAll: expandAll,
-                presentation: ledger ? .searchLedger : .standard
+                presentation: ledger ? .searchLedger : .standard,
+                bookmark: bookmark(for: entry)
             )
         }
     }
@@ -348,59 +351,5 @@ struct AO3BookmarksFilterRail: View {
             }
             .padding(.horizontal, 16)
         }
-    }
-}
-
-/// Note, bookmark tags, date, and the private / rec mark, under the work card.
-///
-/// The work's own tags already sit on the card. Bookmark tags are a second
-/// list, so they keep the caption the author-profile row uses. The note is
-/// `AO3RichTextView`, the renderer that already draws `AO3AuthorBookmark.notes`.
-/// Collections are parsed and not drawn here: 1q names the note, the tags, the
-/// date, and the privacy flag.
-struct AO3BookmarkFootnote: View {
-    let bookmark: AO3AuthorBookmark
-
-    private var showsStatus: Bool {
-        bookmark.isRecommendation || bookmark.isPrivate || !bookmark.date.isEmpty
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if showsStatus {
-                FlowLayout(spacing: 8, rowSpacing: 5) {
-                    if bookmark.isRecommendation {
-                        WorkStateBadge(text: "Rec", symbol: "hand.thumbsup.fill")
-                    }
-                    if bookmark.isPrivate {
-                        WorkStateBadge(text: "Private", symbol: "lock.fill")
-                    }
-                    if !bookmark.date.isEmpty {
-                        WorkStateBadge(text: bookmark.date, symbol: "calendar")
-                    }
-                }
-                .font(.caption2)
-            }
-            if !bookmark.tags.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Bookmark Tags")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                    FlowLayout(spacing: 6, rowSpacing: 6) {
-                        ForEach(bookmark.tags, id: \.self) { TagChip(text: $0) }
-                    }
-                }
-            }
-            if !bookmark.notes.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Bookmark Notes")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                    AO3RichTextView(document: bookmark.notes)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 2)
     }
 }
