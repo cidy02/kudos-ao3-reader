@@ -377,56 +377,96 @@ struct AO3AuthorBookmarkRow: View {
     var presentation: AO3WorkRow.Presentation = .standard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AO3WorkRow(work: bookmark.work, expandAll: expandAll, presentation: presentation)
+        AO3WorkRow(
+            work: bookmark.work,
+            expandAll: expandAll,
+            presentation: presentation,
+            bookmark: bookmark
+        )
+    }
+}
 
-            if bookmark.isRecommendation || bookmark.isPrivate || !bookmark.date.isEmpty {
-                FlowLayout(spacing: 8, rowSpacing: 5) {
-                    if bookmark.isRecommendation {
-                        WorkStateBadge(text: "Recommended", symbol: "hand.thumbsup.fill")
-                    }
-                    if bookmark.isPrivate {
-                        WorkStateBadge(text: "Private", symbol: "lock.fill")
-                    }
+/// The bookmark-only content shared by Account Bookmarks and author profiles.
+/// 1q gives notes a rail and bookmark tags their own rounded-rectangle grammar;
+/// neither carries a caption or repeats the status/date below the card.
+struct AO3BookmarkFootnote: View {
+    let bookmark: AO3AuthorBookmark
+    /// Private / Rec / date, for rows whose card cannot carry them (a saved
+    /// work's row). The 1q card puts them on its kicker and stats row instead.
+    var showsStatus = false
+
+    @Environment(ThemeManager.self) private var theme
+
+    private var palette: SubjectPalette {
+        theme.appTheme.subjectPalette(
+            hue: CoverArt.workHue(fandoms: bookmark.work.fandoms, title: bookmark.work.title)
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if showsStatus, bookmark.isPrivate || bookmark.isRecommendation || !bookmark.date.isEmpty {
+                HStack(spacing: 6) {
+                    if bookmark.isPrivate { SubjectStateBadge(title: "Private", color: .secondary) }
+                    if bookmark.isRecommendation { SubjectStateBadge(title: "Rec", color: .secondary) }
+                    Spacer(minLength: 0)
                     if !bookmark.date.isEmpty {
-                        WorkStateBadge(text: bookmark.date, symbol: "calendar")
-                    }
-                }
-                .font(.caption2)
-            }
-
-            if !bookmark.tags.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Bookmark Tags")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                    FlowLayout(spacing: 6, rowSpacing: 6) {
-                        ForEach(bookmark.tags, id: \.self) { TagChip(text: $0) }
+                        Text(bookmark.date)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Bookmarked \(bookmark.date)")
                     }
                 }
             }
-
             if !bookmark.notes.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Bookmark Notes")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                    AO3RichTextView(document: bookmark.notes)
-                }
-            }
-
-            if !bookmark.collections.isEmpty {
-                Label(bookmark.collections.joined(separator: ", "), systemImage: "square.stack")
-                    .font(.caption)
+                HStack(alignment: .top, spacing: 11) {
+                    Capsule()
+                        .fill(palette.accent)
+                        .frame(width: 2)
+                    AO3RichTextView(
+                        document: bookmark.notes,
+                        font: .system(size: 14),
+                        lineSpacing: 7
+                    )
                     .foregroundStyle(.secondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            if !bookmark.tags.isEmpty {
+                FlowLayout(spacing: 7, rowSpacing: 7) {
+                    ForEach(bookmark.tags, id: \.self) { BookmarkTagPill(text: $0) }
+                }
             }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct BookmarkTagPill: View {
+    let text: String
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 13))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(theme.appTheme.glassFill(0.09))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(theme.appTheme.glassStroke(0.14), lineWidth: 0.5)
+                    )
+            )
     }
 }
 
 struct AO3RichTextView: View {
     let document: AO3RichText
+    var font: Font = .body
+    var lineSpacing: CGFloat = 0
     @Environment(AppRouter.self) private var router
 
     var body: some View {
@@ -443,7 +483,8 @@ struct AO3RichTextView: View {
                 }
             }
         }
-        .font(.body)
+        .font(font)
+        .lineSpacing(lineSpacing)
         .environment(\.openURL, OpenURLAction { url in
             if AO3AuthorRoute.isAO3URL(url) {
                 router.openAO3Link(url)
