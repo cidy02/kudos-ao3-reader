@@ -24,10 +24,7 @@ extension WorkDetailView {
         archiveStatsSection
         pageActionsSection
         seriesSection
-        // Local-only: a remote work has no origin to report and nothing converted.
-        if let work = localWork {
-            WorkProvenanceSections(work: work)
-        }
+        // Origin and conversion live in My copy (1a); the page ends at the row.
         myCopySection
     }
 
