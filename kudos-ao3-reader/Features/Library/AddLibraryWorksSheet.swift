@@ -56,9 +56,19 @@ struct AddLibraryWorksSheet: View {
         // recomputed by each `candidates`/`filtered` mention.
         let eligible = eligibleWorks
         let matches = filteredWorks(in: eligible)
+        // Hide mode can empty the picker on its own; that is not "nothing to add".
+        let hiddenOnly = eligible.isEmpty && !candidates(allWorks).isEmpty
         NavigationStack {
             Group {
-                if eligible.isEmpty {
+                if hiddenOnly {
+                    ContentUnavailableView {
+                        Label("Mature works are hidden", systemImage: "eye.slash")
+                    } description: {
+                        Text("The works you could add here are hidden by Hide Mature.")
+                    } actions: {
+                        MatureRevealToggle()
+                    }
+                } else if eligible.isEmpty {
                     ContentUnavailableView {
                         Label("No works to add", systemImage: "square.stack")
                     } description: {
@@ -95,6 +105,10 @@ struct AddLibraryWorksSheet: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(Self.confirmationTitle(count: selection.count)) { addSelected(from: eligible) }
                             .disabled(selection.isEmpty)
+                    }
+                    // Every works list offers the reveal while Hide Mature is on.
+                    if hideMature, !hiddenOnly {
+                        ToolbarItem(placement: .primaryAction) { MatureRevealToggle() }
                     }
                 }
         }

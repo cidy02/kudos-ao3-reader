@@ -735,11 +735,15 @@ enum QueueOrganizerSelection {
     }
 }
 
-/// 1i's row tag: small caps on a faint plate, not the page's full-size chip.
-private struct QueueRowTagLabel: View {
+/// A queue's tag wherever the queue is shown — 1i's rows and 1h's header:
+/// small caps on a faint plate, not the page's full-size chip. `dashed` is
+/// the "+ Tag" that adds one.
+struct QueueRowTagLabel: View {
     let text: String
+    var dashed = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         Text(text.uppercased())
             .font(.system(size: 9.5, weight: .semibold))
             .tracking(0.6)
@@ -747,7 +751,14 @@ private struct QueueRowTagLabel: View {
             .lineLimit(1)
             .padding(.vertical, 3)
             .padding(.horizontal, 7)
-            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background {
+                if dashed {
+                    shape.strokeBorder(style: StrokeStyle(lineWidth: 0.75, dash: [3]))
+                        .foregroundStyle(.tertiary)
+                } else {
+                    shape.fill(Color.primary.opacity(0.08))
+                }
+            }
     }
 }
 
