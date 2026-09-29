@@ -87,7 +87,9 @@ struct AccountInboxScreen: View {
                         ) { page in
                             model.goToPage(page, auth: auth)
                         }
-                        .accountControlCardRow()
+                        // The pill floats, as on every other paged list; a
+                        // card behind it read as a second, empty panel.
+                        .bareListRow()
                         .disabled(model.isPerformingBulkAction)
                     }
                     if case .paginationFailed = model.phase {
