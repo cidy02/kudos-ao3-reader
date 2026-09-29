@@ -187,12 +187,14 @@ extension WorkDetailView {
     @ViewBuilder
     var librarySections: some View {
         if let work = localWork {
+            myCopyStripSection(for: work)
             libraryStatusSection(for: work)
+            libraryQueuesSection(for: work)
+            libraryCollectionsSection(for: work)
             libraryStorageSection(for: work)
             libraryActivitySection(for: work)
-            // Origin, Status and Conversion are facts about the local file, and
-            // 1a puts everything local behind this sheet rather than on the page.
-            // Moved, not dropped — the page used to carry them under the summary.
+            // Origin and conversion are facts about the local file, and 1a puts
+            // everything local behind this sheet rather than on the page.
             WorkProvenanceSections(work: work)
         } else {
             Section {
@@ -200,7 +202,7 @@ extension WorkDetailView {
                     + "and your download, progress, and tags will appear here.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .cardRow()
+                    .myCopyRow()
             } footer: {
                 // The pre-redesign remote lifecycle guidance (reading downloads
                 // the file; finishing frees it unless saved/favorited).
@@ -210,236 +212,210 @@ extension WorkDetailView {
         myTagsSection
     }
 
-    private func libraryStatusSection(for work: SavedWork) -> some View {
-        Section {
-            Group {
-                let download = WorkDetailPresentation.downloadState(WorkDownload.action(for: work))
-                stateToggleRow(
-                    (download.title, download.systemImage),
-                    isOn: download.isOn,
-                    disabled: working || !download.isEnabled,
-                    action: toggleSaved
-                )
-
-                savedForLaterRow(for: work)
-
-                if work.isQueuedForLater,
-                   work.epubPreservationStatus == .failed || work.epubPreservationStatus == .missingFile {
-                    Button {
-                        retryPreservation(work)
-                    } label: {
-                        Label("Retry Queue Preservation", systemImage: "arrow.clockwise")
-                    }
-                }
-
-                queuesRow(for: work)
-                collectionsRow(for: work)
-
-                stateToggleRow(
-                    WorkActionLabels.finished(isFinished: work.isFinished),
-                    isOn: work.isFinished,
-                    disabled: working,
-                    action: toggleFinished
-                )
-            }
-            .cardRow()
-        } header: {
-            Text("Status")
-        } footer: {
-            Text(statusFooter)
+    /// 1a's three figures under the sheet's title: how far in, how much is on the
+    /// device, and whether it is kept (never freed on finishing).
+    private func myCopyStripSection(for work: SavedWork) -> some View {
+        let hasFile = WorkReaderPreparation.hasReadableEPUB(for: work)
+        let progress = work.publicationProgress.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
+        let size = hasFile ? WorkDetailPresentation.fileSizeLabel(forFileAt: work.fileURL) ?? "—" : "—"
+        let kept = hasFile && work.isProtected
+        return Group {
+            SubjectStatStrip(
+                cells: [
+                    .init(value: progress, label: "Progress"),
+                    .init(value: size, label: "On device"),
+                    .init(value: kept ? "Kept" : "No", label: "Preserved", tint: kept ? .green : nil)
+                ],
+                palette: workPalette
+            )
+            .myCopyRow(top: 0, bottom: 0)
         }
     }
 
-    /// Binary-state row: label + trailing checkmark state indicator (no chevron —
-    /// tapping toggles in place, it doesn't navigate).
-    private func stateToggleRow(
-        _ label: (title: String, systemImage: String),
-        isOn: Bool, disabled: Bool, action: @escaping () -> Void
+    private func libraryStatusSection(for work: SavedWork) -> some View {
+        Group {
+            myCopyHeader("Status")
+            let download = WorkDetailPresentation.downloadState(WorkDownload.action(for: work))
+            myCopyToggleRow(download.title, isOn: download.isOn, disabled: working || !download.isEnabled,
+                            action: toggleSaved)
+            savedForLaterRow(for: work)
+            if work.isQueuedForLater,
+               work.epubPreservationStatus == .failed || work.epubPreservationStatus == .missingFile {
+                Button {
+                    retryPreservation(work)
+                } label: {
+                    myCopyAddLabel("Retry Queue Preservation", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .myCopyRow()
+            }
+            // 1a names the state and checks it, rather than a verb.
+            myCopyToggleRow(
+                "Finished",
+                isOn: work.isFinished,
+                disabled: working,
+                action: toggleFinished
+            )
+        }
+    }
+
+    func myCopyHeader(_ title: String, note: String? = nil) -> some View {
+        MyCopyGroupHeader(title: title, note: note)
+    }
+
+    /// Binary-state row: the name, and 1a's filled check in the work's colour
+    /// when on. Tapping toggles in place, so no chevron.
+    private func myCopyToggleRow(
+        _ title: String, isOn: Bool, value: String? = nil, busy: Bool = false,
+        disabled: Bool, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack {
-                Label(label.title, systemImage: label.systemImage)
-                Spacer()
+            HStack(spacing: 10) {
+                Text(title)
+                    .font(.system(size: 14.5))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if isOn {
                     Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 15))
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
+                }
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else if let value {
+                    myCopyValue(value)
                 }
             }
             .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(disabled)
         .accessibilityValue(isOn ? "On" : "Off")
+        .myCopyRow()
+    }
+
+    /// A fact row: name on the left, the value dim and tabular on the right.
+    func myCopyValueRow(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 14.5))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            myCopyValue(value)
+        }
+        .accessibilityElement(children: .combine)
+        .myCopyRow()
+    }
+
+    private func myCopyValue(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 13))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    /// 1a's "+ Add to queue": an accent plus and label, the group's last row.
+    private func myCopyAddLabel(_ title: String, systemImage: String = "plus") -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+        }
+        .foregroundStyle(.tint)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private func savedForLaterRow(for work: SavedWork) -> some View {
         let queued = work.isInSavedForLaterQueue
-        let label = WorkActionLabels.savedForLater(isQueued: queued)
-        return Button {
-            if queued {
-                removeFromSavedForLater()
-            } else {
-                saveForLater()
-            }
-        } label: {
-            HStack {
-                Label(label.title, systemImage: label.systemImage)
-                Spacer()
-                if preservingStatusIsBusy {
-                    ProgressView()
-                } else if queued {
-                    Text(WorkDetailPresentation.preservationStatusLabel(work.epubPreservationStatus))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .contentShape(Rectangle())
+        return myCopyToggleRow(
+            "Saved for Later",
+            isOn: queued,
+            value: queued ? WorkDetailPresentation.preservationStatusLabel(work.epubPreservationStatus) : nil,
+            busy: preservingStatusIsBusy,
+            disabled: working || preservingStatusIsBusy
+        ) {
+            if queued { removeFromSavedForLater() } else { saveForLater() }
         }
-        .disabled(working || preservingStatusIsBusy)
     }
 
-    private func queuesRow(for work: SavedWork) -> some View {
-        // Counted from the very lines drawn beneath it. The label counted
-        // `queueMemberships` raw, and a soft-deleted queue keeps its
-        // memberships — so a work could read "In 2 Queues" above a list that
-        // named one, and "In 1 Queue" above no list at all.
-        let lines = queueMembershipLines(for: work)
-        return Button {
-            withLocalWork { _ in showingAddToQueue = true }
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                // No trailing chevron: this row opens a sheet, not a hierarchical
-                // push — HIG reserves the disclosure indicator for the latter.
-                HStack {
-                    Label(
-                        WorkDetailPresentation.queueLabel(count: lines.count),
-                        systemImage: "list.bullet.rectangle"
-                    )
-                    Spacer()
-                }
-                ForEach(lines) { line in
-                    Text(line.text)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 30)
-                }
+    /// One row per queue ("Neon reread · #3 of 12"), then Add to queue — 1a.
+    private func libraryQueuesSection(for work: SavedWork) -> some View {
+        Group {
+            myCopyHeader("Queues")
+            ForEach(queueMembershipLines(for: work)) { line in
+                myCopyValueRow(line.name, line.position ?? "")
             }
-            .contentShape(Rectangle())
+            Button {
+                withLocalWork { _ in showingAddToQueue = true }
+            } label: {
+                myCopyAddLabel("Add to queue")
+            }
+            .buttonStyle(.plain)
+            .disabled(working)
+            .myCopyRow(top: 6, bottom: 6)
         }
-        .disabled(working)
     }
 
     /// One display line per membership. Identified by the membership's UUID, not
     /// the rendered text — two same-named queues can produce identical strings.
     private struct QueueMembershipLine: Identifiable {
         let id: UUID
-        let text: String
+        let name: String
+        let position: String?
     }
 
-    /// "Queue name — #position of count" per queue, using the same ordering
-    /// projection the queue screen itself renders.
+    /// Queue name and "#position of count", using the same ordering projection
+    /// the queue screen itself renders. Counted from the live memberships: a
+    /// soft-deleted queue keeps its memberships and must not be listed.
     private func queueMembershipLines(for work: SavedWork) -> [QueueMembershipLine] {
         work.activeQueueMemberships
             .compactMap { membership -> QueueMembershipLine? in
                 guard let queue = membership.queue else { return nil }
                 let orderedWorks = ReadingQueueService.orderedWorks(in: queue)
-                guard let index = orderedWorks.firstIndex(where: { $0.id == work.id }) else {
-                    return QueueMembershipLine(id: membership.id, text: queue.name)
-                }
-                return QueueMembershipLine(
-                    id: membership.id,
-                    text: "\(queue.name) — #\(index + 1) of \(orderedWorks.count)"
-                )
+                let position = orderedWorks.firstIndex(where: { $0.id == work.id })
+                    .map { "#\($0 + 1) of \(orderedWorks.count)" }
+                return QueueMembershipLine(id: membership.id, name: queue.name, position: position)
             }
-            .sorted { $0.text < $1.text }
+            .sorted { $0.name < $1.name }
     }
 
-    private func collectionsRow(for work: SavedWork) -> some View {
-        // A collection in Recently Deleted keeps its works, so the raw list
-        // both counted and NAMED a collection the reader has deleted.
-        let live = work.activeCollections
-        let names = live.map(\.name).sorted()
-        return Button {
-            withLocalWork { _ in showingAddToCollection = true }
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                // No trailing chevron: this row opens a sheet, not a hierarchical
-                // push — HIG reserves the disclosure indicator for the latter.
-                HStack {
-                    Label(
-                        WorkDetailPresentation.collectionLabel(count: live.count),
-                        systemImage: "square.stack"
-                    )
-                    Spacer()
-                }
-                if !names.isEmpty {
-                    Text(names.joined(separator: ", "))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 30)
-                }
+    private func libraryCollectionsSection(for work: SavedWork) -> some View {
+        // A collection in Recently Deleted keeps its works, so only live ones.
+        let names = work.activeCollections.map(\.name).sorted()
+        return Group {
+            myCopyHeader("Collections")
+            ForEach(names, id: \.self) { name in
+                Text(name)
+                    .font(.system(size: 14.5))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .myCopyRow()
             }
-            .contentShape(Rectangle())
+            Button {
+                withLocalWork { _ in showingAddToCollection = true }
+            } label: {
+                myCopyAddLabel("Add to collection")
+            }
+            .buttonStyle(.plain)
+            .disabled(working)
+            .myCopyRow(top: 6, bottom: 6)
         }
-        .disabled(working)
     }
 
     private func libraryStorageSection(for work: SavedWork) -> some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                LabeledContent("Download", value: downloadStatusText(for: work))
-                if work.isQueuedForLater {
-                    LabeledContent(
-                        "Preservation",
-                        value: WorkDetailPresentation.preservationStatusLabel(work.epubPreservationStatus)
-                    )
-                }
-                conversionRows(for: work)
+        Group {
+            myCopyHeader("Storage")
+            myCopyValueRow("Download", downloadStatusText(for: work))
+            if work.isQueuedForLater {
+                myCopyValueRow(
+                    "Preservation",
+                    WorkDetailPresentation.preservationStatusLabel(work.epubPreservationStatus)
+                )
             }
-            .cardRow()
-        } header: {
-            Text("Storage")
-        }
-    }
-
-    /// Shown only for converted imports, which are the only works with an original
-    /// file to rebuild from.
-    @ViewBuilder
-    private func conversionRows(for work: SavedWork) -> some View {
-        if let candidate = WorkReconversion.candidate(for: work) {
-            LabeledContent("Converted from", value: candidate.record.originalFileName)
-            if candidate.isStale {
-                // The whole point of versioning the converter: rebuild in place instead
-                // of deleting the work and importing the file again, which would lose
-                // its progress, tags, collections and queue memberships.
-                Button {
-                    Task { await reconvert(work) }
-                } label: {
-                    Label(
-                        working ? "Rebuilding…" : "Rebuild with the Improved Converter",
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
-                    .font(.subheadline)
-                }
-                .disabled(working)
-                Text("This work was converted by an earlier version. Rebuilding uses the "
-                    + "original file that was kept alongside it, so nothing is re-downloaded "
-                    + "and your progress and tags stay put.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                LabeledContent("Conversion", value: "Up to date")
-            }
-        }
-    }
-
-    private func reconvert(_ work: SavedWork) async {
-        working = true
-        defer { working = false }
-        do {
-            _ = try await WorkReconversion.reconvert(work, in: context)
-        } catch {
-            loadError = error.localizedDescription
+            myCopyValueRow("Source", work.origin.displayName)
         }
     }
 
@@ -458,93 +434,122 @@ extension WorkDetailView {
     }
 
     private func libraryActivitySection(for work: SavedWork) -> some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                LabeledContent(
-                    "Added",
-                    value: work.dateAdded.formatted(date: .abbreviated, time: .shortened)
-                )
-                LabeledContent(
-                    "Last Opened",
-                    value: work.lastReadDate
-                        .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
-                )
-                // Bar and label share one source: `readingProgress`'s chapter
-                // fallback draws a bar for works never opened.
-                if let progress = work.publicationProgress,
-                   let progressLabel = WorkReadingPosition.cardProgressLabel(progress: progress) {
-                    LabeledContent("Progress", value: progressLabel)
+        Group {
+            myCopyHeader("Activity")
+            myCopyValueRow("Added", work.dateAdded.formatted(date: .abbreviated, time: .shortened))
+            myCopyValueRow(
+                "Last opened",
+                work.lastReadDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
+            )
+            // Bar and label share one source: `readingProgress`'s chapter
+            // fallback draws a bar for works never opened.
+            if let progress = work.publicationProgress,
+               let progressLabel = WorkReadingPosition.cardProgressLabel(progress: progress) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Text("Progress")
+                            .font(.system(size: 14.5))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        myCopyValue(progressLabel)
+                    }
                     ProgressView(value: progress)
                 }
+                .accessibilityElement(children: .combine)
+                .myCopyRow()
             }
-            .cardRow()
-        } header: {
-            Text("Activity")
         }
     }
 
     // MARK: My Tags
 
+    /// 1a: chosen tags as tinted chips with a remove mark, an "Add a tag"
+    /// field, then suggestions as plain chips. Private to this device.
     private var myTagsSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 12) {
-                let myTags = localWork?.tags ?? []
-                if myTags.isEmpty {
-                    Text("No tags yet — add some to organize your Library.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(myTags.sorted { $0.name < $1.name }) { tag in
-                        HStack {
-                            Button { router.filterLibrary(.userTag, tag.name) } label: {
-                                Text(tag.name).foregroundStyle(.primary)
-                            }
-                            .buttonStyle(.plain)
-                            Spacer()
-                            Button {
-                                removeTag(tag)
-                            } label: {
-                                Image(systemName: "minus.circle.fill").foregroundStyle(.red)
-                            }
-                            .buttonStyle(.borderless)
-                            // 28pt, not the 44pt default: this row is one of several
-                            // stacked inside a single shared .cardRow() (myTagsSection),
-                            // not its own independent List row, so nothing here already
-                            // enforces a 44pt floor — the default would inflate every
-                            // tag row's height to 44pt via HStack's tallest-child sizing.
-                            // Matches the suggestion-chip row below, which uses the same
-                            // 28pt floor for the identical reason.
-                            .minimumHitTarget(28)
-                            .accessibilityLabel("Remove tag \(tag.name)")
+        Group {
+            myCopyHeader("My tags", note: "private")
+            VStack(alignment: .leading, spacing: 9) {
+                let myTags = (localWork?.tags ?? []).sorted { $0.name < $1.name }
+                if !myTags.isEmpty {
+                    FlowLayout(spacing: 7, rowSpacing: 7) {
+                        ForEach(myTags) { tag in
+                            myTagChip(tag)
                         }
                     }
                 }
 
-                HStack {
+                HStack(spacing: 10) {
                     TextField("Add a tag", text: $newTagName)
+                        .font(.system(size: 14))
                         .onSubmit(addTypedTag)
                     Button("Add", action: addTypedTag)
+                        .font(.system(size: 14, weight: .medium))
                         .buttonStyle(.borderless)
                         .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .subjectPanel(cornerRadius: 10)
 
                 if !suggestions.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 7) {
                             ForEach(suggestions, id: \.self) { name in
-                                Button { apply(named: name) } label: { TagChip(text: name) }
-                                    .buttonStyle(.plain)
-                                    .minimumHitTarget(28)
+                                Button { apply(named: name) } label: {
+                                    Text(name)
+                                        .font(.system(size: 13.5))
+                                        .foregroundStyle(.primary)
+                                        .padding(.horizontal, 11)
+                                        .padding(.vertical, 6)
+                                        .subjectPanel(cornerRadius: 8)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Add tag \(name)")
                             }
                         }
-                        .padding(.vertical, 2)
                     }
                 }
             }
-            .cardRow()
-        } header: {
-            Text("My Tags")
-        } footer: {
-            Text("My Tags are private to your Library on this device and separate from AO3's tags.")
+            .myCopyRow(bottom: 24)
         }
+    }
+
+    /// Tapping the name filters the Library by it; the minus removes it.
+    private func myTagChip(_ tag: Tag) -> some View {
+        HStack(spacing: 7) {
+            Button { router.filterLibrary(.userTag, tag.name) } label: {
+                Text(tag.name)
+                    .font(.system(size: 13.5, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            Button { removeTag(tag) } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 11, weight: .semibold))
+                    .opacity(0.6)
+            }
+            .buttonStyle(.plain)
+            .layoutFreeHitTarget { removeTag(tag) }
+            .accessibilityLabel("Remove tag \(tag.name)")
+        }
+        .foregroundStyle(.tint)
+        .padding(.leading, 11)
+        .padding(.trailing, 9)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.tint.opacity(0.16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(.tint.opacity(0.22), lineWidth: 0.5)
+                )
+        )
+    }
+}
+
+extension View {
+    /// A My copy row: flush to the sheet's 22pt margins, no card, no separator.
+    func myCopyRow(top: CGFloat = 3, bottom: CGFloat = 3) -> some View {
+        listRowInsets(EdgeInsets(top: top, leading: 22, bottom: bottom, trailing: 22))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }

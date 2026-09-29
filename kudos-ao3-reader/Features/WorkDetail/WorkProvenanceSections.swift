@@ -24,9 +24,11 @@ struct WorkProvenanceSections: View {
     @State private var rebuilt = false
     @State private var confirmingRedundantRebuild = false
 
+    /// Lives in My copy (1a) only. The Library/Later/Favorite badges this used to
+    /// repeat are the sheet's own strip and Status group; the preservation
+    /// explanation, which nothing else says, moves under Origin.
     var body: some View {
         originSection
-        if !statuses.isEmpty { statusSection }
         if candidate != nil { conversionSection }
     }
 
@@ -37,7 +39,8 @@ struct WorkProvenanceSections: View {
     // MARK: - Sections
 
     private var originSection: some View {
-        Section {
+        Group {
+            MyCopyGroupHeader(title: "Origin")
             VStack(alignment: .leading, spacing: 8) {
                 Label {
                     Text(originSentence)
@@ -61,20 +64,6 @@ struct WorkProvenanceSections: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-            .cardRow()
-        } header: {
-            Text("Origin")
-        }
-    }
-
-    private var statusSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(statuses, id: \.text) { badge in
-                    WorkStateBadge(text: badge.text, symbol: badge.symbol)
-                        .font(.caption2)
-                }
                 if let explanation = work.preservationState.explanation(origin: work.origin) {
                     Text(explanation)
                         .font(.caption)
@@ -82,16 +71,16 @@ struct WorkProvenanceSections: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .cardRow()
-        } header: {
-            Text("Status")
+            .font(.system(size: 14.5))
+            .myCopyRow()
         }
     }
 
     @ViewBuilder
     private var conversionSection: some View {
         if let candidate {
-            Section {
+            Group {
+                MyCopyGroupHeader(title: "Conversion")
                 VStack(alignment: .leading, spacing: 10) {
                     LabeledContent("Converted from", value: formatName(candidate.record.format))
                     // iOS names a *shared* file with a bare UUID, which tells a reader
@@ -140,7 +129,8 @@ struct WorkProvenanceSections: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .cardRow()
+                .font(.system(size: 14.5))
+                .myCopyRow()
                 .confirmationDialog(
                     "Rebuild this work?",
                     isPresented: $confirmingRedundantRebuild,
@@ -164,8 +154,6 @@ struct WorkProvenanceSections: View {
                 } message: {
                     Text(rebuildError ?? "")
                 }
-            } header: {
-                Text("Conversion")
             }
         }
     }
@@ -190,26 +178,6 @@ struct WorkProvenanceSections: View {
         work.origin == .importedFile ? "its source" : work.origin.displayName
     }
 
-    /// Every status worth reporting. Uncapped — a full screen has room, unlike the card.
-    private var statuses: [(text: String, symbol: String)] {
-        var badges: [(text: String, symbol: String)] = []
-        if let preservation = work.preservationState.badgeLabel {
-            badges.append((text: preservation, symbol: work.preservationState.badgeSymbol))
-        }
-        if work.isInSavedForLaterQueue {
-            badges.append((text: "Later", symbol: WorkActionLabels.savedForLaterSymbol))
-        }
-        if work.isSaved {
-            badges.append((text: "Downloaded", symbol: WorkActionLabels.downloadedSymbol))
-        }
-        if work.isFavorite { badges.append((text: "Favorite", symbol: "star.fill")) }
-        if work.isFinished { badges.append((text: "Finished", symbol: "checkmark.circle.fill")) }
-        if !work.hasEPUB, !work.ao3Unavailable {
-            badges.append((text: "Not downloaded", symbol: "arrow.down.circle"))
-        }
-        return badges
-    }
-
     private func formatName(_ raw: String) -> String {
         ImportedFileFormat(rawValue: raw)?.displayName ?? raw
     }
@@ -227,5 +195,19 @@ struct WorkProvenanceSections: View {
         } catch {
             rebuildError = error.localizedDescription
         }
+    }
+}
+
+/// My copy's group header (1a): 10pt small caps with a hairline. Shared by the
+/// work detail's sheet sections and this view.
+struct MyCopyGroupHeader: View {
+    let title: String
+    var note: String?
+
+    var body: some View {
+        // A row, not a section header: a plain list pins headers while
+        // scrolling and pads them, and 1a spaces its groups 16pt apart.
+        SubjectFieldLabel(text: title, style: .field, note: note, hasRule: true)
+            .myCopyRow(top: 19, bottom: 5)
     }
 }
