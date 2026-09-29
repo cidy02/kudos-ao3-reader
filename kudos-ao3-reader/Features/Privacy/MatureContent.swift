@@ -350,6 +350,7 @@ struct MatureRevealToggle: View {
         }
         // Matches FilterButton: neutral unless actively toggled on. .tint(), not
         // .foregroundStyle() — see FilterButton's own comment on why.
-        .tint(gate.revealAll ? Color.accentColor : Color.primary)
+        // nil inherits the screen's tint.
+        .tint(gate.revealAll ? nil : Color.primary)
     }
 }

@@ -607,7 +607,7 @@ private struct RecentlyDeletedRow: View {
         .overlay {
             if isSelected {
                 RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .strokeBorder(.tint, lineWidth: 2)
             }
         }
     }

@@ -268,6 +268,7 @@ struct ReadingQueueSettingsView: View {
                     + "intact. Works stay in Kudos either way."
             )
         }
+            .screenTint(palette)
     }
 
     /// "Order" is real, if thin: every queue's works are in the manual,

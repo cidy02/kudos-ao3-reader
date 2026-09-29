@@ -75,7 +75,7 @@ struct WorkBulkTagSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: symbol(for: coverage))
-                    .foregroundStyle(coverage == .none ? Color.secondary : Color.accentColor)
+                    .foregroundStyle(coverage == .none ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
                 Text(tag.name)
                     .foregroundStyle(.primary)
                 Spacer(minLength: 8)

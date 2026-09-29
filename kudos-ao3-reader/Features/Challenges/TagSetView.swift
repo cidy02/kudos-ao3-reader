@@ -112,6 +112,7 @@ struct TagSetView: View {
         .subjectScreenWash(palette: palette)
         .task { await loadTagSetIfNeeded() }
         .refreshable { await loadTagSet() }
+            .screenTint(palette)
     }
 
     // MARK: - Header
@@ -575,7 +576,7 @@ struct TagSetView: View {
                 Task { await loadTagSet() }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

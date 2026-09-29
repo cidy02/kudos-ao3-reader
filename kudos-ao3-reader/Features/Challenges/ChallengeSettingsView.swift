@@ -78,6 +78,7 @@ struct ChallengeSettingsView: View {
         .subjectScreenWash(palette: palette)
         .task { await loadSettingsIfNeeded() }
         .refreshable { await loadSettings() }
+            .screenTint(palette)
     }
 
     // MARK: - Header & Intro
@@ -485,7 +486,7 @@ struct ChallengeSettingsView: View {
                 Task { await loadSettings() }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
