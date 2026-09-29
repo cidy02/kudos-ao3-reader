@@ -462,19 +462,23 @@ struct AO3AccountWorksList: View {
         switch phase {
         // Subscriptions keeps its screen: Series and Authors are its own pills.
         case .loaded where works.isEmpty && kind != .subscriptions:
-            ContentUnavailableView {
-                Label(kind.emptyTitle, systemImage: kind.emptySymbol)
-            } description: {
-                Text(kind.emptyMessage)
+            headedState {
+                ContentUnavailableView {
+                    Label(kind.emptyTitle, systemImage: kind.emptySymbol)
+                } description: {
+                    Text(kind.emptyMessage)
+                }
             }
 
         case let .failed(message):
-            ContentUnavailableView {
-                Label("Couldn't load your list", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(message)
-            } actions: {
-                Button("Try Again") { Task { await load(page: currentPage) } }
+            headedState {
+                ContentUnavailableView {
+                    Label("Couldn't load your list", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                } actions: {
+                    Button("Try Again") { Task { await load(page: currentPage) } }
+                }
             }
 
         case .loading where works.isEmpty:
@@ -1292,5 +1296,19 @@ struct EnrichingAO3WorkRow: View {
                     onEnriched?(result)
                 }
             }
+    }
+}
+
+extension AO3AccountWorksList {
+    /// An empty or failed list keeps the page it belongs to — kicker, title,
+    /// wash — so the screen does not turn into a bare black page (T-317).
+    private func headedState<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                subjectHeader.padding(.top, 20)
+                content().padding(.top, 60)
+            }
+        }
+        .subjectScreenWash(palette: accountPalette)
     }
 }

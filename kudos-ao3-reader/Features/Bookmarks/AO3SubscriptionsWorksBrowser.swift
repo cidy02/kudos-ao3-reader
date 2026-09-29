@@ -28,8 +28,9 @@ enum AO3SubscriptionsGroup: String, Sendable {
 
     var title: String {
         switch self {
-        case .updatedSinceYouLooked: "Updated since you looked"
-        case .everythingElse: "Everything else"
+        // 1p's own names; Marked for Later (1o) keeps "Updated since you looked".
+        case .updatedSinceYouLooked: "New since you last looked"
+        case .everythingElse: "All works"
         }
     }
 }
