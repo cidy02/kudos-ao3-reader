@@ -173,25 +173,27 @@ struct AllReadingQueuesGridView: View {
     private var tagRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 7) {
-                tagChip("All", value: "")
+                // 1i: each pill carries how many queues it keeps — "Rereads 2".
+                tagChip("All", value: "", count: readingQueues.count)
                 ForEach(queueTagNames, id: \.self) { name in
-                    tagChip(name, value: name)
+                    tagChip(name, value: name, count: readingQueues.count { $0.tags.contains { $0.name == name } })
                 }
-                if readingQueues.contains(where: { $0.tags.isEmpty }) {
-                    tagChip("Untagged", value: Self.untaggedFilter)
+                let untagged = readingQueues.count { $0.tags.isEmpty }
+                if untagged > 0 {
+                    tagChip("Untagged", value: Self.untaggedFilter, count: untagged)
                 }
             }
             .padding(.horizontal, SubjectMetrics.gutter)
         }
     }
 
-    private func tagChip(_ title: String, value: String) -> some View {
+    private func tagChip(_ title: String, value: String, count: Int) -> some View {
         let isSelected = tagFilter == value
         return Button {
             tagFilter = isSelected ? "" : value
         } label: {
             SubjectChip(
-                text: title,
+                text: "\(title) \(count)",
                 style: .pill(isSelected: isSelected),
                 palette: organizerPalette
             )
@@ -253,7 +255,7 @@ struct AllReadingQueuesGridView: View {
                         .pageBodyRow(top: 18, gutter: 0)
                     ForEach(pinnedQueues) { queue in
                         organizerRow(queue, isReorderable: false)
-                            .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                            .organizerCard(queue)
                     }
                 }
             }
@@ -272,12 +274,12 @@ struct AllReadingQueuesGridView: View {
 
                 if let savedForLaterQueue {
                     organizerRow(savedForLaterQueue, isReorderable: false)
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                        .organizerCard(savedForLaterQueue)
                 }
 
                 ForEach(customQueues) { queue in
                     organizerRow(queue, isReorderable: true)
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                        .organizerCard(queue)
                         .swipeActions(edge: .trailing) {
                             if !isSelecting {
                                 Button(role: .destructive) {
@@ -495,31 +497,51 @@ struct AllReadingQueuesGridView: View {
         let storageLine = preserved.isEmpty
             ? "nothing kept yet"
             : "\(preserved.count) offline · \(queueByteCountString(byteCount))"
-        // 1i: "count, tags and offline size on every row" — "Rereads · Long fic".
-        let tagLine = queue.tags.map(\.name).sorted().joined(separator: " · ")
+        // 1i: "count, tags and offline size on every row".
+        let tagNames = queue.tags.map(\.name).sorted()
+        let tagLine = tagNames.joined(separator: " · ")
+        let palette = queue.kind == .custom
+            ? themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+            : organizerPalette
 
         let isSelected = selection.contains(queue.id)
         let content = HStack(spacing: 12) {
             peekTile(queue, works: works)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+            // 1i's row: dot · name · count, the per-work strip, then the tags
+            // as chips with the storage line after them.
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 7) {
+                    if queue.kind == .custom {
+                        Circle()
+                            .fill(palette.accent)
+                            .frame(width: 10, height: 10)
+                            .accessibilityHidden(true)
+                    }
                     Text(queue.displayName)
                         .font(.system(size: 15.5, weight: .semibold))
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
                     Text("\(works.count)")
                         .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
-                if !tagLine.isEmpty {
-                    Text(tagLine)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                if !works.isEmpty {
+                    QueueProgressStrip(
+                        progress: ReadingQueueFacts.progress(of: works.map(\.readingState)),
+                        palette: palette
+                    )
+                    .accessibilityHidden(true)
                 }
-                Text(storageLine)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
+                FlowLayout(spacing: 6, rowSpacing: 4) {
+                    ForEach(tagNames, id: \.self) { name in
+                        QueueRowTagLabel(text: name)
+                    }
+                    Text(storageLine)
+                        .font(.system(size: 10.5))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: 0)
@@ -528,7 +550,6 @@ struct AllReadingQueuesGridView: View {
                 WorkSelectionBubble(isSelected: isSelected)
             }
         }
-        .padding(.vertical, 4)
         .contentShape(Rectangle())
         let summary = "\(works.count) work\(works.count == 1 ? "" : "s"), "
             + "\(tagLine.isEmpty ? "" : "\(tagLine), ")\(storageLine)"
@@ -554,23 +575,22 @@ struct AllReadingQueuesGridView: View {
     }
 
     /// 1i: "a 2×2 peek tile of the queue's first four works (ReadingQueueCard's
-    /// idea, at 44px)" — replacing the hue dot, so the queue's own colour is the
-    /// tile's glass and each cell is a work's. Saved for Later has no colour of
-    /// its own, so its glass stays plain.
+    /// idea, at 44px)". The queue's colour is the card's wash and the dot, so
+    /// the tile's glass stays plain and each cell is a work's colour.
     private func peekTile(_ queue: ReadingQueue, works: [SavedWork]) -> some View {
         QueuePeekTile(
-            spacing: 2,
+            spacing: 2.5,
             inset: 3,
-            cornerRadius: 10,
-            tint: queue.kind == .custom ? themeManager.appTheme.carouselQueueTint(hue: queue.displayHue) : nil
+            cornerRadius: 9,
+            tint: nil
         ) { index in
-            let shape = RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
             if index < works.count {
                 let work = works[index]
                 shape.fill(
                     themeManager.appTheme.subjectPalette(
                         hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-                    ).accent.opacity(0.55)
+                    ).accent.opacity(0.4)
                 )
             } else {
                 shape.fill(Color.primary.opacity(0.05))
@@ -690,5 +710,34 @@ enum QueueOrganizerSelection {
         if tagFilterActive { return "Clear the tag filter to reorder" }
         if searchActive { return "Clear the search to reorder" }
         return "Drag to reorder"
+    }
+}
+
+/// 1i's row tag: small caps on a faint plate, not the page's full-size chip.
+private struct QueueRowTagLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: 9.5, weight: .semibold))
+            .tracking(0.6)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.vertical, 3)
+            .padding(.horizontal, 7)
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+private extension View {
+    /// 1i draws every queue as a card washed in its own colour (radius 16,
+    /// 11pt top and bottom, 8pt apart). Saved for Later has no colour.
+    func organizerCard(_ queue: ReadingQueue) -> some View {
+        cardRow(
+            tintHue: queue.kind == .custom ? queue.displayHue : nil,
+            cornerRadius: 16,
+            verticalPadding: 11,
+            interCardSpacing: 8
+        )
     }
 }
