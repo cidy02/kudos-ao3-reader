@@ -75,8 +75,14 @@ struct AO3AuthorWorksScopeSection: View {
                 }
                 .filterPanelPresentation(isPresented: $showingFilters) { sortAndFilterSheet }
             } else {
+                // 1u: the scope chips sit on the wash, not in a panel — the
+                // same rail as every other page's filter chips.
                 Section {
-                    controls.cardRow()
+                    controls
+                        .listRowInsets(EdgeInsets(top: 4, leading: SubjectMetrics.gutter,
+                                                  bottom: 4, trailing: SubjectMetrics.gutter))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
                 .filterPanelPresentation(isPresented: $showingFilters) { sortAndFilterSheet }
             }

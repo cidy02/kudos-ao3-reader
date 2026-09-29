@@ -167,6 +167,12 @@ struct AccountView: View {
                     if !inboxModel.isSelecting { floatingChromeRow }
                 }
                 .navigationDestination(for: Route.self, destination: destination)
+                #if DEBUG
+                .task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    DebugLaunchRoute.applyAccount(to: &path)
+                }
+                #endif
                 .navigationDestination(item: $editingWorkID) { WritingWorkDestination(workID: $0) }
                 .navigationDestination(for: SettingsRoute.self) { SettingsDestination(route: $0) }
                 .navigationDestination(for: AO3AccountWorksList.Kind.self) {
