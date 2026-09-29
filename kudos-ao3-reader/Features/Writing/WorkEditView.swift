@@ -143,6 +143,9 @@ struct WorkEditView: View {
             }
         }
         .cardList()
+        // Form rows at their own 11–12pt padding; the List's minimum row
+        // height was holding each at ~52pt (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .environment(\.writingEditedWorkID, form.workID)
         .disabled(isSaving || isPosting)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
