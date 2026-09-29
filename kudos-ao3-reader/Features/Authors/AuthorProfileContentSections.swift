@@ -180,9 +180,9 @@ struct AO3AuthorFandomFilterSection: View {
                         onWillChange()
                         model.selectFandom(fandom, auth: auth)
                     } label: {
-                        let count = fandom.workCount.map { " (\($0.formatted()))" } ?? ""
+                        let count = fandom.workCount.map { " (\($0.compactCount))" } ?? ""
                         TagChip(
-                            text: fandom.name + count,
+                            text: FandomDisplayName.bareTitle(fandom.name) + count,
                             tinted: model.selectedFandom == fandom
                         )
                     }
@@ -377,12 +377,11 @@ struct AO3AuthorWorksSection: View {
     @ViewBuilder
     private func ownWorkSwipeActions(_ entry: CanonicalWork) -> some View {
         if let onOwnWorkAction, let remote = entry.remote {
-            Button {
+            Button(role: .destructive) {
                 onOwnWorkAction(.delete(workID: remote.id, title: remote.title))
             } label: {
                 Label("Delete", systemImage: "trash")
             }
-            .tint(.red)
 
             if Self.offersAddChapter(remote) {
                 Button {

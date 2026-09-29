@@ -253,7 +253,7 @@ struct ReadingQueueBrowserView: View {
                 Button(role: .destructive) {
                     pendingRemoval = work
                 } label: {
-                    Label("Remove from Queue", systemImage: "minus.circle")
+                    Label("Remove", systemImage: "minus.circle")
                 }
             }
         }
@@ -351,7 +351,8 @@ struct ReadingQueueBrowserView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(
-                    "The queue moves to Recently Deleted for 90 days, with everything in it "
+                    "The queue moves to Recently Deleted "
+                        + "for \(PreservedWorkService.recoveryWindowText), with everything in it "
                         + "intact. Works stay in Kudos either way."
                 )
             }
@@ -729,11 +730,9 @@ extension ReadingQueueBrowserView {
     private var manageToolbar: some ToolbarContent {
         if !works.isEmpty {
             if isReordering {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { setReordering(false) } label: {
-                        Image(systemName: "checkmark")
-                    }
-                    .accessibilityLabel("Done")
+                // The word, as the organizer ends its reorder (pass2-13).
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { setReordering(false) }
                 }
             } else if isSelecting {
                 ToolbarItem(placement: .confirmationAction) {

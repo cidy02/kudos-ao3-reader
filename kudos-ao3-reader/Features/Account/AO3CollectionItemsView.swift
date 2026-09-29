@@ -178,10 +178,9 @@ struct AO3CollectionItemsView: View {
                 }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
+                // A word, like every other commit button (pass2-26).
+                Button("Submit") {
                     Task { await submit() }
-                } label: {
-                    Label("Submit staged changes", systemImage: "checkmark")
                 }
                 .disabled(pendingCount == 0 || phase == .submitting)
                 .accessibilityLabel(

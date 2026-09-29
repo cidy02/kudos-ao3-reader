@@ -217,10 +217,10 @@ struct AO3AuthorPerformanceStrip: View {
     /// Missing AO3 fields stay absent, never a manufactured zero.
     static func cells(for work: AO3WorkSummary) -> [SubjectStatStrip.Cell] {
         [
-            work.kudos.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Kudos") },
-            work.comments.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Comments") },
-            work.hits.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Hits") },
-            work.bookmarks.map { SubjectStatStrip.Cell(value: $0.formatted(), label: "Bookmarks") }
+            work.kudos.map { SubjectStatStrip.Cell(value: $0.compactCount, label: "Kudos") },
+            work.comments.map { SubjectStatStrip.Cell(value: $0.compactCount, label: "Comments") },
+            work.hits.map { SubjectStatStrip.Cell(value: $0.compactCount, label: "Hits") },
+            work.bookmarks.map { SubjectStatStrip.Cell(value: $0.compactCount, label: "Bookmarks") }
         ].compactMap { $0 }
     }
 }

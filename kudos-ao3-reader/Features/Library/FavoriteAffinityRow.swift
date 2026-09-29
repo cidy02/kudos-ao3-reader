@@ -205,7 +205,7 @@ struct FavoriteAffinityRow: View {
     private func newestWorkMetadata(_ work: AO3WorkSummary) -> String {
         var parts: [String] = []
         if let fandom = work.fandoms.first(where: { !$0.isEmpty }) {
-            parts.append(fandom)
+            parts.append(FandomDisplayName.bareTitle(fandom))
         }
         if !work.dateUpdated.isEmpty {
             parts.append("updated \(work.dateUpdated)")

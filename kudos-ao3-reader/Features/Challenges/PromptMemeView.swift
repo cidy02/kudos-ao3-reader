@@ -242,7 +242,7 @@ struct PromptMemeView: View {
             // The spec's kicker is the fandom; a multi-fandom prompt adds "+N".
             HStack(spacing: 7) {
                 if let fandom = prompt.fandoms.first {
-                    Text(fandom.uppercased())
+                    Text(FandomDisplayName.bareTitle(fandom).uppercased())
                         .font(.system(size: 9, weight: .bold))
                         .tracking(9 * 0.11)
                         .foregroundStyle(palette.accent)

@@ -82,6 +82,7 @@ struct ReadingQueueCard: View {
         )
         let shape = RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
         let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map(FandomDisplayName.bareTitle)
         return VStack(alignment: .leading, spacing: 6) {
             if let fandom {
                 SubjectKicker(text: fandom, palette: palette, size: 8.5)
