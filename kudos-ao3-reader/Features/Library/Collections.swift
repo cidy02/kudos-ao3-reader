@@ -6,11 +6,13 @@ struct AllCollectionsDestination: Hashable {}
 
 // MARK: - Cards
 
-/// A Library Collections carousel card: a tinted tile (hued from the collection
-/// name, with a stack glyph so it reads as a shelf, not a single work), the name,
-/// and a work count. Sized to match `WorkCoverCard`.
+/// A Library Collections carousel card: a 2×2 preview of the works inside, the
+/// collection name, and a work count. Empty collections keep their own hue tile.
 struct CollectionCard: View {
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(PrivacyGate.self) private var gate
     let collection: WorkCollection
 
     /// Scales width and height together so the card grows proportionally at
@@ -24,38 +26,48 @@ struct CollectionCard: View {
     }
 
     // Works sitting in Recently Deleted don't count toward the card's size or the stack.
-    private var visibleWorks: [SavedWork] {
+    private var works: [SavedWork] {
         collection.works.filter { !$0.isPendingDeletion }.sorted { $0.dateAdded > $1.dateAdded }
     }
 
     private var workCount: Int {
-        visibleWorks.count
+        works.count
     }
+
+    private var previewWorks: [SavedWork] {
+        works.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+    }
+
+    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }
+    private var tileHeight: CGFloat { 221 * scale }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 9 * scale) {
             tile
-                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
-                       minHeight: cardSize.height)
-            Text(collection.name)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            Text("\(workCount) work\(workCount == 1 ? "" : "s")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .frame(width: cardSize.width, height: tileHeight)
+            VStack(alignment: .leading, spacing: 2 * scale) {
+                Text(collection.name)
+                    .font(.system(size: 15 * scale, weight: .semibold))
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                Text("\(workCount) work\(workCount == 1 ? "" : "s")")
+                    .font(.system(size: 12 * scale))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .frame(width: cardSize.width, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(collection.name), \(workCount) work\(workCount == 1 ? "" : "s")")
+        .accessibilityHint("Opens collection.")
     }
 
-    // 2+ works reads as a shelf of the actual works inside; 0-1 keeps the abstract
-    // name-hued tile — a single face would just be a worse-looking work card, and an
-    // empty stack has no titles to hue.
+    // Empty collections keep the collection's own hue; any works fill the mosaic
+    // from the top-left, with placeholders preserving the 2×2 structure.
     @ViewBuilder
     private var tile: some View {
-        if workCount >= 2 {
-            StackedWorkCover(workTitles: visibleWorks.map(\.title), cardSize: cardSize)
+        if workCount > 0 {
+            StackedWorkCover(works: previewWorks, cardSize: cardSize)
         } else {
             singleTile
         }
@@ -64,7 +76,10 @@ struct CollectionCard: View {
     private var singleTile: some View {
         let hue = collection.displayHue
         let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue)
-        return RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
+        return RoundedRectangle(
+            cornerRadius: CarouselCardMetrics.cornerRadius * scale,
+            style: .continuous
+        )
             .fill(LinearGradient(
                 colors: [gradient.start, gradient.end],
                 startPoint: .topLeading, endPoint: .bottomTrailing
@@ -80,6 +95,7 @@ struct CollectionCard: View {
 
 /// The leading "create" card in the Collections carousel.
 struct NewCollectionCard: View {
+    @Environment(ThemeManager.self) private var themeManager
     /// Scales width and height together so the card grows proportionally at
     /// large Dynamic Type sizes instead of only getting taller.
     var cardSize = ScaledCarouselCardSize()
@@ -88,27 +104,45 @@ struct NewCollectionCard: View {
     /// ReadingQueues.swift for why this matters here.
     init() {}
 
+    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }
+    private var tileHeight: CGFloat { 221 * scale }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .frame(minWidth: cardSize.width, maxWidth: cardSize.width,
-                       minHeight: cardSize.height)
+        VStack(alignment: .leading, spacing: 9 * scale) {
+            RoundedRectangle(
+                cornerRadius: CarouselCardMetrics.cornerRadius * scale,
+                style: .continuous
+            )
+                .strokeBorder(
+                    themeManager.appTheme.glassStroke(0.22),
+                    style: StrokeStyle(lineWidth: 1 * scale, dash: [5 * scale])
+                )
+                .frame(width: cardSize.width, height: tileHeight)
                 .overlay {
-                    Image(systemName: "plus")
-                        .font(.system(size: 34, weight: .medium))
-                        .foregroundStyle(.secondary)
+                    Circle()
+                        .fill(themeManager.appTheme.glassFill(0.12))
+                        .frame(width: 34 * scale, height: 34 * scale)
+                        .overlay {
+                            Image(systemName: "plus")
+                                .font(.system(size: 16 * scale, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
                 }
-            Text("New collection")
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            Text("Tap to create")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2 * scale) {
+                Text("New collection")
+                    .font(.system(size: 15 * scale, weight: .semibold))
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                Text("Tap to create")
+                    .font(.system(size: 12 * scale))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .frame(width: cardSize.width, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("New collection")
+        .accessibilityHint("Tap to create a new collection.")
     }
 }
 
