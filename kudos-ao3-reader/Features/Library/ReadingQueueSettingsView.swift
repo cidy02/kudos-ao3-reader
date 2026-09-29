@@ -29,15 +29,12 @@ struct ReadingQueueSettingsView: View {
     let queue: ReadingQueue
     /// "Home" or "Library" — the queue page's own origin, for the kicker.
     var originKicker = "Library"
+    var onShowOnlyTag: (Tag) -> Void = { _ in }
 
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var themeManager
     /// The shared vocabulary "Manage all tags" counts.
     @Query private var allTags: [Tag]
-    @State private var showingRename = false
-    @State private var renameText = ""
-    @State private var confirmDelete = false
     @State private var showingTags = false
 
     private var palette: SubjectPalette {
@@ -66,38 +63,6 @@ struct ReadingQueueSettingsView: View {
         return "\(base) · \(offline) · \(queueByteCountString(preservedByteCount))"
     }
 
-    private var preservedValue: String {
-        preservedWorks.isEmpty ? "None" : "\(preservedWorks.count) · \(queueByteCountString(preservedByteCount))"
-    }
-
-    /// 1h.3's Colour row. Writes straight through to the model rather than holding
-    /// a draft: there is no Save on this screen, and every other control here
-    /// (rename, delete) commits on its own action too.
-    private var colourPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SubjectHueSwatchRow(
-                selection: Binding(
-                    get: { queue.hue },
-                    set: { newValue in
-                        queue.hue = newValue
-                        queue.markModified()
-                        context.saveBestEffort(reason: "Saving queue colour failed")
-                    }
-                ),
-                fallbackHue: queue.displayHue
-            )
-            Text(queue.hue == nil
-                ? "Taken from the queue's name, so renaming it changes the colour."
-                : "Set on the queue, so renaming it keeps this colour.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .subjectPanel()
-    }
-
     /// 1h's "DESCRIPTION note in serif". The field is the note: it reads as the
     /// description and edits in place, writing through like Colour does — this
     /// screen has no Save. Clearing it stores "" rather than nil, so the
@@ -115,11 +80,9 @@ struct ReadingQueueSettingsView: View {
             ),
             axis: .vertical
         )
-        .font(.system(.body, design: .serif))
+        .font(.custom("New York", size: 16, relativeTo: .body))
         .accessibilityLabel("Description")
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .subjectPanel()
     }
 
     /// 1h's queue tags: "the tags as removable chips ... with Manage all tags as
@@ -127,35 +90,25 @@ struct ReadingQueueSettingsView: View {
     /// (`ReadingQueue.removeTag`, `QueueTagSheet`'s own path); "Add tag" opens
     /// that sheet. 1i's organizer rail filters on the same relationship.
     private var tagsPanel: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            FlowLayout(spacing: 6, rowSpacing: 6) {
-                ForEach(queue.tags.sorted { $0.name < $1.name }) { tag in
-                    Button {
-                        queue.removeTag(tag)
-                        context.saveBestEffort(reason: "Removing queue tag failed")
-                    } label: {
-                        SubjectChip(text: tag.name, style: .tinted, trailingImage: "xmark", palette: palette)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Remove \(tag.name)")
-                }
+        FlowLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(queue.tags.sorted { $0.name < $1.name }) { tag in
                 Button {
-                    showingTags = true
+                    queue.removeTag(tag)
+                    context.saveBestEffort(reason: "Removing queue tag failed")
                 } label: {
-                    SubjectChip(text: "Add tag", style: .dashed, systemImage: "plus")
+                    queueDetailChip(tag.name, style: .tinted, trailingImage: "xmark")
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(tag.name)")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Manage all tags", value: "\(allTags.count)", showsDisclosure: true)
-                .subjectRowNavigation(accessibilityLabel: "Manage all tags") {
-                    QueueTagManagerView(queue: queue)
-                }
+            Button {
+                showingTags = true
+            } label: {
+                queueDetailChip("Add tag", style: .dashed, systemImage: "plus")
+            }
+            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
     }
 
     var body: some View {
@@ -189,48 +142,30 @@ struct ReadingQueueSettingsView: View {
             }
 
             Section {
-                SubjectFieldLabel(text: "Details", style: .formGroup)
-                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
-                detailsPanel
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-            }
-
-            Section {
-                SubjectFieldLabel(text: "Colour", style: .formGroup)
-                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
-                colourPanel
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-            }
-
-            Section {
                 SubjectFieldLabel(text: "Tags", style: .formGroup)
-                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
+                    .pageBodyRow(top: 24, gutter: SubjectMetrics.gutter)
                 tagsPanel
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
             }
 
             Section {
-                SubjectFieldLabel(text: "Offline and order", style: .formGroup)
-                    .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
-                offlinePanel
+                SubjectFieldLabel(text: "Details", style: .formGroup)
+                    .pageBodyRow(top: 22, gutter: SubjectMetrics.gutter)
+                detailsPanel
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-                // 1j's sentence, true since T-276 (`KeepOffline`).
-                Text(NewReadingQueueSheet.offlineFootnote)
+                Text(
+                    "Turning offline off leaves the queue as a plain list — "
+                        + "nothing is preserved and it stops counting against storage."
+                )
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary.opacity(0.7))
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                    .pageBodyRow(top: 2, gutter: SubjectMetrics.gutter + 6)
             }
 
-            if queue.kind == .custom {
-                Section {
-                    SubjectFieldLabel(text: "Rename & Delete", style: .formGroup)
-                        .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
-                    managementPanel
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-                }
+            Section {
+                manageTagsPanel
+                    .pageBodyRow(top: 16, gutter: SubjectMetrics.gutter)
             }
         }
         .cardList()
@@ -239,63 +174,40 @@ struct ReadingQueueSettingsView: View {
         #if os(macOS)
         .navigationTitle(queue.displayName)
         #endif
-        .alert("Rename Queue", isPresented: $showingRename) {
-            TextField("Name", text: $renameText)
-            Button("Save") {
-                let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    queue.name = trimmed
-                    queue.markModified()
-                    context.saveBestEffort(reason: "Saving queue rename failed")
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .confirmationDialog(
-            "Delete “\(queue.displayName)”?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                PreservedWorkService.softDelete(queue, in: context)
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "The queue moves to Recently Deleted "
-                    + "for \(PreservedWorkService.recoveryWindowText), with everything in it "
-                    + "intact. Works stay in Kudos either way."
-            )
-        }
-            .screenTint(palette)
+        .screenTint(palette)
     }
 
-    /// "Order" is real, if thin: every queue's works are in the manual,
-    /// drag-reordered order `ReadingQueueBrowserView`'s Reorder mode writes —
-    /// there is no other sort mode to name here. "Preserved" is the same
-    /// figure `ReadingQueueStorageView` shows app-wide, scoped to this queue.
-    /// 1h's Queue Details asks for "offline with its consequence spelled out",
-    /// and 1i for the pin that lifts a queue above the rest. The consequence is
-    /// spelled out because it is the whole point of the setting: queued works
-    /// already keep their EPUB, so what this changes is what happens when the
-    /// work leaves the queue.
-    private var offlinePanel: some View {
+    /// 1h.3/1h.4's single Details card. The header and legend already report
+    /// the preserved count, so it is not repeated as another row here.
+    private var detailsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Pin to the top", arrangement: .control) {
-                Toggle("Pin to the top", isOn: Binding(
-                    get: { queue.isPinned },
-                    set: { isOn in
-                        queue.isPinned = isOn
-                        queue.markModified()
-                        context.saveBestEffort(reason: "Saving queue pin failed")
+            Menu {
+                ForEach(SubjectHueSwatches.all) { swatch in
+                    Button {
+                        setHue(swatch.hue)
+                    } label: {
+                        if SubjectHueSwatches.matches(swatch, queue.hue) {
+                            Label(swatch.name, systemImage: "checkmark")
+                        } else {
+                            Text(swatch.name)
+                        }
                     }
-                ))
-                .labelsHidden()
+                }
+                Divider()
+                Button("From queue name") { setHue(nil) }
+            } label: {
+                SubjectFormRow(label: "Colour", showsDisclosure: true) {
+                    Circle()
+                        .fill(themeManager.appTheme.subjectPalette(hue: queue.displayHue).accent)
+                        .frame(width: 22, height: 22)
+                        .accessibilityHidden(true)
+                }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Colour")
             SubjectRowSeparator()
-            SubjectFormRow(label: "Keep downloaded", arrangement: .control) {
-                Toggle("Keep downloaded", isOn: Binding(
+            SubjectFormRow(label: "Keep works offline", arrangement: .control) {
+                Toggle("Keep works offline", isOn: Binding(
                     // nil is "never asked", and a never-asked queue keeps its
                     // works downloaded as queues always did (`KeepOffline`).
                     get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },
@@ -308,6 +220,14 @@ struct ReadingQueueSettingsView: View {
                 ))
                 .labelsHidden()
             }
+            SubjectRowSeparator()
+            SubjectFormRow(label: "Order", value: "Manual")
+            SubjectRowSeparator()
+            SubjectFormRow(
+                label: "Last read",
+                value: ReadingQueueFacts.lastRead(works.map(\.lastReadDate))?
+                    .formatted(.relative(presentation: .named)) ?? "Never"
+            )
         }
         .subjectPanel()
     }
@@ -325,39 +245,35 @@ struct ReadingQueueSettingsView: View {
         }
     }
 
-    private var detailsPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(label: "Order", value: "Manual")
-            SubjectRowSeparator()
-            SubjectFormRow(label: "Preserved", value: preservedValue)
-            // 1h: "Last read · 2 hours ago". Omitted for a queue nobody has read in.
-            if let lastRead = ReadingQueueFacts.lastRead(works.map(\.lastReadDate)) {
-                SubjectRowSeparator()
-                SubjectFormRow(label: "Last read", value: lastRead.formatted(.relative(presentation: .named)))
+    private var manageTagsPanel: some View {
+        SubjectFormRow(label: "Manage all tags", value: "\(allTags.count)", showsDisclosure: true)
+            .subjectPanel()
+            .subjectRowNavigation(accessibilityLabel: "Manage all tags") {
+                QueueTagManagerView(queue: queue, onShowOnlyTag: onShowOnlyTag)
             }
-        }
-        .subjectPanel()
     }
 
-    private var managementPanel: some View {
-        VStack(spacing: 0) {
-            SubjectFormRow(
-                label: "Rename",
-                value: queue.name,
-                showsDisclosure: true,
-                action: {
-                    renameText = queue.name
-                    showingRename = true
-                }
-            )
-            SubjectRowSeparator()
-            SubjectFormRow(
-                label: "Delete Queue",
-                value: "",
-                isDestructive: true,
-                action: { confirmDelete = true }
-            )
-        }
-        .subjectPanel()
+    private func queueDetailChip(
+        _ text: String,
+        style: SubjectChip.Style,
+        systemImage: String? = nil,
+        trailingImage: String? = nil
+    ) -> some View {
+        SubjectChip(
+            text: text,
+            style: style,
+            systemImage: systemImage,
+            trailingImage: trailingImage,
+            palette: palette,
+            fontWeight: .medium,
+            horizontalPadding: 12,
+            verticalPadding: 8
+        )
+    }
+
+    private func setHue(_ hue: Double?) {
+        queue.hue = hue
+        queue.markModified()
+        context.saveBestEffort(reason: "Saving queue colour failed")
     }
 }

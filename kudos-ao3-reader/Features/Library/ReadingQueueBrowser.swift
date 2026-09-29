@@ -305,7 +305,12 @@ struct ReadingQueueBrowserView: View {
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
         .navigationTitle(screenTitle)
-            .onAppear(perform: resolveInitialSelection)
+            .onAppear {
+                resolveInitialSelection()
+                #if DEBUG
+                if DebugLaunchRoute.opensQueueDetails { showingQueueDetails = true }
+                #endif
+            }
             // Per-queue layout (1h): load the queue's own choice when the queue
             // changes, store it when the reader changes it. No stored choice
             // keeps the default grid.
@@ -325,7 +330,15 @@ struct ReadingQueueBrowserView: View {
             .sheet(isPresented: $showingAddWorks) { addWorksSheet }
             .navigationDestination(isPresented: $showingQueueDetails) {
                 if let selectedQueue {
-                    ReadingQueueSettingsView(queue: selectedQueue, originKicker: originKicker)
+                    ReadingQueueSettingsView(
+                        queue: selectedQueue,
+                        originKicker: originKicker,
+                        // 1bh: "closes the sheet and filters the queue".
+                        onShowOnlyTag: { tag in
+                            filters.userTags = [tag.name]
+                            showingQueueDetails = false
+                        }
+                    )
                 }
             }
             .inspector(isPresented: $showingFilters) {
