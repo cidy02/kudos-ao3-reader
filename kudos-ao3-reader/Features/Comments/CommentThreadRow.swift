@@ -896,7 +896,15 @@ private struct CommentRowChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         let resolved = indents
+        // Measured *before* `listRowInsets`: a geometry modifier between the row
+        // traits and the List dropped the insets, so every reply lost its indent
+        // while its rails kept it (T-292 regression, owner screenshot 2026-09-29).
         return content
+            .onGeometryChange(
+                for: CGRect.self,
+                of: { $0.frame(in: .named(CommentThreadGeometry.listSpace)) },
+                action: trackSwipe
+            )
             .listRowInsets(EdgeInsets(
                 top: topInset,
                 leading: CommentThreadGeometry.sideMargin + (resolved.last ?? 0),
@@ -910,11 +918,6 @@ private struct CommentRowChrome: ViewModifier {
             // row's global minX leaves its resting value frame by frame and comes
             // back as it closes. So the swiped row's rails fade out over the first
             // few points and return with it (owner, 2026-09-29).
-            .onGeometryChange(
-                for: CGRect.self,
-                of: { $0.frame(in: .named(CommentThreadGeometry.listSpace)) },
-                action: trackSwipe
-            )
             .listRowBackground(rowBackground(indents: resolved))
             .listRowSeparator(.hidden)
     }
