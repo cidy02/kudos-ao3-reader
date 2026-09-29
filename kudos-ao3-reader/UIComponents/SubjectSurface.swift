@@ -594,7 +594,8 @@ struct SectionRuleHeader: View {
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
-                .minimumHitTarget()
+                // Header stays one text line tall (1b: 11pt to the cards).
+                .layoutFreeHitTarget(action: onToggleCollapse)
                 .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
             }
 
@@ -613,7 +614,7 @@ struct SectionRuleHeader: View {
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
-                .minimumHitTarget()
+                .layoutFreeHitTarget(action: onSeeAll)
                 .accessibilityLabel("See all \(title)")
             }
         }

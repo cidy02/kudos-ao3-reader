@@ -32,3 +32,20 @@ extension View {
         modifier(MinimumHitTargetModifier(size: size))
     }
 }
+
+extension View {
+    /// A 44pt tap area that takes no layout space: the control keeps its drawn
+    /// size and the extra area rides in a background. For a small control in a
+    /// line whose height must not grow — `minimumHitTarget` makes the whole line
+    /// 44pt tall, which put a section header ~15pt further from its cards than
+    /// the spec, and a comment's name below its avatar.
+    func layoutFreeHitTarget(_ size: CGFloat = 44, action: @escaping () -> Void) -> some View {
+        background {
+            Color.clear
+                .frame(minWidth: size, minHeight: size)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: action)
+                .accessibilityHidden(true)
+        }
+    }
+}
