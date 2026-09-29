@@ -190,7 +190,7 @@ struct AO3AuthorBylineView: View {
                         .overlay {
                             if focusedTokenID == token.id {
                                 RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color.accentColor, lineWidth: 2)
+                                    .stroke(.tint, lineWidth: 2)
                             }
                         }
                 } else {

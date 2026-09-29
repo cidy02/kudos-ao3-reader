@@ -1716,6 +1716,8 @@ private struct CommentSwipeActions: ViewModifier {
 
     @Environment(\.commentThreadHandlers) private var handlers
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.screenTint) private var screenTint
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -1732,7 +1734,7 @@ private struct CommentSwipeActions: ViewModifier {
                         } label: {
                             Label("Reply", systemImage: "arrowshape.turn.up.left")
                         }
-                        .tint(.accentColor)
+                        .tint(screenTint ?? themeManager.effectiveTint)
                     }
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {

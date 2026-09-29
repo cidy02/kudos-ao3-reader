@@ -79,13 +79,14 @@ struct FilterButton: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 3)
                             .frame(minWidth: 15, minHeight: 15)
-                            .background(Circle().fill(Color.accentColor))
+                            .background(Circle().fill(.tint))
                             .offset(x: 6, y: -6)
                             .accessibilityHidden(true)
                     }
                 }
         }
-        .tint(filtersActive ? Color.accentColor : Color.primary)
+        // nil inherits the screen's tint, so an active filter takes its colour.
+        .tint(filtersActive ? nil : Color.primary)
         .labelStyle(.iconOnly)
         .accessibilityValue(badgeCount > 0 ? "\(badgeCount) active" : "")
         // The default toolbar glyph size left the filled circle visibly smaller

@@ -88,7 +88,7 @@ extension ChallengeSettingsEditView {
                             set: { form?.settings.matchSettings?.includeOptional[type] = $0 }
                         ))
                         .labelsHidden()
-                        .tint(palette.accent)
+                        .tint(palette.tint)
                     }
                 }
             }
@@ -153,7 +153,7 @@ extension ChallengeSettingsEditView {
                         set: { form?.settings.isAnonymous = $0 }
                     ))
                     .labelsHidden()
-                    .tint(palette.accent)
+                    .tint(palette.tint)
                 }
             }
         }
@@ -167,7 +167,7 @@ extension ChallengeSettingsEditView {
                 set: { collectionForm?[keyPath: keyPath] = $0 }
             ))
             .labelsHidden()
-            .tint(palette.accent)
+            .tint(palette.tint)
         }
     }
 

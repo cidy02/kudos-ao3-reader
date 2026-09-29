@@ -92,6 +92,7 @@ struct SaveSearchSheet: View {
                 }
             }
         }
+            .screenTint(palette)
     }
 
     // MARK: What gets saved

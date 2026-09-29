@@ -79,6 +79,7 @@ struct PromptTagsEditorView: View {
                 freeformsText = prompt.freeforms.joined(separator: ", ")
             }
         }
+            .screenTint(palette)
     }
 
     private func tagInputField(_ placeholder: String, text: Binding<String>) -> some View {

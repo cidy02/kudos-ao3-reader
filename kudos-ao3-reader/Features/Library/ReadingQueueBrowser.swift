@@ -370,6 +370,7 @@ struct ReadingQueueBrowserView: View {
                     }
                 }
             )
+            .screenTint(subjectPalette)
     }
 
     // MARK: - Compact (iPhone)
@@ -822,7 +823,7 @@ extension ReadingQueueBrowserView {
             Label("Add Works", systemImage: "plus")
         }
         .buttonStyle(.glassProminent)
-        .tint(subjectPalette.accent)
+        .tint(subjectPalette.tint)
         .help("Add works from your library")
     }
 

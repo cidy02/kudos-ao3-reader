@@ -131,7 +131,7 @@ struct NewReadingQueueSheet: View {
         }
         // Outside the stack so the Create button, the toggle and the caret all
         // take the swatch too, not just the rows.
-        .tint(palette.accent)
+        .tint(palette.tint)
         #if os(iOS)
         // Taller than .medium now: 1j's sheet carries four groups, and a medium
         // detent hid the seed step below the fold — the one decision the board

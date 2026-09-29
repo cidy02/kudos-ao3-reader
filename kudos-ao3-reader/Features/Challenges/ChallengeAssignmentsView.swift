@@ -134,6 +134,7 @@ struct ChallengeAssignmentsView: View {
         } message: { write in
             Text(confirmationMessage(write))
         }
+            .screenTint(palette)
     }
 
     // MARK: - Header
@@ -553,7 +554,7 @@ extension ChallengeAssignmentsView {
                 Task { await load() }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
