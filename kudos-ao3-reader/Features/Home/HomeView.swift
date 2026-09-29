@@ -214,6 +214,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     try? await Task.sleep(for: .seconds(1.5))
                     if let destination = DebugLaunchRoute.homeDestination(queues: readingQueues) {
                         path.append(destination)
+                    } else if let kind = DebugLaunchRoute.homeSection() {
+                        path.append(kind)
                     } else if let work = DebugLaunchRoute.homeWork(in: works) {
                         DebugLaunchRoute.installFixtureEPUBs(in: works)
                         path.append(DebugLaunchRoute.opensReader ? .reader(work) : LocalWorkDestination.detail(work))
