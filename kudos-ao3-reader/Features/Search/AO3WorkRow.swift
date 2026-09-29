@@ -436,6 +436,11 @@ struct AO3WorkRow: View {
         if !language.isEmpty {
             metadata.append(language)
         }
+        // A blurb always has a word count. Without one this is a sparse list
+        // row (subscriptions, marked for later), whose stats are unknown, not
+        // zero — on a full blurb a missing count is AO3 omitting a zero.
+        let isFullBlurb = work.words != nil
+        func count(_ value: Int?) -> Int? { value ?? (isFullBlurb ? 0 : nil) }
         if let words = ledgerCount(work.words, singular: "word", showsZeroStats: showsZeroStats) {
             metadata.append(words)
         }
@@ -445,10 +450,10 @@ struct AO3WorkRow: View {
         }
         guard includesPerformance else { return metadata }
         for item in [
-            ledgerCount(work.comments, singular: "comment", showsZeroStats: showsZeroStats),
-            ledgerCount(work.kudos, singular: "kudos", plural: "kudos", showsZeroStats: showsZeroStats),
-            ledgerCount(work.bookmarks, singular: "bookmark", showsZeroStats: showsZeroStats),
-            ledgerCount(work.hits, singular: "hit", showsZeroStats: showsZeroStats),
+            ledgerCount(count(work.comments), singular: "comment", showsZeroStats: showsZeroStats),
+            ledgerCount(count(work.kudos), singular: "kudos", plural: "kudos", showsZeroStats: showsZeroStats),
+            ledgerCount(count(work.bookmarks), singular: "bookmark", showsZeroStats: showsZeroStats),
+            ledgerCount(count(work.hits), singular: "hit", showsZeroStats: showsZeroStats),
         ].compactMap(\.self) {
             metadata.append(item)
         }
@@ -461,8 +466,7 @@ struct AO3WorkRow: View {
         plural: String? = nil,
         showsZeroStats: Bool
     ) -> String? {
-        let count = value ?? 0
-        guard count > 0 || showsZeroStats else { return nil }
+        guard let count = value, count > 0 || showsZeroStats else { return nil }
         let noun = count == 1 ? singular : (plural ?? "\(singular)s")
         return "\(count.formatted()) \(noun)"
     }
