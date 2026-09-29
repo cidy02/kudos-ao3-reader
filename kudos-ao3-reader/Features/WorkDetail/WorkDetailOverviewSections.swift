@@ -157,10 +157,10 @@ extension WorkDetailView {
     }
 
     private var savedQuickAction: some View {
-        let label = WorkDetailPresentation.savedAction(isSaved: localWork?.isSaved ?? false)
+        let state = WorkDetailPresentation.downloadState(localWork.flatMap(WorkDownload.action(for:)))
         return quickAction(
-            title: label.title, systemImage: label.systemImage,
-            disabled: working, action: toggleSaved
+            title: state.title, systemImage: state.systemImage,
+            disabled: working || !state.isEnabled, action: toggleSaved
         )
     }
 

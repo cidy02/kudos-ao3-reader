@@ -20,10 +20,6 @@ struct WorkBulkActionBar: View {
     @State private var showingAddToCollection = false
     @State private var showingTag = false
 
-    private var allSaved: Bool {
-        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
-    }
-
     private var allFavorited: Bool {
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
     }
@@ -55,13 +51,13 @@ struct WorkBulkActionBar: View {
         Spacer()
 
         Menu {
-            Button {
-                bulkSave()
-            } label: {
-                Label(
-                    WorkActionLabels.saved(isSaved: allSaved).title,
-                    systemImage: WorkActionLabels.saved(isSaved: allSaved).systemImage
-                )
+            if let download = WorkDownload.bulkAction(for: selectedWorks) {
+                Button {
+                    Task { await WorkDownload.performBulk(download, on: selectedWorks, in: context) }
+                } label: {
+                    let label = WorkDownload.bulkLabel(download)
+                    Label(label.title, systemImage: label.systemImage)
+                }
             }
             Button {
                 bulkFavorite()
@@ -143,13 +139,6 @@ struct WorkBulkActionBar: View {
             PreservedWorkService.softDelete(work, in: context)
         }
         onDeleted()
-    }
-
-    private func bulkSave() {
-        let shouldSave = !allSaved
-        for work in selectedWorks {
-            WorkLifecycle.setSaved(work, shouldSave, in: context)
-        }
     }
 
     private func bulkFavorite() {

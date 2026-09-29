@@ -174,7 +174,7 @@ struct ReadingInsightsTests {
         #expect(ReadingInsights.hoursLabel(18.4 * 3600) == "18.4")
         #expect(ReadingInsights.signedHoursLabel(-0.6 * 3600) == "−0.6")
         #expect(ReadingInsights.durationLabel(31 * 60) == "31 min")
-        #expect(ReadingInsights.durationLabel(72 * 60) == "1 h 12 min")
-        #expect(ReadingInsights.durationLabel(120 * 60) == "2 h")
+        #expect(ReadingInsights.durationLabel(72 * 60) == "1h 12m")
+        #expect(ReadingInsights.durationLabel(120 * 60) == "2h")
     }
 }

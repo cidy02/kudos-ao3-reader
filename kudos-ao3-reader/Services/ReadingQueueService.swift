@@ -360,6 +360,18 @@ enum ReadingQueueService {
         return membership
     }
 
+    /// Save for Later on, or off — the one toggle every row and menu shares.
+    /// Taking a work off removes a queue-only record with it, as the queue does.
+    @MainActor
+    static func toggleSavedForLater(_ work: SavedWork, in context: ModelContext) {
+        if work.isInSavedForLaterQueue {
+            removeFromQueueAndDeleteIfQueueOnly(work, from: ensureSavedForLaterQueue(in: context), in: context)
+        } else {
+            // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
+            Task { @MainActor in _ = await addToSavedForLater(work, in: context) }
+        }
+    }
+
     @discardableResult
     static func addToSavedForLater(_ work: SavedWork, in context: ModelContext) async -> ReadingQueueMembership {
         let queue = ensureSavedForLaterQueue(in: context)

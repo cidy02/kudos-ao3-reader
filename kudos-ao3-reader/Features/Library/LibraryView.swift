@@ -307,7 +307,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 TabDashboardShell(
                     sectionTitles: [
                         "Reading Now", "Saved for Later", "Finished",
-                        "Collections", "Downloaded"
+                        "Collections", "Downloaded", "Reading History", "Favorites"
                     ],
                     showFilterChips: true
                 )
@@ -317,7 +317,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var realDashboard: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            // 1c's shelves sit 18pt apart; 1d's ledger 16.
+            VStack(alignment: .leading, spacing: dashboardLayout == .ledger ? 16 : 18) {
                 fandomFilterBar
                 localCarousel(.readingNow)
                 localCarousel(.savedForLater)

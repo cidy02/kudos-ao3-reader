@@ -317,6 +317,9 @@ private enum WorkCardActionError {
 private struct LocalWorkContextMenuModifier: ViewModifier {
     let work: SavedWork
     var onSelect: (() -> Void)?
+    /// The container this card sits in ("Remove from Queue"), above Delete —
+    /// a grid of the same works must offer what its list rows swipe to.
+    var scopedRemoval: ScopedRemoval?
 
     @Environment(\.modelContext) private var context
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
@@ -358,12 +361,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 // saved (an imported file, say) had **no way to delete it from this
                 // menu at all**. Delete now lives at the bottom, where a destructive
                 // action belongs.
-                Button {
-                    WorkLifecycle.setSaved(work, !work.isSaved, in: context)
-                } label: {
-                    let labels = WorkActionLabels.saved(isSaved: work.isSaved)
-                    Label(labels.title, systemImage: labels.systemImage)
-                }
+                WorkDownloadButton(work: work)
 
                 Button {
                     toggleFavorite()
@@ -419,6 +417,12 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 }
 
                 Divider()
+
+                if let scopedRemoval {
+                    Button(role: .destructive, action: scopedRemoval.action) {
+                        Label(scopedRemoval.title, systemImage: "minus.circle")
+                    }
+                }
 
                 Button(role: .destructive) {
                     if confirmBeforeDelete {
@@ -507,18 +511,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
 
     @MainActor
     private func toggleSavedForLater() {
-        if work.isInSavedForLaterQueue {
-            ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
-                work,
-                from: ReadingQueueService.ensureSavedForLaterQueue(in: context),
-                in: context
-            )
-        } else {
-            // Discard membership: Task must not inherit a non-Sendable PersistentModel result.
-            Task { @MainActor in
-                _ = await ReadingQueueService.addToSavedForLater(work, in: context)
-            }
-        }
+        ReadingQueueService.toggleSavedForLater(work, in: context)
     }
 }
 
@@ -553,10 +546,15 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             // a parameter forced it to run for every visible card on every body
             // pass. Referenced only inside these closures it keeps the same
             // deferred cost profile `.contextMenu` below already relies on.
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                // Full swipe takes the first action. Save is the common intent
-                // from a listing, and it's what the local rows put here too.
-                if existingLocalWork?.isSaved != true {
+            // A full swipe takes the first action — fine for Download, not for
+            // Remove Download, which deletes a file.
+            .swipeActions(
+                edge: .leading,
+                allowsFullSwipe: existingLocalWork.map { !WorkReaderPreparation.hasReadableEPUB(for: $0) } ?? true
+            ) {
+                if let existingLocalWork, WorkReaderPreparation.hasReadableEPUB(for: existingLocalWork) {
+                    WorkDownloadButton(work: existingLocalWork)
+                } else {
                     Button(action: save) {
                         Label(
                             WorkActionLabels.saved(isSaved: false).title,
@@ -624,6 +622,9 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                         Label("Delete", systemImage: "trash")
                     }
                     .disabled(working)
+                }
+                if let existingLocalWork, WorkReaderPreparation.hasReadableEPUB(for: existingLocalWork) {
+                    WorkDownloadButton(work: existingLocalWork)
                 } else {
                     Button {
                         save()
@@ -713,9 +714,13 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
         }
     }
 
+    /// "Download" fetches the EPUB (owner, 2026-09-28): it used to flip the
+    /// keep flag on a metadata row and download nothing.
     private func save() {
-        // Metadata-only: flag flips immediately; no EPUB gate on "Download/Save".
-        performRemoteAction(requireEPUB: false) { saved in
+        performRemoteAction(requireEPUB: true) { saved in
+            if !WorkReaderPreparation.hasReadableEPUB(for: saved) {
+                try await WorkReaderPreparation.restoreReadableEPUB(for: saved, in: context)
+            }
             WorkLifecycle.setSaved(saved, true, in: context)
         }
     }
@@ -801,11 +806,20 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 }
 
 extension View {
-    func localWorkContextMenu(work: SavedWork, onSelect: (() -> Void)? = nil) -> some View {
-        modifier(LocalWorkContextMenuModifier(work: work, onSelect: onSelect))
+    func localWorkContextMenu(
+        work: SavedWork, onSelect: (() -> Void)? = nil, scopedRemoval: ScopedRemoval? = nil
+    ) -> some View {
+        modifier(LocalWorkContextMenuModifier(work: work, onSelect: onSelect, scopedRemoval: scopedRemoval))
     }
 
     func remoteWorkContextMenu(work: AO3WorkSummary) -> some View {
         modifier(RemoteWorkContextMenuModifier(work: work))
     }
+}
+
+/// A card's removal from the container it is shown in — a queue, a collection —
+/// as opposed to Delete, which removes the work from Kudos.
+struct ScopedRemoval {
+    let title: String
+    let action: () -> Void
 }

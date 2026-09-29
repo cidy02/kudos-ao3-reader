@@ -47,10 +47,12 @@ struct WorkDetailPresentationTests {
     }
 
     @Test func savedAndLaterActionsAreStateAware() {
-        #expect(WorkDetailPresentation.savedAction(isSaved: false).title == "Download")
-        #expect(WorkDetailPresentation.savedAction(isSaved: true).title == "Downloaded")
-        #expect(WorkDetailPresentation.savedAction(isSaved: true).systemImage
+        #expect(WorkDetailPresentation.downloadState(nil).title == "Download")
+        #expect(WorkDetailPresentation.downloadState(.download).title == "Download")
+        #expect(WorkDetailPresentation.downloadState(.removeDownload).title == "Downloaded")
+        #expect(WorkDetailPresentation.downloadState(.removeDownload).systemImage
             == WorkActionLabels.downloadedSymbol)
+        #expect(WorkDetailPresentation.downloadState(.keptBy("Neon reread")).isEnabled == false)
 
         #expect(WorkDetailPresentation.laterAction(isQueued: false).title == "Save for Later")
         #expect(WorkDetailPresentation.laterAction(isQueued: true).title == "Remove from Later")

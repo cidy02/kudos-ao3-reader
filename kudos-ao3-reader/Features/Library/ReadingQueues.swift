@@ -332,24 +332,24 @@ struct ReadingQueueStorageView: View {
                                     } label: {
                                         Label("Remove from Queues", systemImage: "minus.circle")
                                     }
-                                    Button {
-                                        WorkLifecycle.setSaved(work, true, in: context)
-                                    } label: {
-                                        Label(
-                                            WorkActionLabels.saved(isSaved: false).title,
-                                            systemImage: WorkActionLabels.saved(isSaved: false).systemImage
-                                        )
+                                    // These are already on the device — a queue keeps them.
+                                    // This keeps the file after they leave their queues.
+                                    if !work.isSaved {
+                                        Button {
+                                            WorkLifecycle.setSaved(work, true, in: context)
+                                        } label: {
+                                            Label("Keep Download", systemImage: "pin")
+                                        }
+                                        .tint(.blue)
                                     }
-                                    .tint(.blue)
                                 }
                                 .contextMenu {
-                                    Button {
-                                        WorkLifecycle.setSaved(work, true, in: context)
-                                    } label: {
-                                        Label(
-                                            WorkActionLabels.saved(isSaved: false).title,
-                                            systemImage: WorkActionLabels.saved(isSaved: false).systemImage
-                                        )
+                                    if !work.isSaved {
+                                        Button {
+                                            WorkLifecycle.setSaved(work, true, in: context)
+                                        } label: {
+                                            Label("Keep Download", systemImage: "pin")
+                                        }
                                     }
                                     Button(role: .destructive) {
                                         pendingQueueRemoval = work

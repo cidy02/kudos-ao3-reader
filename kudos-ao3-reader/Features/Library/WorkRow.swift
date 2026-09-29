@@ -133,7 +133,7 @@ struct WorkRow: View {
     private var ledgerRow: some View {
         WorkLedgerRow(
             palette: subjectPalette,
-            kicker: nonemptyFandomNames.first,
+            kicker: nonemptyFandomNames.first.map(FandomDisplayName.bareTitle),
             additionalKickerCount: max(0, nonemptyFandomNames.count - 1),
             title: work.title,
             titleSymbol: showsFavoriteStar && work.isFavorite ? "star.fill" : nil,

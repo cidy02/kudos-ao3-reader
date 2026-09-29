@@ -383,7 +383,7 @@ struct AO3WorkRow: View {
     }
 
     private var primaryFandom: String? {
-        nonemptyFandoms.first
+        nonemptyFandoms.first.map(FandomDisplayName.bareTitle)
     }
 
     private var workHue: Double {

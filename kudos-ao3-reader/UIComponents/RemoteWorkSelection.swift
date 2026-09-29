@@ -67,7 +67,8 @@ final class RemoteWorkSelectionController {
         guard !isProcessingBatch else { return }
         isProcessingBatch = true
         defer { isProcessingBatch = false }
-        batchActionError = await resolveSelectedRemoteWorks(selected, in: context) { works in
+        // "Download" fetches each EPUB (owner, 2026-09-28), not just the flag.
+        batchActionError = await resolveSelectedRemoteWorks(selected, in: context, mode: .withEPUB) { works in
             for work in works {
                 WorkLifecycle.setSaved(work, true, in: context)
             }
