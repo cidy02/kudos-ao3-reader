@@ -141,6 +141,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
+                .navigationDestination(for: ReadingInsightsDestination.self) { _ in
+                    ReadingInsightsView(works: statisticsWorks)
+                }
+                #if DEBUG
+                .task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    DebugLaunchRoute.applyLibrary(to: &path, collections: collections)
+                }
+                #endif
                 .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
                 .toolbar { toolbarContent }
             #if os(iOS)
@@ -722,9 +731,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                             }
                             // A page item, so after Select and the layout (pass2-2).
                             if showsStatistics {
-                                NavigationLink {
-                                    ReadingInsightsView(works: statisticsWorks)
-                                } label: {
+                                NavigationLink(value: ReadingInsightsDestination()) {
                                     Label("Reading Insights", systemImage: "chart.bar.xaxis")
                                 }
                             }
