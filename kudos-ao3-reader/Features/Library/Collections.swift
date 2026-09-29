@@ -392,13 +392,28 @@ struct CollectionDetailView: View {
                             if hideMature {
                                 MatureRevealToggle()
                             }
+                            // The app's order: Mature · Select · Reorder · Expand ·
+                            // page items · destructive last.
                             if !works.isEmpty {
-                                ExpandAllMenuItem(expandAll: $expandAll)
                                 Button {
                                     isSelecting = true
                                 } label: {
                                     Label("Select", systemImage: "checklist")
                                 }
+                            }
+                            if works.count > 1 {
+                                Button {
+                                    showingReorder = true
+                                } label: {
+                                    Label(
+                                        filters.hasActiveFilters ? "Clear Filters to Reorder" : "Reorder",
+                                        systemImage: "arrow.up.arrow.down"
+                                    )
+                                }
+                                .disabled(filters.hasActiveFilters)
+                            }
+                            if !works.isEmpty {
+                                ExpandAllMenuItem(expandAll: $expandAll)
                                 Divider()
                             }
                             Button {
@@ -418,16 +433,9 @@ struct CollectionDetailView: View {
                             } label: {
                                 Label("Details", systemImage: "paintpalette")
                             }
-                            // 1bk's Contents group. "Remove works" is Select by
-                            // another name — this screen already removes through
-                            // selection — so it is not built twice.
-                            if works.count > 1 {
-                                Button {
-                                    showingReorder = true
-                                } label: {
-                                    Label("Reorder works", systemImage: "arrow.up.arrow.down")
-                                }
-                            }
+                            // 1bk's "Remove works" is Select by another name — this
+                            // screen already removes through selection.
+                            Divider()
                             Button(role: .destructive) {
                                 confirmDelete = true
                             } label: {

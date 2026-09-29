@@ -49,6 +49,8 @@ struct AO3CollectionFormView: View {
     @State private var nameAvailability: AO3CollectionNameAvailability?
     @State private var nameCheckTask: Task<Void, Never>?
     @State private var showingDeleteConfirmation = false
+    /// 1bl: the name, typed, before Delete on AO3 enables.
+    @State private var deleteConfirmationText = ""
     @State private var isDeleting = false
 
     init(slug: String?, onDeleted: (() -> Void)? = nil) {
@@ -80,16 +82,22 @@ struct AO3CollectionFormView: View {
         .subjectScreenWash(palette: palette)
         .task { if phase == .idle { await loadForm() } }
         .onDisappear { nameCheckTask?.cancel() }
+        // 1bl: the alert says what AO3 actually does — including to other
+        // people's privacy — and asks for the name typed before it will.
         .alert(
             "Delete \u{201c}\(deletionName)\u{201d}?",
             isPresented: $showingDeleteConfirmation
         ) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete Collection", role: .destructive) {
+            TextField(deletionName, text: $deleteConfirmationText)
+                .autocorrectionDisabled()
+            Button("Cancel", role: .cancel) { deleteConfirmationText = "" }
+            Button("Delete on AO3", role: .destructive) {
+                deleteConfirmationText = ""
                 Task { await deleteCollection() }
             }
+            .disabled(!Self.confirmsDeletion(typed: deleteConfirmationText, name: deletionName))
         } message: {
-            Text("This permanently deletes the collection from AO3. Its works remain on AO3. This cannot be undone.")
+            Text(Self.deletionMessage)
         }
     }
 
@@ -576,5 +584,18 @@ extension AO3CollectionFormView {
         } catch {
             saveFailed(error.localizedDescription)
         }
+    }
+}
+
+extension AO3CollectionFormView {
+    /// 1bl's alert body, verbatim in substance: what goes, what stays, and
+    /// what the deletion reveals about other people's works.
+    static let deletionMessage = "The collection, its challenge settings and any gift assignments are removed "
+        + "from AO3. The works stay with their creators — but any that were unrevealed become revealed, and "
+        + "any that were anonymous show their creators. Type the collection name to confirm."
+
+    static func confirmsDeletion(typed: String, name: String) -> Bool {
+        let typed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !typed.isEmpty && typed == name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
