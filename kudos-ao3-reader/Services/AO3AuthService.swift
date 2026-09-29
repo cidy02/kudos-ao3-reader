@@ -459,6 +459,17 @@ final class AO3AuthService {
         let restorationGeneration = advanceSessionGeneration()
         currentSession = nil
         status = .restoring
+        #if DEBUG
+        // Design review only: a local demo session, answered by the fixture stub.
+        if DemoNetworkBlock.demoSignedIn {
+            let cookie = HTTPCookie(properties: [
+                .name: "_otwarchive_session", .value: "demo", .domain: "archiveofourown.org", .path: "/"
+            ])
+            currentSession = AO3Session(username: "AO3_Reader", cookies: cookie.map { [AO3StoredCookie($0)] } ?? [])
+            status = .signedIn(username: "AO3_Reader")
+            return
+        }
+        #endif
 
         if removalTracker.isRemovalPending {
             // A previous logout/expiry couldn't fully clear the durable store (A5-F4).

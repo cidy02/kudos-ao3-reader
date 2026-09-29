@@ -209,6 +209,8 @@ enum DebugLaunchRoute {
         guard let value else { return }
         if libraryRoutes.contains(where: value.hasPrefix) {
             router.selection = .library
+        } else if value.hasPrefix("acct:") {
+            router.selection = .account
         } else if value.hasPrefix("section:"),
            let kind = LibrarySectionKind(rawValue: String(value.dropFirst("section:".count))) {
             router.showLibrarySection(kind)
@@ -229,6 +231,38 @@ enum DebugLaunchRoute {
     }
 
     private static let libraryRoutes = ["collections", "collection:", "recentlyDeleted", "insights"]
+
+    /// `acct:<screen>` on the Account tab (pair with `-KudosFixtureDir` and
+    /// `-KudosDemoSignedIn YES`): dashboard, drafts, works, series, inbox,
+    /// preferences, more, collections, later, bookmarks, history, subscriptions.
+    /// Appends by concrete type — navigation matches destinations by type, so
+    /// an `AnyHashable` would find none.
+    static func applyAccount(to path: inout NavigationPath) {
+        switch accountTarget() {
+        case let route as AccountView.Route: path.append(route)
+        case let kind as AO3AccountWorksList.Kind: path.append(kind)
+        default: break
+        }
+    }
+
+    private static func accountTarget() -> Any? {
+        guard let value, value.hasPrefix("acct:") else { return nil }
+        switch String(value.dropFirst("acct:".count)) {
+        case "dashboard": return AccountView.Route.dashboard
+        case "drafts": return AccountView.Route.drafts
+        case "works": return AccountView.Route.myWorks
+        case "series": return AccountView.Route.mySeries
+        case "inbox": return AccountView.Route.inbox
+        case "preferences": return AccountView.Route.preferences
+        case "more": return AccountView.Route.moreOnAO3
+        case "collections": return AccountView.Route.myCollections
+        case "later": return AO3AccountWorksList.Kind.markedForLater
+        case "bookmarks": return AO3AccountWorksList.Kind.bookmarks
+        case "history": return AO3AccountWorksList.Kind.history
+        case "subscriptions": return AO3AccountWorksList.Kind.subscriptions
+        default: return nil
+        }
+    }
 
     /// Library's stack: `collections`, `collection:<name>`, `recentlyDeleted`, `insights`.
     static func applyLibrary(to path: inout NavigationPath, collections: [WorkCollection]) {
@@ -324,8 +358,56 @@ final class DemoNetworkBlock: URLProtocol {
 
     override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
+    /// `-KudosFixtureDir <path>` (simulator only reads the host path): answer
+    /// AO3 from the test fixtures instead of failing, so AO3 screens can be
+    /// reviewed without the network. Local stub — AO3 is never contacted.
+    static var fixtureDirectory: URL? {
+        UserDefaults.standard.string(forKey: "KudosFixtureDir").map { URL(fileURLWithPath: $0) }
+    }
+
+    /// `-KudosDemoSignedIn YES` with the demo library: a local demo session.
+    static var demoSignedIn: Bool { isActive && UserDefaults.standard.bool(forKey: "KudosDemoSignedIn") }
+
+    /// Path pattern → fixture file, first match wins.
+    private static let routes: [(pattern: String, fixture: String)] = [
+        ("^/works/new", "ao3_work_new_draft"),
+        ("^/works/\\d+/edit", "ao3_work_edit"),
+        ("comments", "ao3_comments_page"),
+        ("^/works/\\d+", "ao3_work_bookmarked_subscribed"),
+        ("edit_multiple", "ao3_edit_multiple"),
+        ("^/users/[^/]+/(pseuds/[^/]+/)?works", "ao3_author_works"),
+        ("^/users/[^/]+/(pseuds/[^/]+/)?series", "ao3_author_series"),
+        ("^/users/[^/]+/(pseuds/[^/]+/)?bookmarks", "ao3_author_bookmarks"),
+        ("^/users/[^/]+/readings", "ao3_readings"),
+        ("^/users/[^/]+/inbox", "ao3_inbox_manage"),
+        ("^/users/[^/]+/preferences", "ao3_preferences"),
+        ("^/users/[^/]+/stats", "ao3_user_stats"),
+        ("^/users/[^/]+/profile", "ao3_author_profile"),
+        ("^/users/[^/]+/pseuds/[^/]+/?$", "ao3_author_pseud_dashboard"),
+        ("^/users/[^/]+/?$", "ao3_author_dashboard"),
+        ("^/help/preferences_privacy", "ao3_help_preferences_privacy"),
+        ("^/?$", "ao3_logged_in")
+    ]
+
+    static func fixture(for url: URL) -> String? {
+        let path = url.path
+        return routes.first { path.range(of: $0.pattern, options: .regularExpression) != nil }?.fixture
+    }
+
     override func startLoading() {
-        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+        guard let url = request.url, let directory = Self.fixtureDirectory else {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
+        let name = Self.fixture(for: url)
+        let data = name.flatMap { try? Data(contentsOf: directory.appendingPathComponent("\($0).html")) }
+        let response = HTTPURLResponse(
+            url: url, statusCode: data == nil ? 404 : 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "text/html; charset=utf-8"]
+        )
+        if let response { client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed) }
+        client?.urlProtocol(self, didLoad: data ?? Data())
+        client?.urlProtocolDidFinishLoading(self)
     }
 
     override func stopLoading() {}
