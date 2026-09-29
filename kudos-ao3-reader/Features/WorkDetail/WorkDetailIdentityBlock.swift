@@ -38,7 +38,7 @@ struct WorkDetailIdentityHeader: View {
 
     var body: some View {
         SubjectHeaderBlock(
-            kicker: namedFandoms.first ?? "Work",
+            kicker: namedFandoms.first.map(FandomDisplayName.bareTitle) ?? "Work",
             // The kicker names one fandom; this is the count of the ones it is
             // not naming. Every fandom is still listed in full under Tags —
             // this is the trace that says to go looking.

@@ -1360,16 +1360,14 @@ private struct CommentPostRow: View {
     }
 }
 
-/// Shared visual language for per-comment overflow actions in Comments and
-/// Inbox. The visible capsule stays compact while its hit target remains 44pt.
+/// Shared per-comment overflow control for Comments and Inbox: a bare mark,
+/// as 1f draws it, on a 44pt hit target.
 struct CommentOverflowButtonLabel: View {
     var body: some View {
+        // 1f: a bare mark on every row, not a chip; the 44pt target stays.
         Image(systemName: "ellipsis")
-            .font(.caption.weight(.bold))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary, in: Capsule())
+            .font(.system(size: 15))
+            .foregroundStyle(.secondary)
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
     }
