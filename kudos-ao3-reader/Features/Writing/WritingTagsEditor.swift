@@ -133,9 +133,12 @@ struct WritingTagsEditor: View {
                     .pageBodyRow(top: 20, gutter: gutter)
                 suggestionsPanel.pageBodyRow(top: 8, gutter: gutter)
             }
-            footnote.pageBodyRow(top: hasSuggestionRows ? 8 : 20, gutter: gutter)
+            // On the one row that is always there: a modifier on the Section
+            // itself folds it into a single plain row (T-309).
+            footnote
+                .task(id: term) { await loadSuggestions(kind: kind) }
+                .pageBodyRow(top: hasSuggestionRows ? 8 : 20, gutter: gutter)
         }
-        .task(id: term) { await loadSuggestions(kind: kind) }
     }
 
     private var hasSuggestionRows: Bool {
