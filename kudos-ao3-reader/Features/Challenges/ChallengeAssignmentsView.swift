@@ -380,10 +380,9 @@ struct ChallengeAssignmentsView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
-                openOnAO3Button(title: "Send pinch-hit request", tint: palette.accent)
-                openOnAO3Button(title: "Open on AO3", tint: .secondary)
-            }
+            // Both buttons opened the same AO3 page; one says what it does. The
+            // pinch-hit request itself is made on AO3 (1cb).
+            openOnAO3Button(title: "Open on AO3", tint: .secondary)
         }
         .padding(14)
         .subjectCard(palette: palette)

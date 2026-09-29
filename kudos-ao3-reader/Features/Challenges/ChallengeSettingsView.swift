@@ -344,7 +344,7 @@ struct ChallengeSettingsView: View {
 
             SubjectFormRow(
                 label: "Additional tags",
-                value: restriction.optionalTagsAllowed ? "Optional" : "Required"
+                value: restriction.optionalTagsAllowed ? "Allowed" : "Not allowed"
             )
 
             SubjectRowSeparator()

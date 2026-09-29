@@ -766,7 +766,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         if work.isPendingDeletion { PreservedWorkService.restore(work, in: context) }
         guard let action = WorkDownload.action(for: work) else { return }
-        Task { try? await WorkDownload.perform(action, on: work, in: context) }
+        Task { try? await WorkDownload.perform(action, on: work, in: context, queue: downloadQueue) }
     }
 
     func toggleFinished() {
