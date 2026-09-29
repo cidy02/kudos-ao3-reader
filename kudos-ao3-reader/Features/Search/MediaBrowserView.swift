@@ -10,7 +10,9 @@ import SwiftUI
 /// per-category fandom index the detail page uses, cached in `FandomCatalog`),
 /// the user's saved-work count in that category, and recently-read fandom chips.
 struct MediaBrowserView: View {
-    var onSelectFandom: (String) -> Void
+    /// Every raw tag to include, and the name to title the page with. A chip
+    /// is a family, so it can name several tags; everything else names one.
+    var onSelectFandom: (_ names: [String], _ title: String) -> Void
 
     /// Deliberately not inside the iOS section below. The category card body is
     /// shared by both platforms and reads the palette, and `ThemeManager` is put
@@ -173,37 +175,19 @@ struct MediaBrowserView: View {
     /// The chips, wrapping rather than scrolling, with the real remainder pinned
     /// at the end. Spec 1g is explicit that nothing here scrolls sideways — a
     /// carousel hides fandoms off the right edge, which is the reason this
-    /// replaced one.
+    /// replaced one — and draws two rows, so the cluster stops at two.
     private func fandomCluster(
         _ stats: CategoryStats,
         palette: SubjectPalette,
         familiarNames: Set<String>
     ) -> some View {
-        let remainder = max(0, (stats.fandomCount ?? 0) - stats.clusterFandoms.count)
-        return FlowLayout(spacing: 7, rowSpacing: 7) {
-            ForEach(stats.clusterFandoms) { fandom in
-                // Borderless so a chip tap opens that fandom instead of following
-                // the panel's own navigation link.
-                Button { onSelectFandom(fandom.name) } label: {
-                    FandomClusterChip(
-                        title: fandom.title,
-                        qualifier: fandom.qualifier,
-                        workCount: fandom.workCount,
-                        isFamiliar: familiarNames.contains(fandom.name.lowercased()),
-                        palette: palette
-                    )
-                }
-                .buttonStyle(.borderless)
-            }
-
-            if remainder > 0 {
-                // Not a button: the panel it sits in already pushes the full
-                // list, and a second target for the same destination inside that
-                // link would race it for the touch.
-                SubjectChip(text: "+\(remainder.formatted()) more", style: .dashed)
-                    .accessibilityLabel("\(remainder.formatted()) more fandoms")
-            }
-        }
+        FandomChipCluster(
+            fandoms: stats.clusterFandoms,
+            total: stats.familyCount ?? stats.clusterFandoms.count,
+            palette: palette,
+            familiarNames: familiarNames,
+            onSelect: { onSelectFandom($0.names, $0.title) }
+        )
     }
 
     /// Spec 1g's "Jump Back In": the fandoms you were most recently reading, as
@@ -222,7 +206,7 @@ struct MediaBrowserView: View {
 
                 HStack(alignment: .top, spacing: 11) {
                     ForEach(recent, id: \.fandom) { entry in
-                        Button { onSelectFandom(entry.fandom) } label: {
+                        Button { onSelectFandom([entry.fandom], entry.fandom) } label: {
                             jumpBackInCard(entry)
                         }
                         .buttonStyle(.plain)
@@ -267,7 +251,7 @@ struct MediaBrowserView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if let workCount = entry.workCount {
-                Text("\(workCount.formatted()) works")
+                Text("\(compact(workCount)) works")
                     .font(.system(size: 10.5))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -292,7 +276,7 @@ struct MediaBrowserView: View {
                     DisclosureGroup(isExpanded: expansionBinding(for: category.id)) {
                         ForEach(category.fandoms) { fandom in
                             Button {
-                                onSelectFandom(fandom.name)
+                                onSelectFandom([fandom.name], fandom.name)
                             } label: {
                                 Text(fandom.name)
                                     .foregroundStyle(.primary)
@@ -405,9 +389,10 @@ struct MediaBrowserView: View {
 
     @ViewBuilder
     private func statsLine(_ stats: CategoryStats?, palette: SubjectPalette? = nil) -> some View {
-        if let count = stats?.fandomCount {
+        // Families, when known: the chips below count fandoms the same way.
+        if let count = stats?.familyCount ?? stats?.fandomCount {
             FlowLayout(spacing: 16, rowSpacing: 4) {
-                statItem("books.vertical", "\(count.formatted()) fandoms", palette: palette)
+                statItem("books.vertical", "\(compact(count)) fandoms", palette: palette)
                 if let works = stats?.workCount {
                     let figure = compact(works)
                     let label = (stats?.isApproximateWorkCount == true)
@@ -479,7 +464,7 @@ struct MediaBrowserView: View {
                 ForEach(fandoms, id: \.self) { fandom in
                     // Borderless so the chip's tap runs the fandom search instead of
                     // following the card's navigation link.
-                    Button { onSelectFandom(fandom) } label: {
+                    Button { onSelectFandom([fandom], fandom) } label: {
                         TagChip(text: fandom)
                     }
                     .buttonStyle(.borderless)
@@ -491,9 +476,11 @@ struct MediaBrowserView: View {
 
     // MARK: - Stats
 
-    private struct CategoryStats: Sendable {
+    fileprivate struct CategoryStats: Sendable {
         /// nil while the category's fandom list is still loading.
         var fandomCount: Int?
+        /// Fandoms once disambiguations are merged — what the chips count in.
+        var familyCount: Int?
         var workCount: Int?
         /// True when `workCount` is a sum of per-tag counts and therefore
         /// double-counts a work tagged with two fandoms in the category.
@@ -505,15 +492,20 @@ struct MediaBrowserView: View {
         /// — `FandomDisplayName.split` walks a rule list, and doing it per render
         /// for every chip on every category panel would be that work on every
         /// scroll.
+        ///
+        /// One chip is a `FandomFamily`: the tags that share a title once their
+        /// disambiguation is dropped ("Naruto", not "Naruto (Anime & Manga)"),
+        /// with their counts summed. 1g draws the bare name.
         struct ClusterFandom: Identifiable, Hashable, Sendable {
-            /// AO3's own spelling. What a tap searches on; never rebuilt from the
-            /// split, which is lossy.
-            let name: String
+            /// The family's id — a join of its members' raw tags.
+            let id: String
+            /// AO3's own spellings. What a tap searches on; never rebuilt from
+            /// the split, which is lossy.
+            let names: [String]
             let title: String
-            let qualifier: String
-            let workCount: Int?
-
-            var id: String { name }
+            let workCount: Int
+            /// Summed across sibling tags, so a work tagged with two counts twice.
+            let isApproximate: Bool
         }
 
         /// The chips artboard 1g clusters under each category, biggest first.
@@ -735,37 +727,24 @@ struct MediaBrowserView: View {
             // Sorted here, in the off-actor pass, not in the view: a category can
             // hold nine thousand fandoms, and sorting that on every render is the
             // kind of work this whole `computeStats` split exists to avoid.
-            let cluster: [CategoryStats.ClusterFandom] = input.hasFullList
-                ? input.fandoms
-                    .sorted { ($0.workCount ?? 0) > ($1.workCount ?? 0) }
-                    .prefix(clusterFandomLimit)
-                    .map { fandom in
-                        // Same two steps `FandomFamily.Member` takes: pick the
-                        // display segment out of AO3's `a | b | c`, then split that
-                        // into title and qualifier.
-                        let primary = FandomDisplayName.primarySegment(of: fandom.name)
-                        let split = FandomDisplayName.split(primary)
-                        return CategoryStats.ClusterFandom(
-                            name: fandom.name,
-                            title: split.title,
-                            // Empty fallback, unlike the nested member row this
-                            // borrows from. There the family title is printed once
-                            // above and a member with no qualifier still needs
-                            // something to name it, so falling back to the title is
-                            // right. Here the title is already the chip's own first
-                            // word, and the fallback drew "Haikyuu!! Haikyuu!!".
-                            qualifier: FandomQualifier.displayText(
-                                parts: split.parts,
-                                fallback: ""
-                            ),
-                            workCount: fandom.workCount
-                        )
-                    }
-                : []
+            let families = input.hasFullList ? FandomFamily.grouped(fandoms: input.fandoms) : []
+            let cluster: [CategoryStats.ClusterFandom] = families
+                .sorted { $0.summedWorkCount > $1.summedWorkCount }
+                .prefix(clusterFandomLimit)
+                .map { family in
+                    CategoryStats.ClusterFandom(
+                        id: family.id,
+                        names: family.includedFilterNames,
+                        title: family.parsedTitle,
+                        workCount: family.summedWorkCount,
+                        isApproximate: family.showsApproximateCount
+                    )
+                }
 
             let summed = input.hasFullList ? CategoryWorkTotal.summedTagCounts(input.fandoms) : nil
             result[input.id] = CategoryStats(
                 fandomCount: input.hasFullList ? input.fandoms.count : nil,
+                familyCount: input.hasFullList ? families.count : nil,
                 workCount: summed?.workCount,
                 isApproximateWorkCount: summed?.isApproximate ?? false,
                 savedCount: savedCount,
@@ -860,5 +839,144 @@ private extension SavedWork {
     /// recently-read fandom.
     var hasBeenRead: Bool {
         isFinished || hasStartedReading
+    }
+}
+
+/// 1g's chip cluster, two rows at most. The layout reports how many chips fit;
+/// the rest are hidden, and the dashed chip carries the real remainder.
+private struct FandomChipCluster: View {
+    let fandoms: [MediaBrowserView.CategoryStats.ClusterFandom]
+    let total: Int
+    let palette: SubjectPalette
+    let familiarNames: Set<String>
+    let onSelect: (MediaBrowserView.CategoryStats.ClusterFandom) -> Void
+
+    /// Until the first layout pass, everything counts as shown.
+    @State private var fitCount: Int?
+
+    private var shown: Int { min(fitCount ?? fandoms.count, fandoms.count) }
+
+    var body: some View {
+        let remainder = max(0, total - shown)
+        CappedFlowLayout(spacing: 7, rowSpacing: 7, maxRows: 2, onFit: { count in
+            guard count != fitCount else { return }
+            DispatchQueue.main.async { fitCount = count }
+        }) {
+            ForEach(Array(fandoms.enumerated()), id: \.element.id) { index, fandom in
+                // Borderless so a chip tap opens that fandom instead of following
+                // the panel's own navigation link.
+                Button { onSelect(fandom) } label: {
+                    FandomClusterChip(
+                        title: fandom.title,
+                        workCount: fandom.workCount,
+                        isApproximateCount: fandom.isApproximate,
+                        isFamiliar: fandom.names.contains { familiarNames.contains($0.lowercased()) },
+                        palette: palette
+                    )
+                }
+                .buttonStyle(.borderless)
+                .opacity(index < shown ? 1 : 0)
+                .accessibilityHidden(index >= shown)
+            }
+            // Always the last subview — the layout keeps room for it. Not a
+            // button: the panel it sits in already pushes the full list, and a
+            // second target for that destination would race it for the touch.
+            if remainder > 0 {
+                SubjectChip(text: "+\(remainder.formatted(.number.notation(.compactName))) more", style: .dashed)
+                    .accessibilityLabel("\(remainder.formatted()) more fandoms")
+            } else {
+                Color.clear.frame(width: 0, height: 0)
+            }
+        }
+    }
+}
+
+/// `FlowLayout` stopped at `maxRows`. The last subview is a trailing chip that
+/// always gets a place, after as many of the others as fit; the rest get no
+/// room. `onFit` hears how many fitted, so the caller can hide them and count
+/// them in the trailing chip.
+struct CappedFlowLayout: Layout {
+    var spacing: CGFloat
+    var rowSpacing: CGFloat
+    var maxRows: Int
+    var onFit: (Int) -> Void = { _ in }
+
+    struct Arrangement: Equatable {
+        /// One per chip but the trailing one; nil for a chip that did not fit.
+        var origins: [CGPoint?]
+        var trailing: CGPoint?
+        var fitCount: Int
+        var size: CGSize
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout Void) -> CGSize {
+        arrange(width: proposal.width ?? .infinity, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout Void) {
+        let result = arrange(width: bounds.width, subviews: subviews)
+        let origins = result.origins + [result.trailing]
+        for (index, subview) in subviews.enumerated() {
+            if let origin = origins[index] {
+                subview.place(
+                    at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                    proposal: ProposedViewSize(size(subview, maxWidth: bounds.width))
+                )
+            } else {
+                subview.place(at: CGPoint(x: bounds.minX, y: bounds.minY), proposal: .zero)
+            }
+        }
+        onFit(result.fitCount)
+    }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> Arrangement {
+        guard let trailing = subviews.last else {
+            return Arrangement(origins: [], trailing: nil, fitCount: 0, size: .zero)
+        }
+        return arrange(
+            sizes: subviews.dropLast().map { size($0, maxWidth: width) },
+            trailing: size(trailing, maxWidth: width),
+            width: width
+        )
+    }
+
+    private func size(_ subview: LayoutSubview, maxWidth: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        return ideal.width <= maxWidth ? ideal : subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+    }
+
+    /// Greedy rows over the chips, stopping at `maxRows`; chips come off the
+    /// end until the trailing one fits after them.
+    func arrange(sizes: [CGSize], trailing: CGSize, width: CGFloat) -> Arrangement {
+        for fitCount in stride(from: sizes.count, through: 0, by: -1) {
+            let placed = place(Array(sizes.prefix(fitCount)) + [trailing], width: width)
+            guard let placed else { continue }
+            let origins = Array(placed.origins.dropLast()).map(Optional.some)
+                + Array(repeating: nil, count: sizes.count - fitCount)
+            return Arrangement(origins: origins, trailing: placed.origins.last, fitCount: fitCount, size: placed.size)
+        }
+        return Arrangement(
+            origins: Array(repeating: nil, count: sizes.count), trailing: nil, fitCount: 0, size: .zero
+        )
+    }
+
+    /// Nil when these sizes need more than `maxRows`.
+    private func place(_ sizes: [CGSize], width: CGFloat) -> (origins: [CGPoint], size: CGSize)? {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, rows = 1, widest: CGFloat = 0
+        for size in sizes {
+            if x > 0, x + size.width > width {
+                rows += 1
+                guard rows <= maxRows else { return nil }
+                y += rowHeight + rowSpacing
+                x = 0
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return (origins, CGSize(width: widest, height: y + rowHeight))
     }
 }

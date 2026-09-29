@@ -37,7 +37,7 @@ struct BrowseView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            MediaBrowserView(onSelectFandom: { path.append(FandomRoute(names: [$0], title: $0)) })
+            MediaBrowserView(onSelectFandom: { path.append(FandomRoute(names: $0, title: $1)) })
                 .navigationTitle("Browse")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
