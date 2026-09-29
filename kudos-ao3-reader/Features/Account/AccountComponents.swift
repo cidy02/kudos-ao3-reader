@@ -349,21 +349,28 @@ struct AccountNavCardLabel: View {
     /// When true, shows the "open outside" glyph instead of a disclosure chevron.
     var opensExternally: Bool = false
 
+    /// The spec's settings-row type (1m, Settings, More on AO3, Preferences):
+    /// 15pt medium title, 13pt medium value — the same row the Settings pages
+    /// draw, so the Account family reads as one list. Scales with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var titleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var valueSize: CGFloat = 13
+
     var body: some View {
         HStack(spacing: 12) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: titleSize, weight: .medium))
                     .foregroundStyle(.tint)
                     .frame(width: 22, alignment: .center)
             }
             Text(title)
-                .font(.body.weight(.medium))
+                .font(.system(size: titleSize, weight: .medium))
                 .foregroundStyle(.primary)
             Spacer(minLength: 8)
             if let count {
                 Text(count)
-                    .font(.subheadline)
+                    .font(.system(size: valueSize, weight: .medium))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             Image(systemName: opensExternally ? "arrow.up.forward.square" : "chevron.right")
