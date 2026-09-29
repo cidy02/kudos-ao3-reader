@@ -53,6 +53,11 @@ struct ContentView: View {
             .sheet(isPresented: $router.isPresentingWebBrowser) {
                 AO3WebBrowserView()
             }
+            #if DEBUG
+            .overlay {
+                if DebugLaunchRoute.value == "comments" { CommentsDemoView() }
+            }
+            #endif
             .environment(router)
             .environment(privacyGate)
             .environment(theme)
