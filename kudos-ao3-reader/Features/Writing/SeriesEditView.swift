@@ -586,13 +586,8 @@ struct SeriesEditDestination: View {
         Group {
             if let form, loadedGeneration == auth.sessionGeneration {
                 SeriesEditView(series: series, form: form).id(auth.sessionGeneration)
-            } else if let errorMessage {
-                VStack {
-                    Text(errorMessage)
-                    Button("Retry") { retry += 1 }
-                }.padding()
             } else {
-                ProgressView("Loading series…")
+                WritingLoaderPage(title: "Edit series", message: errorMessage) { retry += 1 }
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {
