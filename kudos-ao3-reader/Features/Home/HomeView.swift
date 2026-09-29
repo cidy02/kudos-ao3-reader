@@ -148,7 +148,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             Group {
                 if hasSectionCache {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
+                        // 1b: 22pt between sections.
+                        VStack(alignment: .leading, spacing: 22) {
                             resumeSection
                             readingQueuesCarousel
                             ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
@@ -315,7 +316,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             if readingNow.isEmpty {
                 // Strong empty state (Synthesis v2): section chrome + CTAs, not a
                 // dead hero-shaped hole. Same header weight as other Home rows.
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 11) {
                     // "Continue Reading" — matches the title used above the hero
                     // in the non-empty branch below, so the section doesn't
                     // appear to rename itself depending on whether it has content.
@@ -347,7 +348,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 let heroWork = readingNow[0]
                 let stripWorks = Array(readingNow.dropFirst().prefix(4))
 
-                VStack(alignment: .leading, spacing: 14) {
+                // 1b: 11pt from the header to the hero.
+                VStack(alignment: .leading, spacing: 11) {
                     SectionRuleHeader(
                         title: "Continue Reading",
                         count: readingNow.count,

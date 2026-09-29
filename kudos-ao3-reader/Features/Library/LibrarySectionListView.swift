@@ -16,7 +16,6 @@ struct LibrarySectionListView: View {
     @Environment(AO3AuthService.self) private var auth
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-    @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
     /// Where the reader came from, drawn as the header's kicker.
     ///
@@ -34,7 +33,7 @@ struct LibrarySectionListView: View {
     @State private var pendingDelete: SavedWork?
     /// A History or queue-only row waiting on its Remove ask (pass2-9): taking a
     /// work off a list asks first everywhere else, so it asks here too.
-    @State private var pendingRemoval: SavedWork?
+    @State private var pendingRemoval: PendingLibraryRemoval?
     /// Tracks the in-flight refresh so it can be cancelled if the user switches tabs
     /// (see `cancelRefreshOnTabChange`) — this section can list a large number of works.
     @State private var refreshTask: Task<Void, Never>?
@@ -250,30 +249,7 @@ struct LibrarySectionListView: View {
                     .presentationDragIndicator(.visible)
                 #endif
             }
-            .deleteConfirmation(
-                for: $pendingDelete,
-                title: "Delete this work?",
-                confirmLabel: "Delete",
-                message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
-                perform: { PreservedWorkService.softDelete($0, in: context) }
-            )
-            .destructiveConfirmation(
-                for: $pendingRemoval,
-                title: "Remove this work?",
-                confirmLabel: "Remove",
-                message: { work in
-                    kind == .history
-                        ? "“\(work.title)” will leave your reading history. Reading it again brings it back."
-                        : "“\(work.title)” will leave every queue it is in. The work stays on this device."
-                },
-                perform: { work in
-                    if kind == .history {
-                        WorkLifecycle.removeFromHistory(work, in: context)
-                    } else {
-                        ReadingQueueService.removeFromAllQueues(work, in: context)
-                    }
-                }
-            )
+            .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
     }
 
     @ViewBuilder
@@ -902,70 +878,13 @@ struct LibrarySectionListView: View {
                 MoveBackToInProgressButton(work: work)
             }
         }
-            // No full swipe: Remove Download deletes a file.
-            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                // 1ah / 1ai / 1aj lead with Queue: Save for Later is the thing to
-                // do with a work you are looking back over.
-                if kind == .history || showsFavoriteWorks {
-                    SaveForLaterButton(work: work)
-                }
-                WorkDownloadButton(work: work)
-
-                // Favorites carries Unfavorite on the trailing edge instead (1aj), and
-                // one row offering the same toggle on both edges is two answers to
-                // one question.
-                if !showsFavoriteWorks {
-                    Button {
-                        work.isFavorite.toggle()
-                        work.markModified()
-                        try? context.save()
-                    } label: {
-                        let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
-                        Label(labels.title, systemImage: labels.systemImage)
-                    }
-                    .tint(.yellow)
-                }
-            }
-            // No full swipe: every button here removes something, and each asks.
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if showsFavoriteWorks {
-                    // 1aj draws the unstar where every other section has Delete: on the
-                    // page that is *about* the star, taking it off is the removal,
-                    // and soft-deleting the whole work from here was out of scale.
-                    Button {
-                        work.isFavorite = false
-                        work.markModified()
-                        try? context.save()
-                    } label: {
-                        let label = WorkActionLabels.favorite(isFavorite: true)
-                        Label(label.title, systemImage: label.systemImage)
-                    }
-                    .tint(.yellow)
-                } else if kind == .history || work.isQueueOnlyWork {
-                    // History — 1ah: "Remove clears it from history, which is the only
-                    // destructive thing this page can do." A hide marker, never a
-                    // delete — reading the work again brings it back.
-                    // Queue-only works keep a preserved EPUB and must never be hard-deleted
-                    // by a generic Library swipe. Removing the queue membership is
-                    // non-destructive (the record and EPUB survive); explicit deletion of a
-                    // preserved copy lives behind confirmation in Queue Storage.
-                    Button(role: .destructive) {
-                        pendingRemoval = work
-                    } label: {
-                        Label("Remove", systemImage: kind == .history ? "clock.badge.xmark" : "minus.circle")
-                    }
-                } else {
-                    Button(role: .destructive) {
-                        if confirmBeforeDelete {
-                            pendingDelete = work
-                        } else {
-                            PreservedWorkService.softDelete(work, in: context)
-                        }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
+            .libraryWorkSwipeActions(
+                work,
+                kind: kind,
+                isFavoritesList: showsFavoriteWorks,
+                pendingDelete: $pendingDelete,
+                pendingRemoval: $pendingRemoval
+            )
     }
 
     private func refreshSection() async {
