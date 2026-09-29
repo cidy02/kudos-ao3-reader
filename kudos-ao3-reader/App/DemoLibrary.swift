@@ -201,5 +201,12 @@ enum DebugLaunchRoute {
         }
         return nil
     }
+
+    /// `work:<title>` opens that work's detail page on Home's stack.
+    static func homeWork(in works: [SavedWork]) -> SavedWork? {
+        guard let value, value.hasPrefix("work:") else { return nil }
+        let title = String(value.dropFirst("work:".count))
+        return works.first { $0.title == title }
+    }
 }
 #endif
