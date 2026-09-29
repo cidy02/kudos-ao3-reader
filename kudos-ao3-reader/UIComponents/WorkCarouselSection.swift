@@ -76,8 +76,15 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         _collapsed = AppStorage(wrappedValue: false, "section.collapsed.\(collapseKey)")
     }
 
+    /// 1b/1c: 11pt from the header to the cards; 1d: 10pt to the first row. The
+    /// shelf's scroll view pads 6pt above its cards for their shadow, and the
+    /// ledger 2pt, so the stack spacing is what is left.
+    private var headerSpacing: CGFloat {
+        layout == .shelves ? 11 - 6 : 10 - 2
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: headerSpacing) {
             header
             if !collapsed {
                 if hasItems {
@@ -122,6 +129,87 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
             // promise the destination cannot keep.
             onSeeAll: hasItems ? onSeeAll : nil
         )
+    }
+}
+
+/// A ledger section as `List` rows rather than a stacked `VStack`, so each work
+/// row can carry swipe actions — only a `List` row offers them (owner,
+/// 2026-09-29: the Library ledger had none). Same header, same collapse key, so
+/// switching layouts keeps a section folded or open.
+///
+/// The header is an ordinary row, not a `Section` header: a plain list pins
+/// section headers to the top while scrolling, which the dashboard never did.
+struct WorkLedgerListSection<Rows: View, Empty: View>: View {
+    private let title: String
+    private let hasItems: Bool
+    private let itemCount: Int?
+    private let onSeeAll: (() -> Void)?
+    private let rows: () -> Rows
+    private let emptyState: () -> Empty
+    private let topSpacing: CGFloat
+
+    @AppStorage private var collapsed: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(
+        title: String,
+        collapseKey: String,
+        hasItems: Bool,
+        itemCount: Int? = nil,
+        onSeeAll: (() -> Void)? = nil,
+        topSpacing: CGFloat = 22,
+        @ViewBuilder rows: @escaping () -> Rows,
+        @ViewBuilder emptyState: @escaping () -> Empty
+    ) {
+        self.title = title
+        self.hasItems = hasItems
+        self.itemCount = itemCount
+        self.onSeeAll = onSeeAll
+        self.rows = rows
+        self.emptyState = emptyState
+        self.topSpacing = topSpacing
+        _collapsed = AppStorage(wrappedValue: false, "section.collapsed.\(collapseKey)")
+    }
+
+    var body: some View {
+        Group {
+            SectionRuleHeader(
+                title: title,
+                count: itemCount,
+                isCollapsed: collapsed,
+                onToggleCollapse: {
+                    withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
+                        collapsed.toggle()
+                    }
+                },
+                onSeeAll: hasItems ? onSeeAll : nil
+            )
+            // 1d: 22pt between sections, 10pt to the first row (5 here + the
+            // row's own 5).
+            .dashboardListRow(EdgeInsets(top: topSpacing, leading: 0, bottom: 5, trailing: 0))
+
+            if !collapsed {
+                if hasItems {
+                    rows()
+                } else {
+                    emptyState()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .dashboardListRow(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    /// A dashboard row in a plain `List`: the page's own spacing, no separator,
+    /// and no row fill — the rows paint their own card.
+    func dashboardListRow(
+        _ insets: EdgeInsets = EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16)
+    ) -> some View {
+        listRowInsets(insets)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 
