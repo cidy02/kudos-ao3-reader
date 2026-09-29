@@ -229,9 +229,6 @@ struct AccountInboxItemRow: View {
                             )
                         }
                         Spacer(minLength: 0)
-                        if item.isReplied {
-                            InboxRepliedBadge()
-                        }
                         moreActionsMenu
                     }
                 }
@@ -313,7 +310,6 @@ struct AccountInboxItemRow: View {
                             .lineLimit(3)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    if item.isReplied { InboxRepliedBadge() }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -363,6 +359,8 @@ struct AccountInboxItemRow: View {
                 currentUsername: auth.username
             ))
             Spacer(minLength: 4)
+            // 1l: "Replied" rides the byline, beside the time.
+            if item.isReplied { InboxRepliedBadge() }
             if !item.postedAgo.isEmpty {
                 Text(item.postedAgo)
                     .font(.caption2)
@@ -477,15 +475,15 @@ struct AccountInboxItemRow: View {
     }
 }
 
-/// AO3's replied state, visually distinct from neutral work-state chips. The
-/// confirmation mark intentionally follows the text to match reading order.
+/// AO3's replied state, visually distinct from neutral work-state chips.
 private struct InboxRepliedBadge: View {
     var body: some View {
-        HStack(spacing: 4) {
-            Text("Replied")
-            Image(systemName: "checkmark")
-        }
+        // 1l's badge is the word alone; on the byline the checkmark only
+        // pushed the commenter's name into truncation.
+        Text("Replied")
         .font(.caption2.weight(.semibold))
+        .lineLimit(1)
+        .fixedSize()
         .foregroundStyle(Color.green)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
@@ -775,6 +773,8 @@ private struct InboxPanelSegment: ViewModifier {
             style: .continuous
         )
         content
+            // Inside the card: each avatar sat on the edge or separator above it.
+            .padding(.vertical, 10)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(
                 top: topGap,
