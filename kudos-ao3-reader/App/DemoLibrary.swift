@@ -205,8 +205,9 @@ enum DebugLaunchRoute {
 
     /// `work:<title>` opens that work's detail page on Home's stack.
     static func homeWork(in works: [SavedWork]) -> SavedWork? {
-        guard let value, value.hasPrefix("work:") else { return nil }
-        let title = String(value.dropFirst("work:".count))
+        // `mycopy:<title>` opens the same page with its My copy sheet up.
+        guard let value, let prefix = ["work:", "mycopy:"].first(where: value.hasPrefix) else { return nil }
+        let title = String(value.dropFirst(prefix.count))
         return works.first { $0.title == title }
     }
 }
