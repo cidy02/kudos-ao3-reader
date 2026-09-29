@@ -17,6 +17,7 @@ struct SubjectPillRail<Option: Hashable>: View {
                 }
             }
         }
+        .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 
     private func chip(_ option: Option) -> some View {
@@ -48,6 +49,7 @@ struct FavoriteAuthorFilterRail: View {
                 }
             }
         }
+        .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 
     private func chip(_ option: FavoriteAuthorQuickFilter) -> some View {
