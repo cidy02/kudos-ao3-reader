@@ -1284,14 +1284,7 @@ private struct CommentPostRow: View {
             // space. `.minimumHitTarget()` made the byline 44pt tall on thread
             // roots only, so their centred name sat below the 30pt avatar while
             // every other row's lined up (owner, 2026-09-29).
-            .background {
-                // As wide as the pill, 44pt tall.
-                Color.clear
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onToggleCollapse)
-                    .accessibilityHidden(true)
-            }
+            .layoutFreeHitTarget(action: onToggleCollapse)
             .accessibilityLabel(collapse.accessibilityLabel)
         }
     }

@@ -64,6 +64,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
     @State private var showingSelectionList = false
+    @State private var pendingDelete: SavedWork?
+    @State private var pendingRemoval: PendingLibraryRemoval?
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
     @State private var refreshTask: Task<Void, Never>?
@@ -316,10 +318,132 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
+    @ViewBuilder
     private var realDashboard: some View {
+        if dashboardLayout == .ledger {
+            ledgerDashboard
+        } else {
+            shelvesDashboard
+        }
+    }
+
+    /// 1d as a `List`, so every work row swipes like it does on its section page.
+    private var ledgerDashboard: some View {
+        List {
+            fandomFilterBar.dashboardListRow(EdgeInsets())
+            // 1d: 16 + 2 from the chips to the first section.
+            localLedgerSection(.readingNow, topSpacing: 18)
+            localLedgerSection(.savedForLater)
+            localLedgerSection(.finished)
+            collectionsLedgerSection
+            localLedgerSection(.downloaded)
+            localLedgerSection(.history)
+            localLedgerSection(.favorites)
+            if recentlyDeletedCount > 0 {
+                recentlyDeletedRow.dashboardListRow(EdgeInsets(top: 16, leading: 0, bottom: 12, trailing: 0))
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 0)
+        .refreshable { await refreshLibraryDashboard() }
+        .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
+    }
+
+    private func localLedgerSection(_ kind: LibrarySectionKind, topSpacing: CGFloat = 22) -> some View {
+        let sectionWorks = cachedWorks(for: kind)
+        return WorkLedgerListSection(
+            title: kind.title,
+            collapseKey: "library.\(kind.rawValue)",
+            hasItems: !sectionWorks.isEmpty,
+            itemCount: sectionWorks.count,
+            onSeeAll: !sectionWorks.isEmpty
+                ? { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
+                : nil,
+            topSpacing: topSpacing
+        ) {
+            ForEach(sectionWorks.prefix(12)) { work in
+                swipeableLedgerRow(work, kind: kind)
+            }
+        } emptyState: {
+            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
+        }
+    }
+
+    /// Swipes are the section page's, per section (History removes, Favorites
+    /// unstars). Selecting drops them, as every list does.
+    @ViewBuilder
+    private func swipeableLedgerRow(_ work: SavedWork, kind: LibrarySectionKind) -> some View {
+        if isSelecting {
+            listLedgerRow(work)
+        } else {
+            listLedgerRow(work)
+                .libraryWorkSwipeActions(
+                    work,
+                    kind: kind,
+                    isFavoritesList: kind == .favorites,
+                    pendingDelete: $pendingDelete,
+                    pendingRemoval: $pendingRemoval
+                )
+        }
+    }
+
+    /// The section page's ledger row, card and all: `cardRow` paints the wash
+    /// in the row background and hides the List's disclosure chevron, which
+    /// the dashboard's own `usesInlineNavigation` row would otherwise grow.
+    private func listLedgerRow(_ work: SavedWork) -> some View {
+        SensitiveWorkRow(
+            work: work,
+            openMode: .reader,
+            onSelect: selectAction(for: work),
+            isSelecting: isSelecting,
+            isSelected: selection.contains(work.id),
+            onToggleSelection: { toggleSelection(work) },
+            presentation: .ledger
+        )
+        .cardRow(
+            isSelected: isSelecting && selection.contains(work.id),
+            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+        )
+    }
+
+    private var collectionsLedgerSection: some View {
+        let kind = LibrarySectionKind.collections
+        return WorkLedgerListSection(
+            title: kind.title,
+            collapseKey: "library.\(kind.rawValue)",
+            hasItems: true,
+            itemCount: collections.count,
+            onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
+        ) {
+            Button {
+                showingNewCollection = true
+            } label: {
+                NewCollectionLedgerRow()
+            }
+            .buttonStyle(.plain)
+            .dashboardListRow()
+
+            ForEach(collections.prefix(12)) { collection in
+                NavigationLink(value: collection) {
+                    CollectionLedgerRow(
+                        collection: collection,
+                        previewWorks: collectionPreviewWorks(for: collection)
+                    )
+                    .collectionCardMenu(collection)
+                }
+                .buttonStyle(.plain)
+                .dashboardListRow()
+            }
+        } emptyState: {
+            EmptyView()
+        }
+    }
+
+    private var shelvesDashboard: some View {
         ScrollView {
-            // 1c's shelves sit 18pt apart; 1d's ledger 16.
-            VStack(alignment: .leading, spacing: dashboardLayout == .ledger ? 16 : 18) {
+            // 1c: 22pt between sections, and 18 + 4 from the chips to the first.
+            VStack(alignment: .leading, spacing: 22) {
                 fandomFilterBar
                 localCarousel(.readingNow)
                 localCarousel(.savedForLater)
