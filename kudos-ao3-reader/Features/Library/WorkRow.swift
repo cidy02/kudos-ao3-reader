@@ -48,6 +48,7 @@ struct WorkRow: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.ledgerPositionNumber) private var positionNumber
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var internalExpanded = false
 
     private var expandedBinding: Binding<Bool> {
@@ -191,10 +192,13 @@ struct WorkRow: View {
             // Title + author, with the favorite star and expand control pinned top-trailing.
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .top, spacing: 6) {
+                    // Never truncate text someone asked to be larger (WorkLedgerRow's rule).
                     Text(work.title)
                         .font(.headline)
                         .foregroundStyle(.primary)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     Spacer(minLength: 4)
                     if work.isFavorite {
                         Image(systemName: "star.fill")
@@ -215,8 +219,9 @@ struct WorkRow: View {
                         displayText: work.author,
                         identities: work.verifiedAuthorIdentities,
                         font: .subheadline,
-                        compact: true
+                        compact: !dynamicTypeSize.isAccessibilitySize
                     )
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
