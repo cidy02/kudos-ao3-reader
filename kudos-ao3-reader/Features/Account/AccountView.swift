@@ -693,9 +693,7 @@ struct AccountView: View {
 
     // MARK: Reading — Marked for Later | Bookmarks | Collections | Subscriptions
 
-
     // MARK: Activity — History | Inbox
-
 
     // MARK: Shared profile content
 

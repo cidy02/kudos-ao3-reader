@@ -261,7 +261,7 @@ enum DebugLaunchRoute {
         case "dashboard": return AccountView.Route.dashboard
         case "drafts": return AccountView.Route.drafts
         case "works": return AccountView.Route.myWorks
-        case "series": return AccountView.Route.mySeries
+        case "series", "seriesedit": return AccountView.Route.mySeries
         case "inbox": return AccountView.Route.inbox
         case "preferences": return AccountView.Route.preferences
         case "more": return AccountView.Route.moreOnAO3
