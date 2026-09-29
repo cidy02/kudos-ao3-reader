@@ -324,13 +324,19 @@ struct WorkStatusIconGrid: View {
     /// existing bare-grid callers unchanged.
     var showsTray: Bool = false
 
-    @Environment(ThemeManager.self) private var themeManager
-
-    private var items: [WorkTopStatsRow.Item] {
-        WorkTopStatsRow(
-            rating: rating, categories: categories, warnings: warnings,
-            completion: completion, isExpanded: isExpanded
-        ).topItems
+    var body: some View {
+        WorkStatusIconGridContent(
+            rating: rating,
+            categories: categories,
+            warnings: warnings,
+            completion: completion,
+            isExpanded: isExpanded,
+            tileSize: tileSize,
+            announcesToVoiceOver: announcesToVoiceOver,
+            arrangement: arrangement,
+            showsTray: showsTray
+        )
+        .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 
     /// The drawn height of the 2x2 tray, from the same constants it lays itself
@@ -343,26 +349,71 @@ struct WorkStatusIconGrid: View {
         let verticalPadding = tileSize / 4
         return tileSize * 2 + gap + verticalPadding * 2
     }
+}
 
-    private var gap: CGFloat { tileSize * 3 / 18 }
-    private var cornerRadius: CGFloat { tileSize * 4 / 18 }
-    private var iconSize: CGFloat { tileSize * 10 / 18 }
-    private var shieldSize: CGFloat { tileSize * 12 / 18 }
-    private var letterSize: CGFloat { tileSize * 6 / 18 }
+/// Hands `content` the tray's drawn height at the current Dynamic Type size,
+/// under the same cap and scale the tray uses, so a neighbour sized to it grows with it.
+struct WorkStatusTrayMatched<Content: View>: View {
+    let tileSize: CGFloat
+    @ViewBuilder var content: (CGFloat) -> Content
+
+    var body: some View {
+        Scaled(tileSize: tileSize, content: content)
+            .dynamicTypeSize(.xSmall ... .accessibility2)
+    }
+
+    private struct Scaled: View {
+        let tileSize: CGFloat
+        let content: (CGFloat) -> Content
+        @ScaledMetric(relativeTo: .caption2) private var scale: CGFloat = 1
+
+        var body: some View {
+            content(WorkStatusIconGrid.trayHeight(tileSize: tileSize * scale))
+        }
+    }
+}
+
+private struct WorkStatusIconGridContent: View {
+    var rating: String?
+    var categories: [String]
+    var warnings: [String]
+    var completion: WorkCompletionStatus
+    var isExpanded: Bool
+    var tileSize: CGFloat
+    var announcesToVoiceOver: Bool
+    var arrangement: WorkStatusIconGrid.Arrangement
+    var showsTray: Bool
+
+    @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .caption2) private var scale: CGFloat = 1
+
+    private var items: [WorkTopStatsRow.Item] {
+        WorkTopStatsRow(
+            rating: rating, categories: categories, warnings: warnings,
+            completion: completion, isExpanded: isExpanded
+        ).topItems
+    }
+
+    private var scaledTileSize: CGFloat { tileSize * scale }
+    private var gap: CGFloat { scaledTileSize * 3 / 18 }
+    private var cornerRadius: CGFloat { scaledTileSize * 4 / 18 }
+    private var iconSize: CGFloat { scaledTileSize * 10 / 18 }
+    private var shieldSize: CGFloat { scaledTileSize * 12 / 18 }
+    private var letterSize: CGFloat { scaledTileSize * 6 / 18 }
     /// The Unicode pairing glyphs (⚢/⚣/⚤/♅) read smaller than the SF Symbol
     /// icons around them at the same point size — Apple Symbols draws them
     /// with more internal padding than SF Symbols' own icon metrics.
-    private var pairingSymbolSize: CGFloat { tileSize * 12 / 18 }
+    private var pairingSymbolSize: CGFloat { scaledTileSize * 12 / 18 }
     /// Gen's sun glyph (☉) specifically reads much smaller than the other
     /// icons at `pairingSymbolSize` — Apple Symbols draws it with far more
     /// internal padding than the doubled-gender glyphs get. Measured its
     /// rendered ink against the warning tile's own exclamationmark-circle
     /// ink at both tile sizes: a font size equal to `tileSize` itself (not
     /// `pairingSymbolSize`) lands within a couple percent of matching it.
-    private var genSymbolSize: CGFloat { tileSize }
+    private var genSymbolSize: CGFloat { scaledTileSize }
     /// Multi tile geometry — plain design ratio, not anything measured. Two
     /// quadrants across exactly fill the tile.
-    private var multiQuadrantSize: CGFloat { tileSize / 2 }
+    private var multiQuadrantSize: CGFloat { scaledTileSize / 2 }
 
     var body: some View {
         let resolvedItems = items
@@ -384,8 +435,8 @@ struct WorkStatusIconGrid: View {
         if showsTray {
             let shape = RoundedRectangle(cornerRadius: SubjectMetrics.trayRadius, style: .continuous)
             iconLayout(items)
-                .padding(.horizontal, tileSize / 3)
-                .padding(.vertical, tileSize / 4)
+                .padding(.horizontal, scaledTileSize / 3)
+                .padding(.vertical, scaledTileSize / 4)
                 .background(themeManager.appTheme.glassFill(0.10), in: shape)
                 .overlay { shape.strokeBorder(themeManager.appTheme.glassStroke(), lineWidth: 0.5) }
         } else {
@@ -447,9 +498,9 @@ struct WorkStatusIconGrid: View {
                             .foregroundStyle(item.iconColor ?? .gray)
                     }
                 }
-                .frame(width: tileSize, height: tileSize)
+                .frame(width: scaledTileSize, height: scaledTileSize)
         } else {
-            Color.clear.frame(width: tileSize, height: tileSize)
+            Color.clear.frame(width: scaledTileSize, height: scaledTileSize)
         }
     }
 
@@ -605,7 +656,7 @@ struct WorkStatusIconGrid: View {
                 .offset(x: center.x, y: center.y)
             }
         }
-        .frame(width: tileSize, height: tileSize)
+        .frame(width: scaledTileSize, height: scaledTileSize)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
