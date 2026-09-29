@@ -281,9 +281,28 @@ enum DebugLaunchRoute {
     }
 
     /// `work:<title>` opens that work's detail page on Home's stack.
+    static var opensReader: Bool { value?.hasPrefix("read:") == true }
+
+    /// With `-KudosFixtureDir`, demo works get the fixture EPUB in place of the
+    /// zero-filled placeholder, so the reader has a real book to open.
+    static func installFixtureEPUBs(in works: [SavedWork]) {
+        guard let directory = DemoNetworkBlock.fixtureDirectory else { return }
+        // A well-formed XHTML book; `sample.epub` is bare XML and renders unstyled.
+        let source = directory.appendingPathComponent("demo_work.epub")
+        guard let epub = try? Data(contentsOf: source) else { return }
+        for work in works {
+            let url = work.fileURL
+            // Demo works only ever hold a placeholder or this book.
+            guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                  size != epub.count else { continue }
+            try? epub.write(to: url)
+        }
+    }
+
     static func homeWork(in works: [SavedWork]) -> SavedWork? {
-        // `mycopy:<title>` opens the same page with its My copy sheet up.
-        guard let value, let prefix = ["work:", "mycopy:"].first(where: value.hasPrefix) else { return nil }
+        // `mycopy:<title>` opens the same page with its My copy sheet up;
+        // `read:<title>` opens the reader instead (see `opensReader`).
+        guard let value, let prefix = ["work:", "mycopy:", "read:"].first(where: value.hasPrefix) else { return nil }
         let title = String(value.dropFirst(prefix.count))
         return works.first { $0.title == title }
     }
