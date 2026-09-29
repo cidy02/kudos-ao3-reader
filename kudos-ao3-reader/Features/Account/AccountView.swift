@@ -173,6 +173,7 @@ struct AccountView: View {
                 .task {
                     try? await Task.sleep(for: .seconds(1.5))
                     DebugLaunchRoute.applyAccount(to: &path)
+                    editingWorkID = DebugLaunchRoute.accountEditWorkID
                 }
                 #endif
                 .navigationDestination(item: $editingWorkID) { WritingWorkDestination(workID: $0) }

@@ -248,6 +248,13 @@ enum DebugLaunchRoute {
         }
     }
 
+    /// `acct:workedit:<id>` opens Work Edit for that AO3 work (the fixture
+    /// harness serves `/works/<id>/edit`).
+    static var accountEditWorkID: Int? {
+        guard let value, value.hasPrefix("acct:workedit:") else { return nil }
+        return Int(value.dropFirst("acct:workedit:".count))
+    }
+
     private static func accountTarget() -> Any? {
         guard let value, value.hasPrefix("acct:") else { return nil }
         switch String(value.dropFirst("acct:".count)) {
