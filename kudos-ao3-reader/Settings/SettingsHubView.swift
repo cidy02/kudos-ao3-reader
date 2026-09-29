@@ -31,7 +31,11 @@ struct SettingsHubView: View {
             ForEach(SettingsRoute.hubGroups) { group in
                 Section {
                     // Pads itself to `SubjectMetrics.gutter`, like the header.
-                    SectionRuleHeader(title: group.title).pageBodyRow(top: 18, gutter: 0)
+                    // 1ab: 10 from the rule to its panel. The List's minimum
+                    // row height used to supply the gap, and ~20 more with it.
+                    SectionRuleHeader(title: group.title)
+                        .padding(.bottom, 10)
+                        .pageBodyRow(top: 22, gutter: 0)
                     // One `List` row per link: in one row, a tap fires every link.
                     ForEach(Array(group.routes.enumerated()), id: \.element) { index, route in
                         let value = SettingsHubValue.row(route, inputs)
@@ -43,6 +47,9 @@ struct SettingsHubView: View {
             }
         }
         .cardList()
+        // 1ab's rows are 11×14 around a 15pt line (~41pt); the List's own
+        // minimum row height held every row at ~52 (L3-B10-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: themeManager.scopePalette)
         #if os(macOS)
             .navigationTitle("Settings")
