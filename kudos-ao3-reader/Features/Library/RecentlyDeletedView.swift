@@ -152,7 +152,10 @@ struct RecentlyDeletedView: View {
             #endif
         } else if !entries.isEmpty {
             ToolbarItem(placement: .primaryAction) {
-                Button("Select") { isSelecting = true }
+                // The checklist glyph Select wears on every other list.
+                Button { isSelecting = true } label: {
+                    Label("Select", systemImage: "checklist")
+                }
             }
         }
     }
