@@ -116,13 +116,7 @@ enum WorkMetadataRefresh {
     }
 
     static func message(for error: Error) -> String {
-        if let ao3 = error as? AO3Error, let description = ao3.errorDescription {
-            return description
-        }
-        if let localized = error as? LocalizedError, let description = localized.errorDescription {
-            return description
-        }
-        return error.localizedDescription
+        UserFacingError.message(for: error)
     }
 
     // Field-level merge guards are deliberately explicit for refresh safety.

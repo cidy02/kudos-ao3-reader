@@ -502,7 +502,7 @@ final class AO3InboxModel {
             if let ao3 = error as? AO3Error, let description = ao3.errorDescription {
                 actionError = description
             } else {
-                actionError = error.localizedDescription
+                actionError = UserFacingError.message(for: error)
             }
         }
     }
@@ -584,7 +584,7 @@ final class AO3InboxModel {
             if let ao3 = error as? AO3Error, let description = ao3.errorDescription {
                 message = description
             } else {
-                message = error.localizedDescription
+                message = UserFacingError.message(for: error)
             }
             // Only blow away the whole feed when there's nothing behind the
             // error to preserve; a later page's failure keeps the last

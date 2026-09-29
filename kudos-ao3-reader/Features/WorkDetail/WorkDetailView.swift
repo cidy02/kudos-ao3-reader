@@ -1038,7 +1038,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     loadError = error.errorDescription
                     working = false
                 } catch {
-                    loadError = error.localizedDescription
+                    loadError = UserFacingError.message(for: error)
                     working = false
                 }
             }

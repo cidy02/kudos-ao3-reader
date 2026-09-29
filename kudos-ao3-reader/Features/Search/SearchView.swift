@@ -874,7 +874,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 phase = .failed(error.errorDescription ?? "Something went wrong.")
             } catch {
                 guard token == loadToken else { return }
-                phase = .failed(error.localizedDescription)
+                phase = .failed(UserFacingError.message(for: error))
             }
         }
     }

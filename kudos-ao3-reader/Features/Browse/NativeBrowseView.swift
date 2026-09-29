@@ -352,7 +352,7 @@ struct FandomWorksView: View {
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -640,7 +640,7 @@ struct TagWorksView: View {
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 }

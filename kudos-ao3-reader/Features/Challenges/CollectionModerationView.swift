@@ -726,7 +726,7 @@ struct CollectionModerationView: View {
             phase = .loaded
         } catch {
             guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -755,7 +755,7 @@ struct CollectionModerationView: View {
             reviewTotalPages = items.totalPages
         } catch {
             guard shouldApply(capturedLoadGeneration, capturedSessionGeneration) else { return }
-            actionErrorMessage = "Couldn't load that page: \(error.localizedDescription)"
+            actionErrorMessage = "Couldn't load that page: \(UserFacingError.message(for: error))"
         }
     }
 
@@ -779,7 +779,7 @@ struct CollectionModerationView: View {
             try await auth.approveCollectionItem(slug: collectionSlug, itemID: item.id)
             await removeDecided(item)
         } catch {
-            actionErrorMessage = "Failed to approve: \(error.localizedDescription)"
+            actionErrorMessage = "Failed to approve: \(UserFacingError.message(for: error))"
         }
         itemInFlight = nil
     }
@@ -792,7 +792,7 @@ struct CollectionModerationView: View {
             try await auth.rejectCollectionItem(slug: collectionSlug, itemID: item.id)
             await removeDecided(item)
         } catch {
-            actionErrorMessage = "Failed to reject: \(error.localizedDescription)"
+            actionErrorMessage = "Failed to reject: \(UserFacingError.message(for: error))"
         }
         itemInFlight = nil
     }
@@ -814,7 +814,7 @@ struct CollectionModerationView: View {
         } catch is CancellationError {
             return
         } catch {
-            actionErrorMessage = "Failed to accept: \(error.localizedDescription)"
+            actionErrorMessage = "Failed to accept: \(UserFacingError.message(for: error))"
         }
         participantInFlight = nil
     }
@@ -836,7 +836,7 @@ struct CollectionModerationView: View {
         } catch is CancellationError {
             return
         } catch {
-            actionErrorMessage = "Failed to decline: \(error.localizedDescription)"
+            actionErrorMessage = "Failed to decline: \(UserFacingError.message(for: error))"
         }
         participantInFlight = nil
     }
@@ -849,7 +849,7 @@ struct CollectionModerationView: View {
             _ = try await auth.revealCollection(slug: collectionSlug)
             await load()
         } catch {
-            revealErrorMessage = error.localizedDescription
+            revealErrorMessage = UserFacingError.message(for: error)
         }
         isRevealing = false
     }
@@ -862,7 +862,7 @@ struct CollectionModerationView: View {
             _ = try await auth.unanonCollection(slug: collectionSlug)
             await load()
         } catch {
-            revealErrorMessage = error.localizedDescription
+            revealErrorMessage = UserFacingError.message(for: error)
         }
         isUnanonymizing = false
     }

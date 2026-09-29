@@ -452,7 +452,7 @@ struct ChallengeSignUpsView: View {
             pages = next
             phase = .loaded
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -484,7 +484,7 @@ struct ChallengeSignUpsView: View {
             matchError = nil
         } catch {
             assignments = nil
-            matchError = error.localizedDescription
+            matchError = UserFacingError.message(for: error)
         }
     }
 

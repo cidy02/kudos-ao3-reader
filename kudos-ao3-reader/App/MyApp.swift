@@ -28,6 +28,10 @@ import SwiftUI
     }()
 
     init() {
+        #if DEBUG
+        // First thing: nothing may reach AO3 in a demo-library run.
+        DemoNetworkBlock.installGlobally()
+        #endif
         #if os(iOS)
         FolderSyncBackgroundTask.register(container: Self.sharedModelContainer)
         // iOS-only: `Kudos-iOS.entitlements` carries the KVS identifier,
