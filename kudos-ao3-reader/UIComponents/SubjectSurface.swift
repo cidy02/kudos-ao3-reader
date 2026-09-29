@@ -948,6 +948,9 @@ struct SubjectChip: View {
     /// A trailing glyph the caller can tap through — the × on an active filter.
     var trailingImage: String?
     var palette: SubjectPalette?
+    var fontWeight: Font.Weight?
+    var horizontalPadding: CGFloat?
+    var verticalPadding: CGFloat?
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -960,7 +963,7 @@ struct SubjectChip: View {
                     .font(.system(size: 11, weight: .semibold))
             }
             Text(text)
-                .font(.system(size: 13, weight: style == .tinted ? .medium : .regular))
+                .font(.system(size: 13, weight: fontWeight ?? (style == .tinted ? .medium : .regular)))
                 .monospacedDigit()
                 .lineLimit(1)
             if let trailingImage {
@@ -969,8 +972,8 @@ struct SubjectChip: View {
                     .opacity(0.75)
             }
         }
-        .padding(.horizontal, isPill ? 14 : 11)
-        .padding(.vertical, isPill ? 7 : 6)
+        .padding(.horizontal, horizontalPadding ?? (isPill ? 14 : 11))
+        .padding(.vertical, verticalPadding ?? (isPill ? 7 : 6))
         .foregroundStyle(foreground)
         .background(background)
         .accessibilityElement(children: .combine)
