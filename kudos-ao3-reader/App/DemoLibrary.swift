@@ -255,6 +255,7 @@ enum DebugLaunchRoute {
         case "inbox": return AccountView.Route.inbox
         case "preferences": return AccountView.Route.preferences
         case "more": return AccountView.Route.moreOnAO3
+        case "settings": return AccountView.Route.settings
         case "collections": return AccountView.Route.myCollections
         case "later": return AO3AccountWorksList.Kind.markedForLater
         case "bookmarks": return AO3AccountWorksList.Kind.bookmarks
