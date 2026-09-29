@@ -18,6 +18,7 @@ struct AccountProfileCard: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @State private var confirmingLogOut = false
     /// 1m sets the account name at 27px — smaller than a subject page's 32,
     /// because here it shares the line with a 56pt avatar.
     @ScaledMetric(relativeTo: .title2) private var nameSize: CGFloat = 27
@@ -251,7 +252,7 @@ struct AccountProfileCard: View {
             Divider()
 
             Button(role: .destructive) {
-                Task { await auth.logout() }
+                confirmingLogOut = true
             } label: {
                 Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
             }
@@ -262,6 +263,7 @@ struct AccountProfileCard: View {
         .buttonBorderShape(.capsule)
         .controlSize(.small)
         .accessibilityLabel("Account actions")
+        .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
     }
 
     /// Artboard 1n's identity block, which is 1m's with everything the account
