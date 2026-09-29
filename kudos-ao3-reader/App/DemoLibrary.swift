@@ -408,6 +408,7 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/users/[^/]+/(pseuds/[^/]+/)?series", "ao3_author_series"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?bookmarks", "ao3_author_bookmarks"),
         ("^/users/[^/]+/readings", "ao3_readings"),
+        ("^/users/[^/]+/subscriptions", "ao3_subscriptions"),
         ("^/users/[^/]+/inbox", "ao3_inbox_manage"),
         ("^/users/[^/]+/preferences", "ao3_preferences"),
         ("^/users/[^/]+/stats", "ao3_user_stats"),
