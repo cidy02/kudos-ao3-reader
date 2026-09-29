@@ -502,6 +502,30 @@ struct AO3CommentsParseTests {
         #expect(rows.map(\.nextDepth) == [1, 2, 3, 1, nil])
     }
 
+    /// A swiped comment's replies hide the line back to it, found by ancestry:
+    /// each row carries the comment at every level above it, and a later
+    /// sibling must not inherit the previous sibling's subtree.
+    @Test func rowsCarryTheirAncestorsForSwipeHiding() throws {
+        let d3 = AO3Comment(id: 4, author: "D", isGuest: false)
+        var d2 = AO3Comment(id: 3, author: "C", isGuest: false)
+        d2.replies = [d3]
+        var d1 = AO3Comment(id: 2, author: "B", isGuest: false)
+        d1.replies = [d2]
+        let laterSibling = AO3Comment(id: 5, author: "E", isGuest: false)
+        var root = AO3Comment(id: 1, author: "A", isGuest: false)
+        root.replies = [d1, laterSibling]
+
+        let rows = CommentConversationBuilder.rows(
+            roots: [root],
+            repliesByRoot: [root.id: CommentThreadGeometry.flattenedReplies(from: root)],
+            expandedRootIDs: [], visibleReplyCounts: [:],
+            maxDepth: CommentThreadGeometry.maxInlineDepth
+        )
+
+        try #require(rows.count == 5)
+        #expect(rows.map(\.ancestorIDs) == [[], [1], [1, 2], [1, 2, 3], [1]])
+    }
+
     /// 1f's inline list, down to AO3's own nesting limit. A chain seven replies
     /// deep draws depths 0…5 in place and sends exactly the two replies below that
     /// behind one "Continue thread" row — and siblings at depth 1 and 3 still land

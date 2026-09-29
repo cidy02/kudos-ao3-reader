@@ -500,6 +500,9 @@ struct CommentConversationRowItem: Identifiable {
     /// earlier sibling's subtree sits in between, so no connector joins the two
     /// and the reply has to name its parent in text instead.
     let showsParentAttribution: Bool
+    /// The comment at each level above this row, root first — what lets a
+    /// reply hide the line from an ancestor that is being swiped.
+    var ancestorIDs: [Int] = []
     /// Set on a root that has replies: the caret's state and what it would reveal.
     /// nil everywhere else, which is also the "no caret" signal.
     let collapse: CommentCollapseState?
@@ -530,6 +533,10 @@ struct ThreadConnectors: Shape {
     /// would risk the rails and the avatars disagreeing about where a column is
     /// the moment either formula changes.
     let indents: [CGFloat]
+    /// The rail level of an ancestor that is being swiped: its line through
+    /// this row, and the elbow off it into this reply, are left out so nothing
+    /// points at a comment that has slid away. Nil draws everything.
+    var hiddenLevel: Int?
 
     private func indent(forLevel level: Int) -> CGFloat {
         guard level >= 0, level < indents.count else { return indents.last ?? 0 }
@@ -563,11 +570,13 @@ struct ThreadConnectors: Shape {
         // An ancestor with replies still to come keeps its rail running the full
         // height of this row, carrying it past an earlier sibling's subtree to
         // reach the next peer.
-        for level in 0 ..< min(depth - 1, ancestorLines.count) where ancestorLines[level] {
+        for level in 0 ..< min(depth - 1, ancestorLines.count) where ancestorLines[level] && level != hiddenLevel {
             let x = railX(forLevel: level)
             path.move(to: CGPoint(x: x, y: rect.minY))
             path.addLine(to: CGPoint(x: x, y: rect.maxY))
         }
+
+        guard hiddenLevel != depth - 1 else { return path }
 
         // The parent's rail into this reply: down from the top edge, then a rounded
         // elbow that ends at the avatar's left edge, at its vertical centre.
@@ -729,8 +738,14 @@ enum CommentConversationBuilder {
             // ahead of it — one forward scan per row answers both questions the
             // thread lines need.
             let depths = items.map(\.connectorDepth)
+            // The comment at each depth on the way down to the current row.
+            var path: [Int] = []
             for (index, item) in items.enumerated() {
                 let depth = depths[index]
+                let ancestors = Array(path.prefix(depth))
+                if case let .post(comment, _, _, _) = item {
+                    path = ancestors + [comment.id]
+                }
                 rows.append(CommentConversationRowItem(
                     item: item,
                     rootID: root.id,
@@ -746,6 +761,7 @@ enum CommentConversationBuilder {
                     // exactly when the row above is deeper than this one's parent.
                     showsParentAttribution: depth > 0
                         && (index == 0 || depths[index - 1] != depth - 1),
+                    ancestorIDs: ancestors,
                     // Only a root with replies can be folded — keyed on the row's
                     // position, not its depth, because the control rows sit at depth
                     // 0 too. A reply's own caret would compete with its parent's for
@@ -775,6 +791,8 @@ struct CommentConversationRow: View {
     let nextDepth: Int?
     var showsParentAttribution = false
     var collapse: CommentCollapseState?
+    /// See `CommentConversationRowItem.ancestorIDs`.
+    var ancestorIDs: [Int] = []
     /// Invoked by the expander row.
     var onExpand: () -> Void = {}
     /// Invoked by the "Continue thread" row.
@@ -792,7 +810,9 @@ struct CommentConversationRow: View {
                 isLastSibling: isLastSibling,
                 ancestorLines: ancestorLines,
                 nextDepth: nextDepth,
-                startsConversation: startsConversation
+                startsConversation: startsConversation,
+                commentID: item.actionableComment?.id,
+                ancestorIDs: ancestorIDs
             ))
     }
 
@@ -869,10 +889,13 @@ private struct CommentRowChrome: ViewModifier {
     /// True on a root comment that isn't the first on the page: it takes the air
     /// and the hairline that separate one conversation from the next.
     let startsConversation: Bool
+    var commentID: Int?
+    var ancestorIDs: [Int] = []
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.commentsContentWidth) private var contentWidth
+    @Environment(CommentSwipeTracker.self) private var swipeTracker: CommentSwipeTracker?
     /// Where the row sits when nothing is swiping it, and how far it is from
     /// there now. See `trackSwipe`.
     @State private var rest: (minX: CGFloat, width: CGFloat)?
@@ -916,8 +939,8 @@ private struct CommentRowChrome: ViewModifier {
             // neighbour at rest breaks mid-swipe. The swipe itself has no API, but
             // SwiftUI does see the row move (measured on device, 2026-09-29): the
             // row's global minX leaves its resting value frame by frame and comes
-            // back as it closes. So the swiped row's rails fade out over the first
-            // few points and return with it (owner, 2026-09-29).
+            // back as it closes. So the swiped row's rails disappear while it is off
+            // rest and return when it settles (owner, 2026-09-29).
             .listRowBackground(rowBackground(indents: resolved))
             .listRowSeparator(.hidden)
     }
@@ -933,12 +956,28 @@ private struct CommentRowChrome: ViewModifier {
             return
         }
         swipeOffset = frame.minX - rest.minX
+        // Tell the replies. Only on the edge, so a swipe does not re-render
+        // every row on every frame.
+        guard let swipeTracker, let commentID else { return }
+        if isOffRest, swipeTracker.swipedID != commentID {
+            swipeTracker.swipedID = commentID
+        } else if !isOffRest, swipeTracker.swipedID == commentID {
+            swipeTracker.swipedID = nil
+        }
     }
 
-    /// 1 at rest, 0 once the row has moved `fadeDistance` points either way.
+    /// Half a point of slack so layout rounding at rest never counts.
+    private var isOffRest: Bool { abs(swipeOffset) > 0.5 }
+
+    /// The level of this row's swiped ancestor, if one is being swiped.
+    private var hiddenLevel: Int? {
+        guard let swiped = swipeTracker?.swipedID else { return nil }
+        return ancestorIDs.firstIndex(of: swiped)
+    }
+
+    /// Gone the moment the row moves, back the moment it rests (owner: no fade).
     private var railOpacity: Double {
-        let fadeDistance: CGFloat = 8
-        return Double(max(0, 1 - abs(swipeOffset) / fadeDistance))
+        isOffRest ? 0 : 1
     }
 
     /// Rails in the app's hairline tone rather than the accent: at up to five
@@ -953,7 +992,8 @@ private struct CommentRowChrome: ViewModifier {
             leadingInset: CommentThreadGeometry.sideMargin,
             topInset: topInset,
             hasChildBelow: nextDepth == depth + 1,
-            indents: indents
+            indents: indents,
+            hiddenLevel: hiddenLevel
         )
         .stroke(theme.appTheme.glassStroke(0.18), lineWidth: CommentThreadGeometry.railWidth)
         .opacity(railOpacity)
@@ -1821,4 +1861,11 @@ private struct CommentSwipeActions: ViewModifier {
             content
         }
     }
+}
+
+/// Which comment row is being swiped, shared across a comment list so that
+/// row's replies can drop the line that joins them to it (owner, 2026-09-29).
+@Observable
+final class CommentSwipeTracker {
+    var swipedID: Int?
 }

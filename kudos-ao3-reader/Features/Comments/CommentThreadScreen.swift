@@ -29,6 +29,7 @@ struct CommentThreadScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var width: CGFloat = 390
     @State private var highlightedCommentID: Int?
+    @State private var swipeTracker = CommentSwipeTracker()
     @State private var highlightClearTask: Task<Void, Never>?
 
     private var root: AO3Comment? { model.comment(withID: rootID) }
@@ -56,7 +57,8 @@ struct CommentThreadScreen: View {
                             // in full; folding its root would leave a page with a
                             // single comment on it and no way to read what you
                             // navigated here for.
-                            collapse: nil
+                            collapse: nil,
+                            ancestorIDs: row.ancestorIDs
                         )
                         .commentSwipeActions(comment: row.item.actionableComment)
                     }
@@ -77,6 +79,7 @@ struct CommentThreadScreen: View {
             }
             .cardList()
             .coordinateSpace(.named(CommentThreadGeometry.listSpace))
+            .environment(swipeTracker)
             // Same reason as the list's own copy: indent feeds `listRowInsets`,
             // which resolves before a row can measure itself.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
