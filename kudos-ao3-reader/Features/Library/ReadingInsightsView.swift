@@ -103,6 +103,17 @@ struct ReadingInsightsView: View {
         }
         .cardList()
         .subjectScreenWash(palette: palette)
+        // 1bi: the period is a view choice, so it lives in "…" like the
+        // layout picker elsewhere; the header is the title and tally alone.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                WorkListMoreMenu {
+                    Picker("Period", selection: $period) {
+                        ForEach(Period.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+            }
+        }
         .task(id: period) { reload() }
         .refreshable { reload() }
         .overlay {
@@ -124,14 +135,7 @@ struct ReadingInsightsView: View {
             subtitle: headerTallyLine,
             palette: palette,
             gutter: SubjectMetrics.accountGutter
-        ) {
-            SubjectSegmentedControl(
-                options: Period.allCases,
-                title: \.title,
-                selection: $period
-            )
-            .frame(maxWidth: 190)
-        }
+        )
     }
 
     /// Spec 1bi: "18.4 hours in August · measured on this device". The second
