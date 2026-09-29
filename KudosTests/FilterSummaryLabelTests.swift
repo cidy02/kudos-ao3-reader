@@ -108,7 +108,7 @@ struct FilterSummaryLabelTests {
         let labels = filters.summaryLabels().map(\.text)
         for expected in [
             "Title: Chunin Exams", "By: someauthor", "No Not Rated",
-            "Graphic Depictions Of Violence", "Gen", "Crossover: Exclude",
+            "Graphic Depictions Of Violence", "Gen", "Exclude crossovers",
             "Complete", "Single Chapter Only", "Past week", "English"
         ] {
             #expect(labels.contains(expected), "missing \(expected)")
