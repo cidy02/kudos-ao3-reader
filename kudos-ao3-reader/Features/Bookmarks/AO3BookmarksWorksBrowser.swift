@@ -17,6 +17,17 @@ enum AO3BookmarksFilter: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    /// The filtered-empty sentence. Built per case: the pill titles are nouns
+    /// and phrases ("Recs", "With notes"), so "are <title>" read "are recs".
+    var emptyDescription: String {
+        switch self {
+        case .all: "No works on this page."
+        case .recs: "No works on this page are recommended."
+        case .`private`: "No works on this page are private."
+        case .withNotes: "No works on this page have notes."
+        }
+    }
+
     var title: String {
         switch self {
         case .all: "All"
@@ -224,7 +235,7 @@ struct AO3BookmarksWorksBrowser: View {
         ContentUnavailableView {
             Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
         } description: {
-            Text("No works on this page are \(filter.title.lowercased()).")
+            Text(filter.emptyDescription)
         } actions: {
             Button("Reset") { filter = .all }
         }

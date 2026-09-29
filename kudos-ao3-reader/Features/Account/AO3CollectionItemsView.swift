@@ -472,7 +472,7 @@ struct AO3CollectionItemsView: View {
                 sessionGeneration: auth.sessionGeneration
             ) else { return }
             currentPage = displayedPage
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -511,7 +511,7 @@ struct AO3CollectionItemsView: View {
             phase = .loaded
         } catch {
             guard submitStillOwnsScreen(generation) else { return }
-            submitError = error.localizedDescription
+            submitError = UserFacingError.message(for: error)
             phase = .loaded
         }
     }

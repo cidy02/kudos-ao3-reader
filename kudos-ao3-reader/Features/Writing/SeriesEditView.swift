@@ -244,7 +244,7 @@ struct SeriesEditView: View {
                 let message = try await auth.saveSeries(snapshot)
                 savedMessage = message
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
             isSaving = false
         }
@@ -408,7 +408,7 @@ struct SeriesReorderView: View {
             } catch is CancellationError {
                 errorMessage = "Your AO3 session changed, so the order was not saved."
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
             isSaving = false
         }
@@ -547,7 +547,7 @@ struct SeriesRemoveWorksView: View {
             } catch is CancellationError {
                 errorMessage = "Your AO3 session changed, so nothing was removed."
             } catch {
-                errorMessage = "\(Self.title(row)) was not removed. " + error.localizedDescription
+                errorMessage = "\(Self.title(row)) was not removed. " + UserFacingError.message(for: error)
             }
             isRemoving = false
         }
@@ -609,7 +609,7 @@ struct SeriesEditDestination: View {
                 form = loaded
             } catch {
                 guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
         }
     }

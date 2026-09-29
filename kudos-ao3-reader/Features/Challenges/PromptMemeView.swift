@@ -490,7 +490,7 @@ struct PromptMemeView: View {
             totalPages = promptsPage.totalPages
             phase = .loaded
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -501,7 +501,7 @@ struct PromptMemeView: View {
             try await auth.claimPrompt(slug: collectionSlug, promptID: prompt.id)
             await loadPrompts(page: currentPage)
         } catch {
-            actionErrorMessage = "Couldn't claim that prompt: \(error.localizedDescription)"
+            actionErrorMessage = "Couldn't claim that prompt: \(UserFacingError.message(for: error))"
         }
         promptInFlight = nil
     }
@@ -514,7 +514,7 @@ struct PromptMemeView: View {
             try await auth.releasePrompt(slug: collectionSlug, claimID: claimID)
             await loadPrompts(page: currentPage)
         } catch {
-            actionErrorMessage = "Couldn't release that prompt: \(error.localizedDescription)"
+            actionErrorMessage = "Couldn't release that prompt: \(UserFacingError.message(for: error))"
         }
         promptInFlight = nil
     }

@@ -426,7 +426,7 @@ struct AO3PreferencesView: View {
                         ref: ref,
                         content: .failed(
                             title: ref.title,
-                            message: error.localizedDescription
+                            message: UserFacingError.message(for: error)
                         )
                     )
                 }
@@ -456,7 +456,7 @@ struct AO3PreferencesView: View {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -487,7 +487,7 @@ struct AO3PreferencesView: View {
             banner = .error(error.errorDescription ?? "Couldn't save preferences.")
         } catch {
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
-            banner = .error(error.localizedDescription)
+            banner = .error(UserFacingError.message(for: error))
         }
     }
 }

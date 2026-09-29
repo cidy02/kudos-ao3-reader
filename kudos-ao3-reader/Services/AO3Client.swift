@@ -82,6 +82,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         config.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
         config.timeoutIntervalForRequest = 30
         config.httpShouldSetCookies = true
+        #if DEBUG
+        DemoNetworkBlock.install(into: config)
+        #endif
         config.httpCookieAcceptPolicy = .always
         // AO3 serves listing pages with `Cache-Control: max-age=600, public`
         // (measured 2026-08-06), so honouring it turns paging back and forth —

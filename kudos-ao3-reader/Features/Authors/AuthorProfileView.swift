@@ -592,7 +592,7 @@ private extension AuthorProfileView {
                 _ = try await auth.deleteWork(workID: pending.id)
                 await model.refresh(auth: auth)
             } catch {
-                deleteErrorMessage = error.localizedDescription
+                deleteErrorMessage = UserFacingError.message(for: error)
             }
         }
     }

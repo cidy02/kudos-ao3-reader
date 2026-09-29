@@ -49,7 +49,7 @@ struct SeriesReorderDestination: View {
                 rows = loaded
             } catch {
                 guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
             }
         }
     }

@@ -331,7 +331,7 @@ struct FandomListView: View {
             }
         } catch {
             if fandoms.isEmpty {
-                phase = .failed(error.localizedDescription)
+                phase = .failed(UserFacingError.message(for: error))
             } else {
                 Log.network.notice("Fandom list refresh failed: \(error.localizedDescription, privacy: .public)")
             }

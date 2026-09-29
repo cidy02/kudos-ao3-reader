@@ -310,7 +310,7 @@ private enum WorkCardActionError {
         if let localized = error as? LocalizedError, let description = localized.errorDescription {
             return description
         }
-        return error.localizedDescription
+        return UserFacingError.message(for: error)
     }
 }
 

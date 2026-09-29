@@ -86,7 +86,7 @@ struct WritingPreviewView: View {
     private func runPost() async {
         isPosting = true
         defer { isPosting = false }
-        do { try await post() } catch { errorMessage = error.localizedDescription }
+        do { try await post() } catch { errorMessage = UserFacingError.message(for: error) }
     }
 
     /// `WorkEditView.postPanelRow`'s shape.

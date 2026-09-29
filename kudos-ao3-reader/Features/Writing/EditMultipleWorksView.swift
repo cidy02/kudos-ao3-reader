@@ -364,7 +364,7 @@ struct EditMultipleWorksView: View {
                 try await auth.bulkEditWorks(changes)
                 dismiss()
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error)
                 isSaving = false
             }
         }

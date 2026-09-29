@@ -259,7 +259,7 @@ struct AO3SeriesDetailView: View {
             guard authenticationScope == expectedAuthenticationScope,
                   auth.sessionGeneration == expectedSessionGeneration
             else { return }
-            let message = (error as? AO3Error)?.errorDescription ?? error.localizedDescription
+            let message = (error as? AO3Error)?.errorDescription ?? UserFacingError.message(for: error)
             if replace, works.isEmpty {
                 phase = .failed(message)
             } else {

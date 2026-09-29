@@ -650,7 +650,7 @@ struct TagSetView: View {
             resetEditFields(from: loaded)
             phase = .loaded
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -676,7 +676,7 @@ struct TagSetView: View {
             try await auth.saveTagSetFields(tagSet: tagSet, fields: fields)
             saveFieldsNotice = "Tags saved."
         } catch {
-            saveFieldsError = error.localizedDescription
+            saveFieldsError = UserFacingError.message(for: error)
         }
         isSavingFields = false
     }
@@ -690,7 +690,8 @@ struct TagSetView: View {
             )
             withAnimation { markRejectedLocally(nomination) }
         } catch {
-            queueErrorMessage = "Couldn't reject \u{201c}\(nomination.tagName)\u{201d}: \(error.localizedDescription)"
+            let reason = UserFacingError.message(for: error)
+            queueErrorMessage = "Couldn't reject \u{201c}\(nomination.tagName)\u{201d}: \(reason)"
         }
         nominationInFlight = nil
     }

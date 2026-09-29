@@ -618,7 +618,7 @@ extension ChallengeSignUpView {
             ensureMinimumPrompts()
             phase = .loaded
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -662,7 +662,7 @@ extension ChallengeSignUpView {
                 statusNotice = "Sign-up submitted successfully!"
             }
         } catch {
-            currentForm.generalErrors = [error.localizedDescription]
+            currentForm.generalErrors = [UserFacingError.message(for: error)]
             form = currentForm
         }
         isSubmitting = false
@@ -678,7 +678,7 @@ extension ChallengeSignUpView {
             dismiss()
         } catch {
             var updated = currentForm
-            updated.generalErrors = [error.localizedDescription]
+            updated.generalErrors = [UserFacingError.message(for: error)]
             form = updated
             isWithdrawing = false
         }
