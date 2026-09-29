@@ -236,6 +236,7 @@ struct CommentsDemoView: View {
                       parentAuthor: nil, depth: 0), depth: 0, starts: true, next: nil)
         }
         .cardList()
+        .coordinateSpace(.named(CommentThreadGeometry.listSpace))
         .background(.background)
     }
 
@@ -248,6 +249,7 @@ struct CommentsDemoView: View {
             startsConversation: starts, depth: depth, isLastSibling: true,
             ancestorLines: Array(repeating: false, count: depth), nextDepth: next, collapse: collapse
         )
+        .commentSwipeActions(comment: item.actionableComment)
     }
 }
 #endif
