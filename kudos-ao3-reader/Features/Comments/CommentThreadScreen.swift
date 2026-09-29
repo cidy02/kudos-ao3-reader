@@ -76,6 +76,7 @@ struct CommentThreadScreen: View {
                 }
             }
             .cardList()
+            .coordinateSpace(.named(CommentThreadGeometry.listSpace))
             // Same reason as the list's own copy: indent feeds `listRowInsets`,
             // which resolves before a row can measure itself.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }

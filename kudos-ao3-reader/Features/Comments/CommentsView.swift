@@ -160,6 +160,7 @@ struct CommentsView: View {
                 }
             }
             .cardList()
+            .coordinateSpace(.named(CommentThreadGeometry.listSpace))
             // Rows need the container width to size their indent, but indent
             // feeds `listRowInsets` — which is resolved before a row lays out,
             // so a row can't measure itself in time. Measure once here.
