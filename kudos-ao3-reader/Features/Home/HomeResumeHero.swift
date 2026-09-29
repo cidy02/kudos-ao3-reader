@@ -145,6 +145,7 @@ private struct UnblurredHomeResumeHero: View {
 
     private var primaryFandomName: String? {
         work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map(FandomDisplayName.bareTitle)
     }
 
     /// Clamped so a nil or out-of-range stored fraction can never draw a

@@ -121,7 +121,7 @@ struct LibraryFilters: Equatable {
         let upperWordBound = wordsTo.trimmingCharacters(in: .whitespaces)
         switch (lowerWordBound.isEmpty, upperWordBound.isEmpty) {
         case (false, false): add("Words \(lowerWordBound)–\(upperWordBound)")
-        case (false, true): add("Words ≥ \(lowerWordBound)")
+        case (false, true): add(Self.minimumWordsLabel(lowerWordBound))
         case (true, false): add("Words ≤ \(upperWordBound)")
         case (true, true): break
         }
@@ -239,7 +239,7 @@ struct LibraryFilters: Equatable {
         let upperWordBound = wordsTo.trimmingCharacters(in: .whitespaces)
         let wordLabel: String? = switch (lowerWordBound.isEmpty, upperWordBound.isEmpty) {
         case (false, false): "Words \(lowerWordBound)–\(upperWordBound)"
-        case (false, true): "Words ≥ \(lowerWordBound)"
+        case (false, true): Self.minimumWordsLabel(lowerWordBound)
         case (true, false): "Words ≤ \(upperWordBound)"
         case (true, true): nil
         }
@@ -386,5 +386,14 @@ extension AO3SearchFilters.Warning {
 private extension String {
     var isLibraryBlank: Bool {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+extension LibraryFilters {
+    /// 1ay's "50k+ words": a lower bound reads as a size, compact like every
+    /// other count on a chip. A bound that is not a number stays as typed.
+    static func minimumWordsLabel(_ bound: String) -> String {
+        guard let value = Int(bound) else { return "Words ≥ \(bound)" }
+        return "\(value.compactCount)+ words"
     }
 }

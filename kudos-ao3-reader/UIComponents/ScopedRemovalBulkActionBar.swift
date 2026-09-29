@@ -39,10 +39,6 @@ struct ScopedRemovalBulkActionBar: View {
     @State private var membershipBeforeMove = 0
     @State private var isDownloading = false
 
-    private var allSaved: Bool {
-        !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isSaved)
-    }
-
     private var allFavorited: Bool {
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
     }
@@ -119,6 +115,8 @@ struct ScopedRemovalBulkActionBar: View {
         .sheet(isPresented: $showingMoveToQueue, onDismiss: {
             guard totalQueueMemberships > membershipBeforeMove else { return }
             onRemove()
+            // The moved rows have left this list; the selection went with them.
+            onDone()
         }) {
             AddToQueueView(works: selectedWorks)
         }
@@ -191,13 +189,13 @@ struct ScopedRemovalBulkActionBar: View {
     /// same five, in the same order, in both layouts' menus.
     @ViewBuilder
     private var libraryActions: some View {
-        Button {
-            bulkSave()
-        } label: {
-            Label(
-                WorkActionLabels.saved(isSaved: allSaved).title,
-                systemImage: WorkActionLabels.saved(isSaved: allSaved).systemImage
-            )
+        if let download = WorkDownload.bulkAction(for: selectedWorks) {
+            Button {
+                Task { await WorkDownload.performBulk(download, on: selectedWorks, in: context) }
+            } label: {
+                let label = WorkDownload.bulkLabel(download)
+                Label(label.title, systemImage: label.systemImage)
+            }
         }
         Button {
             bulkFavorite()
@@ -260,13 +258,6 @@ struct ScopedRemovalBulkActionBar: View {
         defer { isDownloading = false }
         for work in missingCopies {
             try? await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
-        }
-    }
-
-    private func bulkSave() {
-        let shouldSave = !allSaved
-        for work in selectedWorks {
-            WorkLifecycle.setSaved(work, shouldSave, in: context)
         }
     }
 

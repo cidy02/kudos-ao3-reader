@@ -169,10 +169,14 @@ struct ReadingQueueSettingsView: View {
                 )
                 .pageBodyRow(top: 20, gutter: 0)
                 if !works.isEmpty {
-                    QueueProgressStrip(
-                        progress: ReadingQueueFacts.progress(of: works.map(\.readingState)),
-                        palette: palette
-                    )
+                    let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
+                    // 1h.3 repeats the queue page's strip and its legend.
+                    VStack(alignment: .leading, spacing: 7) {
+                        QueueProgressStrip(progress: progress, palette: palette)
+                        Text(ReadingQueueFacts.legend(progress, offlineCount: preservedWorks.count))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                    }
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.headerGutter)
                 }
             }
@@ -230,7 +234,7 @@ struct ReadingQueueSettingsView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, washHeight: 620)
         .sheet(isPresented: $showingTags) { QueueTagSheet(queue: queue) }
         #if os(macOS)
         .navigationTitle(queue.displayName)

@@ -213,10 +213,11 @@ extension WorkDetailView {
     private func libraryStatusSection(for work: SavedWork) -> some View {
         Section {
             Group {
+                let download = WorkDetailPresentation.downloadState(WorkDownload.action(for: work))
                 stateToggleRow(
-                    WorkDetailPresentation.savedAction(isSaved: work.isSaved),
-                    isOn: work.isSaved,
-                    disabled: working,
+                    (download.title, download.systemImage),
+                    isOn: download.isOn,
+                    disabled: working || !download.isEnabled,
                     action: toggleSaved
                 )
 
