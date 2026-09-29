@@ -300,7 +300,7 @@ private struct CardRow: ViewModifier {
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.accentColor : cardBorder,
+                        isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(cardBorder),
                         lineWidth: isSelected ? 2 : 0.5
                     )
             )

@@ -150,6 +150,7 @@ struct CollectionModerationView: View {
             Text("Creators become visible to everyone instead of just maintainers. "
                 + "This cannot be undone from the app.")
         }
+            .screenTint(palette)
     }
 
     // MARK: - Header
@@ -673,7 +674,7 @@ struct CollectionModerationView: View {
                 Task { await load() }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

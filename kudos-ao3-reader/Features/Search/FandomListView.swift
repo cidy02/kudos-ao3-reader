@@ -139,6 +139,7 @@ struct FandomListView: View {
                 if isOpen { draftFilterOptions = filterOptions }
             }
             .task { if fandoms.isEmpty { await load() } }
+            .screenTint(palette)
     }
 
     private var isFiltered: Bool {

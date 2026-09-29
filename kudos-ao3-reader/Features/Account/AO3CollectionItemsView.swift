@@ -711,7 +711,7 @@ struct AO3CollectionItemCard: View {
                 } label: {
                     Text(isRemoved ? "Keep" : "Remove from collection")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(isRemoved ? Color.accentColor : .red)
+                        .foregroundStyle(isRemoved ? AnyShapeStyle(.tint) : AnyShapeStyle(.red))
                 }
                 .buttonStyle(.plain)
             }

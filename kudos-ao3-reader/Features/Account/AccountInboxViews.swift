@@ -636,6 +636,8 @@ struct AccountInboxCommentListRow: View {
     var onReply: () -> Void
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.screenTint) private var screenTint
     @State private var confirmDelete = false
 
     private var readAction: AO3InboxBulkAction {
@@ -680,7 +682,7 @@ struct AccountInboxCommentListRow: View {
                         systemImage: item.isUnread ? "envelope.open" : "envelope.badge"
                     )
                 }
-                .tint(.accentColor)
+                .tint(screenTint ?? themeManager.effectiveTint)
             }
             // The row's destructive action is its trailing swipe, as on every
             // other list (pass2-11). It asks, like the overflow does.

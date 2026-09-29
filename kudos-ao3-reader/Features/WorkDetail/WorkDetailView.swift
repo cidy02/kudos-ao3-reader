@@ -208,6 +208,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         #endif
             .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
             .toolbar { detailToolbar }
+            .screenTint(workPalette)
     }
 
     // MARK: - Hero + section control

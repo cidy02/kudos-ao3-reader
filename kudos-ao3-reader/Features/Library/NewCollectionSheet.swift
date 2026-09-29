@@ -271,6 +271,7 @@ struct CollectionReorderSheet: View {
                     }
                 }
         }
+            .screenTint(palette)
     }
 
     /// The number is the position after dragging — what Done will write — as

@@ -87,6 +87,7 @@ struct PromptMemeView: View {
         }
         .task { await loadPromptsIfNeeded() }
         .refreshable { await loadPrompts(page: 1) }
+            .screenTint(palette)
     }
 
     private var promptList: some View {
@@ -418,7 +419,7 @@ struct PromptMemeView: View {
                 Task { await loadPrompts(page: currentPage) }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

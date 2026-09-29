@@ -116,6 +116,7 @@ struct ChallengeSignUpsView: View {
         }
         .task { await loadSignUpsIfNeeded() }
         .refreshable { await loadSignUps(resetPage: true) }
+            .screenTint(palette)
     }
 
     // MARK: - Header & Filter
@@ -402,7 +403,7 @@ struct ChallengeSignUpsView: View {
                 Task { await loadSignUps(resetPage: true) }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
@@ -525,6 +526,7 @@ private struct ChallengeSignUpDetailView: View {
         .navigationTitle(signUp.pseud)
         #endif
         .subjectScreenWash(palette: palette)
+            .screenTint(palette)
     }
 
     private func promptSections(_ prompts: [AO3ChallengePrompt], noun: String) -> some View {

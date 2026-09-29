@@ -91,6 +91,7 @@ struct QueueTagManagerView: View {
                 siblings: queue.tags.filter { $0.persistentModelID != tag.persistentModelID }
             )
         }
+            .screenTint(palette)
     }
 
     /// 1bh's subtitle, minus its "everyone can add, only you can rename": there
@@ -333,6 +334,7 @@ struct QueueTagEditSheet: View {
                     Text(mergeNote(workCount: workCount))
                 }
         }
+            .screenTint(palette)
     }
 
     private func groupLabel(_ text: String) -> some View {

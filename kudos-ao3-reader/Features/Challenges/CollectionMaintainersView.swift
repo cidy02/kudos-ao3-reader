@@ -109,6 +109,7 @@ struct CollectionMaintainersView: View {
                     + "Another owner must maintain the collection."
                 : "You will no longer be a moderator for \(effectiveTitle).")
         }
+            .screenTint(palette)
     }
 
     // MARK: - Header
@@ -299,7 +300,7 @@ struct CollectionMaintainersView: View {
                 AO3FormOption(value: AO3CollectionParticipantRole.owner.rawValue, title: "Owner"),
             ]
         )
-        .tint(palette.accent)
+        .tint(palette.tint)
         .panelSegment(1, of: count, gutter: gutter)
 
         if !username.isEmpty {
@@ -413,7 +414,7 @@ struct CollectionMaintainersView: View {
                 Task { await loadMaintainers() }
             }
             .buttonStyle(.bordered)
-            .tint(palette.accent)
+            .tint(palette.tint)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

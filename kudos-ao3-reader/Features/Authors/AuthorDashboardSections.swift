@@ -37,7 +37,7 @@ struct AO3DashboardSections: View {
                             if let url = fandom.url { router.open(url) }
                         } label: {
                             // Fandom totals are not in the account counts cache.
-                            SubjectChip(text: fandom.name, style: .pill(isSelected: false))
+                            SubjectChip(text: FandomDisplayName.bareTitle(fandom.name), style: .pill(isSelected: false))
                                 .minimumHitTarget()
                         }
                         .buttonStyle(.plain)
