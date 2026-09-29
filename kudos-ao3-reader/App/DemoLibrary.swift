@@ -411,6 +411,11 @@ final class DemoNetworkBlock: URLProtocol {
         ("comments", "ao3_comments_page"),
         ("^/works/\\d+", "ao3_work_bookmarked_subscribed"),
         ("edit_multiple", "ao3_edit_multiple"),
+        ("^/media/[^/]+/fandoms", "ao3_media_fandoms"),
+        ("^/media/?$", "ao3_media"),
+        // A works index has the same blurb markup wherever it is listed.
+        ("^/tags/[^/]+/works", "ao3_author_works"),
+        ("^/works/search", "ao3_author_works"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?works", "ao3_author_works"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?series", "ao3_author_series"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?bookmarks", "ao3_author_bookmarks"),
