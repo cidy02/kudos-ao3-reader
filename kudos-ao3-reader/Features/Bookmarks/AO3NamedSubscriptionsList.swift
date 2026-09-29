@@ -241,7 +241,7 @@ struct AO3NamedSubscriptionsList: View {
             return
         } catch {
             guard !Task.isCancelled, requested == currentKey else { return }
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let message = (error as? LocalizedError)?.errorDescription ?? UserFacingError.message(for: error)
             result = (requested, .failure(LoadFailure(message: message)))
         }
     }
@@ -266,7 +266,7 @@ struct AO3NamedSubscriptionsList: View {
             // The session changed between the form GET and the POST. Nothing landed.
         } catch {
             guard auth.sessionGeneration == generation else { return }
-            writeError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            writeError = (error as? LocalizedError)?.errorDescription ?? UserFacingError.message(for: error)
         }
     }
 }

@@ -747,7 +747,7 @@ struct ChallengeSettingsEditView: View {
                 capturedSessionGeneration: capturedSessionGeneration,
                 sessionGeneration: auth.sessionGeneration
             ) else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -782,7 +782,7 @@ struct ChallengeSettingsEditView: View {
         } catch {
             guard auth.sessionGeneration == loadedGeneration else { return }
             var updated = current
-            updated.generalErrors = [error.localizedDescription]
+            updated.generalErrors = [UserFacingError.message(for: error)]
             form = updated
         }
     }
@@ -817,7 +817,7 @@ struct ChallengeSettingsEditView: View {
             return
         } catch {
             guard auth.sessionGeneration == loadedGeneration else { return }
-            appendError("Collection settings: \(error.localizedDescription)")
+            appendError("Collection settings: \(UserFacingError.message(for: error))")
         }
     }
 

@@ -256,4 +256,36 @@ struct CommentsDemoView: View {
         .commentSwipeActions(comment: item.actionableComment)
     }
 }
+/// With the demo library on, every request to AO3 fails at once, on every
+/// session — the design-review simulator must never touch the real site, even
+/// when a screen it opens would normally fetch (owner rule: never contact
+/// archiveofourown.org). Off, this is inert.
+final class DemoNetworkBlock: URLProtocol {
+    static var isActive: Bool { UserDefaults.standard.bool(forKey: "KudosDemoLibrary") }
+
+    /// For a session built from its own configuration (the AO3 client, auth).
+    static func install(into configuration: URLSessionConfiguration) {
+        guard isActive else { return }
+        configuration.protocolClasses = [DemoNetworkBlock.self] + (configuration.protocolClasses ?? [])
+    }
+
+    /// For `URLSession.shared` (AsyncImage avatars and covers).
+    static func installGlobally() {
+        guard isActive else { return }
+        URLProtocol.registerClass(DemoNetworkBlock.self)
+    }
+
+    override static func canInit(with request: URLRequest) -> Bool {
+        guard isActive, let host = request.url?.host?.lowercased() else { return false }
+        return host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org")
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+    }
+
+    override func stopLoading() {}
+}
 #endif

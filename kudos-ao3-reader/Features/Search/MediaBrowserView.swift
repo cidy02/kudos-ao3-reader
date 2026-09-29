@@ -837,7 +837,7 @@ struct MediaBrowserView: View {
         } catch let error as AO3Error {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -858,7 +858,7 @@ struct MediaBrowserView: View {
             }
         } catch {
             if categories.isEmpty {
-                phase = .failed(error.localizedDescription)
+                phase = .failed(UserFacingError.message(for: error))
             } else {
                 Log.network.notice("Browse refresh failed: \(error.localizedDescription, privacy: .public)")
             }

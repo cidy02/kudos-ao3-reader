@@ -131,7 +131,7 @@ struct SyncFolderOnboardingView: View {
                 FolderSyncOnboardingState.recordConfigured()
                 onFinished()
             } catch {
-                connectionError = error.localizedDescription
+                connectionError = UserFacingError.message(for: error)
             }
         }
     }

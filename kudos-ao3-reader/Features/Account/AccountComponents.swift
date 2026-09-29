@@ -838,7 +838,7 @@ struct AccountWorksInlineSection: View {
             phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
             guard auth.sessionGeneration == expectedSessionGeneration else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 

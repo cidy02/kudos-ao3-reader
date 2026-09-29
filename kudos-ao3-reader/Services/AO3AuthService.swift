@@ -99,6 +99,9 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         configuration.timeoutIntervalForRequest = 20
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
+        #if DEBUG
+        DemoNetworkBlock.install(into: configuration)
+        #endif
         session = URLSession(configuration: configuration)
         self.validationURL = unsafeValidationURL
     }

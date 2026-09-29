@@ -88,7 +88,7 @@ struct WritingChaptersView: View {
             loadedReload = reload
         } catch {
             guard !Task.isCancelled, generation == auth.sessionGeneration else { return }
-            if chapters == nil { errorMessage = error.localizedDescription }
+            if chapters == nil { errorMessage = UserFacingError.message(for: error) }
         }
     }
 
