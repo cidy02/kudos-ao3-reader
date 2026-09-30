@@ -104,7 +104,6 @@ struct LibraryFilterPanel: View {
                     Text("Filter by the work's own AO3 tags. Exclude Tags hides matching works.")
                 }
 
-
                 if filters.hasActiveFilters {
                     Section {
                         Button(role: .destructive) {
