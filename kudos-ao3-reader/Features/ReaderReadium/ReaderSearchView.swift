@@ -227,6 +227,7 @@ final class ReaderSearchModel {
 /// The Find in Work sheet: a search field over Readium's search service, and a
 /// result list that jumps to the tapped locator.
 struct ReaderSearchView: View {
+    @Environment(ThemeManager.self) private var theme
     @Bindable var model: ReaderSearchModel
     let publication: Publication?
     let sections: [ReaderSection]
@@ -423,7 +424,7 @@ struct ReaderSearchView: View {
             } label: {
                 Label("Go", systemImage: "arrow.forward.circle")
             }
-            .tint(.accentColor)
+            .tint(theme.effectiveTint)
 
             Button {
                 onBookmark(result.locator)

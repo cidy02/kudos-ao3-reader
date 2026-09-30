@@ -252,6 +252,6 @@ enum WorkDetailPresentation {
         guard let value = try? FileManager.default.attributesOfItem(atPath: url.path)[.size],
               let bytes = (value as? NSNumber)?.int64Value
         else { return nil }
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        return LocalStorageFootprint.formatted(bytes: bytes)
     }
 }

@@ -26,6 +26,10 @@ struct ReaderSpeechSettingsSheet: View {
                     onScanChapter: onScanChapter
                 )
             }
+            // Themed like the Pronunciation sheet beside it (Sepia rows and ground).
+            .formStyle(.grouped)
+            .appThemedScroll()
+            .appThemedRows()
             .navigationTitle("Read Aloud")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -40,13 +40,15 @@ struct AvailabilitySweepView: View {
             .navigationTitle("Check Availability")
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(isRunning ? "Stop" : "Done") {
-                        if isRunning {
-                            task?.cancel()
-                        } else {
-                            dismiss()
-                        }
+                // Stop interrupts on the leading edge; Done closes from the
+                // trailing one, as every other sheet's confirmation does.
+                if isRunning {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Stop") { task?.cancel() }
+                    }
+                } else {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
                     }
                 }
             }
