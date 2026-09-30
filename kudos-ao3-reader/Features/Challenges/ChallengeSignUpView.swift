@@ -489,11 +489,11 @@ extension ChallengeSignUpView {
                     if isSubmitting {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(palette.accentOnFill)
+                            .tint(palette.labelOnAccent)
                     }
                     Text("Submit sign-up")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(palette.accentOnFill)
+                        .foregroundStyle(palette.labelOnAccent)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
