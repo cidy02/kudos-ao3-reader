@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Edit Series</title></head>
+<body>
+<h2 class="heading">Edit Series</h2>
+<form action="/series/42" method="post" class="series">
+  <input type="hidden" name="authenticity_token" value="csrf-series">
+  <input type="hidden" name="_method" value="put">
+  <input type="text" name="series[title]" value="Test Series">
+  <textarea name="series[summary]">A summary</textarea>
+  <textarea name="series[series_notes]">Some notes</textarea>
+  <input type="checkbox" name="series[complete]" value="1" checked>
+  <input type="hidden" name="series[author_attributes][ids][]" value="123">
+</form>
+</body>
+</html>
