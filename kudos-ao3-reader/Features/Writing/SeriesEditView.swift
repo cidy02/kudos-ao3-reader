@@ -124,6 +124,8 @@ struct SeriesEditView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: accountPalette)
         #if os(macOS)
         .navigationTitle("Edit series")
