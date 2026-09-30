@@ -204,6 +204,8 @@ enum DemoLibrary {
 @MainActor
 enum DebugLaunchRoute {
     static var value: String? { UserDefaults.standard.string(forKey: "KudosDebugRoute") }
+    /// `-KudosDebugOpenFilters YES`: the routed screen opens its filter panel.
+    static var opensFilters: Bool { UserDefaults.standard.bool(forKey: "KudosDebugOpenFilters") }
 
     static func applyTab(_ router: AppRouter) {
         guard let value else { return }
