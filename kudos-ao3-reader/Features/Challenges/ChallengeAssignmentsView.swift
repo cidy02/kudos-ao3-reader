@@ -245,18 +245,20 @@ struct ChallengeAssignmentsView: View {
     // MARK: - Matched / Pinch hits rows
 
     private func assignmentRows(_ rows: [AO3ChallengeAssignment]) -> some View {
-        VStack(spacing: 9) {
-            ForEach(rows) { assignment in
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, assignment in
+                if index > 0 { SubjectRowSeparator() }
                 assignmentRow(assignment)
             }
         }
+        .subjectPanel()
     }
 
     private func assignmentRow(_ assignment: AO3ChallengeAssignment) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(displayName(assignment.requestPseud)) → \(giverDisplay(for: assignment))")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 14.5, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
@@ -272,7 +274,6 @@ struct ChallengeAssignmentsView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .subjectCard(palette: palette)
     }
 
     private func displayName(_ pseud: String) -> String {

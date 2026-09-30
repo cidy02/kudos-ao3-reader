@@ -331,8 +331,6 @@ struct AO3CollectionItemsView: View {
             }
         } else {
             Section {
-                SectionRuleHeader(title: Self.tabTitle(tab), count: displayedItems.count)
-                    .pageBodyRow(top: 18, gutter: 0)
                 ForEach(displayedItems) { item in
                     AO3CollectionItemCard(
                         item: item,
@@ -558,24 +556,24 @@ struct AO3CollectionItemCard: View {
     private var isRemoved: Bool { staging.isRemoved(item) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             headerRow
             Text(item.workTitle)
-                .font(.system(size: 16.5, weight: .semibold))
+                .font(.system(size: 19, weight: .semibold))
                 .lineLimit(2)
                 .strikethrough(isRemoved)
 
             if isRemoved {
                 removalNotice
             } else {
-                settingsPanel
+                settingsRows
             }
 
             footerRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
         .subjectCard(palette: palette)
         .opacity(isRemoved ? 0.7 : 1)
     }
@@ -604,7 +602,7 @@ struct AO3CollectionItemCard: View {
         }
     }
 
-    private var settingsPanel: some View {
+    private var settingsRows: some View {
         VStack(spacing: 0) {
             if item.creatorApprovalIsEditable {
                 approvalRow(
@@ -615,7 +613,7 @@ struct AO3CollectionItemCard: View {
             } else {
                 readOnlyApproval("Approved by creator", value: item.creatorApproval)
             }
-            SubjectRowSeparator()
+            SubjectRowSeparator(inset: 0)
             if item.moderatorApprovalIsEditable {
                 approvalRow(
                     "Approved by moderators",
@@ -625,14 +623,14 @@ struct AO3CollectionItemCard: View {
             } else {
                 readOnlyApproval("Approved by moderators", value: item.moderatorApproval)
             }
-            SubjectRowSeparator()
+            SubjectRowSeparator(inset: 0)
             flagRow(
                 "Unrevealed",
                 isOn: staging.isUnrevealed(for: item),
                 isEditable: item.unrevealedIsEditable,
                 set: { staging.setUnrevealed($0, for: item) }
             )
-            SubjectRowSeparator()
+            SubjectRowSeparator(inset: 0)
             flagRow(
                 "Anonymous",
                 isOn: staging.isAnonymous(for: item),
@@ -640,7 +638,6 @@ struct AO3CollectionItemCard: View {
                 set: { staging.setAnonymous($0, for: item) }
             )
         }
-        .subjectPanel()
     }
 
     /// Approval is three states on AO3, not a switch, so it is a three-way control
@@ -650,33 +647,29 @@ struct AO3CollectionItemCard: View {
         value: AO3CollectionItemApproval,
         set: @escaping (AO3CollectionItemApproval) -> Void
     ) -> some View {
-        SubjectFormRow(
-            label: label,
-            arrangement: .control,
-            trailing: {
-                SubjectSegmentedControl(
-                    options: [.unreviewed, .approved, .rejected],
-                    title: { Self.approvalTitle($0) },
-                    selection: Binding(get: { value }, set: set)
-                )
-            }
-        )
+        HStack(spacing: 12) {
+            settingsLabel(label)
+            SubjectSegmentedControl(
+                options: [.unreviewed, .approved, .rejected],
+                title: { Self.approvalTitle($0) },
+                selection: Binding(get: { value }, set: set)
+            )
+            .frame(maxWidth: 180)
+        }
+        .padding(.vertical, 9)
     }
 
     private func readOnlyApproval(
         _ label: String,
         value: AO3CollectionItemApproval
     ) -> some View {
-        SubjectFormRow(
-            label: label,
-            arrangement: .control,
-            trailing: {
-                Text(Self.approvalTitle(value))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        )
+        HStack(spacing: 12) {
+            settingsLabel(label)
+            Text(Self.approvalTitle(value))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 9)
     }
 
     private func flagRow(
@@ -685,22 +678,25 @@ struct AO3CollectionItemCard: View {
         isEditable: Bool,
         set: @escaping (Bool) -> Void
     ) -> some View {
-        SubjectFormRow(
-            label: label,
-            arrangement: .control,
-            trailing: {
-                if isEditable {
-                    Toggle("", isOn: Binding(get: { isOn }, set: set))
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                } else {
-                    Text(isOn ? "On" : "Off")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+        HStack(spacing: 12) {
+            settingsLabel(label)
+            if isEditable {
+                Toggle(label, isOn: Binding(get: { isOn }, set: set))
+                    .labelsHidden()
+            } else {
+                Text(isOn ? "On" : "Off")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-        )
+        }
+        .padding(.vertical, 9)
+    }
+
+    private func settingsLabel(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 13.5))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private static func approvalTitle(_ approval: AO3CollectionItemApproval) -> String {
