@@ -318,6 +318,7 @@ struct AccountProfileCard: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .prominentLabel()
             .buttonBorderShape(.capsule)
             .disabled(auth.status == .signingIn)
         }

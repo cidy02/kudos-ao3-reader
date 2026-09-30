@@ -672,6 +672,7 @@ struct CommentsView: View {
                         }
                     }
                         .buttonStyle(.borderedProminent)
+                        .prominentLabel()
                 }
             }
             .cardRow()

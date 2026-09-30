@@ -1021,7 +1021,7 @@ struct SubjectChip: View {
             // the page — `onEffectiveTint`'s problem, solved the same way: from
             // the fill's luminance rather than from a per-theme case.
             isSelected
-                ? ((palette?.accent ?? themeManager.effectiveTint).relativeLuminance > 0.45 ? .black : .white)
+                ? ThemeManager.label(on: palette?.accent ?? themeManager.effectiveTint)
                 : .primary
         }
     }
@@ -1192,5 +1192,21 @@ extension View {
     /// `body`, since environment only flows inward.
     func screenTint(_ palette: SubjectPalette) -> some View {
         tint(palette.tint).environment(\.screenTint, palette.tint)
+    }
+
+    /// The label on a `.borderedProminent` / `.glassProminent` button: black or
+    /// white against the tint the fill actually uses (the screen's, else the
+    /// app's), instead of the system's white on every fill.
+    func prominentLabel() -> some View {
+        modifier(ProminentLabel())
+    }
+}
+
+private struct ProminentLabel: ViewModifier {
+    @Environment(\.screenTint) private var screenTint
+    @Environment(ThemeManager.self) private var theme
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(ThemeManager.label(on: screenTint ?? theme.effectiveTint))
     }
 }

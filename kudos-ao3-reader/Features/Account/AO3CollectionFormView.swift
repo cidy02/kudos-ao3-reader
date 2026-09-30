@@ -394,6 +394,7 @@ struct AO3CollectionFormView: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
+        .prominentLabel()
         .disabled(phase == .saving || !canSave)
     }
 

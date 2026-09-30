@@ -337,6 +337,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             router.selection = .browse
                         }
                         .buttonStyle(.borderedProminent)
+                        .prominentLabel()
 
                         Button("Open Library") {
                             router.selection = .library
