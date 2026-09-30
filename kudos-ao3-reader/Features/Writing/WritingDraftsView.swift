@@ -115,6 +115,8 @@ struct WritingDraftsView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         // The page states its own name in the header block above, per 1x.
         .hidesNavigationBarChrome()
         .subjectScreenWash(palette: theme.scopePalette)
