@@ -417,7 +417,7 @@ struct PromptMemeView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Retry") {
+            Button("Try Again") {
                 Task { await loadPrompts(page: currentPage) }
             }
             .buttonStyle(.bordered)

@@ -65,7 +65,7 @@ struct WritingDraftsView: View {
             if let errorMessage {
                 Section {
                     footnote(errorMessage)
-                    Button("Retry") { reload += 1 }
+                    Button("Try Again") { reload += 1 }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(theme.scopePalette.accent)
                         .buttonStyle(.plain)
@@ -381,7 +381,7 @@ struct WritingTagsDestination: View {
             } else if let errorMessage {
                 VStack {
                     Text(errorMessage)
-                    Button("Retry") { retry += 1 }
+                    Button("Try Again") { retry += 1 }
                 }.padding()
             } else {
                 ProgressView("Loading tags…")
@@ -431,7 +431,7 @@ struct WritingBulkEditDestination: View {
             } else if let errorMessage {
                 VStack {
                     Text(errorMessage)
-                    Button("Retry") { retry += 1 }
+                    Button("Try Again") { retry += 1 }
                 }.padding()
             } else {
                 ProgressView("Loading \(workIDs.count) works…")

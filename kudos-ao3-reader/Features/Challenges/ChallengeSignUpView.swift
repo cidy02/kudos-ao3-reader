@@ -576,7 +576,7 @@ extension ChallengeSignUpView {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Retry") {
+            Button("Try Again") {
                 Task { await loadSignUp() }
             }
             .buttonStyle(.bordered)
