@@ -201,6 +201,7 @@ struct AO3FilterPanel: View {
             // on the board. Reset stays unfilled so the pair reads as one primary
             // and one secondary rather than two equal buttons.
             .buttonStyle(.borderedProminent)
+            .prominentLabel()
             .disabled(mode == .search && !filters.isSearchable)
             .accessibilityLabel(confirmLabel)
         }

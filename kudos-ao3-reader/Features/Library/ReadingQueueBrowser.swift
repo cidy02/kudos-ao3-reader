@@ -857,6 +857,7 @@ extension ReadingQueueBrowserView {
             Label("Add Works", systemImage: "plus")
         }
         .buttonStyle(.glassProminent)
+        .prominentLabel()
         .tint(subjectPalette.tint)
         .help("Add works from your library")
     }

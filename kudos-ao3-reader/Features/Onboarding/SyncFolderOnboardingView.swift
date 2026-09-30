@@ -102,6 +102,7 @@ struct SyncFolderOnboardingView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .prominentLabel()
             .controlSize(.large)
             .disabled(isConnecting)
 
