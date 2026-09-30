@@ -113,6 +113,8 @@ struct AO3CollectionDetailView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette)
         .toolbar {
             // Its works are a works screen too: Show/Hide mature, like every other.
