@@ -700,11 +700,10 @@ struct WorkListStatsRow: View {
 
     private typealias Item = WorkTopStatsRow.Item
 
-    /// A count stat, treating "AO3 didn't print it" as the zero it means.
-    /// Returns nil — dropping the badge — only when the count is zero and the
-    /// user has turned "Show zero counts" off.
+    /// A count stat whose caller has already distinguished zero from unknown.
+    /// Returns nil for unknown, or for zero when the user hides zero counts.
     private func count(_ value: Int?, symbol: String, noun: String) -> Item? {
-        let count = value ?? 0
+        guard let count = value else { return nil }
         guard count > 0 || showsZeroStats else { return nil }
         let formatted = count.formatted()
         return Item(text: formatted, symbol: symbol, accessibilityLabel: "\(formatted) \(noun)")
@@ -713,12 +712,9 @@ struct WorkListStatsRow: View {
     /// Language / words / chapters / engagement counts / published date, below
     /// the justified row.
     ///
-    /// With "Show zero counts" on (the default) every stat holds its place,
-    /// zeros included: AO3 omits a `dd` entirely when its count is zero, so a
-    /// nil here means "AO3 said nothing", which for a count means zero — and
-    /// dropping those badges made a card's stat row change shape for no reason
-    /// a reader could see. The two text stats (language, chapters) can be
-    /// genuinely absent rather than zero, so they fall back to an em dash.
+    /// With "Show zero counts" on (the default) every known zero holds its place.
+    /// Remote callers normalize AO3's omitted full-blurb counts to zero first;
+    /// sparse rows leave them nil because AO3 did not publish those stats.
     private var secondaryItems: [Item] {
         let unknownText = "—"
         let language = language.flatMap { $0.isEmpty ? nil : $0 }

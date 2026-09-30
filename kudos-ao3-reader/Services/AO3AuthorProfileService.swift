@@ -140,6 +140,7 @@ final class AO3AuthorProfileModel {
     private(set) var series: [AO3SeriesSummary] = []
     private(set) var bookmarks: [AO3AuthorBookmark] = []
     private(set) var headerPhase: Phase = .idle
+    private(set) var headerFailureSystemImage = "exclamationmark.triangle"
     private(set) var contentPhase: Phase = .idle
     private(set) var isLoadingMore = false
     private(set) var loadMoreError: String?
@@ -634,7 +635,8 @@ final class AO3AuthorProfileModel {
             guard route == expectedRoute,
                   auth.sessionGeneration == expectedSessionGeneration
             else { return }
-            headerPhase = .failed(Self.message(for: error))
+            headerFailureSystemImage = UserFacingError.systemImage(for: error)
+            headerPhase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -826,6 +828,7 @@ final class AO3AuthorProfileModel {
 
     private func resetForAuthenticationChange() {
         header = nil
+        headerFailureSystemImage = "exclamationmark.triangle"
         about = nil
         selectedFandom = nil
         stats = nil
