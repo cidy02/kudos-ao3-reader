@@ -74,6 +74,7 @@ struct AO3AuthorHero: View {
                                 }
                             }
                             .buttonStyle(.borderedProminent)
+                            .prominentLabel()
                             .controlSize(.small)
                             .disabled(actionsBusy)
                             // The button reads as scoped to whatever route is on screen,

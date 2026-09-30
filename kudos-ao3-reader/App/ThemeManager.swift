@@ -96,7 +96,14 @@ final class ThemeManager {
     /// contrast is derived from the actual rendered color's luminance every time
     /// it changes.
     var onEffectiveTint: Color {
-        effectiveTint.relativeLuminance > 0.45 ? .black : .white
+        Self.label(on: effectiveTint)
+    }
+
+    /// Black or white, whichever has the higher contrast on `fill` (WCAG: the
+    /// two cross at relative luminance ~0.179). The old 0.45 cut left white on
+    /// Dark's lifted pink accent at ~2.8:1.
+    static func label(on fill: Color) -> Color {
+        fill.relativeLuminance > 0.179 ? .black : .white
     }
 
     /// Sets the accent from a picked colour (stored as hex).
