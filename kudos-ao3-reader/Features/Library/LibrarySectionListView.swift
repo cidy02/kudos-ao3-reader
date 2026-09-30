@@ -248,12 +248,9 @@ struct LibrarySectionListView: View {
                 if DebugLaunchRoute.opensFilters { showingFilters = true }
             }
             #endif
-            .inspector(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                #if os(iOS)
-                    .presentationDragIndicator(.visible)
-                #endif
             }
             .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
     }

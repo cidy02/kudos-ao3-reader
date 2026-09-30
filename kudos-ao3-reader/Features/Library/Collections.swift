@@ -414,12 +414,9 @@ struct CollectionDetailView: View {
         #if os(macOS)
         .navigationTitle(collection.name)
         #endif
-            .inspector(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: works, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                #if os(iOS)
-                    .presentationDragIndicator(.visible)
-                #endif
             }
             .toolbar {
                 if isSelecting {

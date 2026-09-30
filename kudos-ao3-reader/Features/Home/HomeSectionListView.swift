@@ -216,12 +216,9 @@ struct HomeSectionListView: View {
             // kept showing the tab bar underneath/instead of the bulk-action bar.
             .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         #endif
-            .inspector(isPresented: $showingFilters) {
+            .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                #if os(iOS)
-                    .presentationDragIndicator(.visible)
-                #endif
             }
             .deleteConfirmation(
                 for: $pendingDelete,
