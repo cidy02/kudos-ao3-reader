@@ -252,16 +252,14 @@ struct ChallengeSettingsView: View {
         VStack(spacing: 0) {
             SubjectFormRow(
                 label: "Sign-ups open",
-                value: formatDate(settings.signupsOpenAt),
-                isMonospaced: true
+                value: formatDate(settings.signupsOpenAt)
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Sign-ups close",
-                value: formatDate(settings.signupsCloseAt),
-                isMonospaced: true
+                value: formatDate(settings.signupsCloseAt)
             )
 
             SubjectRowSeparator()
@@ -271,24 +269,21 @@ struct ChallengeSettingsView: View {
             // the two reveals, never a due date.
             SubjectFormRow(
                 label: "Works due",
-                value: formatDate(settings.worksDueAt),
-                isMonospaced: true
+                value: formatDate(settings.worksDueAt)
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Works revealed",
-                value: formatDate(settings.worksRevealAt),
-                isMonospaced: true
+                value: formatDate(settings.worksRevealAt)
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Creators revealed",
-                value: formatDate(settings.authorsRevealAt),
-                isMonospaced: true
+                value: formatDate(settings.authorsRevealAt)
             )
         }
         .subjectPanel()
@@ -314,8 +309,7 @@ struct ChallengeSettingsView: View {
             if isPromptMeme {
                 SubjectFormRow(
                     label: "Prompts per sign-up",
-                    value: "\(limits.requestsRequired) to \(limits.requestsAllowed)",
-                    isMonospaced: true
+                    value: "\(limits.requestsRequired) to \(limits.requestsAllowed)"
                 )
 
                 SubjectRowSeparator()
@@ -323,31 +317,28 @@ struct ChallengeSettingsView: View {
 
             SubjectFormRow(
                 label: "Fandoms per \(noun)",
-                value: "\(restriction.fandomRequired) to \(restriction.fandomAllowed)",
-                isMonospaced: true
+                value: "\(restriction.fandomRequired) to \(restriction.fandomAllowed)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Relationships per \(noun)",
-                value: "\(restriction.relationshipRequired) to \(restriction.relationshipAllowed)",
-                isMonospaced: true
+                value: "\(restriction.relationshipRequired) to \(restriction.relationshipAllowed)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Characters per \(noun)",
-                value: "\(restriction.characterRequired) to \(restriction.characterAllowed)",
-                isMonospaced: true
+                value: "\(restriction.characterRequired) to \(restriction.characterAllowed)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Additional tags",
-                value: restriction.optionalTagsAllowed ? "Allowed" : "Not allowed"
+                value: restriction.optionalTagsAllowed ? "Optional" : "Not allowed"
             )
 
             SubjectRowSeparator()
@@ -403,8 +394,7 @@ struct ChallengeSettingsView: View {
             SubjectFormRow(
                 label: "Sign-ups",
                 value: signUpTotal.map(String.init) ?? "Couldn't load",
-                showsDisclosure: true,
-                isMonospaced: true
+                showsDisclosure: true
             )
             .subjectRowNavigation(accessibilityLabel: "Sign-ups") {
                 ChallengeSignUpsView(
@@ -418,26 +408,25 @@ struct ChallengeSettingsView: View {
 
             SubjectFormRow(
                 label: "Assignments",
-                value: assignmentsSummaryText
+                value: assignmentsSummaryText,
+                showsDisclosure: true
             )
+            .subjectRowNavigation(accessibilityLabel: "Assignments") { assignmentsView }
+            .buttonStyle(.plain)
 
             SubjectRowSeparator()
 
+            // Defaults and pinch hits are listed on the same AO3 assignments page.
             SubjectFormRow(
                 label: "Defaults and pinch hits",
                 value: defaultsCount.map(String.init) ?? "Couldn't load",
-                isMonospaced: true
+                showsDisclosure: true
             )
+            .subjectRowNavigation(accessibilityLabel: "Defaults and pinch hits") { assignmentsView }
+            .buttonStyle(.plain)
 
         }
         .subjectPanel()
-    }
-
-    private var assignmentsSummaryText: String {
-        guard let matchedCount, let unmatchedCount else { return "Couldn't load" }
-        // Every list empty means nothing has been sent, not that nobody matched.
-        if matchedCount == 0, unmatchedCount == 0 { return "None sent yet" }
-        return "\(matchedCount) matched, \(unmatchedCount) unmatched"
     }
 
     private var assignmentsFootnote: some View {
@@ -577,5 +566,22 @@ struct ChallengeSettingsView: View {
         return try await AO3Client.shared.allChallengeAssignments(
             slug: collectionSlug, lists: lists, request: request
         )
+    }
+}
+
+extension ChallengeSettingsView {
+    private var assignmentsView: some View {
+        ChallengeAssignmentsView(
+            collectionSlug: collectionSlug,
+            collectionTitle: effectiveTitle,
+            viewerIsOwner: viewerIsOwner
+        )
+    }
+
+    private var assignmentsSummaryText: String {
+        guard let matchedCount, let unmatchedCount else { return "Couldn't load" }
+        // Every list empty means nothing has been sent, not that nobody matched.
+        if matchedCount == 0, unmatchedCount == 0 { return "None sent yet" }
+        return "\(matchedCount) matched, \(unmatchedCount) unmatched"
     }
 }

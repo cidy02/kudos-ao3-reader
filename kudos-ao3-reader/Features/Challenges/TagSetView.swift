@@ -123,7 +123,7 @@ struct TagSetView: View {
         SubjectHeaderBlock(
             kicker: isModerator ? "Tag set · moderator" : "Tag set · owner",
             title: "Tag set",
-            subtitle: "\(effectiveTitle) · \(totalTagCount) tags",
+            subtitle: "\(effectiveTitle) · \(totalTagCount.compactCount) tags",
             palette: palette,
             gutter: SubjectMetrics.accountGutter
         )
@@ -220,22 +220,22 @@ struct TagSetView: View {
 
     private var tagCountsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Fandoms", value: "\(tagSet?.fandomCount ?? 0)", isMonospaced: true)
+            SubjectFormRow(label: "Fandoms", value: "\(tagSet?.fandomCount ?? 0)")
 
             SubjectRowSeparator()
 
-            SubjectFormRow(label: "Characters", value: "\(tagSet?.characterCount ?? 0)", isMonospaced: true)
+            SubjectFormRow(label: "Characters", value: "\(tagSet?.characterCount ?? 0)")
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Relationships", value: "\(tagSet?.relationshipCount ?? 0)", isMonospaced: true
+                label: "Relationships", value: "\(tagSet?.relationshipCount ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Additional tags", value: "\(tagSet?.freeformCount ?? 0)", isMonospaced: true
+                label: "Additional tags", value: "\(tagSet?.freeformCount ?? 0)"
             )
         }
         .subjectPanel()
@@ -310,7 +310,7 @@ struct TagSetView: View {
                     .foregroundStyle(palette.accentOnFill)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 42)
+            .frame(height: 44)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(palette.accent)
@@ -334,32 +334,28 @@ struct TagSetView: View {
 
             SubjectFormRow(
                 label: "Fandoms per person",
-                value: "\(tagSet?.fandomNominationLimit ?? 0)",
-                isMonospaced: true
+                value: "\(tagSet?.fandomNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Characters per person",
-                value: "\(tagSet?.characterNominationLimit ?? 0)",
-                isMonospaced: true
+                value: "\(tagSet?.characterNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Relationships per person",
-                value: "\(tagSet?.relationshipNominationLimit ?? 0)",
-                isMonospaced: true
+                value: "\(tagSet?.relationshipNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Additional tags per person",
-                value: "\(tagSet?.freeformNominationLimit ?? 0)",
-                isMonospaced: true
+                value: "\(tagSet?.freeformNominationLimit ?? 0)"
             )
         }
         .subjectPanel()
@@ -371,24 +367,21 @@ struct TagSetView: View {
         VStack(spacing: 0) {
             SubjectFormRow(
                 label: "Awaiting review",
-                value: "\(reviewQueue.filter { $0.state == .unreviewed }.count)",
-                isMonospaced: true
+                value: "\(reviewQueue.filter { $0.state == .unreviewed }.count)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Approved",
-                value: "\(reviewQueue.filter { $0.state == .approved }.count)",
-                isMonospaced: true
+                value: "\(reviewQueue.filter { $0.state == .approved }.count)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Rejected",
-                value: "\(reviewQueue.filter { $0.state == .rejected }.count)",
-                isMonospaced: true
+                value: "\(reviewQueue.filter { $0.state == .rejected }.count)"
             )
         }
         .subjectPanel()
