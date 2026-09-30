@@ -87,7 +87,7 @@ struct NewReadingQueueSheet: View {
                     // 1j draws the swatches bare on the sheet, not on a card —
                     // they are their own shapes and a panel behind them would
                     // add an edge the board does not have.
-                    SubjectHueSwatchRow(selection: $hue, fallbackHue: previewHue)
+                    SubjectHueSwatchRow(selection: $hue)
                         .pageBodyRow(top: 10, gutter: gutter)
                     footnote(hue == nil
                         ? "Without a colour, the queue takes one from its name — and "
@@ -310,13 +310,6 @@ struct NewReadingQueueSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .pageBodyRow(top: 8, gutter: gutter)
-    }
-
-    /// What the name would give this queue if no swatch is picked — the same hash
-    /// `ReadingQueue.displayHue` falls back to, so the preview cannot disagree
-    /// with the queue that gets created.
-    private var previewHue: Double {
-        CoverArt.hue(for: trimmedName)
     }
 }
 
