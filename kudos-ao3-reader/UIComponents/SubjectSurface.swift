@@ -505,26 +505,37 @@ struct SubjectHeaderBlock<Trailing: View>: View {
                 .minimumScaleFactor(0.7)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if subtitle != nil || hasTrailing {
-                FlowLayout(spacing: 8, rowSpacing: 6) {
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.system(size: subtitleSize))
-                            .foregroundStyle(.secondary)
-                    }
-                    if subtitle != nil, hasTrailing {
+            if let subtitle, hasTrailing {
+                // One line with the dot when both fit; otherwise the control drops
+                // under the subtitle and the dot goes (a flow layout left it
+                // dangling at the end of the first line).
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        subtitleText(subtitle).fixedSize()
                         Circle()
                             .fill(Color.secondary.opacity(0.4))
                             .frame(width: 4, height: 4)
+                        trailing()
                     }
-                    if hasTrailing {
+                    VStack(alignment: .leading, spacing: 6) {
+                        subtitleText(subtitle)
                         trailing()
                     }
                 }
+            } else if let subtitle {
+                subtitleText(subtitle)
+            } else if hasTrailing {
+                trailing()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, gutter)
+    }
+
+    private func subtitleText(_ subtitle: String) -> some View {
+        Text(subtitle)
+            .font(.system(size: subtitleSize))
+            .foregroundStyle(.secondary)
     }
 }
 
