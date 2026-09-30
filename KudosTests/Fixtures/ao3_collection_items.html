@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Manage Items</title></head>
+<body>
+<h2 class="heading">Items in <a href="/collections/fest">Fest</a></h2>
+<ul class="navigation actions" role="navigation">
+  <li><span class="current">Unreviewed by Collection</span></li>
+  <li><a href="/collections/fest/items?status=unreviewed_by_user">Unreviewed by User</a></li>
+  <li><a href="/collections/fest/items?status=rejected_by_collection">Rejected by Collection</a></li>
+  <li><a href="/collections/fest/items?status=rejected_by_user">Rejected by User</a></li>
+  <li><a href="/collections/fest/items?status=approved">Approved</a></li>
+</ul>
+<form action="/collections/fest/items/update_multiple" method="post">
+  <input type="hidden" name="authenticity_token" value="csrf-item">
+  <input type="hidden" name="_method" value="patch">
+  <ul class="index group">
+    <li class="collection item picture blurb group">
+      <div class="header module">
+        <h4 class="heading" id="collection_item_42">
+          <a href="/works/99">Queued Work</a>
+        </h4>
+        <h5 class="heading">Creator Pseud (Member)</h5>
+      </div>
+      <ul class="actions">
+        <li class="user status">
+          <select name="collection_items[42][user_approval_status]">
+            <option value="unreviewed"></option>
+            <option value="approved" selected>Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </li>
+        <li class="collection status">
+          <select name="collection_items[42][collection_approval_status]">
+            <option value="unreviewed" selected></option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </li>
+        <li>
+          <input type="checkbox" name="collection_items[42][unrevealed]" value="1" checked>
+        </li>
+        <li>
+          <input type="checkbox" name="collection_items[42][anonymous]" value="1">
+        </li>
+      </ul>
+    </li>
+    <li class="collection item picture blurb group">
+      <div class="header module">
+        <h4 class="heading" id="collection_item_43">
+          <a href="/works/100">Another Queued Work</a>
+        </h4>
+        <h5 class="heading">Another Creator (Member)</h5>
+      </div>
+      <ul class="actions">
+        <li class="user status">
+          <select name="collection_items[43][user_approval_status]">
+            <option value="unreviewed"></option>
+            <option value="approved" selected>Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </li>
+        <li class="collection status">
+          <select name="collection_items[43][collection_approval_status]">
+            <option value="unreviewed"></option>
+            <option value="approved">Approved</option>
+            <option value="rejected" selected>Rejected</option>
+          </select>
+        </li>
+        <li>
+          <input type="checkbox" name="collection_items[43][unrevealed]" value="1">
+        </li>
+        <li>
+          <input type="checkbox" name="collection_items[43][anonymous]" value="1" checked>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</form>
+</body>
+</html>

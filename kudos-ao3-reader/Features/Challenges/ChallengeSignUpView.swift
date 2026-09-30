@@ -108,6 +108,8 @@ struct ChallengeSignUpView: View {
                 }
             }
             .cardList()
+            // Rows at their own padding, not the List minimum (L3-FORM-1).
+            .environment(\.defaultMinListRowHeight, 0)
             #if os(macOS)
             .navigationTitle("Your sign-up")
             #endif
