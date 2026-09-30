@@ -1,0 +1,87 @@
+1bz	1bz Challenge sign-ups. The moderator’s read of who signed up, with the matched state on t	Challenge sign-ups	Needs building
+1ca	1ca Your own sign-up. Requests and offers as separate groups because AO3 counts them separ	Your sign-up	Needs building
+1cb	1cb Assignments, defaults and pinch hits. Unmatched leads, because it is the only part a m	Assignments	Needs building
+1cc	1cc Prompt Meme. The second challenge type, which has no sign-ups and no assignments at al	Prompt Meme	Needs building
+1cd	1cd Collection moderation, in full. Everything AO3 gives a maintainer in one scroll: works	Collection moderation	Needs building
+1ce	1ce Reject with a reason. The reason is required, so Reject and send stays the only filled	Reject with a reason	Needs building
+1cf	1cf Challenge settings, in full. Everything AO3 puts on the gift-exchange form, grouped by	Challenge settings	Needs building
+1cg	1cg Collection settings. The maintainer’s half of a collection: identity, the three prose 	Collection settings	Needs building
+1ch	1ch Tag sets. The object challenges depend on and the one most sign-up failures trace back	Tag set	Needs building
+1ci	1ci Collection items, the reader’s view. The other side of 1cd : what a collection looks l	Collection items	Needs building
+1bt	1bt The hub’s three scopes. Item 18, answered by drawing it: the structure does not change	Account — Reading scope; Account — Activity scope; Account — Writing scope	
+1bu	1bu Tag picker. The screen behind Fandoms, Relationships, Characters and Additional tags. 	Tag picker — typing; Tag picker — chosen	
+1bv	1bv Chapter text editor. The one screen that has to hold a whole chapter, so the chrome ge	Chapter text editor	Needs building
+1bw	1bw Collections and gifts, and the series picker. Both are pushes from Work Edit’s Associa	Collections and gifts; Series picker	
+1bx	1bx Maintainers and the moderation queue. Deferred from 1bl , now drawn. Roles are a badge	Collection maintainers; Moderated items	
+1by	1by Challenge settings. The other deferred piece. AO3 keeps a challenge as a second object	Challenge settings	Needs building
+1bn	1bn Works select mode and Edit Multiple Works. AO3 has a real bulk editor at /works/edit_m	Works — select mode; Edit Multiple Works	
+1bo	1bo Work Edit, and the delete confirmation. AO3’s edit form is about thirty fields; groupe	Work Edit; Work Edit — delete confirmation	
+1bp	1bp Edit Tags. AO3 keeps this as its own page so a tag fix never opens the text, and that 	Edit Tags	Needs building
+1bq	1bq Add Chapter. Chapter number, position, the four prose fields, and the three publicatio	Add Chapter	Needs building
+1br	1br Series Edit and Reorder. Title, creators, summary, notes and Complete, then the works.	Series Edit; Series Reorder	
+1bs	1bs Draft editor, post, and delete. The same form as Work Edit with the posted-only fields	Draft editor; Draft — post confirmation; Draft — delete confirmation	
+1bg	1bg Queue select mode. The pattern from 1af carried into a queue, where the row keeps its 	Queue — select mode	Needs building
+1bh	1bh Shared queue tag manager. Tags on a shared queue have an author, so every row carries 	Shared queue — tag manager; Tag manager — rename and merge	
+1bi	1bi Reading Insights. One hero figure with its month-over-month delta, then the weekly bar	Reading Insights	Needs building
+1bj	1bj Recently Deleted, and the permanent delete. Mixed content in one list, so each row lea	Recently Deleted; Recently Deleted — permanent delete	
+1bk	1bk Local collection, new and editing. Create is empty with Create dimmed until the name e	Local collection — new; Local collection — edit	
+1bl	1bl AO3 collection, new, editing and delete. The whole of AO3’s New Collection form, in AO	AO3 collection — new; AO3 collection — edit; AO3 collection — delete confirmation	
+1bm	1bm AO3 collections sort and filter. The same sheet grammar as Works at 1v : one grammar p	AO3 collections — sort and filter	Needs building
+1ay	1ay Reading Now, zero results. Three filters that cannot all hold at once. The card states	Reading Now — no matches	Needs building
+1az	1az Series, empty. The locked screen at 1w with its list replaced by one card. Creating a 	Series — empty	Needs building
+1ba	1ba Comment composer. Medium detent over 1f , sized so the parent comment stays visible ab	Comments — composer open	Needs building
+1bb	1bb Preferences saved. The locked screen at 1z with the confirmation as a transient toast 	AO3 Preferences — saved	Needs building
+1bc	1bc Favorites — Fandoms. The third segment. A fandom row has no progress to show, so it ca	Favorites — fandoms	Needs building
+1bd	1bd Favorites — Tags. The fourth segment, same card at lower weight: how much of what you 	Favorites — tags	Needs building
+1be	1be The same sheet with the keyboard up. Focus raises the keyboard and the sheet rides abo	Comments — composer, keyboard up	Needs building
+1bf	1bf Formatting without HTML. AO3 gives comments no rich text editor — every comment anyone	Comments — formatting tray	Needs building
+1ao	1ao Medium detent. The panel opens over the results at half height, showing the two facets	Filters — medium detent	Matches the code
+1ap	1ap Full height, top of the form. The order the code already uses: sort and rating, then W	Filters — warnings and categories	Needs building
+1aq	1aq Work status, dates and language. The middle of the form: three pickers on what state a	Filters — status, dates, language	Matches the code
+1ar	1ar Language, pushed. The one picker in the panel that cannot be a menu: AO3 offers 82 lan	Filters — language	Needs building
+1as	1as Tags, then the first thing you have to type. Each tag row states the selection in the 	Filters — tags, title and creator	Matches the code
+1at	1at All five ranges. Word count, hits, kudos, comments and bookmarks — ten text fields tod	Filters — the five ranges	Needs building
+1au	1au Refine. The same panel narrowing works already on the page, so everything that would n	Refine	Matches the code
+1av	1av The tag picker, opened. Characters first, since all four tag fields are the same scree	Characters — fresh	Matches the code
+1aw	1aw Typing, with a selection. Selected tags lift to the top in the same chips the parent r	Characters — typing	Matches the code
+1ax	1ax Save Search. Naming is the only new input, so the sheet is short: a field, and the fil	Save search	Needs building
+1al	1al Inside a category: sibling families. Rows collapse on the parsed title, which is the d	Browse — entries, sibling families	Needs building
+1am	1am Families, ranked by their total. 1al sorted by most works: a family ranks on the sum o	Browse — families, most works	Needs building
+1an	1an What Filter holds. The rail keeps order — A–Z, Most works, Group variants — and the sh	Browse — filter sheet	Needs building
+1m	1m The Account tab lands on the hub: the username is the page title, the four scopes sit u	Account — hub	
+1o	1o Compact mode is the 164×232 cover with the fandom eyebrow, rule, reading ring and the f	Reading — Marked for Later	
+1q	1q Bookmarks take the search-result card from 1k — fandom eyebrow with the disclosure chev	Reading — Bookmarks	
+1t	1t History in the same language as the hub: Activity wash full-bleed, floating glass chrom	History	Needs building
+1p	1p What posted since your last visit is a 164×232 cover, the same card Marked for Later us	Subscriptions	Needs building
+1r	1r Strictly AO3 collections — local collections live in Home. Each one is a card in its ow	Collections — items as a scope	Needs building
+1s	1s AO3’s manage-collection-items screen, one card per item instead of a table row: the col	Collection items	
+1u	1u Works: the Writing wash, glass chrome with the sort funnel, and the hero tallies. Rows 	Works	Needs building
+1v	1v Works → sort and filter, as a sheet over the list: AO3’s sort fields as one radio group	Works — sort and filter	Needs building
+1w	1w Series: the empty state as one card with the AO3 action, then the loaded shape. Each ro	Series	Needs building
+1x	1x Drafts are unposted works, so the row is the work row minus everything AO3 cannot know 	Drafts	Needs building
+1l	1l Inbox in the spec’s own language: the Activity wash full-bleed, one row of 34px floatin	Inbox — settled shell	Needs building
+1y	1y Dashboard: your own works with their performance read as a four-cell signal strip — kud	Dashboard	Needs building
+1z	1z AO3 Preferences: the account settings AO3 exposes, grouped with section chevrons, the d	AO3 Preferences	
+1ab	1ab Settings: app preferences only — reading, downloads, appearance, notifications — kept 	Settings	
+1ac	1ac Privacy and local data: what the app stores on device, what it sends to AO3, and the c	Privacy and local data	
+1aa	1aa More on AO3: the surfaces the app does not implement, sent to the browser rather than 	More on AO3	
+1n	1n No session, so no accent and no wash: the tab sits on plain #0b0b0d. Settings is a 34px	Signed out — preview of the signed-in tab	
+1k	1k Search results in the same language as every other pushed, subject-scoped screen: the f	Paging — switcher pill; Paging — page sheet	
+1i	1i The organizer. One screen for every queue, Saved for Later included: search over queues	Queues — organizer	Needs building
+1j	1j Creating one. Name, then the three decisions the app currently makes for you — colour (	Queues — new queue	Needs building
+1h	1h Opening a queue lands on the queue’s own colour: a full-bleed wash in its stored hue, f	Queue — tagged, list; Queue — tagged, grid; Queue details — Neon reread; Queue details — Slow burns	
+1g	1g Browse without a carousel. Featured fandoms wrap as a chip cluster under each category 	Browse — fandom clusters	Needs building
+1f	1f Comments — sheet over the reader on the work-detail gradient wash. Threads hang off a h	Comments — redesign	
+1c	1c Library, complete. Sections in source order: Reading Now, Saved for Later (local + the 	Library — all sections	Needs building
+1d	1d Library — ledger. Same seven sections in source order, same chips with the Reset afford	Library — ledger	Needs building
+1e	1e Superseded by 1k , which carries the same query and rows in the spec’s own language.		
+1ah	1ah Reading History — the local one, not AO3’s. Ledger rows carry exactly the design they 	Reading History — by time, ledger	Needs building
+1ai	1ai Grouped by state , which is how Library’s Finished and Reading History rows arrive pre	Reading History — by state, ledger	Needs building
+1aj	1aj Favorites — ours, fully separate from AO3 bookmarks. One type at a time behind a segme	Favorites — works	Needs building
+1ak	1ak The Authors segment. A non-work row has no title or metadata to show, so it carries a 	Favorites — authors	Needs building
+1b	1b Home on the Library card. Continue Reading is the hero plus the next four as the same 1	Home — matched to Library	
+1ad	1ad Reading Now in list mode. isInProgress , most recently read first, so every row carrie	Reading Now — list	Needs building
+1ae	1ae Recently Updated in grid mode, showing the switch’s other state. hasUpdate , newest ch	Recently Updated — grid	Needs building
+1af	1af The two states each of these pages needs. Select mode takes the title bar for a count 	Reading Now — select mode	Needs building
+1ag	1ag Subscriptions is the account list, not the library: no progress, no offline tick, remo	Subscriptions	Needs building
+1a	1a The AO3 account actions get their own lane under the summary — Kudos filled, since it i		
