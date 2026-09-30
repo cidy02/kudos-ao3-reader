@@ -268,20 +268,26 @@ struct CommentFormatBar: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(CommentMarkupTag.quickBar) { tag in
-                GlassCircleButton(accessibilityName: tag.name) {
-                    CommentMarkup.apply(tag, text: &text, selection: &selection)
+                Button {
+                    apply(tag)
                 } label: {
-                    Image(systemName: tag.symbol)
+                    CommentFormatBarButtonFace(tag: tag)
                 }
+                .buttonStyle(.plain)
+                .layoutFreeHitTarget { apply(tag) }
+                .accessibilityLabel(tag.name)
             }
 
             Spacer(minLength: 0)
 
-            GlassCircleButton(accessibilityName: "More formatting") {
+            Button {
                 onOpenTray()
             } label: {
-                Image(systemName: "ellipsis")
+                CommentFormatBarButtonFace(tag: nil)
             }
+            .buttonStyle(.plain)
+            .layoutFreeHitTarget(action: onOpenTray)
+            .accessibilityLabel("More formatting")
         }
         .padding(.horizontal, 12)
         .frame(height: 52)
@@ -290,6 +296,42 @@ struct CommentFormatBar: View {
                 .fill(theme.appTheme.glassStroke(0.10))
                 .frame(height: 0.5)
                 .accessibilityHidden(true)
+        }
+    }
+
+    private func apply(_ tag: CommentMarkupTag) {
+        CommentMarkup.apply(tag, text: &text, selection: &selection)
+    }
+}
+
+/// One transparent 1ba/1be toolbar face. The button and its 44pt hit area stay
+/// outside so this remains the single visual definition for all seven controls.
+private struct CommentFormatBarButtonFace: View {
+    var tag: CommentMarkupTag?
+
+    var body: some View {
+        glyph
+            .foregroundStyle(.secondary)
+            .frame(width: 34, height: 34)
+            .background(Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        switch tag {
+        case .bold:
+            Text("B").font(.system(size: 16, weight: .bold, design: .serif))
+        case .italic:
+            Text("I").font(.system(size: 16, design: .serif)).italic()
+        case .underline:
+            Text("U").font(.system(size: 16, design: .serif)).underline()
+        case .strike:
+            Text("S").font(.system(size: 16, design: .serif)).strikethrough()
+        case let tag?:
+            Image(systemName: tag.symbol).font(.system(size: 18))
+        case nil:
+            Image(systemName: "ellipsis").font(.system(size: 18))
         }
     }
 }
@@ -491,9 +533,9 @@ private struct CommentFormatTileFace: View {
         case .italic:
             Text("I").font(.system(size: 16, design: .serif)).italic()
         case .underline:
-            Text("U").font(.system(size: 16, design: .serif))
+            Text("U").font(.system(size: 16, design: .serif)).underline()
         case .strike:
-            Text("S").font(.system(size: 16, design: .serif))
+            Text("S").font(.system(size: 16, design: .serif)).strikethrough()
         case .superscript:
             scriptedTwo(raised: true)
         case .`subscript`:

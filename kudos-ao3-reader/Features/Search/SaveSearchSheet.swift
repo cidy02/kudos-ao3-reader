@@ -47,29 +47,34 @@ struct SaveSearchSheet: View {
                 }
 
                 Section {
-                    if summary.isEmpty {
-                        Text("This search has no filters yet — only its name will be saved.")
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .subjectPanel()
-                            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                    } else {
-                        FlowLayout(spacing: 8, rowSpacing: 8) {
-                            ForEach(summary) { item in
-                                SubjectChip(
-                                    text: item.text,
-                                    style: item.isExcluded ? .dashed : .neutral
-                                )
+                    VStack(alignment: .leading, spacing: 8) {
+                        if summary.isEmpty {
+                            Text("This search has no filters yet — only its name will be saved.")
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .subjectPanel()
+                        } else {
+                            FlowLayout(spacing: 6, rowSpacing: 6) {
+                                ForEach(summary) { item in
+                                    SaveSearchSummaryChip(text: item.text, kind: item.kind)
+                                }
                             }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 13)
+                            .subjectPanel()
                         }
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+
+                        Text("Only settings you changed are saved.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
                     }
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 } header: {
-                    SectionRuleHeader(title: "What gets saved", count: summary.isEmpty ? nil : summary.count)
+                    SectionRuleHeader(title: "What gets saved")
                         .pageBodyRow(top: 20, gutter: 0)
                 }
             }
@@ -97,10 +102,10 @@ struct SaveSearchSheet: View {
 
     // MARK: What gets saved
 
-    struct SummaryItem: Identifiable {
+    private struct SummaryItem: Identifiable {
         let id: String
         let text: String
-        let isExcluded: Bool
+        let kind: SaveSearchSummaryKind
     }
 
     /// The filters as the artboard lists them: included terms plainly, excluded
@@ -113,7 +118,7 @@ struct SaveSearchSheet: View {
         var items: [SummaryItem] = []
         let query = filters.query.trimmingCharacters(in: .whitespaces)
         if !query.isEmpty {
-            items.append(SummaryItem(id: "query", text: "\u{201C}\(query)\u{201D}", isExcluded: false))
+            items.append(SummaryItem(id: "query", text: "\u{201C}\(query)\u{201D}", kind: .included))
         }
         // 1ax: everything the saved search will run with — the same labels the
         // results rail prints, warnings, ranges, language and the sort included.
@@ -122,9 +127,57 @@ struct SaveSearchSheet: View {
             items.append(SummaryItem(
                 id: "\(index)-\(label.text)",
                 text: label.text,
-                isExcluded: label.text.hasPrefix("−")
+                kind: label.text.hasPrefix("−") ? .excluded : (label.symbol == nil ? .facet : .included)
             ))
         }
         return items
+    }
+}
+
+private enum SaveSearchSummaryKind {
+    case included
+    case excluded
+    case facet
+}
+
+private struct SaveSearchSummaryChip: View {
+    let text: String
+    let kind: SaveSearchSummaryKind
+
+    @Environment(ThemeManager.self) private var theme
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12))
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .foregroundStyle(foreground)
+            .background(Capsule().fill(fill))
+            .overlay(Capsule().strokeBorder(stroke, lineWidth: 0.5))
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .included: .green
+        case .excluded: .red
+        case .facet: .primary
+        }
+    }
+
+    private var fill: Color {
+        switch kind {
+        case .included: .green.opacity(0.15)
+        case .excluded: .red.opacity(0.15)
+        case .facet: theme.appTheme.glassFill(0.10)
+        }
+    }
+
+    private var stroke: Color {
+        switch kind {
+        case .included: .green.opacity(0.35)
+        case .excluded: .red.opacity(0.35)
+        case .facet: theme.appTheme.glassStroke(0.16)
+        }
     }
 }
