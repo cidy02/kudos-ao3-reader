@@ -214,6 +214,9 @@ enum DebugLaunchRoute {
         } else if value.hasPrefix("section:"),
            let kind = LibrarySectionKind(rawValue: String(value.dropFirst("section:".count))) {
             router.showLibrarySection(kind)
+        } else if value.hasPrefix("tagsearch:") {
+            // `tagsearch:<fandom>` — Search's results for a fandom tag.
+            router.searchAO3(.fandom, String(value.dropFirst("tagsearch:".count)))
         } else if let tab = AppTab(rawValue: value) {
             router.selection = tab
         }
@@ -414,8 +417,8 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/media/[^/]+/fandoms", "ao3_media_fandoms"),
         ("^/media/?$", "ao3_media"),
         // A works index has the same blurb markup wherever it is listed.
-        ("^/tags/[^/]+/works", "ao3_author_works"),
-        ("^/works/search", "ao3_author_works"),
+        ("^/tags/[^/]+/works", "ao3_tag_works"),
+        ("^/works/search", "ao3_tag_works"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?works", "ao3_author_works"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?series", "ao3_author_series"),
         ("^/users/[^/]+/(pseuds/[^/]+/)?bookmarks", "ao3_author_bookmarks"),
