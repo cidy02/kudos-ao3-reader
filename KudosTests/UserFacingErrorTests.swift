@@ -18,4 +18,12 @@ struct UserFacingErrorTests {
         struct Local: LocalizedError { var errorDescription: String? { "The file is damaged." } }
         #expect(UserFacingError.message(for: Local()) == "The file is damaged.")
     }
+
+    @Test func onlyConnectionFailuresUseTheOfflineSymbol() {
+        #expect(UserFacingError.systemImage(for: URLError(.notConnectedToInternet)) == "wifi.slash")
+        #expect(UserFacingError.systemImage(for: URLError(.cannotFindHost)) == "wifi.slash")
+        #expect(UserFacingError.systemImage(for: AO3Error.network("transport")) == "wifi.slash")
+        #expect(UserFacingError.systemImage(for: URLError(.timedOut)) == "exclamationmark.triangle")
+        #expect(UserFacingError.systemImage(for: AO3Error.notFound) == "exclamationmark.triangle")
+    }
 }
