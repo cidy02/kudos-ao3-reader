@@ -242,6 +242,12 @@ struct LibrarySectionListView: View {
             // kept showing the tab bar underneath/instead of the bulk-action bar.
             .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         #endif
+            #if DEBUG
+            .task {
+                try? await Task.sleep(for: .seconds(1))
+                if DebugLaunchRoute.opensFilters { showingFilters = true }
+            }
+            #endif
             .inspector(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: items, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)

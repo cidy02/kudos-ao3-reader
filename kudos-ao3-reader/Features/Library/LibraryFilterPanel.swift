@@ -11,7 +11,18 @@ struct LibraryFilterPanel: View {
     /// The user's own tag names, for the "Your Tags" facet.
     let userTagNames: [String]
 
+    /// 1an's group labels (uppercase, tracked), as the AO3 panel draws them.
+    /// The shell stays a bare Form: this panel is an `.inspector`, and a
+    /// NavigationStack inside one merged its bar into the host screen's.
     var body: some View {
+        form
+    }
+
+    private func groupLabel(_ text: String) -> some View {
+        SubjectFieldLabel(text: text, style: .formGroup)
+    }
+
+    private var form: some View {
         Form {
             // Group so .appThemedRows() reaches every section's rows (it doesn't
             // propagate from the Form container, only from a Group/Section/ForEach).
@@ -25,20 +36,24 @@ struct LibraryFilterPanel: View {
                     }
                 }
 
-                Section("Warnings") {
+                Section {
                     ForEach(AO3SearchFilters.Warning.allCases) { warning in
                         selectableRow(warning.title, isSelected: filters.warnings.contains(warning)) {
                             toggle(warning, in: \.warnings)
                         }
                     }
+                } header: {
+                    groupLabel("Warnings")
                 }
 
-                Section("Categories") {
+                Section {
                     ForEach(AO3SearchFilters.Category.allCases) { category in
                         selectableRow(category.title, isSelected: filters.categories.contains(category)) {
                             toggle(category, in: \.categories)
                         }
                     }
+                } header: {
+                    groupLabel("Categories")
                 }
 
                 Section {
@@ -63,7 +78,7 @@ struct LibraryFilterPanel: View {
                         .keyboardType(.numberPad)
                     #endif
                 } header: {
-                    Text("Word count")
+                    groupLabel("Word count")
                 } footer: {
                     Text("Word counts come from AO3 and fill in once a work has been opened.")
                 }
@@ -84,10 +99,11 @@ struct LibraryFilterPanel: View {
                     LibraryMultiSelectField(title: "Exclude Tags", options: distinct(\.workTags),
                                             selection: $filters.excludeTags)
                 } header: {
-                    Text("Tags")
+                    groupLabel("Tags")
                 } footer: {
                     Text("Filter by the work's own AO3 tags. Exclude Tags hides matching works.")
                 }
+
 
                 if filters.hasActiveFilters {
                     Section {
