@@ -401,7 +401,7 @@ struct ChallengeSignUpsView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Retry") {
+            Button("Try Again") {
                 Task { await loadSignUps(resetPage: true) }
             }
             .buttonStyle(.bordered)

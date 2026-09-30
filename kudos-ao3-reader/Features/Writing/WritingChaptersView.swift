@@ -37,7 +37,7 @@ struct WritingChaptersView: View {
             } else if let errorMessage {
                 VStack {
                     Text(errorMessage)
-                    Button("Retry") { reload += 1 }
+                    Button("Try Again") { reload += 1 }
                 }
                 .pageBodyRow(top: 18, gutter: gutter)
             } else {
