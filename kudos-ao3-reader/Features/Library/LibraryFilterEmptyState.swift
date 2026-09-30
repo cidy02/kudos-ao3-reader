@@ -143,7 +143,7 @@ struct LibraryFilterCollisionCard: View {
     }
 
     private var clearLabelColor: Color {
-        themeManager.appTheme.errorColor.relativeLuminance > 0.45 ? Color.black : Color.white
+        ThemeManager.label(on: themeManager.appTheme.errorColor)
     }
 
     private func workCountText(_ count: Int) -> String {
