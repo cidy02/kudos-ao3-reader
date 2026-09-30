@@ -65,6 +65,8 @@ struct StackedWorkCover: View {
                 .font(.system(size: 9.5 * scale, weight: .semibold))
                 .foregroundStyle(themeManager.appTheme.isDarkFamily ? Color.white.opacity(0.92) : .primary)
                 .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .truncationMode(.tail)
             Spacer(minLength: 4 * scale)
             HStack(spacing: 3 * scale) {
                 Image(systemName: "person")
