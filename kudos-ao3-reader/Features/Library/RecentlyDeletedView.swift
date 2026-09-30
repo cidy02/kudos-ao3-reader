@@ -521,6 +521,13 @@ extension RecentlyDeletedEntry {
 /// macOS they only exist for trackpad users, so the menu is the discoverable path.
 /// While selecting, a tap toggles the row and neither is offered.
 private struct RecentlyDeletedRow: View {
+    /// Title, detail and the days figure scale with the kicker above them; at AX
+    /// sizes the kicker alone grew and the title under it stayed at 16.5.
+    @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
+    @ScaledMetric(relativeTo: .caption) private var detailSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .footnote) private var daysSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption2) private var daysLabelSize: CGFloat = 9
+
     let entry: RecentlyDeletedEntry
     let palette: SubjectPalette
     var isSelecting = false
@@ -591,7 +598,7 @@ private struct RecentlyDeletedRow: View {
                     ruleSpacing: 5
                 )
                 Text(entry.title)
-                    .font(.system(size: 16.5, weight: .semibold))
+                    .font(.system(size: titleSize, weight: .semibold))
                     .lineLimit(2)
                 if !entry.detail.isEmpty {
                     detailLine
@@ -619,7 +626,7 @@ private struct RecentlyDeletedRow: View {
     private var detailLine: some View {
         if entry.authorIdentities.isEmpty {
             Text(entry.detail)
-                .font(.system(size: 11.5))
+                .font(.system(size: detailSize))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         } else {
@@ -638,7 +645,7 @@ private struct RecentlyDeletedRow: View {
     private var remaining: some View {
         VStack(spacing: 1) {
             Text("\(entry.daysRemaining)d")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: daysSize, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(
                     RecentlyDeletedView.isUrgent(daysRemaining: entry.daysRemaining)
@@ -646,7 +653,7 @@ private struct RecentlyDeletedRow: View {
                         : Color.primary
                 )
             Text("LEFT")
-                .font(.system(size: 9))
+                .font(.system(size: daysLabelSize))
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)

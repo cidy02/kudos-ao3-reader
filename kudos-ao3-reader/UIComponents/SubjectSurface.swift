@@ -502,12 +502,15 @@ struct SubjectHeaderBlock<Trailing: View>: View {
                 ruleSpacing: 7
             )
 
+            // A one-word title (a username) shrinks rather than splitting
+            // mid-word — "AO3_Reade / r" at accessibility sizes.
+            let isOneWord = !title.contains(where: \.isWhitespace)
             Text(title)
                 .font(.system(size: titleSize, weight: .bold))
                 .tracking(-0.6)
                 .monospacedDigit()
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                .minimumScaleFactor(0.7)
+                .lineLimit(isOneWord ? 1 : (dynamicTypeSize.isAccessibilitySize ? nil : 2))
+                .minimumScaleFactor(isOneWord ? 0.5 : 0.7)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let subtitle, hasTrailing {
