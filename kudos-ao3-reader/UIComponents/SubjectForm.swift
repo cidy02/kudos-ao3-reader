@@ -226,6 +226,12 @@ struct SubjectFormRow<Trailing: View>: View {
     var action: (() -> Void)?
     @ViewBuilder var trailing: () -> Trailing
 
+    /// The spec's 15pt, scaled with Dynamic Type: at a fixed size every form in
+    /// the app stayed small at AX sizes while its section headers grew around it.
+    @ScaledMetric(relativeTo: .body) private var labelSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var chevronSize: CGFloat = 12
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         if let action {
             Button(action: action) {
@@ -241,7 +247,7 @@ struct SubjectFormRow<Trailing: View>: View {
     private var rowContent: some View {
         HStack(spacing: arrangement.horizontalGap) {
             let labelText = (isRequired ? Text("\(label) \(Text("∗").foregroundStyle(.tint))") : Text(label))
-                .font(.system(size: 15))
+                .font(.system(size: labelSize))
                 .foregroundStyle(isDestructive ? Color.red : .primary)
                 .accessibilityLabel(isRequired ? "\(label), required" : label)
 
@@ -252,13 +258,24 @@ struct SubjectFormRow<Trailing: View>: View {
                 // label hugging too the whole row hugged, and a panel CENTRED it
                 // (New collection's toggles) or shrank to fit (New queue's
                 // Offline card). Wrapped so a multi-view `trailing` is framed as
-                // one group, with the gap the outer stack gave it.
+                // one group, with the gap the outer stack gave it. The label takes
+                // its natural width first and wraps only when the control leaves
+                // no room — pinned to one line it ran off the panel at AX sizes.
                 labelText
-                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
                 HStack(spacing: arrangement.horizontalGap) {
                     trailing()
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
+            } else if dynamicTypeSize.isAccessibilitySize {
+                // The value under its label, as iOS Settings does at these sizes:
+                // side by side, "Appearance" left "Dark" as "D…", and a picker or
+                // text field was squeezed to a column one character wide.
+                VStack(alignment: .leading, spacing: 2) {
+                    labelText
+                    trailing()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 // Spec: the label keeps its natural width and the value takes
                 // the rest (`flex:none` / `flex:1;min-width:0`). Two flexible
@@ -276,7 +293,7 @@ struct SubjectFormRow<Trailing: View>: View {
 
             if showsDisclosure {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: chevronSize, weight: .semibold))
                     .foregroundStyle(Color.secondary.opacity(0.7))
                     .accessibilityHidden(true)
             }
@@ -323,6 +340,9 @@ struct SubjectFormValue: View {
     let text: String
     var isMonospaced: Bool = false
 
+    @ScaledMetric(relativeTo: .body) private var valueSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var monospacedSize: CGFloat = 11
+
     var body: some View {
         Text(text)
             .font(valueFont)
@@ -333,9 +353,9 @@ struct SubjectFormValue: View {
 
     private var valueFont: Font {
         if isMonospaced {
-            return .system(size: 11, weight: .medium, design: .monospaced)
+            return .system(size: monospacedSize, weight: .medium, design: .monospaced)
         }
-        return .system(size: 15)
+        return .system(size: valueSize)
     }
 }
 
