@@ -252,8 +252,13 @@ private struct UnblurredHomeResumeHero: View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
             : AnyLayout(HStackLayout(spacing: 16))
+        // The ring over the chapter line too at these sizes: beside a scaled
+        // ring the line broke mid-word ("Chap / ter 2").
+        let ringAndPlace = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 16))
         return layout {
-            HStack(spacing: 16) {
+            ringAndPlace {
                 WorkProgressRing(
                     progress: resolvedReadingProgress,
                     state: resolvedReadingProgress >= 1 ? "Finished" : "Reading",

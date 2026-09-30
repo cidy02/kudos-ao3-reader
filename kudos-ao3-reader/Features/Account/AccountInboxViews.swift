@@ -381,8 +381,12 @@ struct AccountInboxItemRow: View {
                 HStack(spacing: 4) {
                     Text("on")
                     Button(action: onOpenChapter) {
+                        // A chip never wraps ("Chapt / er 3" at AX sizes); the
+                        // work title beside it does.
                         Text(chapter)
                             .font(.caption2)
+                            .lineLimit(1)
+                            .fixedSize()
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
                             .background(.quaternary, in: Capsule())
