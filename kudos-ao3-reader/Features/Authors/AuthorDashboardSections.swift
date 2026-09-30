@@ -6,6 +6,8 @@ struct AO3DashboardSections: View {
     let header: AO3AuthorHeader
     let route: AO3AuthorRoute
     let expandAll: Bool
+    /// The page's Ledger / Detailed choice; the dashboard offers the picker.
+    var displayMode: WorkListDisplayMode = .ledger
     let onSeeAll: (AO3AuthorProfileTab) -> Void
 
     @Environment(AO3AuthService.self) private var auth
@@ -70,6 +72,7 @@ struct AO3DashboardSections: View {
                     AO3AuthorWorkCard(
                         entry: entry,
                         expandAll: expandAll,
+                        usesLedger: displayMode != .detailed,
                         showsPerformance: auth.username?.localizedCaseInsensitiveCompare(route.username) == .orderedSame
                     )
                 }
@@ -131,7 +134,8 @@ struct AO3DashboardSections: View {
     }
 
     private func heading(_ title: String, tab: AO3AuthorProfileTab) -> some View {
-        SectionRuleHeader(title: title, count: count(for: tab)?.exact, onSeeAll: { onSeeAll(tab) })
+        // 1y: the rule carries no link; each section's "See all" sits below its cards.
+        SectionRuleHeader(title: title, count: count(for: tab)?.exact)
             .pageBodyRow(top: 18, gutter: 0)
     }
 

@@ -231,6 +231,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         name: $saveName,
                         onSave: commitSavedSearch
                     )
+                    // 1ax: a part-height sheet with its grabber.
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
                 }
                 .remoteWorkSelectionChrome(bulkSelection)
         }
