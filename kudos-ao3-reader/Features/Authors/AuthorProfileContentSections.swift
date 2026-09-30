@@ -477,29 +477,41 @@ struct AO3AuthorSeriesSection: View {
                     // 1az's own copy, verbatim. The generic empty message said
                     // nothing about what a series is FOR, which is the half that
                     // earns the trip to AO3 underneath it.
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("You have not made a series.")
-                            .font(.system(size: 18, weight: .semibold))
-                        Text("A series groups your works so they read in order. "
-                            + "Series are created on AO3; anything you make there "
-                            + "appears here on the next refresh.")
-                            .font(.system(size: 13.5))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("You have not made a series.")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text("A series groups your works so they read in order. "
+                                + "Series are created on AO3; anything you make there "
+                                + "appears here on the next refresh.")
+                                .font(.system(size: 13.5))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            // 1az says "in Safari" and "Posting is not something the app
+                            // does". Neither holds here: AO3 links open in Browse, and the
+                            // app does post works. What stays true is where series are made.
+                            AccountExternalNavCard(
+                                title: "New series on AO3",
+                                systemImage: "square.stack.badge.plus",
+                                // Site-wide: AO3's New Series form is `/series/new`
+                                // (`AO3Client.newSeriesURL`), not under /users/<you>/.
+                                sitePath: "/series/new",
+                                isFormRow: true
+                            )
+                            .padding(.horizontal, -14)
+                            Text("Opens archiveofourown.org in Browse. Series are made there, not in the app.")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .cardRow()
-                    // 1az says "in Safari" and "Posting is not something the app
-                    // does". Neither holds here: AO3 links open in Browse, and the
-                    // app does post works. What stays true is where series are made.
-                    AccountExternalNavCard(
-                        title: "New series on AO3",
-                        systemImage: "square.stack.badge.plus",
-                        // Site-wide: AO3's New Series form is `/series/new`
-                        // (`AO3Client.newSeriesURL`), not under /users/<you>/.
-                        sitePath: "/series/new",
-                        footnote: "Opens archiveofourown.org in Browse. Series are made there, not in the app."
-                    )
+                    .cardRow(cornerRadius: 18)
                 } else {
                     AO3AuthorContentMessage(
                         model: model,

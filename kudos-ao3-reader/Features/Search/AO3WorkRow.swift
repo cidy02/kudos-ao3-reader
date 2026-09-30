@@ -345,7 +345,11 @@ struct AO3WorkRow: View {
     }
 
     private var statsRow: some View {
-        WorkListStatsRow(
+        // Same sparse-row rule as `ledgerMetadata`: AO3's full blurb always
+        // prints words, so without it missing engagement figures are unknown.
+        let isFullBlurb = work.words != nil
+        func count(_ value: Int?) -> Int? { value ?? (isFullBlurb ? 0 : nil) }
+        return WorkListStatsRow(
             rating: work.rating.isEmpty ? nil : work.rating,
             categories: work.categories,
             warnings: work.warnings,
@@ -353,10 +357,10 @@ struct AO3WorkRow: View {
             language: work.language,
             wordCount: work.words,
             chapters: work.chapters,
-            comments: work.comments,
-            kudos: work.kudos,
-            bookmarks: work.bookmarks,
-            hits: work.hits,
+            comments: count(work.comments),
+            kudos: count(work.kudos),
+            bookmarks: count(work.bookmarks),
+            hits: count(work.hits),
             // AO3WorkSummary carries only AO3's single revised date, rendered
             // separately by both presentations.
             isExpanded: expanded
