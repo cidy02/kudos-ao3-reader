@@ -106,6 +106,8 @@ struct TagSetView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         #if os(macOS)
         .navigationTitle("Tag set")
         #endif

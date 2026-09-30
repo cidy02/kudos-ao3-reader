@@ -107,6 +107,8 @@ struct ChallengeSignUpsView: View {
                 }
             }
             .cardList()
+            // Rows at their own padding, not the List minimum (L3-FORM-1).
+            .environment(\.defaultMinListRowHeight, 0)
             #if os(macOS)
             .navigationTitle("Sign-ups")
             #endif
@@ -522,6 +524,8 @@ private struct ChallengeSignUpDetailView: View {
             promptSections(signUp.offers, noun: "Offer")
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         #if os(macOS)
         .navigationTitle(signUp.pseud)
         #endif

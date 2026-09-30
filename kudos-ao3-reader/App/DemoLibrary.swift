@@ -411,6 +411,18 @@ final class DemoNetworkBlock: URLProtocol {
         ("comments", "ao3_comments_page"),
         ("^/works/\\d+", "ao3_work_bookmarked_subscribed"),
         ("edit_multiple", "ao3_edit_multiple"),
+        // Collections and challenges (task 5). Most specific first.
+        ("^/series/\\d+/edit", "ao3_series_edit"),
+        ("^/collections/[^/]+/signups/\\d+", "ao3_challenge_signup"),
+        ("^/collections/[^/]+/signups", "ao3_challenge_signups"),
+        ("^/collections/[^/]+/assignments", "ao3_challenge_assignments"),
+        ("^/collections/[^/]+/(gift_exchange|prompt_meme)", "ao3_challenge_settings"),
+        ("^/collections/[^/]+/items", "ao3_collection_items"),
+        ("^/collections/[^/]+/edit", "ao3_collection_edit"),
+        ("^/collections/[^/]+/works", "ao3_tag_works"),
+        ("^/collections/[^/]+/?$", "ao3_collection_show"),
+        ("^/users/[^/]+/collections", "ao3_collections_index"),
+        ("^/tag_sets/\\d+", "ao3_tag_set"),
         ("^/media/[^/]+/fandoms", "ao3_media_fandoms"),
         ("^/media/?$", "ao3_media"),
         // A works index has the same blurb markup wherever it is listed.

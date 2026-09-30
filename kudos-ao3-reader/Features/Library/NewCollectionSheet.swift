@@ -57,6 +57,8 @@ struct NewCollectionSheet: View {
                 }
             }
             .cardList()
+            // Rows at their own padding, not the List minimum (L3-FORM-1).
+            .environment(\.defaultMinListRowHeight, 0)
             .navigationTitle("New collection")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
@@ -249,6 +251,8 @@ struct CollectionReorderSheet: View {
                 }
             }
             .cardList()
+            // Rows at their own padding, not the List minimum (L3-FORM-1).
+            .environment(\.defaultMinListRowHeight, 0)
             .navigationTitle("Reorder works")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
