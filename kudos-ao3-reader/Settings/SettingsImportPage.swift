@@ -135,8 +135,6 @@ struct EPUBImportSettingsSection: View {
                         .foregroundStyle(.secondary)
                 }
             }
-        } header: {
-            Text("Import")
         } footer: {
             Text("Import EPUB, HTML, or text files — including zipped chapters — into your "
                 + "local Library. Anything that isn't already an EPUB is converted to one, "
