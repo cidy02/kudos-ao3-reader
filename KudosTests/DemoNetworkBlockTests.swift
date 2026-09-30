@@ -31,10 +31,15 @@ import Testing
         }
         #expect(route("/media") == "ao3_media")
         #expect(route("/media/TV%20Shows/fandoms") == "ao3_media_fandoms")
-        #expect(route("/tags/Doctor%20Who/works") == "ao3_author_works")
+        #expect(route("/tags/Doctor%20Who/works") == "ao3_tag_works")
 
         let url = try #require(Bundle(for: BundleAnchor.self).url(forResource: "ao3_media_fandoms", withExtension: "html"))
         let fandoms = AO3Client.parseFandomIndex(try String(contentsOf: url, encoding: .utf8))
         #expect(fandoms.count == 5)
+
+        let tag = try #require(Bundle(for: BundleAnchor.self).url(forResource: "ao3_tag_works", withExtension: "html"))
+        let page = try AO3Client.parseSearchPage(try String(contentsOf: tag, encoding: .utf8), page: 1)
+        #expect(!page.works.isEmpty)
+        #expect(page.summary?.total == 260_114)
     }
 }

@@ -285,7 +285,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     }
                                 )
                             )
-                            .bareListRow()
+                            // Its own gutters, like every page header: bareListRow's
+                            // card insets on top of them pushed it 26pt right of the cards.
+                            .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
 
