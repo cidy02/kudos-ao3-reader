@@ -611,7 +611,10 @@ private struct WorkStatusIconGridContent: View {
         // Apple Symbols containing it. Naming the font directly skips the
         // cascade and guarantees the glyph AO3's own icon set intends.
         Text(symbol)
-            .font(.custom("AppleSymbols", size: size))
+            // `fixedSize:` — `size` already carries the tile's Dynamic Type
+            // scale; `.custom(_:size:)` would scale it a second time, and at
+            // accessibility sizes the glyph outgrew its tile.
+            .font(.custom("AppleSymbols", fixedSize: size))
             .foregroundStyle(item.iconColor ?? .gray)
             .offset(y: size * verticalOffset)
     }

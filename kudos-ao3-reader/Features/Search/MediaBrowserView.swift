@@ -47,7 +47,7 @@ struct MediaBrowserView: View {
     @State private var expanded: Set<String> = []
     #endif
 
-    private enum Phase: Equatable { case loading, loaded, failed(String) }
+    private enum Phase: Equatable { case loading, loaded, failed(message: String, systemImage: String) }
 
     /// Whether the cards can be drawn complete — every category's counts are in,
     /// or `load`'s grace period has expired and we show what we have (names plus
@@ -66,18 +66,18 @@ struct MediaBrowserView: View {
             switch phase {
             case .loading:
                 CategoryCardSkeletonList()
-            case let .failed(message):
+            case let .failed(message, systemImage):
                 #if os(iOS)
                 // Jump Back In is local: an AO3 failure must not take it away
                 // with the categories (LOOP-v3, offline Browse).
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         jumpBackInSection
-                        loadFailure(message).padding(.top, 24)
+                        loadFailure(message, systemImage: systemImage).padding(.top, 24)
                     }
                 }
                 #else
-                loadFailure(message)
+                loadFailure(message, systemImage: systemImage)
                 #endif
             case .loaded:
                 // The names arrive a whole round of requests before the counts
@@ -93,9 +93,9 @@ struct MediaBrowserView: View {
         .task(id: statsToken) { await recomputeStats() }
     }
 
-    private func loadFailure(_ message: String) -> some View {
+    private func loadFailure(_ message: String, systemImage: String) -> some View {
         ContentUnavailableView {
-            Label("Couldn't load fandoms", systemImage: "wifi.slash")
+            Label("Couldn't load fandoms", systemImage: systemImage)
         } description: {
             Text(message)
         } actions: {
@@ -851,10 +851,11 @@ struct MediaBrowserView: View {
             // Fill in per-category fandom counts/lists in the background; the cards
             // update as each lands.
             await catalog.loadMissing(for: categories)
-        } catch let error as AO3Error {
-            phase = .failed(error.errorDescription ?? "Something went wrong.")
         } catch {
-            phase = .failed(UserFacingError.message(for: error))
+            phase = .failed(
+                message: UserFacingError.message(for: error),
+                systemImage: UserFacingError.systemImage(for: error)
+            )
         }
     }
 
@@ -867,15 +868,12 @@ struct MediaBrowserView: View {
             // keeps existing counts if an individual category request fails.
             let visible = loaded.filter { visibleCategoryIDs.contains($0.id) }
             await catalog.refresh(visible.isEmpty ? Array(loaded.prefix(4)) : visible)
-        } catch let error as AO3Error {
-            if categories.isEmpty {
-                phase = .failed(error.errorDescription ?? "Something went wrong.")
-            } else {
-                Log.network.notice("Browse refresh failed: \(error.localizedDescription, privacy: .public)")
-            }
         } catch {
             if categories.isEmpty {
-                phase = .failed(UserFacingError.message(for: error))
+                phase = .failed(
+                    message: UserFacingError.message(for: error),
+                    systemImage: UserFacingError.systemImage(for: error)
+                )
             } else {
                 Log.network.notice("Browse refresh failed: \(error.localizedDescription, privacy: .public)")
             }
