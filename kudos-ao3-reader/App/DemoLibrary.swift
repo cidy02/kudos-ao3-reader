@@ -244,6 +244,12 @@ enum DebugLaunchRoute {
     /// Appends by concrete type — navigation matches destinations by type, so
     /// an `AnyHashable` would find none.
     static func applyAccount(to path: inout NavigationPath) {
+        // `acct:ao3collection:<slug>` — an AO3 collection's page (fixture-served).
+        if let value, value.hasPrefix("acct:ao3collection:") {
+            let slug = String(value.dropFirst("acct:ao3collection:".count))
+            path.append(AO3CollectionDestination(slug: slug, title: slug))
+            return
+        }
         switch accountTarget() {
         case let route as AccountView.Route: path.append(route)
         case let kind as AO3AccountWorksList.Kind: path.append(kind)
