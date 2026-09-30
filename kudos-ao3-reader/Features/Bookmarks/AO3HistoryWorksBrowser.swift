@@ -141,7 +141,8 @@ struct AO3HistoryWorksBrowser: View {
                 Button(role: .destructive) {
                     onDelete(entry)
                 } label: {
-                    Label("Delete", systemImage: "trash")
+                    // 1t: names what is deleted — the history entry, not the work.
+                    Label("Delete from history", systemImage: "trash")
                 }
             }
         }
