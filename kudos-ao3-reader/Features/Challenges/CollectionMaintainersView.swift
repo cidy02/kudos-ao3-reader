@@ -186,7 +186,7 @@ struct CollectionMaintainersView: View {
                 maintainerRow(
                     participant: owner,
                     roleText: "Owner",
-                    subtitleText: isCurrentAuthor(owner.pseud) ? "You · created the collection" : "Owner"
+                    subtitleText: isCurrentAuthor(owner.pseud) ? "You · created the collection" : nil
                 )
             }
         }
@@ -212,7 +212,7 @@ struct CollectionMaintainersView: View {
     private func maintainerRow(
         participant: AO3CollectionParticipant,
         roleText: String,
-        subtitleText: String
+        subtitleText: String?
     ) -> some View {
         HStack(spacing: 11) {
             avatarCircle(for: participant.pseud)
@@ -222,9 +222,11 @@ struct CollectionMaintainersView: View {
                     .font(.system(size: 15))
                     .foregroundStyle(.primary)
 
-                Text(subtitleText)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                if let subtitleText {
+                    Text(subtitleText)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

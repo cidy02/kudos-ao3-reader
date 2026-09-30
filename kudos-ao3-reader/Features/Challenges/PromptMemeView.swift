@@ -204,7 +204,7 @@ struct PromptMemeView: View {
     @ViewBuilder
     private var contentSections: some View {
         Section {
-            SectionRuleHeader(title: "Prompts", count: filteredPrompts.count)
+            SectionRuleHeader(title: filterSelection.rawValue, count: filteredPrompts.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
 
             if filteredPrompts.isEmpty {
@@ -343,17 +343,20 @@ struct PromptMemeView: View {
                         .font(.system(size: 11, weight: .semibold))
                 }
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
             }
             .foregroundStyle(isProminent ? palette.accentOnFill : palette.accent)
-            .padding(.horizontal, 16)
-            .frame(height: 32)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
             .background(
                 Capsule().fill(isProminent ? palette.accent : palette.accent.opacity(0.14))
             )
         }
         .buttonStyle(.plain)
         .disabled(isInFlight || promptInFlight != nil)
+        .layoutFreeHitTarget {
+            if !isInFlight, promptInFlight == nil { action() }
+        }
     }
 
     private var emptyFilteredCard: some View {
