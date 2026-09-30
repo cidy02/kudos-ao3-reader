@@ -1022,7 +1022,7 @@ enum WorkStat {
     static func ratingColor(_ rating: String) -> Color? {
         switch rating {
         case "General Audiences": .green
-        case "Teen And Up Audiences": .yellow
+        case "Teen And Up Audiences": teenYellow
         case "Mature": .orange
         case "Explicit": .red
         // Explicitly gray rather than nil: falling through to `.tint` painted
@@ -1033,6 +1033,22 @@ enum WorkStat {
         default: nil
         }
     }
+
+    /// System yellow on its own 30% tint over a light card is ~1.3:1 — the "T"
+    /// all but vanished in Light and Sepia. Light appearances get a dark mustard
+    /// (~4.5:1 there); Dark and OLED keep the system yellow.
+    private static let teenYellow: Color = {
+        #if os(iOS)
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? .systemYellow : UIColor(red: 0.55, green: 0.40, blue: 0, alpha: 1)
+        })
+        #else
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? .systemYellow : NSColor(red: 0.55, green: 0.40, blue: 0, alpha: 1)
+        })
+        #endif
+    }()
 
     /// AO3's own category color coding (a small colored badge per
     /// relationship-category tag, e.g. F/F, Gen, Multi). SF Symbols has no
