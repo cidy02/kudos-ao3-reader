@@ -145,7 +145,7 @@ struct PromptMemeView: View {
         } label: {
             Text("New prompt")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(palette.accentOnFill)
+                .foregroundStyle(palette.labelOnAccent)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.accent))
@@ -345,7 +345,7 @@ struct PromptMemeView: View {
                 Text(title)
                     .font(.system(size: 12.5, weight: .semibold))
             }
-            .foregroundStyle(isProminent ? palette.accentOnFill : palette.accent)
+            .foregroundStyle(isProminent ? palette.labelOnAccent : palette.accent)
             .padding(.horizontal, 14)
             .frame(height: 34)
             .background(

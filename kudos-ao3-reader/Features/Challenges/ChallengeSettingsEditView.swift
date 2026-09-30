@@ -590,11 +590,11 @@ struct ChallengeSettingsEditView: View {
                 if isSaving {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(palette.accentOnFill)
+                        .tint(palette.labelOnAccent)
                 }
                 Text("Save changes")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(palette.accentOnFill)
+                    .foregroundStyle(palette.labelOnAccent)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 44)
