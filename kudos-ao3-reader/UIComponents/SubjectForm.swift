@@ -239,44 +239,37 @@ struct SubjectFormRow<Trailing: View>: View {
     }
 
     private var rowContent: some View {
-        // Written as a statement rather than a ternary inside `frame`: the
-        // argument is `CGFloat?` and the branches are `.infinity` and `nil`,
-        // which is exactly the shape that makes the type checker work for it.
-        var labelWidth: CGFloat?
-        // `.control`'s trailing content "takes the remaining width", as the
-        // arrangement promises — which it did not: a hidden-label `Toggle`, a
-        // menu `Picker` or a `Menu` label is intrinsically sized, so with the
-        // label hugging too the whole row hugged. Inside a panel whose
-        // separators stretch it, the VStack then CENTRED the row (New
-        // collection's two toggles sat mid-card, out of line with each other);
-        // a lone row shrank the panel to fit (New queue's Offline card).
-        // Expanding controls — a trailing-aligned `TextField`, a segmented
-        // picker — already filled the width, so this changes nothing for them.
-        if arrangement == .value {
-            labelWidth = .infinity
-        }
-        let labelHugs: Bool = arrangement == .control
-        return HStack(spacing: arrangement.horizontalGap) {
-            (isRequired ? Text("\(label) \(Text("∗").foregroundStyle(.tint))") : Text(label))
+        HStack(spacing: arrangement.horizontalGap) {
+            let labelText = (isRequired ? Text("\(label) \(Text("∗").foregroundStyle(.tint))") : Text(label))
                 .font(.system(size: 15))
                 .foregroundStyle(isDestructive ? Color.red : .primary)
                 .accessibilityLabel(isRequired ? "\(label), required" : label)
-                .frame(maxWidth: labelWidth, alignment: .leading)
-                .fixedSize(horizontal: labelHugs, vertical: false)
 
-            // `.control` only. Wrapped so a multi-view `trailing` is framed as
-            // one group, with the gap the outer stack gave it. `.value` keeps
-            // the bare closure, byte-identical to before: an
-            // `HStack { EmptyView() }` would be a real zero-width child that the
-            // outer stack spaces, taking 10pt of label width from the three
-            // disclosure-only rows whose trailing is `EmptyView`.
             if arrangement == .control {
+                // `.control`'s trailing content "takes the remaining width", as
+                // the arrangement promises. A hidden-label `Toggle`, a menu
+                // `Picker` or a `Menu` label is intrinsically sized, so with the
+                // label hugging too the whole row hugged, and a panel CENTRED it
+                // (New collection's toggles) or shrank to fit (New queue's
+                // Offline card). Wrapped so a multi-view `trailing` is framed as
+                // one group, with the gap the outer stack gave it.
+                labelText
+                    .fixedSize(horizontal: true, vertical: false)
                 HStack(spacing: arrangement.horizontalGap) {
                     trailing()
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             } else {
+                // Spec: the label keeps its natural width and the value takes
+                // the rest (`flex:none` / `flex:1;min-width:0`). Two flexible
+                // children split the line in half instead, which cut "8 matched,
+                // 4 unmatched" short beside a one-word label. A long label (a
+                // user's title) still wraps rather than running off the panel.
+                labelText
+                    .layoutPriority(2)
                 trailing()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .layoutPriority(1)
             }
 
             if showsDisclosure {

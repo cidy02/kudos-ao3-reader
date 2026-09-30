@@ -58,6 +58,7 @@ struct PromptTagsEditorView: View {
                 }
             }
             .cardList()
+            .environment(\.defaultMinListRowHeight, 0)
             #if os(macOS)
             .navigationTitle(isOffer ? "Offer Tags" : "Request Tags")
             #endif

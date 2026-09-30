@@ -393,16 +393,6 @@ struct AO3CollectionDetailView: View {
         return rows
     }
 
-    /// One pushable row that draws its own chevron, with the link in the
-    /// background so `List` adds no second one.
-    private func manageRow<Destination: View>(
-        _ label: String,
-        @ViewBuilder destination: @escaping () -> Destination
-    ) -> some View {
-        SubjectFormRow(label: label, showsDisclosure: true) { EmptyView() }
-            .subjectRowNavigation(accessibilityLabel: label, destination: destination)
-    }
-
     // MARK: Chrome
 
     private var loadingRow: some View {
@@ -646,5 +636,24 @@ struct AO3CollectionPersonRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .subjectCard(palette: palette)
+    }
+}
+
+extension AO3CollectionDetailView {
+    /// One pushable row that draws its own chevron, with the link in the
+    /// background so `List` adds no second one.
+    private func manageRow<Destination: View>(
+        _ label: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        SubjectFormRow(label: label, showsDisclosure: true) { EmptyView() }
+            .subjectRowNavigation(accessibilityLabel: label, destination: destination)
+            #if DEBUG
+            .background {
+                if DebugLaunchRoute.manageRow == label {
+                    Color.clear.navigationDestination(isPresented: .constant(true), destination: destination)
+                }
+            }
+            #endif
     }
 }

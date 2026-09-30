@@ -206,6 +206,9 @@ enum DebugLaunchRoute {
     static var value: String? { UserDefaults.standard.string(forKey: "KudosDebugRoute") }
     /// `-KudosDebugOpenFilters YES`: the routed screen opens its filter panel.
     static var opensFilters: Bool { UserDefaults.standard.bool(forKey: "KudosDebugOpenFilters") }
+    /// `-KudosDebugManageRow <label>` with `acct:ao3collection:<slug>`: opens
+    /// that Manage row (Maintainers, Moderation, Challenge Settings, Prompts…).
+    static var manageRow: String? { UserDefaults.standard.string(forKey: "KudosDebugManageRow") }
 
     static func applyTab(_ router: AppRouter) {
         guard let value else { return }

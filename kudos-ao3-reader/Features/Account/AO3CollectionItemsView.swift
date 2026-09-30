@@ -145,7 +145,7 @@ struct AO3CollectionItemsView: View {
                     Section { loadingRow.pageBodyRow(top: 20, gutter: SubjectMetrics.accountGutter) }
                 case let .failed(message) where displayedItems.isEmpty:
                     Section {
-                        errorCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                        failureCard(message).pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
                     }
                 case let .failed(message):
                     Section {
@@ -361,6 +361,28 @@ struct AO3CollectionItemsView: View {
             ProgressView()
             Spacer()
         }
+    }
+
+    /// The challenge screens' failure card: the page keeps its chrome and offers
+    /// "Try Again" (T-320).
+    private func failureCard(_ message: String) -> some View {
+        VStack(spacing: 8) {
+            Text("Couldn't load collection items")
+                .font(.system(size: 15, weight: .semibold))
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Try Again") {
+                Task { await load(page: currentPage, replacing: true) }
+            }
+            .buttonStyle(.bordered)
+            .tint(palette.tint)
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .subjectPanel()
     }
 
     private func errorCard(_ message: String) -> some View {
