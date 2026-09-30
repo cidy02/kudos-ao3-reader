@@ -11,7 +11,7 @@ struct AuthorProfileView: View {
     @State private var expandAll = false
     /// Per-screen, like Home's and Library's section lists. This screen drew its
     /// rows from the *layout* before, so Ledger and Detailed were unreachable.
-    @AppStorage("authorProfile.displayMode") private var displayMode: WorkListDisplayMode = .detailed
+    @AppStorage("authorProfile.displayMode") private var displayMode: WorkListDisplayMode = .ledger
     @State private var bulkSelection = RemoteWorkSelectionController()
     /// 1bn: pushed rather than presented, so the bulk form gets a real back stack.
     @State private var isBulkEditing = false
@@ -258,6 +258,7 @@ private extension AuthorProfileView {
                     header: header,
                     route: model.route,
                     expandAll: expandAll,
+                    displayMode: displayMode,
                     onSeeAll: { dashboardDestination = $0 }
                 )
             } else {
@@ -796,7 +797,8 @@ private extension AuthorProfileView {
                 }
             }
             if showsDashboard || (!currentContentIsEmpty && model.selectedTab != .about) {
-                DisplayModeMenuPicker(mode: $displayMode)
+                // A List page: no cover grid (1u / 1w draw the ledger).
+                DisplayModeMenuPicker(mode: $displayMode, modes: [.ledger, .detailed])
                 // Expand All acts on cards, so it has nothing to do in Compact.
                 if displayMode != .compact {
                     ExpandAllMenuItem(expandAll: $expandAll)
