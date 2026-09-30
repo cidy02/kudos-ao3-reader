@@ -302,8 +302,13 @@ private extension AuthorProfileView {
     private var accountSubtitle: String? {
         if showsDashboard {
             // Joined lives on About, not this page. Don't fetch a profile just
-            // for the artboard's date, or invent pseud/invitation totals.
-            return model.route.pseud.map { _ in "Pseud of \(model.route.username)" }
+            // for the artboard's date, or invent invitation totals. Pseuds are
+            // already parsed on the dashboard header, so that count is real.
+            var parts = model.route.pseud.map { _ in ["Pseud of \(model.route.username)"] } ?? []
+            if let count = model.header?.pseuds.count, count > 1 {
+                parts.append("\(count) pseuds")
+            }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
         // AO3AccountListCountsCache holds the count for the plain works index.
         // Under "In collections" or "Gifts" the list on screen is a different
@@ -694,13 +699,36 @@ private extension AuthorProfileView {
     }
 
     private func failedProfileView(_ message: String) -> some View {
-        ContentUnavailableView {
-            Label("Couldn't load author", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button("Try Again") { model.retry(auth: auth) }
-            Button("Open on AO3") { router.open(model.route.dashboardURL) }
+        List {
+            Section { failureHeader }
+            Section {
+                AO3ProfileMessageRow(
+                    title: "Couldn't load author",
+                    systemImage: model.headerFailureSystemImage,
+                    message: message,
+                    actionTitle: "Try Again",
+                    action: { model.retry(auth: auth) }
+                )
+                .cardRow()
+            }
+        }
+        .cardList()
+        .subjectScreenWash(palette: theme.scopePalette)
+    }
+
+    @ViewBuilder
+    private var failureHeader: some View {
+        if usesAccountHeader {
+            accountHeader
+        } else {
+            SubjectHeaderBlock(
+                kicker: "AO3 Author",
+                title: model.route.displayName,
+                subtitle: model.route.pseud.map { _ in "Pseud of \(model.route.username)" },
+                palette: theme.scopePalette,
+                gutter: SubjectMetrics.accountGutter
+            )
+            .pageBodyRow(top: 16, gutter: 0)
         }
     }
 

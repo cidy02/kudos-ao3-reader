@@ -5,6 +5,7 @@ import SwiftUI
 /// this view — no tint, no "All N tags" marker.
 struct FandomFamilyBlock: View {
     let family: FandomFamily
+    let sort: FandomFamilySort
     var palette: SubjectPalette
     var onSelectFamily: () -> Void
     var onSelectMember: (FandomFamily.Member) -> Void
@@ -21,7 +22,7 @@ struct FandomFamilyBlock: View {
             .workCardZoomSource(BrowseZoomKey.fandom(family.zoomKey), in: zoomNamespace)
 
             memberList
-                .padding(.leading, 21)
+                .padding(.leading, 35)
                 .overlay(alignment: .leading) {
                     Rectangle()
                         .fill(palette.accent.opacity(0.32))
@@ -55,16 +56,18 @@ struct FandomFamilyBlock: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .trailing, spacing: 3) {
-                HStack(spacing: 5) {
-                    Text(countLabel)
-                        .font(.footnote.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                    Image(systemName: "doc.text")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                if sort == .familyTotal {
+                    HStack(spacing: 5) {
+                        Text(countLabel)
+                            .font(.footnote.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.primary)
+                        Image(systemName: "doc.text")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel(countAccessibilityLabel)
                 }
-                .accessibilityLabel(countAccessibilityLabel)
 
                 Text("All \(family.memberCount) tags")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))

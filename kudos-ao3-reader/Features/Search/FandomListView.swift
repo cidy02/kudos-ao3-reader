@@ -42,7 +42,7 @@ struct FandomListView: View {
     /// started (grouping is the slow side) is dropped, so a later toggle wins.
     @State private var rebuildGeneration = 0
 
-    private enum Phase: Equatable { case loading, loaded, failed(String) }
+    private enum Phase: Equatable { case loading, loaded, failed(String, String) }
 
     private struct FamilySearchEntry: Sendable {
         let family: FandomFamily
@@ -98,14 +98,8 @@ struct FandomListView: View {
             switch phase {
             case .loading:
                 FandomRowSkeletonList()
-            case let .failed(message):
-                ContentUnavailableView {
-                    Label("Couldn't load fandoms", systemImage: "wifi.slash")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try Again") { Task { await load() } }
-                }
+            case let .failed(message, systemImage):
+                failureList(message: message, systemImage: systemImage)
             case .loaded:
                 loadedList
             }
@@ -164,15 +158,7 @@ struct FandomListView: View {
             // redesigned pushed page has it (1al); the wash below empties the
             // navigation title so the name is not printed twice.
             Section {
-                SubjectHeaderBlock(
-                    kicker: "Browse",
-                    title: category.name,
-                    subtitle: headerTally,
-                    palette: palette
-                )
-                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                pageHeader
             }
 
             Section {
@@ -249,6 +235,36 @@ struct FandomListView: View {
         }
     }
 
+    private var pageHeader: some View {
+        SubjectHeaderBlock(
+            kicker: "Browse",
+            title: category.name,
+            subtitle: headerTally,
+            palette: palette
+        )
+        .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    private func failureList(message: String, systemImage: String) -> some View {
+        List {
+            Section { pageHeader }
+            Section {
+                AO3ProfileMessageRow(
+                    title: "Couldn't load fandoms",
+                    systemImage: systemImage,
+                    message: message,
+                    actionTitle: "Try Again",
+                    action: { Task { await load() } }
+                )
+                .cardRow()
+            }
+        }
+        .cardList()
+        .subjectScreenWash(palette: palette)
+    }
+
     @ViewBuilder
     private func familyRow(_ family: FandomFamily) -> some View {
         if family.memberCount == 1, let member = family.members.first {
@@ -263,6 +279,7 @@ struct FandomListView: View {
         } else {
             FandomFamilyBlock(
                 family: family,
+                sort: sort,
                 palette: palette,
                 onSelectFamily: {
                     onSelect(family.includedFilterNames, family.parsedTitle)
@@ -325,13 +342,19 @@ struct FandomListView: View {
             phase = .loaded
         } catch let error as AO3Error {
             if fandoms.isEmpty {
-                phase = .failed(error.errorDescription ?? "Something went wrong.")
+                phase = .failed(
+                    UserFacingError.message(for: error),
+                    UserFacingError.systemImage(for: error)
+                )
             } else {
                 Log.network.notice("Fandom list refresh failed: \(error.localizedDescription, privacy: .public)")
             }
         } catch {
             if fandoms.isEmpty {
-                phase = .failed(UserFacingError.message(for: error))
+                phase = .failed(
+                    UserFacingError.message(for: error),
+                    UserFacingError.systemImage(for: error)
+                )
             } else {
                 Log.network.notice("Fandom list refresh failed: \(error.localizedDescription, privacy: .public)")
             }
