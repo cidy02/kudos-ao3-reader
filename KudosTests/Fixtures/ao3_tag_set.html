@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Exchange Tags</title><meta name="csrf-token" content="csrf-tags"></head>
+<body>
+<h2 class="heading">Exchange Tags</h2>
+<form action="/tag_sets/9" method="post">
+  <input type="hidden" name="_method" value="put">
+  <input name="owned_tag_set[tag_set_attributes][fandom_tagnames_to_add]" value="SW, Trek">
+  <input name="owned_tag_set[tag_set_attributes][character_tagnames_to_add]" value="Leia">
+  <input name="owned_tag_set[tag_set_attributes][relationship_tagnames_to_add]" value="Leia/Han">
+  <input name="owned_tag_set[tag_set_attributes][freeform_tagnames_to_add]" value="Hurt/Comfort">
+  <input name="owned_tag_set[fandom_nomination_limit]" value="2">
+  <input name="owned_tag_set[character_nomination_limit]" value="3">
+  <input name="owned_tag_set[relationship_nomination_limit]" value="3">
+  <input name="owned_tag_set[freeform_nomination_limit]" value="5">
+</form>
+<ul>
+  <li class="nomination">fandom unreviewed Star Wars</li>
+  <li class="nomination">character approved Leia Organa</li>
+  <li class="nomination">freeform rejected Crack</li>
+</ul>
+</body>
+</html>
