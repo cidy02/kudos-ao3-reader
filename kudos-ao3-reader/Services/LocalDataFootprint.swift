@@ -37,7 +37,12 @@ nonisolated struct LocalStorageFootprint: Sendable, Equatable {
     /// The spec's `412 MB`. `.file` rather than `.memory` so the units match
     /// what iOS Settings reports for the same bytes.
     static func formatted(bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: max(0, bytes), countStyle: .file)
+        // Numeric zero ("0 bytes"), not the spelled-out "Zero KB"; the format
+        // style would fix that too but writes "kB" where iOS Settings says "KB".
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowsNonnumericFormatting = false
+        return formatter.string(fromByteCount: max(0, bytes))
     }
 }
 

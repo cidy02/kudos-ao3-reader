@@ -40,6 +40,7 @@ enum ReaderContentsSegment: String, CaseIterable, Identifiable {
 /// Contents / Bookmarks / Highlights, segmented. All three navigate by tapping a
 /// row; annotations additionally swipe to delete.
 struct ReaderContentsSheet: View {
+    @Environment(ThemeManager.self) private var theme
     @Binding var segment: ReaderContentsSegment
     let sections: [ReaderSection]
     let bookmarks: [ReadingAnnotation]
@@ -133,7 +134,7 @@ struct ReaderContentsSheet: View {
                     } label: {
                         Label("Go", systemImage: "arrow.forward.circle")
                     }
-                    .tint(.accentColor)
+                    .tint(theme.effectiveTint)
 
                     // Bookmark and Add Note both anchor to the chapter's first
                     // Readium position, which arrives asynchronously *after*

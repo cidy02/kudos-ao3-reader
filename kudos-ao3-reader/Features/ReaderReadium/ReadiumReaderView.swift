@@ -286,6 +286,8 @@ struct ReadiumReaderView: View {
                     deleteAnnotation(annotation)
                     refreshHighlightDecorations()
                 }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
                 .preferredColorScheme(readerTheme.colorScheme)
             }
             // Title pill → work details as a *sheet*, not a navigation push.

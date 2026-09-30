@@ -459,7 +459,7 @@ struct ReadingQueueStorageView: View {
     }
 
     private func byteString(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        queueByteCountString(bytes)
     }
 }
 

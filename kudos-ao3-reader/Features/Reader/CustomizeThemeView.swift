@@ -183,7 +183,7 @@ struct CustomizeThemeView: View {
                     .frame(width: 54, height: 54)
                     .overlay {
                         Circle().strokeBorder(
-                            selected ? Color.accentColor : Color.primary.opacity(0.12),
+                            selected ? themeManager.effectiveTint : Color.primary.opacity(0.12),
                             lineWidth: selected ? 3 : 1
                         )
                     }
@@ -198,7 +198,7 @@ struct CustomizeThemeView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 16))
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color.accentColor)
+                            .foregroundStyle(.white, themeManager.effectiveTint)
                     }
                 }
                 // Keeps the badge from crowding the neighbouring swatch.
