@@ -1037,5 +1037,5 @@ func queueWorkFileSize(_ url: URL) -> Int64 {
 }
 
 func queueByteCountString(_ bytes: Int64) -> String {
-    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    LocalStorageFootprint.formatted(bytes: bytes)
 }
