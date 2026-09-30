@@ -433,6 +433,8 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/collections/[^/]+/(gift_exchange|prompt_meme)", "ao3_challenge_settings"),
         ("^/collections/[^/]+/items", "ao3_collection_items"),
         ("^/collections/[^/]+/participants", "ao3_collection_participants"),
+        // The profile page carries the same Tag Set list as the show page.
+        ("^/collections/[^/]+/profile", "ao3_collection_show"),
         ("^/collections/[^/]+/edit", "ao3_collection_edit"),
         ("^/collections/[^/]+/works", "ao3_tag_works"),
         ("^/collections/[^/]+/?$", "ao3_collection_show"),

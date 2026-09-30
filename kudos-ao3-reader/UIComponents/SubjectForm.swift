@@ -265,10 +265,12 @@ struct SubjectFormRow<Trailing: View>: View {
                 // children split the line in half instead, which cut "8 matched,
                 // 4 unmatched" short beside a one-word label. A long label (a
                 // user's title) still wraps rather than running off the panel.
+                // The spacer keeps a row with no value (`EmptyView`, a link row)
+                // full width, chevron at the edge.
                 labelText
                     .layoutPriority(2)
+                Spacer(minLength: 0)
                 trailing()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
                     .layoutPriority(1)
             }
 
