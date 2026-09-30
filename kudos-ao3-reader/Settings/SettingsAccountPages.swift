@@ -39,8 +39,6 @@ struct SettingsPrivacyPage: View {
                 NavigationLink(value: SettingsRoute.privacy) {
                     Label("Privacy & Local Data", systemImage: "hand.raised")
                 }
-            } header: {
-                Text("Privacy")
             } footer: {
                 Text(hideMatureContent
                     ? (matureMode == .hide
@@ -108,8 +106,6 @@ private struct AboutSettingsSection: View {
                     Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
             }
-        } header: {
-            Text("About")
         } footer: {
             // 1ab's closing line. The last sentence is the one worth stating:
             // the accent chosen on the Appearance page is what tints the Account
@@ -155,8 +151,6 @@ private struct AO3AccountSettingsSection: View {
                     Label("Log In to AO3…", systemImage: "person.badge.key")
                 }
             }
-        } header: {
-            Text("AO3 Account")
         } footer: {
             if let notice = auth.noticeMessage {
                 Text(notice)

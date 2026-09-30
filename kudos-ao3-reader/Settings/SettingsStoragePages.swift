@@ -15,8 +15,6 @@ struct SettingsDownloadsPage: View {
             Section {
                 Toggle("Download on subscribe", isOn: $downloadOnSubscribe)
                 StorageUsedRow()
-            } header: {
-                Text("Downloads")
             } footer: {
                 Text("Applies to works already in your library without "
                     + "their EPUB. Privacy and local data breaks storage "
@@ -37,8 +35,6 @@ struct SettingsPreservationPage: View {
                 } label: {
                     Label("Check Availability…", systemImage: "arrow.triangle.2.circlepath")
                 }
-            } header: {
-                Text("Preservation")
             } footer: {
                 // Deliberately a button, never a background task: it is one AO3
                 // request per work and AO3 offers no "what changed" feed, so the
@@ -63,8 +59,6 @@ struct SettingsLibraryPage: View {
             Section {
                 Toggle("Confirm before deleting", isOn: $confirmBeforeDelete)
                 Toggle("Show zero counts", isOn: $showsZeroStats)
-            } header: {
-                Text("Library")
             } footer: {
                 Text(
                     """
@@ -147,8 +141,6 @@ struct SettingsReadingQueuesPage: View {
                         }
                     }
                 }
-            } header: {
-                Text("Reading Queues")
             } footer: {
                 Text("Saved for Later keeps a local EPUB. Series preservation asks first "
                     + "unless this option is enabled and the series is within the limit.")

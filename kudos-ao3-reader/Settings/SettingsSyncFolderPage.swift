@@ -213,8 +213,6 @@ struct FolderSyncSettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        } header: {
-            Text("Library Sync Folder")
         } footer: {
             Text(persistenceStatus.detail + " Your library data — including reading history — is written "
                 + "to the folder you choose. If that folder is in iCloud Drive, Apple syncs it to your "

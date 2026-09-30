@@ -497,8 +497,6 @@ struct BackupSettingsSection: View {
                     .progressViewStyle(.linear)
                     .accessibilityLabel(isImporting ? "Importing backup" : "Preparing backup")
             }
-        } header: {
-            Text("Backup")
         } footer: {
             Text("Backups include Library records, Reading Queues, preserved EPUBs, "
                 + "User Tags, saved links, custom fonts, and app settings. Import "
