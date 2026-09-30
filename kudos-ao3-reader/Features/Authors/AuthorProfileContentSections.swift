@@ -329,7 +329,10 @@ struct AO3AuthorWorksSection: View {
                         AO3AuthorWorkCard(
                             entry: entry,
                             expandAll: expandAll,
-                            usesLedger: layout != .scroll,
+                            // The chosen mode, not the layout: the list layout drew
+                            // ledger whatever the reader picked (Detailed did nothing).
+                            // Compact on a list host has no grid, so it stays ledger.
+                            usesLedger: displayMode != .detailed,
                             showsPerformance: showsPerformance
                         )
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -516,7 +519,7 @@ struct AO3AuthorSeriesSection: View {
                     // elsewhere — and this screen had no picker at all until now.
                     AO3SeriesRow(
                         series: series,
-                        presentation: displayMode == .ledger ? .ledger : .standard
+                        presentation: displayMode == .detailed ? .standard : .ledger
                     )
                         .cardNavigation(to: series, accessibilityLabel: series.title)
                         .cardRow()
