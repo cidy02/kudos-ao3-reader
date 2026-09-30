@@ -5,13 +5,27 @@ import Testing
 struct WorkStatLabelTests {
     @Test func ratingColorMatchesAO3sOwnCoding() {
         #expect(WorkStat.ratingColor("General Audiences") == .green)
-        #expect(WorkStat.ratingColor("Teen And Up Audiences") == .yellow)
         #expect(WorkStat.ratingColor("Mature") == .orange)
         #expect(WorkStat.ratingColor("Explicit") == .red)
         // Gray, not nil — nil falls through to the app's red accent tint, which
         // would make an unrated work look like the most severe rating.
         #expect(WorkStat.ratingColor("Not Rated") == .gray)
         #expect(WorkStat.ratingColor("") == nil)
+    }
+
+    /// Teen is yellow, but a dark mustard in light appearances: system yellow on its
+    /// own tint over a light card was ~1.3:1 and the "T" vanished (L3-TH-4).
+    @Test func teenRatingDarkensInLightAppearances() throws {
+        let teen = try #require(WorkStat.ratingColor("Teen And Up Audiences"))
+        #if os(iOS)
+        let dynamic = UIColor(teen)
+        let light = dynamic.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
+        let dark = dynamic.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
+        #expect(dark == UIColor.systemYellow.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        light.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #expect(red < 0.6 && green < 0.45)
+        #endif
     }
 
     @Test func ratingNameShortensKnownAO3Ratings() {
