@@ -85,6 +85,8 @@ struct WorkCollectionsGiftsView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette)
         #if os(macOS)
         .navigationTitle("Collections and gifts")
@@ -411,6 +413,8 @@ struct WorkSeriesPickerView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette)
         #if os(macOS)
         .navigationTitle("Series")
@@ -547,6 +551,8 @@ struct WorkCreatorsPickerView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .navigationTitle("Co-creators")
         .subjectScreenWash(palette: palette)
     }
@@ -655,6 +661,8 @@ struct WorkParentWorkPickerView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .navigationTitle("Inspired by")
         .subjectScreenWash(palette: palette)
     }

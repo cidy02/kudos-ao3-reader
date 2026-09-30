@@ -41,9 +41,6 @@ nonisolated enum SubjectHueSwatches {
 /// predates this is in.
 struct SubjectHueSwatchRow: View {
     @Binding var selection: Double?
-    /// Drawn with a ring when nothing is chosen, so "derived from the name" is a
-    /// visible state rather than an absence.
-    var fallbackHue: Double
 
     @Environment(ThemeManager.self) private var themeManager
 

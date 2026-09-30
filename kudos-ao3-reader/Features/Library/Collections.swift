@@ -232,8 +232,7 @@ struct CollectionDetailView: View {
                         collection.markModified()
                         context.saveBestEffort(reason: "Saving collection colour failed")
                     }
-                ),
-                fallbackHue: collection.displayHue
+                )
             )
         } header: {
             SubjectFieldLabel(text: "Colour", style: .formGroup)

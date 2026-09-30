@@ -39,6 +39,10 @@ struct NewCollectionSheet: View {
                         .pageBodyRow(top: 18, gutter: SubjectMetrics.gutter)
                     collectionPanel
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
+                    footnote(hue == nil
+                        ? "Without a colour, the collection takes one from its name — and "
+                            + "changes it if you rename it."
+                        : "Set once, so renaming the collection keeps its colour.")
                 }
 
                 Section {
@@ -93,12 +97,7 @@ struct NewCollectionSheet: View {
                     .multilineTextAlignment(.trailing)
             }
             SubjectRowSeparator()
-            // The ring shows "derived from the name" as a visible state, so the
-            // fallback has to be the hue that name would actually produce.
-            SubjectHueSwatchRow(
-                selection: $hue,
-                fallbackHue: CoverArt.hue(for: trimmedName)
-            )
+            SubjectHueSwatchRow(selection: $hue)
             // The row insets `SubjectFormRow` gives the labels above it, so the
             // first swatch lines up under "Name" instead of touching the card.
             .padding(.horizontal, 14)
