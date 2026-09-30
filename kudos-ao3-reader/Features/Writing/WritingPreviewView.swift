@@ -54,6 +54,8 @@ struct WritingPreviewView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .disabled(isPosting)
         #if os(macOS)
         .navigationTitle("Preview")
