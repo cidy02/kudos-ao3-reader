@@ -331,8 +331,6 @@ struct AO3CollectionItemsView: View {
             }
         } else {
             Section {
-                SectionRuleHeader(title: Self.tabTitle(tab), count: displayedItems.count)
-                    .pageBodyRow(top: 18, gutter: 0)
                 ForEach(displayedItems) { item in
                     AO3CollectionItemCard(
                         item: item,
@@ -558,24 +556,24 @@ struct AO3CollectionItemCard: View {
     private var isRemoved: Bool { staging.isRemoved(item) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             headerRow
             Text(item.workTitle)
-                .font(.system(size: 16.5, weight: .semibold))
+                .font(.system(size: 19, weight: .semibold))
                 .lineLimit(2)
                 .strikethrough(isRemoved)
 
             if isRemoved {
                 removalNotice
             } else {
-                settingsPanel
+                settingsRows
             }
 
             footerRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
         .subjectCard(palette: palette)
         .opacity(isRemoved ? 0.7 : 1)
     }
@@ -604,7 +602,7 @@ struct AO3CollectionItemCard: View {
         }
     }
 
-    private var settingsPanel: some View {
+    private var settingsRows: some View {
         VStack(spacing: 0) {
             if item.creatorApprovalIsEditable {
                 approvalRow(
@@ -615,7 +613,7 @@ struct AO3CollectionItemCard: View {
             } else {
                 readOnlyApproval("Approved by creator", value: item.creatorApproval)
             }
-            SubjectRowSeparator()
+            SubjectRowSeparator(inset: 0)
             if item.moderatorApprovalIsEditable {
                 approvalRow(
                     "Approved by moderators",
@@ -625,14 +623,14 @@ struct AO3CollectionItemCard: View {
             } else {
                 readOnlyApproval("Approved by moderators", value: item.moderatorApproval)
             }
-            SubjectRowSeparator()
+            SubjectRowSeparator(inset: 0)
             flagRow(
                 "Unrevealed",
                 isOn: staging.isUnrevealed(for: item),
                 isEditable: item.unrevealedIsEditable,
                 set: { staging.setUnrevealed($0, for: item) }
             )
-            SubjectRowSeparator()
+            SubjectRowSeparator(inset: 0)
             flagRow(
                 "Anonymous",
                 isOn: staging.isAnonymous(for: item),
@@ -640,43 +638,72 @@ struct AO3CollectionItemCard: View {
                 set: { staging.setAnonymous($0, for: item) }
             )
         }
-        .subjectPanel()
     }
 
-    /// Approval is three states on AO3, not a switch, so it is a three-way control
+    /// Approval is three states on AO3, not a switch, so it is a menu of three
     /// rather than a toggle that would have to pretend Unreviewed is Rejected.
+    /// Spec 1s draws it as a status chip that opens the choice.
     private func approvalRow(
         _ label: String,
         value: AO3CollectionItemApproval,
         set: @escaping (AO3CollectionItemApproval) -> Void
     ) -> some View {
-        SubjectFormRow(
-            label: label,
-            arrangement: .control,
-            trailing: {
-                SubjectSegmentedControl(
-                    options: [.unreviewed, .approved, .rejected],
-                    title: { Self.approvalTitle($0) },
-                    selection: Binding(get: { value }, set: set)
-                )
+        HStack(spacing: 12) {
+            settingsLabel(label)
+            Menu {
+                Picker(label, selection: Binding(get: { value }, set: set)) {
+                    ForEach([AO3CollectionItemApproval.unreviewed, .approved, .rejected], id: \.self) {
+                        Text(Self.approvalTitle($0)).tag($0)
+                    }
+                }
+            } label: {
+                approvalChip(value, showsChevron: true)
             }
-        )
+            // 44pt tap area without a taller row (the chip is ~22pt).
+            .contentShape(Rectangle().inset(by: -11))
+            .accessibilityLabel(label)
+            .accessibilityValue(Self.approvalTitle(value))
+        }
+        .padding(.vertical, 9)
     }
 
     private func readOnlyApproval(
         _ label: String,
         value: AO3CollectionItemApproval
     ) -> some View {
-        SubjectFormRow(
-            label: label,
-            arrangement: .control,
-            trailing: {
-                Text(Self.approvalTitle(value))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+        HStack(spacing: 12) {
+            settingsLabel(label)
+            approvalChip(value, showsChevron: false)
+        }
+        .padding(.vertical, 9)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Spec 1s: 600 11.5pt in the status colour over its 15% fill, padding 5×9,
+    /// radius 8, with a down chevron when it opens a choice.
+    private func approvalChip(_ value: AO3CollectionItemApproval, showsChevron: Bool) -> some View {
+        let color: Color = switch value {
+        case .unreviewed: .orange
+        case .approved: .green
+        case .rejected: .red
+        }
+        return HStack(spacing: 5) {
+            Text(Self.approvalTitle(value))
+                .font(.system(size: 11.5, weight: .semibold))
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
             }
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(color.opacity(0.15))
+                .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
         )
+        .fixedSize()
     }
 
     private func flagRow(
@@ -685,22 +712,25 @@ struct AO3CollectionItemCard: View {
         isEditable: Bool,
         set: @escaping (Bool) -> Void
     ) -> some View {
-        SubjectFormRow(
-            label: label,
-            arrangement: .control,
-            trailing: {
-                if isEditable {
-                    Toggle("", isOn: Binding(get: { isOn }, set: set))
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                } else {
-                    Text(isOn ? "On" : "Off")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+        HStack(spacing: 12) {
+            settingsLabel(label)
+            if isEditable {
+                Toggle(label, isOn: Binding(get: { isOn }, set: set))
+                    .labelsHidden()
+            } else {
+                Text(isOn ? "On" : "Off")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-        )
+        }
+        .padding(.vertical, 9)
+    }
+
+    private func settingsLabel(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 13.5))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private static func approvalTitle(_ approval: AO3CollectionItemApproval) -> String {

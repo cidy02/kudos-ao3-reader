@@ -353,7 +353,7 @@ struct ChallengeSignUpsView: View {
             } label: {
                 Text("Create sign-up")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(palette.accentOnFill)
+                    .foregroundStyle(palette.labelOnAccent)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
                     .background(

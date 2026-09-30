@@ -432,6 +432,7 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/collections/[^/]+/assignments", "ao3_challenge_assignments"),
         ("^/collections/[^/]+/(gift_exchange|prompt_meme)", "ao3_challenge_settings"),
         ("^/collections/[^/]+/items", "ao3_collection_items"),
+        ("^/collections/[^/]+/participants", "ao3_collection_participants"),
         ("^/collections/[^/]+/edit", "ao3_collection_edit"),
         ("^/collections/[^/]+/works", "ao3_tag_works"),
         ("^/collections/[^/]+/?$", "ao3_collection_show"),

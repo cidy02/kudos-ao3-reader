@@ -143,34 +143,6 @@ struct TagSetView: View {
             SectionRuleHeader(title: "Tags", count: totalTagCount)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             tagCountsPanel.pageBodyRow(top: 8, gutter: gutter)
-
-            tagFieldEditor(
-                title: "Fandom tags to add",
-                placeholder: "Comma-separated fandom names…",
-                text: $fandomTagnames
-            ).pageBodyRow(top: 10, gutter: gutter)
-
-            tagFieldEditor(
-                title: "Character tags to add",
-                placeholder: "Comma-separated character names…",
-                text: $characterTagnames
-            ).pageBodyRow(top: 8, gutter: gutter)
-
-            tagFieldEditor(
-                title: "Relationship tags to add",
-                placeholder: "Comma-separated relationships…",
-                text: $relationshipTagnames
-            ).pageBodyRow(top: 8, gutter: gutter)
-
-            tagFieldEditor(
-                title: "Additional tags to add",
-                placeholder: "Comma-separated additional tags…",
-                text: $freeformTagnames
-            ).pageBodyRow(top: 8, gutter: gutter)
-
-            tagFieldsFootnote.pageBodyRow(top: 8, gutter: gutter)
-            saveFieldsFeedback
-            saveFieldsButton.pageBodyRow(top: 8, gutter: gutter)
         }
 
         Section {
@@ -220,25 +192,78 @@ struct TagSetView: View {
 
     private var tagCountsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Fandoms", value: "\(tagSet?.fandomCount ?? 0)")
+            tagCountRow("Fandoms", count: tagSet?.fandomCount ?? 0)
 
             SubjectRowSeparator()
 
-            SubjectFormRow(label: "Characters", value: "\(tagSet?.characterCount ?? 0)")
+            tagCountRow("Characters", count: tagSet?.characterCount ?? 0)
 
             SubjectRowSeparator()
 
-            SubjectFormRow(
-                label: "Relationships", value: "\(tagSet?.relationshipCount ?? 0)"
-            )
+            tagCountRow("Relationships", count: tagSet?.relationshipCount ?? 0)
 
             SubjectRowSeparator()
 
-            SubjectFormRow(
-                label: "Additional tags", value: "\(tagSet?.freeformCount ?? 0)"
-            )
+            tagCountRow("Additional tags", count: tagSet?.freeformCount ?? 0)
         }
         .subjectPanel()
+    }
+
+    private func tagCountRow(_ label: String, count: Int) -> some View {
+        SubjectFormRow(label: label, value: "\(count)", showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "\(label), add tags") {
+                tagEditorScreen
+            }
+    }
+
+    private var tagEditorScreen: some View {
+        List {
+            Section {
+                SubjectHeaderBlock(
+                    kicker: "Tag set",
+                    title: "Add tags",
+                    subtitle: effectiveTitle,
+                    palette: palette,
+                    gutter: SubjectMetrics.accountGutter
+                )
+                .pageBodyRow(top: 20, gutter: selfGuttered)
+
+                tagFieldEditor(
+                    title: "Fandom tags to add",
+                    placeholder: "Comma-separated fandom names…",
+                    text: $fandomTagnames
+                ).pageBodyRow(top: 18, gutter: gutter)
+
+                tagFieldEditor(
+                    title: "Character tags to add",
+                    placeholder: "Comma-separated character names…",
+                    text: $characterTagnames
+                ).pageBodyRow(top: 8, gutter: gutter)
+
+                tagFieldEditor(
+                    title: "Relationship tags to add",
+                    placeholder: "Comma-separated relationships…",
+                    text: $relationshipTagnames
+                ).pageBodyRow(top: 8, gutter: gutter)
+
+                tagFieldEditor(
+                    title: "Additional tags to add",
+                    placeholder: "Comma-separated additional tags…",
+                    text: $freeformTagnames
+                ).pageBodyRow(top: 8, gutter: gutter)
+
+                tagFieldsFootnote.pageBodyRow(top: 8, gutter: gutter)
+                saveFieldsFeedback
+                saveFieldsButton.pageBodyRow(top: 8, gutter: gutter)
+            }
+        }
+        .cardList()
+        .environment(\.defaultMinListRowHeight, 0)
+        #if os(macOS)
+        .navigationTitle("Add tags")
+        #endif
+        .subjectScreenWash(palette: palette)
+        .screenTint(palette)
     }
 
     private func tagFieldEditor(title: String, placeholder: String, text: Binding<String>) -> some View {
@@ -303,11 +328,11 @@ struct TagSetView: View {
                 if isSavingFields {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(palette.accentOnFill)
+                        .tint(palette.labelOnAccent)
                 }
                 Text("Save tags")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(palette.accentOnFill)
+                    .foregroundStyle(palette.labelOnAccent)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 44)

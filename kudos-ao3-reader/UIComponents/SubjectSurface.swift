@@ -99,6 +99,11 @@ struct SubjectPalette {
         }
     }
 
+    /// Text on a SOLID `accent` fill (a filled confirm button): black or white
+    /// at the WCAG crossover. `accentOnFill` is for the 24%-alpha fill; on the
+    /// solid Dark-theme accent it put near-white on a light fill (T-323's bug).
+    var labelOnAccent: Color { ThemeManager.label(on: accent) }
+
     /// The same identity at text weight on a filled chip or a glass button —
     /// spec `#F4E4C6`, a much lighter tint of `accent` so it stays legible on
     /// the accent's own 24%-alpha fill.
