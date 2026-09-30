@@ -114,6 +114,8 @@ struct AddChapterView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         #if os(macOS)
         .navigationTitle(form.chapterID == nil ? "Add chapter" : "Edit chapter")
