@@ -8,6 +8,20 @@ import Foundation
 /// sentence here; AO3's own errors keep their messages; anything else falls
 /// back to its description.
 enum UserFacingError {
+    static func systemImage(for error: Error) -> String {
+        if let urlError = error as? URLError {
+            return connectionSystemImage(for: urlError.code)
+        }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            return connectionSystemImage(for: URLError.Code(rawValue: nsError.code))
+        }
+        if let ao3 = error as? AO3Error, case .network = ao3 {
+            return "wifi.slash"
+        }
+        return "exclamationmark.triangle"
+    }
+
     static func message(for error: Error) -> String {
         if let urlError = error as? URLError {
             return message(for: urlError.code)
@@ -28,21 +42,32 @@ enum UserFacingError {
     }
 
     static func message(for code: URLError.Code) -> String {
-        switch code {
-        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff:
-            "You're offline. Connect to the internet and try again."
-        case .timedOut:
-            "AO3 took too long to answer. Try again."
-        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost:
-            unreachable
+        if isOffline(code) {
+            return "You're offline. Connect to the internet and try again."
+        }
+        if isUnreachable(code) {
+            return unreachable
+        }
+        return switch code {
+        case .timedOut: "AO3 took too long to answer. Try again."
         case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
              .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot, .clientCertificateRejected:
             "Couldn't make a secure connection to AO3."
-        case .cancelled:
-            "The request was cancelled."
-        default:
-            fallback
+        case .cancelled: "The request was cancelled."
+        default: fallback
         }
+    }
+
+    private static func connectionSystemImage(for code: URLError.Code) -> String {
+        isOffline(code) || isUnreachable(code) ? "wifi.slash" : "exclamationmark.triangle"
+    }
+
+    private static func isOffline(_ code: URLError.Code) -> Bool {
+        [.notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff].contains(code)
+    }
+
+    private static func isUnreachable(_ code: URLError.Code) -> Bool {
+        [.cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost].contains(code)
     }
 
     private static let unreachable = "Couldn't reach AO3. Check your connection and try again."
