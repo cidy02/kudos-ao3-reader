@@ -36,6 +36,12 @@ struct AllReadingQueuesGridView: View {
 
     @State private var showingNewQueue = false
     @State private var newQueueHue: Double?
+    /// The row's name, count and storage line scale with the tag chips beside
+    /// them; at AX sizes the chips grew to twice the size of the queue's name.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 15.5
+    @ScaledMetric(relativeTo: .caption) private var rowCountSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption2) private var rowStorageSize: CGFloat = 10.5
     /// 1i's tag rail. Empty means All; `untaggedFilter` means the queues with no
     /// tags; anything else is a tag name.
     @AppStorage("library.queueOrganizer.tagFilter") private var tagFilter = ""
@@ -549,11 +555,11 @@ struct AllReadingQueuesGridView: View {
                             .accessibilityHidden(true)
                     }
                     Text(queue.displayName)
-                        .font(.system(size: 15.5, weight: .semibold))
+                        .font(.system(size: rowTitleSize, weight: .semibold))
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                     Text(works.count.compactCount)
-                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                        .font(.system(size: rowCountSize, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 if !works.isEmpty {
@@ -568,7 +574,7 @@ struct AllReadingQueuesGridView: View {
                         QueueRowTagLabel(text: name)
                     }
                     Text(storageLine)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: rowStorageSize))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }

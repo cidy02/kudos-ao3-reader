@@ -21,6 +21,7 @@ struct AccountProfileCard: View {
     @State private var confirmingLogOut = false
     /// 1m sets the account name at 27px — smaller than a subject page's 32,
     /// because here it shares the line with a 56pt avatar.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var nameSize: CGFloat = 27
 
     var body: some View {
@@ -76,14 +77,19 @@ struct AccountProfileCard: View {
                     ruleWidth: SubjectMetrics.pageRuleWidth,
                     ruleSpacing: 7
                 )
+                // The floating gear sits over this line's trailing end; at
+                // accessibility sizes the kicker reached under it.
+                .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 44 : 0)
 
                 // 1m: name, session line, then the posting pill with the
                 // account's "…" beside it.
+                // One line: a username has no spaces, so a second line only
+                // ever split it mid-word.
                 Text(username)
                     .font(.system(size: nameSize, weight: .bold))
                     .tracking(-0.5)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(.primary)
 
                 sessionStatusLine
@@ -449,8 +455,10 @@ struct AccountShortcutGridTile: View {
             Text(title)
                 .font(.system(size: titleSize, weight: .medium))
                 .foregroundStyle(.primary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+                // One word shrinks on one line rather than splitting
+                // ("Subscriptio / ns" at accessibility sizes).
+                .lineLimit(title.contains(where: \.isWhitespace) ? 2 : 1)
+                .minimumScaleFactor(title.contains(where: \.isWhitespace) ? 0.8 : 0.5)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
