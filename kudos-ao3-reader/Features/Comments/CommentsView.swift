@@ -1423,7 +1423,7 @@ struct CommentComposerSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(theme.appTheme.glassFill(0.09))
+        .background(theme.appTheme.glassFill(0.06))
         .overlay(alignment: .leading) {
             // The rail, in the page's own accent — the same colour the thread
             // this reply hangs off is drawn in, so the quote reads as lifted out
@@ -1461,13 +1461,13 @@ struct CommentComposerSheet: View {
                 if !chapterSuffix.isEmpty {
                     Text(chapterSuffix)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(palette.accent)
                 }
             }
         } else {
             Text(parent.author + chapterSuffix)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(palette.accent)
         }
     }
 

@@ -27,6 +27,7 @@ struct CommentThreadScreen: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(ThemeManager.self) private var theme
     @State private var width: CGFloat = 390
     @State private var highlightedCommentID: Int?
     @State private var swipeTracker = CommentSwipeTracker()
@@ -37,6 +38,14 @@ struct CommentThreadScreen: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
+                SubjectHeaderBlock(
+                    kicker: model.workContext.title,
+                    title: "Thread",
+                    subtitle: threadSubtitle,
+                    palette: palette
+                )
+                .pageBodyRow(top: 18, gutter: 0)
+
                 if let root {
                     ForEach(Self.rows(for: root)) { row in
                         CommentConversationRow(
@@ -84,12 +93,31 @@ struct CommentThreadScreen: View {
             // which resolves before a row can measure itself.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .environment(\.commentsContentWidth, width)
+            #if os(macOS)
             .navigationTitle("Thread")
-            #if !os(macOS)
-                .navigationBarTitleDisplayMode(.inline)
             #endif
             .hidesFloatingTabBar()
+            .subjectScreenWash(palette: palette, washHeight: 480)
         }
+    }
+
+    private var palette: SubjectPalette {
+        theme.appTheme.subjectPalette(
+            hue: CoverArt.workHue(
+                fandoms: model.workContext.fandoms,
+                title: model.workContext.title
+            )
+        )
+    }
+
+    private var threadSubtitle: String? {
+        guard let root else { return nil }
+        return [root.chapterLabel, root.author]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
     }
 
     /// The subtree, fully expanded.
