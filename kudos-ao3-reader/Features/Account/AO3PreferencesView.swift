@@ -505,7 +505,7 @@ extension AO3PreferencesView {
             HStack(spacing: 10) {
                 bannerView(banner)
                 if !bannerIsSuccess(banner) {
-                    Button("Retry") { Task { await save() } }
+                    Button("Try Again") { Task { await save() } }
                         .font(.system(size: 14, weight: .semibold))
                         .disabled(isSaving)
                 }

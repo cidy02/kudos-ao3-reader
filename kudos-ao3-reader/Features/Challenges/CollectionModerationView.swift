@@ -672,7 +672,7 @@ struct CollectionModerationView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Retry") {
+            Button("Try Again") {
                 Task { await load() }
             }
             .buttonStyle(.bordered)
