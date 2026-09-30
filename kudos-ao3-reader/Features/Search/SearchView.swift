@@ -123,6 +123,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         NavigationStack(path: $path) {
             content
                 .task { await FandomCatalog.shared.warmCache() }
+                #if DEBUG
+                .task {
+                    try? await Task.sleep(for: .seconds(2))
+                    if DebugLaunchRoute.opensFilters { router.panel = .searchFilters }
+                }
+                #endif
                 .task(id: localMatchKey) { await refreshLocalMatches() }
                 // A tapped tag chip elsewhere (work detail / search results) routes here to
                 // run an AO3 search for that tag. `initial` catches a request that arrived
