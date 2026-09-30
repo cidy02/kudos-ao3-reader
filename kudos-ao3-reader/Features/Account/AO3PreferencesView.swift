@@ -139,12 +139,17 @@ struct AO3PreferencesView: View {
                             }
                             SubjectFormRow(label: select.label, arrangement: .value) {
                                 HStack(alignment: .center, spacing: 8) {
-                                    Picker(select.label, selection: bindingSelect(index)) {
+                                    // An empty label, not `.labelsHidden()`: the
+                                    // navigation-link style ignores that and drew
+                                    // "Your site skin" a second time beside the row's own.
+                                    Picker(selection: bindingSelect(index)) {
                                         ForEach(select.options) { option in
                                             Text(option.title).tag(option.value)
                                         }
+                                    } label: {
+                                        EmptyView()
                                     }
-                                    .labelsHidden()
+                                    .accessibilityLabel(select.label)
                                     #if os(iOS)
                                     .pickerStyle(.navigationLink)
                                     #endif
