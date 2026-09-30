@@ -186,7 +186,7 @@ struct ChallengeSettingsView: View {
     /// Two `List` rows so only the first pushes.
     @ViewBuilder
     private var promptsRows: some View {
-        SubjectFormRow(label: "Prompts", value: "Claim and fill", showsDisclosure: true) { EmptyView() }
+        SubjectFormRow(label: "Prompts", value: "Claim and fill", showsDisclosure: true)
             .subjectRowNavigation(accessibilityLabel: "Prompts") {
                 PromptMemeView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
             }

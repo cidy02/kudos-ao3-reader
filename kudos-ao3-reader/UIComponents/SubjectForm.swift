@@ -297,6 +297,8 @@ extension SubjectFormRow where Trailing == SubjectFormValue {
         isDestructive: Bool = false,
         isRequired: Bool = false,
         isMonospaced: Bool = false,
+        // A trailing closure binds here: `{ EmptyView() }` made two pushing rows
+        // no-op Buttons that swallowed the tap before their navigation link.
         action: (() -> Void)? = nil
     ) {
         self.init(

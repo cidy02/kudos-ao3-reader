@@ -214,9 +214,7 @@ struct CollectionModerationView: View {
         // "recently decided" lives here. AO3 pages approved and rejected items
         // with no totals, so this opens those lists rather than counting page one.
         Section {
-            SubjectFormRow(label: "Recently decided", value: "Approved and rejected", showsDisclosure: true) {
-                EmptyView()
-            }
+            SubjectFormRow(label: "Recently decided", value: "Approved and rejected", showsDisclosure: true)
             .subjectRowNavigation(accessibilityLabel: "Recently decided") {
                 AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle, initialTab: .approved)
             }
@@ -285,11 +283,11 @@ struct CollectionModerationView: View {
         }
     }
 
-    /// Title, creator/submission line, and the three side-by-side actions.
+    /// Title, creator/submission line, and the three wrapping actions.
     /// `AO3CollectionItem` carries no word count or tag summary, so none is
     /// invented; the submission date is AO3's own `p.datetime` when printed.
     private func awaitingReviewCard(_ item: AO3CollectionItem) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.itemType.uppercased())
                     .font(.system(size: 9, weight: .bold))
@@ -297,7 +295,7 @@ struct CollectionModerationView: View {
                     .foregroundStyle(palette.accent)
 
                 Text(item.workTitle)
-                    .font(.system(size: 15.5, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
 
                 Text(CollectionModerationCopy.byline(creator: item.creatorByline, dateText: item.itemDateText))
@@ -305,76 +303,48 @@ struct CollectionModerationView: View {
                     .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 8) {
+            FlowLayout(spacing: 7, rowSpacing: 7) {
                 approveButton(for: item)
                 rejectButton(for: item)
                 messageCreatorButton(for: item)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
+        .subjectPanel(cornerRadius: 16)
     }
 
     private func approveButton(for item: AO3CollectionItem) -> some View {
         let isCurrentInFlight = itemInFlight == item.id
-        return Button {
+        let action: () -> Void = {
             Task { await approveItem(item) }
-        } label: {
-            HStack(spacing: 6) {
-                if isCurrentInFlight {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Color.green)
-                }
-                Text("Approve")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.green)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 34)
-            .background(
-                RoundedRectangle(cornerRadius: 99, style: .continuous)
-                    .fill(Color.green.opacity(0.16))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 99, style: .continuous)
-                            .strokeBorder(Color.green.opacity(0.34), lineWidth: 0.5)
-                    )
-            )
         }
-        .buttonStyle(.plain)
-        .disabled(itemInFlight != nil)
+        return moderationPill(
+            title: "Approve",
+            isProminent: true,
+            isInFlight: isCurrentInFlight,
+            isDisabled: itemInFlight != nil,
+            action: action
+        )
     }
 
     private func rejectButton(for item: AO3CollectionItem) -> some View {
-        Button {
+        let action: () -> Void = {
             itemToReject = item
-        } label: {
-            Text("Reject")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.red)
-                .frame(maxWidth: .infinity)
-                .frame(height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 99, style: .continuous)
-                        .fill(Color.red.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 99, style: .continuous)
-                                .strokeBorder(Color.red.opacity(0.32), lineWidth: 0.5)
-                        )
-                )
         }
-        .buttonStyle(.plain)
-        .disabled(itemInFlight != nil)
+        return moderationPill(
+            title: "Reject",
+            isProminent: false,
+            isDisabled: itemInFlight != nil,
+            action: action
+        )
     }
 
     /// Opens the work itself, since AO3's own moderator queue offers no separate
     /// messaging endpoint — a comment on the work is the fix-it channel.
     private func messageCreatorButton(for item: AO3CollectionItem) -> some View {
-        GlassCircleButton(
-            palette: palette,
-            accessibilityName: "Message creator"
-        ) {
+        let action: () -> Void = {
             if let workID = item.workID ?? item.workURL.flatMap({ WorkTags.ao3WorkID(from: $0.absoluteString) }) {
                 commentsRoute = AO3CommentsRoute(
                     workID: workID,
@@ -382,10 +352,71 @@ struct CollectionModerationView: View {
                     composes: true
                 )
             }
-        } label: {
-            Image(systemName: "bubble.left")
-                .font(.system(size: 13))
         }
+        return moderationPill(
+            title: "Message creator",
+            isProminent: false,
+            isDisabled: false,
+            action: action
+        )
+    }
+
+    @ViewBuilder
+    private func moderationPill(
+        title: String,
+        isProminent: Bool,
+        isInFlight: Bool = false,
+        isDisabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Group {
+            if isProminent {
+                moderationPillButton(
+                    title: title, isProminent: true, isInFlight: isInFlight, action: action
+                )
+                .prominentLabel()
+            } else {
+                moderationPillButton(
+                    title: title, isProminent: false, isInFlight: isInFlight, action: action
+                )
+                .foregroundStyle(.primary)
+            }
+        }
+        .disabled(isDisabled)
+        .layoutFreeHitTarget {
+            if !isDisabled { action() }
+        }
+    }
+
+    private func moderationPillButton(
+        title: String,
+        isProminent: Bool,
+        isInFlight: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if isInFlight {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(title)
+                    .font(.system(size: 12.5, weight: .semibold))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .background(
+                Capsule()
+                    .fill(isProminent ? palette.tint : theme.appTheme.glassFill(0.10))
+                    .overlay(
+                        Capsule().strokeBorder(
+                            isProminent ? palette.tint : theme.appTheme.glassStroke(0.16),
+                            lineWidth: 0.5
+                        )
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var emptyReviewCard: some View {
@@ -406,89 +437,68 @@ struct CollectionModerationView: View {
     // MARK: - Membership Requests
 
     private var membershipRequestsList: some View {
-        VStack(spacing: 9) {
-            ForEach(membershipRequests) { participant in
-                membershipRequestCard(participant)
+        VStack(spacing: 0) {
+            ForEach(
+                Array(membershipRequests.enumerated()), id: \.element.id
+            ) { index, participant in
+                if index > 0 { SubjectRowSeparator() }
+                membershipRequestRow(participant)
             }
         }
+        .subjectPanel()
     }
 
     /// `AO3CollectionParticipant` carries no request date or per-user work
     /// count (that figure lives on the unrelated `AO3CollectionPerson`, from
     /// the separate `/people` listing) — so the secondary line states the
     /// request itself rather than inventing either figure.
-    private func membershipRequestCard(_ participant: AO3CollectionParticipant) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+    private func membershipRequestRow(_ participant: AO3CollectionParticipant) -> some View {
+        HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(participant.pseud)
-                    .font(.system(size: 15.5, weight: .semibold))
+                    .font(.system(size: 14.5, weight: .semibold))
                     .foregroundStyle(.primary)
 
                 Text("Wants to join \(effectiveTitle)")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 acceptButton(for: participant)
                 declineButton(for: participant)
             }
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel()
     }
 
     private func acceptButton(for participant: AO3CollectionParticipant) -> some View {
         let isCurrentInFlight = participantInFlight == participant.id
-        return Button {
+        let action: () -> Void = {
             Task { await acceptRequest(participant) }
-        } label: {
-            HStack(spacing: 6) {
-                if isCurrentInFlight {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Color.green)
-                }
-                Text("Accept")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.green)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 34)
-            .background(
-                RoundedRectangle(cornerRadius: 99, style: .continuous)
-                    .fill(Color.green.opacity(0.16))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 99, style: .continuous)
-                            .strokeBorder(Color.green.opacity(0.34), lineWidth: 0.5)
-                    )
-            )
         }
-        .buttonStyle(.plain)
-        .disabled(participantInFlight != nil)
+        return moderationPill(
+            title: "Accept",
+            isProminent: true,
+            isInFlight: isCurrentInFlight,
+            isDisabled: participantInFlight != nil,
+            action: action
+        )
     }
 
     private func declineButton(for participant: AO3CollectionParticipant) -> some View {
-        Button {
+        let action: () -> Void = {
             participantToDecline = participant
-        } label: {
-            Text("Decline")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.red)
-                .frame(maxWidth: .infinity)
-                .frame(height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 99, style: .continuous)
-                        .fill(Color.red.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 99, style: .continuous)
-                                .strokeBorder(Color.red.opacity(0.32), lineWidth: 0.5)
-                        )
-                )
         }
-        .buttonStyle(.plain)
-        .disabled(participantInFlight != nil)
+        return moderationPill(
+            title: "Decline",
+            isProminent: false,
+            isDisabled: participantInFlight != nil,
+            action: action
+        )
     }
 
     private var emptyRequestsCard: some View {
