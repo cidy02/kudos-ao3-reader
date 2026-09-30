@@ -2,9 +2,10 @@ import SwiftUI
 
 /// The Library's filter panel — parity with the Search filters, but the options
 /// are drawn from the user's own saved works and filtering is applied live to the
-/// local collection. Presented as a bottom sheet on iPhone and as an inspector
-/// sidebar on iPad/macOS (the same `.inspector` the Search filters use).
+/// local collection. Presented as a sheet on iPhone and as an inspector sidebar
+/// on iPad/macOS through `filterPanelPresentation`.
 struct LibraryFilterPanel: View {
+    @Environment(\.dismiss) private var dismiss
     @Binding var filters: LibraryFilters
     /// All saved works, used to populate the tag/language facet lists.
     let works: [SavedWork]
@@ -12,10 +13,36 @@ struct LibraryFilterPanel: View {
     let userTagNames: [String]
 
     /// 1an's group labels (uppercase, tracked), as the AO3 panel draws them.
-    /// The shell stays a bare Form: this panel is an `.inspector`, and a
-    /// NavigationStack inside one merged its bar into the host screen's.
     var body: some View {
-        form
+        NavigationStack {
+            form
+                .navigationTitle("Filters")
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .toolbar { actionButtons }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var actionButtons: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button {
+                filters = LibraryFilters()
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
+            }
+            .disabled(!filters.hasActiveFilters)
+            .accessibilityLabel("Reset filters")
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button { dismiss() } label: {
+                Image(systemName: "checkmark")
+            }
+            .buttonStyle(.borderedProminent)
+            .prominentLabel()
+            .accessibilityLabel("Done")
+        }
     }
 
     private func groupLabel(_ text: String) -> some View {
@@ -104,15 +131,6 @@ struct LibraryFilterPanel: View {
                     Text("Filter by the work's own AO3 tags. Exclude Tags hides matching works.")
                 }
 
-                if filters.hasActiveFilters {
-                    Section {
-                        Button(role: .destructive) {
-                            filters = LibraryFilters()
-                        } label: {
-                            Label("Reset Filters", systemImage: "arrow.counterclockwise")
-                        }
-                    }
-                }
             }
             .appThemedRows()
         }

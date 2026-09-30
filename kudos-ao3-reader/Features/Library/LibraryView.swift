@@ -167,14 +167,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .sheet(isPresented: $showingNewCollection) {
                     NewCollectionSheet()
                 }
-                .inspector(isPresented: router.isShowing(.libraryFilters)) {
+                .filterPanelPresentation(isPresented: router.isShowing(.libraryFilters)) {
                     LibraryFilterPanel(filters: $filters, works: works, userTagNames: userTagNames)
                         .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
-                    // On iPhone the inspector collapses into a bottom sheet; show the
-                    // standard grabber so it reads as swipe-to-dismiss.
-                    #if os(iOS)
-                        .presentationDragIndicator(.visible)
-                    #endif
                 }
                 .task {
                     // ContentView already normalizes the full library at launch.
