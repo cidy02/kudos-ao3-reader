@@ -50,6 +50,9 @@ struct SearchResultsHero: View {
     /// text instead, which is what a caller with no binding to offer should get
     /// rather than a menu that cannot change anything.
     var sortSelection: Binding<AO3SearchFilters.Sort>?
+    /// The orders the menu offers. A tag listing has no relevance order, so
+    /// Browse's pages leave Best Match out.
+    var sortOptions: [AO3SearchFilters.Sort] = AO3SearchFilters.Sort.allCases
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -128,7 +131,7 @@ struct SearchResultsHero: View {
         if let sortSelection {
             Menu {
                 Picker("Sort", selection: sortSelection) {
-                    ForEach(AO3SearchFilters.Sort.allCases) { option in
+                    ForEach(sortOptions) { option in
                         Text(option.title).tag(option)
                     }
                 }
