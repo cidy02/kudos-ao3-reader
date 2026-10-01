@@ -230,8 +230,12 @@ extension ReaderTheme {
     /// more saturated than the Work-card tint so a shelf of works reads as its own
     /// distinct thing at a glance. Sepia stays a touch less saturated to keep the
     /// warm, paper-like palette from clashing.
-    func carouselCollectionGradient(hue: Double) -> (start: Color, end: Color) {
-        switch self {
+    /// `pickedHex`: an exact "+" colour runs from itself to a darker self.
+    func carouselCollectionGradient(hue: Double, pickedHex: String? = nil) -> (start: Color, end: Color) {
+        if let picked = pickedHex.flatMap(Color.init(hex:)) {
+            return (picked, picked.mix(with: .black, by: 0.3))
+        }
+        return switch self {
         case .dark, .oled:
             (Color(hue: hue, saturation: 0.50, brightness: 0.80),
              Color(hue: hue, saturation: 0.62, brightness: 0.55))
@@ -247,14 +251,13 @@ extension ReaderTheme {
     /// Reading Queue tile tint: sits over `.regularMaterial`, so it's a wash rather
     /// than a solid fill — brighter than before so the per-queue hue reads clearly
     /// through the glass instead of nearly disappearing.
-    func carouselQueueTint(hue: Double) -> Color {
-        switch self {
-        case .dark, .oled:
-            Color(hue: hue, saturation: 0.38, brightness: 0.78).opacity(0.30)
-        case .light:
-            Color(hue: hue, saturation: 0.42, brightness: 0.75).opacity(0.26)
-        case .sepia:
-            Color(hue: hue, saturation: 0.34, brightness: 0.70).opacity(0.22)
+    /// `pickedHex`: an exact "+" colour, at the same wash opacity.
+    func carouselQueueTint(hue: Double, pickedHex: String? = nil) -> Color {
+        let (derived, opacity) = switch self {
+        case .dark, .oled: (Color(hue: hue, saturation: 0.38, brightness: 0.78), 0.30)
+        case .light: (Color(hue: hue, saturation: 0.42, brightness: 0.75), 0.26)
+        case .sepia: (Color(hue: hue, saturation: 0.34, brightness: 0.70), 0.22)
         }
+        return (pickedHex.flatMap(Color.init(hex:)) ?? derived).opacity(opacity)
     }
 }

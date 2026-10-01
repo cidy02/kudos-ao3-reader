@@ -610,6 +610,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         _ = ReadingQueueService.createQueue(
             named: trimmed,
             hue: hue,
+            colorHex: options.colorHex,
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
             tagNames: options.tagNames,

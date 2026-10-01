@@ -518,7 +518,7 @@ struct AllReadingQueuesGridView: View {
         let tagNames = queue.tags.map(\.name).sorted()
         let tagLine = tagNames.joined(separator: " · ")
         let palette = queue.kind == .custom
-            ? themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+            ? themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
             : organizerPalette
 
         let isSelected = selection.contains(queue.id)
@@ -645,6 +645,7 @@ struct AllReadingQueuesGridView: View {
         _ = ReadingQueueService.createQueue(
             named: trimmed,
             hue: hue,
+            colorHex: options.colorHex,
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
             tagNames: options.tagNames,
@@ -763,6 +764,7 @@ private extension View {
     func organizerCard(_ queue: ReadingQueue) -> some View {
         cardRow(
             tintHue: queue.kind == .custom ? queue.displayHue : nil,
+            tintHex: queue.kind == .custom ? queue.colorHex : nil,
             cornerRadius: 16,
             verticalPadding: 11,
             interCardSpacing: 8

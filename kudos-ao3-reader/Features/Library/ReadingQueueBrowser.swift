@@ -174,7 +174,7 @@ struct ReadingQueueBrowserView: View {
     /// comes from.
     private var subjectPalette: SubjectPalette {
         guard let selectedQueue else { return themeManager.scopePalette }
-        return themeManager.appTheme.subjectPalette(hue: selectedQueue.displayHue)
+        return themeManager.appTheme.subjectPalette(hue: selectedQueue.displayHue, pickedHex: selectedQueue.colorHex)
     }
 
     private var preservedWorks: [SavedWork] {
@@ -919,6 +919,7 @@ extension ReadingQueueBrowserView {
         let queue = ReadingQueueService.createQueue(
             named: trimmed,
             hue: hue,
+            colorHex: options.colorHex,
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
             tagNames: options.tagNames,

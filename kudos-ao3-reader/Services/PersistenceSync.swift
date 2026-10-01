@@ -566,6 +566,26 @@ nonisolated enum SyncMerge {
         var legacyReaderProgress: Double??
     }
 
+    /// A queue's or collection's chosen colour: `hue`, plus `hex` when it was
+    /// picked exactly with "+". The hue keeps its rule — it only ever fills a
+    /// colour in, never clears one, because an archive written before `hue`
+    /// existed (or by Android, which does not write it) carries nil. The hex
+    /// travels with the hue that wins, with one exception: an archive that
+    /// carries the same hue but no hex was written by a build that does not
+    /// know `colorHex` and dropped it on the way through, so the local exact
+    /// colour is kept rather than flattened to a hue.
+    static func chosenColor(
+        local: (hue: Double?, hex: String?),
+        incoming: (hue: Double?, hex: String?),
+        incomingWins: Bool
+    ) -> (hue: Double?, hex: String?) {
+        guard let incomingHue = incoming.hue, incomingWins || local.hue == nil else { return local }
+        if incoming.hex == nil, local.hex != nil, let localHue = local.hue, abs(localHue - incomingHue) < 0.01 {
+            return local
+        }
+        return (incomingHue, incoming.hex)
+    }
+
     static func shouldApplyIncoming(localModifiedAt: Date?, incomingModifiedAt: Date?) -> Bool {
         guard let incomingModifiedAt else { return false }
         guard let localModifiedAt else { return true }

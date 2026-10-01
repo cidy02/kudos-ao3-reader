@@ -75,7 +75,7 @@ struct CollectionCard: View {
 
     private var singleTile: some View {
         let hue = collection.displayHue
-        let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue)
+        let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue, pickedHex: collection.colorHex)
         return RoundedRectangle(
             cornerRadius: CarouselCardMetrics.cornerRadius * scale,
             style: .continuous
@@ -176,7 +176,7 @@ struct CollectionDetailView: View {
     /// The collection's own colour: wash, tint and row accents, as a queue's
     /// page takes its queue's (1h) — the sibling it should read like.
     private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: collection.displayHue)
+        themeManager.appTheme.subjectPalette(hue: collection.displayHue, pickedHex: collection.colorHex)
     }
 
     private var tallyLine: String {
@@ -229,6 +229,16 @@ struct CollectionDetailView: View {
                         // choice about contents, and stamping that clock here
                         // would make recolouring a collection override a
                         // removal made on another device.
+                        collection.markModified()
+                        context.saveBestEffort(reason: "Saving collection colour failed")
+                    }
+                ),
+                // The row writes this after `selection`, every time.
+                pickedHex: Binding(
+                    get: { collection.colorHex },
+                    set: { newValue in
+                        guard collection.colorHex != newValue else { return }
+                        collection.colorHex = newValue
                         collection.markModified()
                         context.saveBestEffort(reason: "Saving collection colour failed")
                     }

@@ -162,7 +162,7 @@ extension ReadingQueueBrowserView {
     private func queueGlyph(_ queue: ReadingQueue?) -> some View {
         if let queue, queue.kind != .savedForLater {
             Circle()
-                .fill(themeManager.appTheme.carouselQueueTint(hue: queue.displayHue))
+                .fill(themeManager.appTheme.carouselQueueTint(hue: queue.displayHue, pickedHex: queue.colorHex))
                 .frame(width: 10, height: 10)
         } else {
             Image(systemName: WorkActionLabels.savedForLaterSymbol)
