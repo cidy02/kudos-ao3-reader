@@ -462,6 +462,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     ReadingQueueCard(queue: queue)
                 }
                 .buttonStyle(.plain)
+                .modifier(QueueCardMenu(queue: queue))
             }
         } emptyState: {
             EmptyView()
