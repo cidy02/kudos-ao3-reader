@@ -41,6 +41,10 @@ struct FandomListView: View {
     /// Bumped by each rebuild. A slower build that finishes after a later one
     /// started (grouping is the slow side) is dropped, so a later toggle wins.
     @State private var rebuildGeneration = 0
+    @State private var indexedLetter: String?
+    @ScaledMetric(relativeTo: .caption2) private var indexFontSize = 8.5
+
+    private static let indexLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".map(String.init) + ["#"]
 
     private enum Phase: Equatable { case loading, loaded, failed(String, String) }
 
@@ -55,16 +59,18 @@ struct FandomListView: View {
 
     private var libraryIndex: FandomLibraryIndex {
         var favourites = Set<String>()
-        var downloads = Set<String>()
+        var downloadCounts: [String: Int] = [:]
         for work in library {
-            let names = work.workFandoms.map { $0.lowercased() }
+            let names = Set(work.workFandoms.map { $0.lowercased() })
             if work.isFavorite { favourites.formUnion(names) }
             // 1an.2: "I have downloads from" means on this device now.
-            if work.hasEPUB { downloads.formUnion(names) }
+            if work.hasEPUB {
+                for name in names { downloadCounts[name, default: 0] += 1 }
+            }
         }
         return FandomLibraryIndex(
             favouriteNamesLowercased: favourites,
-            downloadNamesLowercased: downloads
+            downloadCountsByNameLowercased: downloadCounts
         )
     }
 
@@ -153,86 +159,153 @@ struct FandomListView: View {
     }
 
     private var loadedList: some View {
-        List {
-            // The kicker / rule / hero as the list's first row, as every
-            // redesigned pushed page has it (1al); the wash below empties the
-            // navigation title so the name is not printed twice.
-            Section {
-                pageHeader
-            }
-
-            Section {
-                FandomListSortRail(
-                    sort: $sort,
-                    groupsVariants: $groupsVariants,
-                    filterCount: filterOptions.activeFilterCount,
-                    palette: palette,
-                    onOpenFilters: { showingFilters = true }
-                )
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-
-            // A search or filter that leaves nothing says so, with the way back.
-            if displayedFamilies.isEmpty, isFiltered {
+        ScrollViewReader { proxy in
+            List {
+                // The kicker / rule / hero as the list's first row, as every
+                // redesigned pushed page has it (1al); the wash below empties the
+                // navigation title so the name is not printed twice.
                 Section {
-                    ContentUnavailableView {
-                        Label("No matching fandoms", systemImage: "line.3.horizontal.decrease.circle")
-                    } description: {
-                        Text("No fandom in \(category.name) matches the current search and filters.")
-                    } actions: {
-                        Button("Clear Search and Filters") {
-                            query = ""
-                            filterOptions = FandomListFilterOptions()
-                        }
-                    }
+                    pageHeader
+                }
+
+                Section {
+                    FandomListSortRail(
+                        sort: $sort,
+                        groupsVariants: $groupsVariants,
+                        filterCount: filterOptions.activeFilterCount,
+                        palette: palette,
+                        onOpenFilters: { showingFilters = true }
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
-            }
 
-            if sort == .alphabetical {
-                ForEach(FandomFamily.letterSections(displayedFamilies)) { section in
+                // A search or filter that leaves nothing says so, with the way back.
+                if displayedFamilies.isEmpty, isFiltered {
                     Section {
-                        ForEach(section.families) { family in
-                            familyRow(family)
+                        ContentUnavailableView {
+                            Label("No matching fandoms", systemImage: "line.3.horizontal.decrease.circle")
+                        } description: {
+                            Text("No fandom in \(category.name) matches the current search and filters.")
+                        } actions: {
+                            Button("Clear Search and Filters") {
+                                query = ""
+                                filterOptions = FandomListFilterOptions()
+                            }
                         }
-                    } header: {
-                        FandomLetterHeader(
-                            letter: section.letter,
-                            count: section.families.count,
-                            palette: palette
-                        )
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 }
-            } else {
-                ForEach(displayedFamilies) { family in
-                    familyRow(family)
+
+                if sort == .alphabetical {
+                    ForEach(letterSections) { section in
+                        Section {
+                            ForEach(section.families) { family in
+                                familyRow(family)
+                            }
+                        } header: {
+                            FandomLetterHeader(
+                                letter: section.letter,
+                                count: section.families.count,
+                                palette: palette
+                            )
+                        }
+                        .id(section.id)
+                    }
+                } else {
+                    ForEach(displayedFamilies) { family in
+                        familyRow(family)
+                    }
                 }
             }
+            .cardList()
+            .subjectScreenWash(palette: palette)
+            // Here rather than inside `refresh()`, which `load()` also calls:
+            // the initial load has nothing to invalidate and would only evict
+            // other screens' entries. `/media/<x>/fandoms` is
+            // `max-age=600, public`; it escapes the cache today only because
+            // the index is megabytes and overflows `URLCache`'s per-entry
+            // ceiling, which is a fact about AO3's page size, not about us.
+            .refreshable {
+                await AO3Client.shared.invalidateCachedResponses()
+                await refresh()
+            }
+            .searchable(text: $query, prompt: "Search \(category.name)")
+            #if os(iOS)
+            .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
+            #endif
+            .task(id: listingToken) { await applyFilter() }
+            .onChange(of: groupsVariants) { _, isOn in
+                filterOptions.groupsVariantsChanged(to: isOn)
+                Task { await rebuildFamilies() }
+            }
+            .overlay(alignment: .trailing) {
+                if showsLetterIndex { letterIndex(proxy: proxy) }
+            }
         }
-        .cardList()
-        .subjectScreenWash(palette: palette)
-        // Here rather than inside `refresh()`, which `load()` also calls:
-        // the initial load has nothing to invalidate and would only evict
-        // other screens' entries. `/media/<x>/fandoms` is
-        // `max-age=600, public`; it escapes the cache today only because
-        // the index is megabytes and overflows `URLCache`'s per-entry
-        // ceiling, which is a fact about AO3's page size, not about us.
-        .refreshable {
-            await AO3Client.shared.invalidateCachedResponses()
-            await refresh()
+    }
+
+    private var letterSections: [FandomFamily.LetterSection] {
+        FandomFamily.letterSections(displayedFamilies)
+    }
+
+    private var showsLetterIndex: Bool {
+        sort == .alphabetical && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func letterIndex(proxy: ScrollViewProxy) -> some View {
+        let available = Set(letterSections.map(\.id))
+        let orderedAvailable = Self.indexLetters.filter(available.contains)
+        return GeometryReader { geometry in
+            VStack(spacing: 0) {
+                ForEach(Self.indexLetters, id: \.self) { letter in
+                    Text(letter)
+                        .font(.system(size: indexFontSize, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .opacity(available.contains(letter) ? 1 : 0.28)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let rowHeight = geometry.size.height / CGFloat(Self.indexLetters.count)
+                        let index = min(
+                            max(Int(value.location.y / max(rowHeight, 1)), 0),
+                            Self.indexLetters.count - 1
+                        )
+                        scroll(to: Self.indexLetters[index], available: available, proxy: proxy)
+                    }
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Fandom index")
+            .accessibilityValue(indexedLetter ?? orderedAvailable.first ?? "No sections")
+            .accessibilityAdjustableAction { direction in
+                guard !orderedAvailable.isEmpty else { return }
+                let current = indexedLetter.flatMap { orderedAvailable.firstIndex(of: $0) }
+                let next: Int
+                switch direction {
+                case .increment:
+                    next = min((current ?? -1) + 1, orderedAvailable.count - 1)
+                case .decrement:
+                    next = max((current ?? orderedAvailable.count) - 1, 0)
+                @unknown default:
+                    return
+                }
+                scroll(to: orderedAvailable[next], available: available, proxy: proxy)
+            }
         }
-        .searchable(text: $query, prompt: "Search \(category.name)")
-        #if os(iOS)
-        .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
-        #endif
-        .task(id: listingToken) { await applyFilter() }
-        .onChange(of: groupsVariants) { _, isOn in
-            filterOptions.groupsVariantsChanged(to: isOn)
-            Task { await rebuildFamilies() }
-        }
+        .frame(width: 16, height: indexFontSize * 1.5 * CGFloat(Self.indexLetters.count))
+        .padding(.trailing, 2)
+    }
+
+    private func scroll(to letter: String, available: Set<String>, proxy: ScrollViewProxy) {
+        guard available.contains(letter), indexedLetter != letter else { return }
+        indexedLetter = letter
+        proxy.scrollTo(letter, anchor: .top)
     }
 
     private var pageHeader: some View {
@@ -271,7 +344,10 @@ struct FandomListView: View {
             Button {
                 onSelect([member.originalName], member.originalName)
             } label: {
-                FandomListRow(fandom: member.fandom)
+                FandomListRow(
+                    fandom: member.fandom,
+                    libraryEntry: libraryIndex.entry(for: member.originalName)
+                )
             }
             .buttonStyle(.plain)
             .workCardZoomSource(BrowseZoomKey.fandom(member.originalName), in: zoomNamespace)
@@ -280,6 +356,7 @@ struct FandomListView: View {
             FandomFamilyBlock(
                 family: family,
                 sort: sort,
+                library: libraryIndex,
                 palette: palette,
                 onSelectFamily: {
                     onSelect(family.includedFilterNames, family.parsedTitle)
@@ -751,19 +828,37 @@ enum FandomDisplayName {
 
 private struct FandomListRow: View {
     let fandom: AO3Fandom
+    let libraryEntry: FandomLibraryIndex.Entry
+
+    @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .caption) private var starSize = 14.5
+    @ScaledMetric(relativeTo: .caption2) private var downloadFontSize = 11.5
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
+            if libraryEntry.isFavourite {
+                Image(systemName: "star.fill")
+                    .font(.system(size: starSize))
+                    .foregroundStyle(Color.subjectFavoriteGold)
+                    .accessibilityLabel("Favorite")
+            }
+
             VStack(alignment: .leading, spacing: 2) {
                 // Three tiers, each on its own line and each a step quieter than
                 // the one above. The title used to carry its qualifier inline to
                 // save a line, but that let a long name wrap mid-qualifier —
                 // "My Hero Academia (Anime" / "& Manga)" — which is the worst
                 // thing a row can do to a name you are trying to read.
-                Text(splitName.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(splitName.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                    if libraryEntry.downloadedWorkCount > 0 {
+                        downloadBadge(count: libraryEntry.downloadedWorkCount)
+                    }
+                }
 
                 // The disambiguation. Below rather than beside, so the title
                 // owns its line; also lines the qualifiers up in a column, which
@@ -826,6 +921,25 @@ private struct FandomListRow: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+
+    private func downloadBadge(count: Int) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.down.circle")
+            Text(count.compactCount)
+        }
+        .font(.system(size: downloadFontSize, weight: .medium, design: .monospaced))
+        .foregroundStyle(downloadTint)
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(count.formatted()) downloaded works")
+    }
+
+    private var downloadTint: Color {
+        guard let mint = SubjectHueSwatches.all.first(where: { $0.name == "Mint" }) else {
+            return theme.appTheme.statusSuccessColor
+        }
+        return theme.appTheme.subjectPalette(hue: mint.hue).accent
     }
 
     /// AO3 writes a multilingual fandom tag as `original | romanization |
