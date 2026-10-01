@@ -6,12 +6,15 @@ import SwiftUI
 struct FandomFamilyBlock: View {
     let family: FandomFamily
     let sort: FandomFamilySort
+    let library: FandomLibraryIndex
     var palette: SubjectPalette
     var onSelectFamily: () -> Void
     var onSelectMember: (FandomFamily.Member) -> Void
 
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     @Environment(ThemeManager.self) private var themeManager
+    @ScaledMetric(relativeTo: .caption) private var starSize = 14.5
+    @ScaledMetric(relativeTo: .caption2) private var downloadFontSize = 11.5
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -31,11 +34,6 @@ struct FandomFamilyBlock: View {
                 }
         }
         .padding(.vertical, 4)
-        .padding(.horizontal, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(palette.accent.opacity(themeManager.appTheme.isDarkFamily ? 0.045 : 0.06))
-        )
     }
 
     private var header: some View {
@@ -95,7 +93,7 @@ struct FandomFamilyBlock: View {
                 Button {
                     onSelectMember(member)
                 } label: {
-                    memberRow(member)
+                    memberRow(member, libraryEntry: library.entry(for: member.originalName))
                 }
                 .buttonStyle(.plain)
                 .workCardZoomSource(BrowseZoomKey.fandom(member.originalName), in: zoomNamespace)
@@ -104,13 +102,27 @@ struct FandomFamilyBlock: View {
         .padding(.top, 8)
     }
 
-    private func memberRow(_ member: FandomFamily.Member) -> some View {
+    private func memberRow(
+        _ member: FandomFamily.Member,
+        libraryEntry: FandomLibraryIndex.Entry
+    ) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
+            if libraryEntry.isFavourite {
+                Image(systemName: "star.fill")
+                    .font(.system(size: starSize))
+                    .foregroundStyle(Color.subjectFavoriteGold)
+                    .accessibilityLabel("Favorite")
+            }
+
             Text(member.qualifierDisplay)
                 .font(.subheadline)
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if libraryEntry.downloadedWorkCount > 0 {
+                downloadBadge(count: libraryEntry.downloadedWorkCount)
+            }
 
             Text(member.workCount.formatted())
                 .font(.caption.weight(.medium))
@@ -128,6 +140,25 @@ struct FandomFamilyBlock: View {
         .accessibilityLabel(
             "\(member.qualifierDisplay), \(member.workCount.formatted()) works"
         )
+    }
+
+    private func downloadBadge(count: Int) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.down.circle")
+            Text(count.compactCount)
+        }
+        .font(.system(size: downloadFontSize, weight: .medium, design: .monospaced))
+        .foregroundStyle(downloadTint)
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(count.formatted()) downloaded works")
+    }
+
+    private var downloadTint: Color {
+        guard let mint = SubjectHueSwatches.all.first(where: { $0.name == "Mint" }) else {
+            return themeManager.appTheme.statusSuccessColor
+        }
+        return themeManager.appTheme.subjectPalette(hue: mint.hue).accent
     }
 
     private var headerAliases: [String] {

@@ -322,20 +322,51 @@ nonisolated struct FandomListFilterOptions: Equatable, Sendable {
 /// works. Built on the main actor from `SavedWork`, then passed into the pure
 /// filter pass.
 nonisolated struct FandomLibraryIndex: Equatable, Sendable {
-    var favouriteNamesLowercased: Set<String>
-    var downloadNamesLowercased: Set<String>
+    struct Entry: Equatable, Sendable {
+        var isFavourite = false
+        var downloadedWorkCount = 0
+    }
+
+    private var favouriteNamesLowercased: Set<String>
+    private var downloadCountsByNameLowercased: [String: Int]
 
     static let empty = FandomLibraryIndex(
         favouriteNamesLowercased: [],
         downloadNamesLowercased: []
     )
 
+    init(
+        favouriteNamesLowercased: Set<String>,
+        downloadNamesLowercased: Set<String>
+    ) {
+        self.favouriteNamesLowercased = favouriteNamesLowercased
+        self.downloadCountsByNameLowercased = Dictionary(
+            uniqueKeysWithValues: downloadNamesLowercased.map { ($0, 1) }
+        )
+    }
+
+    init(
+        favouriteNamesLowercased: Set<String>,
+        downloadCountsByNameLowercased: [String: Int]
+    ) {
+        self.favouriteNamesLowercased = favouriteNamesLowercased
+        self.downloadCountsByNameLowercased = downloadCountsByNameLowercased
+    }
+
+    func entry(for originalName: String) -> Entry {
+        let name = originalName.lowercased()
+        return Entry(
+            isFavourite: favouriteNamesLowercased.contains(name),
+            downloadedWorkCount: downloadCountsByNameLowercased[name, default: 0]
+        )
+    }
+
     func isFavourited(_ originalName: String) -> Bool {
-        favouriteNamesLowercased.contains(originalName.lowercased())
+        entry(for: originalName).isFavourite
     }
 
     func hasDownload(_ originalName: String) -> Bool {
-        downloadNamesLowercased.contains(originalName.lowercased())
+        entry(for: originalName).downloadedWorkCount > 0
     }
 }
 
