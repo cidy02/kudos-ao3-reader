@@ -20,6 +20,16 @@ struct ChallengeAssignmentsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .headline) private var cardTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var pillLabelSize: CGFloat = 12
 
     @State private var matched: [AO3ChallengeAssignment] = []
     @State private var unmatched: [AO3ChallengeAssignment] = []
@@ -258,15 +268,17 @@ struct ChallengeAssignmentsView: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(displayName(assignment.requestPseud)) → \(giverDisplay(for: assignment))")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.system(size: rowTitleSize, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let secondary = secondaryLine(for: assignment) {
                     Text(secondary)
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -302,6 +314,8 @@ struct ChallengeAssignmentsView: View {
     private func badge(_ text: String, color: Color) -> some View {
         Text(text.uppercased())
             .font(.system(size: 9, weight: .bold))
+            .lineLimit(1)
+            .fixedSize()
             .tracking(0.6)
             .foregroundStyle(color)
             .padding(.horizontal, 8)
@@ -338,7 +352,9 @@ struct ChallengeAssignmentsView: View {
                     ProgressView().controlSize(.small)
                 }
                 Text("Claim")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: pillLabelSize, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .foregroundStyle(palette.accent)
             .padding(.horizontal, 10)
@@ -377,11 +393,12 @@ struct ChallengeAssignmentsView: View {
     private func unmatchedCard(_ pair: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(pair.count == 2 ? "Two sign-ups lost their giver" : "One sign-up lost its giver")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: cardTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(unmatchedProse(pair))
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -408,7 +425,7 @@ struct ChallengeAssignmentsView: View {
             router.open(AO3ChallengeURL.assignments(slug: collectionSlug, list: .pinchHits))
         } label: {
             Label(title, systemImage: "safari")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: pillLabelSize, weight: .semibold))
         }
         .buttonStyle(.bordered)
         .tint(tint)
@@ -420,7 +437,7 @@ struct ChallengeAssignmentsView: View {
         Text("Assignments and pinch hits are paged lists. The app reads them, reports a default and "
             + "claims a pinch hit; a pinch-hit request opens AO3, and it cannot run AO3’s matching, "
             + "so no screen here offers to.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -528,8 +545,9 @@ extension ChallengeAssignmentsView {
             ProgressView()
                 .controlSize(.small)
             Text("Loading assignments…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -537,7 +555,7 @@ extension ChallengeAssignmentsView {
 
     private func emptyCard(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 12.5))
+            .font(.system(size: bodySize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -549,11 +567,13 @@ extension ChallengeAssignmentsView {
     private func failureCard(_ message: String, title: String = "Couldn't load assignments") -> some View {
         VStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: cardTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await load() }
             }
@@ -571,9 +591,10 @@ extension ChallengeAssignmentsView {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Color.red)
             Text(message)
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             Button {
                 actionErrorMessage = nil
             } label: {
@@ -594,10 +615,13 @@ extension ChallengeAssignmentsView {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
                     Text("Pinch hit #\(row.number)")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: cardTitleSize, weight: .semibold))
                         .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(row.isOpen ? "OPEN" : "CLAIMED")
                         .font(.system(size: 8.5, weight: .bold))
+                        .lineLimit(1)
+                        .fixedSize()
                         .tracking(8.5 * 0.07)
                         .foregroundStyle(row.isOpen ? palette.accent : Color.secondary.opacity(0.7))
                         .padding(.horizontal, 7)
@@ -608,8 +632,9 @@ extension ChallengeAssignmentsView {
                         )
                 }
                 Text(row.detail(dueText: worksDueAt?.dateText))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(Color.secondary.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -661,10 +686,11 @@ extension ChallengeAssignmentsView {
                 picking = .reportDefault
             } label: {
                 Text("Report a default")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: buttonLabelSize, weight: .semibold))
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
+                    .fixedSize(horizontal: false, vertical: true)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(theme.appTheme.glassFill(0.10))
@@ -681,10 +707,11 @@ extension ChallengeAssignmentsView {
                 picking = .claimPinchHit
             } label: {
                 Text("Claim a pinch hit")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: buttonLabelSize, weight: .semibold))
                     .foregroundStyle(palette.labelOnAccent)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
+                    .fixedSize(horizontal: false, vertical: true)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.accent))
             }
             .buttonStyle(.plain)
