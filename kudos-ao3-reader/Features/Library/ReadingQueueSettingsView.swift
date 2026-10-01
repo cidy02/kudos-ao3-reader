@@ -38,7 +38,7 @@ struct ReadingQueueSettingsView: View {
     @State private var showingTags = false
 
     private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+        themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
     private var works: [SavedWork] {
@@ -200,7 +200,9 @@ struct ReadingQueueSettingsView: View {
             } label: {
                 SubjectFormRow(label: "Colour", showsDisclosure: true) {
                     Circle()
-                        .fill(themeManager.appTheme.subjectPalette(hue: queue.displayHue).accent)
+                        // A picked "+" colour shows as itself.
+                        .fill(queue.colorHex.flatMap(Color.init(hex:))
+                            ?? themeManager.appTheme.subjectPalette(hue: queue.displayHue).accent)
                         .frame(width: 22, height: 22)
                         .accessibilityHidden(true)
                 }
@@ -260,8 +262,10 @@ struct ReadingQueueSettingsView: View {
         )
     }
 
+    /// A preset or the name hash replaces a picked "+" colour.
     private func setHue(_ hue: Double?) {
         queue.hue = hue
+        queue.colorHex = nil
         queue.markModified()
         context.saveBestEffort(reason: "Saving queue colour failed")
     }

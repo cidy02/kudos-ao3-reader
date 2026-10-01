@@ -30,7 +30,7 @@ struct QueueTagManagerView: View {
     /// The queue's own colour, as Queue Details draws it — this screen is
     /// pushed from there, and 1bh's wash is the queue's.
     private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+        themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
     private var gutter: CGFloat { SubjectMetrics.gutter }
@@ -321,7 +321,7 @@ struct QueueTagEditSheet: View {
     }
 
     private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+        themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
     private var gutter: CGFloat { SubjectMetrics.gutter }

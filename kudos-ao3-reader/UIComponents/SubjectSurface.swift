@@ -330,8 +330,13 @@ extension ReaderTheme {
         isDarkFamily ? Color.white.opacity(opacity) : Color.black.opacity(opacity * 0.55)
     }
 
-    func subjectPalette(hue: Double) -> SubjectPalette {
-        SubjectPalette(hue: hue, theme: self)
+    /// `pickedHex` is a queue's or collection's exact "+" colour (`colorHex`):
+    /// when present the palette is that colour (`init(color:)`), not the hue's.
+    func subjectPalette(hue: Double, pickedHex: String? = nil) -> SubjectPalette {
+        if let picked = pickedHex.flatMap(Color.init(hex:)) {
+            return SubjectPalette(color: picked, theme: self)
+        }
+        return SubjectPalette(hue: hue, theme: self)
     }
 }
 

@@ -49,7 +49,7 @@ struct QueueTagSheet: View {
     /// a selection of several has no one colour, so it takes the app's accent.
     private var palette: SubjectPalette {
         guard queues.count == 1, let queue = queues.first else { return themeManager.scopePalette }
-        return themeManager.appTheme.subjectPalette(hue: queue.displayHue)
+        return themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
     }
 
     private var gutter: CGFloat { SubjectMetrics.gutter }

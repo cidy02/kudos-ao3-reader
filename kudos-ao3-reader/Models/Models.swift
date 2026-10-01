@@ -728,6 +728,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// someone chooses. Same shape and the same reason as `ReadingQueue.hue`,
     /// including the defect it fixes: renaming a collection silently repainted it.
     var hue: Double?
+    /// The exact colour picked with the swatch row's "+", as `#RRGGBB`; `nil` for
+    /// a preset swatch or a name-derived colour. `hue` is kept as this colour's
+    /// hue alongside it, so an older build, Android and anything that only reads
+    /// the hue still draw a near match. Same as `ReadingQueue.colorHex`.
+    var colorHex: String?
     /// 1bk's Behaviour group. "Keep downloads exempts these works from the cache
     /// sweep" — the same choice `ReadingQueue.keepsWorksOffline` offers, and
     /// optional for the same reason: `nil` is "never asked", which must stay
@@ -870,6 +875,14 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// Deriving the colour from the name had a real cost, which is why the spec
     /// calls it out: renaming a queue silently repainted it.
     var hue: Double?
+
+    /// The exact colour picked with the swatch row's "+", as `#RRGGBB` — owner
+    /// call 2026-10-01: a custom colour is stored as picked, not reduced to a
+    /// hue. `nil` for a preset swatch or a name-derived colour. `hue` is kept as
+    /// this colour's hue alongside it, so an older build, Android and anything
+    /// that reads only the hue still draw a near match. Additive optional, so a
+    /// lightweight schema addition like `hue`.
+    var colorHex: String?
 
     /// 1i: "Pinned queues sit above the rest", and its overflow menu offers bulk
     /// pin. Defaults false so every existing queue keeps the order it had.

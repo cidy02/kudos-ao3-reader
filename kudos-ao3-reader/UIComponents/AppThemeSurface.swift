@@ -254,6 +254,8 @@ private struct CardRow: ViewModifier {
     /// Opt-in fandom hue for redesigned ledger rows. Nil preserves the
     /// established solid card surface for every other list.
     var tintHue: Double?
+    /// A queue's exact "+" colour (`colorHex`), which wins over `tintHue`.
+    var tintHex: String?
     var cornerRadius: CGFloat
     var verticalPadding: CGFloat
     var interCardSpacing: CGFloat
@@ -319,12 +321,12 @@ private struct CardRow: ViewModifier {
     /// underneath, Light and Sepia rows would go translucent.
     private var cardFill: AnyShapeStyle {
         guard let tintHue else { return AnyShapeStyle(theme.appTheme.cardSurface) }
-        return AnyShapeStyle(theme.appTheme.subjectPalette(hue: tintHue).rowWash)
+        return AnyShapeStyle(theme.appTheme.subjectPalette(hue: tintHue, pickedHex: tintHex).rowWash)
     }
 
     private var cardBorder: Color {
         guard let tintHue else { return theme.appTheme.cardBorder }
-        return theme.appTheme.subjectPalette(hue: tintHue).rowBorder
+        return theme.appTheme.subjectPalette(hue: tintHue, pickedHex: tintHex).rowBorder
     }
 }
 
@@ -342,6 +344,7 @@ extension View {
     func cardRow(
         isSelected: Bool = false,
         tintHue: Double? = nil,
+        tintHex: String? = nil,
         cornerRadius: CGFloat = CardListMetrics.cornerRadius,
         verticalPadding: CGFloat = CardListMetrics.innerVertical,
         interCardSpacing: CGFloat = CardListMetrics.interCardSpacing,
@@ -350,6 +353,7 @@ extension View {
         modifier(CardRow(
             isSelected: isSelected,
             tintHue: tintHue,
+            tintHex: tintHex,
             cornerRadius: cornerRadius,
             verticalPadding: verticalPadding,
             interCardSpacing: interCardSpacing,
