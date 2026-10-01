@@ -270,6 +270,7 @@ struct AllReadingQueuesGridView: View {
                         organizerRow(queue, isReorderable: false)
                             .organizerCard(queue)
                             .swipeActions(edge: .trailing) { queueSwipes(queue) }
+                            .modifier(QueueCardMenu(queue: queue, isEnabled: !isSelecting && !isReordering))
                     }
                 }
             }
@@ -287,6 +288,7 @@ struct AllReadingQueuesGridView: View {
                     organizerRow(queue, isReorderable: true)
                         .organizerCard(queue)
                         .swipeActions(edge: .trailing) { queueSwipes(queue) }
+                        .modifier(QueueCardMenu(queue: queue, isEnabled: !isSelecting && !isReordering))
                 }
                 .onMove(perform: moveAction)
 
