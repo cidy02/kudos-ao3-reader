@@ -217,7 +217,7 @@ struct ReadingQueueSettingsView: View {
                         queue.keepsWorksOffline = isOn
                         queue.markModified()
                         context.saveBestEffort(reason: "Saving queue offline setting failed")
-                        if isOn { fetchMissingDownloads() }
+                        if isOn { ReadingQueueService.preserveMissingWorks(in: queue, context: context) }
                     }
                 ))
                 .labelsHidden()
@@ -232,19 +232,6 @@ struct ReadingQueueSettingsView: View {
             )
         }
         .subjectPanel()
-    }
-
-    /// Turning Keep downloaded on fetches the works still missing their EPUB,
-    /// one at a time through the paced client (`ReadingQueueService.preserve`).
-    /// Only this tap starts it: nothing polls.
-    private func fetchMissingDownloads() {
-        let missing = works.filter { !$0.hasEPUB && !$0.isPendingDeletion }
-        guard !missing.isEmpty else { return }
-        Task {
-            for work in missing {
-                try? await ReadingQueueService.preserve(work, in: context)
-            }
-        }
     }
 
     private var manageTagsPanel: some View {

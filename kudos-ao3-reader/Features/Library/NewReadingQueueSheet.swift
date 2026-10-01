@@ -31,8 +31,13 @@ import SwiftUI
 /// nothing is created until Create. The wash, the Create tint, the radio and the
 /// selected tag chips take the tapped swatch's hue.
 ///
-/// **Not built:** the colour row's dashed "+" for a custom hue;
-/// `SubjectHueSwatchRow` is the app's swatch grammar and offers the palette only.
+/// **The colour row's dashed "+" is built** in `SubjectHueSwatchRow`: the system
+/// colour picker, kept as a hue like the swatches.
+///
+/// **Edit Queue is this sheet too** (`EditReadingQueueSheet`, owner request
+/// 2026-10-01): the same fields over an existing queue, saved rather than
+/// created. Start from is left out — seeding only means something for a queue
+/// that does not exist yet.
 ///
 /// Chrome is `NewCollectionSheet`'s — text Cancel/Create in the navigation bar
 /// rather than 1j's 34pt circle pair. The two sheets do the same job minutes
@@ -49,6 +54,9 @@ struct NewReadingQueueSheet: View {
     /// copies of state that only this sheet reads.
     let onCreate: (NewQueueOptions) -> Void
     let onCancel: () -> Void
+    /// Edit Queue: title and confirm read "Edit queue" / "Save", and Start
+    /// from is left out. Set through `init(name:hue:editing:onSave:onCancel:)`.
+    var isEditing = false
 
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
@@ -108,15 +116,17 @@ struct NewReadingQueueSheet: View {
                     footnote(Self.offlineFootnote)
                 }
 
-                Section {
-                    groupLabel("Start from")
-                    seedPanel.pageBodyRow(top: 8, gutter: gutter)
+                if !isEditing {
+                    Section {
+                        groupLabel("Start from")
+                        seedPanel.pageBodyRow(top: 8, gutter: gutter)
+                    }
                 }
             }
             .cardList()
             // Rows at their own padding, not the List minimum (L3-FORM-1).
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle("New queue")
+            .navigationTitle(isEditing ? "Edit queue" : "New queue")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -126,7 +136,7 @@ struct NewReadingQueueSheet: View {
                         Button("Cancel", action: onCancel)
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Create") { onCreate(options) }
+                        Button(isEditing ? "Save" : "Create") { onCreate(options) }
                             .disabled(trimmedName.isEmpty)
                     }
                 }
@@ -141,7 +151,10 @@ struct NewReadingQueueSheet: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         #endif
-        .task { seedCount = ReadingQueueService.savedForLaterSeedCount(in: context) }
+        .task {
+            guard !isEditing else { return }
+            seedCount = ReadingQueueService.savedForLaterSeedCount(in: context)
+        }
         .alert("New tag", isPresented: $showingNewTag) {
             TextField("Tag", text: $newTagName)
             Button("Add", action: addNewTag)
@@ -312,6 +325,57 @@ struct NewReadingQueueSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .pageBodyRow(top: 8, gutter: gutter)
+    }
+}
+
+extension NewReadingQueueSheet {
+    /// Edit Queue: the sheet seeded with what the queue already has.
+    init(
+        name: Binding<String>,
+        hue: Binding<Double?>,
+        editing options: NewQueueOptions,
+        onSave: @escaping (NewQueueOptions) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.init(name: name, hue: hue, onCreate: onSave, onCancel: onCancel)
+        isEditing = true
+        _options = State(initialValue: options)
+    }
+}
+
+/// "Edit Queue" in the queue's menu and the organizer's swipe — it took
+/// Rename's place, since the name is one of its fields. Owns its draft, so
+/// nothing is written until Save.
+struct EditReadingQueueSheet: View {
+    let queue: ReadingQueue
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var hue: Double?
+
+    init(queue: ReadingQueue) {
+        self.queue = queue
+        _name = State(initialValue: queue.name)
+        _hue = State(initialValue: queue.hue)
+    }
+
+    var body: some View {
+        NewReadingQueueSheet(
+            name: $name,
+            hue: $hue,
+            editing: NewQueueOptions(
+                keepsWorksOffline: KeepOffline.queueKeeps(queue.keepsWorksOffline),
+                tagNames: queue.tags.map(\.name).sorted()
+            ),
+            onSave: { options in
+                if ReadingQueueService.updateQueue(queue, name: name, hue: hue, options: options, in: context) {
+                    ReadingQueueService.preserveMissingWorks(in: queue, context: context)
+                }
+                dismiss()
+            },
+            onCancel: { dismiss() }
+        )
     }
 }
 

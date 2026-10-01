@@ -122,6 +122,34 @@ struct ReadingQueueTests {
     /// 1h's "Add N": picked works go on the end of the queue, in the order
     /// picked, and a work already in the queue (or picked twice) is not added
     /// again.
+    /// Edit Queue writes the sheet's fields onto the queue: a blank name keeps
+    /// the old one, unpicked tags come off the queue only, and offline is
+    /// written only when it changes — reporting a turn-on so the caller fetches.
+    @Test func updateQueueWritesTheEditSheetsFields() throws {
+        let context = try makeContext()
+        let queue = ReadingQueueService.createQueue(named: "Before", tagNames: ["Angst", "Fluff"], in: context)
+        let work = SavedWork(title: "Tagged", author: "Writer")
+        context.insert(work)
+        let angst = try #require(queue.tags.first { $0.name == "Angst" })
+        work.tags.append(angst)
+
+        let keep = NewQueueOptions(keepsWorksOffline: true, tagNames: ["Fluff", "Slow Burn"])
+        #expect(!ReadingQueueService.updateQueue(queue, name: "  ", hue: 0.5, options: keep, in: context))
+        #expect(queue.name == "Before")
+        #expect(queue.hue == 0.5)
+        #expect(queue.keepsWorksOffline == nil)
+        #expect(Set(queue.tags.map(\.name)) == ["Fluff", "Slow Burn"])
+        #expect(work.tags.map(\.name) == ["Angst"])
+
+        let off = NewQueueOptions(keepsWorksOffline: false, tagNames: [])
+        #expect(!ReadingQueueService.updateQueue(queue, name: "After", hue: nil, options: off, in: context))
+        #expect(queue.name == "After")
+        #expect(queue.hue == nil)
+        #expect(queue.keepsWorksOffline == false)
+        #expect(queue.tags.isEmpty)
+        #expect(ReadingQueueService.updateQueue(queue, name: "After", hue: nil, options: keep, in: context))
+    }
+
     @Test func appendAddsAtTheEndInOrderWithoutDuplicates() throws {
         let context = try makeContext()
         let queue = ReadingQueueService.createQueue(named: "Append Test", in: context)
