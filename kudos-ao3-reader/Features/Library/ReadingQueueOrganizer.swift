@@ -306,10 +306,6 @@ struct AllReadingQueuesGridView: View {
                     .bareListRow()
                 }
 
-                if !isSelecting {
-                    newQueueRow
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
-                }
             }
         }
         .cardList()
@@ -452,39 +448,6 @@ struct AllReadingQueuesGridView: View {
             ],
             palette: organizerPalette
         )
-    }
-
-    private var newQueueRow: some View {
-        Button {
-            newQueueName = ""
-            showingNewQueue = true
-        } label: {
-            HStack(spacing: 11) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(organizerPalette.accent)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("New queue")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text("Name it, colour it, tag it")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(.primary)
-            .padding(14)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .overlay(
-            RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6]))
-                .foregroundStyle(.tertiary)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Creates a new reading queue")
     }
 
     /// Edit and Delete for a custom queue, wherever its row is drawn —

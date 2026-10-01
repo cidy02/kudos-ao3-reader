@@ -348,18 +348,23 @@ struct LibrarySectionListView: View {
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
 
-            filterChipRail
-            .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+            if hasFilterRailContent {
+                filterChipRail
+                .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
         }
     }
 
+    /// The Reading Now pills, or an active filter's chips. With neither the
+    /// rail would be an empty row: the toolbar Filter is the way in.
+    private var hasFilterRailContent: Bool {
+        kind == .readingNow || !filters.summaryLabels(includesInProgress: kind != .readingNow).isEmpty
+    }
+
     private var filterChipRail: some View {
-        SubjectFilterRail(
-            onOpenFilters: { showingFilters = true },
-            activeFilterCount: filters.summaryLabels(includesSort: false).count
-        ) {
+        SubjectFilterRail {
             if kind == .readingNow {
                 LibraryCompletionPills(filters: $filters, works: items, palette: scopePalette)
             }
@@ -768,7 +773,7 @@ struct LibrarySectionListView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 subjectHeader.padding(.top, 20)
-                filterChipRail
+                if hasFilterRailContent { filterChipRail }
                 if showsFavoriteScopes {
                     favoriteScopeStrip(authorsReady: false)
                 }

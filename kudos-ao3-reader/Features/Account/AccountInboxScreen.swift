@@ -133,7 +133,7 @@ struct AccountInboxScreen: View {
 
     private var pillRail: some View {
         let selected = AO3InboxPill.selected(in: model.currentFilterValues)
-        return SubjectFilterRail(onOpenFilters: { showingFilters = true }) {
+        return SubjectFilterRail {
             ForEach(availablePills) { pill in
                 Button {
                     model.applyFilters(pill.values, auth: auth)

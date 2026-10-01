@@ -242,35 +242,20 @@ extension View {
 
 // MARK: - Filter chip rail
 
-/// The horizontal rail of active filters under a subject header, with a dashed
-/// "Filter" chip pinned at its trailing edge — spec 1k, 1ad, 1l and every other
-/// filtered list.
+/// The horizontal rail of active filters and quick pills under a subject
+/// header — spec 1k, 1ad, 1l and every other filtered list.
 ///
-/// The dashed chip is pinned *outside* the scrolling rail rather than appended
-/// to it: it is the way to change the filters, so it must never scroll off the
-/// edge just because six of them are already set.
+/// The spec pins a dashed "Filter" chip at its trailing edge. It is gone (owner,
+/// 2026-10-01: one control per action, and the top chrome wins): every screen
+/// that draws this rail already has the toolbar `FilterButton`, which carries
+/// the active count as its badge. Callers draw the rail only when it has chips.
 struct SubjectFilterRail<Chips: View>: View {
-    let onOpenFilters: () -> Void
-    /// Count shown on the dashed chip. Zero draws the bare word.
-    var activeFilterCount: Int = 0
     @ViewBuilder var chips: () -> Chips
 
     var body: some View {
-        HStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 7) { chips() }
-                    .padding(.horizontal, 22)
-            }
-
-            Button(action: onOpenFilters) {
-                SubjectChip(
-                    text: activeFilterCount > 0 ? "Filter \(activeFilterCount)" : "Filter",
-                    style: .dashed,
-                    systemImage: "line.3.horizontal.decrease"
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 22)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) { chips() }
+                .padding(.horizontal, 22)
         }
         .dynamicTypeSize(.xSmall ... .accessibility2)
     }

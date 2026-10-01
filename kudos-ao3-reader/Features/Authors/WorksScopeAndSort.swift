@@ -61,12 +61,27 @@ struct AO3AuthorWorksScopeSection: View {
     var showsScopes: Bool = false
     /// Runs before a change refetches (hosts use it to exit select mode).
     var onWillChange: () -> Void = {}
+    /// The host draws the funnel in its toolbar and presents
+    /// `AO3AuthorWorksFilterPanel` itself (`AuthorProfileView`; owner,
+    /// 2026-10-01: global actions live in the top-right chrome), so this row
+    /// keeps only the scope pills.
+    var usesToolbarFilter = false
 
     @Environment(AO3AuthService.self) private var auth
     @State private var showingFilters = false
 
     var body: some View {
-        if model.selectedTab == .works {
+        if usesToolbarFilter {
+            if model.selectedTab == .works, showsScopes {
+                Section {
+                    WorksScopeSegments(scope: scopeBinding)
+                        .listRowInsets(EdgeInsets(top: 4, leading: SubjectMetrics.gutter,
+                                                  bottom: 4, trailing: SubjectMetrics.gutter))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+            }
+        } else if model.selectedTab == .works {
             if layout == .scroll {
                 VStack(alignment: .leading, spacing: 8) {
                     controls
@@ -116,16 +131,44 @@ struct AO3AuthorWorksScopeSection: View {
         .accessibilityLabel("Sort and filter")
     }
 
-    private var sheetActiveCount: Int {
+    private var sheetActiveCount: Int { Self.activeCount(model) }
+
+    /// The funnel's badge: the sort, which refetches, and the facets, which
+    /// narrow the loaded page.
+    static func activeCount(_ model: AO3AuthorProfileModel) -> Int {
         model.worksSort.activeCount + model.worksFilters.refineActiveCount
     }
 
     private var sortAndFilterSheet: some View {
+        AO3AuthorWorksFilterPanel(model: model, onWillChange: onWillChange) { showingFilters = false }
+    }
+
+    private var scopeBinding: Binding<AO3AuthorRoute.Content> {
+        Binding(
+            get: { model.worksScope },
+            set: { scope in
+                onWillChange()
+                model.selectWorksScope(scope, auth: auth)
+            }
+        )
+    }
+}
+
+/// 1v's sort-and-refine panel over an author's works, for whichever control
+/// opens it: the scope row's funnel, or the profile's toolbar Filter.
+struct AO3AuthorWorksFilterPanel: View {
+    var model: AO3AuthorProfileModel
+    var onWillChange: () -> Void = {}
+    var onDone: () -> Void
+
+    @Environment(AO3AuthService.self) private var auth
+
+    var body: some View {
         AO3FilterPanel(
             filters: filtersBinding,
             mode: .refine,
             canReset: model.worksFilters.refineActiveCount > 0,
-            onApply: { showingFilters = false },
+            onApply: onDone,
             onReset: { model.applyWorksFilters(AO3SearchFilters()) },
             // The same array `AO3AuthorWorksSection` narrows, so 1au's match line
             // and the list behind it cannot disagree.
@@ -148,16 +191,6 @@ struct AO3AuthorWorksScopeSection: View {
             set: { filters in
                 onWillChange()
                 model.applyWorksFilters(filters)
-            }
-        )
-    }
-
-    private var scopeBinding: Binding<AO3AuthorRoute.Content> {
-        Binding(
-            get: { model.worksScope },
-            set: { scope in
-                onWillChange()
-                model.selectWorksScope(scope, auth: auth)
             }
         )
     }
