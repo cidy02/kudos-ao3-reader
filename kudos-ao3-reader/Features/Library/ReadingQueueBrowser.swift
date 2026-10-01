@@ -201,10 +201,7 @@ struct ReadingQueueBrowserView: View {
     /// narrowing the queue — 1h's own quick filters (`QueueQuickFilter`) are
     /// the everyday rail, and the toolbar's Filter button opens the panel.
     private var filterChipRail: some View {
-        SubjectFilterRail(
-            onOpenFilters: { showingFilters = true },
-            activeFilterCount: filters.summaryLabels(includesSort: false).count
-        ) {
+        SubjectFilterRail {
             ForEach(filters.summaryLabels(), id: \.self) { label in
                 SubjectChip(
                     text: label.text,

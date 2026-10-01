@@ -330,10 +330,7 @@ struct AO3CollectionsList: View {
     }
 
     private var filterRail: some View {
-        SubjectFilterRail(
-            onOpenFilters: { showingFilters = true },
-            activeFilterCount: filters.summaryLabels.count
-        ) {
+        SubjectFilterRail {
             ForEach(filters.summaryLabels, id: \.self) { label in
                 SubjectChip(text: label, style: .tinted, palette: palette)
             }
