@@ -169,6 +169,8 @@ struct ReadingQueueSettingsView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette, washHeight: 620)
         .sheet(isPresented: $showingTags) { QueueTagSheet(queue: queue) }
         #if os(macOS)

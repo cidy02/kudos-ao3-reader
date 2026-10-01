@@ -137,6 +137,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             pageSections
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         // Spec 1a washes the page in the work's own hue and runs it 620pt down,
         // well past the identity block, so the strip and resume card sit inside
         // the colour rather than on the plain backdrop below it.
