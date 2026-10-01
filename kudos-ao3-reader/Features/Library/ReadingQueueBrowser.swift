@@ -40,8 +40,7 @@ struct ReadingQueueBrowserView: View {
 
     // MARK: Manage-surface state (formerly ReadingQueueDetailView)
 
-    @State private var showingRename = false
-    @State private var renameText = ""
+    @State private var showingEdit = false
     @State private var confirmDelete = false
     /// A row's Remove from Queue waits here for the same confirmation a
     /// collection row and the queue's bulk Remove already ask.
@@ -350,18 +349,8 @@ struct ReadingQueueBrowserView: View {
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
             .toolbar { manageToolbar }
-            .alert("Rename Queue", isPresented: $showingRename) {
-                TextField("Name", text: $renameText)
-                Button("Save") {
-                    guard let queue = selectedQueue else { return }
-                    let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        queue.name = trimmed
-                        queue.markModified()
-                        context.saveBestEffort(reason: "Saving queue rename failed")
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
+            .sheet(isPresented: $showingEdit) {
+                if let selectedQueue { EditReadingQueueSheet(queue: selectedQueue) }
             }
             .confirmationDialog(
                 "Delete “\(selectedQueue?.displayName ?? "Queue")”?",
@@ -870,7 +859,7 @@ extension ReadingQueueBrowserView {
         )
     }
 
-    /// Queue Details, and Rename / Delete for a custom queue — the same items
+    /// Queue Details, and Edit Queue / Delete for a custom queue — the same items
     /// whether or not the queue has works.
     @ViewBuilder
     private var queueMenuItems: some View {
@@ -881,10 +870,9 @@ extension ReadingQueueBrowserView {
         }
         if let queue = selectedQueue, queue.kind == .custom {
             Button {
-                renameText = queue.name
-                showingRename = true
+                showingEdit = true
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label("Edit Queue", systemImage: "pencil")
             }
             Button(role: .destructive) {
                 confirmDelete = true
