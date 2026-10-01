@@ -32,8 +32,10 @@ extension Color {
         #else
         (platform.usingColorSpace(.sRGB) ?? platform).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         #endif
-        return String(format: "#%02X%02X%02X",
-                      Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+        // Clamped: the system colour picker can hand back extended-range
+        // (Display P3) components below 0 or above 1.
+        func byte(_ component: CGFloat) -> Int { Int((min(max(component, 0), 1) * 255).rounded()) }
+        return String(format: "#%02X%02X%02X", byte(red), byte(green), byte(blue))
     }
 
     /// The colour's hue as a 0…1 fraction, which is what every subject-derived

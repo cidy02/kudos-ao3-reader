@@ -1390,6 +1390,9 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
     /// it — and `nil` is exactly "take the colour from the name", the state those
     /// archives were written in. Same additive shape as `ReadingQueue.hue`.
     let hue: Double?
+    /// The exact "+" colour (`WorkCollection.colorHex`). Additive like `hue`;
+    /// merged with it by `SyncMerge.chosenColor`.
+    let colorHex: String?
     /// 1bk's Behaviour group. Additive optionals for the same reason as `hue`:
     /// an older archive and Android carry neither, and `nil` there is the state
     /// they were written in — never asked, and not shown on Home.
@@ -1415,6 +1418,7 @@ nonisolated struct KudosBackupCollection: Codable, Equatable {
         description = collection.collectionDescription
         sortOrder = collection.sortOrder
         hue = collection.hue
+        colorHex = collection.colorHex
         keepsWorksOffline = collection.keepsWorksOffline
         showsOnHome = collection.showsOnHome
         workOrderRaw = collection.workOrderRaw
@@ -1438,6 +1442,10 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
     /// archives were written in. No version bump: this is additive, and the
     /// existing optional fields here were added the same way.
     let hue: Double?
+    /// The exact "+" colour (`ReadingQueue.colorHex`), owner call 2026-10-01.
+    /// Additive like `hue`, no version bump: an older archive or Android carries
+    /// none, and `SyncMerge.chosenColor` keeps a local one through it.
+    let colorHex: String?
     /// 1h/1i's queue tags, by name — the same identity `SavedWork`'s `userTags`
     /// uses, because they are the same `Tag`. Optional and additive for the same
     /// reason as `hue`.
@@ -1466,6 +1474,7 @@ nonisolated struct KudosBackupReadingQueue: Codable, Equatable {
         isDeleted = queue.isPendingDeletion
         permanentDeletionScheduledAt = queue.permanentDeletionScheduledAt
         hue = queue.hue
+        colorHex = queue.colorHex
         tagNames = queue.tags.map(\.name).sorted()
         isPinned = queue.isPinned
         keepsWorksOffline = queue.keepsWorksOffline
@@ -2564,9 +2573,11 @@ enum KudosBackupService {
             // Only ever fills a colour in, never clears one — an archive written
             // before `hue` existed, or by Android which does not write it, carries
             // nil, and letting that win would strip a colour the reader chose here.
-            if let archivedHue = archived.hue, incomingWins || collection.hue == nil {
-                collection.hue = archivedHue
-            }
+            (collection.hue, collection.colorHex) = SyncMerge.chosenColor(
+                local: (collection.hue, collection.colorHex),
+                incoming: (archived.hue, archived.colorHex),
+                incomingWins: incomingWins
+            )
             // Same fill-in-only rule as the queue's. `nil` is "never asked", so
             // an older archive cannot be read as the reader having said no.
             if let archivedOffline = archived.keepsWorksOffline,
@@ -2803,9 +2814,11 @@ enum KudosBackupService {
             // before `hue` existed (or by Android, which does not write it) carries
             // nil, and letting that win would strip a colour the reader had picked
             // on this device.
-            if let archivedHue = archived.hue, incomingWins || queue.hue == nil {
-                queue.hue = archivedHue
-            }
+            (queue.hue, queue.colorHex) = SyncMerge.chosenColor(
+                local: (queue.hue, queue.colorHex),
+                incoming: (archived.hue, archived.colorHex),
+                incomingWins: incomingWins
+            )
             // Same rule for the pin and the offline choice. `isPinned` only ever
             // fills a pin IN — an archive carrying nil, or false, must not unpin
             // a queue the reader pinned on this device unless it genuinely wins

@@ -24,6 +24,7 @@ struct NewCollectionSheet: View {
     @State private var name = ""
     @State private var collectionDescription = ""
     @State private var hue: Double?
+    @State private var colorHex: String?
     @State private var keepsWorksOffline = false
     @State private var showsOnHome = false
 
@@ -97,7 +98,7 @@ struct NewCollectionSheet: View {
                     .multilineTextAlignment(.trailing)
             }
             SubjectRowSeparator()
-            SubjectHueSwatchRow(selection: $hue)
+            SubjectHueSwatchRow(selection: $hue, pickedHex: $colorHex)
             // The row insets `SubjectFormRow` gives the labels above it, so the
             // first swatch lines up under "Name" instead of touching the card.
             .padding(.horizontal, 14)
@@ -140,6 +141,7 @@ struct NewCollectionSheet: View {
         guard !trimmed.isEmpty else { return }
         let collection = WorkCollection(name: trimmed)
         collection.hue = hue
+        collection.colorHex = colorHex
         collection.collectionDescription = collectionDescription
             .trimmingCharacters(in: .whitespacesAndNewlines)
         collection.keepsWorksOffline = keepsWorksOffline
@@ -175,7 +177,7 @@ struct CollectionReorderSheet: View {
     }
 
     private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: collection.displayHue)
+        themeManager.appTheme.subjectPalette(hue: collection.displayHue, pickedHex: collection.colorHex)
     }
 
     private var gutter: CGFloat { SubjectMetrics.gutter }
