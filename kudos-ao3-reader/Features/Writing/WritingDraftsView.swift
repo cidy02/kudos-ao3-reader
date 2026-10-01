@@ -48,15 +48,6 @@ struct WritingDraftsView: View {
                 deletionNotice.pageBodyRow(top: 18, gutter: gutter)
             }
 
-            Section {
-                SubjectFormRow(label: "New work", value: "", showsDisclosure: true)
-                    .subjectRowNavigation(accessibilityLabel: "New work") {
-                        WritingWorkDestination(workID: nil)
-                    }
-                    .subjectPanel()
-                    .pageBodyRow(top: 12, gutter: gutter)
-            }
-
             if isLoading {
                 ProgressView("Loading drafts…")
                     .frame(maxWidth: .infinity)
@@ -119,6 +110,17 @@ struct WritingDraftsView: View {
         .environment(\.defaultMinListRowHeight, 0)
         // The page states its own name in the header block above, per 1x.
         .hidesNavigationBarChrome()
+        // New Work in the top chrome, as on My Works — it was a row above the
+        // list (owner, 2026-10-01: global actions live in the top-right chrome).
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    WritingWorkDestination(workID: nil)
+                } label: {
+                    Label("New Work", systemImage: "plus")
+                }
+            }
+        }
         .subjectScreenWash(palette: theme.scopePalette)
         .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
         .refreshable { reload += 1 }
