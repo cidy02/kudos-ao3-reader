@@ -84,6 +84,8 @@ struct QueueTagManagerView: View {
             }
         }
         .cardList()
+        // Rows at their own padding, not the List minimum (L3-FORM-1).
+        .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette)
         // The wash's empty bar title is iOS-only; macOS's split view still
         // needs a real one, as `ReadingQueueSettingsView` gives itself.
@@ -388,6 +390,8 @@ struct QueueTagEditSheet: View {
                 }
             }
             .cardList()
+            // Rows at their own padding, not the List minimum (L3-FORM-1).
+            .environment(\.defaultMinListRowHeight, 0)
             .navigationTitle("Edit tag")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
