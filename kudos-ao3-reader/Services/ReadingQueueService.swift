@@ -166,6 +166,7 @@ enum ReadingQueueService {
     static func createQueue(
         named rawName: String,
         hue: Double? = nil,
+        colorHex: String? = nil,
         keepsWorksOffline: Bool? = nil,
         seededFrom seed: NewQueueSeed = .empty,
         tagNames: [String] = [],
@@ -178,6 +179,7 @@ enum ReadingQueueService {
             sortOrder: nextQueueSortOrder(in: context)
         )
         queue.hue = hue
+        queue.colorHex = colorHex
         queue.keepsWorksOffline = keepsWorksOffline
         context.insert(queue)
         // 1j's tags, through the same lookup-before-create `QueueTagSheet` uses.
@@ -213,8 +215,9 @@ enum ReadingQueueService {
             queue.name = trimmed
             changed = true
         }
-        if queue.hue != hue {
+        if queue.hue != hue || queue.colorHex != options.colorHex {
             queue.hue = hue
+            queue.colorHex = options.colorHex
             changed = true
         }
         let wasKept = KeepOffline.queueKeeps(queue.keepsWorksOffline)

@@ -41,39 +41,44 @@ nonisolated enum SubjectHueSwatches {
 /// predates this is in.
 ///
 /// On iOS the row ends in 1j's dashed "+": the system colour picker (grid,
-/// spectrum, RGB sliders, hex) that Settings' Accent Color opens. Only the
-/// picked colour's hue is kept — the same as the swatches — so a custom colour
-/// still takes each theme's own saturation and brightness.
+/// spectrum, RGB sliders, hex) that Settings' Accent Color opens. The pick is
+/// stored exactly, as `pickedHex` (`colorHex` on the model), with its hue in
+/// `selection` beside it; a preset clears it.
 struct SubjectHueSwatchRow: View {
     @Binding var selection: Double?
+    @Binding var pickedHex: String?
 
     @Environment(ThemeManager.self) private var themeManager
     @State private var showingCustom = false
 
-    /// A hue that no preset swatch claims — one picked with "+".
+    private var pickedColor: Color? { pickedHex.flatMap(Color.init(hex:)) }
+
+    /// The custom slot's hue: a picked colour's, or a stored hue that no
+    /// preset claims (an older hue-only custom colour).
     private var customHue: Double? {
         selection.flatMap { hue in
-            SubjectHueSwatches.all.contains { SubjectHueSwatches.matches($0, hue) } ? nil : hue
+            pickedHex != nil || !SubjectHueSwatches.all.contains { SubjectHueSwatches.matches($0, hue) }
+                ? hue : nil
         }
+    }
+
+    private func isSelected(_ swatch: SubjectHueSwatches.Swatch) -> Bool {
+        pickedHex == nil && SubjectHueSwatches.matches(swatch, selection)
     }
 
     var body: some View {
         HStack(spacing: 10) {
             ForEach(SubjectHueSwatches.all) { swatch in
                 Button {
-                    selection = SubjectHueSwatches.matches(swatch, selection) ? nil : swatch.hue
+                    selection = isSelected(swatch) ? nil : swatch.hue
+                    pickedHex = nil
                 } label: {
-                    swatchCircle(
-                        hue: swatch.hue,
-                        isSelected: SubjectHueSwatches.matches(swatch, selection)
-                    )
+                    swatchCircle(hue: swatch.hue, isSelected: isSelected(swatch))
                 }
                 .buttonStyle(.plain)
                 .minimumHitTarget()
                 .accessibilityLabel(swatch.name)
-                .accessibilityAddTraits(
-                    SubjectHueSwatches.matches(swatch, selection) ? [.isButton, .isSelected] : .isButton
-                )
+                .accessibilityAddTraits(isSelected(swatch) ? [.isButton, .isSelected] : .isButton)
             }
             #if os(iOS)
             customButton
@@ -90,7 +95,7 @@ struct SubjectHueSwatchRow: View {
             showingCustom = true
         } label: {
             if let customHue {
-                swatchCircle(hue: customHue, isSelected: true)
+                swatchCircle(hue: customHue, picked: pickedColor, isSelected: true)
             } else {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .semibold))
@@ -105,24 +110,29 @@ struct SubjectHueSwatchRow: View {
         .buttonStyle(.plain)
         .minimumHitTarget()
         .accessibilityLabel("Custom colour")
+        .accessibilityValue(pickedHex ?? "")
         .accessibilityAddTraits(customHue != nil ? [.isButton, .isSelected] : .isButton)
         .background(
             SystemColorPicker(
                 isPresented: $showingCustom,
-                initial: themeManager.appTheme.carouselQueueTint(hue: selection ?? SubjectHueSwatches.all[0].hue),
+                // Opaque: the swatch wash is translucent, and the picker
+                // previews a translucent colour over a light and a dark half.
+                initial: pickedColor
+                    ?? themeManager.appTheme.subjectPalette(hue: selection ?? SubjectHueSwatches.all[0].hue).accent,
                 onPick: { color in
-                    var hue: CGFloat = 0
-                    color.getHue(&hue, saturation: nil, brightness: nil, alpha: nil)
-                    selection = Double(hue)
+                    let picked = Color(uiColor: color)
+                    selection = picked.hueComponent
+                    pickedHex = picked.hexString
                 }
             )
         )
     }
     #endif
 
-    private func swatchCircle(hue: Double, isSelected: Bool) -> some View {
+    /// A preset is drawn as the wash it paints; a picked colour as itself.
+    private func swatchCircle(hue: Double, picked: Color? = nil, isSelected: Bool) -> some View {
         Circle()
-            .fill(themeManager.appTheme.carouselQueueTint(hue: hue))
+            .fill(picked ?? themeManager.appTheme.carouselQueueTint(hue: hue))
             .frame(width: 28, height: 28)
             .overlay(
                 Circle()
@@ -152,8 +162,7 @@ private struct SystemColorPicker: UIViewControllerRepresentable {
         context.coordinator.parent = self
         guard isPresented, host.presentedViewController == nil else { return }
         let picker = UIColorPickerViewController()
-        // Resolved, or the picker previews a dynamic colour's light and dark
-        // halves side by side.
+        // Resolved for the current appearance, in case `initial` is dynamic.
         picker.selectedColor = UIColor(initial).resolvedColor(with: host.traitCollection)
         picker.supportsAlpha = false
         picker.delegate = context.coordinator

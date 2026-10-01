@@ -32,7 +32,8 @@ import SwiftUI
 /// selected tag chips take the tapped swatch's hue.
 ///
 /// **The colour row's dashed "+" is built** in `SubjectHueSwatchRow`: the system
-/// colour picker, kept as a hue like the swatches.
+/// colour picker, stored exactly as `ReadingQueue.colorHex` (`options.colorHex`
+/// here) with its hue in `hue` beside it.
 ///
 /// **Edit Queue is this sheet too** (`EditReadingQueueSheet`, owner request
 /// 2026-10-01): the same fields over an existing queue, saved rather than
@@ -79,7 +80,7 @@ struct NewReadingQueueSheet: View {
     /// 1j: "The sheet takes a wash in whichever swatch you tap". Untapped, it
     /// keeps the app's own accent.
     private var palette: SubjectPalette {
-        hue.map { theme.appTheme.subjectPalette(hue: $0) } ?? theme.scopePalette
+        hue.map { theme.appTheme.subjectPalette(hue: $0, pickedHex: options.colorHex) } ?? theme.scopePalette
     }
 
     var body: some View {
@@ -95,7 +96,7 @@ struct NewReadingQueueSheet: View {
                     // 1j draws the swatches bare on the sheet, not on a card —
                     // they are their own shapes and a panel behind them would
                     // add an edge the board does not have.
-                    SubjectHueSwatchRow(selection: $hue)
+                    SubjectHueSwatchRow(selection: $hue, pickedHex: $options.colorHex)
                         .pageBodyRow(top: 10, gutter: gutter)
                     footnote(hue == nil
                         ? "Without a colour, the queue takes one from its name — and "
@@ -366,7 +367,8 @@ struct EditReadingQueueSheet: View {
             hue: $hue,
             editing: NewQueueOptions(
                 keepsWorksOffline: KeepOffline.queueKeeps(queue.keepsWorksOffline),
-                tagNames: queue.tags.map(\.name).sorted()
+                tagNames: queue.tags.map(\.name).sorted(),
+                colorHex: queue.colorHex
             ),
             onSave: { options in
                 if ReadingQueueService.updateQueue(queue, name: name, hue: hue, options: options, in: context) {
@@ -404,4 +406,7 @@ nonisolated struct NewQueueOptions: Equatable, Sendable {
     var seed: NewQueueSeed = .empty
     /// Tag names, resolved to `Tag`s only when the queue is created.
     var tagNames: [String] = []
+    /// The exact "+" colour (`ReadingQueue.colorHex`); the hue travels in the
+    /// sheet's `hue` binding beside it.
+    var colorHex: String?
 }
