@@ -91,6 +91,7 @@ struct FandomWorksView: View {
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var themeManager
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
@@ -166,20 +167,35 @@ struct FandomWorksView: View {
                     // the page you happen to be on.
                     if let heroSummary {
                         Section {
+                            // Spec 1k, as the Search tab draws it: the page head
+                            // with its figure strip and sort, not the old card.
                             SearchResultsHero(
                                 summary: heroSummary,
                                 filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
                                 subjectField: heroSummary.subjectField(inAnyOf: results),
-                                onEditFilters: { showingFilters = true }
+                                onEditFilters: { showingFilters = true },
+                                presentation: .subjectPage,
+                                currentPage: currentPage,
+                                totalPages: totalPages,
+                                sortSelection: sortSelection,
+                                sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance }
                             )
-                            .cardRow()
+                            .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(results) { work in
-                            SelectableAO3WorkRow(work: work, expandAll: expandAll, controller: bulkSelection)
-                                .cardRow(isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id))
+                            SelectableAO3WorkRow(
+                                work: work,
+                                expandAll: expandAll,
+                                controller: bulkSelection,
+                                presentation: .searchLedger
+                            )
+                            .cardRow(
+                                isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
+                                tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+                            )
                         }
                     }
                     if showPagination { Section { paginationRow } }
@@ -192,11 +208,10 @@ struct FandomWorksView: View {
                 .overlay { statusOverlay }
             }
         }
-        .navigationTitle(fandom)
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
-            .hidesFloatingTabBar()
+        // A pushed results page (1k proper): the wash under a title-less bar,
+        // the subject named by the hero, as on every other subject page.
+        .subjectScreenWash(palette: resultsPalette, washHeight: 600)
+        .screenTint(resultsPalette)
             // Zooms out of the fandom row that pushed it.
             .workCardZoomDestination(BrowseZoomKey.fandom(zoomKey), in: zoomNamespace)
             .toolbar { toolbarContent }
@@ -223,7 +238,8 @@ struct FandomWorksView: View {
         SearchPaginationBar(
             currentPage: currentPage,
             totalPages: totalPages,
-            isLoading: phase == .loading
+            isLoading: phase == .loading,
+            palette: resultsPalette
         ) { page in
             // A different page replaces `results` with different works entirely —
             // a stale selection would otherwise reference IDs that no longer exist.
@@ -272,6 +288,26 @@ struct FandomWorksView: View {
     /// subject and work out which slice of the total is on screen.
     private var heroSummary: AO3ResultSummary? {
         resultSummary?.completing(subject: fandom, page: currentPage, onPageCount: results.count)
+    }
+
+    /// The subject's colour, as Search derives it for its own results.
+    private var resultsPalette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: heroSummary?.subject ?? fandom))
+    }
+
+    /// The hero's sort menu applies at once and starts again from page 1, like
+    /// the Search tab's; the filter panel keeps its own Apply.
+    private var sortSelection: Binding<AO3SearchFilters.Sort> {
+        Binding(
+            get: { filters.sort },
+            set: { sort in
+                guard filters.sort != sort else { return }
+                filters.sort = sort
+                filters.sortDirection = sort.naturalDirection
+                bulkSelection.selection.removeAll()
+                reload()
+            }
+        )
     }
 
     /// Every sibling's numeric filter id, or nil if any one of them cannot be
@@ -427,6 +463,7 @@ struct TagWorksView: View {
     let request: AO3TagWorksRequest
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(ThemeManager.self) private var themeManager
     @State private var results: [AO3WorkSummary] = []
     @State private var currentPage = 1
     @State private var totalPages = 1
@@ -467,20 +504,35 @@ struct TagWorksView: View {
                     // the page you happen to be on.
                     if let heroSummary {
                         Section {
+                            // Spec 1k, as the Search tab draws it: the page head
+                            // with its figure strip and sort, not the old card.
                             SearchResultsHero(
                                 summary: heroSummary,
                                 filterLabels: filters.summaryLabels(excluding: heroSummary.subject),
                                 subjectField: heroSummary.subjectField(inAnyOf: results),
-                                onEditFilters: { showingFilters = true }
+                                onEditFilters: { showingFilters = true },
+                                presentation: .subjectPage,
+                                currentPage: currentPage,
+                                totalPages: totalPages,
+                                sortSelection: sortSelection,
+                                sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance }
                             )
-                            .cardRow()
+                            .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
                         ForEach(results) { work in
-                            SelectableAO3WorkRow(work: work, expandAll: expandAll, controller: bulkSelection)
-                                .cardRow(isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id))
+                            SelectableAO3WorkRow(
+                                work: work,
+                                expandAll: expandAll,
+                                controller: bulkSelection,
+                                presentation: .searchLedger
+                            )
+                            .cardRow(
+                                isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
+                                tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+                            )
                         }
                     }
                     if showPagination { Section { paginationRow } }
@@ -493,11 +545,10 @@ struct TagWorksView: View {
                 .overlay { statusOverlay }
             }
         }
-        .navigationTitle(request.title)
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
-            .hidesFloatingTabBar()
+        // A pushed results page (1k proper): the wash under a title-less bar,
+        // the subject named by the hero, as on every other subject page.
+        .subjectScreenWash(palette: resultsPalette, washHeight: 600)
+        .screenTint(resultsPalette)
             .toolbar { toolbarContent }
             .filterPanelPresentation(isPresented: $showingFilters, detents: [.medium, .large]) {
                 AO3FilterPanel(
@@ -545,7 +596,8 @@ struct TagWorksView: View {
         SearchPaginationBar(
             currentPage: currentPage,
             totalPages: totalPages,
-            isLoading: phase == .loading
+            isLoading: phase == .loading,
+            palette: resultsPalette
         ) { page in
             // A different page replaces `results` with different works entirely —
             // a stale selection would otherwise reference IDs that no longer exist.
@@ -593,6 +645,26 @@ struct TagWorksView: View {
     private var heroSummary: AO3ResultSummary? {
         resultSummary?.completing(
             subject: request.title, page: currentPage, onPageCount: results.count
+        )
+    }
+
+    /// The subject's colour, as Search derives it for its own results.
+    private var resultsPalette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: heroSummary?.subject ?? request.title))
+    }
+
+    /// The hero's sort menu applies at once and starts again from page 1, like
+    /// the Search tab's; the filter panel keeps its own Apply.
+    private var sortSelection: Binding<AO3SearchFilters.Sort> {
+        Binding(
+            get: { filters.sort },
+            set: { sort in
+                guard filters.sort != sort else { return }
+                filters.sort = sort
+                filters.sortDirection = sort.naturalDirection
+                bulkSelection.selection.removeAll()
+                reload()
+            }
         )
     }
 
