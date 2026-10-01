@@ -12,6 +12,16 @@ struct ChallengeSignUpsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var loadMoreSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var summarySize: CGFloat = 11
 
     @State private var pages = AO3LoadMorePages<AO3ChallengeSignUp>()
     @State private var filterSelection: SignUpFilter = .all
@@ -205,24 +215,26 @@ struct ChallengeSignUpsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .center, spacing: 7) {
                     Text(signUp.pseud)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: rowTitleSize, weight: .semibold))
                         .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     matchedStatusBadge(matchState(signUp))
                 }
 
                 Text(AO3ChallengeCountText.plural(signUp.requests.count, "request")
                     + " · " + AO3ChallengeCountText.plural(signUp.offers.count, "offer"))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(Color.secondary.opacity(0.85))
                     .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if !signUp.requestTagSummary.isEmpty {
                     Text(signUp.requestTagSummary)
-                        .font(.system(size: 11))
+                        .font(.system(size: summarySize))
                         .foregroundStyle(Color.secondary.opacity(0.65))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -248,6 +260,8 @@ struct ChallengeSignUpsView: View {
     private func statusChip(isMatched: Bool) -> some View {
         Text(isMatched ? "MATCHED" : "UNMATCHED")
             .font(.system(size: 8.5, weight: .bold))
+            .lineLimit(1)
+            .fixedSize()
             .tracking(8.5 * 0.07)
             .foregroundStyle(isMatched ? palette.accent : Color.secondary.opacity(0.7))
             .padding(.horizontal, 7)
@@ -259,8 +273,13 @@ struct ChallengeSignUpsView: View {
     }
 
     private func note(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.triangle")
-            .font(.system(size: 11.5))
+        Label {
+            Text(text)
+                .font(.system(size: captionSize))
+        } icon: {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 11.5))
+        }
             .foregroundStyle(Color.secondary.opacity(0.85))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -273,15 +292,17 @@ struct ChallengeSignUpsView: View {
             Text(unknown ? "Match state unavailable"
                 : filterSelection == .all ? "No sign-ups yet"
                 : "No \(filterSelection.rawValue.lowercased()) sign-ups")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: rowTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(unknown
                 ? "No sign-up can be shown as matched or unmatched without assignments."
                 : filterSelection == .all ? "Sign-ups will appear here as people join the challenge."
                 : "No sign-ups in this page match the \"\(filterSelection.rawValue)\" filter.")
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -292,7 +313,7 @@ struct ChallengeSignUpsView: View {
         Text("AO3 pages sign-ups twenty to a page, so the list is fetched a page at a time "
             + "and the segment filters what has been fetched, not the whole challenge. "
             + "The tag summary is the sign-up’s own requests, truncated to one line.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -309,8 +330,9 @@ struct ChallengeSignUpsView: View {
                         .padding(.trailing, 4)
                 }
                 Text("Load page \(pages.loadedPages + 1) of \(pages.totalPages)")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: loadMoreSize, weight: .medium))
                     .foregroundStyle(palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, 12)
@@ -333,10 +355,11 @@ struct ChallengeSignUpsView: View {
                 )
             } label: {
                 Text("Your sign-up")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: buttonLabelSize, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(theme.appTheme.glassFill(0.10))
@@ -352,10 +375,11 @@ struct ChallengeSignUpsView: View {
                 ChallengeSignUpView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
             } label: {
                 Text("Create sign-up")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: buttonLabelSize, weight: .semibold))
                     .foregroundStyle(palette.labelOnAccent)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(palette.accent)
@@ -386,8 +410,9 @@ struct ChallengeSignUpsView: View {
             ProgressView()
                 .controlSize(.small)
             Text("Loading sign-ups…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -396,11 +421,13 @@ struct ChallengeSignUpsView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load sign-ups")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: rowTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await loadSignUps(resetPage: true) }
             }
@@ -505,6 +532,10 @@ private struct ChallengeSignUpDetailView: View {
     let collectionTitle: String
     let palette: SubjectPalette
 
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var promptSize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
 
     var body: some View {
@@ -565,11 +596,13 @@ private struct ChallengeSignUpDetailView: View {
                 if index > 0 { SubjectRowSeparator() }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.title)
-                        .font(.system(size: 15))
+                        .font(.system(size: rowTitleSize))
                         .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(row.tags.joined(separator: ", "))
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
@@ -578,8 +611,9 @@ private struct ChallengeSignUpDetailView: View {
             if !text.isEmpty {
                 if !tags.isEmpty { SubjectRowSeparator() }
                 Text(text)
-                    .font(.system(size: 13.5, design: .serif))
+                    .font(.system(size: promptSize, design: .serif))
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(14)
             }
         }

@@ -30,6 +30,11 @@ struct AO3CollectionItemsView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
 
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var stagedCountSize: CGFloat = 12
+
     @State private var tab: AO3CollectionItemTab
     @State private var items: [AO3CollectionItem] = []
     @State private var currentPage = 1
@@ -169,9 +174,10 @@ struct AO3CollectionItemsView: View {
             if pendingCount > 0 {
                 ToolbarItem(placement: .primaryAction) {
                     Text("\(pendingCount) staged")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: stagedCountSize, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(
                             "\(pendingCount) staged change\(pendingCount == 1 ? "" : "s")"
                         )
@@ -345,8 +351,9 @@ struct AO3CollectionItemsView: View {
 
     private var emptyCard: some View {
         Text("Nothing in this tab.")
-            .font(.system(size: 12.5))
+            .font(.system(size: bodySize))
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -366,11 +373,13 @@ struct AO3CollectionItemsView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load collection items")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await load(page: currentPage, replacing: true) }
             }
@@ -385,7 +394,7 @@ struct AO3CollectionItemsView: View {
 
     private func errorCard(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 12.5))
+            .font(.system(size: bodySize))
             .foregroundStyle(.red)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -553,14 +562,23 @@ struct AO3CollectionItemCard: View {
     @Binding var staging: AO3CollectionItemStaging
     let palette: SubjectPalette
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .title3) private var titleSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .body) private var settingsLabelSize: CGFloat = 13.5
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var actionSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var roleSize: CGFloat = 10
+
     private var isRemoved: Bool { staging.isRemoved(item) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             headerRow
             Text(item.workTitle)
-                .font(.system(size: 19, weight: .semibold))
-                .lineLimit(2)
+                .font(.system(size: titleSize, weight: .semibold))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .fixedSize(horizontal: false, vertical: true)
                 .strikethrough(isRemoved)
 
             if isRemoved {
@@ -590,8 +608,10 @@ struct AO3CollectionItemCard: View {
             Spacer(minLength: 6)
             if !item.role.isEmpty {
                 Text(item.role)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: roleSize, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             if staging.hasChanges(for: item) {
                 Circle()
@@ -689,7 +709,8 @@ struct AO3CollectionItemCard: View {
         }
         return HStack(spacing: 5) {
             Text(Self.approvalTitle(value))
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: captionSize, weight: .semibold))
+                .lineLimit(1)
             if showsChevron {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
@@ -719,8 +740,9 @@ struct AO3CollectionItemCard: View {
                     .labelsHidden()
             } else {
                 Text(isOn ? "On" : "Off")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: actionSize, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.vertical, 9)
@@ -728,9 +750,10 @@ struct AO3CollectionItemCard: View {
 
     private func settingsLabel(_ label: String) -> some View {
         Text(label)
-            .font(.system(size: 13.5))
+            .font(.system(size: settingsLabelSize))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private static func approvalTitle(_ approval: AO3CollectionItemApproval) -> String {
@@ -743,7 +766,7 @@ struct AO3CollectionItemCard: View {
 
     private var removalNotice: some View {
         Text("Staged for removal from this collection. The work stays on AO3.")
-            .font(.system(size: 12))
+            .font(.system(size: actionSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -753,26 +776,30 @@ struct AO3CollectionItemCard: View {
         HStack(spacing: 12) {
             if !item.creatorByline.isEmpty {
                 Text(item.creatorByline)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if item.removeIsEditable || isRemoved {
                 Button {
                     staging.setRemoved(!isRemoved, for: item)
                 } label: {
                     Text(isRemoved ? "Keep" : "Remove from collection")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: actionSize, weight: .semibold))
                         .foregroundStyle(isRemoved ? AnyShapeStyle(.tint) : AnyShapeStyle(.red))
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 .buttonStyle(.plain)
             }
             Spacer(minLength: 6)
             if !item.itemDateText.isEmpty {
                 Text(item.itemDateText)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

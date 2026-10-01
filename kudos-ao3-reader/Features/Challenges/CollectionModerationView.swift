@@ -20,6 +20,15 @@ struct CollectionModerationView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
 
+    @ScaledMetric(relativeTo: .headline) private var reviewTitleSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .body) private var actionLabelSize: CGFloat = 15
+
     @State private var awaitingReview: [AO3CollectionItem] = []
     /// The review queue is AO3's paged Awaiting list; only this page is held.
     @State private var reviewPage = 1
@@ -267,7 +276,7 @@ struct CollectionModerationView: View {
 
     private func footnote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -291,16 +300,20 @@ struct CollectionModerationView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.itemType.uppercased())
                     .font(.system(size: 9, weight: .bold))
+                    .lineLimit(1)
+                    .fixedSize()
                     .tracking(9 * 0.11)
                     .foregroundStyle(palette.accent)
 
                 Text(item.workTitle)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: reviewTitleSize, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(CollectionModerationCopy.byline(creator: item.creatorByline, dateText: item.itemDateText))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             FlowLayout(spacing: 7, rowSpacing: 7) {
@@ -401,10 +414,12 @@ struct CollectionModerationView: View {
                         .controlSize(.small)
                 }
                 Text(title)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: bodySize, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .padding(.horizontal, 14)
-            .frame(height: 34)
+            .frame(minHeight: 34)
             .background(
                 Capsule()
                     .fill(isProminent ? palette.tint : theme.appTheme.glassFill(0.10))
@@ -422,12 +437,14 @@ struct CollectionModerationView: View {
     private var emptyReviewCard: some View {
         VStack(spacing: 6) {
             Text("No works waiting for review")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text("All submissions to this collection have been reviewed.")
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -456,12 +473,14 @@ struct CollectionModerationView: View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(participant.pseud)
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.system(size: rowTitleSize, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text("Wants to join \(effectiveTitle)")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -504,12 +523,14 @@ struct CollectionModerationView: View {
     private var emptyRequestsCard: some View {
         VStack(spacing: 6) {
             Text("No membership requests")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text("Nobody is waiting to join \(effectiveTitle).")
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -547,7 +568,7 @@ struct CollectionModerationView: View {
 
     private var maintainersFootnote: some View {
         Text("Roles, invitations, and the last-owner rule live on Maintainers — this is just the headcount.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -575,9 +596,10 @@ struct CollectionModerationView: View {
 
             if isAnonymous {
                 Text("Creators are hidden from everyone but maintainers.")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 11)
             }
@@ -600,9 +622,10 @@ struct CollectionModerationView: View {
                             .frame(width: 20)
 
                         Text("Reveal now")
-                            .font(.system(size: 15))
+                            .font(.system(size: actionLabelSize))
                             .foregroundStyle(Color.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         if isRevealing {
                             ProgressView()
@@ -632,9 +655,10 @@ struct CollectionModerationView: View {
                             .frame(width: 20)
 
                         Text("Remove anonymity")
-                            .font(.system(size: 15))
+                            .font(.system(size: actionLabelSize))
                             .foregroundStyle(Color.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         if isUnanonymizing {
                             ProgressView()
@@ -654,7 +678,7 @@ struct CollectionModerationView: View {
 
     private func errorNotice(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.red)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -667,8 +691,9 @@ struct CollectionModerationView: View {
             ProgressView()
                 .controlSize(.small)
             Text("Loading moderation…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -677,11 +702,13 @@ struct CollectionModerationView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load moderation")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await load() }
             }
@@ -699,9 +726,10 @@ struct CollectionModerationView: View {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Color.red)
             Text(message)
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             Button {
                 actionErrorMessage = nil
             } label: {
