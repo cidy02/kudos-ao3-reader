@@ -15,6 +15,12 @@ struct ChallengeSettingsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
 
+    @ScaledMetric(relativeTo: .body) private var typeTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var typeSubtitleSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .headline) private var failureTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+
     @State private var settingsForm: AO3ChallengeSettingsForm?
     @State private var tagSetLinks: [AO3CollectionTagSetLink] = []
     /// `nil` = that fetch failed; the row says so instead of showing 0.
@@ -99,7 +105,7 @@ struct ChallengeSettingsView: View {
         Text("AO3 keeps challenges as a second object on top of the collection, with sign-ups, "
             + "assignments and deadlines of their own. This screen is the app’s read of it — "
             + "the fields AO3 asks for, in AO3’s order.")
-            .font(.system(size: 11.5))
+            .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -198,7 +204,7 @@ struct ChallengeSettingsView: View {
     private var promptsFootnote: some View {
         Text("A Prompt Meme has no matching and no assignments: prompts are posted to the meme "
             + "and claimed freely, so there is nothing to match or send.")
-            .font(.system(size: 11.5))
+            .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -229,12 +235,14 @@ struct ChallengeSettingsView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15))
+                    .font(.system(size: typeTitleSize))
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(subtitle)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: typeSubtitleSize))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -292,7 +300,7 @@ struct ChallengeSettingsView: View {
     private var datesFootnote: some View {
         Text("AO3 does not close the collection on a deadline — closing is manual, "
             + "which is why collection settings keeps Closed as its own switch.")
-            .font(.system(size: 11.5))
+            .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -432,7 +440,7 @@ struct ChallengeSettingsView: View {
     private var assignmentsFootnote: some View {
         Text("Matching is AO3’s own algorithm and runs on their side. "
             + "The app can show sign-ups and assignments and send a pinch-hit request; it cannot match.")
-            .font(.system(size: 11.5))
+            .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -450,16 +458,19 @@ struct ChallengeSettingsView: View {
         }
         .subjectPanel()
     }
+}
 
-    // MARK: - State Cards
+// MARK: - State Cards and loading
 
+private extension ChallengeSettingsView {
     private var loadingRow: some View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
             Text("Loading challenge settings…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -468,11 +479,13 @@ struct ChallengeSettingsView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load challenge settings")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: failureTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await loadSettings() }
             }

@@ -13,6 +13,13 @@ struct CollectionMaintainersView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
 
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+
     @State private var participants: [AO3CollectionParticipant] = []
     @State private var phase: Phase = .idle
     @State private var inviteUsername: String = ""
@@ -219,19 +226,23 @@ struct CollectionMaintainersView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(participant.pseud)
-                    .font(.system(size: 15))
+                    .font(.system(size: rowTitleSize))
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let subtitleText {
                     Text(subtitleText)
-                        .font(.system(size: 11.5))
+                        .font(.system(size: captionSize))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(roleText.uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
+                .lineLimit(1)
+                .fixedSize()
                 .tracking(10.5 * 0.04)
                 .foregroundStyle(Color.secondary.opacity(0.85))
                 .padding(.horizontal, 10)
@@ -283,7 +294,7 @@ struct CollectionMaintainersView: View {
         let count = username.isEmpty ? 2 : 3
         SubjectFormRow(label: "Invite by username", arrangement: .control) {
             TextField("Add a username", text: $inviteUsername)
-                .font(.system(size: 15))
+                .font(.system(size: rowTitleSize))
                 .foregroundStyle(.primary)
                 .autocorrectionDisabled()
                 #if os(iOS)
@@ -318,8 +329,9 @@ struct CollectionMaintainersView: View {
                             .padding(.trailing, 4)
                     }
                     Text("Send invitation to \(username)")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: buttonLabelSize, weight: .semibold))
                         .foregroundStyle(palette.accent)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
@@ -334,19 +346,21 @@ struct CollectionMaintainersView: View {
         VStack(alignment: .leading, spacing: 4) {
             if let inviteSuccessNotice {
                 Text(inviteSuccessNotice)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.system(size: captionSize, weight: .medium))
                     .foregroundStyle(palette.accent)
                     .padding(.bottom, 2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let inviteErrorMessage {
                 Text(inviteErrorMessage)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.system(size: captionSize, weight: .medium))
                     .foregroundStyle(Color.red)
                     .padding(.bottom, 2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text("AO3 sends an invitation the other account accepts; until then nothing changes. "
                 + "An owner can remove a moderator, but the last owner cannot remove themselves.")
-                .font(.system(size: 11.5))
+                .font(.system(size: captionSize))
                 .foregroundStyle(Color.secondary.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 4)
@@ -365,9 +379,10 @@ struct CollectionMaintainersView: View {
                         .frame(width: 20)
 
                     Text(isCurrentUserOwner ? "Step down as owner" : "Leave collection")
-                        .font(.system(size: 15))
+                        .font(.system(size: rowTitleSize))
                         .foregroundStyle(Color.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if isLeaving {
                         ProgressView()
@@ -386,7 +401,7 @@ struct CollectionMaintainersView: View {
 
     private func errorNotice(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.red)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -399,8 +414,9 @@ struct CollectionMaintainersView: View {
             ProgressView()
                 .controlSize(.small)
             Text("Loading maintainers…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -409,11 +425,13 @@ struct CollectionMaintainersView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load maintainers")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await loadMaintainers() }
             }

@@ -45,6 +45,17 @@ struct TagSetView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
 
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var rowTitleSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var editorSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var noticeSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+    @ScaledMetric(relativeTo: .caption) private var fieldLabelSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption) private var pillLabelSize: CGFloat = 12
+
     @State private var tagSet: AO3TagSet?
     @State private var phase: Phase = .idle
 
@@ -273,14 +284,14 @@ struct TagSetView: View {
             ZStack(alignment: .topLeading) {
                 if text.wrappedValue.isEmpty {
                     Text(placeholder)
-                        .font(.system(size: 13))
+                        .font(.system(size: editorSize))
                         .foregroundStyle(.secondary.opacity(0.6))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
                 }
 
                 TextEditor(text: text)
-                    .font(.system(size: 13))
+                    .font(.system(size: editorSize))
                     .frame(minHeight: 60)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
@@ -294,7 +305,7 @@ struct TagSetView: View {
     private var reviewFootnote: some View {
         Text("Nominated characters and relationships have to be associated with a fandom before they "
             + "can be approved. The queue groups by fandom for that reason.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -304,7 +315,7 @@ struct TagSetView: View {
         Text("Each type is its own field on AO3 and takes a comma-separated list. "
             + "The app writes them back as one save, so a rejected tag has to be reported "
             + "against the field it came from.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -331,8 +342,9 @@ struct TagSetView: View {
                         .tint(palette.labelOnAccent)
                 }
                 Text("Save tags")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: buttonLabelSize, weight: .semibold))
                     .foregroundStyle(palette.labelOnAccent)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 44)
@@ -440,7 +452,7 @@ struct TagSetView: View {
     private func fandomGroupPanel(fandom: String, nominations: [AO3TagNomination]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(fandom.isEmpty ? "No fandom listed" : fandom)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: fieldLabelSize, weight: .bold))
                 .tracking(11 * 0.07)
                 .textCase(.uppercase)
                 .foregroundStyle(palette.accent)
@@ -460,11 +472,13 @@ struct TagSetView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(nomination.tagName)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: rowTitleSize, weight: .medium))
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(fieldLabel(nomination.field))
-                    .font(.system(size: 11))
+                    .font(.system(size: fieldLabelSize))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -502,8 +516,10 @@ struct TagSetView: View {
                         .tint(Color.red)
                 }
                 Text("Reject")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: pillLabelSize, weight: .semibold))
                     .foregroundStyle(Color.red)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -520,6 +536,8 @@ struct TagSetView: View {
     private func stateBadge(_ text: String, color: Color) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .semibold))
+            .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(color)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
@@ -532,12 +550,14 @@ struct TagSetView: View {
     private var emptyQueueCard: some View {
         VStack(spacing: 6) {
             Text("No nominations yet")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text("Nothing has been nominated to this tag set.")
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -577,8 +597,9 @@ struct TagSetView: View {
             ProgressView()
                 .controlSize(.small)
             Text("Loading tag set…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -587,11 +608,13 @@ struct TagSetView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load tag set")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: noticeSize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await loadTagSet() }
             }
@@ -609,9 +632,10 @@ struct TagSetView: View {
             Image(systemName: "checkmark.circle")
                 .foregroundStyle(palette.accent)
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: noticeSize, weight: .medium))
                 .foregroundStyle(palette.accent)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .subjectPanel()
@@ -622,9 +646,10 @@ struct TagSetView: View {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Color.red)
             Text(text)
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .subjectPanel()

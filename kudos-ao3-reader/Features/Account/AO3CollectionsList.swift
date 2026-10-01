@@ -10,6 +10,11 @@ struct AO3CollectionsList: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
 
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var actionSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
+
     @State private var collections: [AO3Collection] = []
     @State private var phase: Phase = .idle
     @State private var currentPage = 1
@@ -349,15 +354,17 @@ struct AO3CollectionsList: View {
     private var emptyCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(displayedCollections.isEmpty ? "No collections" : "No collections match")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(emptyDetail)
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if !displayedCollections.isEmpty {
                 Button("Clear Filters") { filters = AO3CollectionsFilter() }
                     .buttonStyle(.borderless)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: actionSize, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -376,7 +383,7 @@ struct AO3CollectionsList: View {
 
     private var sourceFooter: some View {
         Text("AO3 collections. Local collections live in Library.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -634,6 +641,11 @@ struct AO3CollectionCard: View {
     let collection: AO3Collection
 
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .title3) private var titleSize: CGFloat = 19
+    @ScaledMetric(relativeTo: .footnote) private var summarySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11.5
 
     private var palette: SubjectPalette {
         theme.appTheme.subjectPalette(
@@ -681,9 +693,10 @@ struct AO3CollectionCard: View {
             }
             if !collection.summary.isEmpty {
                 Text(collection.summary)
-                    .font(.system(size: 12.5))
+                    .font(.system(size: summarySize))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if !metaFacts.isEmpty || !collection.updatedAtText.isEmpty {
                 metaRow
@@ -710,8 +723,9 @@ struct AO3CollectionCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 eyebrowRow
                 Text(collection.title)
-                    .font(.system(size: 19, weight: .semibold))
-                    .lineLimit(2)
+                    .font(.system(size: titleSize, weight: .semibold))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
@@ -757,7 +771,7 @@ struct AO3CollectionCard: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if !metaFacts.isEmpty {
                 Text(metaFacts.joined(separator: " · "))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: metaSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
@@ -765,9 +779,10 @@ struct AO3CollectionCard: View {
             Spacer(minLength: 8)
             if !collection.updatedAtText.isEmpty {
                 Text(collection.updatedAtText)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: metaSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
