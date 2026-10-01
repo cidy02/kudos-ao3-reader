@@ -193,6 +193,60 @@ enum ReadingQueueService {
         return queue
     }
 
+    /// "Edit Queue": the New queue sheet's fields written onto an existing
+    /// queue. A blank name keeps the old one; tags not in `options.tagNames`
+    /// come off the queue only (they stay on their works). Offline is written
+    /// only when it changes, so a never-asked queue stays never-asked. Returns
+    /// true when Keep works offline was turned on, so the caller can fetch the
+    /// works still missing their EPUB (`preserveMissingWorks`).
+    @discardableResult
+    static func updateQueue(
+        _ queue: ReadingQueue,
+        name rawName: String,
+        hue: Double?,
+        options: NewQueueOptions,
+        in context: ModelContext
+    ) -> Bool {
+        var changed = false
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, trimmed != queue.name {
+            queue.name = trimmed
+            changed = true
+        }
+        if queue.hue != hue {
+            queue.hue = hue
+            changed = true
+        }
+        let wasKept = KeepOffline.queueKeeps(queue.keepsWorksOffline)
+        if options.keepsWorksOffline != wasKept {
+            queue.keepsWorksOffline = options.keepsWorksOffline
+            changed = true
+        }
+        // `addTag` / `removeTag` stamp the queue themselves.
+        for tag in queue.tags where !options.tagNames.contains(tag.name) {
+            queue.removeTag(tag)
+        }
+        for name in options.tagNames {
+            queue.addTag(named: name, in: context)
+        }
+        if changed { queue.markModified() }
+        context.saveBestEffort(reason: "Saving queue changes failed")
+        return options.keepsWorksOffline && !wasKept
+    }
+
+    /// Keep works offline turned on: fetches the works still missing their
+    /// EPUB, one at a time through the paced client. Only that tap starts it:
+    /// nothing polls.
+    static func preserveMissingWorks(in queue: ReadingQueue, context: ModelContext) {
+        let missing = orderedWorks(in: queue).filter { !$0.hasEPUB && !$0.isPendingDeletion }
+        guard !missing.isEmpty else { return }
+        Task {
+            for work in missing {
+                try? await preserve(work, in: context)
+            }
+        }
+    }
+
     /// How many works `.savedForLater` seeding would actually copy, so 1j's
     /// "Copy all N" can name a number rather than a vague promise.
     ///

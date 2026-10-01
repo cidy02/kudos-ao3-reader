@@ -46,8 +46,7 @@ struct AllReadingQueuesGridView: View {
     /// tags; anything else is a tag name.
     @AppStorage("library.queueOrganizer.tagFilter") private var tagFilter = ""
     @State private var newQueueName = ""
-    @State private var pendingRename: ReadingQueue?
-    @State private var renameText = ""
+    @State private var pendingEdit: ReadingQueue?
     /// The queues waiting on the delete confirmation: one from a row's swipe,
     /// or select mode's whole selection — one dialog, one delete path.
     @State private var pendingDelete: [ReadingQueue] = []
@@ -341,24 +340,7 @@ struct AllReadingQueuesGridView: View {
                 }
             )
         }
-        .alert(
-            "Rename Queue",
-            isPresented: Binding(get: { pendingRename != nil }, set: { if !$0 { pendingRename = nil } })
-        ) {
-            TextField("Name", text: $renameText)
-            Button("Save") {
-                if let queue = pendingRename {
-                    let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        queue.name = trimmed
-                        queue.markModified()
-                        context.saveBestEffort(reason: "Saving queue rename failed")
-                    }
-                }
-                pendingRename = nil
-            }
-            Button("Cancel", role: .cancel) { pendingRename = nil }
-        }
+        .sheet(item: $pendingEdit) { EditReadingQueueSheet(queue: $0) }
         // `presenting:` hands the queues INTO the action: dismissal clears
         // `pendingDelete` through the binding, and on iOS 27 it lands first (see
         // `RecentlyDeletedView`'s alert).
@@ -505,7 +487,7 @@ struct AllReadingQueuesGridView: View {
         .accessibilityHint("Creates a new reading queue")
     }
 
-    /// Rename and Delete for a custom queue, wherever its row is drawn —
+    /// Edit and Delete for a custom queue, wherever its row is drawn —
     /// Pinned and All queues show the same queue. Saved for Later has neither.
     @ViewBuilder
     private func queueSwipes(_ queue: ReadingQueue) -> some View {
@@ -516,10 +498,9 @@ struct AllReadingQueuesGridView: View {
                 Label("Delete", systemImage: "trash")
             }
             Button {
-                renameText = queue.name
-                pendingRename = queue
+                pendingEdit = queue
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label("Edit", systemImage: "pencil")
             }
             .tint(.blue)
         }
