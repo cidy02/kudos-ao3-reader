@@ -35,6 +35,8 @@ struct AuthorProfileView: View {
     /// Resume after the login sheet succeeds (cleared on cancel / failed login).
     @State private var pendingAuthAction: PendingAuthAction?
     @State private var dashboardDestination: AO3AuthorProfileTab?
+    /// The works sort-and-refine panel, opened from the toolbar Filter.
+    @State private var showingWorksFilters = false
     /// Nav bar title. Account's **My Dashboard** reuses this surface for the
     /// signed-in user's home (`/users/:login`) under the title "Dashboard".
     private let navigationTitle: String
@@ -269,7 +271,8 @@ private extension AuthorProfileView {
                     // model rather than a host flag means no future caller can
                     // switch a stranger's profile onto their Gifts by mistake.
                     showsScopes: isOwnProfile,
-                    onWillChange: bulkSelection.exitSelectMode
+                    onWillChange: bulkSelection.exitSelectMode,
+                    usesToolbarFilter: true
                 )
                 AO3AuthorFandomFilterSection(model: model, onWillChange: bulkSelection.exitSelectMode)
                 contentRows
@@ -278,6 +281,11 @@ private extension AuthorProfileView {
         .cardList()
         .subjectScreenWash(palette: theme.scopePalette)
         .refreshable { await model.refresh(auth: auth) }
+        .filterPanelPresentation(isPresented: $showingWorksFilters) {
+            AO3AuthorWorksFilterPanel(model: model, onWillChange: bulkSelection.exitSelectMode) {
+                showingWorksFilters = false
+            }
+        }
     }
 
     private var usesAccountHeader: Bool { showsDashboard || (isOwnProfile && isContentDestination) }
@@ -777,10 +785,35 @@ private extension AuthorProfileView {
                 showsNewWork
                     ? AnyView(ToolbarIconButton(title: "New Work", systemImage: "plus") { isCreatingWork = true })
                     : nil,
+                showsWorksFilter ? AnyView(worksFilterButton) : nil,
                 showsSelectButton ? AnyView(selectButton) : nil,
                 AnyView(profileMenu)
             ].compactMap { $0 })
         }
+    }
+
+    /// The works funnel, moved up from the scope row (owner, 2026-10-01: global
+    /// actions live in the top-right chrome). Wherever the works list is.
+    private var showsWorksFilter: Bool {
+        !showsDashboard && model.selectedTab == .works
+    }
+
+    /// The badge counts both halves: the sort, which refetches, and the facets,
+    /// which narrow the loaded page. Clear drops only the facets — the sort has
+    /// no clear of its own, and a long press that reset it would refetch a list
+    /// the reader had not asked to put back.
+    private var worksFilterButton: some View {
+        let count = AO3AuthorWorksScopeSection.activeCount(model)
+        return FilterButton(
+            filtersActive: count > 0,
+            showingFilters: $showingWorksFilters,
+            filterHelp: "Sort and filter the works on this page",
+            onClearFilters: model.worksFilters.refineActiveCount > 0
+                ? { model.applyWorksFilters(AO3SearchFilters()) }
+                : nil,
+            badgeCount: count
+        )
+        .accessibilityLabel("Sort and filter")
     }
 
     private var showsNewWork: Bool {

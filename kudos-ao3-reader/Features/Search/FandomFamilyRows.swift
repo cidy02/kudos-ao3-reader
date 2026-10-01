@@ -208,14 +208,13 @@ struct FandomLetterHeader: View {
     }
 }
 
-/// Sort chips (A–Z / Most works) plus the dashed Filter affordance.
+/// Sort chips (A–Z / Most works) and Group variants. Filter is the toolbar's
+/// (owner, 2026-10-01: global actions live in the top-right chrome).
 struct FandomListSortRail: View {
     @Binding var sort: FandomFamilySort
     /// 1al's "Group variants" switch: tinted while on.
     @Binding var groupsVariants: Bool
-    var filterCount: Int
     var palette: SubjectPalette
-    var onOpenFilters: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -249,13 +248,6 @@ struct FandomListSortRail: View {
                 }
             }
 
-            Button(action: onOpenFilters) {
-                SubjectChip(
-                    text: filterCount > 0 ? "Filter \(filterCount)" : "Filter",
-                    style: .dashed
-                )
-            }
-            .buttonStyle(.plain)
         }
     }
 }

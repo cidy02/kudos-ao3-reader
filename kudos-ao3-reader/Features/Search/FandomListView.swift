@@ -172,9 +172,7 @@ struct FandomListView: View {
                     FandomListSortRail(
                         sort: $sort,
                         groupsVariants: $groupsVariants,
-                        filterCount: filterOptions.activeFilterCount,
-                        palette: palette,
-                        onOpenFilters: { showingFilters = true }
+                        palette: palette
                     )
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     .listRowBackground(Color.clear)
@@ -236,6 +234,16 @@ struct FandomListView: View {
             #if os(iOS)
             .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
             #endif
+            // Top right, like every other filtered list (owner, 2026-10-01).
+            .toolbar {
+                ActionToolbar(items: [AnyView(FilterButton(
+                    filtersActive: filterOptions.hasActiveFilters,
+                    showingFilters: $showingFilters,
+                    filterHelp: "Filter the fandoms in \(category.name)",
+                    onClearFilters: { filterOptions = FandomListFilterOptions() },
+                    badgeCount: filterOptions.activeFilterCount
+                ))])
+            }
             .task(id: listingToken) { await applyFilter() }
             .onChange(of: groupsVariants) { _, isOn in
                 filterOptions.groupsVariantsChanged(to: isOn)

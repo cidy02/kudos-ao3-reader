@@ -23,7 +23,8 @@ struct SearchResultsHero: View {
     /// `.subjectPage` is artboard 1k — the same facts, but as the page's own
     /// header on the subject's wash: kicker, rule, the total at 32pt, the
     /// subject with a sort dropdown beside it, a four-cell figure strip, and the
-    /// filters as a chip rail with a dashed Filter pinned at its end. Not a
+    /// filters as a chip rail (1k's dashed Filter at its end is gone — the
+    /// toolbar Filter is the one way in, owner 2026-10-01). Not a
     /// restyle of the card but a different arrangement of the same content, so
     /// both live here rather than drifting apart in two files.
     enum Presentation: Equatable {
@@ -94,11 +95,9 @@ struct SearchResultsHero: View {
             SubjectStatStrip(cells: statStripCells, palette: palette)
                 .padding(.horizontal, 22)
 
-            if onEditFilters != nil {
-                SubjectFilterRail(
-                    onOpenFilters: { onEditFilters?() },
-                    activeFilterCount: nonSortFilterLabels.count
-                ) {
+            // The active filters only: the toolbar Filter opens the panel.
+            if !nonSortFilterLabels.isEmpty {
+                SubjectFilterRail {
                     ForEach(nonSortFilterLabels, id: \.self) { label in
                         SubjectChip(
                             text: label.text,
