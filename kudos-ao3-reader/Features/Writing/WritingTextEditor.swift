@@ -16,6 +16,8 @@ struct WritingTextEditor: View {
     @Environment(ThemeManager.self) private var theme
     /// 1bv's serif at 15.5, scaled with Dynamic Type.
     @ScaledMetric(relativeTo: .body) private var editorFontSize = 15.5
+    @ScaledMetric(relativeTo: .caption) private var tagLabelFontSize = 13
+    @ScaledMetric(relativeTo: .caption2) private var tagNameFontSize = 8.5
     @Binding var text: String
     let title: String
     let ruleTitle: String?
@@ -101,13 +103,13 @@ struct WritingTextEditor: View {
             #if os(iOS)
             // Above the keyboard: the screen avoids it, so the bar rides on top.
             tagBar
-            #endif
-            // 1bv's footnote under the bar.
+            #else
             Text("AO3 accepts a limited set of HTML. Anything else is stripped on post, "
                 + "so the bar inserts tags rather than styling text.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal).padding(.bottom, 6)
+            #endif
         }
         .navigationTitle(title)
         .subjectScreenWash(palette: theme.scopePalette)
@@ -250,18 +252,28 @@ struct WritingTextEditor: View {
 
     /// The tag bar: every AO3-allowed tag, as 1bv draws it (the tag over what it does).
     private var tagBar: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 16) {
-                ForEach(AO3MarkupTag.Group.allCases) { group in
-                    HStack(spacing: 6) {
-                        Text(group.title).font(.caption).foregroundStyle(.secondary)
-                        ForEach(group.tags(in: AO3MarkupTag.writing)) { tag in
-                            tagButton(tag)
-                        }
+        VStack(alignment: .leading, spacing: 9) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(AO3MarkupTag.writing) { tag in
+                        tagButton(tag)
                     }
                 }
             }
-            .buttonStyle(.bordered).padding(.horizontal).padding(.vertical, 6)
+            Text("AO3 accepts a limited set of HTML. Anything else is stripped on post, "
+                + "so the bar inserts tags rather than styling text.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(theme.appTheme.glassStroke(0.12))
+                .frame(height: 0.5)
+                .accessibilityHidden(true)
         }
         .disabled(isPreviewing)
     }
@@ -299,12 +311,27 @@ struct WritingTextEditor: View {
     /// goes straight to the buffer.
     private func tagButton(_ tag: AO3MarkupTag) -> some View {
         Button { apply(tag) } label: {
-            VStack(spacing: 1) {
-                Text("<\(tag.tagLabel)>").font(.caption.monospaced())
-                Text(tag.name.lowercased()).font(.caption2).foregroundStyle(.secondary)
+            VStack(spacing: 2) {
+                Text("<\(tag.tagLabel)>")
+                    .font(.system(size: tagLabelFontSize, weight: .semibold, design: .monospaced))
+                Text(tag.name.lowercased())
+                    .font(.system(size: tagNameFontSize))
+                    .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(theme.appTheme.glassFill(0.09))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
-        .minimumHitTarget()
+        .buttonStyle(.plain)
+        .layoutFreeHitTarget { apply(tag) }
         .accessibilityLabel(tag.name)
     }
 
