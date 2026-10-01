@@ -20,6 +20,15 @@ struct PromptMemeView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .headline) private var cardTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var promptBodySize: CGFloat = 14.5
+    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var loadingSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var failureBodySize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
 
     @State private var prompts: [AO3PromptMemePrompt] = []
     @State private var currentPage: Int = 1
@@ -107,8 +116,13 @@ struct PromptMemeView: View {
             // moves only on success) and says so above it.
             if case let .failed(message) = phase, !prompts.isEmpty {
                 Section {
-                    Label("Couldn't load that page: \(message)", systemImage: "exclamationmark.triangle")
-                        .font(.system(size: 11.5))
+                    Label {
+                        Text("Couldn't load that page: \(message)")
+                            .font(.system(size: captionSize))
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 11.5))
+                    }
                         .foregroundStyle(Color.secondary.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 4)
@@ -144,10 +158,11 @@ struct PromptMemeView: View {
             ChallengeSignUpView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
         } label: {
             Text("New prompt")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: buttonLabelSize, weight: .semibold))
                 .foregroundStyle(palette.labelOnAccent)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
-                .frame(height: 44)
+                .frame(minHeight: 44)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.accent))
         }
         .buttonStyle(.plain)
@@ -265,26 +280,28 @@ struct PromptMemeView: View {
 
             if !prompt.title.isEmpty {
                 Text(prompt.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: cardTitleSize, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(prompt.promptText)
-                .font(.system(size: 14.5))
+                .font(.system(size: promptBodySize))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !prompt.tagSummary.isEmpty {
                 Text(prompt.tagSummary)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: captionSize))
                     .foregroundStyle(Color.secondary.opacity(0.65))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(prompt.isAnonymous ? "Posted anonymously" : (prompt.displayedOwner ?? "Unknown poster"))
-                .font(.system(size: 11.5))
+                .font(.system(size: captionSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             promptActionRow(prompt)
         }
@@ -300,8 +317,9 @@ struct PromptMemeView: View {
         HStack {
             if prompt.claimedByCurrentUser {
                 Text("Claimed by you")
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: bodySize, weight: .medium))
                     .foregroundStyle(palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer()
 
@@ -343,7 +361,9 @@ struct PromptMemeView: View {
                         .font(.system(size: 11, weight: .semibold))
                 }
                 Text(title)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: bodySize, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .foregroundStyle(isProminent ? palette.labelOnAccent : palette.accent)
             .padding(.horizontal, 14)
@@ -362,14 +382,16 @@ struct PromptMemeView: View {
     private var emptyFilteredCard: some View {
         VStack(spacing: 6) {
             Text(filterSelection == .all ? "No prompts yet" : "No \(filterSelection.rawValue.lowercased()) prompts")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: cardTitleSize, weight: .semibold))
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(filterSelection == .all
                 ? "Prompts will appear here once someone posts one."
                 : "No prompts on this page match the \"\(filterSelection.rawValue)\" filter.")
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -381,7 +403,7 @@ struct PromptMemeView: View {
             + "so nothing here is matched or assigned. Claiming is an AO3 write, "
             + "and a claim can be released; both need the prompt id, which is on the row. "
             + "A new prompt is a request on your sign-up; posting a fill happens on AO3.")
-            .font(.system(size: 11.5))
+            .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 4)
@@ -397,16 +419,19 @@ struct PromptMemeView: View {
             Task { await loadPrompts(page: page) }
         }
     }
+}
 
-    // MARK: - State Cards
+// MARK: - State Cards and actions
 
+private extension PromptMemeView {
     private var loadingRow: some View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
             Text("Loading prompts…")
-                .font(.system(size: 14))
+                .font(.system(size: loadingSize))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -415,11 +440,13 @@ struct PromptMemeView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(spacing: 8) {
             Text("Couldn't load prompts")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: cardTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 13))
+                .font(.system(size: failureBodySize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 Task { await loadPrompts(page: currentPage) }
             }
@@ -437,9 +464,10 @@ struct PromptMemeView: View {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Color.red)
             Text(message)
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             Button {
                 actionErrorMessage = nil
             } label: {
