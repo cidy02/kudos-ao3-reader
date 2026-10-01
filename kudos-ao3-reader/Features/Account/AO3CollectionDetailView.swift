@@ -29,6 +29,10 @@ struct AO3CollectionDetailView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dismiss) private var dismiss
 
+    @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var bodySize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var actionSize: CGFloat = 13
+
     @State private var show: AO3CollectionShow?
     @State private var segment: Segment = .works
     @State private var works: [AO3WorkSummary] = []
@@ -259,6 +263,8 @@ struct AO3CollectionDetailView: View {
         if isAnonymous(work) {
             Text("ANON")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .lineLimit(1)
+                .fixedSize()
                 .tracking(0.6)
                 .foregroundStyle(palette.accentOnFill)
                 .padding(.horizontal, 8)
@@ -405,7 +411,7 @@ struct AO3CollectionDetailView: View {
 
     private func emptyCard(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 12.5))
+            .font(.system(size: bodySize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -417,9 +423,10 @@ struct AO3CollectionDetailView: View {
     private func failureCard(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Couldn't load this collection")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: stateTitleSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 12.5))
+                .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
@@ -427,7 +434,8 @@ struct AO3CollectionDetailView: View {
                 startPageLoad(segment: segment, page: currentPage(for: segment))
             }
             .buttonStyle(.borderless)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: actionSize, weight: .semibold))
+            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -612,6 +620,9 @@ struct AO3CollectionPersonRow: View {
     let person: AO3CollectionPerson
     let palette: SubjectPalette
 
+    @ScaledMetric(relativeTo: .body) private var nameSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var countSize: CGFloat = 11
+
     var body: some View {
         HStack(spacing: 12) {
             Text(String(person.identity.displayName.prefix(1)).uppercased())
@@ -624,13 +635,15 @@ struct AO3CollectionPersonRow: View {
                 .accessibilityHidden(true)
 
             Text(person.identity.displayName)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: nameSize, weight: .medium))
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let count = person.workCount {
                 Text("\(count) work\(count == 1 ? "" : "s")")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.system(size: countSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 14)
