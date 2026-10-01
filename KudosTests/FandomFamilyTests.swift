@@ -298,6 +298,16 @@ struct FandomFamilyTests {
         #expect(tallies.tagsBelowMinimumWorks(.hundred) == 5)
     }
 
+    @Test func libraryIndexExposesRowMetadata() {
+        let library = FandomLibraryIndex(
+            favouriteNamesLowercased: ["haikyuu!!"],
+            downloadCountsByNameLowercased: ["haikyuu!!": 3]
+        )
+        let entry = library.entry(for: "Haikyuu!!")
+        #expect(entry.isFavourite)
+        #expect(entry.downloadedWorkCount == 3)
+    }
+
     @Test func hidingRPFDropsThoseMembersButKeepsTheFamilyIfSiblingsRemain() {
         let families = FandomFamily.grouped(fandoms: [
             AO3Fandom(name: "Good Omens (TV)", workCount: 100),

@@ -32,6 +32,8 @@ struct PrivacyDataView: View {
     @Environment(\.modelContext) private var context
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @ScaledMetric(relativeTo: .headline) private var promiseTitleSize = 17
+    @ScaledMetric(relativeTo: .body) private var promiseBodySize = 13
 
     /// Every live work, for the stored-on-device counts and the two bulk clears.
     /// Soft-deleted works are excluded here and again inside `LocalDataClearing`
@@ -196,12 +198,19 @@ struct PrivacyDataView: View {
         theme.scopePalette
     }
 
+    private var promisePalette: SubjectPalette {
+        guard let mint = SubjectHueSwatches.all.first(where: { $0.name == "Mint" }) else {
+            return accountPalette
+        }
+        return theme.appTheme.subjectPalette(hue: mint.hue)
+    }
+
     // MARK: The promise
 
     private var promisePanel: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No ads, no analytics, no tracking, no accounts but yours")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: promiseTitleSize, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
             // Spec 1ac's line is "The app talks to AO3 and to nothing else."
             // Left as written it would be **false on this very screen**: the
@@ -211,14 +220,21 @@ struct PrivacyDataView: View {
             Text("Kudos talks to AO3, and — only after you confirm a download — to a Voice "
                 + "Pack host. Nothing else. Your library, reading positions, tags, local "
                 + "collections and AO3 session stay on this device.")
-                .font(.system(size: 12.5))
+                .font(.system(size: promiseBodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .subjectPanel()
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(promisePalette.panelWash)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(promisePalette.rowBorder, lineWidth: 0.5)
+        )
     }
 
     // MARK: Stored on this device

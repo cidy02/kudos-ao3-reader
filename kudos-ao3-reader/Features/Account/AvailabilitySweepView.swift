@@ -23,7 +23,7 @@ struct AvailabilitySweepView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 explanationSection
                 if isRunning {
                     progressSection
@@ -35,8 +35,8 @@ struct AvailabilitySweepView: View {
                 }
                 actionSection
             }
-            .formStyle(.grouped)
-            .appThemedScroll()
+            .cardList()
+            .environment(\.defaultMinListRowHeight, 0)
             .navigationTitle("Check Availability")
             .navigationDestination(for: SavedWork.self) { WorkDetailView(work: $0) }
             .toolbar {
@@ -74,8 +74,8 @@ struct AvailabilitySweepView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    .cardRow()
                 }
+                .cardRow()
             }
         } header: {
             Text("No longer on AO3 (\(unavailableWorks.count.formatted()))")
@@ -175,10 +175,12 @@ struct AvailabilitySweepView: View {
                 Label(isRunning ? "Checking…" : "Check Now", systemImage: "arrow.triangle.2.circlepath")
             }
             .disabled(isRunning || pendingCount == 0)
+            .cardRow()
             if pendingCount == 0 {
                 Text("Every AO3 work in your Library was checked within the last week.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .cardRow()
             }
         }
     }
