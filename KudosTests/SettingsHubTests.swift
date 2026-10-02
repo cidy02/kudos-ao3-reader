@@ -150,6 +150,7 @@ struct SettingsHubTests {
     @Test func downloadsValueStatesDownloadOnSubscribe() {
         #expect(SettingsHubValue.downloads(onSubscribe: true) == "On subscribe")
         #expect(SettingsHubValue.downloads(onSubscribe: false) == "Manual")
+        #expect(SettingsHubValue.downloads(onSubscribe: true, keepsWorksYouRead: true) == "Keep what you read")
     }
 
     /// "On" only while connected and syncing on its own — a Replace import's
