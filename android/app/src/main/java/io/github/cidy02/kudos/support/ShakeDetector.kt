@@ -48,6 +48,117 @@ object ShakeMath {
         lastFireMs: Long,
         debounceMs: Long = DEBOUNCE_MS
     ): Boolean = nowMs - lastFireMs >= debounceMs
+
+    /** Below this, a sample is noise floor, not a real swing — ignored for reversals. */
+    const val REVERSAL_MAGNITUDE_FLOOR_MS2 = 2f
+
+    /** How far back a reversal still counts toward the current gesture. */
+    const val REVERSAL_WINDOW_MS = 600L
+
+    /**
+     * A single hard jolt (a bump, being picked up or set down) has one spike and no
+     * back-and-forth; a deliberate shake oscillates. Requiring this many direction
+     * reversals on top of [THRESHOLD_MS2] is the standard technique real shake
+     * detectors use to reject that kind of accidental trigger — unlike iOS, which
+     * gets a version of this for free from `UIWindow.motionShake`'s own built-in
+     * heuristic, Android has no OS-level shake gesture to inherit it from.
+     */
+    const val REQUIRED_REVERSALS = 2
+
+    /**
+     * True when two consecutive linear-acceleration samples (gravity already
+     * removed, unlike the raw accelerometer [accelerationDelta] reads) point in
+     * substantially opposite directions (dot product < 0) and both clear the noise
+     * floor — the back-and-forth pattern of a real shake, as opposed to a single
+     * sustained jolt that a bare magnitude threshold can't tell apart from one.
+     */
+    fun samplesReversed(
+        x1: Float,
+        y1: Float,
+        z1: Float,
+        x2: Float,
+        y2: Float,
+        z2: Float,
+        magnitudeFloor: Float = REVERSAL_MAGNITUDE_FLOOR_MS2
+    ): Boolean {
+        val mag1 = sqrt(x1 * x1 + y1 * y1 + z1 * z1)
+        val mag2 = sqrt(x2 * x2 + y2 * y2 + z2 * z2)
+        if (mag1 < magnitudeFloor || mag2 < magnitudeFloor) return false
+        return (x1 * x2 + y1 * y2 + z1 * z2) < 0
+    }
+
+    /**
+     * Index of dominant axis: 0 for X, 1 for Y, 2 for Z.
+     */
+    fun dominantAxis(x: Float, y: Float, z: Float): Int {
+        val ax = kotlin.math.abs(x)
+        val ay = kotlin.math.abs(y)
+        val az = kotlin.math.abs(z)
+        return when {
+            ax >= ay && ax >= az -> 0
+            ay >= ax && ay >= az -> 1
+            else -> 2
+        }
+    }
+
+    /**
+     * Value along the dominant axis.
+     */
+    fun dominantAxisValue(x: Float, y: Float, z: Float): Float = when (dominantAxis(x, y, z)) {
+        0 -> x
+        1 -> y
+        else -> z
+    }
+
+    /**
+     * Pure function to count reversals in an ordered list of samples.
+     * Each sample is (x, y, z). Returns the number of consecutive pairs
+     * that represent a direction reversal above the magnitude floor.
+     */
+    fun countReversals(
+        samples: List<Triple<Float, Float, Float>>,
+        magnitudeFloor: Float = REVERSAL_MAGNITUDE_FLOOR_MS2
+    ): Int {
+        var reversals = 0
+        for (i in 1 until samples.size) {
+            val prev = samples[i - 1]
+            val curr = samples[i]
+            if (samplesReversed(
+                    curr.first, curr.second, curr.third,
+                    prev.first, prev.second, prev.third,
+                    magnitudeFloor
+                )
+            ) {
+                reversals++
+            }
+        }
+        return reversals
+    }
+
+    /**
+     * Pure function to count how many reversal timestamps fall within the
+     * active gesture window [nowMs - windowMs, nowMs].
+     */
+    fun countRecentReversals(
+        reversalTimestamps: Collection<Long>,
+        nowMs: Long,
+        windowMs: Long = REVERSAL_WINDOW_MS
+    ): Int = reversalTimestamps.count { (nowMs - it) in 0..windowMs }
+
+    /**
+     * Prunes timestamps older than [windowMs] from the deque and returns the
+     * remaining count.
+     */
+    fun pruneAndCountReversals(
+        reversalTimestamps: ArrayDeque<Long>,
+        nowMs: Long,
+        windowMs: Long = REVERSAL_WINDOW_MS
+    ): Int {
+        while (reversalTimestamps.isNotEmpty() && nowMs - reversalTimestamps.first() > windowMs) {
+            reversalTimestamps.removeFirst()
+        }
+        return reversalTimestamps.size
+    }
 }
 
 /**
@@ -70,18 +181,45 @@ fun ShakeToReportEffect(onShake: () -> Unit) {
         if (accelerometer == null) {
             return@DisposableEffect onDispose { }
         }
+        // Gravity-free vector, used only to count direction reversals (see
+        // ShakeMath.samplesReversed) — the raw accelerometer above stays the
+        // magnitude-threshold source, unchanged, so its already-tuned 13.5 m/s²
+        // constant needs no re-tuning.
+        val linearAccelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
 
         val vibrator = ShakeHaptics.from(context.applicationContext)
         var lastFireMs = 0L
+        var lastLinearSample: FloatArray? = null
+        val reversalTimestamps = ArrayDeque<Long>()
+
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
                 val values = event.values
                 if (values.size < 3) return
+
+                if (event.sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
+                    val now = System.currentTimeMillis()
+                    lastLinearSample?.let { last ->
+                        if (ShakeMath.samplesReversed(
+                                values[0], values[1], values[2],
+                                last[0], last[1], last[2]
+                            )
+                        ) {
+                            reversalTimestamps.addLast(now)
+                            ShakeMath.pruneAndCountReversals(reversalTimestamps, now)
+                        }
+                    }
+                    lastLinearSample = values.copyOf(3)
+                    return
+                }
+
+                if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
                 val delta = ShakeMath.accelerationDelta(values[0], values[1], values[2])
                 if (!ShakeMath.isShake(delta)) return
                 val now = System.currentTimeMillis()
                 if (!ShakeMath.shouldFire(now, lastFireMs)) return
+                if (linearAccelerometer != null &&
+                    ShakeMath.pruneAndCountReversals(reversalTimestamps, now) < ShakeMath.REQUIRED_REVERSALS) return
                 lastFireMs = now
                 // Confirm the gesture was accepted before the report UI appears
                 // (iOS fires a success notification haptic at the same point).
@@ -97,6 +235,13 @@ fun ShakeToReportEffect(onShake: () -> Unit) {
             accelerometer,
             SensorManager.SENSOR_DELAY_UI
         )
+        if (linearAccelerometer != null) {
+            sensorManager.registerListener(
+                listener,
+                linearAccelerometer,
+                SensorManager.SENSOR_DELAY_UI
+            )
+        }
         onDispose {
             sensorManager.unregisterListener(listener)
         }

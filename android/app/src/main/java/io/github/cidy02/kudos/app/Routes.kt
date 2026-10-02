@@ -33,6 +33,7 @@ object Routes {
     const val Settings = "settings"
     const val Backup = "backup"
     const val QueueStorage = "queue_storage"
+    const val AvailabilitySweep = "availability_sweep"
     const val RecentlyDeleted = "recently-deleted"
     /**
      * Reading-queue browser (Safari-style switcher). Optional [queueId] pre-selects a
@@ -204,6 +205,7 @@ object Routes {
             AO3Collections -> "My Collections"
             Settings -> "Settings"
             Backup -> "Backup"
+            AvailabilitySweep -> "Check Availability"
             BrowseFandoms -> "Fandoms"
             BrowseWorks -> "Works"
             WebFallback -> "AO3"

@@ -148,7 +148,8 @@ fun SettingsScreen(
     workImporter: WorkImporter? = null,
     fandomCatalogCache: FandomCatalogCache? = null,
     workRepository: WorkRepository? = null,
-    workAvailabilitySweep: io.github.cidy02.kudos.works.WorkAvailabilitySweep? = null
+    workAvailabilitySweep: io.github.cidy02.kudos.works.WorkAvailabilitySweep? = null,
+    onOpenAvailabilitySweep: () -> Unit = {}
 ) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val syncRepository = (androidx.compose.ui.platform.LocalContext.current.applicationContext as? io.github.cidy02.kudos.KudosApplication)
@@ -757,6 +758,11 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        SettingsLinkRow(
+                            label = "Unavailable Works",
+                            icon = Icons.Outlined.CloudOff,
+                            onClick = onOpenAvailabilitySweep
+                        )
                     }
                 }
             }
