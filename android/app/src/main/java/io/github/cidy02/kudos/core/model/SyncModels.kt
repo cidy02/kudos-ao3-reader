@@ -111,7 +111,12 @@ data class ReadingQueue(
     val lastMembershipChangedAt: Instant? = null,
     val deletedAt: Instant? = null,
     val isDeleted: Boolean = false,
-    val permanentDeletionScheduledAt: Instant? = null
+    val permanentDeletionScheduledAt: Instant? = null,
+    val hue: Double? = null,
+    val colorHex: String? = null,
+    val isPinned: Boolean = false,
+    val keepsWorksOffline: Boolean? = null,
+    val notes: String? = null
 ) {
     val displayName: String
         get() = if (kindRaw == ReadingQueueKind.SAVED_FOR_LATER) {

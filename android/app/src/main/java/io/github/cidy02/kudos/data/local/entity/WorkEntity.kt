@@ -70,5 +70,19 @@ data class WorkEntity(
      */
     val epubPreservationStatusRaw: String? = null,
     val preservedAt: Instant? = null,
-    val lastPreservationAttemptAt: Instant? = null
+    val lastPreservationAttemptAt: Instant? = null,
+    // v11 (Phase 2, iOS parity). Device-local or pass-through until each
+    // behaviour is ported; see docs/android-port/LIVING-PROMPT.md §4 Phase 2.
+    @ColumnInfo(defaultValue = "0") val keepInProgressOverride: Boolean = false,
+    val hiddenFromHistoryAt: Instant? = null,
+    /** T-347: when finishing freed this un-kept copy into Recently Deleted (60 days). */
+    val freedAt: Instant? = null,
+    @ColumnInfo(defaultValue = "") val datePublished: String = "",
+    @ColumnInfo(defaultValue = "") val dateUpdated: String = "",
+    val bookmarks: Int? = null,
+    val ao3SeriesID: Int? = null,
+    val legacyReaderProgress: Double? = null,
+    @ColumnInfo(defaultValue = "") val authorIdentitiesJSON: String = "",
+    @ColumnInfo(defaultValue = "") val epubDigest: String = "",
+    @ColumnInfo(defaultValue = "") val assetIdentifier: String = ""
 )

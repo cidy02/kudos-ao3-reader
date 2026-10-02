@@ -1,5 +1,11 @@
 package io.github.cidy02.kudos.data.local
 
+import java.io.File
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.Json
 import android.content.Context
 import androidx.room.Room
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -267,19 +273,81 @@ class KudosDatabaseMigrationTest {
         }
     }
 
+    /**
+     * The strongest check short of a device: build the database exactly as an
+     * exported schema describes it, then let Room migrate it to the current
+     * version and validate every table against the entities. A column with the
+     * wrong type, nullability or default fails here, not on a user's phone.
+     * Released 0.2.1 and 0.2.2 are schema 7.
+     */
     @Test
-    fun roomOpensFreshDatabaseAtVersion10WithMigrationRegistered() {
+    fun releasedSchema7MigratesToCurrentAndPassesRoomValidation() = migrateFromExportedSchema(7)
+
+    @Test
+    fun schema10MigratesToCurrentAndPassesRoomValidation() = migrateFromExportedSchema(10)
+
+    private fun migrateFromExportedSchema(version: Int) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "kudos-validate-from-$version"
+        context.deleteDatabase(name)
+        val schema = Json.parseToJsonElement(
+            File("schemas/io.github.cidy02.kudos.data.local.KudosDatabase/$version.json").readText()
+        ).jsonObject.getValue("database").jsonObject
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(name)
+                .callback(object : SupportSQLiteOpenHelper.Callback(version) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        for (entity in schema.getValue("entities").jsonArray) {
+                            val table = entity.jsonObject.getValue("tableName").jsonPrimitive.content
+                            fun sql(element: JsonElement) =
+                                element.jsonPrimitive.content.replace("\${TABLE_NAME}", table)
+                            db.execSQL(sql(entity.jsonObject.getValue("createSql")))
+                            entity.jsonObject["indices"]?.jsonArray?.forEach {
+                                db.execSQL(sql(it.jsonObject.getValue("createSql")))
+                            }
+                        }
+                        schema["setupQueries"]?.jsonArray?.forEach { db.execSQL(it.jsonPrimitive.content) }
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        helper.writableDatabase.close()
+        helper.close()
+
+        val room = Room.databaseBuilder(context, KudosDatabase::class.java, name)
+            .allowMainThreadQueries()
+            .addMigrations(
+                KudosDatabaseMigrations.MIGRATION_7_8,
+                KudosDatabaseMigrations.MIGRATION_8_9,
+                KudosDatabaseMigrations.MIGRATION_9_10,
+                KudosDatabaseMigrations.MIGRATION_10_11
+            )
+            .build()
+        try {
+            assertEquals(11, room.openHelper.writableDatabase.version)
+        } finally {
+            room.close()
+            context.deleteDatabase(name)
+        }
+    }
+
+    @Test
+    fun roomOpensFreshDatabaseAtCurrentVersionWithMigrationsRegistered() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries()
             .addMigrations(
                 KudosDatabaseMigrations.MIGRATION_7_8,
                 KudosDatabaseMigrations.MIGRATION_8_9,
-                KudosDatabaseMigrations.MIGRATION_9_10
+                KudosDatabaseMigrations.MIGRATION_9_10,
+                KudosDatabaseMigrations.MIGRATION_10_11
             )
             .build()
         try {
-            assertEquals(10, db.openHelper.readableDatabase.version)
+            assertEquals(11, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }

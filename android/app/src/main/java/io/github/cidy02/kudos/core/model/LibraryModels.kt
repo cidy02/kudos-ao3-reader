@@ -32,7 +32,13 @@ data class WorkCollection(
     val lastModifiedAt: Instant? = null,
     val isDeleted: Boolean = false,
     val deletedAt: Instant? = null,
-    val permanentDeletionScheduledAt: Instant? = null
+    val permanentDeletionScheduledAt: Instant? = null,
+    val hue: Double? = null,
+    val colorHex: String? = null,
+    val keepsWorksOffline: Boolean? = null,
+    val showsOnHome: Boolean = false,
+    val workOrderRaw: String = "",
+    val lastMembershipChangedAt: Instant? = null
 )
 
 data class CustomFont(

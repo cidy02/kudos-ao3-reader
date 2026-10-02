@@ -78,7 +78,19 @@ data class SavedWork(
      */
     val epubPreservationStatusRaw: String? = null,
     val preservedAt: Instant? = null,
-    val lastPreservationAttemptAt: Instant? = null
+    val lastPreservationAttemptAt: Instant? = null,
+    // v11 iOS-parity fields (see WorkEntity).
+    val keepInProgressOverride: Boolean = false,
+    val hiddenFromHistoryAt: Instant? = null,
+    val freedAt: Instant? = null,
+    val datePublished: String = "",
+    val dateUpdated: String = "",
+    val bookmarks: Int? = null,
+    val ao3SeriesID: Int? = null,
+    val legacyReaderProgress: Double? = null,
+    val authorIdentitiesJSON: String = "",
+    val epubDigest: String = "",
+    val assetIdentifier: String = ""
 ) {
     // isQueuedForLater counts as protection too - queue-add now preserves the EPUB
     // (T-89), and without this a queue-only work marked Finished would have that
