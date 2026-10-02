@@ -13,8 +13,10 @@ import io.github.cidy02.kudos.library.LibraryRepository
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import io.github.cidy02.kudos.works.WorkMetadataRefresh
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkUpdateChecker
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +30,9 @@ data class HomeUiState(
     val dashboard: HomeDashboardState = HomeDashboardState(),
     val subscriptions: List<AO3WorkSummary> = emptyList(),
     val subscriptionsLoading: Boolean = false,
+    val subscriptionsLoadFailed: Boolean = false,
+    /** Non-null only when page 1 was the whole subscriptions list. */
+    val subscriptionsExactCount: Int? = null,
     val isSignedIn: Boolean = false
 ) {
     val loading: Boolean get() = dashboard.loading
@@ -37,6 +42,10 @@ data class HomeUiState(
     val recentlyUpdated get() = dashboard.recentlyUpdated
     val favorites get() = dashboard.favorites
     val recentlyOpened get() = dashboard.recentlyOpened
+    val visibleItems get() = dashboard.visibleItems
+    val hideMatureContent get() = dashboard.hideMatureContent
+    val confirmBeforeDelete get() = dashboard.confirmBeforeDelete
+    val homeCollections get() = dashboard.homeCollections
     val hasSavedWorks: Boolean get() = dashboard.hasSavedWorks
 }
 
@@ -55,6 +64,9 @@ class HomeViewModel(
 
     private val subscriptions = MutableStateFlow<List<AO3WorkSummary>>(emptyList())
     private val subscriptionsLoading = MutableStateFlow(false)
+    private val subscriptionsLoadFailed = MutableStateFlow(false)
+    private val subscriptionsExactCount = MutableStateFlow<Int?>(null)
+    private val metadataRefresh = WorkMetadataRefresh(workRepository, metadataRepository)
 
     private val dashboard: StateFlow<HomeDashboardState> = combine(
         libraryRepository.observeSnapshot(),
@@ -66,18 +78,26 @@ class HomeViewModel(
             initialValue = HomeDashboardState()
         )
 
-    val state: StateFlow<HomeUiState> = combine(
-        dashboard,
+    private val subscriptionShelf = combine(
         subscriptions,
         subscriptionsLoading,
-        authRepository.state,
-        privacyGate.state
-    ) { dash, subs, loading, auth, revealed ->
+        subscriptionsLoadFailed,
+        subscriptionsExactCount
+    ) { works, loading, failed, exact ->
+        SubscriptionShelf(works, loading, failed, exact)
+    }
+
+    val state: StateFlow<HomeUiState> = combine(
+        dashboard,
+        subscriptionShelf,
+        authRepository.state
+    ) { dash, shelf, auth ->
         HomeUiState(
-            // Reveal is already folded in by HomeDashboard.buildState.
             dashboard = dash,
-            subscriptions = subs,
-            subscriptionsLoading = loading,
+            subscriptions = shelf.works,
+            subscriptionsLoading = shelf.loading,
+            subscriptionsLoadFailed = shelf.failed,
+            subscriptionsExactCount = shelf.exactCount,
             isSignedIn = auth.isSignedIn
         )
     }.stateIn(
@@ -111,10 +131,29 @@ class HomeViewModel(
     suspend fun refreshNow() {
         _isRefreshing.value = true
         try {
+            refreshVisibleMetadata()
             runUpdateCheck()
             loadSubscriptions(authRepository.state.value)
         } finally {
             _isRefreshing.value = false
+        }
+    }
+
+    /** Up to 12 Reading Now and 12 Recently Updated works. A failed fetch leaves the work as it was. */
+    private suspend fun refreshVisibleMetadata() {
+        val works = dashboard.value.visibleItems.map { it.item.work }
+        val candidates = (
+            HomeSectionKind.ReadingNow.works(works) { true }.take(12) +
+                HomeSectionKind.RecentlyUpdated.works(works) { true }.take(12)
+            ).distinctBy { it.id }
+        for (work in candidates) {
+            try {
+                metadataRefresh.refresh(work)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // One work's failure must not blank the rest of the pull.
+            }
         }
     }
 
@@ -139,16 +178,31 @@ class HomeViewModel(
         if (!auth.isSignedIn) {
             subscriptions.value = emptyList()
             subscriptionsLoading.value = false
+            subscriptionsLoadFailed.value = false
+            subscriptionsExactCount.value = null
             return
         }
         subscriptionsLoading.value = true
-        when (val result = accountListRepository.load(AccountListType.Subscriptions, page = 1)) {
-            is AO3Result.Success -> subscriptions.value = result.value.works
-            is AO3Result.Failure -> {
-                // Keep prior list on soft failure so a brief network blip doesn't blank the shelf.
+        try {
+            when (val result = accountListRepository.load(AccountListType.Subscriptions, page = 1)) {
+                is AO3Result.Success -> {
+                    subscriptions.value = result.value.works
+                    subscriptionsLoadFailed.value = false
+                    subscriptionsExactCount.value =
+                        if (result.value.totalPages <= 1) result.value.works.size else null
+                }
+                is AO3Result.Failure -> {
+                    // Keep a previous page. Only an empty shelf says the load failed.
+                    if (subscriptions.value.isEmpty()) subscriptionsLoadFailed.value = true
+                }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            if (subscriptions.value.isEmpty()) subscriptionsLoadFailed.value = true
+        } finally {
+            subscriptionsLoading.value = false
         }
-        subscriptionsLoading.value = false
     }
 
     companion object {
@@ -176,3 +230,10 @@ class HomeViewModel(
         }
     }
 }
+
+private data class SubscriptionShelf(
+    val works: List<AO3WorkSummary>,
+    val loading: Boolean,
+    val failed: Boolean,
+    val exactCount: Int?
+)

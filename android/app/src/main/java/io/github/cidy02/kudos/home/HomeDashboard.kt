@@ -15,7 +15,13 @@ data class HomeDashboardState(
     val continueReading: List<LibraryDisplayItem> = emptyList(),
     val recentlyUpdated: List<LibraryDisplayItem> = emptyList(),
     val favorites: List<LibraryDisplayItem> = emptyList(),
-    val recentlyOpened: List<LibraryDisplayItem> = emptyList()
+    val recentlyOpened: List<LibraryDisplayItem> = emptyList(),
+    /** Privacy-visible works, including obscured cards. Hidden works are already gone. */
+    val visibleItems: List<LibraryDisplayItem> = emptyList(),
+    val hideMatureContent: Boolean = false,
+    val confirmBeforeDelete: Boolean = true,
+    /** `showsOnHome` collections, in the reader's order. Favorites stay on this state for tests; Home no longer shelves them. */
+    val homeCollections: List<HomeCollectionShelf> = emptyList()
 ) {
     val hasSavedWorks: Boolean
         get() = totalSaved > 0
@@ -41,7 +47,11 @@ object HomeDashboard {
             continueReading = library.continueReading,
             recentlyUpdated = recentlyUpdated(library.items),
             favorites = library.favorites,
-            recentlyOpened = library.readingHistory
+            recentlyOpened = library.readingHistory,
+            visibleItems = library.items,
+            hideMatureContent = snapshot.privacy.hideMatureContent,
+            confirmBeforeDelete = snapshot.confirmBeforeDelete,
+            homeCollections = HomeCollections.shelves(snapshot.collections, library.items)
         )
     }
 

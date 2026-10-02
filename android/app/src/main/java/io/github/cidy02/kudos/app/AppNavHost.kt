@@ -44,6 +44,7 @@ import io.github.cidy02.kudos.browse.TagWorksScreen
 import io.github.cidy02.kudos.comments.CommentsScreen
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.home.HomeScreen
+import io.github.cidy02.kudos.home.HomeShellChrome
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.web.AO3WebViewFallbackScreen
@@ -68,7 +69,8 @@ import io.github.cidy02.kudos.works.WorkDetailSource
 fun AppNavHost(
     container: KudosAppContainer,
     navController: NavHostController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    shellChrome: HomeShellChrome? = null
 ) {
     // The only state left here (T-90): a small id-keyed cache so opening Work
     // Detail from a search/browse/account-list result still shows instantly
@@ -111,7 +113,10 @@ fun AppNavHost(
                 authRepository = container.authRepository,
                 accountListRepository = container.accountListRepository,
                 privacyGate = container.privacyGate,
+                queueRepository = container.readingQueueRepository,
                 downloadQueue = container.downloadQueue,
+                workImporter = container.workImporter,
+                shellChrome = shellChrome,
                 onOpenWork = { workId ->
                     navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },
@@ -130,8 +135,20 @@ fun AppNavHost(
                 },
                 onOpenLibrary = { navController.navigate(Routes.Library) },
                 onOpenBrowse = { navController.navigate(Routes.Browse) },
-                onOpenSection = { kind, isSelecting, selection -> 
-                    navController.navigate(Routes.homeSection(kind.id, isSelecting, selection)) 
+                onOpenSection = { kind, isSelecting, selection ->
+                    navController.navigate(Routes.homeSection(kind.id, isSelecting, selection))
+                },
+                onOpenComments = { workId ->
+                    navController.navigate(Routes.comments(workId))
+                },
+                onOpenQueue = { queueId ->
+                    navController.navigate(Routes.readingQueues(queueId))
+                },
+                onOpenQueues = {
+                    navController.navigate(Routes.readingQueues())
+                },
+                onOpenCollection = { collectionId ->
+                    navController.navigate(Routes.collectionDetail(collectionId))
                 }
             )
         }

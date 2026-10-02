@@ -17,16 +17,12 @@ enum class HomeSectionKind(val id: String, val title: String, val emptyMessage: 
     ReadingNow(
         id = "readingNow",
         title = "Reading Now",
-        emptyMessage = "You're not reading anything right now. Start exploring in Browse " +
-            "or open something from your Library."
+        emptyMessage = "You aren't reading anything yet. Open a work from your Library or find one in Browse."
     ),
     RecentlyUpdated(
         id = "recentlyUpdated",
         title = "Recently Updated",
-        // iOS says "from your subscriptions", but the section filters saved works
-        // by hasUpdate, not subscriptions. Deliberate divergence — see
-        // docs/iOS_Issues_Found_While_Porting.md #1.
-        emptyMessage = "No recent updates from your library works yet."
+        emptyMessage = "None of the works in your Library has a new chapter yet."
     ),
     Favorites(
         id = "favorites",
