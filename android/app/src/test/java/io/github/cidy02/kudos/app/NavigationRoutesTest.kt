@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NavigationRoutesTest {
@@ -12,6 +13,16 @@ class NavigationRoutesTest {
             Routes.topLevelDestinations.map { it.route }
         )
         assertFalse(Routes.Search in Routes.topLevelDestinations.map { it.route })
+    }
+
+    @Test
+    fun searchIsAShellRootBesideTheFourTabs() {
+        assertTrue(Routes.isShellRoot(Routes.Search))
+        assertTrue(Routes.isShellRoot(Routes.Home))
+        assertFalse(Routes.isTopLevel(Routes.Search))
+        assertEquals("Home", Routes.shellTitle(Routes.Home))
+        assertEquals(null, Routes.shellTitle(Routes.Account))
+        assertFalse(Routes.isShellRoot(Routes.WorkDetail))
     }
 
     @Test
