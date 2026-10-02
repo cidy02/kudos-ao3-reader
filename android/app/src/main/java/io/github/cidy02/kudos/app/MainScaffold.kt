@@ -1,43 +1,84 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavDestination
-import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import io.github.cidy02.kudos.ui.subject.GlassCircleButton
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.withOpacity
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.DownloadQueueBanner
 
-// Chrome policy (iOS parity): Search is the prominent global action. Theme cycling
-// lives on Account/Settings only — not packed onto every tab.
+private val ShellBarButton = 56.dp
+private val ShellBarMargin = 10.dp
+private val ShellBarClearance = ShellBarButton + ShellBarMargin
+private val ShellTitleReserve = 52.dp
+private val ShellGearReserve = 48.dp
+private val ChromeMotion = tween<Float>(durationMillis = 220, easing = EaseInOut)
+private val ChromeDpMotion = tween<Dp>(durationMillis = 220, easing = EaseInOut)
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Chrome policy: Search is its own shell root, in a circle beside the four tabs.
+// Theme cycling stays on Account and Settings. Pushed screens hide the floating bar.
+
 @Composable
 fun MainScaffold(
     container: KudosAppContainer,
@@ -46,114 +87,284 @@ fun MainScaffold(
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = backStackEntry?.destination
-    val currentRoute = currentDestination?.route
-    val isTopLevel = Routes.isTopLevel(currentRoute)
-    val isReader = currentRoute == Routes.Reader
-    // The queue browser owns its own bottom chrome (the switcher pill / sidebar) —
-    // the top-level nav bar underneath it would double up the bottom edge.
-    val isReadingQueueBrowser = currentRoute == Routes.ReadingQueues
-
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val useNavigationRail = maxWidth >= 840.dp
-
-        Scaffold(
-            topBar = {
-                if (!isReader) {
-                    // Closer to iOS: root tabs show title + Search only.
-                    // Theme cycling lives in Settings (palette button cluttered the bar).
-                    TopAppBar(
-                        title = { Text(Routes.titleFor(currentRoute)) },
-                        navigationIcon = {
-                            if (!isTopLevel) {
-                                IconButton(onClick = { navController.popBackStack() }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back"
-                                    )
-                                }
-                            }
-                        },
-                        actions = {
-                            if (currentRoute != Routes.Search) {
-                                IconButton(
-                                    onClick = {
-                                        navController.navigate(Routes.Search) {
-                                            launchSingleTop = true
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Search,
-                                        contentDescription = "Search"
-                                    )
-                                }
-                            }
-                            // iOS Account trailing gear → Settings.
-                            if (currentRoute == Routes.Account) {
-                                IconButton(
-                                    onClick = {
-                                        navController.navigate(Routes.Settings) {
-                                            launchSingleTop = true
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Settings,
-                                        contentDescription = "Settings"
-                                    )
-                                }
-                            }
-                            // Theme control only on Account / Settings (settings-adjacent).
-                            if (currentRoute == Routes.Account || currentRoute == Routes.Settings) {
-                                IconButton(onClick = onCycleTheme) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Palette,
-                                        contentDescription = "Theme: ${themeMode.label}"
-                                    )
-                                }
-                            }
-                        }
-                    )
-                }
-            },
-            bottomBar = {
-                if (!isReader && !isReadingQueueBrowser && !useNavigationRail) {
-                    TopLevelNavigationBar(
-                        currentDestination = currentDestination,
-                        onNavigate = { route -> navController.navigateTopLevel(route) }
-                    )
-                }
+    val currentRoute = backStackEntry?.destination?.route
+    val shell = Routes.isShellRoot(currentRoute)
+    val reader = currentRoute == Routes.Reader
+    val shellTitle = Routes.shellTitle(currentRoute)
+    val chrome = remember { ShellChromeState() }
+    val chromeHidden = chrome.isHidden(if (shell) currentRoute else null)
+    val bridge = remember { ShellScrollBridge() }
+    bridge.route = if (shell) currentRoute else null
+    bridge.density = LocalDensity.current.density
+    val connection = remember(chrome) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                // SideEffect scrolls are inset and layout changes, not a finger.
+                if (source == NestedScrollSource.SideEffect) return Offset.Zero
+                val route = bridge.route ?: return Offset.Zero
+                chrome.onNestedScroll(route, consumed.y, available.y, bridge.density)
+                return Offset.Zero
             }
-        ) { innerPadding ->
-            // Content + download-queue banner sit inside scaffold padding so the
-            // banner stacks just above the bottom nav (Apple ContentView overlay).
+        }
+    }
+
+    val tokens = LocalKudosTokens.current
+    val insets = WindowInsets.systemBars.asPaddingValues()
+    val reserveTarget = when {
+        shell && shellTitle != null && !chromeHidden -> ShellTitleReserve
+        shell && currentRoute == Routes.Account && !chromeHidden -> ShellGearReserve
+        else -> 0.dp
+    }
+    val reserve by animateDpAsState(reserveTarget, ChromeDpMotion, label = "chromeReserve")
+    val topPad = when {
+        shell -> insets.calculateTopPadding() + reserve
+        reader -> insets.calculateTopPadding()
+        else -> 0.dp
+    }
+    val bottomPad = insets.calculateBottomPadding() + if (shell) ShellBarClearance else 0.dp
+    val page = if (shell) tokens.background else MaterialTheme.colorScheme.background
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(page)
+            .nestedScroll(connection)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (!shell && !reader) {
+                PushedTopBar(
+                    title = Routes.titleFor(currentRoute),
+                    showTheme = currentRoute == Routes.Settings,
+                    themeMode = themeMode,
+                    onBack = { navController.popBackStack() },
+                    onCycleTheme = onCycleTheme
+                )
+            }
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(top = topPad, bottom = bottomPad)
             ) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                    if (!isReader && !isReadingQueueBrowser && useNavigationRail) {
-                        TopLevelNavigationRail(
-                            currentDestination = currentDestination,
-                            onNavigate = { route -> navController.navigateTopLevel(route) }
-                        )
+                AppNavHost(
+                    container = container,
+                    navController = navController,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        if (shell && shellTitle != null) {
+            AnimatedVisibility(
+                visible = !chromeHidden,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(start = 20.dp, top = 4.dp, end = 20.dp),
+                enter = fadeIn(ChromeMotion),
+                exit = fadeOut(ChromeMotion)
+            ) {
+                Text(
+                    text = shellTitle,
+                    color = tokens.primaryInk,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (shell && currentRoute == Routes.Account) {
+            AnimatedVisibility(
+                visible = !chromeHidden,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(top = 6.dp, end = 8.dp),
+                enter = fadeIn(ChromeMotion),
+                exit = fadeOut(ChromeMotion)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    GlassCircleButton(
+                        onClick = onCycleTheme,
+                        accessibilityName = "Theme: ${themeMode.label}"
+                    ) {
+                        Icon(Icons.Outlined.Palette, contentDescription = null)
                     }
-                    AppNavHost(
-                        container = container,
-                        navController = navController,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize()
-                    )
+                    GlassCircleButton(
+                        onClick = {
+                            navController.navigate(Routes.Settings) { launchSingleTop = true }
+                        },
+                        accessibilityName = "Settings"
+                    ) {
+                        Icon(Icons.Outlined.Settings, contentDescription = null)
+                    }
                 }
-                // Shown over the reader too (Apple ContentView overlays it above the whole
-                // tab container regardless of what's presented) — a download in progress
-                // shouldn't become invisible just because the user opened something else.
-                DownloadQueueBanner(
-                    queue = container.downloadQueue,
-                    modifier = Modifier.align(Alignment.BottomCenter)
+            }
+        }
+
+        DownloadQueueBanner(
+            queue = container.downloadQueue,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = bottomPad)
+        )
+
+        if (shell) {
+            FloatingTabBar(
+                currentRoute = currentRoute,
+                minimized = chromeHidden,
+                onNavigate = { route -> navController.navigateShellRoot(route) },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PushedTopBar(
+    title: String,
+    showTheme: Boolean,
+    themeMode: KudosThemeMode,
+    onBack: () -> Unit,
+    onCycleTheme: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GlassCircleButton(onClick = onBack, accessibilityName = "Back") {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+            }
+            Text(
+                text = title,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp),
+                color = tokens.primaryInk,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (showTheme) {
+                GlassCircleButton(
+                    onClick = onCycleTheme,
+                    accessibilityName = "Theme: ${themeMode.label}"
+                ) {
+                    Icon(Icons.Outlined.Palette, contentDescription = null)
+                }
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.5.dp)
+                .background(tokens.separator)
+        )
+    }
+}
+
+@Composable
+private fun FloatingTabBar(
+    currentRoute: String?,
+    minimized: Boolean,
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val searchSelected = currentRoute == Routes.Search
+    val selectedTab = Routes.topLevelDestinations.firstOrNull { destination ->
+        currentRoute == destination.route
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))
+            .padding(start = 12.dp, end = 12.dp, bottom = ShellBarMargin),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (!minimized) {
+            TabCapsule(
+                currentRoute = currentRoute,
+                onNavigate = onNavigate,
+                modifier = Modifier.weight(1f)
+            )
+        } else if (selectedTab != null) {
+            ShellGlassCircle(
+                onClick = { onNavigate(selectedTab.route) },
+                name = selectedTab.label,
+                selected = true,
+                icon = selectedTab.selectedIcon,
+                diameter = 44.dp
+            )
+        }
+        ShellGlassCircle(
+            onClick = { onNavigate(Routes.Search) },
+            name = "Search",
+            selected = searchSelected,
+            icon = Icons.Filled.Search,
+            diameter = ShellBarButton
+        )
+    }
+}
+
+@Composable
+private fun TabCapsule(
+    currentRoute: String?,
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    val shape = RoundedCornerShape(percent = 50)
+    Row(
+        modifier = modifier
+            .height(ShellBarButton)
+            .clip(shape)
+            .background(tokens.glassFill(), shape)
+            .border(0.5.dp, tokens.glassStroke(), shape)
+            .padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Routes.topLevelDestinations.forEach { destination ->
+            val selected = currentRoute == destination.route
+            val tint = if (selected) tokens.accent else tokens.primaryInk
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(shape)
+                    .background(if (selected) tokens.accent.withOpacity(0.18) else Color.Transparent)
+                    .clickable(role = Role.Tab, onClick = { onNavigate(destination.route) })
+                    .semantics(mergeDescendants = true) { this.selected = selected },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = destination.label,
+                    color = if (selected) tokens.accent else tokens.secondaryInk,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -161,64 +372,46 @@ fun MainScaffold(
 }
 
 @Composable
-private fun TopLevelNavigationBar(
-    currentDestination: NavDestination?,
-    onNavigate: (String) -> Unit
+private fun ShellGlassCircle(
+    onClick: () -> Unit,
+    name: String,
+    selected: Boolean,
+    icon: ImageVector,
+    diameter: Dp,
+    modifier: Modifier = Modifier
 ) {
-    NavigationBar {
-        Routes.topLevelDestinations.forEach { destination ->
-            val selected = currentDestination.isRouteSelected(destination.route)
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onNavigate(destination.route) },
-                icon = {
-                    Icon(
-                        imageVector = if (selected) {
-                            destination.selectedIcon
-                        } else {
-                            destination.unselectedIcon
-                        },
-                        contentDescription = destination.label
-                    )
-                },
-                label = { Text(destination.label) }
-            )
-        }
+    val tokens = LocalKudosTokens.current
+    val fill = if (selected) tokens.accent.withOpacity(0.30) else tokens.glassFill()
+    val stroke = if (selected) tokens.accent.withOpacity(0.60) else tokens.glassStroke()
+    Box(
+        modifier
+            .size(diameter)
+            .semantics {
+                role = Role.Button
+                this.selected = selected
+                contentDescription = name
+            }
+            .clip(CircleShape)
+            .background(fill, CircleShape)
+            .border(0.5.dp, stroke, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (selected) tokens.accent else tokens.primaryInk,
+            modifier = Modifier.size(if (diameter < 50.dp) 20.dp else 24.dp)
+        )
     }
 }
 
-@Composable
-private fun TopLevelNavigationRail(
-    currentDestination: NavDestination?,
-    onNavigate: (String) -> Unit
-) {
-    NavigationRail {
-        Routes.topLevelDestinations.forEach { destination ->
-            val selected = currentDestination.isRouteSelected(destination.route)
-            NavigationRailItem(
-                selected = selected,
-                onClick = { onNavigate(destination.route) },
-                icon = {
-                    Icon(
-                        imageVector = if (selected) {
-                            destination.selectedIcon
-                        } else {
-                            destination.unselectedIcon
-                        },
-                        contentDescription = destination.label
-                    )
-                },
-                label = { Text(destination.label) }
-            )
-        }
-    }
+private class ShellScrollBridge {
+    var route: String? = null
+    var density: Float = 1f
 }
 
-private fun NavDestination?.isRouteSelected(route: String): Boolean {
-    return this?.hierarchy?.any { it.route == route } == true
-}
-
-private fun NavHostController.navigateTopLevel(route: String) {
+private fun NavHostController.navigateShellRoot(route: String) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) {
             saveState = true

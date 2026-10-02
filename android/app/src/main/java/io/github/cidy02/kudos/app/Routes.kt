@@ -233,4 +233,19 @@ object Routes {
 
     fun isTopLevel(route: String?): Boolean =
         topLevelDestinations.any { it.route == route }
+
+    /** The four tabs plus Search. Pushed screens are not roots, so the floating bar hides. */
+    fun isShellRoot(route: String?): Boolean = route == Search || isTopLevel(route)
+
+    /**
+     * Large inline title for a shell root. Account has none (its gear floats).
+     * Home matches iOS `navigationTitle("Home")`.
+     */
+    fun shellTitle(route: String?): String? = when (route) {
+        Home -> "Home"
+        Library -> "Library"
+        Browse -> "Browse"
+        Search -> "Search"
+        else -> null
+    }
 }
