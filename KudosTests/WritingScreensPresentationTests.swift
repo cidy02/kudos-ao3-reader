@@ -97,7 +97,7 @@ struct WritingScreensPresentationTests {
 
     @Test func editorRowDetailLine() {
         #expect(WritingTextEditorRow.detail(text: "", previewsText: true, emptyHint: "opens the editor.")
-            == "Empty — opens the editor.")
+            == "Empty. This opens the editor.")
         #expect(WritingTextEditorRow.detail(text: "", previewsText: true, emptyHint: nil) == nil)
         #expect(WritingTextEditorRow.detail(text: "<p>Gojo &amp; Nanami</p>", previewsText: true, emptyHint: nil)
             == "Gojo & Nanami")
@@ -195,10 +195,11 @@ struct WritingScreensPresentationTests {
     @Test func theBulkDeleteAlertNamesWhatGoes() {
         let three = [work(1), work(2), work(3)]
         #expect(OwnWorksBulkBar.deleteTitle(three) == "Delete 3 works?")
-        #expect(OwnWorksBulkBar.deleteMessage(three).hasPrefix("This removes “Work 1”, “Work 2”, and “Work 3” from AO3")
-            || OwnWorksBulkBar.deleteMessage(three).hasPrefix("This removes “Work 1”, “Work 2” and “Work 3” from AO3"))
+        let message = OwnWorksBulkBar.deleteMessage(three)
+        #expect(message.hasPrefix("This permanently removes “Work 1”, “Work 2”, and “Work 3”")
+            || message.hasPrefix("This permanently removes “Work 1”, “Work 2” and “Work 3”"))
         #expect(OwnWorksBulkBar.deleteTitle([work(7)]) == "Delete “Work 7”?")
-        #expect(OwnWorksBulkBar.deleteMessage([work(7)]).hasPrefix("This removes the work from AO3"))
+        #expect(OwnWorksBulkBar.deleteMessage([work(7)]).hasPrefix("This permanently removes the work"))
     }
 
     // MARK: Fixtures

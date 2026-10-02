@@ -138,8 +138,8 @@ struct ScopedRemovalBulkActionBar: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The selected works will no longer be in this \(scopeName). "
-                + "They stay in your Library either way.")
+            Text("Kudos will remove the selected works from this \(scopeName). "
+                + "They will stay in your Library.")
         }
     }
 

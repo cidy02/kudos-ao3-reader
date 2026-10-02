@@ -433,7 +433,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .dashboardListRow()
             }
         } emptyState: {
-            Text("Group works into collections with + above.")
+            Text("Use + above to create a collection for works you want to group together.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -549,7 +549,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
             }
         } emptyState: {
-            Text("Group works into collections with + above.")
+            Text("Use + above to create a collection for works you want to group together.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

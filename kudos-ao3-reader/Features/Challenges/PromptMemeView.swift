@@ -399,10 +399,8 @@ struct PromptMemeView: View {
     }
 
     private var footnoteText: some View {
-        Text("Prompt Meme replaces sign-ups and assignments entirely — there is no matching, "
-            + "so nothing here is matched or assigned. Claiming is an AO3 write, "
-            + "and a claim can be released; both need the prompt id, which is on the row. "
-            + "A new prompt is a request on your sign-up; posting a fill happens on AO3.")
+        Text("A Prompt Meme has no matching or assignments. You can claim a prompt here and release it "
+            + "later. Add a new prompt through your sign-up, and post fills on AO3.")
             .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

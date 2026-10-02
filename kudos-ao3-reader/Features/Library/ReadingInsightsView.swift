@@ -142,9 +142,9 @@ struct ReadingInsightsView: View {
     /// half is not decoration — it is the answer to the question a statistics
     /// page raises, and it belongs where the figure is rather than in a footer.
     private var headerTallyLine: String {
-        guard hasSessions else { return "Measured on this device · nothing sent anywhere" }
+        guard hasSessions else { return "Your reading activity stays on this device" }
         let hours = ReadingInsights.hoursLabel(insights.totalSeconds)
-        return "\(hours) hours in \(periodName) · measured on this device"
+        return "\(hours) hours in \(periodName) · stays on this device"
     }
 
     /// Whether the log has anything in this period. `totalSeconds` rather than a
@@ -402,16 +402,15 @@ struct ReadingInsightsView: View {
     /// time anyone tuned the constant.
     private var paceFootnote: String {
         let seconds = Int(ReadingLogService.minimumPersistableDuration.rounded())
-        return "Sessions shorter than \(seconds) seconds are not counted, so a work opened "
-            + "and closed does not read as reading."
+        return "Reading time under \(seconds) seconds isn't counted."
     }
 
     private var noSessionsNote: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No reading logged this \(period == .month ? "month" : "year")")
                 .font(.system(size: 15, weight: .semibold))
-            Text("Sessions are recorded while a work is open in the reader, on this device "
-                + "only. Your library is summarised below.")
+            Text("Kudos counts reading time only on this device, while a work is open in the reader. "
+                + "Your Library totals still appear below.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -437,9 +436,8 @@ struct ReadingInsightsView: View {
         VStack(alignment: .leading, spacing: 13) {
             libraryGrid
             Divider().overlay(Color.primary.opacity(0.12))
-            Text("Words read counts finished works with a known AO3 word count. "
-                + "Recent activity counts distinct works opened. Finished counts works "
-                + "marked finished, including any you read before the session log existed.")
+            Text("Words read includes finished works when AO3 provides a word count. Recent activity counts each "
+                + "work you opened once. Finished includes works you completed before Kudos began recording time.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -536,8 +534,9 @@ struct ReadingInsightsView: View {
         ContentUnavailableView {
             Label("No reading logged yet", systemImage: "chart.bar.xaxis")
         } description: {
-            Text("Open a work and read for a minute or two. Sessions are recorded on this "
-                + "device only, and nothing here is ever sent anywhere.")
+            Text("Open a work and read for at least "
+                + "\(Int(ReadingLogService.minimumPersistableDuration.rounded())) seconds. "
+                + "Your reading activity stays on this device and isn't sent anywhere.")
         }
     }
 

@@ -357,9 +357,9 @@ struct ReadingQueueBrowserView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(
-                    "The queue moves to Recently Deleted "
-                        + "for \(PreservedWorkService.recoveryWindowText), with everything in it "
-                        + "intact. Works stay in Kudos either way."
+                    "Kudos will move this queue to Recently Deleted for "
+                        + "\(PreservedWorkService.recoveryWindowText). Its list of works stays with it, "
+                        + "and the works stay in Kudos."
                 )
             }
             .destructiveConfirmation(
@@ -448,8 +448,8 @@ extension ReadingQueueBrowserView {
                 )
             } description: {
                 Text(KeepOffline.queueKeeps(selectedQueue.keepsWorksOffline)
-                    ? "Works you add to this queue will keep a local EPUB for offline reading."
-                    : "Add works to line them up. This queue is a list — it keeps nothing offline.")
+                    ? "Works you add here are downloaded and kept for offline reading."
+                    : "Add works to choose what to read next. This queue doesn't keep downloads for you.")
             } actions: {
                 Button {
                     showingAddWorks = true
@@ -477,7 +477,7 @@ extension ReadingQueueBrowserView {
                     ContentUnavailableView {
                         Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
                     } description: {
-                        Text("No works in this queue match the current filters.")
+                        Text("Your filters don't match any works in this queue.")
                     } actions: {
                         Button("Clear Filters") {
                             filters = LibraryFilters()

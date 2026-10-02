@@ -19,11 +19,10 @@ enum PreservedWorkService {
     /// window would mean losing the work entirely, so the user is told plainly.
     static func deleteConfirmationMessage(for work: SavedWork) -> String {
         if work.ao3Unavailable {
-            return "“\(work.title)” is no longer available on AO3. If you don't restore it "
-                + "within 90 days, this will be the only copy — it can't be re-saved from AO3 afterward."
+            return "“\(work.title)” is no longer available on AO3. If you don't restore it within 90 days, "
+                + "Kudos will permanently remove this copy, and you can't download it from AO3 again."
         }
-        return "“\(work.title)” will be moved to Recently Deleted. You can restore it anytime "
-            + "in the next 90 days."
+        return "Kudos will move “\(work.title)” to Recently Deleted. You can restore it for the next 90 days."
     }
 
     // MARK: - Soft delete

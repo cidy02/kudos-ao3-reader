@@ -208,7 +208,7 @@ private struct AO3BookmarkComposer: View {
                     } header: {
                         Text("Tags")
                     } footer: {
-                        Text("Your own bookmark tags, separated by commas.")
+                        Text("Separate your bookmark tags with commas.")
                     }
                     Section {
                         Toggle("Private", isOn: $actions.bookmarkInput.isPrivate)

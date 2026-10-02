@@ -64,15 +64,14 @@ struct QueueTagSheet: View {
                 Section {
                     groupLabel("Add")
                     addPanel.pageBodyRow(top: 8, gutter: gutter)
-                    footnote((queues.count > 1 ? "Applies to all \(queues.count) selected queues. " : "")
-                        + "Tags are shared with your works, so one word means the "
-                        + "same thing wherever you use it.")
+                    footnote((queues.count > 1 ? "Your changes apply to all \(queues.count) selected queues. " : "")
+                        + "A tag you use here is the same tag on your works.")
                 }
 
                 Section {
                     groupLabel("Your tags")
                     if allTags.isEmpty {
-                        footnote("No tags yet — add one above.")
+                        footnote("You have no tags yet. Add one above.")
                     } else {
                         tagPanel.pageBodyRow(top: 8, gutter: gutter)
                     }

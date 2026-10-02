@@ -90,7 +90,7 @@ struct ReaderSpeechSettingsSection: View {
 
                 if selectedKokoroExecutionProvider == .coreML {
                     Label(
-                        "Core ML is requested experimentally; it does not guarantee Neural Engine use.",
+                        "Choosing Core ML asks your device to use it, but the Neural Engine may not be used.",
                         systemImage: "info.circle"
                     )
                     .font(.footnote)
@@ -100,9 +100,9 @@ struct ReaderSpeechSettingsSection: View {
                 if selectedKokoroModelPack.requiresInt8SupportFiles &&
                     !isSelectedKokoroModelPackDownloaded {
                     Label(
-                        "FP32 downloads only the official model.onnx from Hugging Face "
-                            + "and reuses the Int8 Voice Pack voices, tokens, and eSpeak data. "
-                            + "Kudos uses Int8 or Apple until that finishes.",
+                        "FP32 downloads its official voice data from Hugging Face and reuses "
+                            + "the Int8 Voice Pack's voices and other speech files. "
+                            + "Until it finishes, you hear Int8 or an Apple voice.",
                         systemImage: "externaldrive"
                     )
                     .font(.footnote)
@@ -119,8 +119,10 @@ struct ReaderSpeechSettingsSection: View {
             if isKokoroAwaitingVoicePack {
                 Label(
                     KokoroAnePlayback.supportsCoreML()
-                        ? "Kokoro Neural Engine pack is not ready. Apple is used until it is."
-                        : "Kokoro requires the Voice Pack. Apple is used until it finishes.",
+                        ? "Download the Kokoro Neural Engine pack to use Kokoro. "
+                            + "Until then, you hear an Apple voice."
+                        : "Download the Kokoro Voice Pack to use Kokoro. "
+                            + "Until then, you hear an Apple voice.",
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
@@ -236,12 +238,11 @@ struct ReaderSpeechSettingsSection: View {
             Text("Kokoro Neural Engine")
         } footer: {
             Text(
-                "Kokoro runs as staged Core ML graphs, with each stage on the "
-                    + "Neural Engine, GPU, or CPU — whichever is fastest for it. "
-                    + "The pack is dense FP16 (Noise and Tail stay FP32). The first "
-                    + "install downloads the zip from this project's GitHub Releases. "
-                    + "Kudos sends no book text, audio, or library data; GitHub "
-                    + "can receive your IP address and ordinary connection metadata."
+                "Kokoro runs on whichever part of your device is fastest at it: the Neural "
+                    + "Engine, the graphics chip or the main processor. The first install downloads "
+                    + "the voice pack from this project's GitHub Releases. Kudos sends none of your "
+                    + "book text, audio or library, but GitHub sees your IP address and basic "
+                    + "connection details."
             )
         }
         .confirmationDialog(
@@ -253,10 +254,9 @@ struct ReaderSpeechSettingsSection: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "Kudos will download the Core ML Kokoro zip from GitHub Releases "
-                    + "(cidy02/kudos-ao3-reader). No reading or library data is sent, "
-                    + "but GitHub can receive your IP address and standard connection "
-                    + "metadata."
+                "Kudos downloads the Core ML Kokoro voice pack from this project's GitHub Releases "
+                    + "(cidy02/kudos-ao3-reader). Nothing about your reading or library is sent, "
+                    + "but GitHub receives your IP address and basic connection details."
             )
         }
     }
@@ -305,8 +305,8 @@ struct ReaderSpeechSettingsSection: View {
                !downloadManager.isModelDownloaded(for: .int8V019),
                !isBusyWithSelectedPack {
                 Label(
-                    "Download the Int8 Voice Pack first. FP32 reuses its voices, "
-                        + "tokens, and eSpeak data and never unpacks the 320 MB tar.",
+                    "Download the Int8 Voice Pack first. FP32 reuses its voices and other speech "
+                        + "files, so you don't need to unpack another 320 MB file.",
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
@@ -329,10 +329,9 @@ struct ReaderSpeechSettingsSection: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "Kudos will request this public Voice Pack from \(selectedPackHostName). No "
-                    + "reading or library data is sent, but the host/CDN can receive your IP "
-                    + "address and standard "
-                    + "connection metadata."
+                "Kudos downloads this public Voice Pack from \(selectedPackHostName). Nothing "
+                    + "about your reading or library is sent, but the provider or its delivery "
+                    + "service can receive your IP address and basic connection details."
             )
         }
     }
@@ -469,14 +468,13 @@ struct ReaderSpeechSettingsSection: View {
 
     private var readAloudFooter: String {
         if KokoroAnePlayback.supportsCoreML() {
-            return "Automatic uses Apple immediately, then Kokoro on the Neural Engine "
-                + "once the optional Core ML pack is installed. Kudos does not send "
-                + "reading data, library data, or telemetry."
+            return "Automatic starts with an Apple voice, then uses Kokoro on the Neural Engine "
+                + "after you install its optional voice pack. Kudos doesn't send your reading, "
+                + "your library or any usage data."
         }
-        return "Automatic uses Apple immediately, then Kokoro after its optional offline "
-            + "Int8 Voice Pack is downloaded. Full precision (FP32) is an explicit "
-            + "Hugging Face download of csukuangfj/kokoro-en-v0_19 model.onnx; "
-            + "Kudos does not send reading data, library data, or telemetry."
+        return "Automatic starts with an Apple voice, then uses Kokoro after you download its "
+            + "optional Int8 Voice Pack. Full precision (FP32) is a separate download from "
+            + "Hugging Face. Kudos doesn't send your reading, your library or any usage data."
     }
 
     private func normalizeEngineID() {
@@ -541,14 +539,14 @@ struct ReaderSpeechSettingsSection: View {
     private var downloadDisclosure: String {
         let prefix: String
         if selectedKokoroModelPack.requiresInt8SupportFiles {
-            prefix = "FP32 downloads the \(selectedPackSizeLabel) public model from Hugging Face "
-                + "at a pinned revision. Allow up to 900 MB free during install."
+            prefix = "FP32 downloads \(selectedPackSizeLabel) of voice data from a fixed version "
+                + "on Hugging Face. You need up to 900 MB free while it installs."
         } else {
-            prefix = "The Int8 Voice Pack downloads its public archive from GitHub."
+            prefix = "The Int8 Voice Pack downloads its public files from GitHub."
         }
-        return prefix + " Kudos sends no book text, audio, AO3 credentials, library, reading "
-            + "history, analytics, or account identifier. The host or its CDN can receive your "
-            + "IP address and standard connection/request metadata under its privacy policy."
+        return prefix + " Kudos sends no book text, audio, AO3 login details, library, reading "
+            + "history, usage data, or anything that identifies your account. The provider or its delivery service "
+            + "can receive your IP address and basic connection details under its privacy policy."
     }
 
     private var effectiveKokoroRuntimeConfiguration: KokoroRuntimeConfiguration? {
@@ -617,7 +615,7 @@ struct ReaderSpeechSettingsSection: View {
         if let best = ReaderSpeechPreferences.bestVoice(for: language, from: voices) {
             return "Currently \(ReaderSpeechPreferences.displayName(for: best))"
         }
-        return "Uses the best installed voice for the book’s language"
+        return "Chooses the best installed voice for this work’s language"
     }
 
     private func voiceSubtitle(_ voice: TTSVoice) -> String {

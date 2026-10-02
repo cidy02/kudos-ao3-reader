@@ -69,7 +69,7 @@ struct FandomListFilterSheet: View {
                         title: "Only fandoms with more than one tag",
                         detail: groupsVariants
                             ? familyCountLabel(tallies.multiTagFamilies)
-                            : "Turn on Group variants to use this",
+                            : "Turn on Group variants to use this filter",
                         isOn: $options.multiTagOnly
                     )
                     .disabled(!groupsVariants)
@@ -127,7 +127,8 @@ struct FandomListFilterSheet: View {
     private var minimumWorksCaption: String {
         let count = tallies.tagsBelowMinimumWorks(options.minimumWorks)
         let formatted = count.formatted()
-        return "\(formatted) tags in this category hold fewer than \(options.minimumWorks.title.replacingOccurrences(of: "+", with: "")) works."
+        return "\(formatted) tags will be hidden because they have fewer than "
+            + "\(options.minimumWorks.title.replacingOccurrences(of: "+", with: "")) works."
     }
 
     private var spacer: some View { Color.clear.frame(height: 24) }

@@ -287,7 +287,7 @@ struct AO3AuthorWorksSection: View {
                     AO3AuthorContentMessage(
                         model: model,
                         emptyTitle: "No works",
-                        emptyMessage: "AO3 has no visible works for this author scope.",
+                        emptyMessage: "No works by this author are visible to you on AO3.",
                         emptySymbol: "books.vertical"
                     )
                 }
@@ -312,7 +312,7 @@ struct AO3AuthorWorksSection: View {
                 AO3AuthorContentMessage(
                     model: model,
                     emptyTitle: "No works",
-                    emptyMessage: "AO3 has no visible works for this author scope.",
+                    emptyMessage: "No works by this author are visible to you on AO3.",
                     emptySymbol: "books.vertical"
                 )
             } else {
@@ -470,7 +470,7 @@ struct AO3AuthorSeriesSection: View {
                     AO3AuthorContentMessage(
                         model: model,
                         emptyTitle: "No series",
-                        emptyMessage: "AO3 has no visible series for this author scope.",
+                        emptyMessage: "No series by this author are visible to you on AO3.",
                         emptySymbol: "square.stack"
                     )
                 } else if showsNewSeriesOnAO3 {
@@ -481,9 +481,8 @@ struct AO3AuthorSeriesSection: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("You have not made a series.")
                                 .font(.system(size: 18, weight: .semibold))
-                            Text("A series groups your works so they read in order. "
-                                + "Series are created on AO3; anything you make there "
-                                + "appears here on the next refresh.")
+                            Text("A series groups your works in reading order. Create one on AO3, "
+                                + "then refresh this page to see it here.")
                                 .font(.system(size: 13.5))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -504,7 +503,7 @@ struct AO3AuthorSeriesSection: View {
                                 isFormRow: true
                             )
                             .padding(.horizontal, -14)
-                            Text("Opens archiveofourown.org in Browse. Series are made there, not in the app.")
+                            Text("This opens AO3 in Browse, where you can create the series.")
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -516,7 +515,7 @@ struct AO3AuthorSeriesSection: View {
                     AO3AuthorContentMessage(
                         model: model,
                         emptyTitle: "No series",
-                        emptyMessage: "AO3 has no visible series for this author scope.",
+                        emptyMessage: "No series by this author are visible to you on AO3.",
                         emptySymbol: "square.stack"
                     )
                 }
@@ -623,7 +622,7 @@ struct AO3AuthorBookmarksSection: View {
                     AO3AuthorContentMessage(
                         model: model,
                         emptyTitle: "No visible bookmarks",
-                        emptyMessage: "AO3 has no bookmarks visible to this session for this author scope.",
+                        emptyMessage: "No bookmarks by this author are visible to you on AO3.",
                         emptySymbol: "bookmark"
                     )
                 }
@@ -648,7 +647,7 @@ struct AO3AuthorBookmarksSection: View {
                 AO3AuthorContentMessage(
                     model: model,
                     emptyTitle: "No visible bookmarks",
-                    emptyMessage: "AO3 has no bookmarks visible to this session for this author scope.",
+                    emptyMessage: "No bookmarks by this author are visible to you on AO3.",
                     emptySymbol: "bookmark"
                 )
             } else {

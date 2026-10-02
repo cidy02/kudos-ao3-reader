@@ -303,8 +303,8 @@ struct TagSetView: View {
 
     /// The spec's review caption (C2-8).
     private var reviewFootnote: some View {
-        Text("Nominated characters and relationships have to be associated with a fandom before they "
-            + "can be approved. The queue groups by fandom for that reason.")
+        Text("Before you approve a nominated character or relationship, it must be linked to a fandom. "
+            + "The review list groups nominations by fandom.")
             .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -312,9 +312,8 @@ struct TagSetView: View {
     }
 
     private var tagFieldsFootnote: some View {
-        Text("Each type is its own field on AO3 and takes a comma-separated list. "
-            + "The app writes them back as one save, so a rejected tag has to be reported "
-            + "against the field it came from.")
+        Text("Enter each tag type as its own comma-separated list, as on AO3. If AO3 rejects a tag, "
+            + "Kudos shows which list it came from.")
             .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

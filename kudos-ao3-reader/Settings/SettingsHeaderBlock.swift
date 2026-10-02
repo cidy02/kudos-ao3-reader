@@ -21,7 +21,7 @@ struct SettingsHeaderBlock: View {
         SubjectHeaderBlock(
             kicker: "AO3 Account",
             title: "Settings",
-            subtitle: "App only · nothing here reaches AO3",
+            subtitle: "Changes here affect Kudos, not your AO3 account",
             palette: palette,
             gutter: SubjectMetrics.accountGutter
         )

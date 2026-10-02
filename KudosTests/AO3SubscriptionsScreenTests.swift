@@ -213,13 +213,13 @@ struct AO3SubscriptionsScreenTests {
     @Test func footerUsesTheRealPageNumbers() {
         #expect(
             AO3SubscriptionsCopy.footer(currentPage: 2, totalPages: 4)
-                == "Subscriptions live on AO3 — unsubscribing here unsubscribes there. "
-                + "Pagination follows the list: 2 of 4 pages."
+                == "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3. "
+                + "You're viewing 2 of 4 pages."
         )
         #expect(
             AO3SubscriptionsCopy.footer(currentPage: 1, totalPages: 1)
-                == "Subscriptions live on AO3 — unsubscribing here unsubscribes there. "
-                + "Pagination follows the list: 1 of 1 page."
+                == "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3. "
+                + "You're viewing 1 of 1 page."
         )
     }
 

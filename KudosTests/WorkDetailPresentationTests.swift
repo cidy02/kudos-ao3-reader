@@ -118,7 +118,7 @@ struct WorkDetailPresentationTests {
         // "My copy" would read as a rendering fault rather than as a state.
         #expect(WorkDetailPresentation.myCopySummary(
             isDownloaded: false, queueCount: 0, tagCount: 0, collectionCount: 0
-        ) == "Nothing saved on this device yet")
+        ) == "You haven't saved anything on this device yet")
     }
 
     // MARK: Warning figures (the strip under the title, spec 1a)

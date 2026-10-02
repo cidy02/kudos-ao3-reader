@@ -96,7 +96,7 @@ struct WritingTextEditor: View {
                 } else { ProgressView() }
                 if isPreviewing { preview }
             }
-            Text("Local recovery · Save on the work form")
+            Text("Recovery copy on this device · Save from the work form")
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal)
@@ -104,8 +104,8 @@ struct WritingTextEditor: View {
             // Above the keyboard: the screen avoids it, so the bar rides on top.
             tagBar
             #else
-            Text("AO3 accepts a limited set of HTML. Anything else is stripped on post, "
-                + "so the bar inserts tags rather than styling text.")
+            Text("AO3 supports only certain formatting. The toolbar adds formatting that AO3 "
+                + "can keep when you post.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal).padding(.bottom, 6)
@@ -260,8 +260,8 @@ struct WritingTextEditor: View {
                     }
                 }
             }
-            Text("AO3 accepts a limited set of HTML. Anything else is stripped on post, "
-                + "so the bar inserts tags rather than styling text.")
+            Text("AO3 supports only certain formatting. The toolbar adds formatting that AO3 "
+                + "can keep when you post.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -353,9 +353,9 @@ struct WritingTextEditor: View {
                         }
                     }
                 }
-                Text("A local copy was saved \(recovery.savedAt.formatted()).")
+                Text("A recovery copy was saved on this device \(recovery.savedAt.formatted()).")
                 if recovery.originalDigest != WritingTextRecovery.digest(original) {
-                    Text("The form text has changed since this copy was started. Review it before replacing the form text.")
+                    Text("The text on the form has changed since this copy began. Review the copy before restoring it.")
                 }
                 ScrollView { Text(recovery.text).font(.body.monospaced()).textSelection(.enabled) }
                 Button("Restore local copy") {
@@ -489,7 +489,7 @@ struct WritingTextEditorRow: View {
     let field: String
     /// 1bo/1br: the text itself under the label, in place of "Set".
     var previewsText = false
-    /// 1bq: what an empty row opens, read as "Empty — <hint>" under the label.
+    /// 1bq: what an empty row opens, read as "Empty. This <hint>" under the label.
     var emptyHint: String?
     /// The editor's section rule — 1bv's "Chapter 13". Defaults to `title`.
     var ruleTitle: String?
@@ -530,7 +530,7 @@ struct WritingTextEditorRow: View {
     /// the text with its markup stripped; markup with no words falls back to
     /// "Set" rather than previewing an empty line.
     static func detail(text: String, previewsText: Bool, emptyHint: String?) -> String? {
-        if text.isEmpty { return emptyHint.map { "Empty — \($0)" } }
+        if text.isEmpty { return emptyHint.map { "Empty. This \($0)" } }
         guard previewsText else { return nil }
         let plain = text.strippingHTML().trimmingCharacters(in: .whitespacesAndNewlines)
         return plain.isEmpty ? nil : plain

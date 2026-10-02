@@ -136,10 +136,9 @@ struct EPUBImportSettingsSection: View {
                 }
             }
         } footer: {
-            Text("Import EPUB, HTML, or text files — including zipped chapters — into your "
-                + "local Library. Anything that isn't already an EPUB is converted to one, "
-                + "and the original file is kept alongside it. Files are copied into Kudos "
-                + "storage and remain readable offline.")
+            Text("Import downloaded works, web pages, text files, or zipped chapters into your "
+                + "Library. Kudos prepares supported files for reading, keeps the original, "
+                + "and stores both so you can read offline.")
         }
     }
 }
@@ -184,8 +183,9 @@ private struct EPUBImportNoticeSummary {
         let clauses = converted
             .sorted { $0.key.displayName < $1.key.displayName }
             .map { "\($0.value.formatted()) from \($0.key.displayName)" }
-        return "Converted \(clauses.joined(separator: ", ")). The original file\(converted.count == 1 ? "" : "s")"
-            + " \(converted.values.reduce(0, +) == 1 ? "was" : "were") kept."
+        return "Converted \(clauses.joined(separator: ", ")) into readable downloads. The original file"
+            + "\(converted.values.reduce(0, +) == 1 ? "" : "s") "
+            + "\(converted.values.reduce(0, +) == 1 ? "was" : "were") kept."
     }
 
     mutating func record(_ outcome: UserEPUBImportOutcome, convertedFrom format: ImportedFileFormat? = nil) {

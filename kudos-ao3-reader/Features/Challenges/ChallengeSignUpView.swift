@@ -354,7 +354,7 @@ extension ChallengeSignUpView {
                 sentences.append("Each request takes \(perType.joined(separator: ", ")).")
             }
         }
-        sentences.append("Those limits are checked here before submit, so a rejected sign-up is not a round trip.")
+        sentences.append("Kudos checks these limits before you submit your sign-up.")
         return Text(sentences.joined(separator: " "))
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
@@ -421,8 +421,7 @@ extension ChallengeSignUpView {
     }
 
     var offersFootnote: some View {
-        Text("Sign-ups can be edited until they close and withdrawn after, "
-            + "which AO3 treats as two different writes.")
+        Text("You can edit your sign-up until sign-ups close. After they close, you can only withdraw it.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

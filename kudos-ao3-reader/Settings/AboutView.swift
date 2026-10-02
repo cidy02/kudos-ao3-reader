@@ -18,7 +18,7 @@ struct AboutView: View {
                         Text("Version \(Self.versionString)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                        Text("A native reader for Archive of Our Own.")
+                        Text("Read and save Archive of Our Own works on your Apple devices.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -28,26 +28,24 @@ struct AboutView: View {
                 }
 
                 Section("License") {
-                    Text("Kudos is free software, released under the "
-                        + "**GNU Affero General Public License v3.0 (AGPL-3.0)**. "
-                        + "You may use, study, share, and modify it under the terms "
-                        + "of that license.")
+                    Text("Kudos is free to use, study, share, and change under the "
+                        + "**GNU Affero General Public License v3.0 (AGPL-3.0)**.")
                 }
 
                 Section("Open-Source Components") {
                     creditRow(
                         "SwiftSoup", license: "MIT License",
-                        detail: "HTML parsing for AO3 scraping.",
+                        detail: "Reads AO3 pages so Kudos can show works.",
                         url: "https://github.com/scinfu/SwiftSoup"
                     )
                     creditRow(
                         "Readium Swift Toolkit", license: "BSD-3-Clause",
-                        detail: "The EPUB reading engine on the Readium reader build.",
+                        detail: "Displays downloaded works in the reader on iPhone and iPad.",
                         url: "https://github.com/readium/swift-toolkit"
                     )
                     creditRow(
                         "ao3_api", license: "Reference",
-                        detail: "AO3 page selectors are ported from this project.",
+                        detail: "Helped guide how Kudos reads AO3 pages.",
                         url: "https://github.com/ArmindoFlores/ao3_api"
                     )
                 }
@@ -66,10 +64,10 @@ struct AboutView: View {
                 }
 
                 Section("Disclaimer") {
-                    Text("Kudos is an unofficial, personal project. It is not "
-                        + "affiliated with or endorsed by the Organization for "
-                        + "Transformative Works or Archive of Our Own, and it reads "
-                        + "AO3's public web pages — AO3 has no official API.")
+                    Text("Kudos is an unofficial personal project. It isn't affiliated with or "
+                        + "endorsed by the Organization for Transformative Works or Archive of Our "
+                        + "Own. AO3 doesn't provide an official way for apps to read its pages, "
+                        + "so Kudos reads the same public pages you can visit.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
