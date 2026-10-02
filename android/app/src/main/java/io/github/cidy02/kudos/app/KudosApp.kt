@@ -89,7 +89,11 @@ private suspend fun importExternalFiles(
 }
 
 @Composable
-fun KudosApp(container: KudosAppContainer) {
+fun KudosApp(
+    container: KudosAppContainer,
+    sessionTheme: KudosThemeMode? = null,
+    skipOnboarding: Boolean = false
+) {
     val settings by container.settingsRepository.settings
         .collectAsState(initial = KudosSettings())
     // Keep PrivacyGate's biometric flag in lockstep with Settings (iOS UserDefaults).
@@ -110,7 +114,12 @@ fun KudosApp(container: KudosAppContainer) {
         container.settingsRepository.hasPermanentlyDismissedSyncFolderOnboarding
     }.collectAsState(initial = false)
 
-    val themeMode = settings.app.appTheme.toThemeMode()
+    val effectiveCompletedOnboarding = if (skipOnboarding) true else hasCompletedOnboarding
+    val effectiveDismissedSyncFolder = if (skipOnboarding) true else hasPermanentlyDismissedSyncFolderOnboarding
+
+    val persistedThemeMode = settings.app.appTheme.toThemeMode()
+    var sessionThemeState by remember(sessionTheme) { androidx.compose.runtime.mutableStateOf(sessionTheme) }
+    val themeMode = sessionThemeState ?: persistedThemeMode
     val scope = rememberCoroutineScope()
     var showBugReport by remember { androidx.compose.runtime.mutableStateOf(false) }
     // Survives recomposition but not process death, on purpose: "Not Now" means
@@ -123,8 +132,8 @@ fun KudosApp(container: KudosAppContainer) {
     val context = LocalContext.current
     val pendingImports by io.github.cidy02.kudos.works.ExternalFileImport.pending.collectAsState()
     var importStatus by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    androidx.compose.runtime.LaunchedEffect(pendingImports, hasCompletedOnboarding) {
-        if (pendingImports.isEmpty() || hasCompletedOnboarding != true) return@LaunchedEffect
+    androidx.compose.runtime.LaunchedEffect(pendingImports, effectiveCompletedOnboarding) {
+        if (pendingImports.isEmpty() || effectiveCompletedOnboarding != true) return@LaunchedEffect
         val uris = io.github.cidy02.kudos.works.ExternalFileImport.consume()
         importStatus = importExternalFiles(context, container, uris)
     }
@@ -161,7 +170,7 @@ fun KudosApp(container: KudosAppContainer) {
             }
         }
 
-        when (hasCompletedOnboarding) {
+        when (effectiveCompletedOnboarding) {
             null -> Box(Modifier.fillMaxSize())
             false -> WelcomeScreen(
                 onContinue = {
@@ -172,7 +181,7 @@ fun KudosApp(container: KudosAppContainer) {
             )
             true -> {
                 if (!hasConfiguredSyncFolder &&
-                    !hasPermanentlyDismissedSyncFolderOnboarding &&
+                    !effectiveDismissedSyncFolder &&
                     !syncOnboardingDismissedThisSession
                 ) {
                     SyncFolderOnboardingScreen(
@@ -198,8 +207,12 @@ fun KudosApp(container: KudosAppContainer) {
                         container = container,
                         themeMode = themeMode,
                         onCycleTheme = {
-                            scope.launch {
-                                container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+                            if (sessionThemeState != null) {
+                                sessionThemeState = sessionThemeState?.next()
+                            } else {
+                                scope.launch {
+                                    container.settingsRepository.updateAppTheme(themeMode.next().toAppTheme())
+                                }
                             }
                         }
                     )
