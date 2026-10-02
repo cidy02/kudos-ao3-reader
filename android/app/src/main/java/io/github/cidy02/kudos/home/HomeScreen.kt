@@ -54,6 +54,7 @@ import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
+import io.github.cidy02.kudos.works.DownloadQueue
 import kotlin.math.roundToInt
 
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,6 +69,7 @@ fun HomeScreen(
     accountListRepository: AccountListRepository,
     privacyGate: PrivacyGate = PrivacyGate(),
     queueRepository: ReadingQueueRepository? = null,
+    downloadQueue: DownloadQueue? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRemoteWork: (AO3WorkSummary) -> Unit,
@@ -135,6 +137,7 @@ fun HomeScreen(
                     selectedWorks = selectedWorks,
                     workRepository = workRepository,
                     queueRepository = queueRepository,
+                    downloadQueue = downloadQueue,
                     onDeleted = { isSelecting = false; selection = emptySet(); viewModel.refresh() },
                     onDone = { isSelecting = false; selection = emptySet() },
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -563,7 +566,7 @@ private fun HomeWorkCover(
         } else {
             listOfNotNull(
                 footerOverride,
-                if (!work.hasEpub) "Not downloaded" else null,
+                if (!work.isDownloaded) "Not downloaded" else null,
                 if (work.isFavorite) "Favorite" else null
             )
         },

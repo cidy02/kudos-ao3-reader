@@ -68,6 +68,7 @@ data class ReaderSettings(
 
 data class AppSettings(
     val confirmBeforeDelete: Boolean = true,
+    val keepsWorksYouRead: Boolean = false,
     val appTheme: AppThemeSetting = AppThemeSetting.Light,
     val accentColorHex: String = "#990000"
 )

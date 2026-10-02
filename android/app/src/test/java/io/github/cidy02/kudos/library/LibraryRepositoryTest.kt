@@ -96,6 +96,9 @@ class LibraryRepositoryAllWorksTest {
             id = id,
             title = "Work $id",
             author = "Author",
+            // T-344: no AO3 id means an imported, always-protected download on iOS;
+            // these fixtures model AO3 works (Models/Models.swift:469-480).
+            sourceUrl = "https://archiveofourown.org/works/123",
             dateAdded = Instant.parse("2026-06-26T12:00:00Z")
         )
     }

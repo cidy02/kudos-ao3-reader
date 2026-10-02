@@ -75,6 +75,7 @@ class SettingsRepositoryTest {
         repository.updateRequireBiometricToReveal(true)
         repository.updateConfirmBeforeDelete(false)
         repository.updateAccentColor("#0B57D0")
+        repository.updateKeepsWorksYouRead(true)
 
         val settings = repository.snapshot()
 
@@ -83,6 +84,7 @@ class SettingsRepositoryTest {
         assertTrue(settings.privacy.requireBiometricToReveal)
         assertFalse(settings.app.confirmBeforeDelete)
         assertEquals("#0B57D0", settings.app.accentColorHex)
+        assertTrue(settings.app.keepsWorksYouRead)
     }
 
     @Test

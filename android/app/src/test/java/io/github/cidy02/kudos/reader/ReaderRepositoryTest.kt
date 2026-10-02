@@ -106,6 +106,44 @@ class ReaderRepositoryTest {
     }
 
     @Test
+    fun openKeepsWorkWhenKeepWorksYouReadIsOn() = runTest {
+        settingsSnapshot = KudosSettings(app = AppSettings(keepsWorksYouRead = true))
+        workRepository.upsert(
+            savedWork(hasEpub = true).copy(
+                isSaved = false,
+                isFinished = true,
+                freedAt = Instant.parse("2026-06-20T12:00:00Z")
+            )
+        )
+        fileStore.writeWorkEpub(WORK_UUID, EPUB_BYTES)
+
+        val result = readerRepository.open(WORK_UUID) as ReaderOpenResult.Success
+
+        assertTrue(result.work.isSaved)
+        assertTrue(result.work.isDownloaded)
+        assertEquals(null, result.work.freedAt)
+    }
+
+    @Test
+    fun closingReholdsAFinishedUnkeptReadingCopy() = runTest {
+        workRepository.upsert(
+            savedWork(hasEpub = true).copy(
+                sourceUrl = "https://archiveofourown.org/works/123",
+                isSaved = false,
+                isFinished = true,
+                freedAt = Instant.parse("2026-06-20T12:00:00Z")
+            )
+        )
+        fileStore.writeWorkEpub(WORK_UUID, EPUB_BYTES)
+
+        val opened = readerRepository.open(WORK_UUID) as ReaderOpenResult.Success
+        assertEquals(null, opened.work.freedAt)
+
+        val closed = readerRepository.close(WORK_UUID)!!
+        assertEquals(Instant.parse("2026-06-26T12:00:00Z"), closed.freedAt)
+    }
+
+    @Test
     fun openMapsSavedFontPtAndExplicitReaderThemeFromSettingsSnapshot() = runTest {
         // Simulates SettingsRepository.snapshot() after backup restore / deferred 3a write.
         settingsSnapshot = KudosSettings(

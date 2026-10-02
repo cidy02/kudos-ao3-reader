@@ -612,7 +612,7 @@ private fun SearchResultsList(
                         onToggleFavorite = { },
                         onToggleFinished = { },
                         onRemove = { },
-                        onSetSaved = { _, _ -> },
+                        onDownloadAction = { _, _ -> },
                         onSelect = { },
                         onReveal = { },
                         onAddToQueue = { },
@@ -704,4 +704,3 @@ private fun io.github.cidy02.kudos.core.model.SavedWork.toRemoteSummary(): AO3Wo
         hits = hits
     )
 }
-

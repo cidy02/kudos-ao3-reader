@@ -46,7 +46,7 @@ class WorkRepository(
 
     fun observeSavedWorks(): Flow<List<SavedWork>> {
         return workDao.observeAll()
-            .map { works -> works.map { it.toDomain() }.filter { it.isProtected && !it.isQueueOnlyWork } }
+            .map { works -> decorate(works.map { it.toDomain() }).filter { it.isProtected && !it.isQueueOnlyWork } }
     }
 
     /**
@@ -54,12 +54,13 @@ class WorkRepository(
      * enrichment for saved counts and recently-read chips — not only `isSaved`.
      */
     fun observeLibraryWorks(): Flow<List<SavedWork>> {
-        return workDao.observeAll().map { works -> works.map { it.toDomain() } }
+        return workDao.observeAll().map { works -> decorate(works.map { it.toDomain() }) }
     }
 
     /** One-shot list of active saved library works (excludes soft-deleted). */
     suspend fun listSavedWorks(): List<SavedWork> {
-        return workDao.getAll().map { it.toDomain() }.filter { it.isProtected && !it.isQueueOnlyWork }
+        return decorate(workDao.getAll().map { it.toDomain() })
+            .filter { it.isProtected && !it.isQueueOnlyWork }
     }
 
     /** Active finished works in local reading history (excludes soft-deleted). */
@@ -87,14 +88,21 @@ class WorkRepository(
 
     /** Soft-deleted works in Recently Deleted (newest first). */
     fun observeRecentlyDeleted(): Flow<List<SavedWork>> {
-        return workDao.observeDeleted().map { works -> works.map { it.toDomain() } }
+        return workDao.observeDeleted().map { works -> decorate(works.map { it.toDomain() }) }
     }
 
     suspend fun listRecentlyDeleted(): List<SavedWork> {
-        return workDao.getDeleted().map { it.toDomain() }
+        return decorate(workDao.getDeleted().map { it.toDomain() })
     }
 
-    suspend fun getWork(id: String): SavedWork? = workDao.getById(id)?.toDomain()
+    fun observeHeldCopies(): Flow<List<SavedWork>> = workDao.observeHeldCopies()
+        .map { works -> decorate(works.map { it.toDomain() }).filter(::qualifiesForHold) }
+
+    /** Settings' iOS `LocalDataClearing.selectFreeableDownloads` rule. */
+    fun observeFreeableCopies(): Flow<List<SavedWork>> = observeLibraryWorks()
+        .map { works -> works.filter(::qualifiesForHold) }
+
+    suspend fun getWork(id: String): SavedWork? = workDao.getById(id)?.toDomain()?.let { decorate(it) }
 
     /**
      * Marks current posted chapter count as seen, clearing Home → Recently Updated.
@@ -113,7 +121,7 @@ class WorkRepository(
 
     suspend fun findBySourceUrl(sourceUrl: String): SavedWork? {
         if (sourceUrl.isBlank()) return null
-        return workDao.getBySourceUrl(sourceUrl)?.toDomain()
+        return workDao.getBySourceUrl(sourceUrl)?.toDomain()?.let { decorate(it) }
     }
 
     suspend fun upsert(work: SavedWork): SavedWork {
@@ -121,7 +129,7 @@ class WorkRepository(
         val userTags = runCatching { userTagsForWork(work.id).map { it.name } }.getOrDefault(emptyList())
         val indexed = WorkSearchIndex.reindex(work, userTags)
         workDao.upsert(indexed.toEntity())
-        return indexed
+        return decorate(indexed)
     }
 
     /**
@@ -144,19 +152,31 @@ class WorkRepository(
 
     suspend fun setHasEpub(workId: String, hasEpub: Boolean): SavedWork? {
         val work = getWork(workId) ?: return null
-        return upsert(work.copy(hasEpub = hasEpub, lastModifiedAt = clock()))
+        return upsert(
+            work.copy(
+                hasEpub = hasEpub,
+                freedAt = if (hasEpub) work.freedAt else null,
+                lastModifiedAt = clock()
+            )
+        )
     }
 
     suspend fun toggleFavorite(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
-        return upsert(work.copy(isFavorite = !work.isFavorite, lastModifiedAt = clock()))
+        return setFavorite(workId, !work.isFavorite)
     }
 
     /** Sets favorite flag without toggling (Library bulk favorite / unfavorite). */
     suspend fun setFavorite(workId: String, favorite: Boolean): SavedWork? {
         val work = getWork(workId) ?: return null
-        if (work.isFavorite == favorite) return work
-        return upsert(work.copy(isFavorite = favorite, lastModifiedAt = clock()))
+        if (work.isFavorite == favorite && (!favorite || work.freedAt == null)) return work
+        return upsert(
+            work.copy(
+                isFavorite = favorite,
+                freedAt = if (favorite) null else work.freedAt,
+                lastModifiedAt = clock()
+            )
+        )
     }
 
     /**
@@ -165,8 +185,14 @@ class WorkRepository(
      */
     suspend fun setSaved(workId: String, saved: Boolean): SavedWork? {
         val work = getWork(workId) ?: return null
-        if (work.isSaved == saved) return work
-        return upsert(work.copy(isSaved = saved, lastModifiedAt = clock()))
+        if (work.isSaved == saved && (!saved || work.freedAt == null)) return work
+        return upsert(
+            work.copy(
+                isSaved = saved,
+                freedAt = if (saved) null else work.freedAt,
+                lastModifiedAt = clock()
+            )
+        )
     }
 
     suspend fun toggleFinished(workId: String): SavedWork? {
@@ -176,30 +202,76 @@ class WorkRepository(
 
     /**
      * Apple `WorkLifecycle.markFinished` / `markStillReading` parity:
-     * - Mark finished: set flag; if the work is **not** protected (saved/favorite),
-     *   free the local EPUB (history-only entry).
-     * - Mark unfinished: clear flag only — never auto-restore the EPUB.
+     * - Mark finished: set flag; if the work is un-kept, hold its EPUB for 60 days.
+     * - Mark unfinished: clear the hold; never auto-restore an already-freed EPUB.
      */
     suspend fun setFinished(workId: String, finished: Boolean): SavedWork? {
         val work = getWork(workId) ?: return null
         if (work.isFinished == finished) return work
         val now = clock()
         return if (finished) {
-            var next = work.copy(isFinished = true, lastModifiedAt = now)
-            if (!next.isProtected && next.hasEpub) {
-                fileStore.deleteWorkEpub(workId)
-                next = next.copy(hasEpub = false)
-            }
-            upsert(next)
+            upsert(
+                work.copy(
+                    isFinished = true,
+                    freedAt = if (!work.isProtected && work.hasEpub) work.freedAt ?: now else null,
+                    lastModifiedAt = now
+                )
+            )
         } else {
-            upsert(work.copy(isFinished = false, lastModifiedAt = now))
+            upsert(work.copy(isFinished = false, freedAt = null, lastModifiedAt = now))
         }
+    }
+
+    /** Recently Deleted's Restore for a held copy: keep it as a Download. */
+    suspend fun restoreHeldCopy(workId: String): SavedWork? {
+        val work = getWork(workId) ?: return null
+        return upsert(work.copy(isSaved = true, freedAt = null, lastModifiedAt = clock()))
+    }
+
+    /** Reader-close parity with iOS `freeEPUBIfFinished`; safe to call repeatedly. */
+    suspend fun holdFinishedCopy(workId: String, now: Instant = clock()): SavedWork? {
+        val work = getWork(workId) ?: return null
+        if (!qualifiesForHold(work) || work.freedAt != null) return work
+        return upsert(work.copy(freedAt = now, lastModifiedAt = now))
+    }
+
+    /** Recently Deleted's Remove Copy: free the file now, retain reading history. */
+    suspend fun freeHeldCopy(workId: String): SavedWork? = deleteLocalEpub(workId)
+
+    /** Reading a held work again removes it from Recently Deleted. */
+    suspend fun releaseHeldCopy(workId: String): SavedWork? {
+        val work = getWork(workId) ?: return null
+        if (work.freedAt == null) return work
+        return upsert(work.copy(freedAt = null, lastModifiedAt = clock()))
+    }
+
+    /** Frees expired held copies and clears stale holds. Runs beside the 90-day sweep. */
+    suspend fun sweepHeldCopies(everything: Boolean = false): Int {
+        val now = clock()
+        var freed = 0
+        for (entity in workDao.getHeldCopies()) {
+            val work = decorate(entity.toDomain())
+            if (!qualifiesForHold(work)) {
+                upsert(work.copy(freedAt = null, lastModifiedAt = now))
+            } else if (everything || !now.isBefore(work.freedAt!!.plus(FREED_COPY_WINDOW))) {
+                deleteLocalEpub(work.id)
+                freed += 1
+            }
+        }
+        return freed
+    }
+
+    /** Settings › Free up space also catches pre-port finished copies without a hold stamp. */
+    suspend fun freeFinishedCopies(): Int {
+        val freeable = decorate(workDao.getAll().map { it.toDomain() }).filter(::qualifiesForHold)
+        freeable.forEach { deleteLocalEpub(it.id) }
+        return freeable.size
     }
 
     suspend fun deleteLocalEpub(workId: String): SavedWork? {
         val work = getWork(workId) ?: return null
         fileStore.deleteWorkEpub(workId)
-        return upsert(work.copy(hasEpub = false, lastModifiedAt = clock()))
+        return upsert(work.copy(hasEpub = false, freedAt = null, lastModifiedAt = clock()))
     }
 
     /**
@@ -546,6 +618,7 @@ class WorkRepository(
         if (entity.isDeleted) return collectionsForWork(workId)
         collectionDao.addWork(CollectionWorkCrossRef(collectionId, workId))
         touchCollection(collectionId)
+        if (entity.keepsWorksOffline == true) releaseHeldCopy(workId)
         // Retract any tombstone from a prior removal of this same pairing — a
         // stale one here would make a later backup restore silently drop this
         // work back out of the collection despite the user just re-adding it.
@@ -674,5 +747,31 @@ class WorkRepository(
     companion object {
         /** Apple `PreservedWorkService.recoveryWindow` — 90 days. */
         val RECOVERY_WINDOW: Duration = Duration.ofDays(90)
+        /** Apple `WorkLifecycle.freedCopyWindow` — 60 days. */
+        val FREED_COPY_WINDOW: Duration = Duration.ofDays(60)
     }
+
+    private suspend fun decorate(works: List<SavedWork>): List<SavedWork> {
+        val keptIds = workDao.getKeptOfflineWorkIds().toSet()
+        return works.map { decorate(it, keptIds) }
+    }
+
+    private suspend fun decorate(work: SavedWork, keptIds: Set<String>? = null): SavedWork {
+        val kept = keptIds?.contains(work.id)
+            ?: workDao.getKeptOfflineWorkIds().contains(work.id)
+        val keeper = if (kept) {
+            queueDao.getActiveKeepingQueueName(work.id)
+                ?: collectionDao.getActiveKeepingCollectionName(work.id)
+        } else {
+            null
+        }
+        return work.copy(
+            isKeptOffline = kept,
+            keptOfflineBy = keeper,
+            hasAo3WorkId = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) != null
+        )
+    }
+
+    private fun qualifiesForHold(work: SavedWork): Boolean =
+        work.isFinished && !work.isProtected && !work.isDeleted && work.hasEpub
 }

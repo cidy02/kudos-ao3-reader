@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 data class RecentlyDeletedUiState(
     val loading: Boolean = true,
     val items: List<SavedWork> = emptyList(),
+    val heldCopies: List<SavedWork> = emptyList(),
     val deletedCollections: List<WorkCollection> = emptyList(),
     val deletedQueues: List<ReadingQueue> = emptyList(),
     val error: String? = null
@@ -73,12 +74,14 @@ class RecentlyDeletedViewModel(
     val state: StateFlow<RecentlyDeletedUiState> = combine(
         workRepository.observeRecentlyDeleted(),
         workRepository.observeRecentlyDeletedCollections(),
+        workRepository.observeHeldCopies(),
         queueTick
-    ) { works, collections, _ ->
+    ) { works, collections, heldCopies, _ ->
         val queues = queueRepository?.listRecentlyDeletedQueues().orEmpty()
         RecentlyDeletedUiState(
             loading = false,
             items = works,
+            heldCopies = heldCopies,
             deletedCollections = collections,
             deletedQueues = queues
         )
@@ -108,6 +111,14 @@ class RecentlyDeletedViewModel(
             // Permanent remove; same path as removeFromLibrary.
             workRepository.hardDelete(workId)
         }
+    }
+
+    fun restoreHeldCopy(workId: String) {
+        viewModelScope.launch { workRepository.restoreHeldCopy(workId) }
+    }
+
+    fun freeHeldCopy(workId: String) {
+        viewModelScope.launch { workRepository.freeHeldCopy(workId) }
     }
 
     fun restoreCollection(collectionId: String) {
@@ -166,6 +177,10 @@ private sealed interface PendingHardDelete {
     data class Queue(val queue: ReadingQueue) : PendingHardDelete {
         override val label: String get() = queue.displayName
     }
+
+    data class HeldCopy(val work: SavedWork) : PendingHardDelete {
+        override val label: String get() = work.title
+    }
 }
 
 @Composable
@@ -182,12 +197,18 @@ fun RecentlyDeletedScreen(
     val settings = settingsState?.value ?: KudosSettings.Defaults
     var pendingHardDelete by remember { mutableStateOf<PendingHardDelete?>(null) }
 
+    val heldCopy = (pendingHardDelete as? PendingHardDelete.HeldCopy)?.work
     DestructiveConfirmation(
         show = pendingHardDelete != null,
-        title = "Delete forever?",
-        text = "This is gone for good — it can't be restored afterward." +
-            (pendingHardDelete?.let { "\n\n“${it.label}”" } ?: ""),
-        confirmText = "Delete forever",
+        title = heldCopy?.let { "Remove the copy of “${it.title}”?" } ?: "Delete forever?",
+        text = if (heldCopy != null) {
+            "Kudos removes this work's copy from your device now. The work stays in your " +
+                "reading history, and you can download it again from AO3."
+        } else {
+            "This is gone for good — it can't be restored afterward." +
+                (pendingHardDelete?.let { "\n\n“${it.label}”" } ?: "")
+        },
+        confirmText = if (heldCopy != null) "Remove Copy" else "Delete forever",
         confirmBeforeDelete = settings.app.confirmBeforeDelete,
         onConfirm = {
             val toDelete = pendingHardDelete
@@ -198,6 +219,7 @@ fun RecentlyDeletedScreen(
                     viewModel.deleteCollectionForever(toDelete.collection.id)
                 is PendingHardDelete.Queue ->
                     viewModel.deleteQueueForever(toDelete.queue.id)
+                is PendingHardDelete.HeldCopy -> viewModel.freeHeldCopy(toDelete.work.id)
                 null -> Unit
             }
         },
@@ -215,7 +237,9 @@ fun RecentlyDeletedScreen(
         onRestoreQueue = viewModel::restoreQueue,
         onDeleteQueueForever = { queue ->
             pendingHardDelete = PendingHardDelete.Queue(queue)
-        }
+        },
+        onRestoreHeldCopy = viewModel::restoreHeldCopy,
+        onFreeHeldCopy = { work -> pendingHardDelete = PendingHardDelete.HeldCopy(work) }
     )
 }
 
@@ -227,7 +251,9 @@ private fun RecentlyDeletedContent(
     onRestoreCollection: (String) -> Unit,
     onDeleteCollectionForever: (WorkCollection) -> Unit,
     onRestoreQueue: (String) -> Unit,
-    onDeleteQueueForever: (ReadingQueue) -> Unit
+    onDeleteQueueForever: (ReadingQueue) -> Unit,
+    onRestoreHeldCopy: (String) -> Unit,
+    onFreeHeldCopy: (SavedWork) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -237,8 +263,8 @@ private fun RecentlyDeletedContent(
         item {
             // TopAppBar already says "Recently Deleted".
             KudosScreenHeader(
-                subtitle = "Deleted works, collections, and queues stay here for 90 days before " +
-                    "permanent removal."
+                subtitle = "Items you delete stay here for 90 days. Copies of works you finish " +
+                    "without keeping them stay for 60 days."
             )
         }
 
@@ -257,7 +283,9 @@ private fun RecentlyDeletedContent(
             return@LazyColumn
         }
 
-        if (state.items.isEmpty() && state.deletedCollections.isEmpty() && state.deletedQueues.isEmpty()) {
+        if (state.items.isEmpty() && state.deletedCollections.isEmpty() &&
+            state.deletedQueues.isEmpty() && state.heldCopies.isEmpty()
+        ) {
             item {
                 EmptyStateCard(
                     title = "Nothing here",
@@ -266,6 +294,19 @@ private fun RecentlyDeletedContent(
                 )
             }
             return@LazyColumn
+        }
+
+        if (state.deletedQueues.isNotEmpty() || state.deletedCollections.isNotEmpty() || state.items.isNotEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Deleted", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Kept for 90 days, then removed for good.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
         items(state.deletedQueues, key = { "queue-${it.id}" }) { queue ->
@@ -289,6 +330,31 @@ private fun RecentlyDeletedContent(
                 work = work,
                 onRestore = { onRestore(work.id) },
                 onDeleteForever = { onDeleteForever(work) }
+            )
+        }
+
+        if (state.heldCopies.isNotEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Finished, not kept", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Works you finished without downloading, favoriting or queuing them. " +
+                            "Their copies stay here for 60 days so you can still read them " +
+                            "offline, then they're removed. The works stay in your reading history.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        items(state.heldCopies, key = { "held-${it.id}" }) { work ->
+            RecentlyDeletedRow(
+                work = work,
+                expiry = work.freedAt?.plus(WorkRepository.FREED_COPY_WINDOW),
+                deleteLabel = "Remove Copy",
+                onRestore = { onRestoreHeldCopy(work.id) },
+                onDeleteForever = { onFreeHeldCopy(work) }
             )
         }
     }
@@ -349,6 +415,8 @@ private fun RecentlyDeletedQueueRow(
 @Composable
 private fun RecentlyDeletedRow(
     work: SavedWork,
+    expiry: Instant? = work.permanentDeletionScheduledAt,
+    deleteLabel: String = "Delete forever",
     onRestore: () -> Unit,
     onDeleteForever: () -> Unit
 ) {
@@ -378,7 +446,7 @@ private fun RecentlyDeletedRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            expiryCaption(work.permanentDeletionScheduledAt, work.deletedAt)?.let { caption ->
+            expiryCaption(expiry, work.deletedAt)?.let { caption ->
                 Text(
                     text = caption,
                     style = MaterialTheme.typography.bodySmall,
@@ -391,7 +459,7 @@ private fun RecentlyDeletedRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onRestore) { Text("Restore") }
-                OutlinedButton(onClick = onDeleteForever) { Text("Delete forever") }
+                OutlinedButton(onClick = onDeleteForever) { Text(deleteLabel) }
             }
         }
     }

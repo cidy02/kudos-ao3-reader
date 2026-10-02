@@ -57,6 +57,7 @@ class KudosApplication : Application(), Configuration.Provider {
             runCatching { container.workRepository.sweepExpiredSoftDeletes() }
             runCatching { container.workRepository.sweepExpiredCollectionSoftDeletes() }
             runCatching { container.readingQueueRepository.sweepExpiredQueueSoftDeletes() }
+            runCatching { container.workRepository.sweepHeldCopies() }
             // Paced rebuild of stale library searchText (schema bump / pre-index / restore).
             runCatching { container.workRepository.rebuildSearchIndexIfNeeded() }
             // Opportunistic background tag refresh (404 detection).

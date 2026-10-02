@@ -83,6 +83,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkDownloadAction
+import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.app.PrivacyGate
@@ -94,6 +96,7 @@ import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
+import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -111,6 +114,7 @@ fun LibraryScreen(
     workRepository: WorkRepository,
     settingsRepository: SettingsRepository? = null,
     queueRepository: ReadingQueueRepository? = null,
+    downloadQueue: DownloadQueue? = null,
     privacyGate: PrivacyGate = PrivacyGate(),
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
@@ -128,6 +132,7 @@ fun LibraryScreen(
             workRepository,
             settingsRepository,
             queueRepository,
+            downloadQueue,
             privacyGate
         )
     )
@@ -488,7 +493,7 @@ fun LibraryScreen(
         onToggleFavoriteOne = viewModel::toggleFavoriteOne,
         onToggleFinishedOne = viewModel::toggleFinishedOne,
         onRemoveOne = { confirmRemoveOne = it },
-        onSetSavedOne = viewModel::setSavedOne,
+        onDownloadAction = viewModel::performDownloadAction,
         onToggleSavedForLaterOne = viewModel::toggleSavedForLaterOne,
         onRevealWork = { viewModel.revealWork(it, activity) },
         onAddToQueue = { addToQueueWorkId = it },
@@ -532,7 +537,7 @@ private fun LibraryContent(
     onToggleFavoriteOne: (String) -> Unit,
     onToggleFinishedOne: (String) -> Unit,
     onRemoveOne: (String) -> Unit,
-    onSetSavedOne: (String, Boolean) -> Unit,
+    onDownloadAction: (String, WorkDownloadAction) -> Unit,
     onToggleSavedForLaterOne: (String, Boolean) -> Unit = { _, _ -> },
     onRevealWork: (String) -> Unit,
     onAddToQueue: (String) -> Unit,
@@ -549,7 +554,7 @@ private fun LibraryContent(
         onToggleFavorite = onToggleFavoriteOne,
         onToggleFinished = onToggleFinishedOne,
         onRemove = onRemoveOne,
-        onSetSaved = onSetSavedOne,
+        onDownloadAction = onDownloadAction,
         onToggleSavedForLater = onToggleSavedForLaterOne,
         onSelect = { id ->
             onEnterSelection()
@@ -862,7 +867,7 @@ data class LibraryCardActions(
     val onToggleFavorite: (String) -> Unit,
     val onToggleFinished: (String) -> Unit,
     val onRemove: (String) -> Unit,
-    val onSetSaved: (String, Boolean) -> Unit,
+    val onDownloadAction: (String, WorkDownloadAction) -> Unit,
     /** Toggle Saved for Later queue membership (not isSaved / Download). */
     val onToggleSavedForLater: (String, Boolean) -> Unit = { _, _ -> },
     val onSelect: (String) -> Unit,
@@ -896,7 +901,7 @@ private fun LibraryToolbarPill(
             text = if (state.selectionMode) {
                 if (state.hasSelection) "${state.selectedCount} selected" else "Select works"
             } else {
-                "${state.totalSaved} downloaded$hidden"
+                "${state.totalSaved} works$hidden"
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1225,7 +1230,7 @@ fun LibraryCarouselCard(
             } else {
                 listOfNotNull(
                     footerOverride,
-                    if (!work.hasEpub) "Not downloaded" else null,
+                    if (!work.isDownloaded) "Not downloaded" else null,
                     if (work.isFavorite) "Favorite" else null
                 )
             },
@@ -1272,14 +1277,30 @@ fun LibraryCarouselCard(
                     actions.onSelect(work.id)
                 }
             )
-            ContextMenuItem(
-                icon = if (work.isSaved) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
-                label = if (work.isSaved) "Remove Download" else "Download",
-                onClick = {
-                    menuOpen = false
-                    actions.onSetSaved(work.id, !work.isSaved)
-                }
-            )
+            WorkDownloadSemantics.action(
+                hasEpub = work.hasEpub,
+                isDownloaded = work.isDownloaded,
+                hasAo3WorkId = work.hasAo3WorkId,
+                keptBy = work.keptOfflineBy
+            )?.let { action ->
+                ContextMenuItem(
+                    icon = if (action == WorkDownloadAction.RemoveDownload) {
+                        Icons.Outlined.DownloadDone
+                    } else {
+                        Icons.Outlined.Download
+                    },
+                    label = when (action) {
+                        WorkDownloadAction.Download -> "Download"
+                        WorkDownloadAction.RemoveDownload -> "Remove Download"
+                        is WorkDownloadAction.KeptBy -> "Kept Offline by ${action.name}"
+                    },
+                    enabled = action !is WorkDownloadAction.KeptBy,
+                    onClick = {
+                        menuOpen = false
+                        actions.onDownloadAction(work.id, action)
+                    }
+                )
+            }
             ContextMenuItem(
                 icon = Icons.Outlined.Schedule,
                 label = if (work.isQueuedForLater) "Remove from Saved for Later" else "Save for Later",
@@ -1346,7 +1367,8 @@ private fun ContextMenuItem(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
-    destructive: Boolean = false
+    destructive: Boolean = false,
+    enabled: Boolean = true
 ) {
     DropdownMenuItem(
         text = {
@@ -1370,7 +1392,8 @@ private fun ContextMenuItem(
                 }
             )
         },
-        onClick = onClick
+        onClick = onClick,
+        enabled = enabled
     )
 }
 
@@ -1611,7 +1634,7 @@ private fun SelectableWorkRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (work.hasEpub) {
+            if (work.isDownloaded) {
                 Icon(
                     Icons.AutoMirrored.Outlined.MenuBook,
                     contentDescription = "Downloaded",

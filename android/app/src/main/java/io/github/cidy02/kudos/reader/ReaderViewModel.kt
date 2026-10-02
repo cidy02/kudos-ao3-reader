@@ -115,6 +115,13 @@ class ReaderViewModel(
         viewModelScope.launch { saver.flush() }
     }
 
+    fun close() {
+        viewModelScope.launch {
+            saver.flush()
+            repository.close(workId)
+        }
+    }
+
     fun markFinished() {
         viewModelScope.launch {
             repository.setFinished(workId, true)
