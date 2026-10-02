@@ -58,6 +58,25 @@ struct BrowseAndWorkDetailRulesTests {
         #expect(picks.first?.workCount == 42)
     }
 
+    /// Owner, 2026-10-01: the most recently visited fandom leads, whether you
+    /// visited it from Browse or read in it; a visit to a fandom you read keeps
+    /// the library's spelling; a fandom you only visited still gets a card.
+    @Test func jumpBackInRanksVisitsWithReads() {
+        let read = snapshot(["Fandom A", "Fandom B"], added: .distantPast, read: Date(timeIntervalSince1970: 5_000))
+        let picks = MediaBrowserView.jumpBackInFandoms(
+            works: [read],
+            visits: [
+                .init(fandom: "fandom b", at: Date(timeIntervalSince1970: 9_000)),
+                .init(fandom: "Fandom C", at: Date(timeIntervalSince1970: 7_000)),
+                .init(fandom: "Fandom A", at: Date(timeIntervalSince1970: 1_000))
+            ],
+            categoryFor: { _ in "X" },
+            workCountFor: { _ in nil },
+            limit: 10
+        )
+        #expect(picks.map(\.fandom) == ["Fandom B", "Fandom C", "Fandom A"])
+    }
+
     // MARK: Comment budget
 
     /// AO3 counts code points (Ruby `String#length`), not graphemes.
