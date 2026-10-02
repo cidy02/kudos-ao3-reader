@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.home
 
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -137,7 +142,8 @@ fun SubjectWorkCoverCard(
                         color = tokens.primaryInk,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
-                        minLines = 2,
+                        // iOS caps the title at two lines without reserving the second,
+                        // so a one-line title leaves the ring its full 68dp.
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -315,7 +321,7 @@ fun HomeStatusTray(
         StatusTile(tileSize, categoryTint) { CategoryMark(categories, categoryTint, tileSize) }
         StatusTile(tileSize, warningTint) {
             Icon(
-                Icons.Outlined.ErrorOutline,
+                Icons.Filled.Error,
                 contentDescription = "Warnings",
                 tint = warningTint,
                 modifier = Modifier.size(tileSize * 0.58f)
@@ -336,7 +342,7 @@ fun HomeStatusTray(
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 StatusTile(tileSize, warningTint) {
                     Icon(
-                        Icons.Outlined.ErrorOutline,
+                        Icons.Filled.Error,
                         contentDescription = "Warnings",
                         tint = warningTint,
                         modifier = Modifier.size(tileSize * 0.58f)
@@ -375,12 +381,26 @@ private fun RatingMark(rating: String, tint: Color, tileSize: Dp) {
         Text(
             text = letter,
             color = tint,
-            fontSize = (tileSize.value * 0.28f).sp,
+            fontSize = with(LocalDensity.current) { (tileSize * 0.34f).toSp() },
             fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            style = CenteredGlyph
         )
     }
 }
+
+/**
+ * Centres a single glyph on its box. Without trimming the font padding and
+ * line height, the letter sat at the bottom of the shield and the category
+ * symbols shrank to dots (owner report, 2026-10-02).
+ */
+private val CenteredGlyph = TextStyle(
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both
+    )
+)
 
 @Composable
 private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
@@ -408,12 +428,14 @@ private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
         "Other" -> "♅"
         else -> "–"
     }
+    // iOS sizes the sun larger than the pairing signs (its ink reads smaller).
+    val scale = if (named == "Gen") 0.78f else 0.62f
     Text(
         text = glyph,
         color = tint,
-        fontSize = (tileSize.value * 0.42f).sp,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center
+        fontSize = with(LocalDensity.current) { (tileSize * scale).toSp() },
+        textAlign = TextAlign.Center,
+        style = CenteredGlyph
     )
 }
 
