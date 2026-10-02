@@ -32,6 +32,12 @@ struct NewCollectionSheet: View {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The sheet takes a wash in whichever swatch is tapped, as New queue does
+    /// (owner, 2026-10-01). Untapped, it keeps the app's own accent.
+    private var palette: SubjectPalette {
+        hue.map { theme.appTheme.subjectPalette(hue: $0, pickedHex: colorHex) } ?? theme.scopePalette
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -67,7 +73,7 @@ struct NewCollectionSheet: View {
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
-                .subjectScreenWash(palette: theme.scopePalette)
+                .subjectScreenWash(palette: palette)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
@@ -78,6 +84,9 @@ struct NewCollectionSheet: View {
                     }
                 }
         }
+        // Outside the stack, as New queue: the Create button, the toggles and
+        // the caret take the swatch too.
+        .tint(palette.tint)
         // The same sheet chrome as New queue.
         #if os(iOS)
         .presentationDetents([.large])
