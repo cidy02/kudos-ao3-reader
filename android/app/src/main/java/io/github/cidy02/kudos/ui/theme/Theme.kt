@@ -5,8 +5,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import io.github.cidy02.kudos.ui.subject.KudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 
 enum class KudosThemeMode(val label: String) {
     System("System"),
@@ -97,12 +102,31 @@ fun KudosTheme(
         KudosThemeMode.Oled -> oledScheme(accent)
         KudosThemeMode.Sepia -> SepiaScheme
     }
+    // System dark follows Dark, not OLED — the same split the Material schemes use.
+    val readerTheme = when (themeMode) {
+        KudosThemeMode.System -> if (systemDark) ReaderTheme.Dark else ReaderTheme.Light
+        KudosThemeMode.Light -> ReaderTheme.Light
+        KudosThemeMode.Dark -> ReaderTheme.Dark
+        KudosThemeMode.Oled -> ReaderTheme.Oled
+        KudosThemeMode.Sepia -> ReaderTheme.Sepia
+    }
+    val tokens = remember(themeMode, systemDark, accentColorHex) {
+        KudosTokens.of(readerTheme, accent)
+    }
+    val scopePalette = remember(themeMode, systemDark, accentColorHex) {
+        readerTheme.scopePalette(accent)
+    }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = KudosTypography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalKudosTokens provides tokens,
+        LocalSubjectPalette provides scopePalette
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = KudosTypography,
+            content = content
+        )
+    }
 }
 
 const val DefaultAccentHex = "#990000"
