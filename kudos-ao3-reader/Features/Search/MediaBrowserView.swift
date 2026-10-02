@@ -650,7 +650,8 @@ struct MediaBrowserView: View {
                 hasBeenRead: work.hasBeenRead,
                 dateAdded: work.dateAdded,
                 lastReadDate: work.lastReadDate,
-                isOnDevice: work.hasEPUB
+                // "N downloaded" counts kept copies, not ones fetched to read.
+                isOnDevice: work.isDownloaded
             )
         }
         let inputs = categories.map { category -> CategoryStatsInput in

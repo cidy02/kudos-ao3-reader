@@ -6,25 +6,14 @@ import Testing
 /// The Work Details redesign moved the old view's inline label/state logic into
 /// `WorkDetailPresentation`; these tests lock in that moved behavior.
 struct WorkDetailPresentationTests {
-    @Test func readActionReflectsDownloadState() {
-        #expect(WorkDetailPresentation.readAction(hasEPUB: true, working: false).title == "Read")
-        #expect(WorkDetailPresentation.readAction(hasEPUB: false, working: false).title == "Download & Read")
-        // A download in flight wins regardless of the EPUB flag.
-        #expect(WorkDetailPresentation.readAction(hasEPUB: false, working: true).title == "Downloading…")
-        #expect(WorkDetailPresentation.readAction(hasEPUB: true, working: true).title == "Downloading…")
-    }
-
-    @Test func readActionShowsContinueForStartedUnfinishedDownloads() {
-        #expect(WorkDetailPresentation.readAction(
-            hasEPUB: true, working: false, continueReading: true
-        ).title == "Continue Reading")
-        // Continue never overrides a missing file or an in-flight download.
-        #expect(WorkDetailPresentation.readAction(
-            hasEPUB: false, working: false, continueReading: true
-        ).title == "Download & Read")
-        #expect(WorkDetailPresentation.readAction(
-            hasEPUB: true, working: true, continueReading: true
-        ).title == "Downloading…")
+    /// Read never mentions downloading (owner, 2026-10-01): the copy it fetches
+    /// is not a download.
+    @Test func readActionNeverSaysDownload() {
+        #expect(WorkDetailPresentation.readAction(working: false).title == "Read")
+        #expect(WorkDetailPresentation.readAction(working: true).title == "Opening…")
+        #expect(WorkDetailPresentation.readAction(working: false, continueReading: true).title == "Continue Reading")
+        // A fetch in flight wins over Continue.
+        #expect(WorkDetailPresentation.readAction(working: true, continueReading: true).title == "Opening…")
     }
 
     @Test func postRemovalActionRoutesByDeletionAndSource() {

@@ -162,14 +162,12 @@ struct WorkDetailFigureStrip: View {
 /// only one thing this card does.
 struct WorkDetailResumeCard: View {
     /// What the action is called right now — Read / Continue Reading /
-    /// Download & Read / Downloading…, from `WorkDetailPresentation.readAction`
-    /// so this card and the rest of the screen never disagree about it.
+    /// Opening…, from `WorkDetailPresentation.readAction` so this card and the
+    /// rest of the screen never disagree about it.
     let actionTitle: String
-    /// Set for a work with a readable copy on device; nil while it still has to
-    /// be fetched. Spec 1a's filled circle is a play triangle, which is a
-    /// promise this button cannot keep until there is something to open, so the
-    /// download case keeps the download glyph.
-    let hasReadableCopy: Bool
+    /// The library's copy, for the ring's download fill; nil for a remote work
+    /// nobody here has opened.
+    let localWork: SavedWork?
     let isBusy: Bool
     /// Nil for a work with no local reading state — a remote work nobody here
     /// has opened. Drawing a 0% ring for it would claim it is being tracked.
@@ -240,7 +238,10 @@ struct WorkDetailResumeCard: View {
 
     @ViewBuilder
     private var progressRing: some View {
-        if let clampedProgress {
+        if let localWork {
+            WorkReadingOrDownloadRing(work: localWork, progress: clampedProgress, diameter: min(ringDiameter, 72))
+                .accessibilityHidden(true)
+        } else if let clampedProgress {
             WorkProgressRing(progress: clampedProgress, diameter: min(ringDiameter, 72))
                 .accessibilityHidden(true)
         }
@@ -285,7 +286,9 @@ struct WorkDetailResumeCard: View {
                     .controlSize(.small)
                     .tint(palette.solidButtonLabel)
             } else {
-                Image(systemName: hasReadableCopy ? "play.fill" : "arrow.down")
+                // Spec 1a's play triangle, even while a copy is fetched to read:
+                // reading never announces a download (owner, 2026-10-01).
+                Image(systemName: "play.fill")
                     .font(.system(size: min(controlIconSize, 22), weight: .semibold))
                     .foregroundStyle(palette.solidButtonLabel)
             }

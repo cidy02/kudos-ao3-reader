@@ -90,11 +90,10 @@ struct WorkQuickActionTile: View {
 /// rows, extracted from the old single-list view so the moved logic stays
 /// unit-testable.
 enum WorkDetailPresentation {
-    static func readAction(
-        hasEPUB: Bool, working: Bool, continueReading: Bool = false
-    ) -> (title: String, systemImage: String) {
-        if working { return ("Downloading…", "arrow.down.circle") }
-        guard hasEPUB else { return ("Download & Read", "arrow.down.circle") }
+    /// Read never says it downloads (owner, 2026-10-01): a copy fetched to
+    /// read is bookkeeping, and "Download" means keeping a work.
+    static func readAction(working: Bool, continueReading: Bool = false) -> (title: String, systemImage: String) {
+        if working { return ("Opening…", "book") }
         return continueReading ? ("Continue Reading", "book") : ("Read", "book")
     }
 

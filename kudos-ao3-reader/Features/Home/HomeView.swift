@@ -388,6 +388,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         onToggleSelection: { toggleSelection(heroWork) },
                         onSelect: selectAction(for: heroWork)
                     )
+                    .downloadDimmed(heroWork)
                     .padding(.horizontal, 16)
 
                     if !stripWorks.isEmpty, !stripCollapsed {
