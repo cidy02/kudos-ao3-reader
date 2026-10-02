@@ -400,12 +400,33 @@ struct AccountNavCardLabel: View {
     }
 }
 
+/// A 22pt accent square behind a symbol: the Shortcuts tiles' icon, also used by
+/// the Reading, Writing and Activity rows (owner, 2026-10-02) so both follow the
+/// exact accent.
+struct AccountIconSquare: View {
+    @Environment(ThemeManager.self) private var theme
+    let systemImage: String
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.tint)
+            .frame(width: 22, height: 22)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(.tint.opacity(0.16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(theme.appTheme.glassStroke(0.1), lineWidth: 0.5)
+                    )
+            )
+    }
+}
+
 /// One free-standing shortcut icon for Overview's 3×2 grid. Each tile owns its
 /// own panel so the six destinations read as separate controls, not one shared
 /// panel of symbols.
 struct AccountShortcutGridTile: View {
-    @Environment(ThemeManager.self) private var theme
-
     let title: String
     let systemImage: String
     var count: String?
@@ -423,18 +444,7 @@ struct AccountShortcutGridTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.tint)
-                    .frame(width: 22, height: 22)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(.tint.opacity(0.16))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .strokeBorder(theme.appTheme.glassStroke(0.1), lineWidth: 0.5)
-                            )
-                    )
+                AccountIconSquare(systemImage: systemImage)
 
                 Spacer(minLength: 4)
 
