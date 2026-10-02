@@ -1199,10 +1199,7 @@ private extension AccountView {
     private func scopeDestinationRow(_ destination: AccountScopeDestination) -> some View {
         Button(action: destination.open) {
             HStack(spacing: 12) {
-                Image(systemName: destination.systemImage)
-                    .font(.system(size: 15))
-                    .foregroundStyle(accountPalette.accent)
-                    .frame(width: 22)
+                AccountIconSquare(systemImage: destination.systemImage)
 
                 VStack(alignment: .leading, spacing: 2) {
                     // 1m/1bt: 15px medium, the same as the Preferences cards.
