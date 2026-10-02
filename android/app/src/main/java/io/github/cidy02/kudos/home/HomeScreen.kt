@@ -1,41 +1,41 @@
 package io.github.cidy02.kudos.home
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Checklist
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.account.AccountListRepository
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.auth.AO3AuthRepository
+import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.library.LibraryDisplayItem
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
@@ -44,20 +44,17 @@ import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
-import io.github.cidy02.kudos.ui.components.EmptyStateCard
-import io.github.cidy02.kudos.ui.components.KudosScreenHeader
-import io.github.cidy02.kudos.ui.components.KudosSectionHeader
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
-import io.github.cidy02.kudos.ui.components.WorkCoverCard
-import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
-import io.github.cidy02.kudos.ui.components.coverCardStats
-import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
-import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
+import io.github.cidy02.kudos.ui.components.rememberCollapsedSections
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
+import io.github.cidy02.kudos.works.CanonicalWorkMerge
 import io.github.cidy02.kudos.works.DownloadQueue
-import kotlin.math.roundToInt
+import io.github.cidy02.kudos.works.WorkImporter
+import io.github.cidy02.kudos.works.WorkRepository
+import kotlinx.coroutines.launch
 
-import androidx.compose.material3.ExperimentalMaterial3Api
+private const val HomeShelfLimit = 12
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,13 +67,19 @@ fun HomeScreen(
     privacyGate: PrivacyGate = PrivacyGate(),
     queueRepository: ReadingQueueRepository? = null,
     downloadQueue: DownloadQueue? = null,
+    workImporter: WorkImporter? = null,
+    shellChrome: HomeShellChrome? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRemoteWork: (AO3WorkSummary) -> Unit,
     onOpenSubscriptionsList: () -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenBrowse: () -> Unit,
-    onOpenSection: (HomeSectionKind, Boolean, Set<String>) -> Unit
+    onOpenSection: (HomeSectionKind, Boolean, Set<String>) -> Unit,
+    onOpenComments: (Long) -> Unit = {},
+    onOpenQueue: (String) -> Unit = {},
+    onOpenQueues: () -> Unit = {},
+    onOpenCollection: (String) -> Unit = {}
 ) {
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(
@@ -89,510 +92,587 @@ fun HomeScreen(
         )
     )
     val state by viewModel.state.collectAsState()
-    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val privacyState by privacyGate.state.collectAsState()
-    val activity = androidx.compose.ui.platform.LocalContext.current
-        as? androidx.fragment.app.FragmentActivity
-    
-    val collapsedShelves = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
-    val onReveal: (String) -> Unit = { id -> viewModel.revealWork(id, activity) }
-    
+    val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
+    val collapsed = rememberCollapsedSections()
+    val scope = rememberCoroutineScope()
+    val controller = remember { HomeWorkController() }
+
     var isSelecting by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
-    
-    val allLocalWorks = remember(state.continueReading, state.recentlyUpdated, state.favorites, state.recentlyOpened) {
-        (state.continueReading.map { it.item.work } + 
-         state.recentlyUpdated.map { it.item.work } + 
-         state.favorites.map { it.item.work } + 
-         state.recentlyOpened.map { it.item.work }).distinctBy { it.id }
+    var showNewQueue by remember { mutableStateOf(false) }
+    var queues by remember { mutableStateOf<List<Pair<ReadingQueue, List<SavedWork>>>>(emptyList()) }
+    var queueReload by remember { mutableIntStateOf(0) }
+
+    val displayById = remember(state.visibleItems) {
+        state.visibleItems.associateBy { it.item.work.id }
     }
-    val selectedWorks = allLocalWorks.filter { it.id in selection }
-    val allLocalSelected = allLocalWorks.isNotEmpty() && selection.containsAll(allLocalWorks.map { it.id })
+    val visibleWorks = remember(state.visibleItems) { state.visibleItems.map { it.item.work } }
+    val readingNow = remember(visibleWorks) { HomeSectionKind.ReadingNow.works(visibleWorks) { true } }
+    val recentlyUpdated = remember(visibleWorks) { HomeSectionKind.RecentlyUpdated.works(visibleWorks) { true } }
+    val selectable = remember(readingNow, recentlyUpdated) { (readingNow + recentlyUpdated).distinctBy { it.id } }
+    val selectedWorks = selectable.filter { it.id in selection }
+    val allSelected = selectable.isNotEmpty() && selectable.all { it.id in selection }
+    val hideMature = state.hideMatureContent
+
+    suspend fun reloadQueues() {
+        val repo = queueRepository ?: return
+        val loaded = runCatching {
+            repo.listQueues()
+                .filter { it.kindRaw == ReadingQueueKind.CUSTOM && !it.isDeleted }
+                .sortedBy { it.sortOrder }
+                .take(HomeShelfLimit)
+                .map { queue -> queue to repo.listWorks(queue.id).mapNotNull { it.work } }
+        }
+        if (loaded.isSuccess) queues = loaded.getOrThrow()
+    }
+
+    LaunchedEffect(queueRepository, queueReload, state.totalSaved) { reloadQueues() }
+
+    if (shellChrome != null) {
+        SideEffect {
+            shellChrome.mounted = true
+            shellChrome.hideTabBar = isSelecting
+            shellChrome.selectionTitle = if (isSelecting) HomeSelectionTitle.text(selection.size) else null
+            shellChrome.allSelected = allSelected
+            shellChrome.showOverflow = selectable.isNotEmpty() || hideMature
+            shellChrome.showPrivacy = hideMature
+            shellChrome.revealAll = privacyState.revealAll
+            shellChrome.showSelect = selectable.isNotEmpty()
+            shellChrome.actions.onNewQueue = { showNewQueue = true }
+            shellChrome.actions.onSelectAll = {
+                selection = if (allSelected) emptySet() else selectable.map { it.id }.toSet()
+            }
+            shellChrome.actions.onEnterSelect = { isSelecting = true }
+            shellChrome.actions.onTogglePrivacy = { privacyGate.toggleRevealAll(activity) }
+            controller.onChanged = { reloadQueues() }
+        }
+        DisposableEffect(shellChrome) {
+            onDispose { shellChrome.reset() }
+        }
+    }
+
+    fun openLocal(work: SavedWork) {
+        if (work.hasEpub) {
+            viewModel.onOpenLocalWork(work.id)
+            onOpenReader(work.id)
+        } else {
+            onOpenWork(work.id)
+        }
+    }
+
+    if (showNewQueue) {
+        NewQueueDialog(
+            onDismiss = { showNewQueue = false },
+            onCreate = { name, hue, keep ->
+                showNewQueue = false
+                scope.launch {
+                    runCatching {
+                        queueRepository?.createQueue(
+                            name = name,
+                            hue = hue,
+                            keepsWorksOffline = if (keep) true else null
+                        )
+                    }
+                    queueReload += 1
+                }
+            }
+        )
+    }
+
+    HomeWorkDialogs(
+        controller = controller,
+        workRepository = workRepository,
+        queueRepository = queueRepository,
+        confirmBeforeDelete = state.confirmBeforeDelete,
+        onDeleted = {
+            isSelecting = false
+            selection = emptySet()
+        }
+    )
 
     KudosRefreshBox(
-        onRefresh = { viewModel.refreshNow() },
+        onRefresh = {
+            viewModel.refreshNow()
+            reloadQueues()
+        },
         modifier = Modifier.fillMaxSize()
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-        item {
-            HomeHeader(
-                state = state,
-                revealAll = privacyState.revealAll,
-                onToggleRevealAll = { privacyGate.toggleRevealAll(activity) },
-                isSelecting = isSelecting,
-                onToggleSelectMode = { isSelecting = !isSelecting; if (!isSelecting) selection = emptySet() },
-                allLocalSelected = allLocalSelected,
-                onToggleSelectAll = { selection = if (allLocalSelected) emptySet() else allLocalWorks.map { it.id }.toSet() },
-                modifier = Modifier.padding(horizontal = 16.dp)
+        if (state.loading && state.visibleItems.isEmpty()) {
+            Text(
+                text = "Loading your library…",
+                color = LocalKudosTokens.current.secondaryInk,
+                fontSize = 15.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
             )
-        }
-
-        if (isSelecting) {
-            item {
-                WorkBulkActionBar(
-                    selectedWorks = selectedWorks,
-                    workRepository = workRepository,
-                    queueRepository = queueRepository,
-                    downloadQueue = downloadQueue,
-                    onDeleted = { isSelecting = false; selection = emptySet(); viewModel.refresh() },
-                    onDone = { isSelecting = false; selection = emptySet() },
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-        }
-
-        if (state.loading) {
-            item {
-                LoadingStateCard(
-                    message = "Loading your reading dashboard",
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-            return@LazyColumn
-        }
-
-        if (!state.hasSavedWorks) {
-            item {
-                EmptyStateCard(
-                    title = "Welcome to Kudos",
-                    message = "Start by searching AO3 for works you love, or browse through fandoms.",
-                    primaryActionLabel = "Find works to read",
-                    onPrimaryAction = onOpenBrowse,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-        }
-
-        // Section order matches iOS Home: Reading Now, Recently Updated,
-        // Subscriptions, Favorites, Recently Opened (no Recently Added).
-        item {
-            HomeShelf(
-                title = "Continue Reading",
-                items = state.continueReading.take(HomeShelfLimit),
-                emptyMessage =
-                    "You're not reading anything right now. Start exploring in Browse or open something from your Library.",
-                isCollapsed = collapsedShelves["reading"],
-                onToggleCollapse = { collapsedShelves.toggle("reading") },
-                onOpenWork = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenWork(id)
-                },
-                onOpenReader = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenReader(id)
-                },
-                onReveal = onReveal,
-                footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.ReadingNow, isSelecting, selection) },
-                isSelecting = isSelecting,
-                selection = selection,
-                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
-            )
-        }
-        item {
-            HomeShelf(
-                title = "Recently Updated",
-                items = state.recentlyUpdated.take(HomeShelfLimit),
-                emptyMessage = "No recent updates from your library works yet.",
-                isCollapsed = collapsedShelves["updated"],
-                onToggleCollapse = { collapsedShelves.toggle("updated") },
-                onOpenWork = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenWork(id)
-                },
-                onOpenReader = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenReader(id)
-                },
-                onReveal = onReveal,
-                footerFor = { work -> updateFooter(work) },
-                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyUpdated, isSelecting, selection) },
-                isSelecting = isSelecting,
-                selection = selection,
-                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
-            )
-        }
-        item {
-            SubscriptionsShelf(
-                works = state.subscriptions.take(HomeShelfLimit),
-                isLoading = state.subscriptionsLoading,
-                isSignedIn = state.isSignedIn,
-                isCollapsed = collapsedShelves["subscriptions"],
-                onToggleCollapse = { collapsedShelves.toggle("subscriptions") },
-                onOpenRemoteWork = onOpenRemoteWork,
-                onSeeAll = onOpenSubscriptionsList
-            )
-        }
-        item {
-            HomeShelf(
-                title = "Favorites",
-                items = state.favorites.take(HomeShelfLimit),
-                emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
-                isCollapsed = collapsedShelves["favorites"],
-                onToggleCollapse = { collapsedShelves.toggle("favorites") },
-                onOpenWork = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenWork(id)
-                },
-                onOpenReader = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenReader(id)
-                },
-                onReveal = onReveal,
-                footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.Favorites, isSelecting, selection) },
-                isSelecting = isSelecting,
-                selection = selection,
-                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
-            )
-        }
-        item {
-            HomeShelf(
-                title = "Recently Opened",
-                items = state.recentlyOpened.take(HomeShelfLimit),
-                emptyMessage = "Nothing opened recently. Start reading to see your history here.",
-                isCollapsed = collapsedShelves["opened"],
-                onToggleCollapse = { collapsedShelves.toggle("opened") },
-                onOpenWork = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenWork(id)
-                },
-                onOpenReader = { id ->
-                    viewModel.onOpenLocalWork(id)
-                    onOpenReader(id)
-                },
-                onReveal = onReveal,
-                footerFor = null,
-                onSeeAll = { onOpenSection(HomeSectionKind.RecentlyOpened, isSelecting, selection) },
-                isSelecting = isSelecting,
-                selection = selection,
-                onToggleSelection = { id -> selection = if (id in selection) selection - id else selection + id }
-            )
-        }
-        item {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = 12.dp,
+                    bottom = 12.dp + if (isSelecting) 72.dp else 0.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(22.dp)
             ) {
-                OutlinedButton(onClick = onOpenLibrary, modifier = Modifier.weight(1f)) {
-                    Text("Library")
-                }
-                OutlinedButton(onClick = onOpenBrowse, modifier = Modifier.weight(1f)) {
-                    Text("Browse")
-                }
-            }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeHeader(
-    state: HomeUiState,
-    revealAll: Boolean,
-    onToggleRevealAll: () -> Unit,
-    isSelecting: Boolean,
-    onToggleSelectMode: () -> Unit,
-    allLocalSelected: Boolean,
-    onToggleSelectAll: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val hidden = state.hiddenByPrivacyCount.takeIf { it > 0 }?.let {
-        " · $it hidden by privacy"
-    }.orEmpty()
-    // TopAppBar already says "Kudos"; keep saved count / privacy as context only.
-    KudosScreenHeader(
-        subtitle = if (state.loading) "Loading your Library" else "${state.totalSaved} saved$hidden",
-        trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isSelecting) {
-                    TextButton(onClick = onToggleSelectAll) {
-                        Text(if (allLocalSelected) "Deselect All" else "Select All")
-                    }
-                } else if (state.hasSavedWorks) {
-                    IconButton(onClick = onToggleSelectMode) {
-                        Icon(Icons.Outlined.Checklist, "Select")
-                    }
-                }
-                if (state.hiddenByPrivacyCount > 0) {
-                    IconButton(onClick = onToggleRevealAll) {
-                        Icon(
-                            imageVector = if (revealAll) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (revealAll) "Hide mature content" else "Reveal all mature content"
-                        )
-                    }
-                }
-            }
-        },
-        modifier = modifier
-    )
-}
-
-@Composable
-private fun HomeShelf(
-    title: String,
-    items: List<LibraryDisplayItem>,
-    emptyMessage: String,
-    isCollapsed: Boolean,
-    onToggleCollapse: () -> Unit,
-    onOpenWork: (String) -> Unit,
-    onOpenReader: (String) -> Unit,
-    onReveal: (String) -> Unit,
-    footerFor: ((SavedWork) -> String?)?,
-    onSeeAll: (() -> Unit)? = null,
-    isSelecting: Boolean = false,
-    selection: Set<String> = emptySet(),
-    onToggleSelection: ((String) -> Unit)? = null
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        KudosSectionHeader(
-            title = title,
-            subtitle = if (items.isEmpty()) null else "${items.size} shown",
-            trailing = {
-                if (onSeeAll != null) {
-                    androidx.compose.material3.TextButton(onClick = onSeeAll) {
-                        androidx.compose.material3.Text("See all")
-                    }
-                }
-                IconButton(onClick = onToggleCollapse) {
-                    Icon(
-                        imageVector = if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
-                        contentDescription = if (isCollapsed) "Expand" else "Collapse"
+                item {
+                    ContinueReadingBlock(
+                        works = readingNow,
+                        displayById = displayById,
+                        stripCollapsed = collapsed["home.readingNow.strip"],
+                        onToggleStrip = { collapsed.toggle("home.readingNow.strip") },
+                        isSelecting = isSelecting,
+                        selection = selection,
+                        downloadQueue = downloadQueue,
+                        controller = controller,
+                        workRepository = workRepository,
+                        queueRepository = queueRepository,
+                        workImporter = workImporter,
+                        onOpen = ::openLocal,
+                        onDetails = { onOpenWork(it.id) },
+                        onComments = onOpenComments,
+                        onReveal = { viewModel.revealWork(it.id, activity) },
+                        onToggleSelected = { work ->
+                            selection = if (work.id in selection) selection - work.id else selection + work.id
+                        },
+                        onEnterSelect = { work ->
+                            selection = selection + work.id
+                            isSelecting = true
+                        },
+                        onSeeAll = {
+                            onOpenSection(HomeSectionKind.ReadingNow, isSelecting, selection)
+                        },
+                        onOpenBrowse = onOpenBrowse,
+                        onOpenLibrary = onOpenLibrary
                     )
                 }
-            },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        if (!isCollapsed) {
-            if (items.isEmpty()) {
-                EmptyStateCard(
-                    title = "Nothing here yet",
-                    message = emptyMessage,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            } else {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
-                    // Fixed card height: keep cross-axis stable while scrolling.
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.height(WorkCoverCardMetrics.height)
-                ) {
-                    items(items, key = { "${title}-${it.item.work.id}" }) { display ->
-                        HomeWorkCover(
-                            display = display,
-                            footerOverride = footerFor?.invoke(display.item.work),
-                            onOpenWork = { onOpenWork(display.item.work.id) },
-                            onOpenReader = { onOpenReader(display.item.work.id) },
-                            onReveal = { onReveal(display.item.work.id) },
-                            isSelecting = isSelecting,
-                            isSelected = display.item.work.id in selection,
-                            onToggleSelection = { onToggleSelection?.invoke(display.item.work.id) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SubscriptionsShelf(
-    works: List<AO3WorkSummary>,
-    isLoading: Boolean,
-    isSignedIn: Boolean,
-    isCollapsed: Boolean,
-    onToggleCollapse: () -> Unit,
-    onOpenRemoteWork: (AO3WorkSummary) -> Unit,
-    onSeeAll: () -> Unit
-) {
-    val showSkeleton = isLoading && works.isEmpty()
-    val emptyMessage = if (isSignedIn) {
-        "You're not subscribed to anything yet. Subscribe to works or series to see updates here."
-    } else {
-        "Log in to AO3 to see the works and series you subscribe to."
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        KudosSectionHeader(
-            title = "Subscriptions",
-            subtitle = when {
-                showSkeleton -> "Loading…"
-                works.isEmpty() -> null
-                else -> "${works.size} shown"
-            },
-            modifier = Modifier.padding(horizontal = 16.dp),
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (works.isNotEmpty()) {
-                        TextButton(onClick = onSeeAll) {
-                            Text("See all")
+                item {
+                    HomeCarouselSection(
+                        title = "Reading Queues",
+                        items = queues,
+                        collapsed = collapsed["home.readingQueues"],
+                        onToggleCollapse = if (queues.isEmpty()) null else ({ collapsed.toggle("home.readingQueues") }),
+                        onSeeAll = if (queues.isEmpty()) null else onOpenQueues,
+                        emptyIcon = HomeEmptyIcons.queues,
+                        emptyMessage = "Use + above to make a reading queue and plan what you want to read next."
+                    ) { (queue, works) ->
+                        HomePress(
+                            onClick = { onOpenQueue(queue.id) }
+                        ) {
+                            HomeQueueCard(queue = queue, works = works)
                         }
                     }
-                    IconButton(onClick = onToggleCollapse) {
-                        Icon(
-                            imageVector = if (isCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
-                            contentDescription = if (isCollapsed) "Expand" else "Collapse"
+                }
+                items(state.homeCollections, key = { it.id }) { shelf ->
+                    HomeCarouselSection(
+                        title = shelf.name,
+                        items = shelf.works.take(HomeShelfLimit),
+                        count = if (shelf.works.isEmpty()) null else shelf.works.size,
+                        collapsed = collapsed["home.collection.${shelf.id}"],
+                        onToggleCollapse = { collapsed.toggle("home.collection.${shelf.id}") },
+                        onSeeAll = if (shelf.works.isEmpty()) null else ({ onOpenCollection(shelf.id) }),
+                        emptyIcon = HomeEmptyIcons.collections,
+                        emptyMessage = "Add works to this collection to see them here."
+                    ) { item ->
+                        LocalCard(
+                            item = item,
+                            allowSelect = false,
+                            footer = null,
+                            progress = item.item.work.readingProgressFraction(),
+                            isSelecting = isSelecting,
+                            isSelected = item.item.work.id in selection,
+                            downloadQueue = downloadQueue,
+                            controller = controller,
+                            workRepository = workRepository,
+                            queueRepository = queueRepository,
+                            workImporter = workImporter,
+                            onOpen = ::openLocal,
+                            onDetails = { onOpenWork(it.id) },
+                            onComments = onOpenComments,
+                            onReveal = { viewModel.revealWork(it.id, activity) },
+                            onToggleSelected = {},
+                            onEnterSelect = {}
                         )
                     }
                 }
-            }
-        )
-        if (!isCollapsed) {
-            when {
-                showSkeleton -> {
-                    LoadingStateCard(
-                        message = "Loading subscriptions",
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-                works.isEmpty() -> {
-                    EmptyStateCard(
-                        title = "Nothing here yet",
-                        message = emptyMessage,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-                else -> {
-                    // Horizontal remote shelf (Apple AO3WorkCoverCard parity).
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
-                        verticalAlignment = Alignment.Top,
-                        modifier = Modifier.height(WorkCoverCardMetrics.height)
-                    ) {
-                        items(works, key = { "sub-${it.id}" }) { work ->
-                            RemoteWorkCover(
-                                work = work,
-                                onOpen = { onOpenRemoteWork(work) }
+                item {
+                    HomeCarouselSection(
+                        title = HomeSectionKind.RecentlyUpdated.title,
+                        items = recentlyUpdated.take(HomeShelfLimit),
+                        count = if (recentlyUpdated.isEmpty()) null else recentlyUpdated.size,
+                        collapsed = collapsed["home.recentlyUpdated"],
+                        onToggleCollapse = { collapsed.toggle("home.recentlyUpdated") },
+                        onSeeAll = if (recentlyUpdated.size > 1) {
+                            {
+                                onOpenSection(HomeSectionKind.RecentlyUpdated, isSelecting, selection)
+                            }
+                        } else {
+                            null
+                        },
+                        emptyIcon = HomeEmptyIcons.updated,
+                        emptyMessage = HomeSectionKind.RecentlyUpdated.emptyMessage
+                    ) { work ->
+                        val item = displayById[work.id]
+                        if (item != null) {
+                            LocalCard(
+                                item = item,
+                                allowSelect = true,
+                                footer = HomeFacts.updateFooter(work),
+                                progress = null,
+                                isSelecting = isSelecting,
+                                isSelected = work.id in selection,
+                                downloadQueue = downloadQueue,
+                                controller = controller,
+                                workRepository = workRepository,
+                                queueRepository = queueRepository,
+                                workImporter = workImporter,
+                                onOpen = ::openLocal,
+                                onDetails = { onOpenWork(it.id) },
+                                onComments = onOpenComments,
+                                onReveal = { viewModel.revealWork(it.id, activity) },
+                                onToggleSelected = { picked ->
+                                    selection = if (picked.id in selection) selection - picked.id else selection + picked.id
+                                },
+                                onEnterSelect = { picked ->
+                                    selection = selection + picked.id
+                                    isSelecting = true
+                                }
                             )
                         }
                     }
                 }
+                item {
+                    SubscriptionsBlock(
+                        state = state,
+                        displayById = displayById,
+                        collapsed = collapsed["home.subscriptions"],
+                        onToggle = { collapsed.toggle("home.subscriptions") },
+                        isSelecting = isSelecting,
+                        selection = selection,
+                        downloadQueue = downloadQueue,
+                        controller = controller,
+                        workRepository = workRepository,
+                        queueRepository = queueRepository,
+                        workImporter = workImporter,
+                        onOpen = ::openLocal,
+                        onDetails = { onOpenWork(it.id) },
+                        onComments = onOpenComments,
+                        onReveal = { viewModel.revealWork(it.id, activity) },
+                        onOpenRemote = onOpenRemoteWork,
+                        onSeeAll = onOpenSubscriptionsList
+                    )
+                }
+            }
+        }
+        if (isSelecting) {
+            HomeBulkBar(
+                selectedWorks = selectedWorks,
+                controller = controller,
+                workRepository = workRepository,
+                queueRepository = queueRepository,
+                downloadQueue = downloadQueue,
+                onDone = {
+                    isSelecting = false
+                    selection = emptySet()
+                },
+                modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ContinueReadingBlock(
+    works: List<SavedWork>,
+    displayById: Map<String, LibraryDisplayItem>,
+    stripCollapsed: Boolean,
+    onToggleStrip: () -> Unit,
+    isSelecting: Boolean,
+    selection: Set<String>,
+    downloadQueue: DownloadQueue?,
+    controller: HomeWorkController,
+    workRepository: WorkRepository,
+    queueRepository: ReadingQueueRepository?,
+    workImporter: WorkImporter?,
+    onOpen: (SavedWork) -> Unit,
+    onDetails: (SavedWork) -> Unit,
+    onComments: (Long) -> Unit,
+    onReveal: (SavedWork) -> Unit,
+    onToggleSelected: (SavedWork) -> Unit,
+    onEnterSelect: (SavedWork) -> Unit,
+    onSeeAll: () -> Unit,
+    onOpenBrowse: () -> Unit,
+    onOpenLibrary: () -> Unit
+) {
+    val hero = works.firstOrNull()
+    val strip = works.drop(1).take(4)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        SectionRuleHeader(
+            title = "Continue Reading",
+            count = if (works.isEmpty()) null else works.size,
+            isCollapsed = stripCollapsed,
+            onToggleCollapse = if (strip.isEmpty()) null else onToggleStrip,
+            onSeeAll = if (works.size > 5) onSeeAll else null
+        )
+        if (hero == null) {
+            HomeSectionEmpty(
+                message = HomeSectionKind.ReadingNow.emptyMessage,
+                icon = HomeEmptyIcons.reading
+            )
+            ContinueReadingActions(onOpenBrowse = onOpenBrowse, onOpenLibrary = onOpenLibrary)
+        } else {
+            val heroItem = displayById[hero.id]
+            LocalFrame(
+                work = hero,
+                obscured = heroItem?.privacyVisibility == LibraryPrivacyVisibility.Obscured,
+                allowSelect = true,
+                isSelecting = isSelecting,
+                controller = controller,
+                workRepository = workRepository,
+                queueRepository = queueRepository,
+                downloadQueue = downloadQueue,
+                workImporter = workImporter,
+                onOpen = onOpen,
+                onDetails = onDetails,
+                onComments = onComments,
+                onReveal = onReveal,
+                onToggleSelected = onToggleSelected,
+                onEnterSelect = onEnterSelect
+            ) {
+                HomeResumeHero(
+                    work = hero,
+                    downloading = rememberWorkDownloading(hero, downloadQueue),
+                    obscured = heroItem?.privacyVisibility == LibraryPrivacyVisibility.Obscured,
+                    isSelecting = isSelecting,
+                    isSelected = hero.id in selection
+                )
+            }
+            if (strip.isNotEmpty() && !stripCollapsed) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 6.dp)
+                        .offset(y = (-8).dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    strip.forEach { work ->
+                        val item = displayById[work.id] ?: return@forEach
+                        LocalCard(
+                            item = item,
+                            allowSelect = true,
+                            footer = null,
+                            progress = work.readingProgressFraction(),
+                            isSelecting = isSelecting,
+                            isSelected = work.id in selection,
+                            downloadQueue = downloadQueue,
+                            controller = controller,
+                            workRepository = workRepository,
+                            queueRepository = queueRepository,
+                            workImporter = workImporter,
+                            onOpen = onOpen,
+                            onDetails = onDetails,
+                            onComments = onComments,
+                            onReveal = onReveal,
+                            onToggleSelected = onToggleSelected,
+                            onEnterSelect = onEnterSelect
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RemoteWorkCover(
-    work: AO3WorkSummary,
-    onOpen: () -> Unit
+private fun SubscriptionsBlock(
+    state: HomeUiState,
+    displayById: Map<String, LibraryDisplayItem>,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    isSelecting: Boolean,
+    selection: Set<String>,
+    downloadQueue: DownloadQueue?,
+    controller: HomeWorkController,
+    workRepository: WorkRepository,
+    queueRepository: ReadingQueueRepository?,
+    workImporter: WorkImporter?,
+    onOpen: (SavedWork) -> Unit,
+    onDetails: (SavedWork) -> Unit,
+    onComments: (Long) -> Unit,
+    onReveal: (SavedWork) -> Unit,
+    onOpenRemote: (AO3WorkSummary) -> Unit,
+    onSeeAll: () -> Unit
 ) {
-    WorkCoverCard(
-        workId = work.id,
-        title = work.title,
-        author = work.authorText,
-        fandom = work.fandoms.firstOrNull { it.isNotBlank() },
-        stats = coverCardStats(
-            rating = work.rating,
-            chapters = work.chapters,
-            isComplete = work.isComplete == true,
-            wordCount = work.wordCount?.takeIf { it > 0 },
-            kudos = work.kudos?.takeIf { it > 0 }
-        ),
+    val showSkeleton = state.isSignedIn && state.subscriptionsLoading && state.subscriptions.isEmpty()
+    val merged = remember(state.subscriptions, state.visibleItems) {
+        CanonicalWorkMerge.remoteLed(
+            remote = state.subscriptions,
+            localLibrary = state.visibleItems.map { it.item.work }
+        )
+    }
+    val count = when {
+        showSkeleton || merged.isEmpty() || state.subscriptionsExactCount == null -> null
+        else -> merged.size
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        SectionRuleHeader(
+            title = "Subscriptions",
+            count = count,
+            isCollapsed = collapsed,
+            onToggleCollapse = onToggle,
+            onSeeAll = if (merged.isEmpty()) null else onSeeAll
+        )
+        if (!collapsed) {
+            when {
+                showSkeleton -> Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    repeat(6) { HomeCoverSkeleton() }
+                }
+                merged.isEmpty() -> HomeSectionEmpty(
+                    message = HomeSubscriptionsCopy.emptyMessage(state.isSignedIn, state.subscriptionsLoadFailed),
+                    icon = HomeEmptyIcons.subscriptions
+                )
+                else -> Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    merged.take(HomeShelfLimit).forEach { entry ->
+                        val local = entry.local
+                        if (local != null) {
+                            val item = displayById[local.id]
+                            if (item != null) {
+                                LocalCard(
+                                    item = item,
+                                    allowSelect = false,
+                                    footer = null,
+                                    progress = local.readingProgressFraction(),
+                                    isSelecting = isSelecting,
+                                    isSelected = local.id in selection,
+                                    downloadQueue = downloadQueue,
+                                    controller = controller,
+                                    workRepository = workRepository,
+                                    queueRepository = queueRepository,
+                                    workImporter = workImporter,
+                                    onOpen = onOpen,
+                                    onDetails = onDetails,
+                                    onComments = onComments,
+                                    onReveal = onReveal,
+                                    onToggleSelected = {},
+                                    onEnterSelect = {}
+                                )
+                            }
+                        } else {
+                            HomePress(onClick = { onOpenRemote(entry.remote) }) {
+                                SubjectRemoteCoverCard(summary = entry.remote, showsProvenance = true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalCard(
+    item: LibraryDisplayItem,
+    allowSelect: Boolean,
+    footer: String?,
+    progress: Double?,
+    isSelecting: Boolean,
+    isSelected: Boolean,
+    downloadQueue: DownloadQueue?,
+    controller: HomeWorkController,
+    workRepository: WorkRepository,
+    queueRepository: ReadingQueueRepository?,
+    workImporter: WorkImporter?,
+    onOpen: (SavedWork) -> Unit,
+    onDetails: (SavedWork) -> Unit,
+    onComments: (Long) -> Unit,
+    onReveal: (SavedWork) -> Unit,
+    onToggleSelected: (SavedWork) -> Unit,
+    onEnterSelect: (SavedWork) -> Unit
+) {
+    val work = item.item.work
+    val obscured = item.privacyVisibility == LibraryPrivacyVisibility.Obscured
+    LocalFrame(
+        work = work,
+        obscured = obscured,
+        allowSelect = allowSelect,
+        isSelecting = isSelecting,
+        controller = controller,
+        workRepository = workRepository,
+        queueRepository = queueRepository,
+        downloadQueue = downloadQueue,
+        workImporter = workImporter,
         onOpen = onOpen,
-        onOpenDetails = onOpen,
-        statusChips = listOfNotNull(
-            if (work.isRestricted) "Restricted" else null
-        ),
-        contentDescription = "Open ${work.title}, by ${work.authorText}"
+        onDetails = onDetails,
+        onComments = onComments,
+        onReveal = onReveal,
+        onToggleSelected = onToggleSelected,
+        onEnterSelect = onEnterSelect
+    ) {
+        SubjectWorkCoverCard(
+            work = work,
+            obscured = obscured,
+            downloading = rememberWorkDownloading(work, downloadQueue),
+            footer = footer,
+            progress = progress,
+            isSelecting = isSelecting,
+            isSelected = isSelected
+        )
+    }
+}
+
+@Composable
+private fun LocalFrame(
+    work: SavedWork,
+    obscured: Boolean,
+    allowSelect: Boolean,
+    isSelecting: Boolean,
+    controller: HomeWorkController,
+    workRepository: WorkRepository,
+    queueRepository: ReadingQueueRepository?,
+    downloadQueue: DownloadQueue?,
+    workImporter: WorkImporter?,
+    onOpen: (SavedWork) -> Unit,
+    onDetails: (SavedWork) -> Unit,
+    onComments: (Long) -> Unit,
+    onReveal: (SavedWork) -> Unit,
+    onToggleSelected: (SavedWork) -> Unit,
+    onEnterSelect: (SavedWork) -> Unit,
+    content: @Composable () -> Unit
+) {
+    HomeLocalWorkFrame(
+        work = work,
+        obscured = obscured,
+        allowSelect = allowSelect,
+        isSelecting = isSelecting,
+        controller = controller,
+        workRepository = workRepository,
+        queueRepository = queueRepository,
+        downloadQueue = downloadQueue,
+        workImporter = workImporter,
+        onOpen = onOpen,
+        onDetails = onDetails,
+        onComments = onComments,
+        onReveal = onReveal,
+        onToggleSelected = onToggleSelected,
+        onEnterSelect = onEnterSelect,
+        content = content
     )
 }
 
 @Composable
-private fun HomeWorkCover(
-    display: LibraryDisplayItem,
-    footerOverride: String?,
-    onOpenWork: () -> Unit,
-    onOpenReader: () -> Unit,
-    onReveal: () -> Unit,
-    isSelecting: Boolean = false,
-    isSelected: Boolean = false,
-    onToggleSelection: (() -> Unit)? = null
-) {
-    val work = display.item.work
-    val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
-    val canRead = work.hasEpub && !obscured
-    val progress = if (footerOverride != null) null else work.readingProgressFraction()?.toFloat()
-    val progressLabel = progress?.let { value ->
-        when {
-            value >= 0.999f -> "Finished"
-            work.isFinished -> "Finished"
-            else -> "${(value * 100).roundToInt()}% · Reading"
-        }
-    }
-
-    WorkCoverCard(
-        workId = io.github.cidy02.kudos.works.WorkTags.ao3WorkIdFromUrl(work.sourceUrl),
-        title = work.title,
-        author = work.author.ifBlank { "Anonymous" },
-        fandom = work.primaryFandom(),
-        stats = if (obscured) {
-            emptyList()
-        } else {
-            coverCardStats(
-                rating = work.rating,
-                chapters = work.chapters,
-                isComplete = work.isComplete,
-                wordCount = work.wordCount.takeIf { it > 0 },
-                kudos = work.kudos.takeIf { it > 0 }
-            )
-        },
-        // This was the actual bug (found in review, confirmed by reading the code):
-        // `obscured` only ever changed what WorkCoverCard *shows* (blurred cover +
-        // "Tap to reveal" label, below) — the click handler stayed `onOpenWork`
-        // regardless, so a tap on a card whose label promised "Tap to reveal" instead
-        // navigated straight into that work's full, unblurred Work Detail page. The
-        // Library screen's own obscured cards already gate correctly (onReveal, not a
-        // navigation callback); Home's didn't. Apple's equivalent blurs the whole card
-        // — including its own ⓘ details button — under one tap target that only
-        // reveals (Features/Privacy/MatureContent.swift's `SensitiveWorkCoverCard`),
-        // so onOpenDetails is gated the same way here, not only the main tap.
-        onOpen = when {
-            obscured -> onReveal
-            canRead -> onOpenReader
-            else -> onOpenWork
-        },
-        onOpenDetails = if (obscured) onReveal else onOpenWork,
-        progress = if (obscured) null else progress,
-        progressLabel = if (obscured) null else progressLabel,
-        statusChips = if (obscured) {
-            listOf(work.rating.ifBlank { "Mature content" })
-        } else {
-            listOfNotNull(
-                footerOverride,
-                if (!work.isDownloaded) "Not downloaded" else null,
-                if (work.isFavorite) "Favorite" else null
-            )
-        },
-        obscured = obscured,
-        contentDescription = if (obscured) {
-            "Mature work hidden. ${work.rating.ifBlank { "Mature content" }}"
-        } else {
-            val action = if (canRead) "Read" else "Open details for"
-            "$action ${work.title}, by ${work.author.ifBlank { "Anonymous" }}"
-        },
-        isSelecting = isSelecting,
-        isSelected = isSelected,
-        onToggleSelection = onToggleSelection
-    )
+private fun HomePress(onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(Modifier.clickable(onClick = onClick)) { content() }
 }
-
-private fun updateFooter(work: SavedWork): String? {
-    if (!work.hasUpdate) return "Updated"
-    val known = work.knownChapterCount ?: return "Updated"
-    val newCount = work.postedChapterCount - known
-    return if (newCount > 0) "+$newCount new" else "Updated"
-}
-
-private fun SavedWork.primaryFandom(): String? {
-    return workFandoms.firstOrNull { it.isNotBlank() }
-        ?: workTags.firstOrNull { it.isNotBlank() }
-}
-
-private const val HomeShelfLimit = 12

@@ -214,8 +214,18 @@ class ReadingQueueRepository(
         queue
     }
 
-    /** Creates a user-named custom queue (Library “+ New Queue”). */
-    suspend fun createQueue(name: String): ReadingQueue {
+    /**
+     * Creates a user-named custom queue (Library “+ New Queue”, Home's "+").
+     * A case-insensitive name match returns the existing queue and does not
+     * overwrite its hue. [keepsWorksOffline] stays null unless the reader opts in,
+     * because a null queue keep means "on" in the download rules.
+     */
+    suspend fun createQueue(
+        name: String,
+        hue: Double? = null,
+        colorHex: String? = null,
+        keepsWorksOffline: Boolean? = null
+    ): ReadingQueue {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Queue name must not be blank." }
         val existing = queueDao.getActiveQueues().firstOrNull {
@@ -232,7 +242,10 @@ class ReadingQueueRepository(
             kindRaw = ReadingQueueKind.CUSTOM,
             sortOrder = nextOrder,
             dateCreated = now,
-            dateUpdated = now
+            dateUpdated = now,
+            hue = hue,
+            colorHex = colorHex,
+            keepsWorksOffline = keepsWorksOffline
         )
         queueDao.upsertQueue(queue.toEntity())
         return queue

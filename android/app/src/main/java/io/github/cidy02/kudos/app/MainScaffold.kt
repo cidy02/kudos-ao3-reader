@@ -62,6 +62,8 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import io.github.cidy02.kudos.home.HomeShellChrome
+import io.github.cidy02.kudos.home.HomeToolbarActions
 import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.withOpacity
@@ -92,6 +94,9 @@ fun MainScaffold(
     val reader = currentRoute == Routes.Reader
     val shellTitle = Routes.shellTitle(currentRoute)
     val chrome = remember { ShellChromeState() }
+    val homeChrome = remember { HomeShellChrome() }
+    val onHome = currentRoute == Routes.Home
+    val homeSelecting = onHome && homeChrome.hideTabBar
     val chromeHidden = chrome.isHidden(if (shell) currentRoute else null)
     val bridge = remember { ShellScrollBridge() }
     bridge.route = if (shell) currentRoute else null
@@ -125,7 +130,7 @@ fun MainScaffold(
         reader -> insets.calculateTopPadding()
         else -> 0.dp
     }
-    val bottomPad = insets.calculateBottomPadding() + if (shell) ShellBarClearance else 0.dp
+    val bottomPad = insets.calculateBottomPadding() + if (shell && !homeSelecting) ShellBarClearance else 0.dp
     val page = if (shell) tokens.background else MaterialTheme.colorScheme.background
 
     Box(
@@ -153,12 +158,19 @@ fun MainScaffold(
                 AppNavHost(
                     container = container,
                     navController = navController,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    shellChrome = homeChrome
                 )
             }
         }
 
         if (shell && shellTitle != null) {
+            val titleText = if (onHome) homeChrome.selectionTitle ?: shellTitle else shellTitle
+            val titleEnd = when {
+                onHome && homeSelecting -> 200.dp
+                onHome -> 96.dp
+                else -> 0.dp
+            }
             AnimatedVisibility(
                 visible = !chromeHidden,
                 modifier = Modifier
@@ -169,13 +181,28 @@ fun MainScaffold(
                 exit = fadeOut(ChromeMotion)
             ) {
                 Text(
-                    text = shellTitle,
+                    text = titleText,
+                    modifier = Modifier.padding(end = titleEnd),
                     color = tokens.primaryInk,
                     fontSize = 34.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
+
+        if (onHome && homeChrome.mounted) {
+            AnimatedVisibility(
+                visible = !chromeHidden,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(top = 6.dp, end = 8.dp),
+                enter = fadeIn(ChromeMotion),
+                exit = fadeOut(ChromeMotion)
+            ) {
+                HomeToolbarActions(homeChrome)
             }
         }
 
@@ -215,7 +242,7 @@ fun MainScaffold(
                 .padding(bottom = bottomPad)
         )
 
-        if (shell) {
+        if (shell && !homeSelecting) {
             FloatingTabBar(
                 currentRoute = currentRoute,
                 minimized = chromeHidden,
