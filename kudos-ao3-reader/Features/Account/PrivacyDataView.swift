@@ -133,7 +133,7 @@ struct PrivacyDataView: View {
                 + "themselves can be re-downloaded from AO3 anytime.")
         }
         .confirmationDialog(
-            "Clear Downloads?",
+            "Free Up Space?",
             isPresented: $confirmClearDownloads,
             titleVisibility: .visible
         ) {
@@ -260,6 +260,14 @@ struct PrivacyDataView: View {
             value: byteLabel(footprint.downloadedWorkBytes),
             isMonospaced: true
         )
+        if footprint.readingCopyBytes > 0 {
+            SubjectRowSeparator()
+            SubjectFormRow(
+                label: "Works you're reading",
+                value: byteLabel(footprint.readingCopyBytes),
+                isMonospaced: true
+            )
+        }
         if footprint.preservedOriginalBytes > 0 {
             SubjectRowSeparator()
             SubjectFormRow(
@@ -324,7 +332,7 @@ struct PrivacyDataView: View {
     private var clearPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(
-                label: "Clear downloads",
+                label: "Free up space",
                 value: countLabel(freeableDownloads.count, "file"),
                 showsDisclosure: true,
                 isDisabled: freeableDownloads.isEmpty,
@@ -480,7 +488,8 @@ struct PrivacyDataView: View {
     }
 
     private func measure() async {
-        footprint = await LocalDataFootprintScanner.measure()
+        let readingCopies = works.filter { $0.hasEPUB && !$0.isDownloaded }.map(\.fileURL)
+        footprint = await LocalDataFootprintScanner.measure(readingCopies: readingCopies)
         hasMeasured = true
     }
 }

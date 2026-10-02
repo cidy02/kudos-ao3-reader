@@ -156,7 +156,7 @@ enum ReadingAffinities {
                 }
                 if isUnread {
                     row.unreadInLibrary += 1
-                    if work.hasEPUB { row.downloadedInLibrary += 1 }
+                    if work.isDownloaded { row.downloadedInLibrary += 1 }
                     // The shelf's own rule, not just queue membership — see
                     // `SavedWork.isOnSavedForLaterShelf`.
                     if work.isOnSavedForLaterShelf { row.savedForLater += 1 }

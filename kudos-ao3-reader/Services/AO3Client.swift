@@ -1316,14 +1316,17 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         )
     }
 
-    func downloadEPUB(workID: Int) async throws -> URL {
+    /// `onProgress` gets 0…1 as the file arrives, when AO3 sends its size.
+    func downloadEPUB(workID: Int, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         Log.network.info("Downloading EPUB for work \(workID)")
         guard let url = URL(string: "\(base)/downloads/\(workID)/work.epub") else {
             throw AO3Error.network("Bad download URL.")
         }
         let tempURL = try await withRetry { () -> URL in
             try await pace()
-            let (tempURL, response) = try await session.download(from: url)
+            let (tempURL, response) = try await session.download(
+                from: url, delegate: onProgress.map(DownloadProgressDelegate.init)
+            )
             defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
             try Self.check(response)
             return tempURL
@@ -2038,5 +2041,22 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     static func isAnonymousBlurb(_ element: Element) throws -> Bool {
         if element.hasClass("anonymous") { return true }
         return try element.select("div.header.module.anonymous").first() != nil
+    }
+}
+
+/// Forwards a download task's `Progress` to a closure — the async
+/// `download(from:delegate:)` hands over the task in `didCreateTask`.
+private final class DownloadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable (Double) -> Void
+    private var observation: NSKeyValueObservation?
+
+    init(_ onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_: URLSession, didCreateTask task: URLSessionTask) {
+        observation = task.progress.observe(\.fractionCompleted) { [onProgress] progress, _ in
+            onProgress(progress.fractionCompleted)
+        }
     }
 }

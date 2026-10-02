@@ -953,6 +953,59 @@ struct WorkProgressRing: View {
     }
 }
 
+/// `WorkProgressRing`, or while `work` downloads the same ring filling with the
+/// download and labelled Downloading — the App Store's download ring in this
+/// ring's style (owner, 2026-10-01). It hands back to reading progress when the
+/// file is in. `progress` nil draws nothing until a download starts, so a work
+/// with no reading to report still shows its download.
+struct WorkReadingOrDownloadRing: View {
+    let work: SavedWork
+    let progress: Double?
+    var state: String?
+    var diameter: CGFloat = SubjectMetrics.ringDiameter
+    var tint: Color?
+
+    @Environment(DownloadQueue.self) private var downloads
+
+    var body: some View {
+        if downloads.isDownloading(work) {
+            TimelineView(.animation) { context in
+                WorkProgressRing(
+                    progress: downloads.downloadFraction(for: work, at: context.date) ?? 1,
+                    state: state == nil ? nil : "Downloading",
+                    diameter: diameter,
+                    tint: tint
+                )
+            }
+            .accessibilityLabel("Download progress")
+        } else if let progress {
+            WorkProgressRing(progress: progress, state: state, diameter: diameter, tint: tint)
+        }
+    }
+}
+
+extension View {
+    /// Greys a work's card while it downloads, the way the Home Screen dims an
+    /// app that is installing (owner, 2026-10-01); `WorkReadingOrDownloadRing`
+    /// inside shows how far it has got. Nil (no library copy) does nothing.
+    func downloadDimmed(_ work: SavedWork?) -> some View {
+        modifier(DownloadDimming(work: work))
+    }
+}
+
+private struct DownloadDimming: ViewModifier {
+    let work: SavedWork?
+    @Environment(DownloadQueue.self) private var downloads
+
+    func body(content: Content) -> some View {
+        let dimmed = work.map(downloads.isDownloading) ?? false
+        content
+            .saturation(dimmed ? 0 : 1)
+            .brightness(dimmed ? -0.12 : 0)
+            .animation(.easeInOut(duration: 0.25), value: dimmed)
+    }
+}
+
 // MARK: - Chips
 
 /// The redesign's chip. There are two shapes and they mean different things —

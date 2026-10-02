@@ -1,16 +1,17 @@
 import Foundation
 import SwiftData
 
-/// Download / Remove Download follow the EPUB on this device (owner,
-/// 2026-09-28) — not `isSaved`, the keep-forever flag. A work opened once, or
-/// kept by a queue, is downloaded; offering "Download" on it said otherwise, and
-/// the old toggle only flipped the flag, so "Download" never fetched anything
-/// and "Remove Download" never removed a file.
+/// Download / Remove Download follow what the reader chose to keep (owner,
+/// 2026-10-01, reversing 2026-09-28's "follow the file"): a copy fetched only to
+/// read a work is not a download, so that work offers Download — which, with
+/// the file already here, keeps it at once. Download still fetches a missing
+/// file, and Remove Download still deletes one.
 enum WorkDownload {
     enum Action: Equatable {
-        /// Not on this device, and AO3 can supply it.
+        /// Not kept: fetches the file if it is missing, then keeps it.
         case download
-        /// On this device, and nothing else is keeping it.
+        /// Kept by Download (or "Keep works you read"), and nothing else is
+        /// keeping it.
         case removeDownload
         /// On this device because a Keep-offline queue or collection holds it —
         /// removing the file there would only be fetched back.
@@ -21,9 +22,11 @@ enum WorkDownload {
     /// fetch it from (an import whose file was freed).
     @MainActor
     static func action(for work: SavedWork) -> Action? {
-        if WorkReaderPreparation.hasReadableEPUB(for: work) {
+        let hasFile = WorkReaderPreparation.hasReadableEPUB(for: work)
+        if hasFile {
             if let holder = keeper(of: work) { return .keptBy(holder) }
-            return .removeDownload
+            if work.isDownloaded { return .removeDownload }
+            return .download
         }
         guard work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) != nil else { return nil }
         return .download
@@ -59,7 +62,14 @@ enum WorkDownload {
     ) async throws {
         switch action {
         case .download:
+            let hasFile = WorkReaderPreparation.hasReadableEPUB(for: work)
             WorkLifecycle.setSaved(work, true, in: context)
+            if hasFile {
+                // Nothing to fetch; the ring still shows a short fill so the tap
+                // reads as a download (owner, 2026-10-01: 0.7 s).
+                queue?.showInstantDownload(for: work)
+                return
+            }
             if let queue {
                 queue.enqueue(KeepOffline.downloadItems(for: [work]), into: context)
                 return
@@ -76,12 +86,13 @@ enum WorkDownload {
 
     // MARK: Bulk
 
-    /// Remove Downloads when every selected work is on this device (a kept one
-    /// is skipped); otherwise Download, which fetches only the missing ones.
+    /// Remove Downloads when every selected work is downloaded (one a queue or
+    /// collection keeps is skipped); otherwise Download, which keeps the rest and
+    /// fetches only the missing ones.
     @MainActor
     static func bulkAction(for works: [SavedWork]) -> Action? {
         guard !works.isEmpty else { return nil }
-        if works.allSatisfy(WorkReaderPreparation.hasReadableEPUB(for:)) {
+        if works.allSatisfy(\.isDownloaded) {
             return works.contains { keeper(of: $0) == nil } ? .removeDownload : nil
         }
         return .download

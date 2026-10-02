@@ -68,7 +68,8 @@ enum AO3MarkedForLaterClassification {
         SubscriptionWatermarks.newChapterCount(for: work, watermarks: watermarks) > 0
     }
 
-    /// Downloaded is the local copy's `hasEPUB`. A remote-only row has no copy.
+    /// Downloaded is the local copy's `isDownloaded` — kept, not just fetched to
+    /// read (owner, 2026-10-01). A remote-only row has no copy.
     static func isDownloaded(hasEPUB: Bool?) -> Bool {
         hasEPUB == true
     }
@@ -405,7 +406,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
     private func downloadLine(for entry: CanonicalWork) -> String? {
         guard let work = entry.local else { return nil }
         return AO3MarkedForLaterDownloadLine.text(
-            hasEPUB: work.hasEPUB,
+            hasEPUB: work.isDownloaded,
             byteLabel: WorkDetailPresentation.fileSizeLabel(forFileAt: work.fileURL)
         )
     }
@@ -416,7 +417,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
     }
 
     private func isDownloaded(_ entry: CanonicalWork) -> Bool {
-        AO3MarkedForLaterClassification.isDownloaded(hasEPUB: entry.local?.hasEPUB)
+        AO3MarkedForLaterClassification.isDownloaded(hasEPUB: entry.local?.isDownloaded)
     }
 
     private func hue(for entry: CanonicalWork) -> Double {

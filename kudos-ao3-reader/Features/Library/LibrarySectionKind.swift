@@ -133,9 +133,10 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .collections:
             []
         case .downloaded:
-            // Everything with its EPUB on disk — the full offline shelf, newest first.
+            // What the reader chose to keep — a copy fetched only to read is not a
+            // download (owner, 2026-10-01). Newest first.
             works
-                .filter { $0.hasEPUB && !$0.isQueueOnlyWork && visible($0) }
+                .filter { $0.isDownloaded && !$0.isQueueOnlyWork && visible($0) }
                 .sorted { $0.dateAdded > $1.dateAdded }
         case .history:
             // Works you have actually read — artboard 1ah's "the local one, not

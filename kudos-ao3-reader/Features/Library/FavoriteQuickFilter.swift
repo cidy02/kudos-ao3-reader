@@ -70,7 +70,7 @@ nonisolated enum FavoriteQuickFilter: String, CaseIterable, Hashable, Identifiab
         case .rereads:
             works.filter { (finishCounts[$0.id] ?? 0) > 1 }
         case .offline:
-            works.filter(\.hasEPUB)
+            works.filter(\.isDownloaded)
         case .wip:
             // AO3's posted status, not how far in you are. The chip sits beside
             // Rereads and Offline, which are both facts about the work itself, and

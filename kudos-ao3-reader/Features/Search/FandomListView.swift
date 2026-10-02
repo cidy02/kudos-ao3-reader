@@ -63,8 +63,9 @@ struct FandomListView: View {
         for work in library {
             let names = Set(work.workFandoms.map { $0.lowercased() })
             if work.isFavorite { favourites.formUnion(names) }
-            // 1an.2: "I have downloads from" means on this device now.
-            if work.hasEPUB {
+            // 1an.2: "I have downloads from" — kept copies, not ones fetched only
+            // to read (owner, 2026-10-01).
+            if work.isDownloaded {
                 for name in names { downloadCounts[name, default: 0] += 1 }
             }
         }
@@ -77,7 +78,7 @@ struct FandomListView: View {
     /// Signature of everything `applyFilter` depends on besides the query debounce.
     private var listingToken: String {
         let favs = library.reduce(0) { $0 + ($1.isFavorite ? 1 : 0) }
-        let saved = library.reduce(0) { $0 + ($1.hasEPUB ? 1 : 0) }
+        let saved = library.reduce(0) { $0 + ($1.isDownloaded ? 1 : 0) }
         return [
             query,
             sort.rawValue,
