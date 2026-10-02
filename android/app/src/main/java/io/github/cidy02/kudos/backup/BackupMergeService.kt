@@ -13,6 +13,9 @@ import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import io.github.cidy02.kudos.core.model.collectionMembershipRecordId
+import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
@@ -284,6 +287,7 @@ object BackupMergeService {
         val queueMerge = mergeQueues(
             currentQueues = current.readingQueues,
             currentMemberships = current.readingQueueMemberships,
+            currentQueueTagNames = current.queueTagNamesByQueueId,
             incomingQueues = manifest.readingQueues,
             incomingMemberships = manifest.readingQueueMemberships,
             worksById = worksById,
@@ -299,6 +303,36 @@ object BackupMergeService {
             membershipsCreated = queueMerge.membershipsCreated,
             membershipsUpdated = queueMerge.membershipsUpdated,
             membershipsSuppressed = queueMerge.membershipsSuppressed
+        )
+
+        val readingSessions = mergeReadingSessions(
+            current = current.readingSessions,
+            incoming = manifest.readingSessions,
+            tombstoneIndex = tombstoneIndex,
+            mode = mode,
+            exportedAt = exportedAt,
+            workIdRemap = workIdRemap,
+            now = now,
+            tombstonesById = tombstonesById
+        )
+        val readingFavorites = mergeReadingFavorites(
+            current = current.readingFavorites,
+            incoming = manifest.readingFavorites,
+            tombstoneIndex = tombstoneIndex,
+            mode = mode,
+            exportedAt = exportedAt,
+            workIdRemap = workIdRemap,
+            now = now,
+            tombstonesById = tombstonesById
+        )
+        val fandomReadWatermarks = mergeFandomReadWatermarks(
+            current = current.fandomReadWatermarks,
+            incoming = manifest.fandomReadWatermarks,
+            tombstoneIndex = tombstoneIndex,
+            mode = mode,
+            exportedAt = exportedAt,
+            now = now,
+            tombstonesById = tombstonesById
         )
 
         val annotationMerge = mergeAnnotations(
@@ -340,7 +374,11 @@ object BackupMergeService {
                 tombstones = tombstonesById.values.sortedBy { it.id },
                 readingQueues = queueMerge.queues,
                 readingQueueMemberships = queueMerge.memberships,
-                annotations = annotationMerge.items
+                annotations = annotationMerge.items,
+                readingSessions = readingSessions,
+                readingFavorites = readingFavorites,
+                fandomReadWatermarks = fandomReadWatermarks,
+                queueTagNamesByQueueId = queueMerge.queueTagNamesByQueueId
             ),
             summary = summary,
             epubFilesToWriteByWorkId = epubFilesToWrite,
@@ -1050,6 +1088,7 @@ object BackupMergeService {
     private fun mergeQueues(
         currentQueues: List<ReadingQueue>,
         currentMemberships: List<ReadingQueueMembership>,
+        currentQueueTagNames: Map<String, List<String>>,
         incomingQueues: List<BackupReadingQueue>,
         incomingMemberships: List<BackupReadingQueueMembership>,
         worksById: Map<String, SavedWork>,
@@ -1094,6 +1133,9 @@ object BackupMergeService {
             .firstOrNull { it.kindRaw == ReadingQueueKind.SAVED_FOR_LATER }
             ?.let { BackupPaths.normalizeIdForComparison(it.id) }
         val queueIdRemap = mutableMapOf<String, String>()
+        val queueTagNamesByQueueId = currentQueueTagNames
+            .mapKeys { BackupPaths.normalizeIdForComparison(it.key) }
+            .mapValuesTo(linkedMapOf()) { it.value.normalizedNames() }
 
         incomingQueues.forEach { archived ->
             val incomingId = BackupPaths.canonicalUuid(archived.id, "queue.id")
@@ -1172,6 +1214,14 @@ object BackupMergeService {
                     }
                 }
             }
+            if (id in queuesById) {
+                queueTagNamesByQueueId[id] = if (mode == BackupImportMode.REPLACE_LIBRARY) {
+                    archived.tagNames.orEmpty().normalizedNames()
+                } else {
+                    (queueTagNamesByQueueId[id].orEmpty() + archived.tagNames.orEmpty())
+                        .normalizedNames()
+                }
+            }
         }
 
         val membershipsById = currentMemberships.associateByTo(linkedMapOf()) {
@@ -1232,6 +1282,7 @@ object BackupMergeService {
                 val existing = queuesById[id] ?: return@forEach
                 if (existing.kindRaw == ReadingQueueKind.SAVED_FOR_LATER) return@forEach
                 queuesById.remove(id)
+                queueTagNamesByQueueId.remove(id)
             }
             val incomingMembershipIds = incomingMemberships.mapTo(mutableSetOf()) {
                 BackupPaths.canonicalUuid(it.id, "membership.id")
@@ -1244,6 +1295,7 @@ object BackupMergeService {
         return QueueMerge(
             queues = queuesById.values.sortedBy { it.sortOrder },
             memberships = membershipsById.values.sortedBy { it.sortOrderInQueue },
+            queueTagNamesByQueueId = queueTagNamesByQueueId,
             queuesCreated = queuesCreated,
             queuesUpdated = queuesUpdated,
             membershipsCreated = membershipsCreated,
@@ -1284,6 +1336,216 @@ object BackupMergeService {
             keepsWorksOffline = keepsOffline,
             notes = queueNotes
         )
+    }
+
+    private fun mergeReadingSessions(
+        current: List<ReadingSessionEntity>,
+        incoming: List<BackupReadingSession>,
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode,
+        exportedAt: Instant?,
+        workIdRemap: Map<String, String>,
+        now: Instant,
+        tombstonesById: MutableMap<String, SyncTombstone>
+    ): List<ReadingSessionEntity> {
+        val byId = current.associateByTo(linkedMapOf()) {
+            BackupPaths.normalizeIdForComparison(it.id)
+        }
+        val resolvedLocalIds = mutableSetOf<String>()
+        incoming.forEach { archived ->
+            val id = BackupPaths.canonicalUuid(archived.id, "readingSession.id")
+            val restored = archived.toReadingSession(exportedAt).let { session ->
+                val archivedWorkId = BackupPaths.normalizeIdForComparison(session.workID)
+                session.copy(workID = workIdRemap[archivedWorkId] ?: session.workID)
+            }
+            val incomingModified = parseOptionalInstant(archived.lastModifiedAt, exportedAt)
+                ?: restored.lastModifiedAt
+            if (mode != BackupImportMode.REPLACE_LIBRARY &&
+                tombstoneIndex.readingSessionResolution(id, incomingModified) ==
+                TombstoneResolution.SUPPRESS_STALE
+            ) return@forEach
+
+            val existing = byId[id]
+            if (existing == null) {
+                byId[id] = restored
+                resolvedLocalIds += id
+            } else {
+                resolvedLocalIds += id
+                if (mode != BackupImportMode.MERGE &&
+                    SyncMerge.shouldApplyIncoming(existing.lastModifiedAt, incomingModified)
+                ) byId[id] = restored.copy(id = existing.id)
+            }
+        }
+
+        if (mode != BackupImportMode.REPLACE_LIBRARY) {
+            byId.entries.removeAll { (id, session) ->
+                tombstoneIndex.readingSessionResolution(id, session.lastModifiedAt) ==
+                    TombstoneResolution.SUPPRESS_STALE
+            }
+        } else {
+            current.forEach { session ->
+                val id = BackupPaths.normalizeIdForComparison(session.id)
+                if (id !in resolvedLocalIds) {
+                    byId.remove(id)
+                    mintImmediateTombstone(
+                        session.id,
+                        SyncTombstoneRecordType.READING_SESSION,
+                        "readingSessionDeleted",
+                        now,
+                        tombstonesById
+                    )
+                }
+            }
+        }
+        return byId.values.sortedByDescending { it.startedAt }
+    }
+
+    private fun mergeReadingFavorites(
+        current: List<ReadingFavoriteEntity>,
+        incoming: List<BackupReadingFavorite>,
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode,
+        exportedAt: Instant?,
+        workIdRemap: Map<String, String>,
+        now: Instant,
+        tombstonesById: MutableMap<String, SyncTombstone>
+    ): List<ReadingFavoriteEntity> {
+        val byId = current.associateByTo(linkedMapOf()) {
+            BackupPaths.normalizeIdForComparison(it.id)
+        }
+        val byTarget = current.associateByTo(linkedMapOf()) { "${it.kindRaw}|${it.targetKey}" }
+        val resolvedLocalIds = mutableSetOf<String>()
+        incoming.forEach { archived ->
+            val archivedId = BackupPaths.canonicalUuid(archived.id, "readingFavorite.id")
+            val resolvedTarget = if (archived.kindRaw == "work") {
+                runCatching { BackupPaths.canonicalUuid(archived.targetKey, "readingFavorite.targetKey") }
+                    .getOrNull()
+                    ?.let { workIdRemap[it] }
+                    ?: archived.targetKey
+            } else {
+                archived.targetKey
+            }
+            val incomingFavorite = archived.toReadingFavorite(exportedAt)
+                .copy(targetKey = resolvedTarget)
+            val incomingModified = parseOptionalInstant(archived.lastModifiedAt, exportedAt)
+                ?: incomingFavorite.lastModifiedAt
+            if (mode != BackupImportMode.REPLACE_LIBRARY &&
+                tombstoneIndex.readingFavoriteResolution(archivedId, incomingModified) ==
+                TombstoneResolution.SUPPRESS_STALE
+            ) return@forEach
+
+            val targetKey = "${archived.kindRaw}|$resolvedTarget"
+            val direct = byId[archivedId]
+            val existing = direct ?: byTarget[targetKey]
+            if (existing == null) {
+                byId[archivedId] = incomingFavorite
+                byTarget[targetKey] = incomingFavorite
+                resolvedLocalIds += archivedId
+            } else {
+                val localId = BackupPaths.normalizeIdForComparison(existing.id)
+                resolvedLocalIds += localId
+                if ((mode != BackupImportMode.MERGE || direct == null) &&
+                    SyncMerge.shouldApplyIncoming(existing.lastModifiedAt, incomingModified)
+                ) {
+                    val restored = incomingFavorite.copy(
+                        id = existing.id,
+                        kindRaw = archived.kindRaw,
+                        targetKey = resolvedTarget,
+                        createdAt = minInstant(existing.createdAt, incomingFavorite.createdAt)
+                    )
+                    byId[localId] = restored
+                    byTarget[targetKey] = restored
+                }
+            }
+        }
+
+        if (mode != BackupImportMode.REPLACE_LIBRARY) {
+            byId.entries.removeAll { (id, favorite) ->
+                tombstoneIndex.readingFavoriteResolution(id, favorite.lastModifiedAt) ==
+                    TombstoneResolution.SUPPRESS_STALE
+            }
+        } else {
+            current.forEach { favorite ->
+                val id = BackupPaths.normalizeIdForComparison(favorite.id)
+                if (id !in resolvedLocalIds) {
+                    byId.remove(id)
+                    mintImmediateTombstone(
+                        favorite.id,
+                        SyncTombstoneRecordType.READING_FAVORITE,
+                        "readingFavoriteDeleted",
+                        now,
+                        tombstonesById
+                    )
+                }
+            }
+        }
+        return byId.values.sortedByDescending { it.createdAt }
+    }
+
+    private fun mergeFandomReadWatermarks(
+        current: List<FandomReadWatermarkEntity>,
+        incoming: List<BackupFandomReadWatermark>,
+        tombstoneIndex: TombstoneIndex,
+        mode: BackupImportMode,
+        exportedAt: Instant?,
+        now: Instant,
+        tombstonesById: MutableMap<String, SyncTombstone>
+    ): List<FandomReadWatermarkEntity> {
+        val byId = current.associateByTo(linkedMapOf()) {
+            BackupPaths.normalizeIdForComparison(it.id)
+        }
+        val byName = current.associateByTo(linkedMapOf()) { it.fandomName }
+        val resolvedLocalIds = mutableSetOf<String>()
+        incoming.forEach { archived ->
+            val archivedId = BackupPaths.canonicalUuid(archived.id, "fandomReadWatermark.id")
+            val incomingWatermark = archived.toFandomReadWatermark(exportedAt)
+            val incomingModified = parseOptionalInstant(archived.lastModifiedAt, exportedAt)
+                ?: incomingWatermark.lastModifiedAt
+            if (mode != BackupImportMode.REPLACE_LIBRARY &&
+                tombstoneIndex.fandomReadWatermarkResolution(archivedId, incomingModified) ==
+                TombstoneResolution.SUPPRESS_STALE
+            ) return@forEach
+
+            val direct = byId[archivedId]
+            val existing = direct ?: byName[archived.fandomName]
+            if (existing == null) {
+                byId[archivedId] = incomingWatermark
+                byName[archived.fandomName] = incomingWatermark
+                resolvedLocalIds += archivedId
+            } else {
+                val localId = BackupPaths.normalizeIdForComparison(existing.id)
+                resolvedLocalIds += localId
+                if ((mode != BackupImportMode.MERGE || direct == null) &&
+                    SyncMerge.shouldApplyIncoming(existing.lastModifiedAt, incomingModified)
+                ) {
+                    val restored = incomingWatermark.copy(id = existing.id)
+                    byId[localId] = restored
+                    byName[archived.fandomName] = restored
+                }
+            }
+        }
+
+        if (mode != BackupImportMode.REPLACE_LIBRARY) {
+            byId.entries.removeAll { (id, watermark) ->
+                tombstoneIndex.fandomReadWatermarkResolution(id, watermark.lastModifiedAt) ==
+                    TombstoneResolution.SUPPRESS_STALE
+            }
+        } else {
+            current.forEach { watermark ->
+                val id = BackupPaths.normalizeIdForComparison(watermark.id)
+                if (id !in resolvedLocalIds) {
+                    byId.remove(id)
+                    mintImmediateTombstone(
+                        watermark.id,
+                        SyncTombstoneRecordType.FANDOM_READ_WATERMARK,
+                        "fandomReadWatermarkDeleted",
+                        now,
+                        tombstonesById
+                    )
+                }
+            }
+        }
+        return byId.values.sortedBy { it.fandomName }
     }
 
     private fun mergeAnnotations(
@@ -1460,6 +1722,7 @@ object BackupMergeService {
     private data class QueueMerge(
         val queues: List<ReadingQueue>,
         val memberships: List<ReadingQueueMembership>,
+        val queueTagNamesByQueueId: Map<String, List<String>>,
         val queuesCreated: Int,
         val queuesUpdated: Int,
         val membershipsCreated: Int,
@@ -1546,6 +1809,9 @@ internal class TombstoneIndex(
     private val collectionMembershipById = mutableMapOf<String, SyncTombstone>()
     private val bookmarkById = mutableMapOf<String, SyncTombstone>()
     private val savedSearchById = mutableMapOf<String, SyncTombstone>()
+    private val readingSessionById = mutableMapOf<String, SyncTombstone>()
+    private val readingFavoriteById = mutableMapOf<String, SyncTombstone>()
+    private val fandomReadWatermarkById = mutableMapOf<String, SyncTombstone>()
 
     init {
         tombstones.forEach { tombstone ->
@@ -1583,6 +1849,12 @@ internal class TombstoneIndex(
                     indexNewest(bookmarkById, recordId, tombstone)
                 SyncTombstoneRecordType.SAVED_SEARCH ->
                     indexNewest(savedSearchById, recordId, tombstone)
+                SyncTombstoneRecordType.READING_SESSION ->
+                    indexNewest(readingSessionById, recordId, tombstone)
+                SyncTombstoneRecordType.READING_FAVORITE ->
+                    indexNewest(readingFavoriteById, recordId, tombstone)
+                SyncTombstoneRecordType.FANDOM_READ_WATERMARK ->
+                    indexNewest(fandomReadWatermarkById, recordId, tombstone)
                 else -> Unit
             }
         }
@@ -1666,6 +1938,30 @@ internal class TombstoneIndex(
             incomingModifiedAt = incomingModifiedAt,
             tombstoneDeletedAt = savedSearchById[BackupPaths.normalizeIdForComparison(id)]
                 ?.lastModifiedAt
+        )
+    }
+
+    fun readingSessionResolution(id: String, incomingModifiedAt: Instant?): TombstoneResolution {
+        return SyncMerge.tombstoneResolution(
+            incomingModifiedAt,
+            readingSessionById[BackupPaths.normalizeIdForComparison(id)]?.lastModifiedAt
+        )
+    }
+
+    fun readingFavoriteResolution(id: String, incomingModifiedAt: Instant?): TombstoneResolution {
+        return SyncMerge.tombstoneResolution(
+            incomingModifiedAt,
+            readingFavoriteById[BackupPaths.normalizeIdForComparison(id)]?.lastModifiedAt
+        )
+    }
+
+    fun fandomReadWatermarkResolution(
+        id: String,
+        incomingModifiedAt: Instant?
+    ): TombstoneResolution {
+        return SyncMerge.tombstoneResolution(
+            incomingModifiedAt,
+            fandomReadWatermarkById[BackupPaths.normalizeIdForComparison(id)]?.lastModifiedAt
         )
     }
 

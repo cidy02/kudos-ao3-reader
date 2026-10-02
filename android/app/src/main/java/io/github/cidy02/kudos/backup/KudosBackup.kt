@@ -10,6 +10,9 @@ import io.github.cidy02.kudos.core.model.SavedSearch
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 
 data class KudosBackupPackage(
     val manifest: KudosBackupManifest,
@@ -33,7 +36,11 @@ data class BackupLibrarySnapshot(
     val tombstones: List<SyncTombstone> = emptyList(),
     val readingQueues: List<ReadingQueue> = emptyList(),
     val readingQueueMemberships: List<ReadingQueueMembership> = emptyList(),
-    val annotations: List<ReadingAnnotation> = emptyList()
+    val annotations: List<ReadingAnnotation> = emptyList(),
+    val readingSessions: List<ReadingSessionEntity> = emptyList(),
+    val readingFavorites: List<ReadingFavoriteEntity> = emptyList(),
+    val fandomReadWatermarks: List<FandomReadWatermarkEntity> = emptyList(),
+    val queueTagNamesByQueueId: Map<String, List<String>> = emptyMap()
 )
 
 enum class BackupImportMode {
