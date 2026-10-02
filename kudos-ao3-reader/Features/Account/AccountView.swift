@@ -142,6 +142,9 @@ struct AccountView: View {
         auth.isLoggedIn && displayMode == .compact && showsWorkListControls
     }
 
+    /// The floating gear fades while you scroll down (owner, 2026-10-01).
+    @State private var chromeScrolledAway = false
+
     var body: some View {
         NavigationStack(path: $path) {
             Group {
@@ -165,8 +168,13 @@ struct AccountView: View {
             #if os(iOS)
             .toolbar(inboxModel.isSelecting ? .visible : .hidden, for: .navigationBar)
             #endif
+                .scrollAwayTopChrome(isHidden: $chromeScrolledAway)
                 .overlay(alignment: .topTrailing) {
-                    if !inboxModel.isSelecting { floatingChromeRow }
+                    if !inboxModel.isSelecting {
+                        floatingChromeRow
+                            .opacity(chromeScrolledAway ? 0 : 1)
+                            .allowsHitTesting(!chromeScrolledAway)
+                    }
                 }
                 .navigationDestination(for: Route.self, destination: destination)
                 #if DEBUG
