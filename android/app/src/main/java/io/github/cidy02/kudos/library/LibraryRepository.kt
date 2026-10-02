@@ -49,4 +49,9 @@ class LibraryRepository(
             )
         }
     }
+
+    fun observeRecentlyDeletedCount(): Flow<Int> = combine(
+        workRepository.observeRecentlyDeleted(),
+        workRepository.observeRecentlyDeletedCollections()
+    ) { works, collections -> works.size + collections.size }
 }

@@ -1,75 +1,98 @@
 package io.github.cidy02.kudos.library
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.KudosScreenHeader
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
-import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.subject.GlassCircleButton
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
+import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+import io.github.cidy02.kudos.works.WorkRepository
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * Local user-named shelves (WorkCollection). AO3 remote collections are out of scope.
- */
+/** Full Collections grid behind the Library dashboard's See All action. */
 @Composable
 fun CollectionsScreen(
     workRepository: WorkRepository,
+    repository: LibraryRepository,
+    privacyGate: PrivacyGate,
     onOpenCollection: (String) -> Unit
 ) {
+    val tokens = LocalKudosTokens.current
+    val reveal by privacyGate.state.collectAsState()
     var loading by remember { mutableStateOf(true) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var collections by remember { mutableStateOf<List<WorkCollection>>(emptyList()) }
+    var works by remember { mutableStateOf<List<SavedWork>>(emptyList()) }
     var showCreate by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var deleteCandidate by remember { mutableStateOf<WorkCollection?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
         loading = true
         error = null
         try {
-            collections = workRepository.allCollections()
-                .sortedWith(
-                    compareByDescending<WorkCollection> { it.workIds.size }
-                        .thenBy { it.name.lowercase() }
-                )
-        } catch (e: Exception) {
-            error = e.message ?: "Could not load collections."
+            val snapshot = repository.observeSnapshot().first()
+            val state = LibraryQuery.buildState(
+                snapshot = snapshot,
+                searchQuery = "",
+                filters = LibraryFilterState(),
+                sort = LibrarySort.RecentlyAdded,
+                reveal = reveal
+            )
+            collections = state.collections
+            works = state.items
+                .filter { it.privacyVisibility == LibraryPrivacyVisibility.Visible }
+                .map { it.item.work }
+        } catch (failure: Exception) {
+            error = failure.message ?: "Could not load collections."
         } finally {
             loading = false
         }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(reveal) { refresh() }
 
     fun createCollection() {
         val name = newName.trim()
@@ -77,22 +100,15 @@ fun CollectionsScreen(
         scope.launch {
             working = true
             error = null
-            try {
-                val created = workRepository.createCollection(name)
-                newName = ""
-                showCreate = false
-                collections = workRepository.allCollections()
-                    .sortedWith(
-                        compareByDescending<WorkCollection> { it.workIds.size }
-                            .thenBy { it.name.lowercase() }
-                    )
-                // Open the new (or matched) shelf so create feels complete.
-                onOpenCollection(created.id)
-            } catch (e: Exception) {
-                error = e.message ?: "Could not create collection."
-            } finally {
-                working = false
-            }
+            runCatching { workRepository.createCollection(name) }
+                .onSuccess { created ->
+                    newName = ""
+                    showCreate = false
+                    refresh()
+                    onOpenCollection(created.id)
+                }
+                .onFailure { error = it.message ?: "Could not create collection." }
+            working = false
         }
     }
 
@@ -108,9 +124,7 @@ fun CollectionsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Name a shelf for grouping saved works. " +
-                            "Add works later from Work Detail.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        "Name a shelf for grouping saved works. Add works later from Work Detail.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
@@ -126,128 +140,119 @@ fun CollectionsScreen(
             confirmButton = {
                 TextButton(
                     enabled = !working && newName.trim().isNotEmpty(),
-                    onClick = { createCollection() }
-                ) {
-                    Text("Create")
-                }
+                    onClick = ::createCollection
+                ) { Text("Create") }
             },
             dismissButton = {
                 TextButton(
                     enabled = !working,
-                    onClick = {
-                        showCreate = false
-                        newName = ""
-                    }
-                ) {
-                    Text("Cancel")
-                }
+                    onClick = { showCreate = false; newName = "" }
+                ) { Text("Cancel") }
             }
         )
     }
 
-    KudosRefreshBox(onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            KudosScreenHeader(
-                title = "Collections",
-                subtitle = "Local shelves for organizing your Library.",
-                trailing = {
-                    OutlinedButton(
-                        enabled = !working && !loading,
-                        onClick = { showCreate = true }
-                    ) {
-                        Text("New")
-                    }
-                }
-            )
-        }
+    DestructiveConfirmation(
+        show = deleteCandidate != null,
+        title = deleteCandidate?.let { "Delete “${it.name}”?" }.orEmpty(),
+        text = "Kudos will move this collection to Recently Deleted for 90 days. Its works will stay in your Library.",
+        confirmText = "Delete",
+        confirmBeforeDelete = true,
+        onConfirm = {
+            val collection = deleteCandidate ?: return@DestructiveConfirmation
+            deleteCandidate = null
+            scope.launch {
+                workRepository.softDeleteCollection(collection.id)
+                refresh()
+            }
+        },
+        onDismissRequest = { deleteCandidate = null }
+    )
 
-        when {
-            loading -> item { LoadingStateCard("Loading collections") }
-            error != null && collections.isEmpty() -> item {
-                ErrorStateCard(
-                    title = "Collections could not load",
-                    message = error.orEmpty()
-                )
-            }
-            collections.isEmpty() -> item {
-                EmptyStateCard(
-                    title = "No collections yet",
-                    message = "Create collections to organize your reading. " +
-                        "You can also add a work to a new collection from Work Detail."
-                )
-            }
-            else -> {
-                error?.let { message ->
-                    item {
-                        ErrorStateCard(
-                            title = "Collections action failed",
-                            message = message
+    Box(
+        Modifier
+            .fillMaxSize()
+            .subjectScreenWash(tokens.scopePalette)
+    ) {
+        KudosRefreshBox(onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(SubjectWorkCardMetrics.width),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            GlassCircleButton(
+                                onClick = { showCreate = true },
+                                accessibilityName = "New Collection"
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
+                            }
+                        }
+                        SubjectHeaderBlock(
+                            kicker = "Library",
+                            title = "Collections",
+                            subtitle = "${collections.size} ${if (collections.size == 1) "collection" else "collections"}",
+                            palette = tokens.scopePalette
                         )
                     }
                 }
-                items(collections, key = { it.id }) { collection ->
-                    CollectionRow(
-                        collection = collection,
-                        onClick = { onOpenCollection(collection.id) }
-                    )
+
+                when {
+                    loading -> item(span = { GridItemSpan(maxLineSpan) }) {
+                        LoadingStateCard("Loading collections")
+                    }
+                    error != null && collections.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                        ErrorStateCard("Collections could not load", error.orEmpty())
+                    }
+                    collections.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                        EmptyStateCard(
+                            "No collections yet",
+                            "Create a collection above to group works together."
+                        )
+                    }
+                    else -> items(collections, key = { it.id }) { collection ->
+                        CollectionGridItem(
+                            collection = collection,
+                            works = works,
+                            onOpen = { onOpenCollection(collection.id) },
+                            onDelete = { deleteCandidate = collection }
+                        )
+                    }
                 }
             }
         }
-    }
     }
 }
 
 @Composable
-private fun CollectionRow(
+private fun CollectionGridItem(
     collection: WorkCollection,
-    onClick: () -> Unit
+    works: List<SavedWork>,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    val count = collection.workIds.size
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    var menuOpen by remember(collection.id) { mutableStateOf(false) }
+    Box {
+        CollectionCard(
+            collection = collection,
+            previewWorks = works
+                .filter { it.id in collection.workIds }
+                .sortedByDescending { it.dateAdded },
+            onClick = onOpen,
+            onLongClick = { menuOpen = true }
         )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = collection.name,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = when (count) {
-                        0 -> "Empty"
-                        1 -> "1 work"
-                        else -> "$count works"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                collection.description?.takeIf { it.isNotBlank() }?.let { description ->
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("Delete Collection", color = MaterialTheme.colorScheme.error) },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                },
+                onClick = { menuOpen = false; onDelete() }
+            )
         }
     }
 }

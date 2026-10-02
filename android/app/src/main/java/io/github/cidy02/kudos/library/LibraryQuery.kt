@@ -50,7 +50,7 @@ object LibraryQuery {
             recentlyAdded = sortDisplayItems(shelfSource, LibrarySort.RecentlyAdded),
             favorites = sortDisplayItems(
                 shelfSource.filter { it.item.work.isFavorite },
-                LibrarySort.LastRead
+                LibrarySort.RecentlyAdded
             ),
             savedForLater = savedForLater(shelfSource),
             finished = finished(shelfSource),
@@ -156,7 +156,10 @@ object LibraryQuery {
 
     fun readingHistory(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
-            .filter { it.item.work.lastReadDate != null }
+            .filter {
+                val work = it.item.work
+                (work.hasStartedReading || work.isFinished) && work.hiddenFromHistoryAt == null
+            }
             .sortedWith(lastReadComparator())
     }
 

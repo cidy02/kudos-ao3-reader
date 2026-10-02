@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
+import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,7 @@ class LibraryViewModel(
     private val selectionMode = MutableStateFlow(false)
     private val selectedWorkIds = MutableStateFlow<Set<String>>(emptySet())
     private val readingQueues = MutableStateFlow<List<LibraryQueuePreview>>(emptyList())
+    private val deletedQueueCount = MutableStateFlow(0)
     private val queueRefreshTick = MutableStateFlow(0)
 
     private val libraryBase: StateFlow<LibraryUiState> = combine(
@@ -61,19 +63,26 @@ class LibraryViewModel(
         initialValue = LibraryUiState(loading = true)
     )
 
+    private val dashboardExtras = combine(
+        readingQueues,
+        repository.observeRecentlyDeletedCount(),
+        deletedQueueCount
+    ) { queues, deletedCount, queueCount -> Triple(queues, deletedCount, queueCount) }
+
     val state: StateFlow<LibraryUiState> = combine(
         libraryBase,
         selectionMode,
         selectedWorkIds,
         privacyGate.state,
-        readingQueues
-    ) { base, selecting, ids, revealed, queues ->
+        dashboardExtras
+    ) { base, selecting, ids, revealed, extras ->
         base.copy(
             selectionMode = selecting,
             selectedWorkIds = if (selecting) ids else emptySet(),
             revealedWorkIds = revealed.revealedIds,
             revealAllActive = revealed.revealAll,
-            readingQueues = queues
+            readingQueues = extras.first,
+            recentlyDeletedCount = extras.second + extras.third
             // Reveal is already folded into every shelf by LibraryQuery.buildState.
         )
     }.stateIn(
@@ -96,6 +105,10 @@ class LibraryViewModel(
 
     fun updateSort(next: LibrarySort) {
         sort.value = next
+    }
+
+    fun updateFilters(next: LibraryFilterState) {
+        filters.value = next
     }
 
     /** Fandom chip bar: empty = All; single fandom = filter to that name. */
@@ -154,6 +167,11 @@ class LibraryViewModel(
             return
         }
         selectedWorkIds.update { LibrarySelection.toggle(it, workId) }
+    }
+
+    fun setSelection(workIds: Set<String>) {
+        selectionMode.value = true
+        selectedWorkIds.value = workIds
     }
 
     fun bulkSetFavorite(favorite: Boolean) {
@@ -224,6 +242,17 @@ class LibraryViewModel(
         }
     }
 
+    fun bulkAddToSaveForLater() {
+        val ids = selectedWorkIds.value
+        val repo = queueRepository ?: return
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            for (id in ids) runCatching { repo.addToSavedForLater(id) }
+            queueRefreshTick.update { it + 1 }
+            exitSelectionMode()
+        }
+    }
+
     fun bulkAddToQueue(queueId: String) {
         val ids = selectedWorkIds.value
         val queues = queueRepository ?: return
@@ -269,6 +298,26 @@ class LibraryViewModel(
         viewModelScope.launch {
             workRepository.softDelete(workId)
         }
+    }
+
+    fun removeFromHistoryOne(workId: String) {
+        viewModelScope.launch {
+            val work = workRepository.getWork(workId) ?: return@launch
+            val now = Instant.now()
+            workRepository.upsert(work.copy(hiddenFromHistoryAt = now, lastModifiedAt = now))
+        }
+    }
+
+    fun removeFromAllQueuesOne(workId: String) {
+        val queues = queueRepository ?: return
+        viewModelScope.launch {
+            queues.removeFromAllQueuesAndDeleteIfQueueOnly(workId)
+            queueRefreshTick.update { it + 1 }
+        }
+    }
+
+    fun deleteCollection(collectionId: String) {
+        viewModelScope.launch { workRepository.softDeleteCollection(collectionId) }
     }
 
     fun performDownloadAction(workId: String, action: WorkDownloadAction) {
@@ -403,6 +452,7 @@ class LibraryViewModel(
                 )
             }
         }.onSuccess { readingQueues.value = it }
+        deletedQueueCount.value = runCatching { queues.listRecentlyDeletedQueues().size }.getOrDefault(0)
     }
 
     private fun refreshQueues() {
@@ -418,6 +468,9 @@ class LibraryViewModel(
                     )
                 }
             }.onSuccess { readingQueues.value = it }
+            deletedQueueCount.value = runCatching {
+                queues.listRecentlyDeletedQueues().size
+            }.getOrDefault(0)
         }
     }
 

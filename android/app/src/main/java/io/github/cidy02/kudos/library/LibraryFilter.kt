@@ -21,18 +21,15 @@ data class LibraryFilterState(
     val characters: Set<String> = emptySet(),
     val freeforms: Set<String> = emptySet()
 ) {
+    val activeCount: Int
+        get() = listOf(
+            favoriteOnly,
+            finished != LibraryFinishedFilter.Any,
+            download != LibraryDownloadFilter.Any,
+            completion != LibraryCompletionFilter.Any
+        ).count { it } + userTagIds.size + collectionIds.size + ratings.size + warnings.size +
+            categories.size + fandoms.size + relationships.size + characters.size + freeforms.size
+
     val hasActiveFilters: Boolean
-        get() = favoriteOnly ||
-            finished != LibraryFinishedFilter.Any ||
-            download != LibraryDownloadFilter.Any ||
-            completion != LibraryCompletionFilter.Any ||
-            userTagIds.isNotEmpty() ||
-            collectionIds.isNotEmpty() ||
-            ratings.isNotEmpty() ||
-            warnings.isNotEmpty() ||
-            categories.isNotEmpty() ||
-            fandoms.isNotEmpty() ||
-            relationships.isNotEmpty() ||
-            characters.isNotEmpty() ||
-            freeforms.isNotEmpty()
+        get() = activeCount > 0
 }

@@ -116,6 +116,10 @@ object Routes {
         return base
     }
 
+    private const val ARG_LIBRARY_SECTION = "librarySection"
+    const val LibrarySection = "library-section/{$ARG_LIBRARY_SECTION}"
+    fun librarySection(sectionId: String) = "library-section/${encode(sectionId)}"
+
     private const val ARG_ACCOUNT_LIST_TYPE = "listType"
     const val AccountList = "account-list/{$ARG_ACCOUNT_LIST_TYPE}"
     fun accountList(encodedType: String) = "account-list/${encode(encodedType)}"
@@ -226,6 +230,7 @@ object Routes {
             NativeLogin -> "Sign In"
             AO3Preferences -> "AO3 Preferences"
             HomeSection -> "Section"
+            LibrarySection -> "Library"
             BugReport -> "Report a Bug"
             else -> "Kudos"
         }

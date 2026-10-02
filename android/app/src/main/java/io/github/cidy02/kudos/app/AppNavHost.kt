@@ -156,6 +156,7 @@ fun AppNavHost(
             LibraryScreen(
                 repository = container.libraryRepository,
                 workRepository = container.workRepository,
+                workImporter = container.workImporter,
                 settingsRepository = container.settingsRepository,
                 queueRepository = container.readingQueueRepository,
                 downloadQueue = container.downloadQueue,
@@ -179,12 +180,15 @@ fun AppNavHost(
                 },
                 onOpenComments = { workId ->
                     navController.navigate(Routes.comments(workId))
-                }
+                },
+                onOpenSection = { kind -> navController.navigate(Routes.librarySection(kind.id)) }
             )
         }
         sharedComposable(Routes.Collections) {
             CollectionsScreen(
                 workRepository = container.workRepository,
+                repository = container.libraryRepository,
+                privacyGate = container.privacyGate,
                 onOpenCollection = { collectionId ->
                     navController.navigate(Routes.collectionDetail(collectionId))
                 }
@@ -328,6 +332,39 @@ fun AppNavHost(
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                     },
                     onOpenReader = { workId -> navController.navigate(Routes.reader(workId)) },
+                    onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) }
+                )
+            }
+        }
+
+        sharedComposable(
+            Routes.LibrarySection,
+            arguments = listOf(Routes.navArgOf("librarySection"))
+        ) { backStackEntry ->
+            val kind = io.github.cidy02.kudos.library.LibrarySectionKind
+                .fromId(Routes.routeArg(backStackEntry, "librarySection"))
+            if (kind == null || kind == io.github.cidy02.kudos.library.LibrarySectionKind.Collections) {
+                navController.popBackStack()
+            } else {
+                LibraryScreen(
+                    repository = container.libraryRepository,
+                    workRepository = container.workRepository,
+                    workImporter = container.workImporter,
+                    settingsRepository = container.settingsRepository,
+                    queueRepository = container.readingQueueRepository,
+                    downloadQueue = container.downloadQueue,
+                    privacyGate = container.privacyGate,
+                    section = kind,
+                    onOpenWork = { workId ->
+                        navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
+                    },
+                    onOpenReader = { workId -> navController.navigate(Routes.reader(workId)) },
+                    onOpenRecentlyDeleted = { navController.navigate(Routes.RecentlyDeleted) },
+                    onOpenReadingQueues = { navController.navigate(Routes.readingQueues()) },
+                    onOpenReadingStatistics = { navController.navigate(Routes.ReadingStatistics) },
+                    onOpenCollections = { navController.navigate(Routes.Collections) },
+                    onOpenQueue = { queueId -> navController.navigate(Routes.readingQueues(queueId)) },
+                    onOpenCollection = { collectionId -> navController.navigate(Routes.collectionDetail(collectionId)) },
                     onOpenComments = { workId -> navController.navigate(Routes.comments(workId)) }
                 )
             }
