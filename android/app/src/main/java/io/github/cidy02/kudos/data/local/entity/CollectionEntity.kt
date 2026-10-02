@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -19,7 +20,16 @@ data class CollectionEntity(
     val lastModifiedAt: Instant? = null,
     val isDeleted: Boolean = false,
     val deletedAt: Instant? = null,
-    val permanentDeletionScheduledAt: Instant? = null
+    val permanentDeletionScheduledAt: Instant? = null,
+    // v11 iOS parity (1bk): colour (a picked `colorHex` wins over `hue`), keep
+    // downloads (nil = never asked = off for collections), Show on Home, and
+    // the reader's own work order.
+    val hue: Double? = null,
+    val colorHex: String? = null,
+    val keepsWorksOffline: Boolean? = null,
+    @ColumnInfo(defaultValue = "0") val showsOnHome: Boolean = false,
+    @ColumnInfo(defaultValue = "") val workOrderRaw: String = "",
+    val lastMembershipChangedAt: Instant? = null
 )
 
 @Entity(

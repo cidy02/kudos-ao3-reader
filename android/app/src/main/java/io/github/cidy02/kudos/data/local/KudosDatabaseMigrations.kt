@@ -244,4 +244,76 @@ object KudosDatabaseMigrations {
             db.execSQL("ALTER TABLE works ADD COLUMN hasGivenKudos INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+    /**
+     * v10 → v11: Phase 2 iOS parity. Additive only: new nullable or defaulted
+     * columns on works, collections and queues, plus the reading-log tables
+     * (`ReadingSession`, `ReadingFavorite`, `FandomReadWatermark`) and queue tags.
+     * The SQL mirrors `schemas/.../11.json` so Room's validation passes.
+     */
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf(
+                "works" to "keepInProgressOverride INTEGER NOT NULL DEFAULT 0",
+                "works" to "hiddenFromHistoryAt INTEGER",
+                "works" to "freedAt INTEGER",
+                "works" to "datePublished TEXT NOT NULL DEFAULT ''",
+                "works" to "dateUpdated TEXT NOT NULL DEFAULT ''",
+                "works" to "bookmarks INTEGER",
+                "works" to "ao3SeriesID INTEGER",
+                "works" to "legacyReaderProgress REAL",
+                "works" to "authorIdentitiesJSON TEXT NOT NULL DEFAULT ''",
+                "works" to "epubDigest TEXT NOT NULL DEFAULT ''",
+                "works" to "assetIdentifier TEXT NOT NULL DEFAULT ''",
+                "collections" to "hue REAL",
+                "collections" to "colorHex TEXT",
+                "collections" to "keepsWorksOffline INTEGER",
+                "collections" to "showsOnHome INTEGER NOT NULL DEFAULT 0",
+                "collections" to "workOrderRaw TEXT NOT NULL DEFAULT ''",
+                "collections" to "lastMembershipChangedAt INTEGER",
+                "reading_queues" to "hue REAL",
+                "reading_queues" to "colorHex TEXT",
+                "reading_queues" to "isPinned INTEGER NOT NULL DEFAULT 0",
+                "reading_queues" to "keepsWorksOffline INTEGER",
+                "reading_queues" to "notes TEXT"
+            ).forEach { (table, column) -> db.execSQL("ALTER TABLE $table ADD COLUMN $column") }
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `reading_sessions` (`id` TEXT NOT NULL, `workID` TEXT NOT NULL, " +
+                    "`ao3WorkID` INTEGER, `sourceURL` TEXT NOT NULL, `workTitle` TEXT NOT NULL, " +
+                    "`startedAt` INTEGER NOT NULL, `endedAt` INTEGER NOT NULL, `durationSeconds` REAL NOT NULL, " +
+                    "`lastSpineIndex` INTEGER NOT NULL, `chapterTitle` TEXT NOT NULL, `endingProgress` REAL NOT NULL, " +
+                    "`wordCount` INTEGER NOT NULL, `chapterCountAtVisit` INTEGER NOT NULL, `didFinish` INTEGER NOT NULL, " +
+                    "`lastModifiedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_reading_sessions_workID` ON `reading_sessions` (`workID`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_reading_sessions_startedAt` ON `reading_sessions` (`startedAt`)")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `reading_favorites` (`id` TEXT NOT NULL, `kindRaw` TEXT NOT NULL, " +
+                    "`targetKey` TEXT NOT NULL, `displayName` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                    "`lastModifiedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reading_favorites_kindRaw_targetKey` " +
+                    "ON `reading_favorites` (`kindRaw`, `targetKey`)"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `fandom_read_watermarks` (`id` TEXT NOT NULL, `fandomName` TEXT NOT NULL, " +
+                    "`lastVisitedAt` INTEGER NOT NULL, `newestWorkIDSeen` INTEGER, `newestWorkTitleSeen` TEXT NOT NULL, " +
+                    "`lastModifiedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_fandom_read_watermarks_fandomName` " +
+                    "ON `fandom_read_watermarks` (`fandomName`)"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `queue_tag_cross_refs` (`queueId` TEXT NOT NULL, `tagId` TEXT NOT NULL, " +
+                    "PRIMARY KEY(`queueId`, `tagId`), " +
+                    "FOREIGN KEY(`queueId`) REFERENCES `reading_queues`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                    "FOREIGN KEY(`tagId`) REFERENCES `user_tags`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_queue_tag_cross_refs_queueId` ON `queue_tag_cross_refs` (`queueId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_queue_tag_cross_refs_tagId` ON `queue_tag_cross_refs` (`tagId`)")
+        }
+    }
 }

@@ -1,5 +1,10 @@
 package io.github.cidy02.kudos.data.local
 
+import io.github.cidy02.kudos.data.local.dao.ReadingLogDao
+import io.github.cidy02.kudos.data.local.entity.QueueTagCrossRef
+import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
@@ -39,9 +44,13 @@ import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
         SyncTombstoneEntity::class,
         ReadingQueueEntity::class,
         ReadingQueueMembershipEntity::class,
-        AnnotationEntity::class
+        AnnotationEntity::class,
+        ReadingSessionEntity::class,
+        ReadingFavoriteEntity::class,
+        FandomReadWatermarkEntity::class,
+        QueueTagCrossRef::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(KudosTypeConverters::class)
@@ -55,6 +64,7 @@ abstract class KudosDatabase : RoomDatabase() {
     abstract fun syncTombstoneDao(): SyncTombstoneDao
     abstract fun readingQueueDao(): ReadingQueueDao
     abstract fun annotationDao(): AnnotationDao
+    abstract fun readingLogDao(): ReadingLogDao
 
     companion object {
         const val DatabaseName = "kudos.db"

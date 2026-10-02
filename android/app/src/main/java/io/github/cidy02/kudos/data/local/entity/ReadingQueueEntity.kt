@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -20,7 +21,14 @@ data class ReadingQueueEntity(
     val lastMembershipChangedAt: Instant? = null,
     val deletedAt: Instant? = null,
     val isDeleted: Boolean = false,
-    val permanentDeletionScheduledAt: Instant? = null
+    val permanentDeletionScheduledAt: Instant? = null,
+    // v11 iOS parity (T-335/T-336/T-338): colour, pin, keep downloads
+    // (nil = never asked = on for queues) and notes.
+    val hue: Double? = null,
+    val colorHex: String? = null,
+    @ColumnInfo(defaultValue = "0") val isPinned: Boolean = false,
+    val keepsWorksOffline: Boolean? = null,
+    val notes: String? = null
 )
 
 @Entity(

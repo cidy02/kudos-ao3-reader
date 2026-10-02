@@ -62,7 +62,18 @@ fun SavedWork.toEntity(): WorkEntity {
         lastTagRefreshAttemptAt = lastTagRefreshAttemptAt,
         epubPreservationStatusRaw = epubPreservationStatusRaw,
         preservedAt = preservedAt,
-        lastPreservationAttemptAt = lastPreservationAttemptAt
+        lastPreservationAttemptAt = lastPreservationAttemptAt,
+        keepInProgressOverride = keepInProgressOverride,
+        hiddenFromHistoryAt = hiddenFromHistoryAt,
+        freedAt = freedAt,
+        datePublished = datePublished,
+        dateUpdated = dateUpdated,
+        bookmarks = bookmarks,
+        ao3SeriesID = ao3SeriesID,
+        legacyReaderProgress = legacyReaderProgress,
+        authorIdentitiesJSON = authorIdentitiesJSON,
+        epubDigest = epubDigest,
+        assetIdentifier = assetIdentifier
     )
 }
 
@@ -117,7 +128,18 @@ fun WorkEntity.toDomain(): SavedWork {
         lastTagRefreshAttemptAt = lastTagRefreshAttemptAt,
         epubPreservationStatusRaw = epubPreservationStatusRaw,
         preservedAt = preservedAt,
-        lastPreservationAttemptAt = lastPreservationAttemptAt
+        lastPreservationAttemptAt = lastPreservationAttemptAt,
+        keepInProgressOverride = keepInProgressOverride,
+        hiddenFromHistoryAt = hiddenFromHistoryAt,
+        freedAt = freedAt,
+        datePublished = datePublished,
+        dateUpdated = dateUpdated,
+        bookmarks = bookmarks,
+        ao3SeriesID = ao3SeriesID,
+        legacyReaderProgress = legacyReaderProgress,
+        authorIdentitiesJSON = authorIdentitiesJSON,
+        epubDigest = epubDigest,
+        assetIdentifier = assetIdentifier
     )
 }
 
@@ -143,7 +165,13 @@ fun WorkCollection.toEntity(): CollectionEntity {
         lastModifiedAt = lastModifiedAt,
         isDeleted = isDeleted,
         deletedAt = deletedAt,
-        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt,
+        hue = hue,
+        colorHex = colorHex,
+        keepsWorksOffline = keepsWorksOffline,
+        showsOnHome = showsOnHome,
+        workOrderRaw = workOrderRaw,
+        lastMembershipChangedAt = lastMembershipChangedAt
     )
 }
 
@@ -158,7 +186,13 @@ fun CollectionEntity.toDomain(workIds: List<String> = emptyList()): WorkCollecti
         lastModifiedAt = lastModifiedAt,
         isDeleted = isDeleted,
         deletedAt = deletedAt,
-        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt,
+        hue = hue,
+        colorHex = colorHex,
+        keepsWorksOffline = keepsWorksOffline,
+        showsOnHome = showsOnHome,
+        workOrderRaw = workOrderRaw,
+        lastMembershipChangedAt = lastMembershipChangedAt
     )
 }
 
@@ -221,7 +255,12 @@ fun ReadingQueue.toEntity(): ReadingQueueEntity {
         lastMembershipChangedAt = lastMembershipChangedAt,
         deletedAt = deletedAt,
         isDeleted = isDeleted,
-        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt,
+        hue = hue,
+        colorHex = colorHex,
+        isPinned = isPinned,
+        keepsWorksOffline = keepsWorksOffline,
+        notes = notes
     )
 }
 
@@ -236,7 +275,12 @@ fun ReadingQueueEntity.toDomain(): ReadingQueue {
         lastMembershipChangedAt = lastMembershipChangedAt,
         deletedAt = deletedAt,
         isDeleted = isDeleted,
-        permanentDeletionScheduledAt = permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = permanentDeletionScheduledAt,
+        hue = hue,
+        colorHex = colorHex,
+        isPinned = isPinned,
+        keepsWorksOffline = keepsWorksOffline,
+        notes = notes
     )
 }
 
