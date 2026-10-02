@@ -76,6 +76,7 @@ import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.SelectableRemoteWorkRow
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.network.ao3.displayMessage
 
@@ -116,6 +117,16 @@ fun SearchScreen(
     var expandAllCards by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activeFilters = remember(filters) { activeFilterCount(filters) }
+
+    val savedWorks by (workRepository?.observeSavedWorks() ?: emptyFlow())
+        .collectAsState(initial = emptyList())
+    var userTagNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(workRepository) {
+        userTagNames = workRepository?.allUserTags()?.map { it.normalizedName }.orEmpty()
+    }
+    val localTagSuggestions = remember(savedWorks, userTagNames) {
+        collectLocalTagSuggestions(savedWorks, userTagNames)
+    }
 
     fun commitSavedSearch() {
         val name = saveName.trim()
@@ -280,7 +291,7 @@ fun SearchScreen(
 
     if (showFilterSheet) {
         SearchFilterSheet(
-            localTagSuggestions = LocalTagSuggestions(),
+            localTagSuggestions = localTagSuggestions,
             filters = filters,
             onFiltersChange = { viewModel.updateFilters(it) },
             onApply = {

@@ -58,6 +58,7 @@ import io.github.cidy02.kudos.network.ao3.comments.AO3CommentTarget
 import io.github.cidy02.kudos.reader.ReaderScreen
 import io.github.cidy02.kudos.reader.ReaderViewModel
 import io.github.cidy02.kudos.search.SearchScreen
+import io.github.cidy02.kudos.settings.AvailabilitySweepScreen
 import io.github.cidy02.kudos.settings.SettingsScreen
 import io.github.cidy02.kudos.works.WorkDetailScreen
 import io.github.cidy02.kudos.works.WorkDetailSource
@@ -680,10 +681,20 @@ fun AppNavHost(
                 workAvailabilitySweep = io.github.cidy02.kudos.works.WorkAvailabilitySweep(
                     container.workRepository,
                     container.tagsRepository
-                )
+                ),
+                onOpenAvailabilitySweep = { navController.navigate(Routes.AvailabilitySweep) }
             )
         }
-                sharedComposable(Routes.QueueStorage) {
+        sharedComposable(Routes.AvailabilitySweep) {
+            AvailabilitySweepScreen(
+                workRepository = container.workRepository,
+                onOpenWork = { workId ->
+                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        sharedComposable(Routes.QueueStorage) {
             io.github.cidy02.kudos.settings.QueueStorageScreen(
                 workRepository = container.workRepository,
                 readingQueueRepository = container.readingQueueRepository,

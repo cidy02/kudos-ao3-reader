@@ -8,9 +8,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,9 +27,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
@@ -910,6 +915,22 @@ private fun ReaderBottomProgress(
     progress: Float,
     onSeek: (Float) -> Unit
 ) {
+    // Marks where a scrub gesture started (Apple ReaderPositionCard's scrubOrigin
+    // tick), so cancelling a drag back to where it began reads as a clean no-op
+    // instead of a silent, unremarkable seek. Origin is captured from `progress`
+    // at drag-start via the Slider's own DragInteraction.
+    val interactionSource = remember { MutableInteractionSource() }
+    var scrubOrigin by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> scrubOrigin = progress
+                is DragInteraction.Stop, is DragInteraction.Cancel -> scrubOrigin = null
+                else -> Unit
+            }
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         tonalElevation = 3.dp,
@@ -922,11 +943,35 @@ private fun ReaderBottomProgress(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Slider(
-                value = progress,
-                onValueChange = onSeek,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Slider(
+                    value = progress,
+                    onValueChange = onSeek,
+                    interactionSource = interactionSource,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                scrubOrigin?.let { origin ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(origin.coerceIn(0.0001f, 1f))
+                            .align(Alignment.CenterStart),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(2.dp)
+                                .height(14.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.tertiary,
+                                    RoundedCornerShape(1.dp)
+                                )
+                        )
+                    }
+                }
+            }
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
