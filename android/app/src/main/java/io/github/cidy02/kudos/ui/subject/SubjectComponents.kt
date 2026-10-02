@@ -70,6 +70,8 @@ object SubjectMetrics {
     val panelGutter = 22.dp
     val accountGutter = 16.dp
     val chromeButton = 34.dp
+    /** Tab-root toolbar circle. iOS draws a 44pt glass circle with a 17pt glyph. */
+    val toolbarCircle = 44.dp
     val kickerRuleWidth = 22.dp
     val pageRuleWidth = 26.dp
     val kickerRuleHeight = 2.5.dp
@@ -663,6 +665,7 @@ fun GlassCircleButton(
     isAccented: Boolean = false,
     palette: SubjectPalette? = null,
     badge: String? = null,
+    diameter: Dp = SubjectMetrics.chromeButton,
     content: @Composable () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
@@ -673,7 +676,7 @@ fun GlassCircleButton(
     val glyph = 17.sp.asDp()
     Box(
         modifier
-            .size(SubjectMetrics.chromeButton)
+            .size(diameter)
             .semantics { contentDescription = accessibilityName }
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center

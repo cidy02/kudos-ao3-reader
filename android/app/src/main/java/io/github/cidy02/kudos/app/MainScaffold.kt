@@ -70,6 +70,7 @@ import io.github.cidy02.kudos.home.HomeShellChrome
 import io.github.cidy02.kudos.home.HomeToolbarActions
 import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.withOpacity
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.DownloadQueueBanner
@@ -234,7 +235,8 @@ fun MainScaffold(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     GlassCircleButton(
                         onClick = onCycleTheme,
-                        accessibilityName = "Theme: ${themeMode.label}"
+                        accessibilityName = "Theme: ${themeMode.label}",
+                        diameter = SubjectMetrics.toolbarCircle
                     ) {
                         Icon(Icons.Outlined.Palette, contentDescription = null)
                     }
@@ -242,7 +244,8 @@ fun MainScaffold(
                         onClick = {
                             navController.navigate(Routes.Settings) { launchSingleTop = true }
                         },
-                        accessibilityName = "Settings"
+                        accessibilityName = "Settings",
+                        diameter = SubjectMetrics.toolbarCircle
                     ) {
                         Icon(Icons.Outlined.Settings, contentDescription = null)
                     }
