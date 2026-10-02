@@ -8,7 +8,8 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 data class LibraryWorkListItem(
     val work: SavedWork,
     val userTags: List<Tag> = emptyList(),
-    val collections: List<WorkCollection> = emptyList()
+    val collections: List<WorkCollection> = emptyList(),
+    val inSavedForLater: Boolean = false
 )
 
 data class LibrarySnapshot(

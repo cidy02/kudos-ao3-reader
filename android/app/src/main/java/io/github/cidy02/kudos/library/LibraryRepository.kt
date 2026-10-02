@@ -32,12 +32,14 @@ class LibraryRepository(
     }
 
     fun observeSnapshot(): Flow<LibrarySnapshot> {
-        return combine(workRepository.observeSavedWorks(), settings) { works, settings ->
+        return combine(workRepository.observeLibraryWorks(), settings) { works, settings ->
+            val savedForLaterIds = workRepository.savedForLaterWorkIds()
             val items = works.map { work ->
                 LibraryWorkListItem(
                     work = work,
                     userTags = workRepository.userTagsForWork(work.id),
-                    collections = workRepository.collectionsForWork(work.id)
+                    collections = workRepository.collectionsForWork(work.id),
+                    inSavedForLater = work.id in savedForLaterIds
                 )
             }
             LibrarySnapshot(

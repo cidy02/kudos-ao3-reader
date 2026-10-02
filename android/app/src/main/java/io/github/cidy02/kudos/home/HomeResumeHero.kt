@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.ui.subject.SelectionChrome
+import io.github.cidy02.kudos.ui.subject.RevealCapsule
+import io.github.cidy02.kudos.ui.subject.CoverSurface
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -24,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.library.readingProgressFraction
+import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
+import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics

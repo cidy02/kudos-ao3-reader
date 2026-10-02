@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.backup.TombstoneSigning
+import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
@@ -61,6 +62,12 @@ class WorkRepository(
     suspend fun listSavedWorks(): List<SavedWork> {
         return decorate(workDao.getAll().map { it.toDomain() })
             .filter { it.isProtected && !it.isQueueOnlyWork }
+    }
+
+    /** Active work IDs in the system Saved for Later queue. */
+    suspend fun savedForLaterWorkIds(): Set<String> {
+        val queue = queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER) ?: return emptySet()
+        return queueDao.getMembershipsForQueue(queue.id).mapTo(mutableSetOf()) { it.workID }
     }
 
     /** Active finished works in local reading history (excludes soft-deleted). */

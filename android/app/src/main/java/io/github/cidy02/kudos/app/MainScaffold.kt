@@ -68,6 +68,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.cidy02.kudos.home.HomeShellChrome
 import io.github.cidy02.kudos.home.HomeToolbarActions
+import io.github.cidy02.kudos.library.LibraryShellChrome
+import io.github.cidy02.kudos.library.LibraryToolbarActions
 import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
@@ -106,11 +108,14 @@ fun MainScaffold(
     val shellTitle = Routes.shellTitle(currentRoute)
     val chrome = remember { ShellChromeState() }
     val homeChrome = remember { HomeShellChrome() }
+    val libraryChrome = remember { LibraryShellChrome() }
     val onHome = currentRoute == Routes.Home
+    val onLibrary = currentRoute == Routes.Library
     val homeSelecting = onHome && homeChrome.hideTabBar
+    val librarySelecting = onLibrary && libraryChrome.hideTabBar
     val overlay = remember { ShellOverlayState() }
-    // Home (HomeShellChrome) and Library (ShellOverlayState) each hide the bar in select mode.
-    val hidesTabBar = homeSelecting || overlay.hidesTabBar
+    // Home (HomeShellChrome) and Library (LibraryShellChrome/ShellOverlayState) each hide the bar in select mode.
+    val hidesTabBar = homeSelecting || librarySelecting || overlay.hidesTabBar
     val chromeHidden = chrome.isHidden(if (shell) currentRoute else null)
     val bridge = remember { ShellScrollBridge() }
     bridge.route = if (shell) currentRoute else null
@@ -174,17 +179,24 @@ fun MainScaffold(
                         container = container,
                         navController = navController,
                         modifier = Modifier.fillMaxSize(),
-                        shellChrome = homeChrome
+                        shellChrome = homeChrome,
+                        libraryChrome = libraryChrome
                     )
                 }
             }
         }
 
         if (shell && shellTitle != null) {
-            val titleText = if (onHome) homeChrome.selectionTitle ?: shellTitle else shellTitle
+            val titleText = when {
+                onHome -> homeChrome.selectionTitle ?: shellTitle
+                onLibrary -> libraryChrome.selectionTitle ?: shellTitle
+                else -> shellTitle
+            }
             val titleEnd = when {
                 onHome && homeSelecting -> 200.dp
                 onHome -> 96.dp
+                onLibrary && librarySelecting -> 160.dp
+                onLibrary -> 144.dp
                 else -> 0.dp
             }
             AnimatedVisibility(
@@ -219,6 +231,20 @@ fun MainScaffold(
                 exit = fadeOut(ChromeMotion)
             ) {
                 HomeToolbarActions(homeChrome)
+            }
+        }
+
+        if (onLibrary && libraryChrome.mounted) {
+            AnimatedVisibility(
+                visible = !chromeHidden,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(top = 6.dp, end = 8.dp),
+                enter = fadeIn(ChromeMotion),
+                exit = fadeOut(ChromeMotion)
+            ) {
+                LibraryToolbarActions(libraryChrome)
             }
         }
 

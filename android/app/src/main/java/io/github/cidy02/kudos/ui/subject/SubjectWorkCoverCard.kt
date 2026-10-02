@@ -1,10 +1,5 @@
-package io.github.cidy02.kudos.home
+package io.github.cidy02.kudos.ui.subject
 
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -23,10 +18,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,24 +41,21 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.ui.components.AO3StatusTint
-import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.subject.ReaderTheme
-import io.github.cidy02.kudos.ui.subject.SubjectKicker
-import io.github.cidy02.kudos.ui.subject.SubjectMetrics
-import io.github.cidy02.kudos.ui.subject.SubjectPalette
-import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
-import io.github.cidy02.kudos.ui.subject.downloadDimmed
-import io.github.cidy02.kudos.ui.subject.withOpacity
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.DownloadQueueStatus
 import io.github.cidy02.kudos.works.WorkTags
@@ -86,8 +82,8 @@ fun rememberWorkDownloading(work: SavedWork, queue: DownloadQueue?): Boolean {
 }
 
 /**
- * Home's portrait cover. Port of iOS `WorkCoverCard` / `WorkSummaryCardSurface`,
- * named apart from the older Material `WorkCoverCard` Library still uses.
+ * Shared portrait cover. Port of iOS `WorkCoverCard` / `WorkSummaryCardSurface`,
+ * shared across Home and Library.
  */
 @Composable
 fun SubjectWorkCoverCard(
