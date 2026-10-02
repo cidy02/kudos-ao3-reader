@@ -80,6 +80,7 @@ struct SettingsHubInputs {
     var fontName: String
     var readingMode: ReadingMode
     var downloadOnSubscribe: Bool
+    var keepsWorksYouRead = false
     var autoPreserveSeries: Bool
     var seriesLimit: Int
     var hidesMature: Bool
@@ -96,7 +97,7 @@ enum SettingsHubValue {
         case .appearance: theme(app: inputs.appTheme, reader: inputs.readerTheme, matched: inputs.themesMatched)
         case .font: inputs.fontName
         case .reader: inputs.readingMode.title
-        case .downloads: downloads(onSubscribe: inputs.downloadOnSubscribe)
+        case .downloads: downloads(onSubscribe: inputs.downloadOnSubscribe, keepsWorksYouRead: inputs.keepsWorksYouRead)
         case .readingQueues: readingQueues(autoPreserve: inputs.autoPreserveSeries, seriesLimit: inputs.seriesLimit)
         case .syncFolder: syncFolder(inputs.folderSync)
         case .account: account(inputs.auth)
@@ -112,8 +113,9 @@ enum SettingsHubValue {
 
     /// "Keep downloads for" is not shown: no retention sweep exists (see
     /// `StorageUsedRow`), so the one download setting there is to state is this.
-    static func downloads(onSubscribe: Bool) -> String {
-        onSubscribe ? "On subscribe" : "Manual"
+    /// Keeping what you read covers more than a subscribe does, so it names the row.
+    static func downloads(onSubscribe: Bool, keepsWorksYouRead: Bool = false) -> String {
+        keepsWorksYouRead ? "Keep what you read" : onSubscribe ? "On subscribe" : "Manual"
     }
 
     static func readingQueues(autoPreserve: Bool, seriesLimit: Int) -> String {
