@@ -9,8 +9,12 @@ import Foundation
 /// estimated, and the screen shows what the measurement found even when that is
 /// zero.
 nonisolated struct LocalStorageFootprint: Sendable, Equatable {
-    /// `Storage.worksDirectory` — the EPUBs a reader can open offline.
+    /// `Storage.worksDirectory`, less `readingCopyBytes` — the works the reader
+    /// chose to keep (`SavedWork.isDownloaded`).
     var downloadedWorkBytes: Int64 = 0
+    /// Copies fetched only so a work could be read: on the device, but not
+    /// downloads (owner, 2026-10-01). Freed when finished.
+    var readingCopyBytes: Int64 = 0
     /// `Storage.originalsDirectory` — the bytes a converted import arrived as,
     /// kept verbatim because a redistributed work is often the last copy left.
     /// Counted separately from the EPUB rather than folded into it: they are
@@ -31,7 +35,8 @@ nonisolated struct LocalStorageFootprint: Sendable, Equatable {
     var draftRecoveryBytes: Int64 = 0
 
     var totalBytes: Int64 {
-        downloadedWorkBytes + preservedOriginalBytes + importedFontBytes + cacheBytes + draftRecoveryBytes
+        downloadedWorkBytes + readingCopyBytes + preservedOriginalBytes + importedFontBytes + cacheBytes
+            + draftRecoveryBytes
     }
 
     /// The spec's `412 MB`. `.file` rather than `.memory` so the units match
@@ -54,10 +59,17 @@ nonisolated struct LocalStorageFootprint: Sendable, Equatable {
 /// actor would stutter the push animation on exactly the libraries where the
 /// figure matters most.
 nonisolated enum LocalDataFootprintScanner {
-    static func measure() async -> LocalStorageFootprint {
+    /// `readingCopies`: the files of works on the device but not kept, split out
+    /// of the works figure.
+    static func measure(readingCopies: [URL] = []) async -> LocalStorageFootprint {
         await Task.detached(priority: .utility) {
-            LocalStorageFootprint(
-                downloadedWorkBytes: directorySize(of: Storage.worksDirectory),
+            let readingCopyBytes = readingCopies.reduce(Int64(0)) { total, url in
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                return total + Int64(size)
+            }
+            return LocalStorageFootprint(
+                downloadedWorkBytes: max(0, directorySize(of: Storage.worksDirectory) - readingCopyBytes),
+                readingCopyBytes: readingCopyBytes,
                 preservedOriginalBytes: directorySize(of: Storage.originalsDirectory),
                 importedFontBytes: directorySize(of: Storage.fontsDirectory),
                 cacheBytes: directorySize(of: Storage.metadataCacheDirectory)

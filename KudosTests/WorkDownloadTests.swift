@@ -3,8 +3,8 @@ import SwiftData
 import Testing
 @testable import Kudos
 
-/// Owner, 2026-09-28: Download / Remove Download follow the EPUB on this
-/// device, not the keep flag.
+/// Owner, 2026-10-01 (reversing 2026-09-28): Download / Remove Download follow
+/// what the reader chose to keep. A copy fetched only to read is not a download.
 @MainActor
 @Suite(.serialized)
 struct WorkDownloadTests {
@@ -35,15 +35,28 @@ struct WorkDownloadTests {
         return work
     }
 
-    @Test func aFileOnTheDeviceOffersRemoveEvenWhenNotKept() throws {
+    @Test func onlyAKeptCopyOffersRemove() throws {
         let context = try context()
-        let downloaded = work(onDevice: true, in: context)
-        downloaded.isSaved = false
-        #expect(WorkDownload.action(for: downloaded) == .removeDownload)
+        let readingCopy = work(onDevice: true, in: context)
+        readingCopy.isSaved = false
+        #expect(WorkDownload.action(for: readingCopy) == .download)
+        #expect(!readingCopy.isDownloaded)
+        readingCopy.isSaved = true
+        #expect(WorkDownload.action(for: readingCopy) == .removeDownload)
+        #expect(readingCopy.isDownloaded)
         let missing = work(onDevice: false, in: context)
         missing.isSaved = true
         #expect(WorkDownload.action(for: missing) == .download)
-        try? FileManager.default.removeItem(at: downloaded.fileURL)
+        try? FileManager.default.removeItem(at: readingCopy.fileURL)
+    }
+
+    /// Download on a copy fetched to read keeps it at once, fetching nothing.
+    @Test func downloadKeepsAReadingCopyWithoutFetching() async throws {
+        let context = try context()
+        let readingCopy = work(onDevice: true, in: context)
+        try await WorkDownload.perform(.download, on: readingCopy, in: context)
+        #expect(readingCopy.isSaved && readingCopy.isDownloaded)
+        try? FileManager.default.removeItem(at: readingCopy.fileURL)
     }
 
     @Test func aKeepOfflineQueueNamesItselfInsteadOfRemove() throws {
@@ -70,6 +83,7 @@ struct WorkDownloadTests {
     @Test func bulkRemoveOnlyWhenEverythingIsOnTheDevice() throws {
         let context = try context()
         let onDevice = work(onDevice: true, in: context)
+        onDevice.isSaved = true
         let missing = work(onDevice: false, in: context)
         #expect(WorkDownload.bulkAction(for: [onDevice]) == .removeDownload)
         #expect(WorkDownload.bulkAction(for: [onDevice, missing]) == .download)

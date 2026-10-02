@@ -461,6 +461,15 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         isSaved || isFavorite || isKeptOffline || ao3WorkID == nil || ao3Unavailable
     }
 
+    /// "Downloaded" as the app says it (owner, 2026-10-01): a copy on this
+    /// device that the reader chose to keep — Download, "Keep works you read", a
+    /// Keep-offline queue or collection, or a file they imported themselves (no
+    /// AO3 id: it has nowhere else to come from). A copy fetched only so a work
+    /// could be read is bookkeeping, and nothing in the UI calls it downloaded.
+    var isDownloaded: Bool {
+        hasEPUB && (isSaved || isKeptOffline || ao3WorkID == nil)
+    }
+
     /// T-276: a queue with Keep downloaded on (or never asked, as queues always
     /// kept) or a collection with Keep downloads on holds this work's EPUB. A
     /// queue in Recently Deleted still counts, so restoring it finds its works

@@ -550,9 +550,11 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             // Remove Download, which deletes a file.
             .swipeActions(
                 edge: .leading,
-                allowsFullSwipe: existingLocalWork.map { !WorkReaderPreparation.hasReadableEPUB(for: $0) } ?? true
+                allowsFullSwipe: existingLocalWork.map { WorkDownload.action(for: $0) != .removeDownload } ?? true
             ) {
-                if let existingLocalWork, WorkReaderPreparation.hasReadableEPUB(for: existingLocalWork) {
+                // A work already here, even as a copy fetched only to read, takes
+                // the shared control: Download keeps it, Remove Download frees it.
+                if let existingLocalWork, WorkDownload.action(for: existingLocalWork) != nil {
                     WorkDownloadButton(work: existingLocalWork)
                 } else {
                     Button(action: save) {
@@ -623,7 +625,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     }
                     .disabled(working)
                 }
-                if let existingLocalWork, WorkReaderPreparation.hasReadableEPUB(for: existingLocalWork) {
+                if let existingLocalWork, WorkDownload.action(for: existingLocalWork) != nil {
                     WorkDownloadButton(work: existingLocalWork)
                 } else {
                     Button {
