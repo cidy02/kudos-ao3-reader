@@ -262,7 +262,7 @@ struct HomeSectionListView: View {
                         )
                         // The same local actions Library's rows carry, so a row means
                         // the same thing wherever it is drawn.
-                        // No full swipe: Remove Download deletes a file.
+                        // No full swipe: a flick should not un-keep a download.
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             WorkDownloadButton(work: work)
 

@@ -54,7 +54,7 @@ private struct LibraryWorkSwipeActions: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            // No full swipe: Remove Download deletes a file.
+            // No full swipe: a flick should not un-keep a download.
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 // 1ah / 1ai / 1aj lead with Queue: Save for Later is the thing to
                 // do with a work you are looking back over.

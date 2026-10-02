@@ -69,15 +69,28 @@ struct WorkDownloadTests {
         try? FileManager.default.removeItem(at: kept.fileURL)
     }
 
-    @Test func removeDownloadDeletesTheFileAndKeepsTheRecord() async throws {
+    /// Owner, 2026-10-01: "only Delete may remove an EPUB". Remove Download
+    /// clears the keep and leaves the file, so the work can be kept again at once.
+    @Test func removeDownloadClearsTheKeepAndLeavesTheFile() async throws {
         let context = try context()
         let downloaded = work(onDevice: true, in: context)
         downloaded.isSaved = true
         try await WorkDownload.perform(.removeDownload, on: downloaded, in: context)
-        #expect(!FileManager.default.fileExists(atPath: downloaded.fileURL.path))
-        #expect(!downloaded.hasEPUB)
-        #expect(!downloaded.isSaved)
+        #expect(FileManager.default.fileExists(atPath: downloaded.fileURL.path))
+        #expect(downloaded.hasEPUB)
+        #expect(!downloaded.isSaved && !downloaded.isDownloaded)
         #expect(WorkDownload.action(for: downloaded) == .download)
+        try? FileManager.default.removeItem(at: downloaded.fileURL)
+    }
+
+    /// An imported work has no AO3 copy and is always kept: no Download control.
+    @Test func anImportOffersNoDownloadControl() throws {
+        let context = try context()
+        let imported = work(onDevice: true, in: context)
+        imported.ao3WorkID = nil
+        #expect(WorkDownload.action(for: imported) == nil)
+        #expect(imported.isDownloaded)
+        try? FileManager.default.removeItem(at: imported.fileURL)
     }
 
     @Test func bulkRemoveOnlyWhenEverythingIsOnTheDevice() throws {
