@@ -80,7 +80,7 @@ struct CommentThreadScreen: View {
                     ContentUnavailableView(
                         "Thread Unavailable",
                         systemImage: "bubble.left.and.bubble.right",
-                        description: Text("This comment is no longer part of the loaded page.")
+                        description: Text("This comment is no longer on this page. Go back to Comments to continue.")
                     )
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)

@@ -910,7 +910,7 @@ private extension AccountView {
     var signedOutPreviewSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Signed in, this tab fills in with your own account:")
+                Text("When you sign in, this tab shows your AO3 account and activity.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 14)
@@ -1099,7 +1099,7 @@ private extension AccountView {
             switch tab {
             case .history:
                 return activityDestination(
-                    .history, count: .history, subtitle: "AO3’s own history, not the local reading log"
+                    .history, count: .history, subtitle: "Your AO3 history, not your reading activity in Kudos"
                 )
             case .inbox:
                 return activityDestination(

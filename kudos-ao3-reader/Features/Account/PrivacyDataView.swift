@@ -127,10 +127,9 @@ struct PrivacyDataView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Moves your local reading-history records to Recently Deleted "
-                + "for \(PreservedWorkService.recoveryWindowText). "
-                + "Your saved and downloaded works are not affected, and the works "
-                + "themselves can be re-downloaded from AO3 anytime.")
+            Text("Moves works that only remain in your reading history to Recently Deleted for "
+                + "\(PreservedWorkService.recoveryWindowText). Your saved and downloaded works "
+                + "stay where they are, and you can download these works from AO3 again.")
         }
         .confirmationDialog(
             "Free Up Space?",
@@ -143,9 +142,8 @@ struct PrivacyDataView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Frees the files of works you have finished and not kept. Downloaded, "
-                + "favourited and queued works are left alone, and anything freed "
-                + "re-downloads from AO3 when you open it.")
+            Text("Removes the copies of works you've finished reading and didn't download, "
+                + "favourite or queue. Kudos gets them again from AO3 if you open them.")
         }
         .confirmationDialog(
             "Clear Reading Positions?",
@@ -157,8 +155,8 @@ struct PrivacyDataView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Forgets where you had got to in every work. The works, and the order they "
-                + "appear in Continue Reading, are kept.")
+            Text("Clears your place in every work. Your works and their order in Continue Reading "
+                + "stay the same.")
         }
         .confirmationDialog(
             "Clear Browse Cache?",
@@ -172,8 +170,8 @@ struct PrivacyDataView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Drops the saved fandom and category lists. Nothing you have read, saved or "
-                + "downloaded is touched, and Browse rebuilds them the next time you open it.")
+            Text("Removes saved fandom and category lists. Your reading, saved works, and "
+                + "downloads stay untouched; Browse rebuilds the lists next time you open it.")
         }
     }
 
@@ -186,7 +184,7 @@ struct PrivacyDataView: View {
         SubjectHeaderBlock(
             kicker: "AO3 Account › Settings",
             title: "Privacy",
-            subtitle: "Nothing leaves your device",
+            subtitle: "Your reading data stays on this device",
             palette: accountPalette,
             gutter: SubjectMetrics.accountGutter
         )
@@ -209,7 +207,7 @@ struct PrivacyDataView: View {
 
     private var promisePanel: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("No ads, no analytics, no tracking, no accounts but yours")
+            Text("No ads or tracking, and no separate Kudos account")
                 .font(.system(size: promiseTitleSize, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
             // Spec 1ac's line is "The app talks to AO3 and to nothing else."
@@ -217,9 +215,9 @@ struct PrivacyDataView: View {
             // Read Aloud section below says a Voice Pack host can see your IP
             // address. The old copy named that exception and this keeps it. A
             // privacy page that overclaims is worse than one that says less.
-            Text("Kudos talks to AO3, and — only after you confirm a download — to a Voice "
-                + "Pack host. Nothing else. Your library, reading positions, tags, local "
-                + "collections and AO3 session stay on this device.")
+            Text("Kudos connects to AO3. After you approve a Voice Pack download, it also "
+                + "connects to the service providing the pack. Your library, reading positions, "
+                + "tags, collections, and AO3 sign-in stay on this device.")
                 .font(.system(size: promiseBodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -322,9 +320,9 @@ struct PrivacyDataView: View {
     }
 
     private var storedFootnote: some View {
-        footnote("Sizes are measured on this device, not estimated. Caches hold scraped AO3 "
-            + "fandom and category data so Browse opens instantly; they rebuild on demand, "
-            + "and the system may free them at any time.")
+        footnote("The sizes shown are measured on this device. Browse keeps fandom and category "
+            + "lists so it opens faster; it rebuilds them when needed, and your device may "
+            + "remove them to free space.")
     }
 
     // MARK: Clear
@@ -378,9 +376,9 @@ struct PrivacyDataView: View {
     }
 
     private var clearFootnote: some View {
-        footnote("Clearing is local and two-step — each of these asks first and names what it "
-            + "will touch. Your reading history on AO3 is separate: clear it from History, or "
-            + "turn it off in AO3 Preferences.")
+        footnote("Each option asks before it clears anything and tells you what will change on "
+            + "this device. Your AO3 reading history is separate; clear it from History or turn "
+            + "it off in AO3 Preferences.")
     }
 
     // MARK: AO3 session
@@ -413,7 +411,7 @@ struct PrivacyDataView: View {
     private var sessionFootnote: some View {
         let notice = auth.noticeMessage
         footnote(
-            "Your AO3 session is stored only on this device and is never shared."
+            "Your AO3 sign-in is kept only on this device and is never shared."
                 + (notice.map { " " + $0 } ?? "")
         )
     }
@@ -425,11 +423,11 @@ struct PrivacyDataView: View {
             Text("Optional Voice Pack downloads stay separate from your reading data.")
                 .font(.system(size: 15, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Kudos never sends book text, generated audio, AO3 credentials, saved works, "
-                + "reading history, analytics, or an account identifier to a Voice Pack host. "
-                + "The host or its CDN can receive your IP address and standard connection "
-                + "metadata. Kokoro shows this before a Voice Pack downloads; installed voice "
-                + "files remain on this device.")
+            Text("Kudos never sends a work's text, spoken audio, your AO3 sign-in, saved works, "
+                + "reading history, usage information, or anything that identifies your account "
+                + "to the Voice Pack provider. The provider can see your IP address and basic "
+                + "details about the connection. Kudos tells you this before downloading a "
+                + "Voice Pack, and the installed voices stay on this device.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

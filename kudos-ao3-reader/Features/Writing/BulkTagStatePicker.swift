@@ -27,8 +27,8 @@ struct BulkTagStatePicker: View {
                     row(option)
                 }
             } footer: {
-                Text("Tap once to add to every selected work, twice to remove it from "
-                    + "every selected work, three times to leave it alone.")
+                Text("Tap an option once to add it to every selected work, twice to remove it, "
+                    + "or three times to leave it unchanged.")
             }
         }
         .appThemedRows()
@@ -165,8 +165,8 @@ private struct BulkNameListEditor: View {
                 Button("Add", action: add)
                     .disabled(trimmed.isEmpty)
             } footer: {
-                Text("Type the collection name exactly as it appears on AO3. "
-                    + "A name AO3 does not recognize is reported when you save.")
+                Text("Enter the collection name exactly as it appears on AO3. If AO3 doesn't "
+                    + "recognize it, you will see that when you save.")
             }
         }
         .cardList()

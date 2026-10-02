@@ -170,11 +170,12 @@ struct SettingsBackupPage: View {
     /// erasing the old one. Saying so at export time is the difference between
     /// a reader who can copy the files off and one who finds out afterwards.
     private static func exportSuccessMessage(recordCount: Int, missingAssets: Int) -> String {
-        var parts = ["\(recordCount.formatted()) Library records were included."]
+        var parts = ["\(recordCount.formatted()) Library works were included in the backup."]
         if missingAssets > 0 {
-            let noun = missingAssets == 1 ? "file was" : "files were"
-            parts.append("\(missingAssets.formatted()) \(noun) listed but could not be read, "
-                + "so they are not in this backup. Those works restore without their EPUB.")
+            let subject = missingAssets == 1 ? "file was" : "files were"
+            parts.append("\(missingAssets.formatted()) \(subject) unreadable and left out. "
+                + "You may need to download or import the missing files again after restoring "
+                + "this backup.")
         }
         return parts.joined(separator: "\n\n")
     }
@@ -362,7 +363,7 @@ struct SettingsBackupPage: View {
                 let conflictMessage = summary.conflictMessage
                 backupNotice = SettingsNotice(
                     title: title,
-                    message: "\(verb) into your library:\n\(summary.changeMessage)"
+                    message: "\(verb) into your library.\n\(summary.changeMessage)"
                         + (conflictMessage.isEmpty ? "" : "\n\n\(conflictMessage)")
                 )
             } catch {
@@ -498,10 +499,10 @@ struct BackupSettingsSection: View {
                     .accessibilityLabel(isImporting ? "Importing backup" : "Preparing backup")
             }
         } footer: {
-            Text("Backups include Library records, Reading Queues, preserved EPUBs, "
-                + "User Tags, saved links, custom fonts, and app settings. Import "
-                + "merges without deleting items already on this device. AO3 sessions "
-                + "and passwords are never included.")
+            Text("Your backup file includes your Library, Reading Queues, downloaded copies, "
+                + "User Tags, saved links, custom fonts, imported original files, and app "
+                + "settings. Importing adds anything you don't have without removing what is "
+                + "already here. Your AO3 sign-in and password are never included.")
         }
     }
 }

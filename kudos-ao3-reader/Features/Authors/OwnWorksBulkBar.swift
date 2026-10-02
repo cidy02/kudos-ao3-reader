@@ -32,12 +32,12 @@ struct OwnWorksBulkBar: View {
     /// The single swipe's wording (`AuthorProfileView`), made plural.
     static func deleteMessage(_ works: [AO3WorkSummary]) -> String {
         guard works.count > 1 else {
-            return "This removes the work from AO3 for everyone, with its chapters, kudos, comments "
-                + "and bookmarks. It cannot be undone."
+            return "This permanently removes the work and its chapters, kudos, comments and bookmarks "
+                + "from AO3 for everyone."
         }
         let titles = ListFormatter.localizedString(byJoining: works.map { "“\($0.title)”" })
-        return "This removes \(titles) from AO3 for everyone, with their chapters, kudos, comments "
-            + "and bookmarks. It cannot be undone."
+        return "This permanently removes \(titles) and their chapters, kudos, comments and bookmarks "
+            + "from AO3 for everyone."
     }
 }
 

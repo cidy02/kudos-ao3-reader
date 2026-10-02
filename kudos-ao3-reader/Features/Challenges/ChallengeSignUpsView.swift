@@ -69,7 +69,8 @@ struct ChallengeSignUpsView: View {
     /// Why no chip shows, when none can.
     private var matchNote: String? {
         if let matchError {
-            return "Match state unavailable: AO3 shows assignments to maintainers once sign-ups close. "
+            return "Kudos can't tell which sign-ups are matched. AO3 shows assignments to maintainers "
+                + "after sign-ups close. "
                 + matchError
         }
         return assignments?.isEmpty == true
@@ -310,9 +311,8 @@ struct ChallengeSignUpsView: View {
     }
 
     private var footnoteText: some View {
-        Text("AO3 pages sign-ups twenty to a page, so the list is fetched a page at a time "
-            + "and the segment filters what has been fetched, not the whole challenge. "
-            + "The tag summary is the sign-up’s own requests, truncated to one line.")
+        Text("AO3 shows 20 sign-ups per page, so these filters apply only to the pages you have loaded. "
+            + "Each tag summary shows one line from that person's sign-up requests.")
             .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

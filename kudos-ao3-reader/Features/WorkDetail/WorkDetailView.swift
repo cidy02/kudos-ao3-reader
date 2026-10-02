@@ -647,44 +647,51 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     var statusFooter: String {
         guard let work = localWork else {
-            return "Reading downloads this work to your device. When you finish, "
-                + "the file is freed unless you save or favorite it."
+            return "Reading keeps a copy on your device for now. After you finish, it's removed "
+                + "unless you download, favorite, or queue the work."
         }
         if work.isInSavedForLaterQueue {
             switch work.epubPreservationStatus {
             case .preserved:
                 if WorkReaderPreparation.hasReadableEPUB(for: work) {
-                    return "Saved for Later — a local EPUB is kept for offline reading."
+                    return "Saved for Later. A downloaded copy stays on your device for reading "
+                        + "without internet."
                 }
-                return "Saved for Later, but the local EPUB needs to be restored."
+                return "Saved for Later, but its downloaded copy needs to be restored."
             case .preserving:
-                return "Saving for Later — preserving a local EPUB."
+                return "Saving for Later. A downloaded copy is being kept on your device."
             case .failed, .missingFile:
-                return "Saved for Later, but the local EPUB needs to be restored."
+                return "Saved for Later, but its downloaded copy needs to be restored."
             case .queued:
-                return "Saved for Later — preservation is queued."
+                return "Saved for Later. Its download is waiting to be kept on your device."
             case .notPreserved:
                 return "Saved for Later."
             }
         }
         if work.isQueuedForLater {
-            return "In a Reading Queue — its EPUB is protected while queued."
+            return "This work is in a Reading Queue. Its copy stays on your device if one of its "
+                + "queues has Keep works offline turned on."
         }
-        if work.isSaved { return "Downloaded — kept on this device." }
+        if work.isSaved { return "Downloaded. Its copy stays on this device." }
         if work.ao3WorkID == nil, WorkTags.ao3WorkID(from: work.sourceURL) == nil {
-            return "Imported EPUB — kept on this device for offline reading."
+            return "Imported work. Its copy stays on this device for reading without internet."
         }
         switch work.readingState {
         case .finished:
             return work.hasEPUB
                 ? "Finished."
-                : "Finished. The file was freed to save space; it re-downloads when you read it again."
+                : "Finished. Its copy was removed to save space, and Kudos gets it again when "
+                    + "you read it."
         case .freedHistory:
             // Freed without being finished — don't call it "Finished."
-            return "In your reading history. The file was freed to save space; it re-downloads when you read it again."
+            return "In your reading history. Its copy was removed to save space, and Kudos gets "
+                + "it again when you read it."
         case .inProgress, .unread:
-            if work.isFavorite { return "Favorited, so its file is kept when finished." }
-            return "Reading. When you finish, the file is freed unless you save or favorite it."
+            if work.isFavorite {
+                return "This work is a favorite, so its copy stays after you finish."
+            }
+            return "Reading. After you finish, its copy is removed unless you download, favorite, "
+                + "or queue it."
         }
     }
 
@@ -1179,15 +1186,16 @@ private struct SeriesPreservationPromptSheet: View {
                 Group {
                     Section {
                         Text(prompt.message)
-                        Text("Kudos preserves series works one at a time using the normal AO3 request pacing.")
+                        Text("Kudos saves the series one work at a time, with the usual pause between "
+                            + "visits to AO3.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
 
                     Section {
                         Toggle(prompt.autoPreserveLabel, isOn: $autoPreserveSmallSeries)
-                        Text("Automatic preservation only runs when the first AO3 series page proves the whole "
-                            + "series is within your \(threshold)-work limit.")
+                        Text("Kudos saves a series automatically only when the first AO3 page shows "
+                            + "the full series and it has \(threshold) works or fewer.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

@@ -57,17 +57,17 @@ struct WorkCollectionsGiftsView: View {
                 SectionRuleHeader(title: "Your collections", count: collections.count)
                     .pageBodyRow(top: 18, gutter: 0)
                 collectionsPanel.pageBodyRow(top: 8, gutter: gutter)
-                footnote("A work submitted to a moderated collection is pending until a "
-                    + "maintainer approves it, and to an unrevealed collection it is hidden "
-                    + "until reveal. Both states show on the work, so neither is silent.")
+                footnote("A work submitted to a moderated collection waits for a maintainer's approval. "
+                    + "A work in an unrevealed collection stays hidden until the reveal. AO3 shows "
+                    + "either state on the work.")
             }
 
             Section {
                 SectionRuleHeader(title: "Gift recipients", count: gifts.count)
                     .pageBodyRow(top: 18, gutter: 0)
                 giftsPanel.pageBodyRow(top: 8, gutter: gutter)
-                footnote("Gifts are notified by email on post and cannot be taken back, so a "
-                    + "typo matters here. AO3 checks the name when the work is saved.")
+                footnote("When you post, AO3 emails each gift recipient. You can't take back the gift, "
+                    + "so check each name before you save.")
             }
 
             if parentWorkCount > 0 {
@@ -218,10 +218,10 @@ struct WorkCollectionsGiftsView: View {
     static func stateText(_ access: AO3CollectionAccess) -> String {
         var text: String
         switch access.rowState {
-        case .moderated: text = "Moderated — a maintainer approves the work"
+        case .moderated: text = "Moderated (a maintainer approves the work)"
         case .closed: text = "Closed to new works"
         case .open: text = "Open"
-        case .unknown: text = "Open to new works · may be moderated or unrevealed"
+        case .unknown: text = "Open to new works (it may be moderated or unrevealed)"
         }
         if access.isUnrevealed { text += " · Unrevealed until reveal" }
         if access.isAnonymous { text += " · Anonymous" }
@@ -369,8 +369,8 @@ struct WorkSeriesPickerView: View {
                 SectionRuleHeader(title: "Your series", count: series.count)
                     .pageBodyRow(top: 18, gutter: 0)
                 seriesPanel.pageBodyRow(top: 8, gutter: gutter)
-                footnote("AO3 adds a work to one series per save, and saving never takes it out "
-                    + "of a series it is already in — that is Remove works on the series’ Edit screen.")
+                footnote("Each save adds this work to one series. Saving doesn't remove it from another "
+                    + "series. To do that, use Remove works on the series' Edit screen.")
             }
 
             if let ordered = orderedSeries {
@@ -387,8 +387,8 @@ struct WorkSeriesPickerView: View {
                     }
                     .subjectPanel()
                     .pageBodyRow(top: 8, gutter: gutter)
-                    footnote("Changing the reading order writes every work in the series, so it "
-                        + "saves on its own screen rather than with this work.")
+                    footnote("Changing the reading order updates every work in the series. Save the new "
+                        + "order on its own screen.")
                 }
             }
 
@@ -408,8 +408,7 @@ struct WorkSeriesPickerView: View {
                 }
                 .subjectPanel()
                 .pageBodyRow(top: 8, gutter: gutter)
-                footnote("AO3 creates the series with this work as its first; its summary and "
-                    + "notes are set on the series afterwards.")
+                footnote("AO3 creates the series with this work first. Add the series summary and notes afterwards.")
             }
         }
         .cardList()
@@ -539,9 +538,8 @@ struct WorkCreatorsPickerView: View {
                 SectionRuleHeader(title: "Invite a co-creator")
                     .pageBodyRow(top: 18, gutter: 0)
                 bylinePanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("A co-creator is invited rather than added: the work is unchanged "
-                    + "until the other account accepts. Use the byline exactly as it "
-                    + "appears on AO3, as username or username (pseud).")
+                Text("AO3 invites a co-creator, and the work stays unchanged until they accept. "
+                    + "Enter their byline exactly as it appears on AO3, as username or username (pseud).")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
@@ -644,8 +642,8 @@ struct WorkParentWorkPickerView: View {
                 SectionRuleHeader(title: "Source work")
                     .pageBodyRow(top: 18, gutter: 0)
                 sourcePanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("A work already on AO3 needs only its URL. Title and author are for "
-                    + "a source somewhere else, and are shown instead of the link.")
+                Text("For a work on AO3, enter its web address. For a work from elsewhere, enter its "
+                    + "title and author, which will appear instead of a link.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)

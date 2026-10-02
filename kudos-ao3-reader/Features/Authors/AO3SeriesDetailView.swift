@@ -167,7 +167,7 @@ struct AO3SeriesDetailView: View {
             AO3ProfileMessageRow(
                 title: "No visible works",
                 systemImage: "books.vertical",
-                message: "AO3 has no works visible to this session in the series."
+                message: "No works in this series are visible to you on AO3."
             )
             .cardRow()
         } else {

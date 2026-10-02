@@ -46,7 +46,7 @@ struct SyncFolderOnboardingView: View {
                 Text("Protect Your Library")
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
-                Text("Optional — set this up anytime in Settings")
+                Text("Optional. You can set this up anytime in Settings")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -58,24 +58,23 @@ struct SyncFolderOnboardingView: View {
         VStack(alignment: .leading, spacing: 22) {
             OnboardingPointRow(
                 symbol: "folder", title: "Choose a Folder",
-                message: "Choose a folder where Kudos can safely keep a copy of your library data. "
-                    + "If you choose a folder in iCloud Drive, Apple can sync it across your devices."
+                message: "Choose where Kudos keeps another copy of your library. If the folder "
+                    + "is in iCloud Drive, Apple can keep it up to date on your devices."
             )
             OnboardingPointRow(
                 symbol: "wifi.slash", title: "Works Fully Offline",
-                message: "Kudos still works completely offline either way, and you can set this up "
-                    + "later in Settings if you'd rather skip it for now."
+                message: "You can use Kudos without an internet connection. If you skip this, "
+                    + "you can choose a folder later in Settings."
             )
             OnboardingPointRow(
-                symbol: "doc.text.magnifyingglass", title: "Not Real-Time CloudKit Sync",
-                message: "This uses the existing Kudos backup format written to a folder you choose — "
-                    + "it's folder-based sync, not real-time CloudKit sync."
+                symbol: "doc.text.magnifyingglass", title: "Changes May Take Time",
+                message: "Kudos saves the same kind of file as a backup in your folder. Updates "
+                    + "aren't instant."
             )
             OnboardingPointRow(
                 symbol: "signature", title: "Using More Than One Device?",
-                message: "Deletes are signed on each device so only devices you've paired can remove "
-                    + "things from your library. Pair your devices anytime in Settings → Sync Folder "
-                    + "→ Deletion signing — it takes a few seconds."
+                message: "To let another device remove items from your library, pair it in Settings "
+                    + "→ Sync Folder → Deletion signing. Pairing takes a few seconds."
             )
             if let connectionError {
                 OnboardingPointRow(

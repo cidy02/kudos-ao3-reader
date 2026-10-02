@@ -132,7 +132,7 @@ struct AO3NamedSubscriptionsList: View {
             confirmLabel: "Unsubscribe",
             message: { row in
                 "“\(row.name)” will be removed from your AO3 subscriptions. "
-                    + "You'll stop getting its update emails."
+                    + "You will stop getting update emails for it."
             },
             perform: { row in Task { await unsubscribe(row) } }
         )

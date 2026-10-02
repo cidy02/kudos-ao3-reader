@@ -104,9 +104,8 @@ struct AO3CollectionsFilterPanel: View {
             .subjectPanel()
 
             if editor.draft.sort == .recentlyUpdated {
-                note("Recently updated is computed here from the date AO3 prints on each "
-                    + "collection. A collection whose date does not parse keeps AO3's own "
-                    + "position rather than being sorted somewhere wrong.")
+                note("Recently updated uses the date shown on each AO3 collection. If a date "
+                    + "can't be read, that collection stays in AO3's order.")
             }
         }
     }
@@ -126,8 +125,7 @@ struct AO3CollectionsFilterPanel: View {
                 toggleRow("Unrevealed", isOn: $editor.draft.showsUnrevealedOnly)
             }
             .subjectPanel()
-            note("These four are independent on AO3, so they narrow together rather than "
-                + "replacing one another.")
+            note("You can turn on more than one of these. Each choice narrows the results further.")
         }
     }
 
@@ -146,9 +144,8 @@ struct AO3CollectionsFilterPanel: View {
     /// States what the panel cannot offer and why, where a reader looking for it
     /// will actually be.
     private var unavailableNote: some View {
-        note("AO3's collections page does not say what your role in each collection is, "
-            + "so there is no Maintainer / Member / Invited filter here. Finding out would "
-            + "mean loading each collection's participants — a page request per row.")
+        note("AO3 doesn't show your role in its collections list, so you can't filter by "
+            + "Maintainer, Member or Invited here.")
     }
 
     private func note(_ text: String) -> some View {

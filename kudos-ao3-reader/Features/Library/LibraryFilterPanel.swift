@@ -107,7 +107,7 @@ struct LibraryFilterPanel: View {
                 } header: {
                     groupLabel("Word count")
                 } footer: {
-                    Text("Word counts come from AO3 and fill in once a work has been opened.")
+                    Text("A work's word count appears after you open it, using the number from AO3.")
                 }
 
                 Section {
@@ -128,7 +128,7 @@ struct LibraryFilterPanel: View {
                 } header: {
                     groupLabel("Tags")
                 } footer: {
-                    Text("Filter by the work's own AO3 tags. Exclude Tags hides matching works.")
+                    Text("Choose AO3 tags to show matching works. Exclude Tags hides works with those tags.")
                 }
 
             }
@@ -253,10 +253,10 @@ private struct LibraryOptionPicker: View {
                 // below share this instead of re-running the filter.
                 let matches = filtered
                 if options.isEmpty {
-                    Text("No \(title.lowercased()) in your library yet.")
+                    Text("Your Library has no \(title.lowercased()) yet.")
                         .foregroundStyle(.secondary)
                 } else if matches.isEmpty {
-                    Text("No matches for “\(query)”.")
+                    Text("None of your options match “\(query)”.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(matches, id: \.self) { value in

@@ -26,11 +26,11 @@ struct HomeSubscriptionsTests {
         #expect(failed.contains("Couldn't load"))
 
         #expect(HomeSubscriptionsCopy.emptyMessage(isLoggedIn: true, loadFailed: false)
-            == "You're not subscribed to anything yet. Subscribe to works or series to see updates here.")
+            == "You have no work or series subscriptions yet. When you subscribe on AO3, updates appear here.")
         // Signed out wins over a stale failure flag.
         for loadFailed in [false, true] {
             #expect(HomeSubscriptionsCopy.emptyMessage(isLoggedIn: false, loadFailed: loadFailed)
-                == "Log in to AO3 to see the works and series you subscribe to.")
+                == "Log in to AO3 to see updates from works and series you subscribe to.")
         }
     }
 

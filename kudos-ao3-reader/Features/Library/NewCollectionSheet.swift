@@ -14,8 +14,8 @@ import SwiftUI
 /// choice — it just stops being the only option.
 struct NewCollectionSheet: View {
     /// 1bk's Behaviour footnote.
-    static let behaviourFootnote = "Keep downloads exempts these works from the cache sweep. "
-        + "Show on Home adds a shelf above Recently Updated."
+    static let behaviourFootnote = "Keep downloads keeps a downloaded copy of every work in this collection. "
+        + "Show on Home adds the collection above Recently Updated."
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -41,9 +41,8 @@ struct NewCollectionSheet: View {
                     collectionPanel
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                     footnote(hue == nil
-                        ? "Without a colour, the collection takes one from its name — and "
-                            + "changes it if you rename it."
-                        : "Set once, so renaming the collection keeps its colour.")
+                        ? "Kudos picks a colour from the collection name. Renaming it may change the colour."
+                        : "Your chosen colour stays the same if you rename the collection.")
                 }
 
                 Section {
@@ -57,8 +56,8 @@ struct NewCollectionSheet: View {
                 }
 
                 Section {
-                    footnote("Local collections live on this device only. AO3 never "
-                        + "sees them, and they do not sync between your devices.")
+                    footnote("This collection stays on this device. AO3 doesn't see it, and it isn't "
+                        + "shared with your other devices.")
                 }
             }
             .cardList()
@@ -240,9 +239,8 @@ struct CollectionReorderSheet: View {
                     // are not in this list, so Done drops their place). Ids
                     // missing from the order sort after it. An active Library
                     // filter re-sorts (`LibraryFilters.apply`).
-                    Text("The collection lists its works in this order unless a filter "
-                        + "is on. Works not in it — added later, or in Recently "
-                        + "Deleted when you tap Done — appear after it.")
+                    Text("This order is used when no filter is on. Works you add later, or restore from "
+                        + "Recently Deleted after tapping Done, appear at the end.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary.opacity(0.7))
                         .fixedSize(horizontal: false, vertical: true)

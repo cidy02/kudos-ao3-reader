@@ -466,7 +466,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .modifier(QueueCardMenu(queue: queue))
             }
         } emptyState: {
-            Text("Plan what to read next with + above.")
+            Text("Use + above to make a reading queue and plan what you want to read next.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

@@ -81,9 +81,8 @@ enum AO3BookmarksCopy {
         let pages = max(totalPages, 1)
         let page = min(max(currentPage, 1), pages)
         let noun = pages == 1 ? "page" : "pages"
-        return "Your bookmarks on AO3. Each row's note, tags, date, and private "
-            + "or rec mark are that bookmark's own. The pills narrow this page: "
-            + "\(page) of \(pages) \(noun)."
+        return "These are your AO3 bookmarks. Each row shows that bookmark's note, tags, date, "
+            + "privacy and recommendation status. The filters apply to \(page) of \(pages) \(noun)."
     }
 }
 
