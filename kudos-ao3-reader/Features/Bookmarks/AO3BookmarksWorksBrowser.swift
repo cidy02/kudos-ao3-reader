@@ -115,6 +115,8 @@ struct AO3BookmarksWorksBrowser: View {
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @State private var pendingLocalDelete: SavedWork?
+    @State private var pendingLocalRemoval: PendingLibraryRemoval?
 
     private var shownEntries: [CanonicalWork] {
         entries.filter { entry in
@@ -190,6 +192,7 @@ struct AO3BookmarksWorksBrowser: View {
             }
         }
         .cardList()
+        .libraryWorkRemovalConfirmations(pendingDelete: $pendingLocalDelete, pendingRemoval: $pendingLocalRemoval)
         .subjectScreenWash(palette: palette)
     }
 
@@ -252,9 +255,23 @@ struct AO3BookmarksWorksBrowser: View {
             .padding(.horizontal, CardListMetrics.sideMargin)
     }
 
+    @ViewBuilder
     private func detailedRow(_ entry: CanonicalWork) -> some View {
-        rowStack(entry, ledger: displayMode == .ledger)
+        let row = rowStack(entry, ledger: displayMode == .ledger)
             .cardRow(tintHue: hue(for: entry))
+        // A saved work's row takes Library's swipes, as it does everywhere else;
+        // a remote row brings its own through `AO3WorkRow` (T-339).
+        if let work = entry.local {
+            row.libraryWorkSwipeActions(
+                work,
+                kind: .readingNow,
+                isFavoritesList: false,
+                pendingDelete: $pendingLocalDelete,
+                pendingRemoval: $pendingLocalRemoval
+            )
+        } else {
+            row
+        }
     }
 
     private func rowStack(_ entry: CanonicalWork, ledger: Bool) -> some View {

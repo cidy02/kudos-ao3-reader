@@ -65,7 +65,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// On-device matches for the current query — works (via `WorkSearchIndex`),
     /// library fandoms, cached AO3 fandoms, user tags, and collections. Arrays are
     /// already capped to what the list shows.
-    private struct LocalMatches {
+    struct LocalMatches {
         var works: [SavedWork] = []
         var libraryFandoms: [String] = []
         var ao3Fandoms: [AO3Fandom] = []
@@ -114,6 +114,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     // Multi-select / bulk actions over AO3 search results — the same shared
     // selection shell as Browse's FandomWorksView/TagWorksView.
     @State private var bulkSelection = RemoteWorkSelectionController()
+    // Select over the live library matches — Library's own local selection
+    // shell, so the bulk bar, swipes and menu match its section lists (T-339).
+    @State private var isSelectingLocal = false
+    @State private var localSelection: Set<UUID> = []
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -166,6 +170,30 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         RemoteWorkSelectionToolbar(controller: bulkSelection) {
                             bulkSelection.selected(in: results)
                         }
+                    } else if isSelectingLocal {
+                        ToolbarItem(placement: .principal) {
+                            Text(WorkSelectionTitle.text(selectedCount: selectedLocalWorks.count))
+                                .font(.headline)
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            SelectAllButton(
+                                allSelected: !localWorks.isEmpty && selectedLocalWorks.count == localWorks.count,
+                                action: toggleSelectAllLocal
+                            )
+                        }
+                        #if os(iOS)
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            WorkBulkActionBar(
+                                selectedWorks: selectedLocalWorks, onDeleted: exitLocalSelect, onDone: exitLocalSelect
+                            )
+                        }
+                        #else
+                        ToolbarItemGroup(placement: .primaryAction) {
+                            WorkBulkActionBar(
+                                selectedWorks: selectedLocalWorks, onDeleted: exitLocalSelect, onDone: exitLocalSelect
+                            )
+                        }
+                        #endif
                     } else {
                         #if os(iOS)
                         // Search is a focused, full-screen mode. Results replace the
@@ -202,7 +230,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     }
                                     ExpandAllMenuItem(expandAll: $expandAllCards)
                                 })
-                                : nil
+                                : (showsLocalResults && !localWorks.isEmpty)
+                                    ? AnyView(WorkListMoreMenu {
+                                        if hideMature {
+                                            MatureRevealToggle()
+                                        }
+                                        Button { isSelectingLocal = true } label: {
+                                            Label("Select", systemImage: "checklist")
+                                        }
+                                    })
+                                    : nil
                         ].compactMap { $0 })
                     }
                 }
@@ -471,86 +508,42 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         return matches
     }
 
-    /// On-device matches shown live as the user types (from the debounced
-    /// `localMatches` snapshot), plus an explicit AO3 search action (no AO3
-    /// request fires until the user taps it or submits).
+    /// On-device matches shown live as the user types (`SearchLocalResultsList`).
     private var localResultsList: some View {
-        // A deletion re-keys the compute task via the record counts, but a render
-        // can land in the gap before the debounce fires — drop invalidated models
-        // rather than touching them (SwiftData asserts on invalidated access).
-        let works = localMatches.works.filter { $0.modelContext != nil }
-        let tags = localMatches.tags.filter { $0.modelContext != nil }
-        let matchedCollections = localMatches.collections.filter { $0.modelContext != nil }
-        return List {
-            Section {
-                Button(action: runSearch) {
-                    Label("Search AO3 for “\(localQuery)”", systemImage: "magnifyingglass")
-                }
-            } header: {
-                Text("Archive of Our Own")
-            }
-
-            if !works.isEmpty {
-                Section("In Your Library") {
-                    ForEach(works) { work in
-                        WorkRow(work: work).cardNavigation(to: work, accessibilityLabel: work.title)
-                    }
-                    .cardRow()
-                }
-            }
-            if !localMatches.libraryFandoms.isEmpty {
-                Section("Fandoms in Your Library") {
-                    ForEach(localMatches.libraryFandoms, id: \.self) { fandom in
-                        Button { router.filterLibrary(.fandom, fandom) } label: {
-                            Label(fandom, systemImage: "books.vertical")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            if !localMatches.ao3Fandoms.isEmpty {
-                Section("Fandoms on AO3") {
-                    ForEach(localMatches.ao3Fandoms, id: \.id) { fandom in
-                        Button {
-                            setIncludedFandom(fandom.name)
-                            runSearch()
-                        } label: {
-                            HStack {
-                                Label(fandom.name, systemImage: "books.vertical")
-                                Spacer()
-                                if let count = fandom.workCount {
-                                    Text(count.formatted(.number.notation(.compactName)))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            if !tags.isEmpty {
-                Section("Your Tags") {
-                    ForEach(tags) { tag in
-                        Button { router.filterLibrary(.userTag, tag.name) } label: {
-                            Label(tag.name, systemImage: "tag")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            if !matchedCollections.isEmpty {
-                Section("Collections") {
-                    ForEach(matchedCollections) { collection in
-                        NavigationLink(value: collection) {
-                            Label(collection.name, systemImage: "square.stack")
-                        }
-                    }
-                }
-            }
+        SearchLocalResultsList(
+            query: localQuery,
+            matches: localMatches,
+            works: localWorks,
+            isSelecting: $isSelectingLocal,
+            selection: $localSelection,
+            onSearchAO3: runSearch,
+            onSearchFandom: { setIncludedFandom($0); runSearch() }
+        )
+        // Leaving the live matches (an AO3 search, or a cleared query) ends a
+        // selection over them.
+        .onChange(of: showsLocalResults) { _, isShowing in
+            if !isShowing { exitLocalSelect() }
         }
-        .cardList()
+    }
+
+    /// The live library matches, minus any a deletion has invalidated.
+    private var localWorks: [SavedWork] {
+        localMatches.works.filter { $0.modelContext != nil }
+    }
+
+    private var showsLocalResults: Bool { phase == .idle && !localQuery.isEmpty }
+
+    private var selectedLocalWorks: [SavedWork] {
+        localWorks.filter { localSelection.contains($0.id) }
+    }
+
+    private func toggleSelectAllLocal() {
+        localSelection = selectedLocalWorks.count == localWorks.count ? [] : Set(localWorks.map(\.id))
+    }
+
+    private func exitLocalSelect() {
+        isSelectingLocal = false
+        localSelection = []
     }
 
     private var showPagination: Bool {

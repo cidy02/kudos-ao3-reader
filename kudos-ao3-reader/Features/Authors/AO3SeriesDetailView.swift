@@ -26,6 +26,9 @@ struct AO3SeriesDetailView: View {
     @State private var loadMoreError: String?
     @State private var isShowingStaleCache = false
     @State private var expandAll = false
+    /// Select over the series' works — Browse's remote selection shell and
+    /// bulk bar (T-339).
+    @State private var bulkSelection = RemoteWorkSelectionController()
     @State private var loadTask: Task<Void, Never>?
     /// 1br's Edit series, pushed rather than presented — a `NavigationLink` inside
     /// a `Menu` does not reliably push.
@@ -76,38 +79,50 @@ struct AO3SeriesDetailView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar {
-                ActionToolbar(items: [
-                    // The app's one "…" order (pass2-1): Mature, Reorder, Expand,
-                    // then the page's own items.
-                    AnyView(
-                        WorkListMoreMenu {
-                            if hideMature {
-                                MatureRevealToggle()
-                            }
-                            if canEditSeries, works.count > 1 {
-                                Button { isReorderingSeries = true } label: {
-                                    Label("Reorder", systemImage: "arrow.up.arrow.down")
+                if bulkSelection.isSelecting {
+                    RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                        bulkSelection.selected(in: works)
+                    }
+                } else {
+                    ActionToolbar(items: [
+                        // The app's one "…" order (pass2-1): Mature, Select, Reorder,
+                        // Expand, then the page's own items.
+                        AnyView(
+                            WorkListMoreMenu {
+                                if hideMature {
+                                    MatureRevealToggle()
+                                }
+                                if !works.isEmpty {
+                                    Button { bulkSelection.isSelecting = true } label: {
+                                        Label("Select", systemImage: "checklist")
+                                    }
+                                }
+                                if canEditSeries, works.count > 1 {
+                                    Button { isReorderingSeries = true } label: {
+                                        Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                    }
+                                }
+                                if !works.isEmpty {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                    Divider()
+                                }
+                                if canEditSeries {
+                                    Button { isEditingSeries = true } label: {
+                                        Label("Edit series", systemImage: "square.and.pencil")
+                                    }
+                                }
+                                Button { router.open(series.url) } label: {
+                                    Label("Open on AO3", systemImage: "safari")
+                                }
+                                ShareLink(item: series.url) {
+                                    Label("Share Series", systemImage: "square.and.arrow.up")
                                 }
                             }
-                            if !works.isEmpty {
-                                ExpandAllMenuItem(expandAll: $expandAll)
-                                Divider()
-                            }
-                            if canEditSeries {
-                                Button { isEditingSeries = true } label: {
-                                    Label("Edit series", systemImage: "square.and.pencil")
-                                }
-                            }
-                            Button { router.open(series.url) } label: {
-                                Label("Open on AO3", systemImage: "safari")
-                            }
-                            ShareLink(item: series.url) {
-                                Label("Share Series", systemImage: "square.and.arrow.up")
-                            }
-                        }
-                    )
-                ])
+                        )
+                    ])
+                }
             }
+            .remoteWorkSelectionChrome(bulkSelection)
             .navigationDestination(isPresented: $isEditingSeries) {
                 SeriesEditDestination(series: series, works: works)
             }
@@ -123,6 +138,7 @@ struct AO3SeriesDetailView: View {
             .task(id: authenticationScope) {
                 loadTask?.cancel()
                 loadTask = nil
+                bulkSelection.exitSelectMode()
                 works = []
                 currentPage = 0
                 totalPages = 1
@@ -159,7 +175,12 @@ struct AO3SeriesDetailView: View {
                 AO3AuthorInlineErrorRow(message: message)
             }
             ForEach(workEntries) { entry in
-                if let work = entry.local {
+                if bulkSelection.isSelecting, let remote = entry.remote {
+                    // Every entry is remote-led, so selection runs over the AO3
+                    // summaries — the list the bulk bar acts on.
+                    SelectableAO3WorkRow(work: remote, expandAll: expandAll, controller: bulkSelection)
+                        .cardRow(isSelected: bulkSelection.selection.contains(remote.id))
+                } else if let work = entry.local {
                     // No .cardNavigation here: SensitiveWorkRow already applies it
                     // internally (MatureContent.swift) for its non-blurred, non-selecting
                     // branch — re-wrapping it stacks a second, unhidden, real-titled

@@ -151,12 +151,12 @@ struct RecentlyDeletedView: View {
             ToolbarItemGroup(placement: .primaryAction) { selectionBar(entries) }
             #endif
         } else if !entries.isEmpty {
-            ToolbarItem(placement: .primaryAction) {
-                // The checklist glyph Select wears on every other list.
+            // Select lives in the "…", as on every other list (owner, 2026-10-01).
+            ActionToolbar(items: [AnyView(WorkListMoreMenu {
                 Button { isSelecting = true } label: {
                     Label("Select", systemImage: "checklist")
                 }
-            }
+            })])
         }
     }
 
