@@ -1,7 +1,16 @@
 package io.github.cidy02.kudos.backup
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.nullable
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 
@@ -94,7 +103,12 @@ data class BackupWork(
     val preservedAt: String? = null,
     val lastPreservationAttemptAt: String? = null,
     val lastAvailabilityCheck: String? = null,
-    val ao3WorkID: Int? = null
+    val ao3WorkID: Int? = null,
+    val keepInProgressOverride: Boolean? = null,
+    val bookmarks: Int? = null,
+    val epubDigest: String? = null,
+    @Serializable(with = PresentNullJsonSerializer::class) val legacyReaderProgress: JsonElement? = null,
+    @Serializable(with = PresentNullJsonSerializer::class) val hiddenFromHistoryAt: JsonElement? = null
 )
 
 @Serializable
@@ -125,7 +139,12 @@ data class BackupCollection(
     val deletedAt: String? = null,
     val isDeleted: Boolean? = null,
     val permanentDeletionScheduledAt: String? = null,
-    val syncStatusRaw: String? = null
+    val syncStatusRaw: String? = null,
+    val hue: Double? = null,
+    val colorHex: String? = null,
+    val keepsWorksOffline: Boolean? = null,
+    val showsOnHome: Boolean? = null,
+    val workOrderRaw: String? = null
 )
 
 @Serializable
@@ -147,7 +166,12 @@ data class BackupReadingQueue(
     val lastMembershipChangedAt: String? = null,
     val deletedAt: String? = null,
     val isDeleted: Boolean? = null,
-    val permanentDeletionScheduledAt: String? = null
+    val permanentDeletionScheduledAt: String? = null,
+    val hue: Double? = null,
+    val colorHex: String? = null,
+    val isPinned: Boolean? = null,
+    val keepsWorksOffline: Boolean? = null,
+    val notes: String? = null
 )
 
 @Serializable
@@ -219,3 +243,19 @@ data class BackupSettingsPayload(
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5
 )
+
+/**
+ * iOS's `Double??` / `Date??` keys: a missing key leaves the local value, an
+ * explicit `null` clears it. A plain `JsonElement?` decodes both as Kotlin null;
+ * a nullable descriptor hands the null to this serializer instead, which keeps
+ * it as [JsonNull]. Kotlin null (missing) is still omitted on export.
+ */
+internal object PresentNullJsonSerializer : KSerializer<JsonElement?> {
+    override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor.nullable
+
+    override fun deserialize(decoder: Decoder): JsonElement? = (decoder as JsonDecoder).decodeJsonElement()
+
+    override fun serialize(encoder: Encoder, value: JsonElement?) {
+        (encoder as JsonEncoder).encodeJsonElement(value ?: JsonNull)
+    }
+}

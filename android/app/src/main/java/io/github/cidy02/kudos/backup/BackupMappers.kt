@@ -14,7 +14,10 @@ import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
 import io.github.cidy02.kudos.works.WorkRepository
 import java.time.Instant
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 
@@ -141,7 +144,18 @@ fun SavedWork.toBackupWork(
         // Pass-through only — do not default null to "notPreserved" (would rewrite iOS data).
         epubPreservationStatusRaw = epubPreservationStatusRaw,
         preservedAt = preservedAt?.let(BackupValidator::formatInstant),
-        lastPreservationAttemptAt = lastPreservationAttemptAt?.let(BackupValidator::formatInstant)
+        lastPreservationAttemptAt = lastPreservationAttemptAt?.let(BackupValidator::formatInstant),
+        keepInProgressOverride = keepInProgressOverride,
+        bookmarks = bookmarks ?: 0,
+        epubDigest = epubDigest.ifBlank { null },
+        legacyReaderProgress = legacyReaderProgress?.let { JsonPrimitive(it) } ?: JsonNull,
+        hiddenFromHistoryAt = hiddenFromHistoryAt?.let {
+            JsonPrimitive(BackupValidator.formatInstant(it))
+        } ?: JsonNull,
+        datePublished = datePublished,
+        dateUpdated = dateUpdated,
+        ao3SeriesID = ao3SeriesID,
+        assetIdentifier = assetIdentifier.ifBlank { null }
     )
 }
 
@@ -157,6 +171,20 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         exportedAt
     ) ?: added
     val deletionState = restoredDeletionState(isDeleted)
+    val readerProgress = when (val element = legacyReaderProgress) {
+        null, is JsonNull -> null
+        is JsonPrimitive -> element.content.toDoubleOrNull()
+        else -> null
+    }
+    val hiddenAt = when (val element = hiddenFromHistoryAt) {
+        null, is JsonNull -> null
+        is JsonPrimitive -> BackupValidator.parseNullableInstant(
+            element.content.takeIf { it.isNotBlank() },
+            "work.hiddenFromHistoryAt",
+            exportedAt
+        )
+        else -> null
+    }
     return SavedWork(
         id = BackupPaths.canonicalUuid(id, "work.id"),
         title = title,
@@ -242,7 +270,16 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
             lastPreservationAttemptAt?.takeIf { it.isNotBlank() },
             "work.lastPreservationAttemptAt",
             exportedAt
-        )
+        ),
+        keepInProgressOverride = keepInProgressOverride ?: false,
+        hiddenFromHistoryAt = hiddenAt,
+        datePublished = datePublished.orEmpty(),
+        dateUpdated = dateUpdated.orEmpty(),
+        bookmarks = bookmarks,
+        ao3SeriesID = ao3SeriesID,
+        legacyReaderProgress = readerProgress,
+        epubDigest = epubDigest.orEmpty(),
+        assetIdentifier = assetIdentifier.orEmpty()
     )
 }
 
@@ -297,7 +334,12 @@ fun WorkCollection.toBackupCollection(): BackupCollection {
         deletedAt = deletedAt?.let { BackupValidator.formatInstant(it) },
         isDeleted = isDeleted,
         permanentDeletionScheduledAt = permanentDeletionScheduledAt
-            ?.let { BackupValidator.formatInstant(it) }
+            ?.let { BackupValidator.formatInstant(it) },
+        hue = hue,
+        colorHex = colorHex,
+        keepsWorksOffline = keepsWorksOffline,
+        showsOnHome = showsOnHome,
+        workOrderRaw = workOrderRaw
     )
 }
 
@@ -321,7 +363,12 @@ fun BackupCollection.toWorkCollection(
                 BackupValidator.parseInstant(it, "collection.deletedAt", exportedAt)
             }
         } else null,
-        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
+        hue = hue,
+        colorHex = colorHex,
+        keepsWorksOffline = keepsWorksOffline,
+        showsOnHome = showsOnHome ?: false,
+        workOrderRaw = workOrderRaw.orEmpty()
     )
 }
 
@@ -406,7 +453,12 @@ fun ReadingQueue.toBackupReadingQueue(): BackupReadingQueue {
         deletedAt = deletedAt?.let(BackupValidator::formatInstant),
         isDeleted = isDeleted,
         permanentDeletionScheduledAt = permanentDeletionScheduledAt
-            ?.let(BackupValidator::formatInstant)
+            ?.let(BackupValidator::formatInstant),
+        hue = hue,
+        colorHex = colorHex,
+        isPinned = isPinned,
+        keepsWorksOffline = keepsWorksOffline,
+        notes = notes
     )
 }
 
@@ -442,7 +494,12 @@ fun BackupReadingQueue.toReadingQueue(exportedAt: Instant? = null): ReadingQueue
             )
         } else null,
         isDeleted = deletionState.isDeleted,
-        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
+        permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
+        hue = hue,
+        colorHex = colorHex,
+        isPinned = isPinned ?: false,
+        keepsWorksOffline = keepsWorksOffline,
+        notes = notes
     )
 }
 

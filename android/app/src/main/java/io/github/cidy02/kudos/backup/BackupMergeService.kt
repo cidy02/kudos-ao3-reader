@@ -420,7 +420,18 @@ object BackupMergeService {
                 hits = archived.hits ?: existing.hits,
                 knownChapterCount = archived.knownChapterCount ?: existing.knownChapterCount,
                 lastUpdateCheck = restored.lastUpdateCheck ?: existing.lastUpdateCheck,
-                hasGivenKudos = existing.hasGivenKudos || restored.hasGivenKudos
+                hasGivenKudos = existing.hasGivenKudos || restored.hasGivenKudos,
+                freedAt = existing.freedAt,
+                authorIdentitiesJSON = existing.authorIdentitiesJSON,
+                keepInProgressOverride = archived.keepInProgressOverride ?: existing.keepInProgressOverride,
+                hiddenFromHistoryAt = if (archived.hiddenFromHistoryAt != null) restored.hiddenFromHistoryAt else existing.hiddenFromHistoryAt,
+                legacyReaderProgress = if (archived.legacyReaderProgress != null) restored.legacyReaderProgress else existing.legacyReaderProgress,
+                datePublished = restored.datePublished.ifBlank { existing.datePublished },
+                dateUpdated = restored.dateUpdated.ifBlank { existing.dateUpdated },
+                epubDigest = restored.epubDigest.ifBlank { existing.epubDigest },
+                assetIdentifier = restored.assetIdentifier.ifBlank { existing.assetIdentifier },
+                bookmarks = archived.bookmarks ?: existing.bookmarks,
+                ao3SeriesID = archived.ao3SeriesID ?: existing.ao3SeriesID
             )
         } else {
             // Keep local flags/metadata; still absorb non-destructive fills.
@@ -448,7 +459,13 @@ object BackupMergeService {
                 workTagsFetched = existing.workTagsFetched || restored.workTagsFetched,
                 lastModifiedAt = maxInstant(existing.lastModifiedAt, incomingModifiedAt)
                     ?: existing.effectiveLastModifiedAt,
-                hasGivenKudos = existing.hasGivenKudos || restored.hasGivenKudos
+                hasGivenKudos = existing.hasGivenKudos || restored.hasGivenKudos,
+                datePublished = existing.datePublished.ifBlank { restored.datePublished },
+                dateUpdated = existing.dateUpdated.ifBlank { restored.dateUpdated },
+                epubDigest = existing.epubDigest.ifBlank { restored.epubDigest },
+                assetIdentifier = existing.assetIdentifier.ifBlank { restored.assetIdentifier },
+                bookmarks = existing.bookmarks ?: archived.bookmarks,
+                ao3SeriesID = existing.ao3SeriesID ?: archived.ao3SeriesID
             )
         }
 
@@ -840,13 +857,24 @@ object BackupMergeService {
                     .map { BackupPaths.normalizeIdForComparison(it) }
                     .toSet()
                 val added = incomingWorkIds.filter { it !in existingIds }
-                if (added.isNotEmpty()) {
-                    collectionsById[id] = existing.copy(workIds = existing.workIds + added)
+                val filled = fillCollectionFields(existing, archived, incomingWins = false)
+                val target = if (added.isNotEmpty()) {
+                    filled.copy(workIds = filled.workIds + added)
+                } else {
+                    filled
+                }
+                if (target != existing) {
+                    collectionsById[id] = target
                     updated += 1
                 }
             } else {
                 val localModified = existing.lastModifiedAt ?: existing.dateAdded
                 if (!SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
+                    val filled = fillCollectionFields(existing, archived, incomingWins = false)
+                    if (filled != existing) {
+                        collectionsById[id] = filled
+                        updated += 1
+                    }
                     return@forEach
                 }
                 val archivedIsDeleted = archived.isDeleted == true
@@ -863,7 +891,7 @@ object BackupMergeService {
                         ) == TombstoneResolution.SUPPRESS_STALE
                     }
                 val deletionState = restoredDeletionState(archived.isDeleted)
-                collectionsById[id] = existing.copy(
+                val base = existing.copy(
                     name = if (archivedIsDeleted) existing.name else archived.name,
                     dateAdded = BackupValidator.parseInstant(
                         archived.dateAdded,
@@ -882,12 +910,47 @@ object BackupMergeService {
                     },
                     permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
                 )
+                collectionsById[id] = fillCollectionFields(base, archived, incomingWins = true)
                 if (!archivedIsDeleted) names += archived.name
                 updated += 1
             }
         }
 
         return MergeItems(collectionsById.values.sortedBy { it.name.lowercase() }, created, updated)
+    }
+
+    private fun fillCollectionFields(
+        existing: WorkCollection,
+        archived: BackupCollection,
+        incomingWins: Boolean
+    ): WorkCollection {
+        val (chosenHue, chosenHex) = SyncMerge.chosenColor(
+            local = existing.hue to existing.colorHex,
+            incoming = archived.hue to archived.colorHex,
+            incomingWins = incomingWins
+        )
+        val keepsOffline = if (archived.keepsWorksOffline != null && (incomingWins || existing.keepsWorksOffline == null)) {
+            archived.keepsWorksOffline
+        } else {
+            existing.keepsWorksOffline
+        }
+        val onHome = if (archived.showsOnHome != null && (incomingWins || !existing.showsOnHome)) {
+            archived.showsOnHome
+        } else {
+            existing.showsOnHome
+        }
+        val orderRaw = if (!archived.workOrderRaw.isNullOrEmpty() && (incomingWins || existing.workOrderRaw.isEmpty())) {
+            archived.workOrderRaw
+        } else {
+            existing.workOrderRaw
+        }
+        return existing.copy(
+            hue = chosenHue,
+            colorHex = chosenHex,
+            keepsWorksOffline = keepsOffline,
+            showsOnHome = onHome,
+            workOrderRaw = orderRaw
+        )
     }
 
     private fun mergeSavedSearches(
@@ -1062,6 +1125,11 @@ object BackupMergeService {
                 queuesCreated += 1
             } else if (mode == BackupImportMode.MERGE) {
                 // Keep local queue name / fields. New memberships still insert below.
+                val filled = fillQueueFields(existing, archived, incomingWins = false)
+                if (filled != existing) {
+                    queuesById[id] = filled
+                    queuesUpdated += 1
+                }
             } else {
                 val localModified = SyncMerge.effectiveQueueModifiedAt(
                     queueUpdatedAt = existing.dateUpdated,
@@ -1072,7 +1140,7 @@ object BackupMergeService {
                     val restored = archived.toReadingQueue(exportedAt)
                     val finalIsDeleted = !isSystemQueue && restored.isDeleted
                     val deletionState = restoredDeletionState(finalIsDeleted)
-                    queuesById[id] = restored.copy(
+                    val base = restored.copy(
                         // Keep the local identity: local memberships already point
                         // at it, and for the system queue the incoming id is a
                         // different platform's UUID entirely.
@@ -1087,7 +1155,21 @@ object BackupMergeService {
                         permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
                         dateCreated = minInstant(existing.dateCreated, restored.dateCreated)
                     )
+                    val filled = fillQueueFields(existing, archived, incomingWins = true)
+                    queuesById[id] = base.copy(
+                        hue = filled.hue,
+                        colorHex = filled.colorHex,
+                        isPinned = filled.isPinned,
+                        keepsWorksOffline = filled.keepsWorksOffline,
+                        notes = filled.notes
+                    )
                     queuesUpdated += 1
+                } else {
+                    val filled = fillQueueFields(existing, archived, incomingWins = false)
+                    if (filled != existing) {
+                        queuesById[id] = filled
+                        queuesUpdated += 1
+                    }
                 }
             }
         }
@@ -1167,6 +1249,40 @@ object BackupMergeService {
             membershipsCreated = membershipsCreated,
             membershipsUpdated = membershipsUpdated,
             membershipsSuppressed = membershipsSuppressed
+        )
+    }
+
+    private fun fillQueueFields(
+        existing: ReadingQueue,
+        archived: BackupReadingQueue,
+        incomingWins: Boolean
+    ): ReadingQueue {
+        val (chosenHue, chosenHex) = SyncMerge.chosenColor(
+            local = existing.hue to existing.colorHex,
+            incoming = archived.hue to archived.colorHex,
+            incomingWins = incomingWins
+        )
+        val pinned = if (archived.isPinned != null && (incomingWins || !existing.isPinned)) {
+            archived.isPinned
+        } else {
+            existing.isPinned
+        }
+        val keepsOffline = if (archived.keepsWorksOffline != null && (incomingWins || existing.keepsWorksOffline == null)) {
+            archived.keepsWorksOffline
+        } else {
+            existing.keepsWorksOffline
+        }
+        val queueNotes = if (archived.notes != null && (incomingWins || existing.notes == null)) {
+            archived.notes
+        } else {
+            existing.notes
+        }
+        return existing.copy(
+            hue = chosenHue,
+            colorHex = chosenHex,
+            isPinned = pinned,
+            keepsWorksOffline = keepsOffline,
+            notes = queueNotes
         )
     }
 
@@ -1363,6 +1479,18 @@ object BackupMergeService {
 
 /** Apple `SyncMerge` helpers used by backup restore. */
 object SyncMerge {
+    fun chosenColor(
+        local: Pair<Double?, String?>,
+        incoming: Pair<Double?, String?>,
+        incomingWins: Boolean
+    ): Pair<Double?, String?> {
+        val incomingHue = incoming.first ?: return local
+        if (!incomingWins && local.first != null) return local
+        if (incoming.second == null && local.second != null && local.first != null &&
+            kotlin.math.abs(local.first!! - incomingHue) < 0.01) return local
+        return incomingHue to incoming.second
+    }
+
     fun shouldApplyIncoming(localModifiedAt: Instant?, incomingModifiedAt: Instant?): Boolean {
         if (incomingModifiedAt == null) return false
         if (localModifiedAt == null) return true
