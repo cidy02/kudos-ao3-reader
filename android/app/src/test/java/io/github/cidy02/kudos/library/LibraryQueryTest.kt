@@ -194,6 +194,20 @@ class ReadingHistoryQueryTest {
 
         assertEquals(listOf("alpha", "gamma", "delta"), result.ids())
     }
+
+    @Test
+    fun readingHistoryOmitsWorksTheReaderRemoved() {
+        val items = sampleItems().map { display ->
+            if (display.item.work.id != "alpha") display
+            else display.copy(
+                item = display.item.copy(
+                    work = display.item.work.copy(hiddenFromHistoryAt = baseTime)
+                )
+            )
+        }
+
+        assertEquals(listOf("gamma", "delta"), LibraryQuery.readingHistory(items).ids())
+    }
 }
 
 class RecentlyAddedQueryTest {

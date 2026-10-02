@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.CollectionsBookmark
@@ -48,6 +51,8 @@ import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material3.AlertDialog
 import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import androidx.compose.material3.Checkbox
@@ -64,6 +69,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -74,6 +80,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -81,6 +88,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
@@ -88,6 +96,7 @@ import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.app.LocalShellOverlayState
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
@@ -95,9 +104,26 @@ import io.github.cidy02.kudos.ui.components.WorkCoverCard
 import io.github.cidy02.kudos.ui.components.WorkCoverCardMetrics
 import io.github.cidy02.kudos.ui.components.coverCardStats
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkImporter
 import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.subject.FilterButton
+import io.github.cidy02.kudos.ui.subject.GlassCircleButton
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
+import io.github.cidy02.kudos.ui.subject.SubjectChip
+import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
+import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
+import io.github.cidy02.kudos.ui.subject.SwipeAction
+import io.github.cidy02.kudos.ui.subject.SwipeActionRow
+import io.github.cidy02.kudos.ui.subject.WorkCardCarousel
+import io.github.cidy02.kudos.ui.subject.WorkCoverCard as SubjectWorkCoverCard
+import io.github.cidy02.kudos.ui.subject.WorkLedgerRow as SubjectWorkLedgerRow
+import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
+import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
+import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -112,6 +138,7 @@ private const val ShelfLimit = 12
 fun LibraryScreen(
     repository: LibraryRepository,
     workRepository: WorkRepository,
+    workImporter: WorkImporter? = null,
     settingsRepository: SettingsRepository? = null,
     queueRepository: ReadingQueueRepository? = null,
     downloadQueue: DownloadQueue? = null,
@@ -124,7 +151,9 @@ fun LibraryScreen(
     onOpenCollections: () -> Unit = {},
     onOpenQueue: (String) -> Unit = {},
     onOpenCollection: (String) -> Unit = {},
-    onOpenComments: (Long) -> Unit = {}
+    onOpenComments: (Long) -> Unit = {},
+    section: LibrarySectionKind? = null,
+    onOpenSection: (LibrarySectionKind) -> Unit = {}
 ) {
     val viewModel: LibraryViewModel = viewModel(
         factory = LibraryViewModel.factory(
@@ -137,7 +166,15 @@ fun LibraryScreen(
         )
     )
     val state by viewModel.state.collectAsState()
-    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+    val shellOverlay = LocalShellOverlayState.current
+    DisposableEffect(state.selectionMode, section) {
+        shellOverlay.hidesTabBar = state.selectionMode
+        onDispose {
+            shellOverlay.hidesTabBar = false
+        }
+    }
+    val localContext = LocalContext.current
+    val activity = localContext as? androidx.fragment.app.FragmentActivity
     val scope = rememberCoroutineScope()
     var confirmBulkRemove by remember { mutableStateOf(false) }
     var confirmRemoveOne by remember { mutableStateOf<String?>(null) }
@@ -147,6 +184,21 @@ fun LibraryScreen(
     var addToCollectionWorkId by remember { mutableStateOf<String?>(null) }
     var bulkAddToQueueOpen by remember { mutableStateOf(false) }
     var bulkAddToCollectionOpen by remember { mutableStateOf(false) }
+    var showFilters by remember { mutableStateOf(false) }
+    var confirmRemoveFromHistory by remember { mutableStateOf<String?>(null) }
+    var confirmDeleteCollection by remember { mutableStateOf<String?>(null) }
+    val layoutPreferences = remember {
+        localContext.getSharedPreferences("library-dashboard", android.content.Context.MODE_PRIVATE)
+    }
+    var dashboardLayout by remember {
+        mutableStateOf(
+            if (layoutPreferences.getString("layout", "shelves") == "ledger") {
+                WorkSectionLayout.Ledger
+            } else {
+                WorkSectionLayout.Shelves
+            }
+        )
+    }
 
     if (bulkAddToQueueOpen) {
         AlertDialog(
@@ -221,9 +273,9 @@ fun LibraryScreen(
 
     DestructiveConfirmation(
         show = confirmBulkRemove,
-        title = if (state.selectedCount == 1) "Remove 1 work?" else "Remove ${state.selectedCount} works?",
+        title = if (state.selectedCount == 1) "Delete 1 work?" else "Delete ${state.selectedCount} works?",
         text = "Selected works move to Recently Deleted for 90 days.",
-        confirmText = "Remove",
+        confirmText = "Delete",
         confirmBeforeDelete = state.confirmBeforeDelete,
         onConfirm = {
             confirmBulkRemove = false
@@ -233,10 +285,38 @@ fun LibraryScreen(
     )
 
     DestructiveConfirmation(
-        show = confirmRemoveOne != null,
-        title = "Remove from Library?",
-        text = "This work moves to Recently Deleted for 90 days.",
+        show = confirmRemoveFromHistory != null,
+        title = "Remove this work?",
+        text = "This work will leave your reading history. Reading it again brings it back.",
         confirmText = "Remove",
+        confirmBeforeDelete = true,
+        onConfirm = {
+            val workId = confirmRemoveFromHistory ?: return@DestructiveConfirmation
+            confirmRemoveFromHistory = null
+            viewModel.removeFromHistoryOne(workId)
+        },
+        onDismissRequest = { confirmRemoveFromHistory = null }
+    )
+
+    DestructiveConfirmation(
+        show = confirmDeleteCollection != null,
+        title = "Delete this collection?",
+        text = "Kudos will move this collection to Recently Deleted for 90 days. Its works will stay in your Library.",
+        confirmText = "Delete",
+        confirmBeforeDelete = true,
+        onConfirm = {
+            val collectionId = confirmDeleteCollection ?: return@DestructiveConfirmation
+            confirmDeleteCollection = null
+            viewModel.deleteCollection(collectionId)
+        },
+        onDismissRequest = { confirmDeleteCollection = null }
+    )
+
+    DestructiveConfirmation(
+        show = confirmRemoveOne != null,
+        title = "Delete this work?",
+        text = "This work moves to Recently Deleted for 90 days.",
+        confirmText = "Delete",
         confirmBeforeDelete = state.confirmBeforeDelete,
         onConfirm = {
             val workId = confirmRemoveOne ?: return@DestructiveConfirmation
@@ -463,6 +543,16 @@ fun LibraryScreen(
 
     LibraryContent(
         state = state,
+        section = section,
+        dashboardLayout = dashboardLayout,
+        onLayoutChange = { layout ->
+            dashboardLayout = layout
+            layoutPreferences.edit().putString(
+                "layout",
+                if (layout == WorkSectionLayout.Ledger) "ledger" else "shelves"
+            ).apply()
+        },
+        onShowFilters = { showFilters = true },
         onUpdateSearchQuery = viewModel::updateSearchQuery,
         onUpdateSort = viewModel::updateSort,
         onSetFandomFilter = viewModel::setFandomFilter,
@@ -475,11 +565,13 @@ fun LibraryScreen(
         onOpenCollections = onOpenCollections,
         onOpenQueue = onOpenQueue,
         onOpenCollection = onOpenCollection,
+        onOpenSection = onOpenSection,
         onCreateQueue = { createQueueName = "" },
         onCreateCollection = { createCollectionName = "" },
         onEnterSelection = { viewModel.enterSelectionMode() },
         onExitSelection = viewModel::exitSelectionMode,
         onToggleSelection = viewModel::toggleWorkSelection,
+        onSetSelection = viewModel::setSelection,
         onBulkFavorite = { viewModel.bulkSetFavorite(true) },
         onBulkUnfavorite = { viewModel.bulkSetFavorite(false) },
         onBulkSave = { viewModel.bulkSetSaved(true) },
@@ -489,24 +581,56 @@ fun LibraryScreen(
         onBulkMarkFinished = { viewModel.bulkSetFinished(true) },
         onBulkMarkUnfinished = { viewModel.bulkSetFinished(false) },
         onBulkRemove = { confirmBulkRemove = true },
+        onBulkSaveForLater = viewModel::bulkAddToSaveForLater,
         onBulkRemoveFromSaveForLater = viewModel::bulkRemoveFromSaveForLater,
         onToggleFavoriteOne = viewModel::toggleFavoriteOne,
         onToggleFinishedOne = viewModel::toggleFinishedOne,
         onRemoveOne = { confirmRemoveOne = it },
+        onRemoveFromHistory = { confirmRemoveFromHistory = it },
+        onRemoveFromAllQueues = viewModel::removeFromAllQueuesOne,
+        onDeleteCollection = { confirmDeleteCollection = it },
         onDownloadAction = viewModel::performDownloadAction,
         onToggleSavedForLaterOne = viewModel::toggleSavedForLaterOne,
         onRevealWork = { viewModel.revealWork(it, activity) },
         onAddToQueue = { addToQueueWorkId = it },
         onAddToCollection = { addToCollectionWorkId = it },
         onOpenComments = onOpenComments,
+        canRebuildFromOriginal = { work ->
+            workImporter?.canRebuildFromOriginal(work) == true
+        },
+        onRebuildFromOriginal = { work ->
+            workImporter?.let { importer ->
+                scope.launch { importer.rebuildFromOriginal(work) }
+            }
+        },
         onTogglePrivacy = { viewModel.toggleRevealAll(activity) },
         onRefresh = { viewModel.refresh() }
     )
+
+    if (showFilters) {
+        LibraryFilterPanel(
+            filters = state.filters,
+            sort = state.sort,
+            userTags = state.userTags,
+            collections = state.collections,
+            onFiltersChange = viewModel::updateFilters,
+            onSortChange = viewModel::updateSort,
+            onApply = { showFilters = false },
+            onClear = viewModel::clearFilters,
+            onDismiss = { showFilters = false },
+            searchQuery = state.searchQuery,
+            onSearchQueryChange = viewModel::updateSearchQuery
+        )
+    }
 }
 
 @Composable
 private fun LibraryContent(
     state: LibraryUiState,
+    section: LibrarySectionKind?,
+    dashboardLayout: WorkSectionLayout,
+    onLayoutChange: (WorkSectionLayout) -> Unit,
+    onShowFilters: () -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
     onUpdateSort: (LibrarySort) -> Unit,
     onSetFandomFilter: (String?) -> Unit,
@@ -519,11 +643,13 @@ private fun LibraryContent(
     onOpenCollections: () -> Unit,
     onOpenQueue: (String) -> Unit,
     onOpenCollection: (String) -> Unit,
+    onOpenSection: (LibrarySectionKind) -> Unit,
     onCreateQueue: () -> Unit,
     onCreateCollection: () -> Unit,
     onEnterSelection: () -> Unit,
     onExitSelection: () -> Unit,
     onToggleSelection: (String) -> Unit,
+    onSetSelection: (Set<String>) -> Unit,
     onBulkFavorite: () -> Unit,
     onBulkUnfavorite: () -> Unit,
     onBulkSave: () -> Unit,
@@ -533,19 +659,26 @@ private fun LibraryContent(
     onBulkMarkFinished: () -> Unit,
     onBulkMarkUnfinished: () -> Unit,
     onBulkRemove: () -> Unit,
+    onBulkSaveForLater: () -> Unit,
     onBulkRemoveFromSaveForLater: () -> Unit,
     onToggleFavoriteOne: (String) -> Unit,
     onToggleFinishedOne: (String) -> Unit,
     onRemoveOne: (String) -> Unit,
+    onRemoveFromHistory: (String) -> Unit,
+    onRemoveFromAllQueues: (String) -> Unit,
+    onDeleteCollection: (String) -> Unit,
     onDownloadAction: (String, WorkDownloadAction) -> Unit,
     onToggleSavedForLaterOne: (String, Boolean) -> Unit = { _, _ -> },
     onRevealWork: (String) -> Unit,
     onAddToQueue: (String) -> Unit,
     onAddToCollection: (String) -> Unit,
     onOpenComments: (Long) -> Unit,
+    canRebuildFromOriginal: suspend (SavedWork) -> Boolean,
+    onRebuildFromOriginal: (SavedWork) -> Unit,
     onTogglePrivacy: () -> Unit,
     onRefresh: suspend () -> Unit
 ) {
+    val tokens = LocalKudosTokens.current
     val collapsed = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
     val bottomPad = if (state.selectionMode) 88.dp else 12.dp
     val cardActions = LibraryCardActions(
@@ -557,16 +690,51 @@ private fun LibraryContent(
         onDownloadAction = onDownloadAction,
         onToggleSavedForLater = onToggleSavedForLaterOne,
         onSelect = { id ->
-            onEnterSelection()
+            if (!state.selectionMode) onEnterSelection()
             onToggleSelection(id)
         },
         onReveal = onRevealWork,
         onAddToQueue = onAddToQueue,
         onAddToCollection = onAddToCollection,
-        onOpenComments = onOpenComments
+        onOpenComments = onOpenComments,
+        canRebuildFromOriginal = canRebuildFromOriginal,
+        onRebuildFromOriginal = onRebuildFromOriginal
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    if (section != null) {
+        LibrarySectionContent(
+            kind = section,
+            state = state,
+            cardActions = cardActions,
+            onShowFilters = onShowFilters,
+            onTogglePrivacy = onTogglePrivacy,
+            onEnterSelection = onEnterSelection,
+            onExitSelection = onExitSelection,
+            onToggleSelection = onToggleSelection,
+            onSetSelection = onSetSelection,
+            onBulkFavorite = onBulkFavorite,
+            onBulkUnfavorite = onBulkUnfavorite,
+            onBulkSave = onBulkSave,
+            onBulkUnsave = onBulkUnsave,
+            onBulkAddToQueue = onBulkAddToQueue,
+            onBulkAddToCollection = onBulkAddToCollection,
+            onBulkMarkFinished = onBulkMarkFinished,
+            onBulkMarkUnfinished = onBulkMarkUnfinished,
+            onBulkRemove = onBulkRemove,
+            onBulkSaveForLater = onBulkSaveForLater,
+            onBulkRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
+            onRemoveFromHistory = onRemoveFromHistory,
+            onRemoveFromAllQueues = onRemoveFromAllQueues,
+            onRefresh = onRefresh
+        )
+        return
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .subjectScreenWash(tokens.scopePalette)
+    ) {
         KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -576,80 +744,19 @@ private fun LibraryContent(
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            item {
-                LibraryToolbarPill(
-                    state = state,
-                    onOpenReadingStatistics = onOpenReadingStatistics,
-                    onEnterSelection = onEnterSelection,
-                    onExitSelection = onExitSelection,
-                    onTogglePrivacy = onTogglePrivacy,
-                    onOpenRecentlyDeleted = onOpenRecentlyDeleted,
-                    onBulkRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
-            }
-
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = state.searchQuery,
-                        onValueChange = onUpdateSearchQuery,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Search library") },
-                        singleLine = true,
-                        trailingIcon = {
-                            if (state.searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { onUpdateSearchQuery("") }) {
-                                    Icon(Icons.Filled.Clear, "Clear search")
-                                }
-                            }
-                        }
+            if (!state.selectionMode) {
+                item {
+                    LibraryTopActions(
+                        state = state,
+                        layout = dashboardLayout,
+                        onLayoutChange = onLayoutChange,
+                        onNewCollection = onCreateCollection,
+                        onShowFilters = onShowFilters,
+                        onOpenReadingQueues = onOpenReadingQueues,
+                        onOpenReadingStatistics = onOpenReadingStatistics,
+                        onEnterSelection = onEnterSelection,
+                        onTogglePrivacy = onTogglePrivacy
                     )
-
-                    var sortMenuOpen by remember { mutableStateOf(false) }
-                    var moreMenuOpen by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { sortMenuOpen = true }) {
-                            Icon(Icons.Filled.Sort, "Sort")
-                        }
-                        DropdownMenu(
-                            expanded = sortMenuOpen,
-                            onDismissRequest = { sortMenuOpen = false }
-                        ) {
-                            LibrarySort.entries.forEach { sortOption ->
-                                DropdownMenuItem(
-                                    text = { Text(sortOption.label) },
-                                    onClick = {
-                                        onUpdateSort(sortOption)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    Box {
-                        IconButton(onClick = { moreMenuOpen = true }) {
-                            Icon(Icons.Default.MoreVert, "More")
-                        }
-                        DropdownMenu(
-                            expanded = moreMenuOpen,
-                            onDismissRequest = { moreMenuOpen = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Remove from Save for Later") },
-                                onClick = {
-                                    moreMenuOpen = false
-                                    onBulkRemoveFromSaveForLater()
-                                }
-                            )
-                        }
-                    }
                 }
             }
 
@@ -674,17 +781,6 @@ private fun LibraryContent(
                 return@LazyColumn
             }
 
-            if (!state.hasSavedWorks) {
-                item {
-                    EmptyStateCard(
-                        title = "No saved works",
-                        message = "Save or download works from Search, Browse, or Work Detail.",
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-                return@LazyColumn
-            }
-
             if (!state.selectionMode &&
                 (state.topFandoms.isNotEmpty() || state.filters.hasActiveFilters)
             ) {
@@ -703,15 +799,22 @@ private fun LibraryContent(
 
             if (state.selectionMode) {
                 item {
-                    Text(
-                        text = if (state.hasSelection) {
-                            "${state.selectedCount} selected"
-                        } else {
-                            "Select works"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
+                    val selectableIds = state.items.mapTo(linkedSetOf()) { it.item.work.id }
+                    val allSelected = selectableIds.isNotEmpty() &&
+                        state.selectedWorkIds.containsAll(selectableIds)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (state.hasSelection) "${state.selectedCount} Selected" else "Select Works",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = { onSetSelection(if (allSelected) emptySet() else selectableIds) }
+                        ) { Text(if (allSelected) "Deselect All" else "Select All") }
+                    }
                 }
                 items(state.items, key = { "sel-${it.item.work.id}" }) { display ->
                     SelectableWorkRow(
@@ -723,119 +826,102 @@ private fun LibraryContent(
                 }
             } else {
                 item {
-                    LibraryCarousel(
-                        sectionKey = "readingNow",
-                        title = "Reading Now",
-                        items = state.continueReading.take(ShelfLimit),
-                        emptyMessage =
-                            "You're not reading anything right now. Open something below or find a new work in Browse.",
-                        showProgress = true,
+                    LibraryDashboardWorkSection(
+                        kind = LibrarySectionKind.ReadingNow,
+                        items = state.continueReading,
+                        layout = dashboardLayout,
                         collapsed = collapsed["readingNow"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("readingNow")
-                        },
-                        actions = cardActions
+                        onToggleCollapsed = { collapsed.toggle("readingNow") },
+                        onSeeAll = { onOpenSection(LibrarySectionKind.ReadingNow) },
+                        actions = cardActions,
+                        onRemoveFromHistory = onRemoveFromHistory,
+                        onRemoveFromAllQueues = onRemoveFromAllQueues
                     )
                 }
                 item {
-                    LibraryCarousel(
-                        sectionKey = "savedForLater",
-                        title = "Saved for Later",
-                        items = state.savedForLater.take(ShelfLimit),
-                        emptyMessage =
-                            "Nothing saved for later yet. Save works here, or mark them for later on AO3.",
-                        showProgress = false,
+                    LibraryDashboardWorkSection(
+                        kind = LibrarySectionKind.SavedForLater,
+                        items = state.savedForLater,
+                        layout = dashboardLayout,
                         collapsed = collapsed["savedForLater"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("savedForLater")
-                        },
-                        actions = cardActions
+                        onToggleCollapsed = { collapsed.toggle("savedForLater") },
+                        onSeeAll = { onOpenSection(LibrarySectionKind.SavedForLater) },
+                        actions = cardActions,
+                        onRemoveFromHistory = onRemoveFromHistory,
+                        onRemoveFromAllQueues = onRemoveFromAllQueues
                     )
                 }
                 item {
-                    LibraryCarousel(
-                        sectionKey = "finished",
-                        title = "Finished",
-                        items = state.finished.take(ShelfLimit),
-                        emptyMessage = "No finished works yet. Works you complete show up here.",
-                        showProgress = false,
-                        footerFor = { "Finished" },
+                    LibraryDashboardWorkSection(
+                        kind = LibrarySectionKind.Finished,
+                        items = state.finished,
+                        layout = dashboardLayout,
                         collapsed = collapsed["finished"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("finished")
-                        },
-                        actions = cardActions
-                    )
-                }
-                item {
-                    // Home already has a Favorites shelf; Library computed the same
-                    // state (privacy-reveal mapped and all) but never rendered it.
-                    LibraryCarousel(
-                        sectionKey = "favorites",
-                        title = "Favorites",
-                        items = state.favorites.take(ShelfLimit),
-                        emptyMessage = "No favorites yet. Mark works as favorites to see them here.",
-                        showProgress = false,
-                        collapsed = collapsed["favorites"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("favorites")
-                        },
-                        actions = cardActions
-                    )
-                }
-                item {
-                    ReadingQueuesShelf(
-                        queues = state.readingQueues,
-                        collapsed = collapsed["queues"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("queues")
-                        },
-                        onSeeAll = onOpenReadingQueues,
-                        onCreate = onCreateQueue,
-                        onOpenQueue = onOpenQueue
+                        onToggleCollapsed = { collapsed.toggle("finished") },
+                        onSeeAll = { onOpenSection(LibrarySectionKind.Finished) },
+                        actions = cardActions,
+                        onRemoveFromHistory = onRemoveFromHistory,
+                        onRemoveFromAllQueues = onRemoveFromAllQueues
                     )
                 }
                 item {
                     CollectionsShelf(
                         collections = state.collections,
+                        allItems = state.items,
+                        layout = dashboardLayout,
                         collapsed = collapsed["collections"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("collections")
-                        },
+                        onToggleCollapsed = { collapsed.toggle("collections") },
                         onSeeAll = onOpenCollections,
-                        onCreate = onCreateCollection,
-                        onOpenCollection = onOpenCollection
+                        onOpenCollection = onOpenCollection,
+                        onDeleteCollection = onDeleteCollection
                     )
                 }
                 item {
-                    LibraryCarousel(
-                        sectionKey = "downloaded",
-                        title = "Downloaded",
-                        items = state.downloaded.take(ShelfLimit),
-                        emptyMessage =
-                            "No downloads yet. Download a work as EPUB to read it offline.",
-                        showProgress = false,
+                    LibraryDashboardWorkSection(
+                        kind = LibrarySectionKind.Downloaded,
+                        items = state.downloaded,
+                        layout = dashboardLayout,
                         collapsed = collapsed["downloaded"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("downloaded")
-                        },
-                        actions = cardActions
+                        onToggleCollapsed = { collapsed.toggle("downloaded") },
+                        onSeeAll = { onOpenSection(LibrarySectionKind.Downloaded) },
+                        actions = cardActions,
+                        onRemoveFromHistory = onRemoveFromHistory,
+                        onRemoveFromAllQueues = onRemoveFromAllQueues
                     )
                 }
                 item {
-                    LibraryCarousel(
-                        sectionKey = "history",
-                        title = "Reading History",
-                        items = state.readingHistory.take(ShelfLimit),
-                        emptyMessage =
-                            "Nothing opened recently. Start reading to see your history here.",
-                        showProgress = false,
+                    LibraryDashboardWorkSection(
+                        kind = LibrarySectionKind.History,
+                        items = state.readingHistory,
+                        layout = dashboardLayout,
                         collapsed = collapsed["history"],
-                        onToggleCollapsed = {
-                            collapsed.toggle("history")
-                        },
-                        actions = cardActions
+                        onToggleCollapsed = { collapsed.toggle("history") },
+                        onSeeAll = { onOpenSection(LibrarySectionKind.History) },
+                        actions = cardActions,
+                        onRemoveFromHistory = onRemoveFromHistory,
+                        onRemoveFromAllQueues = onRemoveFromAllQueues
                     )
+                }
+                item {
+                    LibraryDashboardWorkSection(
+                        kind = LibrarySectionKind.Favorites,
+                        items = state.favorites,
+                        layout = dashboardLayout,
+                        collapsed = collapsed["favorites"],
+                        onToggleCollapsed = { collapsed.toggle("favorites") },
+                        onSeeAll = { onOpenSection(LibrarySectionKind.Favorites) },
+                        actions = cardActions,
+                        onRemoveFromHistory = onRemoveFromHistory,
+                        onRemoveFromAllQueues = onRemoveFromAllQueues
+                    )
+                }
+                if (state.recentlyDeletedCount > 0) {
+                    item {
+                        RecentlyDeletedRow(
+                            count = state.recentlyDeletedCount,
+                            onClick = onOpenRecentlyDeleted
+                        )
+                    }
                 }
             }
         }
@@ -853,12 +939,536 @@ private fun LibraryContent(
                 onMarkFinished = onBulkMarkFinished,
                 onMarkUnfinished = onBulkMarkUnfinished,
                 onRemove = onBulkRemove,
+                onSaveForLater = onBulkSaveForLater,
                 onRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
                 onCancel = onExitSelection,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
     }
+}
+
+@Composable
+private fun LibraryTopActions(
+    state: LibraryUiState,
+    layout: WorkSectionLayout,
+    onLayoutChange: (WorkSectionLayout) -> Unit,
+    onNewCollection: () -> Unit,
+    onShowFilters: () -> Unit,
+    onOpenReadingQueues: () -> Unit,
+    onOpenReadingStatistics: () -> Unit,
+    onEnterSelection: () -> Unit,
+    onTogglePrivacy: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    var moreOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        GlassCircleButton(onClick = onNewCollection, accessibilityName = "New Collection") {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
+        }
+        if (state.hasSavedWorks) {
+            FilterButton(
+                filtersActive = state.hasActiveQueryOrFilters,
+                badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
+                onClick = onShowFilters,
+                modifier = Modifier.size(44.dp)
+            )
+        }
+        Box {
+            GlassCircleButton(onClick = { moreOpen = true }, accessibilityName = "More") {
+                Icon(Icons.Filled.MoreVert, contentDescription = null)
+            }
+            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                if (state.showPrivacyToggle) {
+                    DropdownMenuItem(
+                        text = { Text(if (state.revealAllActive) "Hide mature works" else "Show mature works") },
+                        leadingIcon = {
+                            Icon(
+                                if (state.revealAllActive) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                contentDescription = null
+                            )
+                        },
+                        onClick = { moreOpen = false; onTogglePrivacy() }
+                    )
+                }
+                if (state.hasSavedWorks) {
+                    DropdownMenuItem(
+                        text = { Text("Select") },
+                        leadingIcon = { Icon(Icons.Outlined.Checklist, contentDescription = null) },
+                        onClick = { moreOpen = false; onEnterSelection() }
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(if (layout == WorkSectionLayout.Shelves) "Show Detailed List" else "Show Carousels") },
+                    leadingIcon = {
+                        Icon(
+                            if (layout == WorkSectionLayout.Shelves) Icons.AutoMirrored.Outlined.List else Icons.Outlined.CollectionsBookmark,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        moreOpen = false
+                        onLayoutChange(
+                            if (layout == WorkSectionLayout.Shelves) WorkSectionLayout.Ledger else WorkSectionLayout.Shelves
+                        )
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Reading Queues") },
+                    leadingIcon = { Icon(Icons.Outlined.Queue, contentDescription = null) },
+                    onClick = { moreOpen = false; onOpenReadingQueues() }
+                )
+                if (state.hasSavedWorks) {
+                    DropdownMenuItem(
+                        text = { Text("Reading Insights") },
+                        leadingIcon = { Icon(Icons.Outlined.BarChart, contentDescription = null) },
+                        onClick = { moreOpen = false; onOpenReadingStatistics() }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryDashboardWorkSection(
+    kind: LibrarySectionKind,
+    items: List<LibraryDisplayItem>,
+    layout: WorkSectionLayout,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
+    onSeeAll: () -> Unit,
+    actions: LibraryCardActions,
+    onRemoveFromHistory: (String) -> Unit,
+    onRemoveFromAllQueues: (String) -> Unit
+) {
+    io.github.cidy02.kudos.ui.subject.WorkCarouselSection(
+        title = kind.title,
+        count = items.size,
+        collapsed = collapsed,
+        onToggleCollapsed = onToggleCollapsed,
+        onSeeAll = onSeeAll,
+        emptyMessage = kind.emptyMessage,
+        layout = layout
+    ) {
+        if (layout == WorkSectionLayout.Shelves) {
+            WorkCardCarousel(items.take(ShelfLimit), key = { it.item.work.id }) { display ->
+                LibrarySubjectWorkCard(display, kind, actions)
+            }
+        } else {
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items.take(ShelfLimit).forEach { display ->
+                    LibrarySubjectLedgerRow(
+                        display = display,
+                        kind = kind,
+                        actions = actions,
+                        onRemoveFromHistory = onRemoveFromHistory,
+                        onRemoveFromAllQueues = onRemoveFromAllQueues
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibrarySubjectWorkCard(
+    display: LibraryDisplayItem,
+    kind: LibrarySectionKind,
+    actions: LibraryCardActions,
+    selected: Boolean = false,
+    selecting: Boolean = false
+) {
+    val work = display.item.work
+    val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
+    var menuOpen by remember(work.id) { mutableStateOf(false) }
+    val progress = work.readingProgressFraction() ?: 0.0
+    SubjectWorkCoverCard(
+        title = work.title,
+        author = work.author,
+        fandoms = work.workFandoms,
+        progress = if (kind == LibrarySectionKind.ReadingNow) progress else null,
+        progressState = when {
+            work.isFinished -> "Finished"
+            progress > 0 -> "Reading"
+            else -> null
+        },
+        signals = defaultWorkSignals(work.rating, work.workCategories, work.workWarnings, work.isComplete),
+        footer = if (kind == LibrarySectionKind.Finished) "Finished" else null,
+        obscured = obscured,
+        isSelected = selected,
+        onClick = {
+            when {
+                selecting -> actions.onSelect(work.id)
+                obscured -> actions.onReveal(work.id)
+                work.hasEpub -> actions.onOpenReader(work.id)
+                else -> actions.onOpenWork(work.id)
+            }
+        },
+        onLongClick = { if (!obscured && !selecting) menuOpen = true }
+    )
+    LibraryWorkMenu(menuOpen, { menuOpen = false }, work, actions)
+}
+
+@Composable
+private fun LibrarySubjectLedgerRow(
+    display: LibraryDisplayItem,
+    kind: LibrarySectionKind,
+    actions: LibraryCardActions,
+    onRemoveFromHistory: (String) -> Unit,
+    onRemoveFromAllQueues: (String) -> Unit,
+    selected: Boolean = false,
+    selecting: Boolean = false
+) {
+    val work = display.item.work
+    val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
+    var menuOpen by remember(work.id) { mutableStateOf(false) }
+    val progress = work.readingProgressFraction() ?: 0.0
+    val row: @Composable () -> Unit = {
+        SubjectWorkLedgerRow(
+            title = work.title,
+            author = work.author,
+            fandoms = work.workFandoms,
+            metadata = listOfNotNull(
+                work.author.ifBlank { null },
+                work.wordCount.takeIf { it > 0 }?.let(::compactWords),
+                work.chapters.takeIf { it.isNotBlank() }
+            ).joinToString(" · "),
+            progress = progress,
+            progressState = when {
+                work.isFinished -> "Finished"
+                progress > 0 -> "Reading"
+                else -> null
+            },
+            signals = defaultWorkSignals(work.rating, work.workCategories, work.workWarnings, work.isComplete),
+            obscured = obscured,
+            favorite = kind == LibrarySectionKind.Favorites && work.isFavorite,
+            selected = selected,
+            onClick = {
+                when {
+                    selecting -> actions.onSelect(work.id)
+                    obscured -> actions.onReveal(work.id)
+                    work.hasEpub -> actions.onOpenReader(work.id)
+                    else -> actions.onOpenWork(work.id)
+                }
+            },
+            onLongClick = { if (!obscured && !selecting) menuOpen = true }
+        )
+    }
+    if (selecting || obscured) {
+        row()
+    } else {
+        SwipeActionRow(
+            leading = leadingSwipeActions(work, kind, actions),
+            trailing = trailingSwipeActions(work, kind, actions, onRemoveFromHistory, onRemoveFromAllQueues),
+            content = row
+        )
+    }
+    LibraryWorkMenu(menuOpen, { menuOpen = false }, work, actions)
+}
+
+@Composable
+private fun leadingSwipeActions(
+    work: SavedWork,
+    kind: LibrarySectionKind,
+    actions: LibraryCardActions
+): List<SwipeAction> {
+    val tokens = LocalKudosTokens.current
+    return buildList {
+        if (kind == LibrarySectionKind.History || kind == LibrarySectionKind.Favorites) {
+            add(
+                SwipeAction(
+                    if (work.isQueuedForLater) "Unsave" else "Save for Later",
+                    Icons.Outlined.Schedule,
+                    tokens.accent
+                ) { actions.onToggleSavedForLater(work.id, work.isQueuedForLater) }
+            )
+        }
+        WorkDownloadSemantics.action(
+            work.hasEpub,
+            work.isDownloaded,
+            work.hasAo3WorkId,
+            work.keptOfflineBy
+        )?.takeIf { it !is WorkDownloadAction.KeptBy }?.let { action ->
+            add(
+                SwipeAction(
+                    if (action == WorkDownloadAction.RemoveDownload) "Remove Download" else "Download",
+                    Icons.Outlined.CloudDownload,
+                    Color(0xFF2E7D32)
+                ) { actions.onDownloadAction(work.id, action) }
+            )
+        }
+        if (kind != LibrarySectionKind.Favorites) {
+            add(
+                SwipeAction(
+                    if (work.isFavorite) "Unfavorite" else "Favorite",
+                    Icons.Outlined.Star,
+                    Color(0xFFF9A825)
+                ) { actions.onToggleFavorite(work.id) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun trailingSwipeActions(
+    work: SavedWork,
+    kind: LibrarySectionKind,
+    actions: LibraryCardActions,
+    onRemoveFromHistory: (String) -> Unit,
+    onRemoveFromAllQueues: (String) -> Unit
+): List<SwipeAction> = when {
+    kind == LibrarySectionKind.Favorites -> listOf(
+        SwipeAction("Unfavorite", Icons.Outlined.Star, Color(0xFFF9A825)) {
+            actions.onToggleFavorite(work.id)
+        }
+    )
+    kind == LibrarySectionKind.History -> listOf(
+        SwipeAction("Remove", Icons.Outlined.RemoveCircleOutline, MaterialTheme.colorScheme.error) {
+            onRemoveFromHistory(work.id)
+        }
+    )
+    work.isQueueOnlyWork -> listOf(
+        SwipeAction("Remove", Icons.Outlined.RemoveCircleOutline, MaterialTheme.colorScheme.error) {
+            onRemoveFromAllQueues(work.id)
+        }
+    )
+    else -> listOf(
+        SwipeAction("Delete", Icons.Outlined.Delete, MaterialTheme.colorScheme.error) {
+            actions.onRemove(work.id)
+        }
+    )
+}
+
+@Composable
+private fun LibraryWorkMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    work: SavedWork,
+    actions: LibraryCardActions
+) {
+    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl)
+    var canRebuild by remember(work.id) { mutableStateOf(false) }
+    LaunchedEffect(expanded, work.id) {
+        canRebuild = expanded && actions.canRebuildFromOriginal(work)
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (work.hasEpub) {
+            ContextMenuItem(Icons.AutoMirrored.Outlined.MenuBook, "Read", {
+                onDismiss(); actions.onOpenReader(work.id)
+            })
+        }
+        if (ao3Id != null) {
+            ContextMenuItem(Icons.Outlined.Info, "Comments", {
+                onDismiss(); actions.onOpenComments(ao3Id)
+            })
+        }
+        ContextMenuItem(Icons.Outlined.Checklist, "Select", {
+            onDismiss(); actions.onSelect(work.id)
+        })
+        WorkDownloadSemantics.action(
+            work.hasEpub,
+            work.isDownloaded,
+            work.hasAo3WorkId,
+            work.keptOfflineBy
+        )?.let { action ->
+            ContextMenuItem(
+                if (action == WorkDownloadAction.RemoveDownload) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
+                when (action) {
+                    WorkDownloadAction.Download -> "Download"
+                    WorkDownloadAction.RemoveDownload -> "Remove Download"
+                    is WorkDownloadAction.KeptBy -> "Kept Offline by ${action.name}"
+                },
+                { onDismiss(); actions.onDownloadAction(work.id, action) },
+                enabled = action !is WorkDownloadAction.KeptBy
+            )
+        }
+        ContextMenuItem(
+            if (work.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+            if (work.isFavorite) "Unfavorite" else "Favorite",
+            { onDismiss(); actions.onToggleFavorite(work.id) }
+        )
+        ContextMenuItem(Icons.Outlined.Schedule, if (work.isQueuedForLater) "Remove from Saved for Later" else "Save for Later", {
+            onDismiss(); actions.onToggleSavedForLater(work.id, work.isQueuedForLater)
+        })
+        ContextMenuItem(Icons.AutoMirrored.Outlined.List, "Add to Queue", {
+            onDismiss(); actions.onAddToQueue(work.id)
+        })
+        ContextMenuItem(Icons.Outlined.CheckCircle, if (work.isFinished) "Mark as Still Reading" else "Mark as Finished", {
+            onDismiss(); actions.onToggleFinished(work.id)
+        })
+        ContextMenuItem(Icons.Outlined.Folder, "Add to Collection", {
+            onDismiss(); actions.onAddToCollection(work.id)
+        })
+        if (canRebuild) {
+            ContextMenuItem(Icons.Outlined.Build, "Rebuild from Original", {
+                onDismiss(); actions.onRebuildFromOriginal(work)
+            })
+        }
+        ContextMenuItem(Icons.Outlined.Info, "Work Details", {
+            onDismiss(); actions.onOpenWork(work.id)
+        })
+        ContextMenuItem(Icons.Outlined.Delete, "Delete", {
+            onDismiss(); actions.onRemove(work.id)
+        }, destructive = true)
+    }
+}
+
+@Composable
+private fun LibrarySectionContent(
+    kind: LibrarySectionKind,
+    state: LibraryUiState,
+    cardActions: LibraryCardActions,
+    onShowFilters: () -> Unit,
+    onTogglePrivacy: () -> Unit,
+    onEnterSelection: () -> Unit,
+    onExitSelection: () -> Unit,
+    onToggleSelection: (String) -> Unit,
+    onSetSelection: (Set<String>) -> Unit,
+    onBulkFavorite: () -> Unit,
+    onBulkUnfavorite: () -> Unit,
+    onBulkSave: () -> Unit,
+    onBulkUnsave: () -> Unit,
+    onBulkAddToQueue: () -> Unit,
+    onBulkAddToCollection: () -> Unit,
+    onBulkMarkFinished: () -> Unit,
+    onBulkMarkUnfinished: () -> Unit,
+    onBulkRemove: () -> Unit,
+    onBulkSaveForLater: () -> Unit,
+    onBulkRemoveFromSaveForLater: () -> Unit,
+    onRemoveFromHistory: (String) -> Unit,
+    onRemoveFromAllQueues: (String) -> Unit,
+    onRefresh: suspend () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    val sectionItems = kind.items(state)
+    val ids = sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
+    val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .subjectScreenWash(tokens.scopePalette)
+    ) {
+        KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                contentPadding = PaddingValues(top = 12.dp, bottom = if (state.selectionMode) 94.dp else 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    SubjectHeaderBlock(
+                        kicker = "Library",
+                        title = kind.title,
+                        subtitle = "${sectionItems.size} ${if (sectionItems.size == 1) "work" else "works"}",
+                        palette = tokens.scopePalette
+                    )
+                }
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (state.selectionMode) {
+                            TextButton(onClick = { onSetSelection(if (allSelected) emptySet() else ids) }) {
+                                Text(if (allSelected) "Deselect All" else "Select All")
+                            }
+                        } else {
+                            FilterButton(
+                                filtersActive = state.hasActiveQueryOrFilters,
+                                badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
+                                onClick = onShowFilters
+                            )
+                            if (state.showPrivacyToggle) {
+                                IconButton(onClick = onTogglePrivacy) {
+                                    Icon(
+                                        if (state.revealAllActive) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                        contentDescription = if (state.revealAllActive) "Hide mature works" else "Show mature works"
+                                    )
+                                }
+                            }
+                            IconButton(onClick = onEnterSelection, enabled = sectionItems.isNotEmpty()) {
+                                Icon(Icons.Outlined.Checklist, contentDescription = "Select")
+                            }
+                        }
+                    }
+                }
+                when {
+                    state.loading -> item { LoadingStateCard("Loading ${kind.title}", Modifier.padding(horizontal = 16.dp)) }
+                    state.error != null -> item {
+                        ErrorStateCard(kind.title, state.error, Modifier.padding(horizontal = 16.dp))
+                    }
+                    sectionItems.isEmpty() -> item {
+                        EmptyStateCard("Nothing here yet", kind.emptyMessage, Modifier.padding(horizontal = 16.dp))
+                    }
+                    else -> items(sectionItems, key = { "${kind.id}-${it.item.work.id}" }) { display ->
+                        LibrarySubjectLedgerRow(
+                            display = display,
+                            kind = kind,
+                            actions = cardActions,
+                            onRemoveFromHistory = onRemoveFromHistory,
+                            onRemoveFromAllQueues = onRemoveFromAllQueues,
+                            selected = display.item.work.id in state.selectedWorkIds,
+                            selecting = state.selectionMode
+                        )
+                    }
+                }
+            }
+        }
+        if (state.selectionMode) {
+            LibrarySelectionActionBar(
+                hasSelection = state.hasSelection,
+                onFavorite = onBulkFavorite,
+                onUnfavorite = onBulkUnfavorite,
+                onSave = onBulkSave,
+                onUnsave = onBulkUnsave,
+                onAddToQueue = onBulkAddToQueue,
+                onAddToCollection = onBulkAddToCollection,
+                onMarkFinished = onBulkMarkFinished,
+                onMarkUnfinished = onBulkMarkUnfinished,
+                onRemove = onBulkRemove,
+                onSaveForLater = onBulkSaveForLater,
+                onRemoveFromSaveForLater = onBulkRemoveFromSaveForLater,
+                onCancel = onExitSelection,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentlyDeletedRow(count: Int, onClick: () -> Unit) {
+    val tokens = LocalKudosTokens.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .subjectPanel()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(Icons.Outlined.Delete, contentDescription = null, tint = tokens.secondaryInk, modifier = Modifier.size(18.dp))
+        Text("Recently Deleted", color = tokens.primaryInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.weight(1f))
+        Text(count.toString(), color = tokens.secondaryInk, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = tokens.tertiaryInk)
+    }
+}
+
+private fun compactWords(count: Int): String = when {
+    count >= 1_000_000 -> "${count / 1_000_000}.${(count % 1_000_000) / 100_000}M words"
+    count >= 1_000 -> "${count / 1_000}K words"
+    else -> "$count words"
 }
 
 data class LibraryCardActions(
@@ -874,7 +1484,9 @@ data class LibraryCardActions(
     val onReveal: (String) -> Unit,
     val onAddToQueue: (String) -> Unit,
     val onAddToCollection: (String) -> Unit,
-    val onOpenComments: (Long) -> Unit
+    val onOpenComments: (Long) -> Unit,
+    val canRebuildFromOriginal: suspend (SavedWork) -> Boolean = { false },
+    val onRebuildFromOriginal: (SavedWork) -> Unit = {}
 )
 
 /** Compact trailing pill: privacy eye · select · overflow (Insights / Select). */
@@ -1446,46 +2058,82 @@ private fun ReadingQueuesShelf(
 @Composable
 private fun CollectionsShelf(
     collections: List<WorkCollection>,
+    allItems: List<LibraryDisplayItem>,
+    layout: WorkSectionLayout,
     collapsed: Boolean,
     onToggleCollapsed: () -> Unit,
     onSeeAll: () -> Unit,
-    onCreate: () -> Unit,
-    onOpenCollection: (String) -> Unit
+    onOpenCollection: (String) -> Unit,
+    onDeleteCollection: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        CollapsibleSectionHeader(
-            title = "Collections",
-            collapsed = collapsed,
-            onToggleCollapsed = onToggleCollapsed,
-            onSeeAll = onSeeAll,
-            showSeeAll = true
-        )
-        AnimatedVisibility(visible = !collapsed) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
-                verticalAlignment = Alignment.Top
+    io.github.cidy02.kudos.ui.subject.WorkCarouselSection(
+        title = "Collections",
+        count = collections.size,
+        collapsed = collapsed,
+        onToggleCollapsed = onToggleCollapsed,
+        onSeeAll = onSeeAll,
+        emptyMessage = "Use + above to create a collection for works you want to group together.",
+        layout = layout
+    ) {
+        if (layout == WorkSectionLayout.Shelves) {
+            WorkCardCarousel(collections.take(ShelfLimit), key = { it.id }) { collection ->
+                CollectionDashboardCard(collection, allItems, onOpenCollection, onDeleteCollection)
+            }
+        } else {
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "new-collection") {
-                    CreateShelfTile(
-                        title = "New Collection",
-                        subtitle = "Tap to create",
-                        onClick = onCreate
-                    )
-                }
-                items(collections, key = { "col-${it.id}" }) { collection ->
-                    NamedShelfTile(
-                        title = collection.name,
-                        subtitle = when (collection.workIds.size) {
-                            0 -> "Empty"
-                            1 -> "1 work"
-                            else -> "${collection.workIds.size} works"
-                        },
-                        onClick = { onOpenCollection(collection.id) }
+                collections.take(ShelfLimit).forEach { collection ->
+                    CollectionDashboardCard(
+                        collection,
+                        allItems,
+                        onOpenCollection,
+                        onDeleteCollection,
+                        ledger = true
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CollectionDashboardCard(
+    collection: WorkCollection,
+    allItems: List<LibraryDisplayItem>,
+    onOpenCollection: (String) -> Unit,
+    onDeleteCollection: (String) -> Unit,
+    ledger: Boolean = false
+) {
+    var menuOpen by remember(collection.id) { mutableStateOf(false) }
+    val previews = allItems
+        .filter { display -> display.item.collections.any { it.id == collection.id } }
+        .sortedByDescending { it.item.work.dateAdded }
+        .map { it.item.work }
+    if (ledger) {
+        CollectionLedgerRow(
+            collection = collection,
+            previewWorks = previews,
+            onClick = { onOpenCollection(collection.id) },
+            onLongClick = { menuOpen = true }
+        )
+    } else {
+        CollectionCard(
+            collection = collection,
+            previewWorks = previews,
+            onClick = { onOpenCollection(collection.id) },
+            onLongClick = { menuOpen = true }
+        )
+    }
+    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenuItem(
+            text = { Text("Delete Collection", color = MaterialTheme.colorScheme.error) },
+            leadingIcon = {
+                Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            },
+            onClick = { menuOpen = false; onDeleteCollection(collection.id) }
+        )
     }
 }
 
@@ -1657,6 +2305,7 @@ private fun LibrarySelectionActionBar(
     onMarkFinished: () -> Unit,
     onMarkUnfinished: () -> Unit,
     onRemove: () -> Unit,
+    onSaveForLater: () -> Unit,
     onRemoveFromSaveForLater: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
@@ -1670,63 +2319,36 @@ private fun LibrarySelectionActionBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onFavorite, enabled = hasSelection) {
-                    Icon(Icons.Outlined.Star, "Favorite")
+            TextButton(onClick = onRemove, enabled = hasSelection) {
+                Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+            Box {
+                TextButton(onClick = { overflowExpanded = true }, enabled = hasSelection) {
+                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                    Text("Actions")
                 }
-                IconButton(onClick = onSave, enabled = hasSelection) {
-                    Icon(Icons.Outlined.Download, "Download")
-                }
-                IconButton(onClick = onAddToQueue, enabled = hasSelection) {
-                    Icon(Icons.Outlined.Queue, "Add to Queue")
-                }
-                IconButton(onClick = onAddToCollection, enabled = hasSelection) {
-                    Icon(Icons.Outlined.CollectionsBookmark, "Add to Collection")
-                }
-                IconButton(onClick = onMarkFinished, enabled = hasSelection) {
-                    Icon(Icons.Outlined.CheckCircle, "Mark Finished")
+                DropdownMenu(expanded = overflowExpanded, onDismissRequest = { overflowExpanded = false }) {
+                    DropdownMenuItem(text = { Text("Download") }, onClick = { overflowExpanded = false; onSave() })
+                    DropdownMenuItem(text = { Text("Favorite") }, onClick = { overflowExpanded = false; onFavorite() })
+                    DropdownMenuItem(text = { Text("Save for Later") }, onClick = { overflowExpanded = false; onSaveForLater() })
+                    DropdownMenuItem(text = { Text("Add to Queue") }, onClick = { overflowExpanded = false; onAddToQueue() })
+                    DropdownMenuItem(text = { Text("Add to Collection") }, onClick = { overflowExpanded = false; onAddToCollection() })
+                    DropdownMenuItem(text = { Text("Mark Finished") }, onClick = { overflowExpanded = false; onMarkFinished() })
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text("Unfavorite") }, onClick = { overflowExpanded = false; onUnfavorite() })
+                    DropdownMenuItem(text = { Text("Remove Download") }, onClick = { overflowExpanded = false; onUnsave() })
+                    DropdownMenuItem(text = { Text("Remove from Saved for Later") }, onClick = { overflowExpanded = false; onRemoveFromSaveForLater() })
+                    DropdownMenuItem(text = { Text("Mark as Still Reading") }, onClick = { overflowExpanded = false; onMarkUnfinished() })
                 }
             }
-            
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    IconButton(onClick = { overflowExpanded = true }, enabled = hasSelection) {
-                        Icon(Icons.Default.MoreVert, "More actions")
-                    }
-                    DropdownMenu(
-                        expanded = overflowExpanded,
-                        onDismissRequest = { overflowExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Unfavorite") },
-                            onClick = { overflowExpanded = false; onUnfavorite() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Remove Download") },
-                            onClick = { overflowExpanded = false; onUnsave() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Mark Unfinished") },
-                            onClick = { overflowExpanded = false; onMarkUnfinished() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Remove from Saved for Later") },
-                            onClick = { overflowExpanded = false; onRemoveFromSaveForLater() }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Remove from Library", color = MaterialTheme.colorScheme.error) },
-                            onClick = { overflowExpanded = false; onRemove() }
-                        )
-                    }
-                }
-                TextButton(onClick = onCancel) {
-                    Text("Cancel")
-                }
+            TextButton(onClick = onCancel) {
+                Icon(Icons.Outlined.CheckCircle, contentDescription = null)
+                Text("Done")
             }
         }
     }

@@ -83,7 +83,8 @@ data class LibraryUiState(
      * `MatureRevealToggle` / `gate.revealAll`).
      */
     val revealAllActive: Boolean = false,
-    val matureWorkCount: Int = 0
+    val matureWorkCount: Int = 0,
+    val recentlyDeletedCount: Int = 0
 ) {
     val hasSavedWorks: Boolean
         get() = totalSaved > 0

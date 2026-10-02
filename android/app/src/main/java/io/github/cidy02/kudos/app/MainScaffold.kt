@@ -36,8 +36,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,6 +82,12 @@ private val ShellGearReserve = 48.dp
 private val ChromeMotion = tween<Float>(durationMillis = 220, easing = EaseInOut)
 private val ChromeDpMotion = tween<Dp>(durationMillis = 220, easing = EaseInOut)
 
+class ShellOverlayState {
+    var hidesTabBar by mutableStateOf(false)
+}
+
+val LocalShellOverlayState = staticCompositionLocalOf { ShellOverlayState() }
+
 // Chrome policy: Search is its own shell root, in a circle beside the four tabs.
 // Theme cycling stays on Account and Settings. Pushed screens hide the floating bar.
 
@@ -97,6 +107,9 @@ fun MainScaffold(
     val homeChrome = remember { HomeShellChrome() }
     val onHome = currentRoute == Routes.Home
     val homeSelecting = onHome && homeChrome.hideTabBar
+    val overlay = remember { ShellOverlayState() }
+    // Home (HomeShellChrome) and Library (ShellOverlayState) each hide the bar in select mode.
+    val hidesTabBar = homeSelecting || overlay.hidesTabBar
     val chromeHidden = chrome.isHidden(if (shell) currentRoute else null)
     val bridge = remember { ShellScrollBridge() }
     bridge.route = if (shell) currentRoute else null
@@ -130,7 +143,7 @@ fun MainScaffold(
         reader -> insets.calculateTopPadding()
         else -> 0.dp
     }
-    val bottomPad = insets.calculateBottomPadding() + if (shell && !homeSelecting) ShellBarClearance else 0.dp
+    val bottomPad = insets.calculateBottomPadding() + if (shell && !hidesTabBar) ShellBarClearance else 0.dp
     val page = if (shell) tokens.background else MaterialTheme.colorScheme.background
 
     Box(
@@ -155,12 +168,14 @@ fun MainScaffold(
                     .fillMaxWidth()
                     .padding(top = topPad, bottom = bottomPad)
             ) {
-                AppNavHost(
-                    container = container,
-                    navController = navController,
-                    modifier = Modifier.fillMaxSize(),
-                    shellChrome = homeChrome
-                )
+                CompositionLocalProvider(LocalShellOverlayState provides overlay) {
+                    AppNavHost(
+                        container = container,
+                        navController = navController,
+                        modifier = Modifier.fillMaxSize(),
+                        shellChrome = homeChrome
+                    )
+                }
             }
         }
 
@@ -242,7 +257,7 @@ fun MainScaffold(
                 .padding(bottom = bottomPad)
         )
 
-        if (shell && !homeSelecting) {
+        if (shell && !hidesTabBar) {
             FloatingTabBar(
                 currentRoute = currentRoute,
                 minimized = chromeHidden,
