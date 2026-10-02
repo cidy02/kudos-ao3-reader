@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.ui.subject
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -544,7 +547,11 @@ private fun StatCell(
     }
 }
 
-/** 68dp read-progress ring. [state] is the word under the percentage. */
+/**
+ * 68dp read-progress ring. [state] is the word under the percentage. In a slot
+ * shorter than [diameter] it shrinks as a whole (ring, stroke and labels), so
+ * it stays round and "READING" is never clipped.
+ */
 @Composable
 fun WorkProgressRing(
     progress: Double,
@@ -553,6 +560,22 @@ fun WorkProgressRing(
     diameter: Dp = SubjectMetrics.ringDiameter,
     tint: Color? = null
 ) {
+    BoxWithConstraints(
+        modifier.sizeIn(maxWidth = diameter, maxHeight = diameter).aspectRatio(1f),
+        contentAlignment = Alignment.Center
+    ) {
+        WorkProgressRingSized(progress, state, minOf(maxWidth, maxHeight, diameter), tint)
+    }
+}
+
+@Composable
+private fun WorkProgressRingSized(
+    progress: Double,
+    state: String?,
+    diameter: Dp,
+    tint: Color?
+) {
+    val modifier: Modifier = Modifier
     val tokens = LocalKudosTokens.current
     val clamped = progress.coerceIn(0.0, 1.0)
     val percent = (clamped * 100.0).roundToInt()
@@ -573,7 +596,11 @@ fun WorkProgressRing(
     }
     Box(
         modifier
-            .size(diameter)
+            // Square even when the slot is shorter than [diameter]: a plain
+            // size() let the height clamp while the width did not, and the
+            // arc drew as an ellipse (owner report, 2026-10-02).
+            .sizeIn(maxWidth = diameter, maxHeight = diameter)
+            .aspectRatio(1f)
             .semantics {
                 contentDescription = "Reading progress"
                 stateDescription = spoken
@@ -582,9 +609,9 @@ fun WorkProgressRing(
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val strokePx = stroke.toPx()
-            val inset = strokePx / 2f
-            val arcSize = Size(size.width - strokePx, size.height - strokePx)
-            val topLeft = Offset(inset, inset)
+            val side = minOf(size.width, size.height)
+            val arcSize = Size(side - strokePx, side - strokePx)
+            val topLeft = Offset((size.width - side + strokePx) / 2f, (size.height - side + strokePx) / 2f)
             val arc = Stroke(width = strokePx, cap = StrokeCap.Round)
             drawArc(track, 0f, 360f, false, topLeft, arcSize, style = arc)
             if (clamped > 0.0) {
