@@ -547,13 +547,13 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             // pass. Referenced only inside these closures it keeps the same
             // deferred cost profile `.contextMenu` below already relies on.
             // A full swipe takes the first action — fine for Download, not for
-            // Remove Download, which deletes a file.
+            // Remove Download, which un-keeps a work.
             .swipeActions(
                 edge: .leading,
                 allowsFullSwipe: existingLocalWork.map { WorkDownload.action(for: $0) != .removeDownload } ?? true
             ) {
                 // A work already here, even as a copy fetched only to read, takes
-                // the shared control: Download keeps it, Remove Download frees it.
+                // the shared control: Download keeps it, Remove Download un-keeps it.
                 if let existingLocalWork, WorkDownload.action(for: existingLocalWork) != nil {
                     WorkDownloadButton(work: existingLocalWork)
                 } else {
