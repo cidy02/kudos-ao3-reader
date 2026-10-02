@@ -23,6 +23,7 @@ enum BrowseZoomKey: Hashable {
 
 struct BrowseView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(\.modelContext) private var modelContext
 
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
@@ -35,17 +36,25 @@ struct BrowseView: View {
         let title: String
     }
 
+    // ponytail: a sibling family records only its first tag; give families their
+    // own Jump Back In card if that reads wrong.
+    /// Opens a fandom's works and records the visit, which orders Jump Back In.
+    private func openFandom(_ names: [String], _ title: String) {
+        if let first = names.first {
+            ReadingLogService.markVisited(fandom: first, newestWork: nil, in: modelContext)
+        }
+        path.append(FandomRoute(names: names, title: title))
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
-            MediaBrowserView(onSelectFandom: { path.append(FandomRoute(names: $0, title: $1)) })
+            MediaBrowserView(onSelectFandom: openFandom)
                 .navigationTitle("Browse")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
                 .navigationDestination(for: AO3MediaCategory.self) { category in
-                    FandomListView(category: category) { names, title in
-                        path.append(FandomRoute(names: names, title: title))
-                    }
+                    FandomListView(category: category, onSelect: openFandom)
                 }
                 .navigationDestination(for: FandomRoute.self) { route in
                     FandomWorksView(fandom: route.title, includedFandoms: route.names)

@@ -27,6 +27,8 @@ struct MediaBrowserView: View {
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     #endif
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var library: [SavedWork]
+    /// Fandom pages opened from Browse, for Jump Back In's order.
+    @Query private var fandomVisits: [FandomReadWatermark]
 
     @State private var categories: [AO3MediaCategory] = []
     @State private var phase: Phase = .loading
@@ -36,6 +38,8 @@ struct MediaBrowserView: View {
     @State private var statsByCategory: [String: CategoryStats] = [:]
     /// 1g's "Jump Back In", from the same off-actor pass — see `jumpBackInFandoms`.
     @State private var jumpBackInPicks: [JumpBackInPick] = []
+    /// About a third of a phone's width, so a fourth card peeks at the edge.
+    @ScaledMetric(relativeTo: .subheadline) private var jumpBackInCardWidth: CGFloat = 112
     /// Set once `cardsReady` has waited as long as it is willing to for counts
     /// (a warm cache beats it; a cold one does not) — see `load`.
     @State private var countsSettled = false
@@ -251,17 +255,24 @@ struct MediaBrowserView: View {
             VStack(alignment: .leading, spacing: 11) {
                 SectionRuleHeader(title: "Jump Back In", count: recent.count)
 
-                HStack(alignment: .top, spacing: 11) {
-                    ForEach(recent, id: \.fandom) { entry in
-                        Button { onSelectFandom([entry.fandom], entry.fandom) } label: {
-                            jumpBackInCard(entry)
+                // A carousel of up to ten (owner, 2026-10-01), so each card keeps
+                // a fixed width instead of sharing the row three ways.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 11) {
+                        ForEach(recent, id: \.fandom) { entry in
+                            Button { onSelectFandom([entry.fandom], entry.fandom) } label: {
+                                jumpBackInCard(entry).frame(width: jumpBackInCardWidth)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    // One height for the row: a two-line name made its card the odd one out.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, CardListMetrics.sideMargin)
+                    .padding(.vertical, 6)
                 }
-                // One height for the row: a two-line name made its card the odd one out.
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, CardListMetrics.sideMargin)
+                // The card shadows fall past the row, as on the Home shelves.
+                .scrollClipDisabled()
             }
         }
     }
@@ -272,9 +283,8 @@ struct MediaBrowserView: View {
         let workCount: Int?
     }
 
-    /// At most three (`jumpBackInLimit`), one per fandom, most recently read
-    /// first. Three because 1g draws three and they share the width equally — a
-    /// fourth would squeeze every card below the width its fandom name needs.
+    /// At most ten (`jumpBackInLimit`), one per fandom, most recently visited or
+    /// read first.
     private var jumpBackInEntries: [JumpBackInEntry] {
         jumpBackInPicks.compactMap { pick in
             guard let category = categories.first(where: { $0.id == pick.categoryID }) else { return nil }
@@ -629,6 +639,8 @@ struct MediaBrowserView: View {
         let changed = library.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
         let lastRead = library.compactMap(\.lastReadDate).max()?.timeIntervalSince1970 ?? 0
         parts.append("lib:\(library.count):\(changed):\(lastRead)")
+        let lastVisit = fandomVisits.map(\.lastVisitedAt).max()?.timeIntervalSince1970 ?? 0
+        parts.append("visits:\(fandomVisits.count):\(lastVisit)")
         return parts.joined(separator: "|")
     }
 
@@ -663,10 +675,12 @@ struct MediaBrowserView: View {
             )
         }
 
+        let visits = fandomVisits.map { FandomVisit(fandom: $0.fandomName, at: $0.lastVisitedAt) }
+
         let computed = await Task.detached(priority: .userInitiated) {
             (
                 stats: Self.computeStats(inputs: inputs, works: works),
-                jumpBackIn: Self.rankJumpBackIn(inputs: inputs, works: works)
+                jumpBackIn: Self.rankJumpBackIn(inputs: inputs, works: works, visits: visits)
             )
         }.value
 
@@ -678,36 +692,8 @@ struct MediaBrowserView: View {
     /// How many "recently read" fandom chips a category card shows at most.
     private static let recentFandomsLimit = 5
 
-    /// How many Jump Back In cards 1g draws.
-    private nonisolated static let jumpBackInLimit = 3
-
-    /// Jump Back In, ranked across every category (1g.6): read works newest-read
-    /// first, the first `limit` distinct fandoms that belong to a category, each
-    /// in the library's own spelling. `categoryFor` and `workCountFor` take a
-    /// lowercased name. Pure, so the order can be tested without a catalog.
-    nonisolated static func jumpBackInFandoms(
-        works: [LibraryWorkSnapshot],
-        categoryFor: (String) -> String?,
-        workCountFor: (String) -> Int?,
-        limit: Int
-    ) -> [JumpBackInPick] {
-        let readWorks = works.filter(\.hasBeenRead).sorted { $0.recency > $1.recency }
-        var picks: [JumpBackInPick] = []
-        var seen = Set<String>()
-        for work in readWorks {
-            for index in work.fandomsLower.indices {
-                let lower = work.fandomsLower[index]
-                guard let categoryID = categoryFor(lower), seen.insert(lower).inserted else { continue }
-                picks.append(JumpBackInPick(
-                    fandom: work.fandomsDisplay[index],
-                    categoryID: categoryID,
-                    workCount: workCountFor(lower)
-                ))
-                if picks.count == limit { return picks }
-            }
-        }
-        return picks
-    }
+    /// How many Jump Back In cards the carousel holds (owner, 2026-10-01: ten).
+    private nonisolated static let jumpBackInLimit = 10
 
     /// Maps only the fandoms you have read to their category (the first that
     /// lists them, in `/media` order) and to their work count — looked up in the
@@ -715,9 +701,11 @@ struct MediaBrowserView: View {
     /// fandom outside the top twelve still shows its size (1g.7).
     private nonisolated static func rankJumpBackIn(
         inputs: [CategoryStatsInput],
-        works: [LibraryWorkSnapshot]
+        works: [LibraryWorkSnapshot],
+        visits: [FandomVisit]
     ) -> [JumpBackInPick] {
         let readLower = Set(works.lazy.filter(\.hasBeenRead).flatMap(\.fandomsLower))
+            .union(visits.map { $0.fandom.lowercased() })
         guard !readLower.isEmpty else { return [] }
         var categoryByFandom: [String: String] = [:]
         var workCountByFandom: [String: Int] = [:]
@@ -731,6 +719,7 @@ struct MediaBrowserView: View {
         }
         return jumpBackInFandoms(
             works: works,
+            visits: visits,
             categoryFor: { categoryByFandom[$0] },
             workCountFor: { workCountByFandom[$0] },
             limit: jumpBackInLimit
