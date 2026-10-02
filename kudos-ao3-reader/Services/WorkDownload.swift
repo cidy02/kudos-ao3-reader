@@ -5,24 +5,26 @@ import SwiftData
 /// 2026-10-01, reversing 2026-09-28's "follow the file"): a copy fetched only to
 /// read a work is not a download, so that work offers Download — which, with
 /// the file already here, keeps it at once. Download still fetches a missing
-/// file, and Remove Download still deletes one.
+/// file. Remove Download only stops keeping it (owner, 2026-10-01: "only Delete
+/// may remove an EPUB"), so the file stays and the work becomes a reading copy.
 enum WorkDownload {
     enum Action: Equatable {
         /// Not kept: fetches the file if it is missing, then keeps it.
         case download
         /// Kept by Download (or "Keep works you read"), and nothing else is
-        /// keeping it.
+        /// keeping it. Clears the keep; the file stays.
         case removeDownload
         /// On this device because a Keep-offline queue or collection holds it —
         /// removing the file there would only be fetched back.
         case keptBy(String)
     }
 
-    /// Nil when there is nothing to offer: not on the device and no AO3 id to
-    /// fetch it from (an import whose file was freed).
+    /// Nil when there is nothing to offer: an imported work (no AO3 copy to
+    /// fetch, and always kept), or one not on the device with no AO3 id.
     @MainActor
     static func action(for work: SavedWork) -> Action? {
         let hasFile = WorkReaderPreparation.hasReadableEPUB(for: work)
+        if work.ao3WorkID == nil, hasFile { return nil }
         if hasFile {
             if let holder = keeper(of: work) { return .keptBy(holder) }
             if work.isDownloaded { return .removeDownload }
@@ -51,8 +53,8 @@ enum WorkDownload {
         }
     }
 
-    /// Download fetches the EPUB and keeps it; Remove Download deletes the file
-    /// and the keep flag, leaving the record as history. `keptBy` does nothing.
+    /// Download fetches the EPUB and keeps it; Remove Download clears the keep
+    /// flag and leaves the file (only Delete removes one). `keptBy` does nothing.
     /// With a `queue`, Download goes through the app's `DownloadQueue`, whose
     /// banner shows it running and says if it failed; without one it fetches
     /// inline and throws.
@@ -76,9 +78,7 @@ enum WorkDownload {
             }
             try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
         case .removeDownload:
-            work.isSaved = false
-            WorkLifecycle.freeEPUB(work)
-            context.saveBestEffort(reason: "Removing a download failed")
+            WorkLifecycle.setSaved(work, false, in: context)
         case .keptBy:
             return
         }
