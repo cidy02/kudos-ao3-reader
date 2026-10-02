@@ -278,7 +278,7 @@ struct ReadingQueueStorageView: View {
 
                 Section {
                     if preservedWorks.isEmpty {
-                        Text("No queued EPUBs are currently stored on this device.")
+                        Text("None of your queued works is downloaded on this device.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(preservedWorks) { work in
@@ -319,8 +319,8 @@ struct ReadingQueueStorageView: View {
                 } header: {
                     Text("Preserved EPUBs")
                 } footer: {
-                    Text("Removing a work here only removes queue membership. Saved or favorited works stay "
-                        + "in Kudos; queue-only works are removed when no queues remain.")
+                    Text("Removing a work here takes it out of its queues. It stays in Kudos if you saved "
+                        + "or favorited it, but a work kept only by queues is removed when its last queue is gone.")
                 }
             }
             .appThemedRows()
@@ -395,9 +395,9 @@ struct ReadingQueueStorageView: View {
     private var queueRemovalMessage: String {
         guard let work = pendingQueueRemoval else { return "" }
         if work.isSaved || work.isFavorite {
-            return "This keeps the work in your Library and only removes its reading queue membership."
+            return "Kudos will remove the work from its reading queues. It will stay in your Library."
         }
-        return "This queue-only work will be removed from Kudos if it has no remaining queues."
+        return "Kudos will remove this work if it isn't in another queue, because you haven't saved or favorited it."
     }
 
     private var queueRemovalButtonTitle: String {
@@ -481,7 +481,7 @@ struct AddToQueueView: View {
                 } header: {
                     Text("Queues")
                 } footer: {
-                    Text("Queue membership keeps a local EPUB available without marking the work as saved.")
+                    Text("A queue with Keep works offline turned on keeps its works downloaded for you.")
                 }
 
                 if hasSeries {
@@ -529,7 +529,7 @@ struct AddToQueueView: View {
                     } header: {
                         Text("Series")
                     } footer: {
-                        Text("Series works are added only after you tap the series action. Requests are paced.")
+                        Text("Kudos adds series works only after you choose Add Series, one work at a time.")
                     }
                 }
             }
@@ -671,8 +671,8 @@ struct AddToQueueView: View {
             return "Adding \(result.completed) of \(result.total) series works…"
         }
         if result.cancelled > 0 {
-            return "Series preservation cancelled. Added \(result.preserved) work"
-                + "\(result.preserved == 1 ? "" : "s")."
+            return "Stopped adding the series. \(result.preserved) work"
+                + "\(result.preserved == 1 ? " was" : "s were") added."
         }
         if result.total == 0 { return "No series works were found." }
         let parts = result.summaryParts(verb: "added")

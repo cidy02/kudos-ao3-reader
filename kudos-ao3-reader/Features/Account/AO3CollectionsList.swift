@@ -379,7 +379,7 @@ struct AO3CollectionsList: View {
     }
 
     private var sourceFooter: some View {
-        Text("AO3 collections. Local collections live in Library.")
+        Text("These are your AO3 collections. Collections you make in Kudos are in Library.")
             .font(.system(size: captionSize))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

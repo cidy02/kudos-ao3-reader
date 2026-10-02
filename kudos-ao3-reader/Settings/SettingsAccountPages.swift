@@ -42,11 +42,11 @@ struct SettingsPrivacyPage: View {
             } footer: {
                 Text(hideMatureContent
                     ? (matureMode == .hide
-                        ? "Mature and Explicit works are hidden from your Library, "
-                        + "History, and Favorites until you reveal them."
-                        : "Mature and Explicit works are blurred in your Library, "
-                        + "History, and Favorites until you tap to reveal them.")
-                    : "Mature and Explicit works are shown normally.")
+                        ? "Kudos hides Mature and Explicit works from your Library, History, and "
+                        + "Favorites until you reveal them."
+                        : "Kudos blurs Mature and Explicit works in your Library, History, and "
+                        + "Favorites until you tap to reveal them.")
+                    : "You see Mature and Explicit works normally.")
             }
         }
     }
@@ -110,8 +110,9 @@ private struct AboutSettingsSection: View {
             // 1ab's closing line. The last sentence is the one worth stating:
             // the accent chosen on the Appearance page is what tints the Account
             // tab's wash, which neither screen says on its own.
-            Text("App settings only. Anything AO3 stores on the account is in AO3 "
-                + "Preferences. The accent colour in Appearance tints the whole tab.")
+            Text("These settings only change Kudos. Change anything AO3 stores about your "
+                + "account in AO3 Preferences. Your accent colour from Appearance also colours "
+                + "this tab.")
         }
     }
 }
@@ -155,8 +156,8 @@ private struct AO3AccountSettingsSection: View {
             if let notice = auth.noticeMessage {
                 Text(notice)
             } else {
-                Text("A login enables future synced bookmarks, history, subscriptions, "
-                    + "kudos, comments, and restricted works.")
+                Text("Sign in to use your AO3 bookmarks, history, subscriptions, kudos, "
+                    + "comments, and restricted works in Kudos.")
             }
         }
     }

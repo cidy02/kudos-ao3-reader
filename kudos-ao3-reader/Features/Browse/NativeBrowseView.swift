@@ -260,7 +260,7 @@ struct FandomWorksView: View {
             ContentUnavailableView {
                 Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
             } description: {
-                Text("No works in this fandom match the current filters.")
+                Text("No works in this fandom match your filters.")
             } actions: {
                 Button("Clear Filters", action: resetFilters)
             }
@@ -268,7 +268,7 @@ struct FandomWorksView: View {
             ContentUnavailableView(
                 "No works found",
                 systemImage: "books.vertical",
-                description: Text("No works for this fandom right now.")
+                description: Text("AO3 has no works for this fandom right now.")
             )
         case let .failed(message):
             ContentUnavailableView {
@@ -616,7 +616,7 @@ struct TagWorksView: View {
             ContentUnavailableView {
                 Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
             } description: {
-                Text("No works with this tag match the current filters.")
+                Text("No works with this tag match your filters.")
             } actions: {
                 Button("Clear Filters", action: resetFilters)
             }
@@ -624,7 +624,7 @@ struct TagWorksView: View {
             ContentUnavailableView(
                 "No works found",
                 systemImage: "tag",
-                description: Text("No works for this tag right now.")
+                description: Text("AO3 has no works for this tag right now.")
             )
         case let .failed(message):
             ContentUnavailableView {

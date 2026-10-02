@@ -68,8 +68,8 @@ struct EditTagsView: View {
                 // to say: otwarchive's `Work` validates `archive_warning_string`
                 // for presence only ("Please select at least one warning"), and
                 // the rows above are a multi-select.
-                Text("AO3 needs at least one of these, and the first is how a "
-                    + "creator declines to warn.")
+                Text("Choose at least one warning. Choose the first option if you don't want to "
+                    + "name a specific warning.")
 
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
@@ -95,8 +95,8 @@ struct EditTagsView: View {
             }
             Section {
                 tagsRows
-                Text("Tags are AO3’s autocomplete: typing offers canonical tags first, and a tag "
-                    + "that is not canonical still posts. Removing a tag here never deletes it from AO3.")
+                Text("As you type, AO3 suggests its canonical tags first. You can still post a tag "
+                    + "that isn't canonical, and removing one here doesn't delete it from AO3.")
 
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))

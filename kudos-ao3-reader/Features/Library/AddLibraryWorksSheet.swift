@@ -64,7 +64,7 @@ struct AddLibraryWorksSheet: View {
                     ContentUnavailableView {
                         Label("Mature works are hidden", systemImage: "eye.slash")
                     } description: {
-                        Text("The works you could add here are hidden by Hide Mature.")
+                        Text("Hide Mature is hiding every work you can add here.")
                     } actions: {
                         MatureRevealToggle()
                     }
@@ -72,8 +72,7 @@ struct AddLibraryWorksSheet: View {
                     ContentUnavailableView {
                         Label("No works to add", systemImage: "square.stack")
                     } description: {
-                        Text("Every work in your library is already in this \(scopeName), "
-                            + "or there are no works to add yet.")
+                        Text("Your Library has no works you can add to this \(scopeName).")
                     }
                 } else {
                     List {
@@ -86,7 +85,7 @@ struct AddLibraryWorksSheet: View {
                             ContentUnavailableView {
                                 Label("No matching works", systemImage: "magnifyingglass")
                             } description: {
-                                Text("Nothing in your library matches “\(query)”.")
+                                Text("Your Library has no works matching “\(query)”.")
                             } actions: {
                                 Button("Clear Search") { query = "" }
                             }

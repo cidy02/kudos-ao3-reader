@@ -572,8 +572,8 @@ extension AO3PreferencesView {
     }
 
     private var footnote: some View {
-        Text("Every switch here is a field on AO3’s own preferences form, in AO3’s own "
-            + "groups. App-only settings live in Settings.")
+        Text("These preferences are saved to your AO3 account and follow you on AO3. "
+            + "Settings that affect only Kudos are under Settings.")
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
             .lineSpacing(1.5)

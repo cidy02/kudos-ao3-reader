@@ -391,10 +391,10 @@ struct AO3AccountWorksList: View {
                     let title = entry.title
                     if title.isEmpty {
                         return "This removes the work from your AO3 reading history. "
-                            + "The work itself is left where it is."
+                            + "The work stays on AO3."
                     }
                     return "“\(title)” will be removed from your AO3 reading history. "
-                        + "The work itself is left where it is."
+                        + "The work stays on AO3."
                 },
                 perform: { entry in Task { await deleteHistoryEntry(entry) } }
             )
@@ -402,7 +402,7 @@ struct AO3AccountWorksList: View {
                 isPresented: $confirmClearHistory,
                 title: "Clear your entire history?",
                 confirmLabel: "Clear History",
-                message: "This removes every work from your AO3 reading history. It cannot be undone.",
+                message: "This clears your AO3 reading history. It doesn't delete the works and can't be undone.",
                 perform: { Task { await clearHistory() } }
             )
             .alert(
@@ -424,10 +424,10 @@ struct AO3AccountWorksList: View {
                     let title = entry.title
                     if title.isEmpty {
                         return "This removes the work from your AO3 subscriptions. "
-                            + "The work itself is left where it is."
+                            + "The work stays on AO3."
                     }
                     return "“\(title)” will be removed from your AO3 subscriptions. "
-                        + "The work itself is left where it is."
+                        + "The work stays on AO3."
                 },
                 perform: { entry in Task { await unsubscribe(entry) } }
             )

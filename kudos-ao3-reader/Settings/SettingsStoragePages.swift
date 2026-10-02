@@ -17,18 +17,18 @@ struct SettingsDownloadsPage: View {
             Section {
                 Toggle("Keep works you read", isOn: $keepsWorksYouRead)
             } footer: {
-                Text("Every work you open stays downloaded, just as if you had tapped Download. "
-                    + "Without this, finishing a work you haven't downloaded, favorited or queued "
-                    + "removes its file to save space. It stays in your history, and you can "
-                    + "download it again.")
+                Text("When this is on, every work you open stays downloaded, as if you tapped "
+                    + "Download. When it's off, finishing a work removes its copy unless you "
+                    + "downloaded, favorited, or queued it. It stays in your history, and you "
+                    + "can download it again.")
             }
             Section {
                 Toggle("Download on subscribe", isOn: $downloadOnSubscribe)
                 StorageUsedRow()
             } footer: {
-                Text("Applies to works already in your library without "
-                    + "their EPUB. Privacy and local data breaks storage "
-                    + "down and can free space a title at a time.")
+                Text("When you subscribe to a work already in your Library, Kudos downloads it "
+                    + "if no copy is stored. Privacy and Local Data shows what uses space and "
+                    + "lets you remove individual downloads.")
             }
         }
     }
@@ -49,9 +49,9 @@ struct SettingsPreservationPage: View {
                 // Deliberately a button, never a background task: it is one AO3
                 // request per work and AO3 offers no "what changed" feed, so the
                 // user decides when that cost is worth paying.
-                Text("Asks AO3 which of your saved works still exist, so deleted ones are "
-                    + "marked as the last copy you have. One request per work, sent slowly — "
-                    + "start it when it suits you.")
+                Text("Checks which saved works are still on AO3 and marks missing ones as the "
+                    + "last copy you have. Kudos checks one work at a time and waits between "
+                    + "checks, so start it when you have time.")
             }
         }
         .sheet(isPresented: $showingAvailabilitySweep) {
@@ -72,9 +72,8 @@ struct SettingsLibraryPage: View {
             } footer: {
                 Text(
                     """
-                    Ask before a swipe-to-delete removes a work from your Library. \
-                    Show zero counts keeps every stat on a work card in place when \
-                    it is zero — turn it off to hide empty stats instead.
+                    Confirm before deleting asks before a swipe removes a work from your Library. \
+                    Show zero counts keeps empty stats on work cards; turn it off to hide them.
                     """
                 )
             }
@@ -152,8 +151,9 @@ struct SettingsReadingQueuesPage: View {
                     }
                 }
             } footer: {
-                Text("Saved for Later keeps a local EPUB. Series preservation asks first "
-                    + "unless this option is enabled and the series is within the limit.")
+                Text("Saved for Later keeps a downloaded copy. When you save a series, Kudos "
+                    + "asks before downloading each work unless this option is on and the series "
+                    + "is within your limit.")
             }
         }
         .settingsNoticeAlert($notice)
@@ -170,9 +170,9 @@ struct SettingsReadingQueuesPage: View {
             // Split out of the ViewBuilder so the type checker can finish
             // (the surrounding modifier chain otherwise times out).
             let migrationMessage =
-                "Kudos will add existing saved works to the native Saved for Later queue. "
-                + "It keeps their current saved state and preserves EPUBs one at a time, "
-                + "with a pause between AO3 requests."
+                "Kudos will add your existing saved works to Saved for Later without changing "
+                + "whether they are saved. It makes each one available offline, one at a time, "
+                + "with a pause between visits to AO3."
             Text(migrationMessage)
         }
     }
@@ -236,7 +236,7 @@ struct SettingsReadingQueuesPage: View {
             }
 
             guard index + 1 < candidates.count else { continue }
-            savedWorkMigrationProgress = "Pausing before the next AO3 request…"
+            savedWorkMigrationProgress = "Waiting before checking the next work on AO3…"
             do {
                 try await Task.sleep(nanoseconds: ReadingQueueService.preservationRequestPauseNanos)
             } catch {
@@ -248,10 +248,10 @@ struct SettingsReadingQueuesPage: View {
         var message = "Added \(added.formatted()) saved work"
             + "\(added == 1 ? "" : "s") to Saved for Later."
         if unavailableOffline > 0 {
-            message += " \(unavailableOffline.formatted()) need preservation retry before offline reading."
+            message += " \(unavailableOffline.formatted()) need to be downloaded again before offline reading."
         }
         if cancelled {
-            message += " Migration was cancelled before the remaining works were touched."
+            message += " The update stopped before the remaining works were changed."
         }
 
         notice = SettingsNotice(

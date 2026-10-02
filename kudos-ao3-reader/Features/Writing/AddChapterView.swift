@@ -87,8 +87,8 @@ struct AddChapterView: View {
             }
             Section {
                 Group { publicationRows }.disabled(chapterSaved || isSaving || isPosting)
-                Text("The last-chapter switch writes the total on the work rather "
-                    + "than a flag of its own, which is how AO3 records a finished work.")
+                Text("When you turn on Last chapter, Kudos sets the work's total to this chapter's "
+                    + "position. AO3 marks the work complete when its posted and total chapters match.")
 
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
@@ -102,8 +102,8 @@ struct AddChapterView: View {
                 SectionRuleHeader(title: "Post")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 postPanel.pageBodyRow(top: 8, gutter: gutter)
-                Text("Subscribers are notified on post, so the draft path exists to write "
-                    + "a chapter over several sittings without sending twelve notifications.")
+                Text("Posting a chapter notifies your subscribers. Save it as a draft if you want to "
+                    + "work on it over several sittings without sending a notification.")
 
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))

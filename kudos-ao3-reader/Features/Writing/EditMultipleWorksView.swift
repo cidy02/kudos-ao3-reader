@@ -59,9 +59,8 @@ struct EditMultipleWorksView: View {
                 )
                 .pageBodyRow(top: 20, gutter: selfGuttered)
 
-                Text("AO3’s Edit Multiple Works adds and removes tags rather than replacing them, "
-                    + "and every field left alone stays untouched on every selected work. That is why "
-                    + "this screen has separate Add and Remove groups instead of one tag editor.")
+                Text("Your changes apply to every selected work. Use the separate Add and Remove groups "
+                    + "for tags. Anything you leave alone stays unchanged.")
 
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
@@ -86,8 +85,8 @@ struct EditMultipleWorksView: View {
             groupHeader("Change on all")
             Section {
                 changeOnAllRows
-                Text("Rating and language are single values, so setting one overwrites what each "
-                    + "work had. Warnings and categories are lists and follow the add-and-remove rule.")
+                Text("Changing the rating or language replaces that value on every selected work. "
+                    + "Warnings and categories are added or removed instead.")
 
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
@@ -106,8 +105,7 @@ struct EditMultipleWorksView: View {
             groupHeader("Creators")
             Section {
                 creatorsRows
-                Text("Co-creator additions send an invitation on AO3; the "
-                    + "work is not changed until the other account accepts.")
+                Text("AO3 sends each co-creator an invitation. Their work doesn't change until they accept it.")
 
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))

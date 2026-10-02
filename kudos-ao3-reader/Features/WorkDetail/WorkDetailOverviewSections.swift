@@ -199,7 +199,7 @@ extension WorkDetailView {
                 Text("Series")
             } footer: {
                 if localWork != nil, seriesWorks.isEmpty {
-                    Text("Other works in this series will appear here once you download them.")
+                    Text("When you download more works from this series, they will appear here.")
                 }
             }
         }

@@ -135,8 +135,8 @@ struct ChallengeSettingsEditView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Turning off Unrevealed shows this collection's works to everyone, and turning off "
-                + "Anonymous shows their creators. The app can't hide them again.")
+            Text("Turning off Unrevealed makes every work visible. Turning off Anonymous shows every "
+                + "creator. You can't reverse either change in Kudos.")
         }
             .screenTint(palette)
     }
@@ -345,9 +345,9 @@ struct ChallengeSettingsEditView: View {
 
     private var scheduleFootnote: some View {
         Text(settings.scheduleIsEditable
-            ? "Dates are in the challenge’s time zone, as on AO3’s own form. AO3 runs reveals "
-                + "server-side, so the app cannot bring a reveal forward once it has fired."
-            : "AO3's time zone was missing or unreadable, so dates are read-only and won't be included in this save.")
+            ? "Dates use the challenge’s time zone shown on AO3. After a reveal happens, you can't "
+                + "move it to an earlier time in Kudos."
+            : "Kudos couldn't read the challenge's time zone. Dates are view-only and won't be saved.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -531,7 +531,7 @@ struct ChallengeSettingsEditView: View {
                     Text("Allow any fandom")
                         .font(.system(size: 15))
                         .foregroundStyle(.primary)
-                    Text("Signing up with “any” matches a participant to everything in the tag set")
+                    Text("Choosing “any” can match you with anything in the tag set.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
@@ -547,9 +547,9 @@ struct ChallengeSettingsEditView: View {
     }
 
     private var matchingFootnote: some View {
-        Text("Matching itself runs on AO3 and is not exposed to clients. These settings post to "
-            + "the challenge; running the match is an Open on AO3 link. Changed after potential matches "
-            + "were generated, they apply only once matches are regenerated on AO3.")
+        Text("AO3 does the matching. Save these settings here, then use Open on AO3 to run or rerun "
+            + "the match. If potential matches already exist, your changes take effect after you "
+            + "regenerate them on AO3.")
             .font(.system(size: 11.5))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

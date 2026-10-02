@@ -298,7 +298,7 @@ struct AllReadingQueuesGridView: View {
                     ContentUnavailableView {
                         Label("No matching queues", systemImage: "line.3.horizontal.decrease.circle")
                     } description: {
-                        Text("No queue matches the current search and tag filter.")
+                        Text("Your search and tag filter don't match any queues.")
                     } actions: {
                         Button("Clear Search and Filters") {
                             searchText = ""
@@ -679,12 +679,12 @@ enum QueueOrganizerSelection {
 
     static func deleteMessage(count: Int) -> String {
         count == 1
-            ? "The queue moves to Recently Deleted "
-                + "for \(PreservedWorkService.recoveryWindowText), with everything in it "
-                + "intact. Works stay in Kudos either way."
-            : "The \(count) queues move to Recently Deleted "
-                + "for \(PreservedWorkService.recoveryWindowText), with everything in them "
-                + "intact. Works stay in Kudos either way."
+            ? "Kudos will move this queue to Recently Deleted for "
+                + "\(PreservedWorkService.recoveryWindowText). Its list of works stays with it, "
+                + "and the works stay in Kudos."
+            : "Kudos will move these \(count) queues to Recently Deleted for "
+                + "\(PreservedWorkService.recoveryWindowText). Their lists of works stay with them, "
+                + "and the works stay in Kudos."
     }
 
     /// A filtered list can't write its order back: the drag would renumber only

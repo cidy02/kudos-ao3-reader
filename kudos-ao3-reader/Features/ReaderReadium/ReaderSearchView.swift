@@ -320,7 +320,7 @@ struct ReaderSearchView: View {
         case .idle:
             ContentUnavailableView(
                 "Find in Work", systemImage: "magnifyingglass",
-                description: Text("Search this work's text. Results jump straight to the passage.")
+                description: Text("Search the text of this work. Tap a result to jump to that passage.")
             )
         case .searching:
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)

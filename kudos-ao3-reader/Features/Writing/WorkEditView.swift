@@ -56,8 +56,8 @@ struct WorkEditView: View {
                 )
                 .pageBodyRow(top: 20, gutter: selfGuttered)
                 if form.isDraft {
-                    footnote("A draft is an unposted work, so this is the same form as Edit work "
-                        + "with the posted-only fields absent until it exists publicly.")
+                    footnote("This draft isn't public yet. Options that apply only after posting "
+                        + "will appear once you post it.")
                 }
             }
 
@@ -118,8 +118,8 @@ struct WorkEditView: View {
                         .pageBodyRow(top: 8, gutter: gutter)
                 }
                 if form.isPosted {
-                    footnote("Chapters posted of total is AO3’s own field — setting a total above what is "
-                        + "posted is what marks a work in progress, and Complete writes the same value.")
+                    footnote("AO3 marks a work in progress when its total chapters are higher than the number "
+                        + "posted. Complete sets both numbers to the same value.")
                 }
             }
 
@@ -757,8 +757,8 @@ extension WorkEditView {
     /// 1bs's confirmation copy. The board's "your 412 subscribers" is dropped:
     /// the form does not carry a subscriber count.
     static func postConfirmationMessage(missing: [String]) -> String {
-        let consequence = "notifies your subscribers and cannot be undone — a posted work can be "
-            + "edited, but not returned to draft."
+        let consequence = "notifies your subscribers and can't be undone. You can edit a posted work, "
+            + "but you can't return it to a draft."
         guard !missing.isEmpty else { return "Posting " + consequence }
         let things = missing.map { requirementPhrases[$0] ?? $0.lowercased() }
         let list = ListFormatter.localizedString(byJoining: things)
@@ -767,7 +767,7 @@ extension WorkEditView {
         case 2: ("Two things are missing", "both")
         default: ("\(missing.count) things are missing", "all of them")
         }
-        return "\(lead): \(list). AO3 requires \(requires). Posting also " + consequence
+        return "\(lead). Add \(list). AO3 requires \(requires). Posting also " + consequence
     }
 
     /// `AO3WorkForm.missingRequiredFields()`'s names, as the board phrases them.

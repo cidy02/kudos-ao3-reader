@@ -554,8 +554,7 @@ struct CommentsView: View {
     /// Printed under the strip whenever the loaded page is not the whole work.
     private var signalScopeNote: String? {
         guard let page = model.page, page.totalPages > 1 else { return nil }
-        return "Threads, yours and latest count this page. AO3 pages its comments, "
-            + "and only the comment total is the whole work’s."
+        return "Threads, Yours and Latest count only this page. The comment total covers the whole work."
     }
 
     // MARK: Chapter + sort
@@ -685,7 +684,7 @@ struct CommentsView: View {
                     ContentUnavailableView(
                         "No Comments Yet",
                         systemImage: "bubble.left",
-                        description: Text("Be the first to leave one.")
+                        description: Text("You can be the first to comment on this work.")
                     )
                 }
                 .cardRow()
@@ -756,7 +755,7 @@ struct CommentsView: View {
             Label {
                 let fetched = model.page?.fetchedAt
                     .formatted(.relative(presentation: .named)) ?? "earlier"
-                Text("You're offline — showing comments from \(fetched). They may be out of date.")
+                Text("You're offline. These comments are from \(fetched) and may be out of date.")
             } icon: {
                 Image(systemName: "wifi.exclamationmark")
             }
@@ -947,7 +946,7 @@ struct CommentsView: View {
                 } footer: {
                     // Quiet help text, not a warning panel: explains why there are
                     // no per-chapter counts without shouting about it.
-                    Text("AO3 doesn't publish per-chapter totals, so Kudos doesn't fetch every chapter just to count them.")
+                    Text("AO3 doesn't show comment totals for each chapter. Choose a chapter to see its comments.")
                 }
             }
             .appThemedScroll()
@@ -1247,7 +1246,7 @@ struct CommentComposerSheet: View {
                     if !isReply, !isEdit, model.scope == .byChapter {
                         // Honesty note: AO3's work-level comment form is the only
                         // one Kudos posts to; AO3 files it under the newest chapter.
-                        Text("New comments post to the whole work — AO3 shows them on its latest chapter.")
+                        Text("New comments post to the whole work. AO3 shows them on its latest chapter.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

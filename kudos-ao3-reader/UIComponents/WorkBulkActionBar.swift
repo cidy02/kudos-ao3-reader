@@ -34,11 +34,11 @@ struct WorkBulkActionBar: View {
     }
 
     private var deleteMessage: String {
-        let base = "The selected works will be moved to Recently Deleted. "
-            + "You can restore them anytime in the next 90 days."
+        let base = "Kudos will move the selected works to Recently Deleted. "
+            + "You can restore them for the next 90 days."
         guard selectedWorks.contains(where: \.ao3Unavailable) else { return base }
-        return base + " Some of these are no longer available on AO3 — "
-            + "if you don't restore them in time, they can't be re-saved afterward."
+        return base + " Some are no longer available on AO3. If you don't restore them in time, "
+            + "you can't download them again."
     }
 
     var body: some View {

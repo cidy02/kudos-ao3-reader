@@ -414,7 +414,7 @@ struct ChallengeAssignmentsView: View {
         let lead = pair.count == 2
             ? "The givers for \(pair[0]) and \(pair[1]) defaulted, and no pinch hitter has covered them yet."
             : "The giver for \(pair[0]) defaulted, and no pinch hitter has covered it yet."
-        return lead + " AO3 runs matching on its side, so the fix is either a pinch hit or a manual assignment there."
+        return lead + " Only AO3 can match participants, so cover this with a pinch hit or assign someone on AO3."
     }
 
     /// Neither label is a native write — AO3 has no "request a pinch hit"
@@ -434,9 +434,8 @@ struct ChallengeAssignmentsView: View {
     /// The spec's footnote also says the app can report a default and send a
     /// pinch-hit request; neither is a native write here yet, so it doesn't.
     private var footnote: some View {
-        Text("Assignments and pinch hits are paged lists. The app reads them, reports a default and "
-            + "claims a pinch hit; a pinch-hit request opens AO3, and it cannot run AO3’s matching, "
-            + "so no screen here offers to.")
+        Text("You can view assignments and pinch hits here one page at a time. You can report a default "
+            + "or claim a pinch hit here, but asking for a pinch hitter and running the match open on AO3.")
             .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -751,8 +750,8 @@ extension ChallengeAssignmentsView {
         let recipient = displayName(write.assignment.requestPseud)
         switch write.kind {
         case .reportDefault:
-            return "AO3 will mark \(giverDisplay(for: write.assignment))'s assignment for \(recipient) as "
-                + "defaulted, and it moves to the pinch hits waiting for cover."
+            return "This marks \(giverDisplay(for: write.assignment))'s assignment for \(recipient) as "
+                + "defaulted on AO3 and adds it to the pinch hits waiting for cover."
         case .claimPinchHit:
             let due = worksDueAt?.dateText.map { ", due \($0)" } ?? ""
             return "You'll be the pinch hitter for \(recipient)'s gift\(due)."
