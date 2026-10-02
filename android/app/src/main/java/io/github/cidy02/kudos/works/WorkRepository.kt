@@ -41,6 +41,8 @@ class WorkRepository(
     private val tagDao = database.tagDao()
     private val collectionDao = database.collectionDao()
     private val tombstoneDao = database.syncTombstoneDao()
+    private val queueDao = database.readingQueueDao()
+    private val annotationDao = database.annotationDao()
 
     fun observeSavedWorks(): Flow<List<SavedWork>> {
         return workDao.observeAll()
@@ -244,10 +246,49 @@ class WorkRepository(
      */
     suspend fun hardDelete(workId: String) {
         val work = getWork(workId)
+        deleteDependents(workId)
         fileStore.deleteWorkEpub(workId)
         workDao.deleteById(workId)
         if (work != null) {
             recordWorkTombstone(work, clock(), deletionReason = "workDeleted")
+        }
+    }
+
+    /**
+     * Queue memberships and annotations have no foreign key to `works`, so they
+     * would outlive the work: orphaned, and resurrectable by an older backup.
+     * Tombstone each and delete it, as iOS `WorkLifecycle.hardDelete` does, in
+     * the same shapes `ReadingQueueRepository.removeWork` and
+     * `AnnotationRepository.deleteAnnotation` write.
+     */
+    private suspend fun deleteDependents(workId: String) {
+        val now = clock()
+        for (membership in queueDao.getMembershipsForWork(workId)) {
+            queueDao.deleteMembershipById(membership.id)
+            upsertSignedTombstone(
+                SyncTombstone(
+                    id = uuidFactory(),
+                    recordID = membership.id,
+                    recordTypeRaw = SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletedOnDeviceID = "",
+                    deletionReason = "queueMembershipRemoved"
+                )
+            )
+        }
+        for (annotation in annotationDao.getAllForWork(workId)) {
+            annotationDao.deleteById(annotation.id)
+            upsertSignedTombstone(
+                SyncTombstone(
+                    id = uuidFactory(),
+                    recordID = annotation.id.lowercase(),
+                    recordTypeRaw = SyncTombstoneRecordType.READING_ANNOTATION,
+                    createdAt = now,
+                    lastModifiedAt = now,
+                    deletionReason = "annotationDeleted"
+                )
+            )
         }
     }
 

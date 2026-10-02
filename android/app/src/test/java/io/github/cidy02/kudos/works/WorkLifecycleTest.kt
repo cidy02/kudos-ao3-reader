@@ -354,6 +354,46 @@ class WorkLifecycleRepositoryTest {
         )
     }
 
+    /** T-245 item G: nothing that belonged to the work survives it untombstoned. */
+    @Test
+    fun hardDeleteTombstonesAndRemovesMembershipsAndAnnotations() = runTest {
+        val now = Instant.parse("2026-10-02T12:00:00Z")
+        // The shared fixture's fixed UUID would make each tombstone overwrite the last.
+        var next = 0
+        val repository = WorkRepository(
+            database = database,
+            fileStore = fileStore,
+            clock = { clockNow },
+            uuidFactory = { "00000000-0000-0000-0000-%012d".format(++next) }
+        )
+        repository.upsert(sampleSavedWork().copy(hasEpub = true))
+        database.readingQueueDao().upsertQueue(
+            io.github.cidy02.kudos.data.local.entity.ReadingQueueEntity(
+                id = "q-1", name = "Q", kindRaw = "custom", sortOrder = 0, dateCreated = now, dateUpdated = now
+            )
+        )
+        database.readingQueueDao().upsertMembership(
+            io.github.cidy02.kudos.data.local.entity.ReadingQueueMembershipEntity(
+                id = "m-1", queueID = "q-1", workID = workUuid, queuedAt = now
+            )
+        )
+        database.annotationDao().upsert(
+            io.github.cidy02.kudos.data.local.entity.AnnotationEntity(
+                id = "A-1", workID = workUuid, kindRaw = "highlight", colorRaw = "yellow",
+                locatorString = "{}", selectedText = "x", note = "", progression = 0.1,
+                spineIndex = 0, chapterTitle = "", createdAt = now
+            )
+        )
+
+        repository.hardDelete(workUuid)
+
+        assertTrue(database.readingQueueDao().getMembershipsForWork(workUuid).isEmpty())
+        assertTrue(database.annotationDao().getAllForWork(workUuid).isEmpty())
+        val tombstones = database.syncTombstoneDao().getAll()
+        assertTrue(tombstones.any { it.recordID == "m-1" && it.recordTypeRaw == SyncTombstoneRecordType.READING_QUEUE_MEMBERSHIP })
+        assertTrue(tombstones.any { it.recordID == "a-1" && it.recordTypeRaw == SyncTombstoneRecordType.READING_ANNOTATION })
+    }
+
     @Test
     fun sweepExpiredSoftDeletesOnlyRemovesPastSchedule() = runTest {
         val expiredId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
