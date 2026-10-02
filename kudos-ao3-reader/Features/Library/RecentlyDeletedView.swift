@@ -31,6 +31,9 @@ struct RecentlyDeletedView: View {
     @Query(filter: #Predicate<SavedWork> { $0.isPendingDeletion }) private var deletedWorks: [SavedWork]
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
     @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
+    /// Finished, un-kept works whose copy is waiting out its 60 days.
+    @Query(filter: #Predicate<SavedWork> { $0.freedAt != nil && !$0.isPendingDeletion })
+    private var heldWorks: [SavedWork]
 
     /// Set when a restore did not persist. Recently Deleted is the last stop
     /// before permanent deletion, so "it looked like it worked" is the one
@@ -45,11 +48,6 @@ struct RecentlyDeletedView: View {
     /// The selection waiting on the bulk alert, captured when it was asked for.
     @State private var pendingBulkDelete: Set<UUID> = []
 
-    /// Spec 1bj splits at a threshold rather than showing a continuous countdown.
-    /// Two weeks: long enough that the Expiring soon group is not everything on the
-    /// day someone clears out a shelf, short enough that landing in it is a prompt.
-    private static let expiringSoonDays = 14
-
     var body: some View {
         // Bound once. `entries` flattens and sorts three `@Query` results, and the
         // body reads it four times — emptiness, the header count, and both groups.
@@ -59,8 +57,8 @@ struct RecentlyDeletedView: View {
                 ContentUnavailableView {
                     Label("Recently Deleted", systemImage: "trash")
                 } description: {
-                    Text("Items you delete stay here for \(Self.windowDays) days. "
-                        + "After that, Kudos removes them permanently.")
+                    Text("Items you delete stay here for \(Self.windowDays) days. Copies of works "
+                        + "you finish without keeping them stay for \(Self.heldWindowDays) days.")
                 }
             } else {
                 list(entries)
@@ -80,7 +78,7 @@ struct RecentlyDeletedView: View {
         // 1bj draws an alert, not a sheet, and "repeats it per item with the real
         // numbers" — the title names the record and the message says what goes.
         .alert(
-            pendingPermanent.map { "Delete “\($0.title)” permanently?" } ?? "",
+            pendingPermanent?.deleteTitle ?? "",
             isPresented: Binding(
                 get: { pendingPermanent != nil },
                 set: { if !$0 { pendingPermanent = nil } }
@@ -92,7 +90,7 @@ struct RecentlyDeletedView: View {
             // control that quietly does nothing teaches people not to trust it.
             presenting: pendingPermanent
         ) { entry in
-            Button("Delete Permanently", role: .destructive) {
+            Button(entry.deleteLabel, role: .destructive) {
                 entry.deletePermanently()
                 pendingPermanent = nil
             }
@@ -110,7 +108,8 @@ struct RecentlyDeletedView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Kudos will permanently remove every item here and any download, progress, or notes "
-                + "stored with it. The works stay on AO3. You can't undo this.")
+                + "stored with it, and the copies of finished works. The works stay on AO3. "
+                + "You can't undo this.")
         }
         // One alert for the whole selection, naming the count. `presenting:`
         // for the same reason as the per-item alert above.
@@ -193,30 +192,37 @@ struct RecentlyDeletedView: View {
         selection = []
     }
 
+    /// Two sections (owner, 2026-10-01): what you deleted, kept for 90 days, and
+    /// the copies of works you finished without keeping, held for 60. Each is
+    /// soonest to expire first.
     private func list(_ entries: [RecentlyDeletedEntry]) -> some View {
-        let soon = entries.filter { $0.daysRemaining <= Self.expiringSoonDays }
-        let later = entries.filter { $0.daysRemaining > Self.expiringSoonDays }
+        let deleted = entries.filter { !$0.isHeldCopy }
+        let held = entries.filter(\.isHeldCopy)
         return List {
             Section {
                 header(count: entries.count).pageBodyRow(top: 20, gutter: 0)
                 reassurance.pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
             }
 
-            if !soon.isEmpty {
+            if !deleted.isEmpty {
                 Section {
-                    SectionRuleHeader(title: "Expiring soon", count: soon.count)
+                    SectionRuleHeader(title: "Deleted", count: deleted.count)
                         .pageBodyRow(top: 18, gutter: 0)
-                    ForEach(soon) { entry in
+                    sectionNote("Kept for \(Self.windowDays) days, then removed for good.")
+                    ForEach(deleted) { entry in
                         row(entry)
                     }
                 }
             }
 
-            if !later.isEmpty {
+            if !held.isEmpty {
                 Section {
-                    SectionRuleHeader(title: "Later", count: later.count)
+                    SectionRuleHeader(title: "Finished, not kept", count: held.count)
                         .pageBodyRow(top: 18, gutter: 0)
-                    ForEach(later) { entry in
+                    sectionNote("Works you finished without downloading, favoriting or queuing them. "
+                        + "Their copies stay here for \(Self.heldWindowDays) days so you can still read them "
+                        + "offline, then they're removed. The works stay in your reading history.")
+                    ForEach(held) { entry in
                         row(entry)
                     }
                 }
@@ -260,6 +266,15 @@ struct RecentlyDeletedView: View {
         .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
     }
 
+    private func sectionNote(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter + 6)
+    }
+
     /// 1bj's footer: an outlined red capsule, behind its own confirmation.
     private var deleteAllButton: some View {
         Button {
@@ -279,8 +294,7 @@ struct RecentlyDeletedView: View {
         SubjectHeaderBlock(
             kicker: "Library",
             title: "Recently Deleted",
-            subtitle: "\(count) item\(count == 1 ? "" : "s") · removed from "
-                + "the app after \(Self.windowDays) days",
+            subtitle: "\(count) item\(count == 1 ? "" : "s")",
             palette: palette,
             gutter: SubjectMetrics.accountGutter
         )
@@ -312,6 +326,10 @@ struct RecentlyDeletedView: View {
         Int((PreservedWorkService.recoveryWindow / 86_400).rounded())
     }
 
+    private static var heldWindowDays: Int {
+        Int((WorkLifecycle.freedCopyWindow / 86_400).rounded())
+    }
+
     // MARK: Entries
 
     /// All three kinds in one list, soonest to expire first.
@@ -324,6 +342,8 @@ struct RecentlyDeletedView: View {
         let all = deletedWorks.map { RecentlyDeletedEntry.work($0, in: context) }
             + deletedCollections.map { RecentlyDeletedEntry.collection($0, in: context) }
             + deletedQueues.map { RecentlyDeletedEntry.queue($0, in: context) }
+            + heldWorks.filter { $0.isFinished && !$0.isProtected && $0.hasEPUB }
+                .map { RecentlyDeletedEntry.heldCopy($0, in: context) }
         return all.sorted { $0.daysRemaining < $1.daysRemaining }
     }
 
@@ -422,6 +442,14 @@ struct RecentlyDeletedEntry: Identifiable {
     let deletionMessage: () -> String
     /// The existing per-kind permanent delete; runs only from an alert.
     let deletePermanently: () -> Void
+    /// A finished, un-kept work's copy, not something deleted.
+    var isHeldCopy = false
+
+    var deleteTitle: String {
+        isHeldCopy ? "Remove the copy of “\(title)”?" : "Delete “\(title)” permanently?"
+    }
+
+    var deleteLabel: String { isHeldCopy ? "Remove Copy" : "Delete Permanently" }
 }
 
 @MainActor
@@ -438,6 +466,31 @@ extension RecentlyDeletedEntry {
             restore: { PreservedWorkService.restore(work, in: context) },
             deletionMessage: { workDeletionMessage(work, in: context) },
             deletePermanently: { PreservedWorkService.deletePermanently(work, in: context) }
+        )
+    }
+
+    /// A copy waiting out its 60 days after its work was finished un-kept.
+    /// Restore keeps it downloaded; Delete frees it now. The work itself stays.
+    static func heldCopy(_ work: SavedWork, in context: ModelContext) -> Self {
+        let expires = work.freedAt.map { $0.addingTimeInterval(WorkLifecycle.freedCopyWindow) }
+        return RecentlyDeletedEntry(
+            id: work.id,
+            kicker: "Finished work",
+            noun: "work",
+            title: work.title,
+            detail: workDetail(work),
+            authorIdentities: work.verifiedAuthorIdentities,
+            daysRemaining: RecentlyDeletedView.daysRemaining(expires),
+            restore: {
+                WorkLifecycle.restoreHeldCopy(work, in: context)
+                return true
+            },
+            deletionMessage: {
+                "Kudos removes this work's copy from your device now. The work stays in your "
+                    + "reading history, and you can download it again from AO3."
+            },
+            deletePermanently: { WorkLifecycle.freeHeldCopy(work, in: context) },
+            isHeldCopy: true
         )
     }
 
@@ -570,7 +623,7 @@ private struct RecentlyDeletedRow: View {
         // A full swipe lands on Delete, which only opens the alert.
         .swipeActions(edge: .trailing) {
             Button(role: .destructive, action: onDeletePermanently) {
-                Label("Delete", systemImage: "trash.fill")
+                Label(entry.isHeldCopy ? "Remove" : "Delete", systemImage: "trash.fill")
             }
             Button(action: onRestore) {
                 Label("Restore", systemImage: "arrow.uturn.backward")
@@ -582,7 +635,7 @@ private struct RecentlyDeletedRow: View {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
             Button(role: .destructive, action: onDeletePermanently) {
-                Label("Delete Permanently", systemImage: "trash.fill")
+                Label(entry.deleteLabel, systemImage: "trash.fill")
             }
         }
     }

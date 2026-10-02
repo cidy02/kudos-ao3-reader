@@ -183,6 +183,7 @@ struct ReaderView: View {
                 wireController()
                 ReadingLogService.startSession(for: work, now: Date())
                 WorkLifecycle.keepIfKeepingWorksYouRead(work, in: modelContext)
+                WorkLifecycle.releaseHeldCopy(work)
             }
             .onDisappear {
                 // Flush the exact final position so resume lands precisely, even if

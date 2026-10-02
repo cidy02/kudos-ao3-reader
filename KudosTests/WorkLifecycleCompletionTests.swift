@@ -53,6 +53,33 @@ struct WorkLifecycleCompletionTests {
         #expect(work.hasEPUB)
     }
 
+    /// Owner, 2026-10-01: finishing an un-kept work holds its copy in Recently
+    /// Deleted for 60 days instead of freeing it. The sweep frees it after the
+    /// window; reading again or keeping it lets go.
+    @Test func finishingHoldsTheCopyForSixtyDays() throws {
+        let context = try makeContext()
+        let work = unprotectedWork(in: context)
+        WorkLifecycle.markFinished(work, in: context)
+        #expect(work.hasEPUB)
+        let held = try #require(work.freedAt)
+
+        WorkLifecycle.sweepHeldCopies(in: context, now: held.addingTimeInterval(59 * 86_400))
+        #expect(work.hasEPUB && work.freedAt != nil)
+        WorkLifecycle.sweepHeldCopies(in: context, now: held.addingTimeInterval(61 * 86_400))
+        #expect(!work.hasEPUB && work.freedAt == nil)
+
+        let kept = unprotectedWork(in: context)
+        WorkLifecycle.markFinished(kept, in: context)
+        WorkLifecycle.restoreHeldCopy(kept, in: context)
+        #expect(kept.isSaved && kept.freedAt == nil && kept.hasEPUB)
+
+        let reread = unprotectedWork(in: context)
+        WorkLifecycle.markFinished(reread, in: context)
+        WorkLifecycle.releaseHeldCopy(reread)
+        WorkLifecycle.sweepHeldCopies(in: context, now: Date().addingTimeInterval(90 * 86_400))
+        #expect(reread.hasEPUB)
+    }
+
     @Test func unfinishedWorkAt99PercentKeepsItsEPUB() throws {
         let context = try makeContext()
         let work = unprotectedWork(in: context)
@@ -90,16 +117,16 @@ struct WorkLifecycleCompletionTests {
         #expect(work.hasEPUB)
     }
 
-    @Test func unprotectedFinishedWorkFreesItsEPUBOnClose() throws {
-        // The intentional post-finish storage policy still applies once a work
-        // is genuinely finished.
+    @Test func unprotectedFinishedWorkIsHeldOnClose() throws {
+        // The post-finish storage policy still applies once a work is genuinely
+        // finished — as a 60-day hold in Recently Deleted (owner, 2026-10-01).
         let context = try makeContext()
         let work = unprotectedWork(in: context)
         work.isFinished = true
 
         WorkLifecycle.freeEPUBIfFinished(work, in: context)
 
-        #expect(!work.hasEPUB)
+        #expect(work.hasEPUB && work.freedAt != nil)
         #expect(work.readingState == .finished)
     }
 }

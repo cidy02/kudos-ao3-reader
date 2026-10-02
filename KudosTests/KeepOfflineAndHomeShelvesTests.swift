@@ -53,6 +53,12 @@ struct KeepOfflineAndHomeShelvesTests {
         context.insert(plain)
         context.insert(kept)
         let listed = ao3Work(1, in: context)
+        // A real file, or adding to a queue reconciles `hasEPUB` to false first.
+        try? FileManager.default.createDirectory(
+            at: listed.fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try? Data([0]).write(to: listed.fileURL)
+        defer { try? FileManager.default.removeItem(at: listed.fileURL) }
         ReadingQueueService.add(listed, to: plain, in: context)
         let collected = ao3Work(2, in: context)
         collected.collections.append(kept)
@@ -62,8 +68,9 @@ struct KeepOfflineAndHomeShelvesTests {
         #expect(collected.isProtected)
         WorkLifecycle.markFinished(listed, in: context)
         WorkLifecycle.markFinished(collected, in: context)
-        #expect(!listed.hasEPUB)
-        #expect(collected.hasEPUB)
+        // Finishing holds an un-kept copy in Recently Deleted rather than freeing it.
+        #expect(listed.hasEPUB && listed.freedAt != nil)
+        #expect(collected.hasEPUB && collected.freedAt == nil)
 
         // A never-asked queue keeps its works, as queues always did.
         let legacy = ReadingQueue(name: "Legacy")
