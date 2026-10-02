@@ -127,6 +127,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     dashboard
                 }
             }
+            .scrollAwayTopChrome()
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
             .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selection.count) : "Library")
             #if os(iOS)
