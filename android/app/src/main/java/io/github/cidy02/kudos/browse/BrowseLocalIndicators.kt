@@ -6,11 +6,11 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 /** Local Library state for a browsed work, derived without any DB write. */
 data class BrowseLocalIndicator(
     val isSaved: Boolean = false,
-    val hasEpub: Boolean = false,
+    val isDownloaded: Boolean = false,
     val isFavorite: Boolean = false,
     val isFinished: Boolean = false
 ) {
-    val any: Boolean get() = isSaved || hasEpub || isFavorite || isFinished
+    val any: Boolean get() = isSaved || isDownloaded || isFavorite || isFinished
 
     companion object {
         val NONE = BrowseLocalIndicator()
@@ -33,7 +33,7 @@ object BrowseLocalIndicators {
         val local = savedByUrl[summary.workUrl.trim()] ?: return BrowseLocalIndicator.NONE
         return BrowseLocalIndicator(
             isSaved = local.isSaved,
-            hasEpub = local.hasEpub,
+            isDownloaded = local.isDownloaded,
             isFavorite = local.isFavorite,
             isFinished = local.isFinished
         )

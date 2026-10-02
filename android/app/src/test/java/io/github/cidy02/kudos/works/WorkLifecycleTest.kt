@@ -591,8 +591,7 @@ class WorkLifecycleRepositoryTest {
     }
 
     @Test
-    fun markFinishedFreesEpubWhenUnprotected() = runTest {
-        // History-only: not saved, not favorite — Apple WorkLifecycle free-on-finish.
+    fun markFinishedHoldsEpubWhenUnprotected() = runTest {
         repository.upsert(
             sampleSavedWork().copy(isSaved = false, isFavorite = false, hasEpub = true, isFinished = false)
         )
@@ -601,7 +600,17 @@ class WorkLifecycleRepositoryTest {
         val finished = repository.setFinished(workUuid, true)
 
         assertTrue(finished!!.isFinished)
-        assertFalse(finished.hasEpub)
+        assertTrue(finished.hasEpub)
+        assertEquals(clockNow, finished.freedAt)
+        assertTrue(fileStore.workEpubExists(workUuid))
+
+        clockNow = clockNow.plus(java.time.Duration.ofDays(59))
+        assertEquals(0, repository.sweepHeldCopies())
+        assertTrue(repository.getWork(workUuid)!!.hasEpub)
+
+        clockNow = clockNow.plus(java.time.Duration.ofDays(2))
+        assertEquals(1, repository.sweepHeldCopies())
+        assertFalse(repository.getWork(workUuid)!!.hasEpub)
         assertFalse(fileStore.workEpubExists(workUuid))
     }
 
@@ -615,6 +624,87 @@ class WorkLifecycleRepositoryTest {
         assertTrue(finished!!.isFinished)
         assertTrue(finished.hasEpub)
         assertTrue(fileStore.workEpubExists(workUuid))
+    }
+
+    @Test
+    fun freeUpSpaceAlsoFreesLegacyFinishedCopiesWithoutAHoldStamp() = runTest {
+        repository.upsert(
+            sampleSavedWork().copy(
+                isSaved = false,
+                isFavorite = false,
+                hasEpub = true,
+                isFinished = true,
+                freedAt = null
+            )
+        )
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+
+        assertEquals(1, repository.freeFinishedCopies())
+        assertFalse(repository.getWork(workUuid)!!.hasEpub)
+        assertFalse(fileStore.workEpubExists(workUuid))
+    }
+
+    @Test
+    fun restoreHeldCopyKeepsItAndRemoveDownloadOnlyUnkeeps() = runTest {
+        repository.upsert(
+            sampleSavedWork().copy(isSaved = false, hasEpub = true, isFinished = false)
+        )
+        fileStore.writeWorkEpub(workUuid, epubBytes)
+        repository.setFinished(workUuid, true)
+
+        val restored = repository.restoreHeldCopy(workUuid)!!
+        assertTrue(restored.isSaved)
+        assertTrue(restored.isDownloaded)
+        assertNull(restored.freedAt)
+
+        val unkept = repository.setSaved(workUuid, false)!!
+        assertFalse(unkept.isSaved)
+        assertTrue(unkept.hasEpub)
+        assertTrue(fileStore.workEpubExists(workUuid))
+
+        val freed = repository.freeHeldCopy(workUuid)!!
+        assertFalse(freed.hasEpub)
+        assertFalse(fileStore.workEpubExists(workUuid))
+    }
+
+    @Test
+    fun keepOfflineQueueDrivesDownloadedQueryAndClearsHold() = runTest {
+        repository.upsert(
+            sampleSavedWork().copy(isSaved = false, hasEpub = true, isFinished = true, freedAt = clockNow)
+        )
+        val queues = io.github.cidy02.kudos.library.ReadingQueueRepository(
+            database,
+            clock = { clockNow },
+        )
+        val queue = queues.createQueue("Weekend")
+
+        queues.addWork(queue.id, workUuid)
+
+        val kept = repository.getWork(workUuid)!!
+        assertTrue(kept.isKeptOffline)
+        assertEquals("Weekend", kept.keptOfflineBy)
+        assertTrue(kept.isDownloaded)
+        assertNull(kept.freedAt)
+    }
+
+    @Test
+    fun collectionNilDoesNotKeepButOnDoesAndClearsHold() = runTest {
+        repository.upsert(
+            sampleSavedWork().copy(isSaved = false, hasEpub = true, isFinished = true, freedAt = clockNow)
+        )
+        val collection = repository.createCollection("Weekend")
+        repository.addWorkToCollection(workUuid, collection.id)
+
+        assertFalse(repository.getWork(workUuid)!!.isKeptOffline)
+
+        val entity = database.collectionDao().getById(collection.id)!!
+        database.collectionDao().upsert(entity.copy(keepsWorksOffline = true))
+        repository.addWorkToCollection(workUuid, collection.id)
+
+        val kept = repository.getWork(workUuid)!!
+        assertTrue(kept.isKeptOffline)
+        assertEquals("Weekend", kept.keptOfflineBy)
+        assertNull(kept.freedAt)
     }
 
     @Test

@@ -213,7 +213,7 @@ private fun ReaderReading(
 
     // Persist any pending progress when leaving the reader (route change / activity destroy)…
     DisposableEffect(Unit) {
-        onDispose { viewModel.flushProgress() }
+        onDispose { viewModel.close() }
     }
     // …and when the app is merely backgrounded, so an OS process kill cannot drop
     // the last debounce window of reading position.

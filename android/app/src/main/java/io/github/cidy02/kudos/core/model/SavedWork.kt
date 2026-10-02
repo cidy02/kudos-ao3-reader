@@ -90,15 +90,26 @@ data class SavedWork(
     val legacyReaderProgress: Double? = null,
     val authorIdentitiesJSON: String = "",
     val epubDigest: String = "",
-    val assetIdentifier: String = ""
+    val assetIdentifier: String = "",
+    /** Repository-derived; queue nil means on, collection nil means off, matching iOS. */
+    val isKeptOffline: Boolean = false,
+    /** First active keep-offline queue or collection, for the `.keptBy` action. */
+    val keptOfflineBy: String? = null,
+    /** Repository-derived from the shared AO3 identity matcher. Local imports have no AO3 id. */
+    val hasAo3WorkId: Boolean = sourceUrl.isNotBlank()
 ) {
-    // isQueuedForLater counts as protection too - queue-add now preserves the EPUB
-    // (T-89), and without this a queue-only work marked Finished would have that
-    // freshly-preserved file immediately freed by the existing unprotected-finish
-    // cleanup, defeating the point of preserving it.
-    // Last Copy works are always protected so the EPUB isn't silently deleted.
+    /** iOS `SavedWork.isDownloaded`: a file on-device that the reader chose to keep. */
+    val isDownloaded: Boolean
+        get() = WorkDownloadSemantics.isDownloaded(
+            hasEpub = hasEpub,
+            isSaved = isSaved,
+            isKeptOffline = isKeptOffline,
+            hasAo3WorkId = hasAo3WorkId
+        )
+
+    /** Last-copy and local-import protection stays independent of the Downloaded label. */
     val isProtected: Boolean
-        get() = isSaved || isFavorite || isQueuedForLater || ao3Unavailable
+        get() = isSaved || isFavorite || isKeptOffline || !hasAo3WorkId || ao3Unavailable
 
     val needsAO3Refresh: Boolean
         get() = (System.currentTimeMillis() - (lastTagRefreshAttemptAt?.toEpochMilli() ?: 0)) > 86400000L

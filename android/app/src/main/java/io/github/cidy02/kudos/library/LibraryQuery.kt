@@ -144,10 +144,10 @@ object LibraryQuery {
             .sortedWith(lastReadComparator())
     }
 
-    /** Apple `LibrarySectionKind.downloaded`: EPUB on disk. */
+    /** Apple `LibrarySectionKind.downloaded`: a copy on-device the reader chose to keep. */
     fun downloaded(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
-            .filter { it.item.work.hasEpub }
+            .filter { it.item.work.isDownloaded }
             .sortedWith(
                 compareByDescending<LibraryDisplayItem> { it.item.work.dateAdded }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
@@ -214,8 +214,8 @@ object LibraryQuery {
         }
         when (filters.download) {
             LibraryDownloadFilter.Any -> Unit
-            LibraryDownloadFilter.Downloaded -> if (!work.hasEpub) return false
-            LibraryDownloadFilter.NotDownloaded -> if (work.hasEpub) return false
+            LibraryDownloadFilter.Downloaded -> if (!work.isDownloaded) return false
+            LibraryDownloadFilter.NotDownloaded -> if (work.isDownloaded) return false
         }
         when (filters.completion) {
             LibraryCompletionFilter.Any -> Unit

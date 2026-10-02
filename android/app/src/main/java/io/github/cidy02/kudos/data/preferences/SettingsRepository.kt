@@ -153,6 +153,10 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ConfirmBeforeDelete] = confirm }
     }
 
+    suspend fun updateKeepsWorksYouRead(keep: Boolean) {
+        dataStore.edit { it[Keys.KeepsWorksYouRead] = keep }
+    }
+
     suspend fun updateReaderJustify(justify: Boolean) {
         dataStore.edit { it[Keys.ReaderJustify] = justify }
     }
@@ -399,6 +403,8 @@ class SettingsRepository(
             app = AppSettings(
                 confirmBeforeDelete = preferences[Keys.ConfirmBeforeDelete]
                     ?: defaults.app.confirmBeforeDelete,
+                keepsWorksYouRead = preferences[Keys.KeepsWorksYouRead]
+                    ?: defaults.app.keepsWorksYouRead,
                 appTheme = AppThemeSetting.fromStorage(preferences[Keys.AppTheme]),
                 accentColorHex = preferences[Keys.AccentColorHex]
                     ?: defaults.app.accentColorHex
@@ -434,6 +440,7 @@ class SettingsRepository(
         val ReaderMargin = doublePreferencesKey("readerMargin")
         val ReaderJustify = booleanPreferencesKey("readerJustify")
         val ConfirmBeforeDelete = booleanPreferencesKey("confirmBeforeDelete")
+        val KeepsWorksYouRead = booleanPreferencesKey("keepsWorksYouRead")
         val HideMatureContent = booleanPreferencesKey("hideMatureContent")
         val MatureContentMode = stringPreferencesKey("matureContentMode")
         val RequireBiometricToReveal = booleanPreferencesKey("requireBiometricToReveal")

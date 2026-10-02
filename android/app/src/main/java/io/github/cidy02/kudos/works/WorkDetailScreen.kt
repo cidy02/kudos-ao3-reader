@@ -84,6 +84,8 @@ import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
+import io.github.cidy02.kudos.core.model.WorkDownloadAction
+import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.library.ReadingQueueRepository
@@ -522,21 +524,32 @@ fun WorkDetailScreen(
                 if (local.isDeleted) {
                     workRepository.restoreFromRecentlyDeleted(local.id)
                 }
-                val updated = workRepository.upsert(
-                    local.copy(
-                        isSaved = !local.isSaved,
-                        isDeleted = false,
-                        deletedAt = null,
-                        permanentDeletionScheduledAt = null,
-                        lastModifiedAt = Instant.now()
+                val active = workRepository.getWork(local.id) ?: local
+                when (
+                    WorkDownloadSemantics.action(
+                        active.hasEpub,
+                        active.isDownloaded,
+                        active.hasAo3WorkId,
+                        active.keptOfflineBy
                     )
-                )
-                refreshLocal(updated.id, state.remote)
+                ) {
+                    WorkDownloadAction.RemoveDownload -> {
+                        workRepository.setSaved(active.id, false)?.let {
+                            refreshLocal(it.id, state.remote)
+                        }
+                    }
+                    WorkDownloadAction.Download -> {
+                        val kept = workRepository.setSaved(active.id, true) ?: active
+                        refreshLocal(kept.id, state.remote)
+                        if (!kept.hasEpub) download()
+                    }
+                    is WorkDownloadAction.KeptBy, null -> Unit
+                }
             }
             return
         }
-        // Remote-only: create a local saved record.
-        saveMetadataOnly()
+        // Remote-only: Download fetches and keeps the EPUB.
+        download()
     }
 
     DestructiveConfirmation(
@@ -1293,7 +1306,15 @@ private fun WorkDetailContent(
     val busy = state.working || state.queuingSeries
     val local = state.local
     val isFavorite = local?.isFavorite == true
-    val isSaved = local?.isSaved == true
+    val isDownloaded = local?.isDownloaded == true
+    val downloadAction = local?.let {
+        WorkDownloadSemantics.action(
+            it.hasEpub,
+            it.isDownloaded,
+            it.hasAo3WorkId,
+            it.keptOfflineBy
+        )
+    } ?: state.remote?.let { WorkDownloadAction.Download }
     val hasEpub = local?.hasEpub == true
     val epubWorkId = local?.takeIf { it.hasEpub }?.id
 
@@ -1511,7 +1532,8 @@ private fun WorkDetailContent(
                     state = state,
                     busy = busy,
                     hasEpub = hasEpub,
-                    isSaved = isSaved,
+                    isDownloaded = isDownloaded,
+                    downloadAction = downloadAction,
                     epubWorkId = epubWorkId,
                     onOpenReader = onOpenReader,
                     onDownload = onDownload,
@@ -1534,8 +1556,8 @@ private fun WorkDetailContent(
                 WorkDetailTab.Library -> LibraryTab(
                     state = state,
                     busy = busy,
-                    isSaved = isSaved,
-                    hasEpub = hasEpub,
+                    isDownloaded = isDownloaded,
+                    downloadAction = downloadAction,
                     newTagName = newTagName,
                     onNewTagName = onNewTagName,
                     onToggleSaved = onToggleSaved,
@@ -1543,7 +1565,6 @@ private fun WorkDetailContent(
                     onAddToQueue = onAddToQueue,
                     onAddToCollection = onAddToCollection,
                     onToggleFinished = onToggleFinished,
-                    onDownload = onDownload,
                     onAddTag = onAddTag,
                     onRemoveTag = onRemoveTag,
                     onSuggestTag = onSuggestTag
@@ -1681,7 +1702,8 @@ private fun OverviewTab(
     state: WorkDetailUiState,
     busy: Boolean,
     hasEpub: Boolean,
-    isSaved: Boolean,
+    isDownloaded: Boolean,
+    downloadAction: WorkDownloadAction?,
     epubWorkId: String?,
     onOpenReader: (String) -> Unit,
     onDownload: () -> Unit,
@@ -1736,10 +1758,10 @@ private fun OverviewTab(
                 onClick = onOpenAo3
             ),
             QuickAction(
-                label = if (isSaved) "Downloaded" else "Download",
-                icon = if (isSaved) Icons.Filled.Download else Icons.Outlined.Download,
-                enabled = !busy && (state.local != null || state.remote != null),
-                emphasized = isSaved,
+                label = downloadActionLabel(downloadAction, isDownloaded),
+                icon = if (isDownloaded) Icons.Filled.Download else Icons.Outlined.Download,
+                enabled = !busy && downloadAction != null && downloadAction !is WorkDownloadAction.KeptBy,
+                emphasized = isDownloaded,
                 onClick = onToggleSaved
             ),
             QuickAction(
@@ -1941,8 +1963,8 @@ private fun DiscussionTab(
 private fun LibraryTab(
     state: WorkDetailUiState,
     busy: Boolean,
-    isSaved: Boolean,
-    hasEpub: Boolean,
+    isDownloaded: Boolean,
+    downloadAction: WorkDownloadAction?,
     newTagName: String,
     onNewTagName: (String) -> Unit,
     onToggleSaved: () -> Unit,
@@ -1950,7 +1972,6 @@ private fun LibraryTab(
     onAddToQueue: () -> Unit,
     onAddToCollection: () -> Unit,
     onToggleFinished: () -> Unit,
-    onDownload: () -> Unit,
     onAddTag: () -> Unit,
     onRemoveTag: (Tag) -> Unit,
     onSuggestTag: (String) -> Unit
@@ -1961,10 +1982,10 @@ private fun LibraryTab(
     SectionLabel("Status")
     DetailFormCard {
         StatusToggleRow(
-            icon = if (isSaved) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
-            title = if (isSaved) "Downloaded" else "Download",
-            checked = isSaved,
-            enabled = !busy,
+            icon = if (isDownloaded) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
+            title = downloadActionLabel(downloadAction, isDownloaded),
+            checked = isDownloaded,
+            enabled = !busy && downloadAction != null && downloadAction !is WorkDownloadAction.KeptBy,
             onClick = onToggleSaved,
             showDivider = true
         )
@@ -2013,26 +2034,26 @@ private fun LibraryTab(
 
     SectionLabel("Storage")
     DetailCard {
-        // Download / redownload only makes sense with an AO3 work id. Local file
-        // imports show status only (no dead tap that ends in "No work selected").
-        val canDownloadFromAo3 = state.ao3WorkId != null
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = !busy && canDownloadFromAo3) {
-                    onDownload()
+                .clickable(
+                    enabled = !busy && downloadAction != null &&
+                        downloadAction !is WorkDownloadAction.KeptBy
+                ) {
+                    onToggleSaved()
                 },
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (hasEpub) "Download" else "Download",
+                text = downloadActionLabel(downloadAction, isDownloaded),
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
                 text = when {
                     busy -> "Working…"
-                    hasEpub -> "Downloaded"
+                    isDownloaded -> "Downloaded"
                     else -> "Not downloaded"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -2468,12 +2489,19 @@ private fun statusFooter(state: WorkDetailUiState): String {
     val work = state.local
         ?: return "Reading downloads this work to your device. When you finish, the file is freed unless you save or favorite it."
     return when {
-        work.isSaved -> "Saved — kept on this device."
+        work.isDownloaded -> "Downloaded — kept on this device."
         !work.hasEpub -> "Finished. The file was freed to save space; it re-downloads when you read it again."
         work.isFinished -> "Finished."
         work.isFavorite -> "Favorited, so its file is kept when finished."
         else -> "Reading. When you finish, the file is freed unless you save or favorite it."
     }
+}
+
+private fun downloadActionLabel(action: WorkDownloadAction?, downloaded: Boolean): String = when (action) {
+    WorkDownloadAction.Download -> "Download"
+    WorkDownloadAction.RemoveDownload -> "Remove Download"
+    is WorkDownloadAction.KeptBy -> "Kept Offline by ${action.name}"
+    null -> if (downloaded) "Downloaded" else "Download"
 }
 
 /**

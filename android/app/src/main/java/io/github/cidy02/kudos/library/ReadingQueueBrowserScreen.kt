@@ -506,7 +506,7 @@ private fun BrowserPageContent(
                     onToggleFavorite = {},
                     onToggleFinished = {},
                     onRemove = {},
-                    onSetSaved = { _, _ -> },
+                    onDownloadAction = { _, _ -> },
                     onSelect = {},
                     onReveal = {},
                     onAddToQueue = {},

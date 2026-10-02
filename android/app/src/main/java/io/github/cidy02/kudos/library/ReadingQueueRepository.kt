@@ -107,8 +107,17 @@ class ReadingQueueRepository(
         // too - this runs for every addWork caller, not just the ones that already
         // went through WorkDetailScreen's queue-add localize path.
         val workEntity = workDao.getById(workId)
-        if (workEntity != null && !workEntity.isQueuedForLater) {
-            workDao.upsert(workEntity.copy(isQueuedForLater = true, lastModifiedAt = now))
+        if (workEntity != null) {
+            val keepsCopy = queue.keepsWorksOffline != false
+            if (!workEntity.isQueuedForLater || (keepsCopy && workEntity.freedAt != null)) {
+                workDao.upsert(
+                    workEntity.copy(
+                        isQueuedForLater = true,
+                        freedAt = if (keepsCopy) null else workEntity.freedAt,
+                        lastModifiedAt = now
+                    )
+                )
+            }
         }
 
         return membership

@@ -44,7 +44,7 @@ class BrowseLocalIndicatorsTest {
         val indicator = BrowseLocalIndicators.forWork(summary(123), index)
 
         assertTrue(indicator.isSaved)
-        assertTrue(indicator.hasEpub)
+        assertTrue(indicator.isDownloaded)
         assertTrue(indicator.isFavorite)
         assertTrue(indicator.isFinished)
         assertTrue(indicator.any)

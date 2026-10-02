@@ -39,6 +39,25 @@ interface WorkDao {
     @Query("SELECT * FROM works WHERE isDeleted = 0 ORDER BY dateAdded DESC")
     fun observeAll(): Flow<List<WorkEntity>>
 
+    /** Work ids held by any queue/collection whose keep-offline policy is on. */
+    @Query(
+        """
+        SELECT DISTINCT reading_queue_memberships.workID
+        FROM reading_queue_memberships
+        INNER JOIN reading_queues
+            ON reading_queues.id = reading_queue_memberships.queueID
+        WHERE reading_queues.keepsWorksOffline IS NULL
+           OR reading_queues.keepsWorksOffline = 1
+        UNION
+        SELECT DISTINCT collection_work_cross_refs.workId
+        FROM collection_work_cross_refs
+        INNER JOIN collections
+            ON collections.id = collection_work_cross_refs.collectionId
+        WHERE collections.keepsWorksOffline = 1
+        """
+    )
+    suspend fun getKeptOfflineWorkIds(): List<String>
+
     /** Soft-deleted works for Recently Deleted UI (newest deletion first). */
     @Query(
         """
@@ -48,6 +67,18 @@ interface WorkDao {
         """
     )
     fun observeDeleted(): Flow<List<WorkEntity>>
+
+    @Query(
+        """
+        SELECT * FROM works
+        WHERE freedAt IS NOT NULL AND isDeleted = 0
+        ORDER BY freedAt ASC
+        """
+    )
+    fun observeHeldCopies(): Flow<List<WorkEntity>>
+
+    @Query("SELECT * FROM works WHERE freedAt IS NOT NULL ORDER BY freedAt ASC")
+    suspend fun getHeldCopies(): List<WorkEntity>
 
     @Query(
         """

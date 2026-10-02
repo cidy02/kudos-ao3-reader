@@ -56,7 +56,7 @@ class LibraryRepositoryFinishedFilterTest {
 
 class LibraryRepositoryDownloadedFilterTest {
     @Test
-    fun downloadedFilterUsesHasEpub() {
+    fun downloadedFilterUsesKeptCopySemantics() {
         val downloaded = LibraryQuery.apply(
             sampleItems(),
             filters = LibraryFilterState(download = LibraryDownloadFilter.Downloaded)
@@ -68,6 +68,31 @@ class LibraryRepositoryDownloadedFilterTest {
 
         assertEquals(listOf("alpha", "gamma", "delta"), downloaded.ids())
         assertEquals(listOf("beta"), notDownloaded.ids())
+    }
+
+    @Test
+    fun readingCopyIsNotDownloaded() {
+        val readingCopy = LibraryDisplayItem(
+            LibraryWorkListItem(
+                SavedWork(
+                    id = "reading-copy",
+                    title = "Reading Copy",
+                    author = "Author",
+                    sourceUrl = "https://archiveofourown.org/works/123",
+                    isSaved = false,
+                    hasEpub = true,
+                    hasAo3WorkId = true
+                )
+            )
+        )
+
+        assertTrue(LibraryQuery.downloaded(listOf(readingCopy)).isEmpty())
+        assertTrue(
+            LibraryQuery.apply(
+                listOf(readingCopy),
+                filters = LibraryFilterState(download = LibraryDownloadFilter.NotDownloaded)
+            ).isNotEmpty()
+        )
     }
 }
 
@@ -520,12 +545,16 @@ class QueueOnlyWorkSemanticsTest {
         val queueOnly = SavedWork(
             title = "Queue Only",
             author = "Author",
+            sourceUrl = "https://archiveofourown.org/works/123",
             isQueuedForLater = true,
             isSaved = false,
-            isFavorite = false
+            isFavorite = false,
+            isKeptOffline = true,
+            hasAo3WorkId = true
         )
         assertTrue(queueOnly.isQueueOnlyWork)
-        assertTrue("queued works are protected from EPUB cleanup too", queueOnly.isProtected)
+        assertTrue("a keep-offline queue protects its works", queueOnly.isProtected)
+        assertFalse(queueOnly.copy(isKeptOffline = false).isProtected)
 
         val savedAndQueued = queueOnly.copy(isSaved = true)
         assertFalse(savedAndQueued.isQueueOnlyWork)

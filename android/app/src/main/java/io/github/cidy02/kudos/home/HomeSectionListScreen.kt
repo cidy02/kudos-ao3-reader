@@ -44,6 +44,7 @@ import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.WorkBulkActionBar
 import io.github.cidy02.kudos.works.WorkMetadataRefresh
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.DownloadQueue
 
 /**
  * The full, vertically scrolling list behind a Home section's "See all"
@@ -62,6 +63,7 @@ fun HomeSectionListScreen(
     privacyGate: PrivacyGate,
     metadataRefresh: WorkMetadataRefresh?,
     queueRepository: ReadingQueueRepository? = null,
+    downloadQueue: DownloadQueue? = null,
     initialSelecting: Boolean = false,
     initialSelection: Set<String> = emptySet(),
     onOpenWork: (String) -> Unit,
@@ -118,7 +120,7 @@ fun HomeSectionListScreen(
         onToggleFavorite = {},
         onToggleFinished = {},
         onRemove = {},
-        onSetSaved = { _, _ -> },
+        onDownloadAction = { _, _ -> },
         onSelect = {},
         onReveal = { id -> privacyGate.reveal(id, activity) },
         onAddToQueue = {},
@@ -185,6 +187,7 @@ fun HomeSectionListScreen(
                         selectedWorks = selectedWorks,
                         workRepository = workRepository,
                         queueRepository = queueRepository,
+                        downloadQueue = downloadQueue,
                         onDeleted = { isSelecting = false; selection = emptySet() },
                         onDone = { isSelecting = false; selection = emptySet() }
                     )

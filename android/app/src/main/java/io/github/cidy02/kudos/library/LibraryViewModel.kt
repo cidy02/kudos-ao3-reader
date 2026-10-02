@@ -7,7 +7,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.core.model.WorkDownloadAction
+import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
+import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkTags
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +26,7 @@ class LibraryViewModel(
     private val workRepository: WorkRepository,
     private val settingsRepository: SettingsRepository? = null,
     private val queueRepository: ReadingQueueRepository? = null,
+    private val downloadQueue: DownloadQueue? = null,
     private val privacyGate: PrivacyGate = PrivacyGate()
 ) : ViewModel() {
     private val searchQuery = MutableStateFlow("")
@@ -167,7 +172,19 @@ class LibraryViewModel(
         if (ids.isEmpty()) return
         viewModelScope.launch {
             for (id in ids) {
-                workRepository.setSaved(id, saved)
+                val work = workRepository.getWork(id) ?: continue
+                val action = WorkDownloadSemantics.action(
+                    work.hasEpub,
+                    work.isDownloaded,
+                    work.hasAo3WorkId,
+                    work.keptOfflineBy
+                ) ?: continue
+                if (saved) {
+                    workRepository.setSaved(id, true)
+                    if (!work.hasEpub) enqueueDownload(work)
+                } else if (action == WorkDownloadAction.RemoveDownload) {
+                    workRepository.setSaved(id, false)
+                }
             }
             exitSelectionMode()
         }
@@ -254,17 +271,27 @@ class LibraryViewModel(
         }
     }
 
-    fun setSavedOne(workId: String, saved: Boolean) {
+    fun performDownloadAction(workId: String, action: WorkDownloadAction) {
         viewModelScope.launch {
-            workRepository.setSaved(workId, saved)
+            when (action) {
+                WorkDownloadAction.RemoveDownload -> workRepository.setSaved(workId, false)
+                is WorkDownloadAction.KeptBy -> Unit
+                WorkDownloadAction.Download -> {
+                    val work = workRepository.setSaved(workId, true) ?: return@launch
+                    if (!work.hasEpub) enqueueDownload(work)
+                }
+            }
         }
     }
 
-    fun toggleSavedOne(workId: String) {
-        viewModelScope.launch {
-            val work = workRepository.getWork(workId) ?: return@launch
-            workRepository.setSaved(workId, !work.isSaved)
-        }
+    private fun enqueueDownload(work: io.github.cidy02.kudos.core.model.SavedWork) {
+        val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: return
+        downloadQueue?.enqueueLocal(
+            ao3WorkId = ao3Id,
+            title = work.title,
+            sourceUrl = work.sourceUrl,
+            force = true
+        )
     }
 
     /**
@@ -400,6 +427,7 @@ class LibraryViewModel(
             workRepository: WorkRepository,
             settingsRepository: SettingsRepository? = null,
             queueRepository: ReadingQueueRepository? = null,
+            downloadQueue: DownloadQueue? = null,
             privacyGate: PrivacyGate = PrivacyGate()
         ): ViewModelProvider.Factory =
             viewModelFactory {
@@ -409,6 +437,7 @@ class LibraryViewModel(
                         workRepository,
                         settingsRepository,
                         queueRepository,
+                        downloadQueue,
                         privacyGate
                     )
                 }

@@ -38,10 +38,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkDownloadAction
+import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.library.ReadingQueueRepository
+import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.works.WorkTags
 import kotlinx.coroutines.launch
 
 @Composable
@@ -49,6 +53,7 @@ fun WorkBulkActionBar(
     selectedWorks: List<SavedWork>,
     workRepository: WorkRepository,
     queueRepository: ReadingQueueRepository?,
+    downloadQueue: DownloadQueue? = null,
     onDeleted: () -> Unit = {},
     onDone: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -61,8 +66,30 @@ fun WorkBulkActionBar(
     
     val hasSelection = selectedWorks.isNotEmpty()
     val allFavorited = hasSelection && selectedWorks.all { it.isFavorite }
-    val allSaved = hasSelection && selectedWorks.all { it.isSaved }
+    val allDownloaded = hasSelection && selectedWorks.all { it.isDownloaded }
     val allFinished = hasSelection && selectedWorks.all { it.isFinished }
+    val canRemoveDownload = selectedWorks.any { it.isDownloaded && it.keptOfflineBy == null }
+
+    suspend fun setDownloaded(downloaded: Boolean) {
+        for (selected in selectedWorks) {
+            val work = workRepository.getWork(selected.id) ?: continue
+            val action = WorkDownloadSemantics.action(
+                work.hasEpub,
+                work.isDownloaded,
+                work.hasAo3WorkId,
+                work.keptOfflineBy
+            ) ?: continue
+            if (downloaded) {
+                workRepository.setSaved(work.id, true)
+                if (!work.hasEpub) {
+                    val ao3Id = WorkTags.ao3WorkIdFromUrl(work.sourceUrl) ?: continue
+                    downloadQueue?.enqueueLocal(ao3Id, work.title, work.sourceUrl, force = true)
+                }
+            } else if (action == WorkDownloadAction.RemoveDownload) {
+                workRepository.setSaved(work.id, false)
+            }
+        }
+    }
 
     Surface(
         tonalElevation = 6.dp,
@@ -88,11 +115,11 @@ fun WorkBulkActionBar(
                 }
                 IconButton(onClick = {
                     scope.launch {
-                        val target = !allSaved
-                        selectedWorks.forEach { workRepository.setSaved(it.id, target) }
+                        val target = !allDownloaded
+                        setDownloaded(target)
                         onDone()
                     }
-                }, enabled = hasSelection) {
+                }, enabled = hasSelection && (!allDownloaded || canRemoveDownload)) {
                     Icon(Icons.Outlined.Download, "Download")
                 }
                 IconButton(onClick = { showingAddToQueue = true }, enabled = hasSelection) {
@@ -136,10 +163,11 @@ fun WorkBulkActionBar(
                             onClick = {
                                 overflowExpanded = false
                                 scope.launch {
-                                    selectedWorks.forEach { workRepository.setSaved(it.id, false) }
+                                    setDownloaded(false)
                                     onDone()
                                 }
-                            }
+                            },
+                            enabled = canRemoveDownload
                         )
                         DropdownMenuItem(
                             text = { Text("Mark Unfinished") },

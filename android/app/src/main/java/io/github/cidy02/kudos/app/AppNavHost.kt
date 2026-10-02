@@ -110,6 +110,7 @@ fun AppNavHost(
                 authRepository = container.authRepository,
                 accountListRepository = container.accountListRepository,
                 privacyGate = container.privacyGate,
+                downloadQueue = container.downloadQueue,
                 onOpenWork = { workId ->
                     navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },
@@ -139,6 +140,7 @@ fun AppNavHost(
                 workRepository = container.workRepository,
                 settingsRepository = container.settingsRepository,
                 queueRepository = container.readingQueueRepository,
+                downloadQueue = container.downloadQueue,
                 privacyGate = container.privacyGate,
                 onOpenWork = { workId ->
                     navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
@@ -301,6 +303,7 @@ fun AppNavHost(
                         container.metadataRepository
                     ),
                     queueRepository = container.readingQueueRepository,
+                    downloadQueue = container.downloadQueue,
                     initialSelecting = isSelecting,
                     initialSelection = selection,
                     onOpenWork = { workId ->

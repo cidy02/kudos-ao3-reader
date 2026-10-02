@@ -185,6 +185,10 @@ fun SettingsScreen(
         effectiveWorkRepository?.observeFinishedWorks() ?: flowOf(emptyList())
     }
     val finishedWorks by finishedWorksFlow.collectAsState(initial = emptyList())
+    val freeableCopiesFlow = remember(effectiveWorkRepository) {
+        effectiveWorkRepository?.observeFreeableCopies() ?: flowOf(emptyList())
+    }
+    val freeableCopies by freeableCopiesFlow.collectAsState(initial = emptyList())
     var fontStatus by remember { mutableStateOf<String?>(null) }
     var fontStatusIsError by remember { mutableStateOf(false) }
     var fontBusy by remember { mutableStateOf(false) }
@@ -195,6 +199,7 @@ fun SettingsScreen(
     var browseCacheCleared by remember { mutableStateOf(false) }
     var showClearBrowseCacheConfirm by remember { mutableStateOf(false) }
     var showClearHistoryConfirm by remember { mutableStateOf(false) }
+    var showFreeUpSpaceConfirm by remember { mutableStateOf(false) }
 
     fun launchUpdate(block: suspend () -> Unit) {
         scope.launch { block() }
@@ -629,6 +634,27 @@ fun SettingsScreen(
             }
         }
 
+        // ── Downloads ──────────────────────────────────────────────────
+        item {
+            SettingsGroup(title = "Downloads") {
+                SettingSwitchRow(
+                    label = "Keep works you read",
+                    checked = settings.app.keepsWorksYouRead,
+                    onCheckedChange = {
+                        launchUpdate { repository.updateKeepsWorksYouRead(it) }
+                    }
+                )
+                Text(
+                    text = "When this is on, every work you open stays downloaded, as if you " +
+                        "tapped Download. When it's off, finishing a work removes its copy unless " +
+                        "you downloaded, favorited, or queued it. It stays in your history, and " +
+                        "you can download it again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         // ── Library ────────────────────────────────────────────────────
         item {
             SettingsGroup(title = "Library") {
@@ -880,6 +906,22 @@ fun SettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
+                        text = "Remove the copies of finished works you didn't keep. The works " +
+                            "stay in your reading history, and you can download them again.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = { showFreeUpSpaceConfirm = true },
+                        enabled = freeableCopies.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Free up space")
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
                         text = "Cached AO3 fandom and category data used to show Browse instantly. " +
                             "Safe to clear — it rebuilds the next time you open Browse.",
                         style = MaterialTheme.typography.bodySmall,
@@ -1000,6 +1042,20 @@ fun SettingsScreen(
             }
         },
         onDismissRequest = { showClearBrowseCacheConfirm = false }
+    )
+
+    DestructiveConfirmation(
+        show = showFreeUpSpaceConfirm,
+        title = "Free Up Space?",
+        text = "Removes the copies of works you've finished reading and didn't download, " +
+            "favourite or queue. Kudos gets them again from AO3 if you open them.",
+        confirmText = "Free ${freeableCopies.size} ${if (freeableCopies.size == 1) "File" else "Files"}",
+        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        onConfirm = {
+            showFreeUpSpaceConfirm = false
+            scope.launch { effectiveWorkRepository?.freeFinishedCopies() }
+        },
+        onDismissRequest = { showFreeUpSpaceConfirm = false }
     )
 
     DestructiveConfirmation(

@@ -47,6 +47,10 @@ class ReaderRepository(
             ?: return ReaderOpenResult.Failure(work, ReaderError.OpenFailed("Invalid work file path."))
 
         val settings = settingsProvider()
+        var openedWork = workRepository.releaseHeldCopy(workId) ?: work
+        if (settings.app.keepsWorksYouRead && !openedWork.isSaved) {
+            openedWork = workRepository.setSaved(workId, true) ?: openedWork
+        }
         val customFonts = customFontsProvider?.invoke()
             ?: customFontRepository?.listImported()
             ?: emptyList()
@@ -70,9 +74,9 @@ class ReaderRepository(
         )
 
         return ReaderOpenResult.Success(
-            work = work,
+            work = openedWork,
             epubPath = path,
-            restoreTarget = progressMapper.restoreTarget(work),
+            restoreTarget = progressMapper.restoreTarget(openedWork),
             preferences = preferences
         )
     }
@@ -88,6 +92,8 @@ class ReaderRepository(
         // (Apple WorkLifecycle parity).
         return workRepository.setFinished(workId, finished)
     }
+
+    suspend fun close(workId: String): SavedWork? = workRepository.holdFinishedCopy(workId, clock())
 
     /**
      * Explicitly mark the EPUB file as gone (e.g. after a confirmed FileMissing).

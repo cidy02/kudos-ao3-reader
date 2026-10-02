@@ -63,6 +63,19 @@ interface ReadingQueueDao {
     @Query("SELECT * FROM reading_queue_memberships WHERE workID = :workId")
     suspend fun getMembershipsForWork(workId: String): List<ReadingQueueMembershipEntity>
 
+    @Query(
+        """
+        SELECT q.name FROM reading_queues q
+        INNER JOIN reading_queue_memberships m ON m.queueID = q.id
+        WHERE m.workID = :workId
+          AND q.isDeleted = 0
+          AND (q.keepsWorksOffline IS NULL OR q.keepsWorksOffline = 1)
+        ORDER BY q.sortOrder ASC, q.name ASC
+        LIMIT 1
+        """
+    )
+    suspend fun getActiveKeepingQueueName(workId: String): String?
+
 
     @Query("SELECT * FROM reading_queue_memberships WHERE id = :id")
     suspend fun getMembershipById(id: String): ReadingQueueMembershipEntity?

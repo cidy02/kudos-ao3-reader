@@ -84,6 +84,20 @@ interface CollectionDao {
 
     @Query(
         """
+        SELECT collections.name FROM collections
+        INNER JOIN collection_work_cross_refs
+            ON collections.id = collection_work_cross_refs.collectionId
+        WHERE collection_work_cross_refs.workId = :workId
+          AND collections.isDeleted = 0
+          AND collections.keepsWorksOffline = 1
+        ORDER BY collections.dateAdded DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getActiveKeepingCollectionName(workId: String): String?
+
+    @Query(
+        """
         SELECT works.* FROM works
         INNER JOIN collection_work_cross_refs
             ON works.id = collection_work_cross_refs.workId
