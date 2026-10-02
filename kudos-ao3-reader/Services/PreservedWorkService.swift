@@ -198,6 +198,8 @@ enum PreservedWorkService {
         let count = hardDeletePending(in: context) { scheduledAt in
             scheduledAt.map { $0 <= now } ?? false
         }
+        // Recently Deleted's other section: finished, un-kept copies past 60 days.
+        WorkLifecycle.sweepHeldCopies(in: context, now: now)
         if count > 0 {
             Log.library.info("Recently Deleted sweep permanently removed \(count, privacy: .public) record(s)")
         }
@@ -209,7 +211,8 @@ enum PreservedWorkService {
     /// per-item action and the sweep use — not a second way to delete.
     @discardableResult
     static func hardDeleteAllPending(in context: ModelContext) -> Int {
-        hardDeletePending(in: context) { _ in true }
+        WorkLifecycle.sweepHeldCopies(in: context, everything: true)
+            + hardDeletePending(in: context) { _ in true }
     }
 
     /// The shared pass: permanently deletes each pending work, collection and

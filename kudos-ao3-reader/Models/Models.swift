@@ -221,6 +221,14 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// was freed; revisiting re-downloads it.
     var hasEPUB: Bool = true
 
+    /// When finishing this un-kept work put its copy in Recently Deleted's
+    /// "Finished, not kept" section (owner, 2026-10-01). The file stays on the
+    /// device until `WorkLifecycle.freedCopyWindow` has passed, so Restore is
+    /// instant and offline; nil when the copy is not being held. Device-local,
+    /// like `hasEPUB`'s file: it describes this device's storage, so backups and
+    /// sync do not carry it. Additive optional — a lightweight migration.
+    var freedAt: Date?
+
     /// Whether AO3 marks the work complete (known only for native imports).
     /// Reaching the end auto-finishes only complete works; WIPs need a manual mark.
     var isComplete: Bool = false
@@ -453,10 +461,11 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     /// `ao3Unavailable` is protected for exactly the reason the sentence above
     /// gives. It is set ONLY when AO3 answered 404 — deleted or hidden, never a
     /// network blip (see `preservationState`) — so the EPUB on this device is the
-    /// last copy in existence. Without this, finishing such a work ran
-    /// `WorkLifecycle.markFinished` → `freeEPUB`, which deletes the file outright
-    /// and does not pass through Recently Deleted: the reader lost the only copy of
-    /// a work AO3 had already removed, by reaching the end of it.
+    /// last copy in existence. Without this, finishing such a work used to run
+    /// `WorkLifecycle.markFinished` → `freeEPUB`, which deleted the file outright:
+    /// the reader lost the only copy of a work AO3 had already removed, by
+    /// reaching the end of it. (Finishing now holds the copy in Recently Deleted
+    /// first — `holdFinishedCopy` — but a protected work is never held at all.)
     var isProtected: Bool {
         isSaved || isFavorite || isKeptOffline || ao3WorkID == nil || ao3Unavailable
     }

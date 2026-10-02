@@ -101,6 +101,7 @@ enum DemoLibrary {
     private static func seedRecentlyDeleted(in context: ModelContext) {
         let title = "Lanterns Over Ba Sing Se"
         let all = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        seedHeldCopy(in: context, existing: all)
         guard !all.contains(where: { $0.title == title }) else { return }
         let work = SavedWork(title: title, author: "paperlantern", summary: "")
         work.workFandoms = ["Avatar: The Last Airbender"]
@@ -112,6 +113,26 @@ enum DemoLibrary {
         let shelf = WorkCollection(name: "Summer 2025")
         context.insert(shelf)
         PreservedWorkService.softDelete(shelf, in: context)
+        try? context.save()
+    }
+
+    /// A finished, un-kept work whose copy waits in Recently Deleted's "Finished,
+    /// not kept" section — the only demo work with an AO3 id, because that
+    /// section holds AO3 works only (an import is always kept). The id is a
+    /// placeholder; the demo blocks AO3 anyway.
+    private static func seedHeldCopy(in context: ModelContext, existing: [SavedWork]) {
+        let title = "Tea in the Jasmine Dragon"
+        guard !existing.contains(where: { $0.title == title }) else { return }
+        let work = SavedWork(title: title, author: "uncle_iroh_fan", summary: "")
+        work.workFandoms = ["Avatar: The Last Airbender"]
+        work.rating = "General Audiences"
+        work.wordCount = 8_120
+        work.chapters = "3/3"
+        work.ao3WorkID = 999_000_001
+        context.insert(work)
+        writePlaceholder(for: work)
+        work.isFinished = true
+        work.freedAt = Date().addingTimeInterval(-9 * 86_400)
         try? context.save()
     }
 

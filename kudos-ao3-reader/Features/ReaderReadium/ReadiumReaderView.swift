@@ -392,6 +392,7 @@ struct ReadiumReaderView: View {
             .onAppear {
                 ReadingLogService.startSession(for: work, now: Date())
                 WorkLifecycle.keepIfKeepingWorksYouRead(work, in: modelContext)
+                WorkLifecycle.releaseHeldCopy(work)
             }
             .onChange(of: scenePhase) { _, phase in
                 // Force-quit safety: flush when leaving the foreground so a
