@@ -401,6 +401,10 @@ struct ContentView: View {
             #endif
         }
         .tabViewStyle(.sidebarAdaptable)
+        #if os(iOS)
+        // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
+        .tabBarMinimizeBehavior(.onScrollDown)
+        #endif
         #if os(visionOS)
             .tabViewBottomAccessory {
                 searchButton

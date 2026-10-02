@@ -126,6 +126,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     var body: some View {
         NavigationStack(path: $path) {
             content
+                .scrollAwayTopChrome()
                 .task { await FandomCatalog.shared.warmCache() }
                 #if DEBUG
                 .task {

@@ -165,6 +165,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         .padding(.vertical, 12)
                     }
                     .refreshable { await refreshHome() }
+                    .scrollAwayTopChrome()
                 } else {
                     TabDashboardShell(
                         sectionTitles: [
