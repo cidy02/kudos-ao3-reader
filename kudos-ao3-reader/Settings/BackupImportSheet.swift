@@ -83,8 +83,8 @@ struct BackupImportSheet: View {
         Section {
             Button("Merge", action: onMerge)
         } footer: {
-            Text("Keeps everything already on this device and adds anything in "
-                + "the backup you do not have. Nothing is removed.")
+            Text("Merge keeps everything already on this device and adds anything you don't "
+                + "have from the backup. It removes nothing.")
         }
     }
 
@@ -95,10 +95,10 @@ struct BackupImportSheet: View {
         Section {
             Button("Replace Library…", role: .destructive) { step = .replace }
         } footer: {
-            Text("Makes this device match the backup exactly. Works, reading "
-                + "positions, notes, collections and queues all become what the "
-                + "backup says, and works it does not contain are removed. "
-                + "You will be asked to confirm, and an undo copy is written first.")
+            Text("Replace makes this device match the backup. Your works, reading positions, "
+                + "notes, collections, and queues change to match it, and anything missing from "
+                + "the backup is removed. You will confirm before it starts, and Kudos saves a "
+                + "copy of your current library first.")
         }
     }
 }

@@ -464,9 +464,9 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 Button("Rebuild") { Task { await rebuildFromOriginal() } }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This work was already built with the latest converter, so its text is "
-                    + "unlikely to change. Rebuilding re-reads everything from the original file, "
-                    + "which is worth doing if its details look wrong.")
+                Text("This work already uses the latest version, so rebuilding probably won't change it. "
+                    + "Try rebuilding if its text or details look wrong. Kudos will use the original "
+                    + "file you imported.")
             }
             .alert(
                 "Couldn't Rebuild This Work",

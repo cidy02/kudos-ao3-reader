@@ -134,8 +134,8 @@ struct LibraryFilterCollisionCard: View {
 
     private var collisionDetail: String {
         let hidden = hiddenCount == 1
-            ? "The 1 work in \(sectionTitle) is hidden."
-            : "All \(hiddenCount) works in \(sectionTitle) are hidden."
+            ? "Your 1 work in \(sectionTitle) is hidden by this filter."
+            : "All \(hiddenCount) of your works in \(sectionTitle) are hidden by these filters."
         guard activeLabels.count >= 2 else { return hidden }
         let colliding = filters.collidingFilterLabels(in: works)
         if colliding.count == 1 { return hidden + " " + colliding[0] + " matches no works here." }

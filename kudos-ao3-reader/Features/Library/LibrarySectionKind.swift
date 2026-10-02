@@ -66,20 +66,19 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     var emptyMessage: String {
         switch self {
         case .readingNow:
-            "You're not reading anything right now. Open something below or find a new work in Browse."
+            "You aren't reading anything yet. Open a work from your Library or find one in Browse."
         case .savedForLater:
-            "Nothing saved for later yet. Add works to your local Saved for Later queue."
+            "You haven't saved any works for later. Add a work to Saved for Later to see it here."
         case .finished:
-            "No finished works yet. Works you complete show up here."
+            "Works you mark as finished will appear here."
         case .collections:
-            "Collections are coming soon — a place to group your works into shelves."
+            "You have no collections yet. Create one from your Library to group works together."
         case .downloaded:
-            "No downloads yet. Download a work as EPUB to read it offline."
+            "Download a work to read it without an internet connection."
         case .history:
-            "Nothing read yet. Works you open land here with the time you spent on "
-                + "them, how often you have reread them, and whether they changed since."
+            "Works you open appear here with your reading time, reread count, and any new chapters."
         case .favorites:
-            "Swipe a work in your Library, or tap the star on its page, to favorite it."
+            "To add a favorite, swipe a work in your Library or tap the star on its page."
         }
     }
 

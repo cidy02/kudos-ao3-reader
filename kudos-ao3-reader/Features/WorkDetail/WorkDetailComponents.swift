@@ -154,7 +154,7 @@ enum WorkDetailPresentation {
             segments.append(pluralised(tagCount, "tag"))
         }
         if segments.isEmpty {
-            return "Nothing saved on this device yet"
+            return "You haven't saved anything on this device yet"
         }
         return segments.joined(separator: " · ")
     }

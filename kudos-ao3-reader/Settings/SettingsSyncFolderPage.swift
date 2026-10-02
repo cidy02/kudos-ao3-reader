@@ -203,7 +203,7 @@ struct FolderSyncSettingsSection: View {
             if isPreparing || isSyncing {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text(isSyncing ? "Syncing library…" : "Preparing metadata…")
+                    Text(isSyncing ? "Syncing library…" : "Preparing your library…")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -214,11 +214,11 @@ struct FolderSyncSettingsSection: View {
                     .foregroundStyle(.secondary)
             }
         } footer: {
-            Text(persistenceStatus.detail + " Your library data — including reading history — is written "
-                + "to the folder you choose. If that folder is in iCloud Drive, Apple syncs it to your "
-                + "other devices through your personal iCloud account. Kudos still works fully offline. "
-                + "This is folder-based sync using the existing backup format, not real-time CloudKit sync. "
-                + "Turning off Auto Sync stops automatic background/launch syncing — Sync Now still works.")
+            Text("Kudos stores your library data, including reading history, in the folder you "
+                + "choose using the same kind of file as a backup. If the folder is in iCloud "
+                + "Drive, Apple shares changes through your personal iCloud account; changes may "
+                + "not appear immediately, and Kudos still works offline. Turning off Auto Sync "
+                + "stops automatic updates, but Sync Now still works.")
         }
     }
 }

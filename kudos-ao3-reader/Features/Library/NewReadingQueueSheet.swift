@@ -99,16 +99,14 @@ struct NewReadingQueueSheet: View {
                     SubjectHueSwatchRow(selection: $hue, pickedHex: $options.colorHex)
                         .pageBodyRow(top: 10, gutter: gutter)
                     footnote(hue == nil
-                        ? "Without a colour, the queue takes one from its name — and "
-                            + "changes it if you rename it."
-                        : "Set once, so renaming the queue keeps its colour.")
+                        ? "Kudos picks a colour from the queue name. Renaming it may change the colour."
+                        : "Your chosen colour stays the same if you rename the queue.")
                 }
 
                 Section {
                     groupLabel("Tags")
                     tagsPanel.pageBodyRow(top: 10, gutter: gutter)
-                    footnote("Tags are shared with the ones already on works, so one word "
-                        + "means the same thing in both places.")
+                    footnote("A tag you use here is the same tag on your works.")
                 }
 
                 Section {
@@ -239,8 +237,8 @@ struct NewReadingQueueSheet: View {
 
     /// 1j's copy for this group, and what the toggle does since T-276
     /// (`KeepOffline`, `SavedWork.isKeptOffline`).
-    static let offlineFootnote = "On, every work you add downloads an EPUB. "
-        + "Off, the queue is just a list — nothing is preserved and nothing counts against storage."
+    static let offlineFootnote = "When this is on, every work you add is downloaded for offline reading. "
+        + "When it is off, the queue keeps only your list and uses no extra storage."
 
     private var seedPanel: some View {
         VStack(spacing: 0) {
@@ -313,8 +311,8 @@ struct NewReadingQueueSheet: View {
             return nil
         case .savedForLater:
             guard let seedCount else { return nil }
-            guard seedCount > 0 else { return "Nothing in Saved for Later to copy." }
-            return "Copy all \(seedCount), leaving them saved"
+            guard seedCount > 0 else { return "You have no works in Saved for Later to copy." }
+            return "Copy \(seedCount) work\(seedCount == 1 ? "" : "s"). They stay in Saved for Later."
         }
     }
 

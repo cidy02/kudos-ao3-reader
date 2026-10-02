@@ -195,8 +195,8 @@ struct CollectionDetailView: View {
             SubjectFieldLabel(text: "Colour", style: .formGroup)
         } footer: {
             Text(collection.hue == nil
-                ? "Taken from the collection's name, so renaming it changes the colour."
-                : "Set on the collection, so renaming it keeps this colour.")
+                ? "Kudos picks this colour from the collection name. Renaming it may change the colour."
+                : "Your chosen colour stays the same if you rename the collection.")
         }
         .appThemedRows()
     }
@@ -288,8 +288,7 @@ struct CollectionDetailView: View {
                 ContentUnavailableView {
                     Label(collection.name, systemImage: "square.stack")
                 } description: {
-                    Text("No works yet. Add works from your library here, or from any "
-                        + "work's page (Add to Collection).")
+                    Text("Add works from your Library here, or choose Add to Collection on a work's page.")
                 } actions: {
                     Button {
                         showingAddWorks = true
@@ -356,7 +355,7 @@ struct CollectionDetailView: View {
                         ContentUnavailableView {
                             Label("No matching works", systemImage: "line.3.horizontal.decrease.circle")
                         } description: {
-                            Text("No works in this collection match the current filters.")
+                            Text("Your filters don't match any works in this collection.")
                         } actions: {
                             Button("Clear Filters") { filters = LibraryFilters() }
                         }
@@ -604,7 +603,7 @@ struct AddToCollectionView: View {
 
                 if collections.isEmpty {
                     Section {
-                        Text("No collections yet. Create one above to start grouping works.")
+                        Text("You have no collections yet. Create one above to group works together.")
                             .foregroundStyle(.secondary)
                     }
                 } else {
@@ -762,9 +761,8 @@ private struct CollectionDeleteConfirmation: ViewModifier {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "The collection moves to Recently Deleted "
-                    + "for \(PreservedWorkService.recoveryWindowText). The works "
-                    + "themselves stay in your Library either way."
+                "Kudos will move this collection to Recently Deleted for "
+                    + "\(PreservedWorkService.recoveryWindowText). Its works will stay in your Library."
             )
         }
     }

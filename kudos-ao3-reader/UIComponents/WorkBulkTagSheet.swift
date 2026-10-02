@@ -37,13 +37,13 @@ struct WorkBulkTagSheet: View {
                     }
                 } footer: {
                     Text(works.count == 1
-                        ? "Applies to the selected work."
-                        : "Applies to all \(works.count) selected works.")
+                        ? "Your changes apply to the selected work."
+                        : "Your changes apply to all \(works.count) selected works.")
                 }
 
                 if allTags.isEmpty {
                     Section {
-                        Text("No tags yet — add one above to organize your Library.")
+                        Text("You have no tags yet. Add one above to organize your Library.")
                             .foregroundStyle(.secondary)
                     }
                 } else {

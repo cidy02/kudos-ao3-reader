@@ -125,8 +125,8 @@ struct CollectionModerationView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { item in
-            Text("“\(item.workTitle)” leaves the review queue as rejected. AO3 sends the creator no reason "
-                + "and no email, and the work stays on AO3; only its place in this collection changes.")
+            Text("This rejects “\(item.workTitle)” from the collection. The work stays on AO3, and its "
+                + "creator receives no reason or email.")
         }
         .alert(
             participantToDecline.map { CollectionModerationCopy.declineTitle(participant: $0.pseud) } ?? "",
@@ -141,7 +141,7 @@ struct CollectionModerationView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { participant in
-            Text("\(participant.pseud)'s membership request will be removed, and they will need to apply again.")
+            Text("This removes \(participant.pseud)'s membership request. They will need to apply again.")
         }
         .alert("Reveal this collection?", isPresented: $confirmReveal) {
             Button("Reveal", role: .destructive) {
@@ -150,7 +150,7 @@ struct CollectionModerationView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Unrevealed works and their creators become visible to everyone. "
-                + "This cannot be undone from the app.")
+                + "You can't undo this in Kudos.")
         }
         .alert("Remove anonymity?", isPresented: $confirmUnanon) {
             Button("Remove Anonymity", role: .destructive) {
@@ -158,8 +158,8 @@ struct CollectionModerationView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Creators become visible to everyone instead of just maintainers. "
-                + "This cannot be undone from the app.")
+            Text("Creators become visible to everyone instead of only maintainers. "
+                + "You can't undo this in Kudos.")
         }
             .screenTint(palette)
     }
@@ -263,15 +263,15 @@ struct CollectionModerationView: View {
             if let revealErrorMessage {
                 errorNotice(revealErrorMessage).pageBodyRow(top: 8, gutter: gutter)
             }
-            footnote("Reveal and remove anonymity are separate AO3 writes, each confirmed first; "
-                + "neither can be undone from the app.")
+            footnote("Reveal and Remove anonymity are separate actions. You confirm each one, "
+                + "and neither can be undone in Kudos.")
                 .pageBodyRow(top: 8, gutter: gutter)
         }
     }
 
     private var reviewFootnote: some View {
-        footnote("Rejecting sends the creator no reason and no email: AO3 has neither. The work stays "
-            + "on AO3; only its place in this collection changes.")
+        footnote("AO3 doesn't send the creator a reason or email when you reject a work. "
+            + "The work stays on AO3 and only leaves this collection.")
     }
 
     private func footnote(_ text: String) -> some View {
@@ -567,7 +567,8 @@ struct CollectionModerationView: View {
     }
 
     private var maintainersFootnote: some View {
-        Text("Roles, invitations, and the last-owner rule live on Maintainers — this is just the headcount.")
+        Text("This shows how many maintainers there are. Manage roles, invitations and the last-owner "
+            + "rule under Maintainers.")
             .font(.system(size: captionSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

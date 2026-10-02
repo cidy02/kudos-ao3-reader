@@ -138,8 +138,8 @@ struct ReaderLayoutSection: View {
             Text("Reading")
         } footer: {
             Text(twoPageSpreadAvailable
-                ? "Two-page spread is available in Paged mode on wider windows."
-                : "Choose how pages turn while reading.")
+                ? "On a wide screen, Paged mode can show two pages side by side."
+                : "Choose whether you turn pages or scroll while reading.")
         }
     }
 }
@@ -360,11 +360,11 @@ struct ReplaceLibraryConfirmationView: View {
     /// Held as one string rather than built in the body: this view is already
     /// at the type checker's limit.
     private static let replaceFooterText = """
-        Replace Library only changes this device. Works it removes go to Recently \
-        Deleted, so a later Merge can bring them back. Saved links, saved searches, \
-        reading history, stars and fandom watermarks are removed outright and \
-        recorded as deletions, which a Merge will not undo. To undo this \
-        completely, import the undo copy with Replace rather than Merge.
+        Replace only changes this device. Removed works go to Recently Deleted and \
+        can return through Merge; saved links, saved searches, reading history, stars, \
+        and fandom visits are deleted completely and remembered as deleted, so Merge \
+        will not bring them back. To restore everything, import the saved copy and \
+        choose Replace.
         """
 
     /// Whether this presentation actually produced an undo copy.
@@ -418,9 +418,8 @@ struct ReplaceLibraryConfirmationView: View {
                     .font(.footnote)
                     .foregroundStyle(.red)
                 if offersRiskOverride {
-                    Text("This is the second time. Replacing now will delete works "
-                        + "with no way to undo it — there is no copy of your current "
-                        + "library to put back.")
+                    Text("This is the second attempt. Replacing now will delete works without "
+                        + "an undo because no copy of your current library was saved.")
                         .font(.footnote)
                         .foregroundStyle(.red)
                     Toggle(isOn: $riskAccepted) {
@@ -428,7 +427,7 @@ struct ReplaceLibraryConfirmationView: View {
                             .font(.footnote.weight(.semibold))
                     }
                 } else {
-                    Text("Replace is blocked until a copy can be saved. Free some "
+                    Text("You can't replace your library until a copy can be saved. Free some "
                         + "space and try again.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -449,7 +448,7 @@ struct ReplaceLibraryConfirmationView: View {
                 }
                 if backupIsMuchSmaller {
                     Section {
-                        Text("This backup is much smaller than your library.")
+                        Text("This backup has far fewer works than your current library.")
                             .foregroundStyle(.orange)
                     }
                 }
@@ -459,7 +458,8 @@ struct ReplaceLibraryConfirmationView: View {
                     }
                     if syncIsConnected {
                         Toggle("Pause Library Sync on this device", isOn: $pauseSync)
-                        Text("Sync will put removed works back. Pause sync for this device?")
+                        Text("If you leave Library Sync on, it will add the removed works back. "
+                            + "Pause it on this device?")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

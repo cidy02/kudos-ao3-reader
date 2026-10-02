@@ -193,8 +193,8 @@ enum AO3MarkedForLaterCopy {
         let pages = max(totalPages, 1)
         let page = min(max(currentPage, 1), pages)
         let noun = pages == 1 ? "page" : "pages"
-        return "Marked for Later lives on AO3 — unmarking here unmarks there. "
-            + "Pagination follows the ledger: \(page) of \(pages) \(noun)."
+        return "Your Marked for Later list is stored on AO3. Unmarking a work here also removes it "
+            + "from that list on AO3. You're viewing \(page) of \(pages) \(noun)."
     }
 }
 

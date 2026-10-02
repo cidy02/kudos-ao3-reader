@@ -52,8 +52,8 @@ struct QueueOrganizerSelectionTests {
         #expect(!kept.isPendingDeletion)
         #expect(QueueOrganizerSelection.deleteTitle([chosen]) == "Delete “Chosen”?")
         #expect(QueueOrganizerSelection.deleteTitle([chosen, kept]) == "Delete 2 queues?")
-        #expect(QueueOrganizerSelection.deleteMessage(count: 1).hasPrefix("The queue moves"))
-        #expect(QueueOrganizerSelection.deleteMessage(count: 2).hasPrefix("The 2 queues move"))
+        #expect(QueueOrganizerSelection.deleteMessage(count: 1).hasPrefix("Kudos will move this queue"))
+        #expect(QueueOrganizerSelection.deleteMessage(count: 2).hasPrefix("Kudos will move these 2 queues"))
     }
 
     /// A filtered list can't write its order back, so Reorder is off under a

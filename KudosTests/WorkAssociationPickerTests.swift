@@ -10,7 +10,7 @@ struct WorkAssociationPickerTests {
     @Test func collectionStateNamesWhatSubmittingWillDo() {
         let moderated = AO3CollectionAccess(isOpen: true, isModerated: true)
         #expect(WorkCollectionsGiftsView.stateText(moderated)
-            == "Moderated — a maintainer approves the work")
+            == "Moderated (a maintainer approves the work)")
 
         let closed = AO3CollectionAccess(isOpen: false)
         #expect(WorkCollectionsGiftsView.stateText(closed) == "Closed to new works")
@@ -27,7 +27,7 @@ struct WorkAssociationPickerTests {
             isOpen: true, isModerated: true, isUnrevealed: true, isAnonymous: true
         )
         let text = WorkCollectionsGiftsView.stateText(access)
-        #expect(text.hasPrefix("Moderated — a maintainer approves the work"))
+        #expect(text.hasPrefix("Moderated (a maintainer approves the work)"))
         #expect(text.contains("Unrevealed until reveal"))
         #expect(text.contains("Anonymous"))
     }

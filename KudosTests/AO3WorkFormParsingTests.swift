@@ -156,12 +156,12 @@ struct AO3WorkFormParsingTests {
 
     @MainActor @Test func postConfirmationNamesWhatIsMissing() {
         let two = WorkEditView.postConfirmationMessage(missing: ["Title", "Archive Warning"])
-        #expect(two.hasPrefix("Two things are missing: a title"))
+        #expect(two.hasPrefix("Two things are missing. Add a title"))
         #expect(two.contains("an archive warning. AO3 requires both."))
-        #expect(two.contains("cannot be undone"))
+        #expect(two.contains("can't be undone"))
 
         let none = WorkEditView.postConfirmationMessage(missing: [])
-        #expect(none.hasPrefix("Posting notifies your subscribers and cannot be undone"))
+        #expect(none.hasPrefix("Posting notifies your subscribers and can't be undone"))
     }
 
     // MARK: 1bw series — one per save

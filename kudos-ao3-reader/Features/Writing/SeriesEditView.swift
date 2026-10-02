@@ -88,8 +88,8 @@ struct SeriesEditView: View {
                 SectionRuleHeader(title: "State")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 statePanel.disabled(isSaving).pageBodyRow(top: 8, gutter: gutter)
-                footnote("AO3 shows Complete on the series page and in its blurb. It does not "
-                    + "close the series — works can still be added.")
+                footnote("Complete appears on the AO3 series page and its description. "
+                    + "You can still add works to a complete series.")
             }
 
             Section {
@@ -219,8 +219,7 @@ struct SeriesEditView: View {
 
     /// 1br's sentence, corrected: AO3 renumbers every work from one list.
     private var reorderFootnote: String {
-        "A work’s place in a series is stored on the work, so reordering rewrites the "
-            + "position of \(worksPhrase), in one request."
+        "Reordering changes the saved position on \(worksPhrase). All positions are saved together."
     }
 
     private func footnote(_ text: String) -> some View {
@@ -332,9 +331,8 @@ struct SeriesReorderView: View {
             }
 
             Section {
-                Text("Position is a number on each work. Save sends the whole order to AO3 in "
-                    + "one request, then reads the series back to check it — which is why this "
-                    + "screen saves once rather than on each drag.")
+                Text("Each work has a numbered position. After you arrange the list, save once to update "
+                    + "the whole order on AO3 and check that it was saved.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
@@ -470,8 +468,9 @@ struct SeriesRemoveWorksView: View {
             }
             Section {
                 Text(rows.count > 1
-                    ? "A removed work stays posted; only its place in this series goes."
-                    : "AO3 deletes a series with its last work, so the last one goes by deleting the series on AO3.")
+                    ? "A removed work stays posted and only leaves this series."
+                    : "AO3 deletes a series when its last work leaves. Remove the last work by deleting "
+                        + "the series on AO3.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
