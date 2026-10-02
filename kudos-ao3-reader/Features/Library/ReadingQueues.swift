@@ -39,104 +39,94 @@ struct ReadingQueueCard: View {
         ReadingQueueService.orderedWorks(in: queue)
     }
 
+    /// 1b's numbers are for a 164pt card; the deck scales with it.
+    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            tile
-                // Exact, not `minHeight:` — a flexible `Shape`/grid fill given only
-                // a floor grows to soak up whatever extra height the row proposes
-                // to match a taller sibling. Pinning both dimensions keeps this
-                // tile at its sqrt(2):1 ratio regardless of what the row offers.
-                .frame(width: cardSize.width, height: cardSize.height)
-            Text(queue.displayName)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            Text(ReadingQueueFacts.cardFooter(states: works.map(\.readingState)))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 9 * scale) {
+            deck
+            VStack(alignment: .leading, spacing: 2) {
+                Text(queue.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                Text(ReadingQueueFacts.cardFooter(states: works.map(\.readingState)))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .frame(width: cardSize.width, alignment: .leading)
     }
 
-    // Spec 1b's face: the next-up work, not a peek at the first four. An empty
-    // queue has no titles to preview, so it shows 4 skeleton cells instead —
-    // "a place for works to land" rather than a dead, contentless tile.
+    /// Spec 1b: a short deck, not a full-height card — two faint cards fanned
+    /// up and to the right behind the next-up work's face, 96pt in all. Each
+    /// card is 148×88; the back one sits 16pt in, the middle 8pt in and 4pt
+    /// down, the face flush left and 8pt down. The owner caught the app
+    /// drawing a 232pt work-sized card here instead (2026-10-01).
+    private var deck: some View {
+        let width = 148 * scale
+        let height = 88 * scale
+        let shape = RoundedRectangle(cornerRadius: 12 * scale, style: .continuous)
+        let theme = themeManager.appTheme
+        return ZStack(alignment: .topLeading) {
+            shape.fill(theme.glassFill(0.06))
+                .overlay(shape.strokeBorder(theme.glassStroke(0.07), lineWidth: 0.5))
+                .frame(width: width, height: height)
+                .offset(x: 16 * scale)
+            shape.fill(theme.glassFill(0.09))
+                .overlay(shape.strokeBorder(theme.glassStroke(0.09), lineWidth: 0.5))
+                .frame(width: width, height: height)
+                .offset(x: 8 * scale, y: 4 * scale)
+            face(shape: shape)
+                .frame(width: width, height: height)
+                .offset(y: 8 * scale)
+        }
+        .frame(width: cardSize.width, height: 96 * scale, alignment: .topLeading)
+    }
+
+    /// The next-up work's fandom and title over its own gradient — the work
+    /// cards' `cardWash` — with 1h's finished / in-progress / unread strip for
+    /// the whole queue along the bottom. A fully read queue shows its first
+    /// work; an empty one says so. The queue page's Up next row is this same
+    /// work (`ReadingQueueFacts.upNext`).
     @ViewBuilder
-    private var tile: some View {
+    private func face(shape: RoundedRectangle) -> some View {
         let queued = works
-        // The queue page's Up next row is this same work (`ReadingQueueFacts.upNext`).
-        if let upNext = ReadingQueueFacts.upNext(in: queued).upNext {
-            nextUpFace(upNext, progress: ReadingQueueFacts.progress(of: queued.map(\.readingState)))
+        if let work = ReadingQueueFacts.upNext(in: queued).upNext {
+            let palette = themeManager.appTheme.subjectPalette(
+                hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+            )
+            let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map(FandomDisplayName.bareTitle)
+            VStack(alignment: .leading, spacing: 6 * scale) {
+                if let fandom {
+                    SubjectKicker(text: fandom, palette: palette, size: 8.5, ruleWidth: 18 * scale, ruleSpacing: 5)
+                }
+                Text(work.title)
+                    .font(.system(size: 13 * scale, weight: .bold))
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+                QueueProgressStrip(
+                    progress: ReadingQueueFacts.progress(of: queued.map(\.readingState)),
+                    palette: palette,
+                    height: 3.5 * scale,
+                    gap: 2.5 * scale
+                )
+            }
+            .padding(10 * scale)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(shape.fill(palette.cardWash))
+            .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.12), lineWidth: 0.5))
         } else {
-            skeletonGrid
-        }
-    }
-
-    /// The next-up work's fandom and title over its own wash, with 1h's
-    /// finished / in-progress / unread strip for the whole queue along the
-    /// bottom. A fully read queue shows its first work.
-    private func nextUpFace(_ work: SavedWork, progress: ReadingQueueFacts.Progress) -> some View {
-        let palette = themeManager.appTheme.subjectPalette(
-            hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        )
-        let shape = RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-        let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map(FandomDisplayName.bareTitle)
-        return VStack(alignment: .leading, spacing: 6) {
-            if let fandom {
-                SubjectKicker(text: fandom, palette: palette, size: 8.5)
-            }
-            Text(work.title)
-                .font(.system(size: 13, weight: .bold))
-                .lineLimit(3)
-                .foregroundStyle(.primary)
-            Spacer(minLength: 0)
-            QueueProgressStrip(progress: progress, palette: palette)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(shape.fill(themeManager.appTheme.cardSurface).overlay(shape.fill(palette.rowWash)))
-        .overlay(shape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
-    }
-
-    // No `.skeletonShimmer()` — this isn't a loading state waiting on a request
-    // (that's what the shimmer promises elsewhere), just a static placeholder
-    // shape showing where works will land once the queue has some.
-    private var skeletonGrid: some View {
-        QueuePeekTile { _ in skeletonCell() }
-    }
-
-    /// One skeleton cell: title placeholder, a 2×2 of status-tile-sized blocks,
-    /// then author/fandom placeholder lines.
-    private func skeletonCell() -> some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        return VStack(alignment: .leading, spacing: 2) {
-            SkeletonTextLine(height: 7, width: 40)
-            Spacer(minLength: 0)
-            skeletonStatusGrid
-                .frame(maxWidth: .infinity)
-            Spacer(minLength: 0)
-            SkeletonTextLine(height: 6, width: 32)
-            SkeletonTextLine(height: 5, width: 28)
-        }
-        .padding(6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.primary.opacity(0.05))
-        .clipShape(shape)
-    }
-
-    /// A 2×2 of 14×14 `SkeletonBlock`s, 3pt radius, 2pt gap.
-    private var skeletonStatusGrid: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 2) {
-                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
-                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
-            }
-            HStack(spacing: 2) {
-                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
-                SkeletonBlock(height: 14, width: 14, cornerRadius: 3)
-            }
+            Text("No works yet")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(10 * scale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(shape.fill(themeManager.appTheme.glassFill(0.12)))
+                .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.12), lineWidth: 0.5))
         }
     }
 }
@@ -174,40 +164,6 @@ struct QueuePeekTile<Cell: View>: View {
         }
         .overlay { shape.strokeBorder(.quaternary, lineWidth: 0.75) }
         .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
-    }
-}
-
-struct NewReadingQueueCard: View {
-    /// Scales width and height together so the card grows proportionally at
-    /// large Dynamic Type sizes instead of only getting taller.
-    var cardSize = ScaledCarouselCardSize()
-
-    /// Explicit, non-defaulted init — see `ReadingQueueCard.init`.
-    init() {}
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                // Exact, not `minHeight:` — see ReadingQueueCard's own tile frame
-                // for why a flexible `Shape` fill can't be bounded by a minimum
-                // alone in a row where a sibling card might end up taller.
-                .frame(width: cardSize.width, height: cardSize.height)
-                .overlay {
-                    Image(systemName: "plus")
-                        .font(.system(size: 34, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            Text("New queue")
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            Text("Plan what to read next")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .frame(width: cardSize.width, alignment: .leading)
     }
 }
 
