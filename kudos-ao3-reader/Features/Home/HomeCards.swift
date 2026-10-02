@@ -9,6 +9,7 @@ struct WorkCoverCard: View {
     var progress: Double?
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(DownloadQueue.self) private var downloads
     @ScaledMetric(relativeTo: .headline) private var ringDiameter: CGFloat = 68
     /// Set per tab stack; the pushed reader zooms out of this card. See
     /// `WorkCardZoomTransition.swift`.
@@ -41,7 +42,7 @@ struct WorkCoverCard: View {
 
                 Spacer(minLength: 0)
 
-                if let progressValue {
+                if progressValue != nil || downloads.isDownloading(work) {
                     progressRing(progressValue)
                         .frame(maxWidth: .infinity, alignment: .center)
                 } else if let footer {
@@ -74,6 +75,7 @@ struct WorkCoverCard: View {
                     .padding(.top, 6)
             }
         }
+        .downloadDimmed(work)
         // The reader pushed from this card zooms out of it, and collapses back into
         // it on dismiss. No-ops where no namespace is provided.
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
@@ -129,10 +131,11 @@ struct WorkCoverCard: View {
         return saved.map { min(1, max(0, $0)) }
     }
 
-    private func progressRing(_ value: Double) -> some View {
-        WorkProgressRing(
+    private func progressRing(_ value: Double?) -> some View {
+        WorkReadingOrDownloadRing(
+            work: work,
             progress: value,
-            state: value >= 1 ? "Finished" : "Reading",
+            state: (value ?? 0) >= 1 ? "Finished" : "Reading",
             diameter: min(ringDiameter, 82)
         )
     }

@@ -260,16 +260,14 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// grid no longer opens with a Read tile — two controls for one action, a
     /// thumb-length apart, is a coin toss the reader should not have to make.
     private var resumeCardRow: some View {
-        let hasReadableCopy = localWork?.hasEPUB ?? false
         let label = WorkDetailPresentation.readAction(
-            hasEPUB: hasReadableCopy,
             working: working,
             continueReading: (localWork?.hasStartedReading ?? false)
                 && !(localWork?.isFinished ?? false)
         )
         return WorkDetailResumeCard(
             actionTitle: label.title,
-            hasReadableCopy: hasReadableCopy,
+            localWork: localWork,
             isBusy: working,
             readingProgress: resumeCardReadingProgress,
             savedPositionTitle: localWork.flatMap { WorkReadingPosition.title(from: $0.readiumLocator) },
@@ -277,6 +275,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             palette: workPalette,
             action: read
         )
+        .downloadDimmed(localWork)
         .pagePanelRow(top: 14)
     }
 

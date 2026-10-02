@@ -259,7 +259,8 @@ private struct UnblurredHomeResumeHero: View {
             : AnyLayout(HStackLayout(spacing: 16))
         return layout {
             ringAndPlace {
-                WorkProgressRing(
+                WorkReadingOrDownloadRing(
+                    work: work,
                     progress: resolvedReadingProgress,
                     state: resolvedReadingProgress >= 1 ? "Finished" : "Reading",
                     diameter: ringSize

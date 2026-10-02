@@ -420,12 +420,15 @@ extension WorkDetailView {
     }
 
     private func downloadStatusText(for work: SavedWork) -> String {
-        if WorkReaderPreparation.hasReadableEPUB(for: work) {
+        // A copy fetched only to read is not "Downloaded" (owner, 2026-10-01).
+        if work.isDownloaded, WorkReaderPreparation.hasReadableEPUB(for: work) {
             if let size = WorkDetailPresentation.fileSizeLabel(forFileAt: work.fileURL) {
                 return "Downloaded · \(size)"
             }
             return "Downloaded"
         }
+        // A copy fetched only to read: here for now, but not kept.
+        if WorkReaderPreparation.hasReadableEPUB(for: work) { return "Not downloaded" }
         // Only an AO3-identified work can actually re-download; an imported EPUB
         // with a missing file has no recovery path to promise.
         return ao3WorkID != nil

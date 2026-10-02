@@ -16,12 +16,21 @@ final class DownloadQueue {
         let isComplete: Bool
         let seriesURL: String
         var status: Status = .queued
+        /// 0…1 from the download task, when AO3 says how big the file is.
+        var fraction: Double = 0
+        var startedAt: Date?
     }
 
     enum Status: Equatable { case queued, downloading, done, skipped, failed }
 
     private(set) var items: [Item] = []
     private(set) var isRunning = false
+    /// Downloads of a work whose file was already here (`WorkDownload.perform`
+    /// keeps it at once): when each one's short fill started, by `SavedWork.id`.
+    private(set) var instantDownloads: [UUID: Date] = [:]
+
+    /// The fill a download with nothing to fetch still shows (owner, 2026-10-01).
+    static let instantDuration: TimeInterval = 0.7
 
     private var context: ModelContext?
 
@@ -63,6 +72,45 @@ final class DownloadQueue {
             isRunning = true // set synchronously so a rapid second enqueue appends
             Task { await run() }
         }
+    }
+
+    /// The short fill for a work whose file was already here.
+    func showInstantDownload(for work: SavedWork) {
+        let id = work.id
+        instantDownloads[id] = Date()
+        Task {
+            try? await Task.sleep(for: .seconds(Self.instantDuration))
+            instantDownloads[id] = nil
+        }
+    }
+
+    /// Whether `work`'s progress ring should show a download right now.
+    func isDownloading(_ work: SavedWork) -> Bool {
+        instantDownloads[work.id] != nil || activeItem(for: work) != nil
+    }
+
+    /// The download fill for `work`'s ring at `now`, or nil when it is not
+    /// downloading. A real download shows the larger of AO3's own progress and a
+    /// floor that creeps toward 90%, so the ring moves while AO3 paces the
+    /// request or sends no file size; it reaches 100% when the file is in.
+    func downloadFraction(for work: SavedWork, at now: Date) -> Double? {
+        if let start = instantDownloads[work.id] {
+            return min(1, now.timeIntervalSince(start) / Self.instantDuration)
+        }
+        guard let item = activeItem(for: work) else { return nil }
+        guard let start = item.startedAt else { return 0 }
+        let creep = 0.9 * (1 - exp(-now.timeIntervalSince(start) / 4))
+        return max(item.fraction, creep)
+    }
+
+    private func activeItem(for work: SavedWork) -> Item? {
+        guard let ao3ID = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else { return nil }
+        return items.first { $0.id == ao3ID && ($0.status == .queued || $0.status == .downloading) }
+    }
+
+    private func setFraction(_ fraction: Double, for id: Int) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].fraction = max(items[index].fraction, fraction)
     }
 
     /// Cancels everything still queued. A download already in flight finishes.
@@ -115,12 +163,19 @@ final class DownloadQueue {
                 continue
             }
             items[index].status = .downloading
+            items[index].startedAt = Date()
             do {
-                let temp = try await AO3Client.shared.downloadEPUB(workID: item.id)
+                let id = item.id
+                let temp = try await AO3Client.shared.downloadEPUB(workID: id) { fraction in
+                    Task { @MainActor [weak self] in self?.setFraction(fraction, for: id) }
+                }
                 _ = try await importEPUB(
                     temp, source: item.sourceURL,
                     isComplete: item.isComplete, seriesURL: item.seriesURL, into: context
                 )
+                // A beat at 100% before the ring hands back to reading progress.
+                items[index].fraction = 1
+                try? await Task.sleep(for: .milliseconds(300))
                 items[index].status = .done
             } catch {
                 items[index].status = .failed

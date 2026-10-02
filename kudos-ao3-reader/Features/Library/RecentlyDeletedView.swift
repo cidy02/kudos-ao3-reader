@@ -430,7 +430,7 @@ extension RecentlyDeletedEntry {
     static func work(_ work: SavedWork, in context: ModelContext) -> Self {
         RecentlyDeletedEntry(
             id: work.id,
-            kicker: work.hasEPUB ? "Downloaded work" : "Work",
+            kicker: work.isDownloaded ? "Downloaded work" : "Work",
             noun: "work",
             title: work.title,
             detail: workDetail(work),

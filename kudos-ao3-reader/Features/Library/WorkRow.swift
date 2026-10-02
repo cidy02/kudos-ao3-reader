@@ -88,6 +88,7 @@ struct WorkRow: View {
             case .ledger: ledgerRow
             }
         }
+        .downloadDimmed(work)
         .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
     }
 
@@ -151,7 +152,8 @@ struct WorkRow: View {
                     // that way. Both come from the tray's own constants and Dynamic
                     // Type scale, so the two stay the same size.
                     WorkStatusTrayMatched(tileSize: Self.ledgerTileSize) { diameter in
-                        WorkProgressRing(
+                        WorkReadingOrDownloadRing(
+                            work: work,
                             progress: work.readingProgress ?? 0,
                             state: ledgerProgressState,
                             diameter: diameter
