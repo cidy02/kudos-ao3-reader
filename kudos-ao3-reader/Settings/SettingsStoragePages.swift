@@ -9,9 +9,19 @@ struct SettingsDownloadsPage: View {
     /// 1ab's Downloads toggle. Read at the one place a subscribe can turn
     /// into a download — `WorkDetailView.downloadIfSubscribedWithoutEPUB`.
     @AppStorage("downloadOnSubscribe") private var downloadOnSubscribe = false
+    /// Read where a work opens in the reader (`WorkLifecycle.keepIfKeepingWorksYouRead`).
+    @AppStorage(WorkLifecycle.keepsWorksYouReadKey) private var keepsWorksYouRead = false
 
     var body: some View {
         SettingsPageForm(route: .downloads) {
+            Section {
+                Toggle("Keep works you read", isOn: $keepsWorksYouRead)
+            } footer: {
+                Text("Every work you open stays downloaded, just as if you had tapped Download. "
+                    + "Without this, finishing a work you haven't downloaded, favorited or queued "
+                    + "removes its file to save space. It stays in your history, and you can "
+                    + "download it again.")
+            }
             Section {
                 Toggle("Download on subscribe", isOn: $downloadOnSubscribe)
                 StorageUsedRow()

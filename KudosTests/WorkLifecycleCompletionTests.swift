@@ -33,6 +33,26 @@ struct WorkLifecycleCompletionTests {
         #"{"href":"ch9.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":\#(totalProgression)}}"#
     }
 
+    /// "Keep works you read": opening a work marks it Downloaded only while the
+    /// setting is on, so finishing it no longer frees the EPUB.
+    @Test func keepWorksYouReadMarksAnOpenedWorkDownloaded() throws {
+        let context = try makeContext()
+        let name = "WorkLifecycleCompletionTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let work = unprotectedWork(in: context)
+
+        WorkLifecycle.keepIfKeepingWorksYouRead(work, in: context, defaults: defaults)
+        #expect(!work.isSaved)
+
+        defaults.set(true, forKey: WorkLifecycle.keepsWorksYouReadKey)
+        WorkLifecycle.keepIfKeepingWorksYouRead(work, in: context, defaults: defaults)
+        #expect(work.isSaved)
+        work.isFinished = true
+        WorkLifecycle.freeEPUBIfFinished(work, in: context)
+        #expect(work.hasEPUB)
+    }
+
     @Test func unfinishedWorkAt99PercentKeepsItsEPUB() throws {
         let context = try makeContext()
         let work = unprotectedWork(in: context)

@@ -15,6 +15,7 @@ struct SettingsHubView: View {
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("downloadOnSubscribe") private var downloadOnSubscribe = false
+    @AppStorage(WorkLifecycle.keepsWorksYouReadKey) private var keepsWorksYouRead = false
     @AppStorage("autoPreserveSmallSeriesOnSaveForLater") private var autoPreserveSeries = false
     @AppStorage("autoPreserveSeriesWorkThreshold") private var seriesLimit = 5
     @AppStorage("hideMatureContent") private var hideMatureContent = true
@@ -66,6 +67,7 @@ struct SettingsHubView: View {
             fontName: ReaderFontOption.current(id: fontID, customFonts: customFonts).name,
             readingMode: readingMode,
             downloadOnSubscribe: downloadOnSubscribe,
+            keepsWorksYouRead: keepsWorksYouRead,
             autoPreserveSeries: autoPreserveSeries,
             seriesLimit: seriesLimit,
             hidesMature: hideMatureContent,
