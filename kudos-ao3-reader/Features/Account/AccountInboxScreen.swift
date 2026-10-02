@@ -214,23 +214,25 @@ struct AccountInboxScreen: View {
                 }
             #endif
         } else {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if model.canFilter {
-                    ToolbarIconButton(
+            // Filter stays a button; Select lives in the "…", as on every other
+            // list (owner, 2026-10-01 — 1l draws it as its own glass button).
+            ActionToolbar(items: [
+                model.canFilter
+                    ? AnyView(ToolbarIconButton(
                         title: "Inbox Filters",
                         systemImage: "line.3.horizontal.decrease"
                     ) {
                         showingFilters = true
-                    }
-                }
-                if model.canSelectItems {
-                    ToolbarIconButton(
-                        title: "Select Inbox Items",
-                        systemImage: "checklist",
-                        action: model.beginSelection
-                    )
-                }
-            }
+                    })
+                    : nil,
+                model.canSelectItems
+                    ? AnyView(WorkListMoreMenu {
+                        Button(action: model.beginSelection) {
+                            Label("Select", systemImage: "checklist")
+                        }
+                    })
+                    : nil
+            ].compactMap { $0 })
         }
     }
 

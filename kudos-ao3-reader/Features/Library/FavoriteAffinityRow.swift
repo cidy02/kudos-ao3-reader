@@ -39,7 +39,32 @@ struct FavoriteAffinityRow: View {
         return AO3AuthorRoute(username: username)
     }
 
+    /// 1bc / 1bd: the works this row counts, in the Library — the same filter a
+    /// tag tapped on a work's page applies (T-339; the cards did nothing). Authors
+    /// open their page from the chevron instead.
+    private var libraryFilter: LibraryTagFilter? {
+        switch scope {
+        case .fandoms: LibraryTagFilter(field: .fandom, value: row.name)
+        case .tags: LibraryTagFilter(field: .additional, value: row.name)
+        default: nil
+        }
+    }
+
     var body: some View {
+        if let libraryFilter {
+            Button {
+                router.filterLibrary(libraryFilter.field, libraryFilter.value)
+            } label: {
+                card
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows these works in your Library")
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 10) {
             identityLine
             // 1bd puts the library facts in their own labelled block under a

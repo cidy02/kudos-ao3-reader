@@ -93,59 +93,6 @@ struct CollectionCard: View {
     }
 }
 
-/// The leading "create" card in the Collections carousel.
-struct NewCollectionCard: View {
-    @Environment(ThemeManager.self) private var themeManager
-    /// Scales width and height together so the card grows proportionally at
-    /// large Dynamic Type sizes instead of only getting taller.
-    var cardSize = ScaledCarouselCardSize()
-
-    /// Explicit, non-defaulted init — see `ReadingQueueCard.init` in
-    /// ReadingQueues.swift for why this matters here.
-    init() {}
-
-    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }
-    private var tileHeight: CGFloat { 221 * scale }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9 * scale) {
-            RoundedRectangle(
-                cornerRadius: CarouselCardMetrics.cornerRadius * scale,
-                style: .continuous
-            )
-                .strokeBorder(
-                    themeManager.appTheme.glassStroke(0.22),
-                    style: StrokeStyle(lineWidth: 1 * scale, dash: [5 * scale])
-                )
-                .frame(width: cardSize.width, height: tileHeight)
-                .overlay {
-                    Circle()
-                        .fill(themeManager.appTheme.glassFill(0.12))
-                        .frame(width: 34 * scale, height: 34 * scale)
-                        .overlay {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16 * scale, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                }
-            VStack(alignment: .leading, spacing: 2 * scale) {
-                Text("New collection")
-                    .font(.system(size: 15 * scale, weight: .semibold))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-                Text("Tap to create")
-                    .font(.system(size: 12 * scale))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(width: cardSize.width, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("New collection")
-        .accessibilityHint("Tap to create a new collection.")
-    }
-}
-
 // MARK: - Collection detail
 
 /// The works in a collection. Rows open the reader; Work Details remains in the
