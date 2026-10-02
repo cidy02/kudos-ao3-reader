@@ -31,7 +31,6 @@ struct ReadingQueueBrowserView: View {
     /// which queue a Library carousel tap pre-selected this time.
     @AppStorage("library.readingQueueBrowser.lastSelectedID") private var lastSelectedIDRaw = ""
     @State private var selectedQueueID: UUID?
-    @State var showingSwitcher = false
     @State var showingNewQueue = false
     @State var newQueueName = ""
     /// 1j's colour swatch for the queue being created. `nil` keeps the
@@ -382,10 +381,12 @@ struct ReadingQueueBrowserView: View {
 
     // MARK: - Compact (iPhone)
 
+    /// The tab bar shows, as on the queue list; the select bulk bar takes the
+    /// bottom only while selecting.
     private var compactLayout: some View {
         pageContent
             #if os(iOS)
-            .toolbar(.hidden, for: .tabBar)
+            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
     }
 
@@ -421,9 +422,7 @@ struct ReadingQueueBrowserView: View {
             pageContent
         }
         #if os(iOS)
-        // This screen always owns the bottom chrome (switcher and/or select
-        // bulk bar in compactLayout; regularLayout has no phone-style tab bar
-        // to begin with, but stays consistent with compactLayout regardless).
+        // No phone-style tab bar here to begin with; hidden for the sidebar.
         .toolbar(.hidden, for: .tabBar)
         #endif
     }
@@ -808,16 +807,6 @@ extension ReadingQueueBrowserView {
             ])
         }
 
-        // Not nested in the branches above: the switcher must stay reachable even
-        // from an empty queue (it's how you get to a *different* queue). regularLayout
-        // (iPad/Mac) never renders this — it has its own sidebar list instead.
-        #if os(iOS)
-        if horizontalSizeClass != .regular, !isSelecting, !isReordering {
-            ToolbarItemGroup(placement: .bottomBar) {
-                switcherBarContent
-            }
-        }
-        #endif
     }
 
     @ViewBuilder
@@ -903,7 +892,6 @@ extension ReadingQueueBrowserView {
         quickFilter = .all
         selectedQueueID = queue.id
         lastSelectedIDRaw = queue.id.uuidString
-        showingSwitcher = false
     }
 
     func createQueue(_ options: NewQueueOptions) {
