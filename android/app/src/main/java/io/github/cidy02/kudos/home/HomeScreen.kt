@@ -40,6 +40,8 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.library.LibraryDisplayItem
 import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.LibraryRepository
+import io.github.cidy02.kudos.library.QueueCardPress
+import io.github.cidy02.kudos.library.QueueEditorSheet
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
@@ -101,6 +103,7 @@ fun HomeScreen(
     var isSelecting by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showNewQueue by remember { mutableStateOf(false) }
+    var editingQueue by remember { mutableStateOf<ReadingQueue?>(null) }
     var queues by remember { mutableStateOf<List<Pair<ReadingQueue, List<SavedWork>>>>(emptyList()) }
     var queueReload by remember { mutableIntStateOf(0) }
 
@@ -161,21 +164,19 @@ fun HomeScreen(
         }
     }
 
-    if (showNewQueue) {
-        NewQueueDialog(
-            onDismiss = { showNewQueue = false },
-            onCreate = { name, hue, keep ->
+    val queueRepo = queueRepository
+    if (queueRepo != null && (showNewQueue || editingQueue != null)) {
+        QueueEditorSheet(
+            repository = queueRepo,
+            existing = editingQueue,
+            onDismiss = {
                 showNewQueue = false
-                scope.launch {
-                    runCatching {
-                        queueRepository?.createQueue(
-                            name = name,
-                            hue = hue,
-                            keepsWorksOffline = if (keep) true else null
-                        )
-                    }
-                    queueReload += 1
-                }
+                editingQueue = null
+            },
+            onSaved = {
+                showNewQueue = false
+                editingQueue = null
+                queueReload += 1
             }
         )
     }
@@ -255,10 +256,31 @@ fun HomeScreen(
                         emptyIcon = HomeEmptyIcons.queues,
                         emptyMessage = "Use + above to make a reading queue and plan what you want to read next."
                     ) { (queue, works) ->
-                        HomePress(
-                            onClick = { onOpenQueue(queue.id) }
-                        ) {
-                            HomeQueueCard(queue = queue, works = works)
+                        if (queueRepo == null) {
+                            HomePress(onClick = { onOpenQueue(queue.id) }) {
+                                HomeQueueCard(queue = queue, works = works)
+                            }
+                        } else {
+                            QueueCardPress(
+                                queue = queue,
+                                enabled = true,
+                                onClick = { onOpenQueue(queue.id) },
+                                onEdit = { editingQueue = queue },
+                                onPin = {
+                                    scope.launch {
+                                        queueRepo.setQueuesPinned(listOf(queue.id), !queue.isPinned)
+                                        queueReload += 1
+                                    }
+                                },
+                                onDelete = {
+                                    scope.launch {
+                                        queueRepo.deleteQueue(queue.id)
+                                        queueReload += 1
+                                    }
+                                }
+                            ) {
+                                HomeQueueCard(queue = queue, works = works)
+                            }
                         }
                     }
                 }

@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
 import io.github.cidy02.kudos.data.local.entity.toEntity
 import java.time.Instant
@@ -18,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -32,16 +34,18 @@ class ReadingQueueRepositoryTest {
     private lateinit var repository: ReadingQueueRepository
     private val uuidSeq = AtomicInteger(0)
     private val fixedNow = Instant.parse("2026-07-31T12:00:00Z")
+    private var now = fixedNow
 
     @Before
     fun setUp() {
+        now = fixedNow
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         repository = ReadingQueueRepository(
             database = database,
-            clock = { fixedNow },
+            clock = { now },
             uuidFactory = { "id-${uuidSeq.incrementAndGet()}" }
         )
     }
@@ -228,6 +232,158 @@ class ReadingQueueRepositoryTest {
         val afterLastRemoval = database.workDao().getById(work.id)!!.toDomain()
         assertFalse(afterLastRemoval.isQueuedForLater)
         assertTrue("last queue membership dropped for a queue-only work -> soft-deleted", afterLastRemoval.isDeleted)
+    }
+
+    @Test
+    fun updateQueueWritesColourTagsNotesAndStampsDateUpdated() = runTest {
+        val queue = repository.createQueue("Night")
+        now = fixedNow.plusSeconds(40)
+        val turnedOn = repository.updateQueue(
+            queue.id,
+            QueueEdit(
+                name = "Night watch",
+                hue = 0.4424,
+                colorHex = "#112233",
+                keepsWorksOffline = false,
+                notes = "After dark",
+                tagNames = listOf("Comfort")
+            )
+        )
+        val updated = repository.getQueue(queue.id)!!
+        assertFalse(turnedOn)
+        assertEquals("Night watch", updated.name)
+        assertEquals(0.4424, updated.hue!!, 0.0)
+        assertEquals("#112233", updated.colorHex)
+        assertEquals(false, updated.keepsWorksOffline)
+        assertEquals("After dark", updated.notes)
+        assertEquals(now, updated.dateUpdated)
+        assertEquals(listOf("Comfort"), repository.tagsForQueue(queue.id).map { it.name })
+    }
+
+    @Test
+    fun updateQueueKeepsABlankNameAndANeverAskedOfflineFlag() = runTest {
+        val queue = repository.createQueue("Plain")
+        assertNull(queue.keepsWorksOffline)
+        repository.updateQueue(
+            queue.id,
+            QueueEdit(name = "  ", hue = null, colorHex = null, keepsWorksOffline = true, tagNames = emptyList())
+        )
+        val updated = repository.getQueue(queue.id)!!
+        assertEquals("Plain", updated.name)
+        assertNull(updated.keepsWorksOffline)
+    }
+
+    @Test
+    fun updateQueueReportsWhenKeepOfflineTurnsOn() = runTest {
+        val queue = repository.createQueue("Loose", keepsWorksOffline = false)
+        val turnedOn = repository.updateQueue(
+            queue.id,
+            QueueEdit(name = "Loose", hue = null, colorHex = null, keepsWorksOffline = true)
+        )
+        assertTrue(turnedOn)
+        assertEquals(true, repository.getQueue(queue.id)!!.keepsWorksOffline)
+    }
+
+    @Test
+    fun setQueuesPinnedStampsOnlyTheQueuesThatChange() = runTest {
+        val first = repository.createQueue("One")
+        val second = repository.createQueue("Two")
+        now = fixedNow.plusSeconds(5)
+        repository.setQueuesPinned(listOf(first.id, second.id), true)
+        assertTrue(repository.getQueue(first.id)!!.isPinned)
+        assertEquals(now, repository.getQueue(first.id)!!.dateUpdated)
+        val pinnedAt = repository.getQueue(second.id)!!.dateUpdated
+        now = fixedNow.plusSeconds(9)
+        repository.setQueuesPinned(listOf(second.id), true)
+        assertEquals(pinnedAt, repository.getQueue(second.id)!!.dateUpdated)
+    }
+
+    @Test
+    fun replaceQueueTagsRemovesTheLinkAndKeepsTheTag() = runTest {
+        val queue = repository.createQueue("Tagged", tagNames = listOf("Comfort", "Reread"))
+        val comfort = repository.allTags().first { it.name == "Comfort" }
+        now = fixedNow.plusSeconds(3)
+        repository.replaceQueueTags(queue.id, listOf("comfort"))
+        assertEquals(listOf("Comfort"), repository.tagsForQueue(queue.id).map { it.name })
+        assertEquals(now, repository.getQueue(queue.id)!!.dateUpdated)
+        assertEquals(comfort.id, repository.allTags().first { it.name.equals("Comfort", ignoreCase = true) }.id)
+        assertTrue(repository.allTags().any { it.name == "Reread" })
+    }
+
+    @Test
+    fun toggleSharedTagFillsTheQueuesThatLackIt() = runTest {
+        val first = repository.createQueue("A", tagNames = listOf("Later"))
+        val second = repository.createQueue("B")
+        repository.toggleSharedTag(listOf(first.id, second.id), "Later")
+        assertEquals(listOf("Later"), repository.tagsForQueue(second.id).map { it.name })
+        repository.toggleSharedTag(listOf(first.id, second.id), "Later")
+        assertTrue(repository.tagsForQueue(first.id).isEmpty())
+        assertTrue(repository.tagsForQueue(second.id).isEmpty())
+    }
+
+    @Test
+    fun reorderQueuesRewritesCustomSortOrder() = runTest {
+        val first = repository.createQueue("First")
+        val second = repository.createQueue("Second")
+        now = fixedNow.plusSeconds(2)
+        repository.reorderQueues(listOf(second.id, first.id))
+        assertEquals(0, repository.getQueue(second.id)!!.sortOrder)
+        assertEquals(1, repository.getQueue(first.id)!!.sortOrder)
+        assertEquals(now, repository.getQueue(second.id)!!.dateUpdated)
+    }
+
+    @Test
+    fun createQueueCopiesSavedForLaterWithoutRemovingThoseWorks() = runTest {
+        val saved = repository.ensureSavedForLaterQueue()
+        val work = savedWork("seed-work", "Seeded")
+        database.workDao().upsert(work.toEntity())
+        repository.addWork(saved.id, work.id)
+        assertEquals(1, repository.savedForLaterSeedCount())
+        val created = repository.createQueue("From saved", seedFromSavedForLater = true)
+        assertEquals(listOf(work.id), repository.listWorks(created.id).map { it.work?.id })
+        assertEquals(listOf(work.id), repository.listWorks(saved.id).map { it.work?.id })
+    }
+
+    @Test
+    fun worksAvailableToAddSkipsMembersAndDeletedWorks() = runTest {
+        val queue = repository.createQueue("Shelf")
+        val inside = savedWork("inside", "Inside")
+        val outside = savedWork("outside", "Outside")
+        val gone = savedWork("gone", "Gone").copy(isDeleted = true)
+        database.workDao().upsert(inside.toEntity())
+        database.workDao().upsert(outside.toEntity())
+        database.workDao().upsert(gone.toEntity())
+        repository.addWork(queue.id, inside.id)
+        assertEquals(listOf("outside"), repository.worksAvailableToAdd(queue.id).map { it.id })
+    }
+
+    @Test
+    fun mergeAndStripStayInsideThisQueue() = runTest {
+        val queue = repository.createQueue("Shelf", tagNames = listOf("Comfort", "Angst"))
+        val other = repository.createQueue("Other", tagNames = listOf("Comfort"))
+        val member = savedWork("member", "Member")
+        val outsider = savedWork("outsider", "Outsider")
+        database.workDao().upsert(member.toEntity())
+        database.workDao().upsert(outsider.toEntity())
+        repository.addWork(queue.id, member.id)
+        val comfort = repository.allTags().first { it.name == "Comfort" }
+        val angst = repository.allTags().first { it.name == "Angst" }
+        database.tagDao().addToWork(WorkTagCrossRef(member.id, comfort.id))
+        database.tagDao().addToWork(WorkTagCrossRef(outsider.id, comfort.id))
+        assertEquals(1, repository.workTagCounts(queue.id)[comfort.id])
+        assertEquals(angst.id, repository.tagRenameConflict(comfort.id, "angst")?.id)
+        repository.mergeQueueTag(queue.id, comfort.id, angst.id)
+        assertEquals(listOf("Angst"), repository.tagsForQueue(queue.id).map { it.name })
+        assertEquals(listOf(angst.id), database.tagDao().getTagsForWork(member.id).map { it.id })
+        assertEquals(listOf(comfort.id), database.tagDao().getTagsForWork(outsider.id).map { it.id })
+        assertEquals(listOf("Comfort"), repository.tagsForQueue(other.id).map { it.name })
+        repository.copyTagToQueue("Angst", other.id)
+        assertEquals(listOf("Angst", "Comfort"), repository.tagsForQueue(other.id).map { it.name }.sorted())
+        repository.stripQueueTag(queue.id, angst.id)
+        assertTrue(repository.tagsForQueue(queue.id).isEmpty())
+        assertTrue(database.tagDao().getTagsForWork(member.id).isEmpty())
+        repository.renameUserTag(comfort.id, "Slow Burn")
+        assertEquals("Slow Burn", repository.allTags().first { it.id == comfort.id }.name)
     }
 
     private fun savedWork(id: String, title: String): SavedWork {

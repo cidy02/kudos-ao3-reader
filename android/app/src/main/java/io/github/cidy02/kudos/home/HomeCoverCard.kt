@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.home
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -17,11 +18,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,7 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -302,35 +306,22 @@ fun HomeStatusTray(
 ) {
     val tokens = LocalKudosTokens.current
     val ratingTint = AO3StatusTint.rating(rating) ?: AO3StatusTint.gray
-    val category = categories.firstOrNull { it.isNotBlank() }
+    val category = categories.firstOrNull { AO3StatusTint.category(it) != null }
     val categoryTint = category?.let { AO3StatusTint.category(it) } ?: AO3StatusTint.gray
     val warningTint = if (HomeFacts.hasRealArchiveWarning(warnings)) AO3StatusTint.orange else AO3StatusTint.gray
     val completeTint = if (isComplete) AO3StatusTint.green else AO3StatusTint.gray
-    val tiles: @Composable () -> Unit = {
-        StatusTile(tileSize, ratingTint) {
-            Icon(Icons.Outlined.Shield, contentDescription = rating.ifBlank { "Rating" }, tint = ratingTint, modifier = Modifier.size(tileSize * 0.62f))
-        }
-        StatusTile(tileSize, categoryTint) {
-            Text(
-                text = category?.let { if (it.length <= 5) it else it.take(3) } ?: "–",
-                color = categoryTint,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                textAlign = TextAlign.Center
-            )
-        }
+    val marks: @Composable () -> Unit = {
+        StatusTile(tileSize, ratingTint) { RatingMark(rating, ratingTint, tileSize) }
+        StatusTile(tileSize, categoryTint) { CategoryMark(categories, categoryTint, tileSize) }
         StatusTile(tileSize, warningTint) {
-            Icon(Icons.Outlined.Warning, contentDescription = "Warnings", tint = warningTint, modifier = Modifier.size(tileSize * 0.58f))
-        }
-        StatusTile(tileSize, completeTint) {
             Icon(
-                imageVector = if (isComplete) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                contentDescription = if (isComplete) "Complete" else "In progress",
-                tint = completeTint,
+                Icons.Outlined.ErrorOutline,
+                contentDescription = "Warnings",
+                tint = warningTint,
                 modifier = Modifier.size(tileSize * 0.58f)
             )
         }
+        StatusTile(tileSize, completeTint) { CompletionMark(isComplete, completeTint, tileSize) }
     }
     val trayShape = RoundedCornerShape(SubjectMetrics.trayRadius)
     if (arrangement == HomeStatusArrangement.Grid) {
@@ -339,31 +330,19 @@ fun HomeStatusTray(
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                StatusTile(tileSize, ratingTint) {
-                    Icon(Icons.Outlined.Shield, contentDescription = rating.ifBlank { "Rating" }, tint = ratingTint, modifier = Modifier.size(tileSize * 0.62f))
-                }
-                StatusTile(tileSize, categoryTint) {
-                    Text(
-                        text = category?.let { if (it.length <= 5) it else it.take(3) } ?: "–",
-                        color = categoryTint,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                }
+                StatusTile(tileSize, ratingTint) { RatingMark(rating, ratingTint, tileSize) }
+                StatusTile(tileSize, categoryTint) { CategoryMark(categories, categoryTint, tileSize) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 StatusTile(tileSize, warningTint) {
-                    Icon(Icons.Outlined.Warning, contentDescription = "Warnings", tint = warningTint, modifier = Modifier.size(tileSize * 0.58f))
-                }
-                StatusTile(tileSize, completeTint) {
                     Icon(
-                        imageVector = if (isComplete) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                        contentDescription = if (isComplete) "Complete" else "In progress",
-                        tint = completeTint,
+                        Icons.Outlined.ErrorOutline,
+                        contentDescription = "Warnings",
+                        tint = warningTint,
                         modifier = Modifier.size(tileSize * 0.58f)
                     )
                 }
+                StatusTile(tileSize, completeTint) { CompletionMark(isComplete, completeTint, tileSize) }
             }
         }
     } else {
@@ -372,7 +351,90 @@ fun HomeStatusTray(
             horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            tiles()
+            marks()
+        }
+    }
+}
+
+@Composable
+private fun RatingMark(rating: String, tint: Color, tileSize: Dp) {
+    val letter = when (rating.trim()) {
+        "General Audiences" -> "G"
+        "Teen And Up Audiences" -> "T"
+        "Mature" -> "M"
+        "Explicit" -> "E"
+        else -> "?"
+    }
+    Box(Modifier.size(tileSize * 0.72f), contentAlignment = Alignment.Center) {
+        Icon(
+            Icons.Outlined.Shield,
+            contentDescription = rating.ifBlank { "Not Rated" },
+            tint = tint,
+            modifier = Modifier.fillMaxSize()
+        )
+        Text(
+            text = letter,
+            color = tint,
+            fontSize = (tileSize.value * 0.28f).sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
+    val named = categories.firstOrNull { AO3StatusTint.category(it) != null }?.trim()
+    if (named == "Multi") {
+        Canvas(
+            Modifier
+                .size(tileSize * 0.55f)
+                .clip(RoundedCornerShape(2.dp))
+        ) {
+            val w = size.width / 2f
+            val h = size.height / 2f
+            drawRect(AO3StatusTint.green, Offset.Zero, Size(w, h))
+            drawRect(AO3StatusTint.purple, Offset(w, 0f), Size(w, h))
+            drawRect(AO3StatusTint.red, Offset(0f, h), Size(w, h))
+            drawRect(AO3StatusTint.blue, Offset(w, h), Size(w, h))
+        }
+        return
+    }
+    val glyph = when (named) {
+        "F/F" -> "⚢"
+        "M/M" -> "⚣"
+        "F/M" -> "⚤"
+        "Gen" -> "☉"
+        "Other" -> "♅"
+        else -> "–"
+    }
+    Text(
+        text = glyph,
+        color = tint,
+        fontSize = (tileSize.value * 0.42f).sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center
+    )
+}
+
+@Composable
+private fun CompletionMark(isComplete: Boolean, tint: Color, tileSize: Dp) {
+    if (isComplete) {
+        Icon(
+            Icons.Outlined.Verified,
+            contentDescription = "Complete",
+            tint = tint,
+            modifier = Modifier.size(tileSize * 0.58f)
+        )
+    } else {
+        Canvas(Modifier.size(tileSize * 0.5f)) {
+            drawCircle(
+                color = tint,
+                style = Stroke(
+                    width = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx()))
+                )
+            )
         }
     }
 }

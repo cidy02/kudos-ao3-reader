@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.theme.Ao3Red
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 
 /**
  * Home's top-right chrome, drawn by the shell so it fades with the large title.
@@ -87,13 +87,21 @@ fun HomeToolbarActions(chrome: HomeShellChrome) {
         }
     } else {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            GlassCircleButton(onClick = { chrome.actions.onNewQueue() }, accessibilityName = "New Queue") {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = Ao3Red)
+            GlassCircleButton(
+                onClick = { chrome.actions.onNewQueue() },
+                accessibilityName = "New Queue",
+                diameter = SubjectMetrics.toolbarCircle
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
             }
             if (chrome.showOverflow) {
                 var open by remember { mutableStateOf(false) }
                 Box {
-                    GlassCircleButton(onClick = { open = true }, accessibilityName = "More") {
+                    GlassCircleButton(
+                        onClick = { open = true },
+                        accessibilityName = "More",
+                        diameter = SubjectMetrics.toolbarCircle
+                    ) {
                         Icon(Icons.Filled.MoreHoriz, contentDescription = null)
                     }
                     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -126,7 +134,8 @@ fun HomeToolbarActions(chrome: HomeShellChrome) {
 private fun PrivacyButton(revealed: Boolean, onClick: () -> Unit) {
     GlassCircleButton(
         onClick = onClick,
-        accessibilityName = if (revealed) "Hide mature" else "Show mature"
+        accessibilityName = if (revealed) "Hide mature" else "Show mature",
+        diameter = SubjectMetrics.toolbarCircle
     ) {
         Icon(
             imageVector = if (revealed) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,

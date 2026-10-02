@@ -239,7 +239,12 @@ fun AppNavHost(
                 },
                 onManageQueue = { queueId ->
                     navController.navigate(Routes.queueDetail(queueId))
-                }
+                },
+                epubBytes = { workId -> epubByteCount(container, workId) },
+                metadataRefresh = io.github.cidy02.kudos.works.WorkMetadataRefresh(
+                    container.workRepository,
+                    container.metadataRepository
+                )
             )
         }
         sharedComposable(
@@ -254,8 +259,13 @@ fun AppNavHost(
                     queueId = queueId,
                     repository = container.readingQueueRepository,
                     settingsRepository = container.settingsRepository,
+                    epubBytes = { workId -> epubByteCount(container, workId) },
                     onOpenWork = { workId ->
                         navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
+                    },
+                    onShowOnlyTag = { name ->
+                        io.github.cidy02.kudos.library.QueueShowOnlyTag.name = name
+                        navController.popBackStack()
                     }
                 )
             }
@@ -848,4 +858,11 @@ fun NavGraphBuilder.sharedComposable(
             content(backStackEntry)
         }
     }
+}
+
+private fun epubByteCount(container: KudosAppContainer, workId: String): Long {
+    return runCatching {
+        val path = container.workFileStore.workEpubPath(workId)
+        if (java.nio.file.Files.isRegularFile(path)) java.nio.file.Files.size(path) else 0L
+    }.getOrDefault(0L)
 }
