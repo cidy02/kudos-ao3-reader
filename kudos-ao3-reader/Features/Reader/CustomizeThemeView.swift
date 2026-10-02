@@ -93,8 +93,8 @@ struct CustomizeThemeView: View {
                     } header: {
                         Text("Accessibility & Layout")
                     } footer: {
-                        Text("When Customize is off, the reader uses comfortable defaults. "
-                            + "Bold Text and the font apply either way.")
+                        Text("Turn Customize off to use comfortable defaults. "
+                            + "Your Bold Text and font choices still apply.")
                     }
 
                     Section {

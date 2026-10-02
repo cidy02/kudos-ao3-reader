@@ -58,8 +58,8 @@ struct WorkProvenanceSections: View {
                         .textSelection(.enabled)
                 }
                 if !work.origin.supportsLiveLookup {
-                    Text("Kudos can't reach \(unreachableName), so tags, stats and availability "
-                        + "aren't refreshed for this work, and kudos and comments aren't available.")
+                    Text("Kudos can't update this work's tags, stats, or availability from "
+                        + "\(unreachableName). You also can't leave kudos or comments here.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -96,8 +96,8 @@ struct WorkProvenanceSections: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Text("The original file is kept alongside this work, so it can be rebuilt "
-                        + "without downloading anything.")
+                    Text("The original file stays on your device, so you can rebuild this work "
+                        + "without downloading it again.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -122,9 +122,10 @@ struct WorkProvenanceSections: View {
                     .buttonStyle(.borderless)
                     .disabled(rebuilding)
                     Text(candidate.isStale
-                        ? "A newer converter is available. Rebuilding re-reads the original file "
-                            + "and keeps your progress, tags and collections."
-                        : "Re-reads the original file. Your progress, tags and collections are kept.")
+                        ? "Kudos has a newer way to build this work. Rebuilding reads the original "
+                            + "file again and keeps your progress, tags, and collections."
+                        : "Rebuilding reads the original file again. Your progress, tags, and "
+                            + "collections are kept.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -139,9 +140,9 @@ struct WorkProvenanceSections: View {
                     Button("Rebuild") { Task { await rebuild() } }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("This work was already built with the latest converter, so the text is "
-                        + "unlikely to change. Rebuilding is still useful if its details look "
-                        + "wrong — it re-reads everything from the original file.")
+                    Text("This work already uses the latest way Kudos builds imported files, so its "
+                        + "text will probably not change. If its details look wrong, rebuilding "
+                        + "reads everything from the original file again.")
                 }
                 .alert(
                     "Couldn't Rebuild",
@@ -165,10 +166,9 @@ struct WorkProvenanceSections: View {
         case .archiveOfOurOwn:
             "From Archive of Our Own."
         case .importedFile:
-            "Imported from a file. It records no source site, so where it was first posted "
-                + "is unknown."
+            "This imported work doesn't include the website where it was first posted."
         case .archiveOfOurOwnMirror:
-            "Imported work, originally posted on Archive of Our Own and saved through a mirror."
+            "This work was first posted on Archive of Our Own and imported through another website."
         default:
             "Imported work, originally posted on \(work.origin.displayName)."
         }

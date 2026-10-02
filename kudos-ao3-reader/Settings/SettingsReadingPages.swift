@@ -52,9 +52,9 @@ struct SettingsAppearancePage: View {
                 Text("Theme")
             } footer: {
                 Text((themeManager.matchAppAndReader
-                        ? "Light, Sepia, Dark, or OLED across the whole app. The reader uses the same theme."
-                        : "The app and reader use separate themes.")
-                    + " The accent colour applies in Light, Dark, and OLED; Sepia keeps its warm tint.")
+                        ? "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."
+                        : "You can choose different themes for Kudos and the reader.")
+                    + " Your accent colour appears in Light, Dark, and OLED; Sepia keeps its warm tint.")
             }
         }
         #if os(iOS)

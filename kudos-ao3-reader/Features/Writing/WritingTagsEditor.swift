@@ -378,9 +378,8 @@ struct WritingTagsEditor: View {
     }
 
     private var footnote: some View {
-        Text("AO3's autocomplete offers only its canonical tags, and does not return "
-            + "how many works carry each one, so no counts are shown. A tag that is "
-            + "not canonical still posts as typed — that is how new tags get made.")
+        Text("AO3 suggests only its canonical tags and doesn't provide work counts here. "
+            + "You can still post a tag exactly as you type it, which is how new tags are created.")
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

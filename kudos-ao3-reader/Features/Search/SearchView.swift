@@ -417,7 +417,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 } header: {
                     Text("Saved Searches")
                 } footer: {
-                    Text("Search your library or AO3 above. Browse fandoms in the Browse tab.")
+                    Text("Search above for works in your Library or on AO3. "
+                        + "To explore by fandom, use the Browse tab.")
                 }
             }
             .cardList()
@@ -429,8 +430,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         ContentUnavailableView {
             Label("Search Kudos", systemImage: "magnifyingglass")
         } description: {
-            Text("Find works in your library, or search AO3 by title, author, or tag. "
-                + "Browse fandoms and categories in the Browse tab.")
+            Text("Search your Library or AO3 by title, author, or tag. "
+                + "You can browse fandoms and categories in the Browse tab.")
         }
     }
 

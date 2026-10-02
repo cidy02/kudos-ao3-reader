@@ -247,9 +247,8 @@ struct AccountMoreOnAO3View: View {
 
     private var creatorToolsFootnote: some View {
         footnote(
-            "These open your AO3 pages in Browse. Native versions can land later. "
-            + "Works, series, bookmarks, history, and inbox live under Account's "
-            + "Reading, Writing, and Activity tabs."
+            "These open your AO3 pages in Browse. You can find works, series, bookmarks, "
+            + "history and inbox in the Reading, Writing and Activity sections of Account."
         )
     }
 
@@ -305,8 +304,7 @@ struct AccountMoreOnAO3View: View {
 
     private var archiveFootnote: some View {
         footnote(
-            "The archive's own pages, not your account's. These open in Browse and need no "
-            + "sign-in — they are listed here so they are findable rather than missing."
+            "These public AO3 pages open in Browse. You don't need to sign in to view them."
         )
     }
 

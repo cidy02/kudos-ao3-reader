@@ -96,8 +96,8 @@ struct AuthorProfileView: View {
                 Button("Delete on AO3", role: .destructive) { confirmDeleteWork() }
                 Button("Cancel", role: .cancel) { pendingDeleteWork = nil }
             } message: {
-                Text("This removes the work from AO3 for everyone, with its chapters, "
-                    + "kudos, comments and bookmarks. It cannot be undone.")
+                Text("This permanently removes the work and its chapters, kudos, comments and bookmarks "
+                    + "from AO3 for everyone.")
             }
             .modifier(OwnWorksBulkDelete(
                 pending: $pendingBulkDelete, isDeleting: $isBulkDeleting, errorMessage: $deleteErrorMessage
@@ -146,7 +146,7 @@ struct AuthorProfileView: View {
                     }
                 }
             } message: {
-                Text("This action requires an AO3 account, log in first.")
+                Text("Log in to your AO3 account to do this.")
             }
             .confirmationDialog(
                 "Unsubscribe from \(model.route.username)?",
@@ -158,7 +158,7 @@ struct AuthorProfileView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("AO3 subscriptions apply to the underlying user account, not only this pseud.")
+                Text("Unsubscribing here applies to the whole AO3 account, not only this pseud.")
             }
             // Centered alert (same style as "Log in to AO3"), not an action sheet.
             .alert(

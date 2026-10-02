@@ -36,12 +36,12 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     var emptyMessage: String {
         switch self {
         case .readingNow:
-            "You're not reading anything right now. Start exploring in Browse or open something from your Library."
+            "You aren't reading anything yet. Open a work from your Library or find one in Browse."
         case .recentlyUpdated:
             // Built from works saved in the library (`WorkUpdateChecker`), not from
             // AO3 subscriptions, so the copy must not name them. Android's wording,
             // per docs/iOS_Issues_Found_While_Porting.md §1.
-            "No recent updates from your library works yet."
+            "None of the works in your Library has a new chapter yet."
         }
     }
 
@@ -104,10 +104,10 @@ enum HomeSubscriptionsCount {
 enum HomeSubscriptionsCopy {
     static func emptyMessage(isLoggedIn: Bool, loadFailed: Bool) -> String {
         guard isLoggedIn else {
-            return "Log in to AO3 to see the works and series you subscribe to."
+            return "Log in to AO3 to see updates from works and series you subscribe to."
         }
         return loadFailed
             ? "Couldn't load your subscriptions. Pull down to try again."
-            : "You're not subscribed to anything yet. Subscribe to works or series to see updates here."
+            : "You have no work or series subscriptions yet. When you subscribe on AO3, updates appear here."
     }
 }

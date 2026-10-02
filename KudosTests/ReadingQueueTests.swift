@@ -826,10 +826,10 @@ struct ReadingQueueTests {
             threshold: 5
         )
         #expect(partial.message.contains("at least 1 work"))
-        #expect(partial.message.contains("multiple pages"))
+        #expect(partial.message.contains("other pages"))
 
         let unknown = ReadingQueueService.seriesPrompt(for: nil, threshold: 5, previewFailed: true)
-        #expect(unknown.message.contains("couldn't confirm"))
+        #expect(unknown.message.contains("couldn't check"))
     }
 
     @Test func autoPreserveSettingDefaultOffThresholdFiveRules() {

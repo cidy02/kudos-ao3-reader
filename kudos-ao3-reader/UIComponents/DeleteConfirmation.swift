@@ -131,7 +131,7 @@ extension View {
             style: .alert,
             title: "Log out of AO3?",
             confirmLabel: "Log Out",
-            message: "Your AO3 session is removed from this device. Your library, downloads and queues stay.",
+            message: "You will be signed out of AO3 on this device. Your Library, downloads, and queues stay.",
             perform: perform
         )
     }

@@ -31,7 +31,7 @@ struct WelcomeView: View {
                 Text("Welcome to Kudos")
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
-                Text("Open Source • Ad-Free • Community Built")
+                Text("Free to use • Ad-free • Built by fans")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -43,23 +43,23 @@ struct WelcomeView: View {
         VStack(alignment: .leading, spacing: 22) {
             OnboardingPointRow(
                 symbol: "book", title: "Built for AO3 Readers",
-                message: "An unofficial, third-party reader for Archive of Our Own — free, open "
-                    + "source, and always ad-free. Not affiliated with AO3 or the OTW."
+                message: "An unofficial reader for Archive of Our Own. Kudos is free and open "
+                    + "source, has no ads, and isn't affiliated with AO3 or the OTW."
             )
             OnboardingPointRow(
                 symbol: "lock.shield", title: "Your Privacy Matters",
-                message: "No ads, analytics, tracking, or hidden data collection. Anything the "
-                    + "app needs — like your AO3 login — stays on your device."
+                message: "Kudos has no ads, analytics, tracking, or hidden data collection. Your "
+                    + "AO3 sign-in and the information Kudos needs stay on your device."
             )
             OnboardingPointRow(
                 symbol: "heart", title: "Community Built",
-                message: "A labor of love. Donations aren't accepted, but contributions are "
-                    + "always welcome."
+                message: "Kudos is made by fans. It doesn't accept donations, but you can "
+                    + "contribute to the project."
             )
             OnboardingPointRow(
                 symbol: "ladybug", title: "Need Help?",
-                message: "Found a bug? Shake your device to send a report, or open a GitHub "
-                    + "issue. Please don't contact the AO3 team — they can't support this app."
+                message: "Found a bug? Shake your device to send a report, or open an issue on "
+                    + "GitHub. The AO3 team can't help with Kudos, so please don't contact them about it."
             )
         }
     }

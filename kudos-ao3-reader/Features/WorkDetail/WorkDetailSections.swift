@@ -45,9 +45,9 @@ extension WorkDetailView {
                 // Only offer an AO3 refresh when a refresh can actually succeed;
                 // a plain imported EPUB has no AO3 identity to fetch from.
                 Text(ao3WorkID != nil
-                    ? "No AO3 tags are available for this work yet. "
-                        + "Pull to refresh to fetch the latest details from AO3."
-                    : "This imported work isn't linked to AO3, so it has no AO3 tags.")
+                    ? "AO3 hasn't provided tags for this work yet. "
+                        + "Pull down to get the latest details from AO3."
+                    : "This imported work isn't linked to AO3, so you won't see AO3 tags here.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .pageBodyRow(top: 20)
@@ -59,7 +59,7 @@ extension WorkDetailView {
                         .pageBodyRow(top: index == 0 ? 20 : 22)
 
                     if index == groups.count - 1 {
-                        Text("Tags come from AO3. Tap one to search the archive for works carrying it.")
+                        Text("Tags come from AO3. Tap one to find other AO3 works with that tag.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .pageBodyRow(top: 16)
@@ -128,7 +128,7 @@ extension WorkDetailView {
 
                 commentsRows(workID: id)
 
-                Text("Comment pages load when you open them; nothing is fetched in advance.")
+                Text("Comments load only when you open them.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .pageBodyRow(top: 9)
@@ -198,8 +198,8 @@ extension WorkDetailView {
             WorkProvenanceSections(work: work)
         } else {
             Section {
-                Text("Not in your Library yet. Save it, queue it, or start reading "
-                    + "and your download, progress, and tags will appear here.")
+                Text("This work isn't in your Library yet. Save, queue, or start reading it "
+                    + "to see its download, progress, and tags here.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .myCopyRow()

@@ -70,8 +70,7 @@ struct QueueTagManagerView: View {
                 Section {
                     groupLabel("Unused")
                     tagPanel(unused, counts: counts).pageBodyRow(top: 8, gutter: gutter)
-                    footnote("Kept until you remove them — an empty tag is usually one "
-                        + "you have not finished applying.")
+                    footnote("Unused tags stay here until you remove them. You can apply them later.")
                 }
             }
 
@@ -79,8 +78,7 @@ struct QueueTagManagerView: View {
             Section {
                 groupLabel("Add")
                 addPanel.pageBodyRow(top: 8, gutter: gutter)
-                footnote("Tags are shared with your works, so one word means the "
-                    + "same thing wherever you use it.")
+                footnote("A tag you use here is the same tag on your works.")
             }
         }
         .cardList()
@@ -363,8 +361,7 @@ struct QueueTagEditSheet: View {
                     } else {
                         // The rename is global because the Tag is: this is the
                         // same word the reader's works carry.
-                        footnote("This tag is shared with your works, so renaming it "
-                            + "here renames it everywhere.")
+                        footnote("Renaming this tag also renames it on your works and other queues.")
                     }
                 }
 
@@ -485,20 +482,18 @@ struct QueueTagEditSheet: View {
     /// Zero is its own sentence: "moves all 0 works" was what the simulator
     /// showed for an unused tag.
     private func mergeNote(workCount: Int) -> String {
-        let undo = " It cannot be undone from the app."
+        let undo = " You can't undo this in Kudos."
         switch workCount {
         case 0:
             // No "cannot be undone" here: with nothing to retag, merging only
             // takes the tag off the queue, and `QueueTagSheet` puts it back in
             // one tap — the same change Remove makes, and Remove says so.
-            return "No work in this queue carries “\(tag.name)”, so merging only "
-                + "takes it off the queue, the same as Remove below."
+            return "No work in this queue uses “\(tag.name)”. Merging removes the tag from this queue."
         case 1:
-            return "Merging moves the 1 work in this queue onto the tag you pick and "
-                + "takes “\(tag.name)” off the queue." + undo
+            return "The 1 work in this queue gets the tag you pick, and “\(tag.name)” leaves the queue." + undo
         default:
-            return "Merging moves all \(workCount) works in this queue onto the tag you "
-                + "pick and takes “\(tag.name)” off the queue." + undo
+            return "All \(workCount) works in this queue get the tag you pick, and “\(tag.name)” leaves the queue."
+                + undo
         }
     }
 
@@ -508,18 +503,18 @@ struct QueueTagEditSheet: View {
     /// says what Merge does (this queue's works), not "make them one tag",
     /// which a queue-scoped merge does not do.
     private func conflictNote(_ existing: Tag) -> String {
-        let taken = "A tag called “\(existing.name)” already exists, so that name is taken."
+        let taken = "You already have a tag called “\(existing.name)”."
         let isSibling = siblings.contains { $0.persistentModelID == existing.persistentModelID }
         return isSibling
-            ? taken + " To move this queue's works onto it, merge below."
+            ? taken + " To use it for this queue's works, choose it below."
             : taken
     }
 
     private func stripNote(workCount: Int) -> String {
         switch workCount {
-        case 0: "The tag stays on your other works and queues."
-        case 1: "That work keeps its other tags, and works outside this queue keep this one."
-        default: "Those works keep their other tags, and works outside this queue keep this one."
+        case 0: "This tag stays on your other works and queues."
+        case 1: "That work keeps its other tags. Works outside this queue keep this tag."
+        default: "Those works keep their other tags. Works outside this queue keep this tag."
         }
     }
 

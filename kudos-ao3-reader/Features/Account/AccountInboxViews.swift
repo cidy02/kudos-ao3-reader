@@ -534,8 +534,8 @@ struct AccountInboxRows: View {
             AO3ProfileMessageRow(
                 title: "No comments yet",
                 systemImage: "bubble.left",
-                message: "Comments on your works, and replies to comments you've "
-                    + "posted, show up here from your AO3 inbox."
+                message: "Comments on your works and replies to your comments appear here "
+                    + "from your AO3 inbox."
             )
             .accountControlCardRow()
         case let .paginationFailed(requestedPage, message):
@@ -895,8 +895,8 @@ struct AccountInboxBulkActionBar: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This only removes the selected notifications from AO3's Inbox. "
-                + "It does not delete any work from your Kudos library.")
+            Text("This removes the selected notifications from your AO3 Inbox. "
+                + "Your works in Kudos aren't deleted.")
         }
     }
 
@@ -916,7 +916,7 @@ extension View {
             Button("Delete From Inbox", role: .destructive, action: perform)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes only the Inbox notification. It does not delete the comment.")
+            Text("This removes the notification from your AO3 Inbox. The comment stays on AO3.")
         }
     }
 }
