@@ -57,6 +57,24 @@ enum WorkLifecycle {
         context.saveBestEffort(reason: "Saving freed EPUB state failed")
     }
 
+    /// Settings › Downloads › "Keep works you read" (owner, 2026-10-01). Off by
+    /// default; read by `keepIfKeepingWorksYouRead`.
+    static let keepsWorksYouReadKey = "keepsWorksYouRead"
+
+    /// Opening a work in the reader marks it Downloaded when the reader asked
+    /// for that, so finishing it never frees its EPUB. Only ever keeps — the
+    /// setting turned off later leaves what it kept alone, as if each had been
+    /// downloaded by hand.
+    @MainActor
+    static func keepIfKeepingWorksYouRead(
+        _ work: SavedWork,
+        in context: ModelContext,
+        defaults: UserDefaults = .standard
+    ) {
+        guard defaults.bool(forKey: keepsWorksYouReadKey), !work.isSaved else { return }
+        setSaved(work, true, in: context)
+    }
+
     /// Saves (keeps) or un-saves a work. Saving protects its EPUB from being freed.
     @MainActor
     static func setSaved(_ work: SavedWork, _ saved: Bool, in context: ModelContext) {
