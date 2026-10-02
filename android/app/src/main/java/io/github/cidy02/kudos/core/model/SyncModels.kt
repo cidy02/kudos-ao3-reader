@@ -13,6 +13,9 @@ object SyncTombstoneRecordType {
     const val READING_ANNOTATION = "readingAnnotation"
     const val BOOKMARK = "bookmark"
     const val SAVED_SEARCH = "savedSearch"
+    const val READING_SESSION = "readingSession"
+    const val READING_FAVORITE = "readingFavorite"
+    const val FANDOM_READ_WATERMARK = "fandomReadWatermark"
 }
 
 /**

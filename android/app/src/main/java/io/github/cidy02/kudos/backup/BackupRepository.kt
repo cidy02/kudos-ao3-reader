@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.backup
 import io.github.cidy02.kudos.core.model.BackupSettings
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.local.entity.CollectionWorkCrossRef
+import io.github.cidy02.kudos.data.local.entity.QueueTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.TagEntity
 import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
 import io.github.cidy02.kudos.data.local.entity.toDomain
@@ -155,6 +156,13 @@ class BackupRepository(
         val readingQueues = database.readingQueueDao().getAllQueues().map { it.toDomain() }
         val memberships = database.readingQueueDao().getAllMemberships().map { it.toDomain() }
         val annotations = database.annotationDao().getAll().map { it.toDomain() }
+        val readingSessions = database.readingLogDao().getAllSessions()
+        val readingFavorites = database.readingLogDao().getAllFavorites()
+        val fandomReadWatermarks = database.readingLogDao().getAllWatermarks()
+        val tagNamesById = database.tagDao().getAll().associate { it.id to it.name }
+        val queueTagNamesByQueueId = database.readingLogDao().getAllQueueTags()
+            .groupBy({ it.queueId }, { tagNamesById[it.tagId] })
+            .mapValues { (_, names) -> names.filterNotNull() }
         val settings = BackupSettings.fromSettings(settingsRepository.snapshot())
         val epubWorkIds = works
             .filter { it.hasEpub }
@@ -180,7 +188,11 @@ class BackupRepository(
             tombstones = tombstones,
             readingQueues = readingQueues,
             readingQueueMemberships = memberships,
-            annotations = annotations
+            annotations = annotations,
+            readingSessions = readingSessions,
+            readingFavorites = readingFavorites,
+            fandomReadWatermarks = fandomReadWatermarks,
+            queueTagNamesByQueueId = queueTagNamesByQueueId
         )
     }
 
@@ -261,7 +273,10 @@ class BackupRepository(
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION,
             io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.BOOKMARK,
-            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_SESSION,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_FAVORITE,
+            io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.FANDOM_READ_WATERMARK
         )
         snapshot.tombstones.forEach { tombstone ->
             if (tombstone.recordTypeRaw in knownTombstoneTypes) {
@@ -271,6 +286,27 @@ class BackupRepository(
 
         // Queues before memberships (FK).
         snapshot.readingQueues.forEach { database.readingQueueDao().upsertQueue(it.toEntity()) }
+        snapshot.queueTagNamesByQueueId.forEach { (queueId, tagNames) ->
+            val desiredTagIds = tagNames.normalizedNames().mapTo(mutableSetOf()) { name ->
+                val tag = database.tagDao().getByName(name)
+                    ?: TagEntity(
+                        id = uuidFactory(),
+                        name = name,
+                        dateCreated = clock()
+                    ).also { database.tagDao().upsert(it) }
+                database.readingLogDao().upsertQueueTag(
+                    QueueTagCrossRef(queueId = queueId, tagId = tag.id)
+                )
+                tag.id
+            }
+            if (merge.mode == BackupImportMode.REPLACE_LIBRARY) {
+                database.readingLogDao().getQueueTags(queueId).forEach { ref ->
+                    if (ref.tagId !in desiredTagIds) {
+                        database.readingLogDao().deleteQueueTag(queueId, ref.tagId)
+                    }
+                }
+            }
+        }
         snapshot.readingQueueMemberships.forEach {
             database.readingQueueDao().upsertMembership(it.toEntity())
         }
@@ -286,6 +322,26 @@ class BackupRepository(
         }
 
         snapshot.annotations.forEach { database.annotationDao().upsert(it.toEntity()) }
+
+        val sessionIds = snapshot.readingSessions.mapTo(mutableSetOf()) { it.id }
+        database.readingLogDao().getAllSessions().forEach { session ->
+            if (session.id !in sessionIds) database.readingLogDao().deleteSession(session.id)
+        }
+        snapshot.readingSessions.forEach { database.readingLogDao().upsertSession(it) }
+
+        val favoriteIds = snapshot.readingFavorites.mapTo(mutableSetOf()) { it.id }
+        database.readingLogDao().getAllFavorites().forEach { favorite ->
+            if (favorite.id !in favoriteIds) database.readingLogDao().deleteFavorite(favorite.id)
+        }
+        snapshot.readingFavorites.forEach { database.readingLogDao().upsertFavorite(it) }
+
+        val watermarkIds = snapshot.fandomReadWatermarks.mapTo(mutableSetOf()) { it.id }
+        database.readingLogDao().getAllWatermarks().forEach { watermark ->
+            if (watermark.id !in watermarkIds) {
+                database.readingLogDao().deleteWatermark(watermark.id)
+            }
+        }
+        snapshot.fandomReadWatermarks.forEach { database.readingLogDao().upsertWatermark(it) }
 
         if (merge.mode != BackupImportMode.REPLACE_LIBRARY) {
             settingsRepository.replaceAll(snapshot.settings.toSettings())

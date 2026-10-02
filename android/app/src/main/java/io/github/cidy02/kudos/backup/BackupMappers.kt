@@ -12,6 +12,9 @@ import io.github.cidy02.kudos.core.model.SyncTombstone
 import io.github.cidy02.kudos.core.model.SyncTombstoneRecordType
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.canonicalizeCollectionMembershipRecordId
+import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import io.github.cidy02.kudos.works.WorkRepository
 import java.time.Instant
 import kotlinx.serialization.json.JsonElement
@@ -57,13 +60,28 @@ fun BackupLibrarySnapshot.toV2Manifest(
             .map { it.toBackupSavedSearch() },
         readingQueues = readingQueues
             .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
-            .map { it.toBackupReadingQueue() },
+            .map { queue ->
+                queue.toBackupReadingQueue(
+                    queueTagNamesByQueueId[queue.id]
+                        ?: queueTagNamesByQueueId[BackupPaths.normalizeIdForComparison(queue.id)]
+                        .orEmpty()
+                )
+            },
         readingQueueMemberships = readingQueueMemberships
             .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
             .map { it.toBackupReadingQueueMembership() },
         annotations = annotations
             .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
             .map { it.toBackupAnnotation() },
+        readingSessions = readingSessions
+            .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
+            .map { it.toBackupReadingSession() },
+        readingFavorites = readingFavorites
+            .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
+            .map { it.toBackupReadingFavorite() },
+        fandomReadWatermarks = fandomReadWatermarks
+            .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
+            .map { it.toBackupFandomReadWatermark() },
         tombstones = tombstones
             .sortedBy { BackupPaths.normalizeIdForComparison(it.id) }
             .map { it.toBackupTombstone() },
@@ -441,7 +459,7 @@ fun BackupSettingsPayload.toCoreBackupSettings(): CoreBackupSettings {
     )
 }
 
-fun ReadingQueue.toBackupReadingQueue(): BackupReadingQueue {
+fun ReadingQueue.toBackupReadingQueue(tagNames: List<String> = emptyList()): BackupReadingQueue {
     return BackupReadingQueue(
         id = BackupPaths.canonicalUuid(id, "queue.id"),
         name = name,
@@ -456,9 +474,114 @@ fun ReadingQueue.toBackupReadingQueue(): BackupReadingQueue {
             ?.let(BackupValidator::formatInstant),
         hue = hue,
         colorHex = colorHex,
+        tagNames = tagNames.normalizedNames().sorted(),
         isPinned = isPinned,
         keepsWorksOffline = keepsWorksOffline,
         notes = notes
+    )
+}
+
+fun ReadingSessionEntity.toBackupReadingSession(): BackupReadingSession = BackupReadingSession(
+    id = BackupPaths.canonicalUuid(id, "readingSession.id"),
+    workID = BackupPaths.canonicalUuid(workID, "readingSession.workID"),
+    ao3WorkID = ao3WorkID,
+    sourceURL = sourceURL,
+    workTitle = workTitle,
+    startedAt = BackupValidator.formatInstant(startedAt),
+    endedAt = BackupValidator.formatInstant(endedAt),
+    durationSeconds = durationSeconds,
+    lastSpineIndex = lastSpineIndex,
+    chapterTitle = chapterTitle,
+    endingProgress = endingProgress,
+    wordCount = wordCount,
+    chapterCountAtVisit = chapterCountAtVisit,
+    didFinish = didFinish,
+    lastModifiedAt = BackupValidator.formatInstant(lastModifiedAt)
+)
+
+fun BackupReadingSession.toReadingSession(exportedAt: Instant? = null): ReadingSessionEntity {
+    val started = startedAt.takeIf { it.isNotBlank() }?.let {
+        BackupValidator.parseInstant(it, "readingSession.startedAt", exportedAt)
+    } ?: Instant.now()
+    val ended = endedAt.takeIf { it.isNotBlank() }?.let {
+        BackupValidator.parseInstant(it, "readingSession.endedAt", exportedAt)
+    } ?: started
+    return ReadingSessionEntity(
+        id = BackupPaths.canonicalUuid(id, "readingSession.id"),
+        workID = workID.takeIf { it.isNotBlank() }?.let {
+            BackupPaths.canonicalUuid(it, "readingSession.workID")
+        } ?: java.util.UUID.randomUUID().toString(),
+        ao3WorkID = ao3WorkID,
+        sourceURL = sourceURL,
+        workTitle = workTitle,
+        startedAt = started,
+        endedAt = ended,
+        durationSeconds = durationSeconds.coerceAtLeast(0.0),
+        lastSpineIndex = lastSpineIndex,
+        chapterTitle = chapterTitle,
+        endingProgress = endingProgress.coerceIn(0.0, 1.0),
+        wordCount = wordCount,
+        chapterCountAtVisit = chapterCountAtVisit,
+        didFinish = didFinish,
+        lastModifiedAt = lastModifiedAt.takeIf { it.isNotBlank() }?.let {
+            BackupValidator.parseInstant(it, "readingSession.lastModifiedAt", exportedAt)
+        } ?: ended
+    )
+}
+
+fun ReadingFavoriteEntity.toBackupReadingFavorite(): BackupReadingFavorite = BackupReadingFavorite(
+    id = BackupPaths.canonicalUuid(id, "readingFavorite.id"),
+    kindRaw = kindRaw,
+    targetKey = targetKey,
+    displayName = displayName,
+    createdAt = BackupValidator.formatInstant(createdAt),
+    lastModifiedAt = BackupValidator.formatInstant(lastModifiedAt)
+)
+
+fun BackupReadingFavorite.toReadingFavorite(exportedAt: Instant? = null): ReadingFavoriteEntity {
+    val created = createdAt.takeIf { it.isNotBlank() }?.let {
+        BackupValidator.parseInstant(it, "readingFavorite.createdAt", exportedAt)
+    } ?: Instant.now()
+    return ReadingFavoriteEntity(
+        id = BackupPaths.canonicalUuid(id, "readingFavorite.id"),
+        kindRaw = when (kindRaw) {
+            "work", "author", "fandom", "tag" -> kindRaw
+            else -> "work"
+        },
+        targetKey = targetKey,
+        displayName = displayName,
+        createdAt = created,
+        lastModifiedAt = lastModifiedAt.takeIf { it.isNotBlank() }?.let {
+            BackupValidator.parseInstant(it, "readingFavorite.lastModifiedAt", exportedAt)
+        } ?: created
+    )
+}
+
+fun FandomReadWatermarkEntity.toBackupFandomReadWatermark(): BackupFandomReadWatermark =
+    BackupFandomReadWatermark(
+        id = BackupPaths.canonicalUuid(id, "fandomReadWatermark.id"),
+        fandomName = fandomName,
+        lastVisitedAt = BackupValidator.formatInstant(lastVisitedAt),
+        newestWorkIDSeen = newestWorkIDSeen,
+        newestWorkTitleSeen = newestWorkTitleSeen,
+        lastModifiedAt = BackupValidator.formatInstant(lastModifiedAt)
+    )
+
+fun BackupFandomReadWatermark.toFandomReadWatermark(
+    exportedAt: Instant? = null
+): FandomReadWatermarkEntity {
+    val visited = lastVisitedAt.takeIf { it.isNotBlank() }?.let {
+        BackupValidator.parseInstant(it, "fandomReadWatermark.lastVisitedAt", exportedAt)
+    } ?: Instant.now()
+    return FandomReadWatermarkEntity(
+        id = BackupPaths.canonicalUuid(id, "fandomReadWatermark.id"),
+        fandomName = fandomName,
+        lastVisitedAt = visited,
+        newestWorkIDSeen = newestWorkIDSeen,
+        newestWorkTitleSeen = newestWorkTitleSeen,
+        lastModifiedAt = lastModifiedAt.takeIf { it.isNotBlank() }?.let {
+            BackupValidator.parseInstant(it, "fandomReadWatermark.lastModifiedAt", exportedAt)
+        } ?: visited
     )
 }
 
@@ -634,7 +757,10 @@ fun BackupTombstone.toSyncTombstone(exportedAt: Instant? = null): SyncTombstone 
         io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.WORK_COLLECTION_MEMBERSHIP,
         io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_ANNOTATION,
         io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.BOOKMARK,
-        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.SAVED_SEARCH,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_SESSION,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.READING_FAVORITE,
+        io.github.cidy02.kudos.core.model.SyncTombstoneRecordType.FANDOM_READ_WATERMARK
     )
     if (type.isEmpty() || type !in knownTypes) {
         throw IllegalArgumentException("Invalid or unknown tombstone recordTypeRaw: $recordTypeRaw")

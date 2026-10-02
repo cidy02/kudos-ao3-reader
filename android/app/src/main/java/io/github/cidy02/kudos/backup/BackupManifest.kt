@@ -30,6 +30,9 @@ data class KudosBackupManifest(
     val readingQueueMemberships: List<BackupReadingQueueMembership> = emptyList(),
     /** Apple v8+ in-book annotations — decoded and applied by [io.github.cidy02.kudos.backup.BackupMergeService]. */
     val annotations: List<BackupAnnotation> = emptyList(),
+    val readingSessions: List<BackupReadingSession> = emptyList(),
+    val readingFavorites: List<BackupReadingFavorite> = emptyList(),
+    val fandomReadWatermarks: List<BackupFandomReadWatermark> = emptyList(),
     /** Apple sync tombstones — decoded so we do not fail on v5+ archives. */
     val tombstones: List<BackupTombstone> = emptyList()
 )
@@ -169,9 +172,49 @@ data class BackupReadingQueue(
     val permanentDeletionScheduledAt: String? = null,
     val hue: Double? = null,
     val colorHex: String? = null,
+    val tagNames: List<String>? = null,
     val isPinned: Boolean? = null,
     val keepsWorksOffline: Boolean? = null,
     val notes: String? = null
+)
+
+@Serializable
+data class BackupReadingSession(
+    val id: String,
+    @SerialName("workID") val workID: String = "",
+    @SerialName("ao3WorkID") val ao3WorkID: Int? = null,
+    @SerialName("sourceURL") val sourceURL: String = "",
+    val workTitle: String = "",
+    val startedAt: String = "",
+    val endedAt: String = "",
+    val durationSeconds: Double = 0.0,
+    val lastSpineIndex: Int = 0,
+    val chapterTitle: String = "",
+    val endingProgress: Double = 0.0,
+    val wordCount: Int = 0,
+    val chapterCountAtVisit: Int = 0,
+    val didFinish: Boolean = false,
+    val lastModifiedAt: String = ""
+)
+
+@Serializable
+data class BackupReadingFavorite(
+    val id: String,
+    val kindRaw: String = "work",
+    val targetKey: String = "",
+    val displayName: String = "",
+    val createdAt: String = "",
+    val lastModifiedAt: String = ""
+)
+
+@Serializable
+data class BackupFandomReadWatermark(
+    val id: String,
+    val fandomName: String = "",
+    val lastVisitedAt: String = "",
+    @SerialName("newestWorkIDSeen") val newestWorkIDSeen: Int? = null,
+    val newestWorkTitleSeen: String = "",
+    val lastModifiedAt: String = ""
 )
 
 @Serializable
