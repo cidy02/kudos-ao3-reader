@@ -75,16 +75,14 @@ struct SubjectPalette {
     /// screen's colour rather than the app's.
     var tint: Color { picked.map { Self.controlColor($0, on: theme) } ?? accent }
 
-    /// A chosen colour as a control colour. On Dark and OLED a deep accent
-    /// (the default AO3 red, #990000) all but disappears on the ground — the
-    /// selected tab read red on near-black — so controls take it halfway to
-    /// white, as the dark artboards do (#E39B9B for crimson). Washes keep the
-    /// colour itself. Light and Sepia use it as is.
+    /// A chosen colour as a control colour: the colour itself, on every theme.
+    /// Dark and OLED used to take it halfway to white (the dark artboards'
+    /// #E39B9B for crimson), which kept a deep accent off the near-black ground
+    /// but read as a washed-out version of the reader's colour; the owner wants
+    /// their colour as picked (2026-10-01). Labels on a filled control still
+    /// pick black or white by contrast (`labelOnAccent`).
     static func controlColor(_ color: Color, on theme: ReaderTheme) -> Color {
-        switch theme {
-        case .dark, .oled: color.mix(with: .white, by: 0.5)
-        case .light, .sepia: color
-        }
+        color
     }
 
     /// The subject's identity colour: kicker text, the short rule under it, the
