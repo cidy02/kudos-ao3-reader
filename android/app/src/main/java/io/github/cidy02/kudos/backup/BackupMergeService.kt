@@ -37,7 +37,7 @@ object BackupMergeService {
         now: Instant = Instant.now(),
         trustedPublicKeys: Set<String> = emptySet()
     ): BackupMergeResult {
-        val manifest = BackupValidator.validateManifest(backup.manifest)
+        val manifest = BackupValidator.validateManifest(backup.manifest, now)
         val exportedAt = parseOptionalInstant(manifest.exportedAt)
         val epubFilesById = backup.epubFilesByWorkId.normalizedWorkFileMap()
         val currentEpubIds = current.epubWorkIds.map(BackupPaths::normalizeIdForComparison).toSet()

@@ -39,7 +39,10 @@ object BackupValidator {
         return validateManifest(manifest)
     }
 
-    fun validateManifest(manifest: KudosBackupManifest): KudosBackupManifest {
+    fun validateManifest(
+        manifest: KudosBackupManifest,
+        now: Instant = Instant.now()
+    ): KudosBackupManifest {
         if (!BackupVersion.isSupported(manifest.version)) {
             throw BackupError.UnsupportedVersion(manifest.version)
         }
@@ -49,7 +52,7 @@ object BackupValidator {
         // to it (a forged "just now" / future lastModifiedAt cannot outrank
         // later genuine backups).
         val exportedAt = if (manifest.exportedAt.isNotBlank()) {
-            parseInstant(manifest.exportedAt, "exportedAt")
+            parseInstant(manifest.exportedAt, "exportedAt", now = now)
         } else {
             null
         }
@@ -61,16 +64,16 @@ object BackupValidator {
             val id = BackupPaths.canonicalUuid(work.id, "works[$index].id")
             if (!workIds.add(id)) throw BackupError.InvalidPackage("Duplicate work id: $id")
             if (work.dateAdded.isNotBlank()) {
-                parseInstant(work.dateAdded, "works[$index].dateAdded", exportedAt)
+                parseInstant(work.dateAdded, "works[$index].dateAdded", exportedAt, now)
             }
             work.lastModifiedAt?.takeIf { it.isNotBlank() }
-                ?.let { parseInstant(it, "works[$index].lastModifiedAt", exportedAt) }
+                ?.let { parseInstant(it, "works[$index].lastModifiedAt", exportedAt, now) }
             work.lastReadDate?.takeIf { it.isNotBlank() }
-                ?.let { parseInstant(it, "works[$index].lastReadDate", exportedAt) }
+                ?.let { parseInstant(it, "works[$index].lastReadDate", exportedAt, now) }
             work.lastUpdateCheck?.takeIf { it.isNotBlank() }
-                ?.let { parseInstant(it, "works[$index].lastUpdateCheck", exportedAt) }
+                ?.let { parseInstant(it, "works[$index].lastUpdateCheck", exportedAt, now) }
             work.progressModifiedAt?.takeIf { it.isNotBlank() }
-                ?.let { parseInstant(it, "works[$index].progressModifiedAt", exportedAt) }
+                ?.let { parseInstant(it, "works[$index].progressModifiedAt", exportedAt, now) }
             if (work.lastSpineIndex < 0) {
                 throw BackupError.InvalidPackage("lastSpineIndex must be non-negative for work $id.")
             }
@@ -96,7 +99,7 @@ object BackupValidator {
             if (bookmark.urlString.isBlank()) {
                 throw BackupError.InvalidPackage("Bookmark urlString must not be blank.")
             }
-            parseInstant(bookmark.dateAdded, "bookmarks[$index].dateAdded", exportedAt)
+            parseInstant(bookmark.dateAdded, "bookmarks[$index].dateAdded", exportedAt, now)
             bookmark
         }
 
@@ -106,7 +109,7 @@ object BackupValidator {
             if (!fontNames.add(BackupPaths.fontFileNameKey(font.fileName))) {
                 throw BackupError.InvalidPackage("Duplicate font file name: ${font.fileName}")
             }
-            parseInstant(font.dateAdded, "fonts[$index].dateAdded", exportedAt)
+            parseInstant(font.dateAdded, "fonts[$index].dateAdded", exportedAt, now)
             font
         }
 
@@ -116,9 +119,9 @@ object BackupValidator {
             if (!collectionIds.add(id)) {
                 throw BackupError.InvalidPackage("Duplicate collection id: $id")
             }
-            parseInstant(collection.dateAdded, "collections[$index].dateAdded", exportedAt)
+            parseInstant(collection.dateAdded, "collections[$index].dateAdded", exportedAt, now)
             collection.lastModifiedAt?.takeIf { it.isNotBlank() }
-                ?.let { parseInstant(it, "collections[$index].lastModifiedAt", exportedAt) }
+                ?.let { parseInstant(it, "collections[$index].lastModifiedAt", exportedAt, now) }
             collection.copy(
                 id = id,
                 workIDs = collection.workIDs.mapIndexed { workIndex, workId ->
@@ -133,7 +136,7 @@ object BackupValidator {
             if (!savedSearchIds.add(id)) {
                 throw BackupError.InvalidPackage("Duplicate saved search id: $id")
             }
-            parseInstant(savedSearch.dateAdded, "savedSearches[$index].dateAdded", exportedAt)
+            parseInstant(savedSearch.dateAdded, "savedSearches[$index].dateAdded", exportedAt, now)
             savedSearch.copy(id = id)
         }
 
