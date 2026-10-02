@@ -70,7 +70,8 @@ fun AppNavHost(
     container: KudosAppContainer,
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    shellChrome: HomeShellChrome? = null
+    shellChrome: HomeShellChrome? = null,
+    libraryChrome: io.github.cidy02.kudos.library.LibraryShellChrome? = null
 ) {
     // The only state left here (T-90): a small id-keyed cache so opening Work
     // Detail from a search/browse/account-list result still shows instantly
@@ -161,6 +162,7 @@ fun AppNavHost(
                 queueRepository = container.readingQueueRepository,
                 downloadQueue = container.downloadQueue,
                 privacyGate = container.privacyGate,
+                libraryChrome = libraryChrome,
                 onOpenWork = { workId ->
                     navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },

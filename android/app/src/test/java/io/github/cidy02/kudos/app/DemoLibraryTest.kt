@@ -8,9 +8,14 @@ import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.library.LibraryFilterState
+import io.github.cidy02.kudos.library.LibraryQuery
+import io.github.cidy02.kudos.library.LibraryRepository
+import io.github.cidy02.kudos.library.LibrarySort
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -193,5 +198,43 @@ class DemoLibraryTest {
 
         assertEquals(2, workRepository.allCollections().size)
         assertEquals(1, workRepository.listRecentlyDeletedCollections().size)
+    }
+
+    @Test
+    fun demoLibraryShelfCountsMatchIos() = runTest {
+        DemoLibrary.seed(
+            database = database,
+            workRepository = workRepository,
+            readingQueueRepository = queueRepository,
+            fileStore = fileStore,
+            clock = { fixedNow }
+        )
+
+        val libraryRepository = LibraryRepository(workRepository)
+        val snapshot = libraryRepository.observeSnapshot().first()
+        val state = LibraryQuery.buildState(
+            snapshot = snapshot,
+            searchQuery = "",
+            filters = LibraryFilterState(),
+            sort = LibrarySort.RecentlyAdded
+        )
+
+        // Reading Now 3, Saved for Later 2, Finished 2: iOS rules (LibrarySectionKind.swift) on a fresh demo seed
+        assertEquals(3, state.continueReading.size)
+        assertEquals(2, state.savedForLater.size)
+        assertEquals(2, state.finished.size)
+
+        assertEquals(
+            listOf("Sodium Lights", "Ashfall", "Winter Garden"),
+            state.continueReading.map { it.item.work.title }
+        )
+        assertEquals(
+            listOf("Paper Cranes", "Stars Over Tatooine"),
+            state.savedForLater.map { it.item.work.title }
+        )
+        assertTrue(state.finished.any { it.item.work.title == "Tea in the Jasmine Dragon" })
+        // Lighthouse Hours is finished but held only by the Case fic pile queue (queue-only).
+        assertTrue(state.finished.none { it.item.work.title == "Lighthouse Hours" })
+        assertTrue(state.finished.any { it.item.work.title == "What the River Keeps" })
     }
 }

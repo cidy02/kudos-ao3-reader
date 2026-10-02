@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -118,7 +120,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SwipeAction
 import io.github.cidy02.kudos.ui.subject.SwipeActionRow
 import io.github.cidy02.kudos.ui.subject.WorkCardCarousel
-import io.github.cidy02.kudos.ui.subject.WorkCoverCard as SubjectWorkCoverCard
+import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.ui.subject.WorkLedgerRow as SubjectWorkLedgerRow
 import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
 import io.github.cidy02.kudos.ui.subject.defaultWorkSignals
@@ -153,7 +155,8 @@ fun LibraryScreen(
     onOpenCollection: (String) -> Unit = {},
     onOpenComments: (Long) -> Unit = {},
     section: LibrarySectionKind? = null,
-    onOpenSection: (LibrarySectionKind) -> Unit = {}
+    onOpenSection: (LibrarySectionKind) -> Unit = {},
+    libraryChrome: LibraryShellChrome? = null
 ) {
     val viewModel: LibraryViewModel = viewModel(
         factory = LibraryViewModel.factory(
@@ -198,6 +201,49 @@ fun LibraryScreen(
                 WorkSectionLayout.Shelves
             }
         )
+    }
+
+    if (libraryChrome != null && section == null) {
+        val selectableIds = remember(state.items) {
+            state.items.mapTo(linkedSetOf()) { it.item.work.id }
+        }
+        val allSelected = selectableIds.isNotEmpty() &&
+            state.selectedWorkIds.containsAll(selectableIds)
+        val selectionTitle = if (state.selectionMode) {
+            if (state.selectedCount == 0) "Select Works" else "${state.selectedCount} Selected"
+        } else null
+        SideEffect {
+            libraryChrome.mounted = true
+            libraryChrome.hideTabBar = state.selectionMode
+            libraryChrome.selectionTitle = selectionTitle
+            libraryChrome.allSelected = allSelected
+            libraryChrome.showPrivacyToggle = state.showPrivacyToggle
+            libraryChrome.revealAll = state.revealAllActive
+            libraryChrome.hasSavedWorks = state.hasSavedWorks
+            libraryChrome.filtersActive = state.hasActiveQueryOrFilters
+            libraryChrome.filterBadgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1
+            libraryChrome.layout = dashboardLayout
+            libraryChrome.actions.onNewCollection = { createCollectionName = "" }
+            libraryChrome.actions.onShowFilters = { showFilters = true }
+            libraryChrome.actions.onSelectAll = {
+                viewModel.setSelection(if (allSelected) emptySet() else selectableIds)
+            }
+            libraryChrome.actions.onEnterSelect = { viewModel.enterSelectionMode() }
+            libraryChrome.actions.onTogglePrivacy = { viewModel.toggleRevealAll(activity) }
+            libraryChrome.actions.onLayoutChange = { layout ->
+                dashboardLayout = layout
+                layoutPreferences.edit().putString(
+                    "layout",
+                    if (layout == WorkSectionLayout.Ledger) "ledger" else "shelves"
+                ).apply()
+            }
+            libraryChrome.actions.onOpenReadingQueues = onOpenReadingQueues
+            libraryChrome.actions.onOpenReadingStatistics = onOpenReadingStatistics
+            libraryChrome.actions.onOpenRecentlyDeleted = onOpenRecentlyDeleted
+        }
+        DisposableEffect(libraryChrome) {
+            onDispose { libraryChrome.reset() }
+        }
     }
 
     if (bulkAddToQueueOpen) {
@@ -731,9 +777,7 @@ private fun LibraryContent(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .subjectScreenWash(tokens.scopePalette)
+        modifier = Modifier.fillMaxSize()
     ) {
         KudosRefreshBox(onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -744,22 +788,6 @@ private fun LibraryContent(
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            if (!state.selectionMode) {
-                item {
-                    LibraryTopActions(
-                        state = state,
-                        layout = dashboardLayout,
-                        onLayoutChange = onLayoutChange,
-                        onNewCollection = onCreateCollection,
-                        onShowFilters = onShowFilters,
-                        onOpenReadingQueues = onOpenReadingQueues,
-                        onOpenReadingStatistics = onOpenReadingStatistics,
-                        onEnterSelection = onEnterSelection,
-                        onTogglePrivacy = onTogglePrivacy
-                    )
-                }
-            }
-
             if (state.loading) {
                 item {
                     LoadingStateCard(
@@ -798,24 +826,6 @@ private fun LibraryContent(
             }
 
             if (state.selectionMode) {
-                item {
-                    val selectableIds = state.items.mapTo(linkedSetOf()) { it.item.work.id }
-                    val allSelected = selectableIds.isNotEmpty() &&
-                        state.selectedWorkIds.containsAll(selectableIds)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (state.hasSelection) "${state.selectedCount} Selected" else "Select Works",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            onClick = { onSetSelection(if (allSelected) emptySet() else selectableIds) }
-                        ) { Text(if (allSelected) "Deselect All" else "Select All") }
-                    }
-                }
                 items(state.items, key = { "sel-${it.item.work.id}" }) { display ->
                     SelectableWorkRow(
                         display = display,
@@ -949,94 +959,6 @@ private fun LibraryContent(
 }
 
 @Composable
-private fun LibraryTopActions(
-    state: LibraryUiState,
-    layout: WorkSectionLayout,
-    onLayoutChange: (WorkSectionLayout) -> Unit,
-    onNewCollection: () -> Unit,
-    onShowFilters: () -> Unit,
-    onOpenReadingQueues: () -> Unit,
-    onOpenReadingStatistics: () -> Unit,
-    onEnterSelection: () -> Unit,
-    onTogglePrivacy: () -> Unit
-) {
-    val tokens = LocalKudosTokens.current
-    var moreOpen by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        GlassCircleButton(onClick = onNewCollection, accessibilityName = "New Collection") {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
-        }
-        if (state.hasSavedWorks) {
-            FilterButton(
-                filtersActive = state.hasActiveQueryOrFilters,
-                badgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1,
-                onClick = onShowFilters,
-                modifier = Modifier.size(44.dp)
-            )
-        }
-        Box {
-            GlassCircleButton(onClick = { moreOpen = true }, accessibilityName = "More") {
-                Icon(Icons.Filled.MoreVert, contentDescription = null)
-            }
-            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                if (state.showPrivacyToggle) {
-                    DropdownMenuItem(
-                        text = { Text(if (state.revealAllActive) "Hide mature works" else "Show mature works") },
-                        leadingIcon = {
-                            Icon(
-                                if (state.revealAllActive) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                                contentDescription = null
-                            )
-                        },
-                        onClick = { moreOpen = false; onTogglePrivacy() }
-                    )
-                }
-                if (state.hasSavedWorks) {
-                    DropdownMenuItem(
-                        text = { Text("Select") },
-                        leadingIcon = { Icon(Icons.Outlined.Checklist, contentDescription = null) },
-                        onClick = { moreOpen = false; onEnterSelection() }
-                    )
-                }
-                DropdownMenuItem(
-                    text = { Text(if (layout == WorkSectionLayout.Shelves) "Show Detailed List" else "Show Carousels") },
-                    leadingIcon = {
-                        Icon(
-                            if (layout == WorkSectionLayout.Shelves) Icons.AutoMirrored.Outlined.List else Icons.Outlined.CollectionsBookmark,
-                            contentDescription = null
-                        )
-                    },
-                    onClick = {
-                        moreOpen = false
-                        onLayoutChange(
-                            if (layout == WorkSectionLayout.Shelves) WorkSectionLayout.Ledger else WorkSectionLayout.Shelves
-                        )
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Reading Queues") },
-                    leadingIcon = { Icon(Icons.Outlined.Queue, contentDescription = null) },
-                    onClick = { moreOpen = false; onOpenReadingQueues() }
-                )
-                if (state.hasSavedWorks) {
-                    DropdownMenuItem(
-                        text = { Text("Reading Insights") },
-                        leadingIcon = { Icon(Icons.Outlined.BarChart, contentDescription = null) },
-                        onClick = { moreOpen = false; onOpenReadingStatistics() }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun LibraryDashboardWorkSection(
     kind: LibrarySectionKind,
     items: List<LibraryDisplayItem>,
@@ -1080,6 +1002,7 @@ private fun LibraryDashboardWorkSection(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibrarySubjectWorkCard(
     display: LibraryDisplayItem,
@@ -1092,31 +1015,32 @@ private fun LibrarySubjectWorkCard(
     val obscured = display.privacyVisibility == LibraryPrivacyVisibility.Obscured
     var menuOpen by remember(work.id) { mutableStateOf(false) }
     val progress = work.readingProgressFraction() ?: 0.0
-    SubjectWorkCoverCard(
-        title = work.title,
-        author = work.author,
-        fandoms = work.workFandoms,
-        progress = if (kind == LibrarySectionKind.ReadingNow) progress else null,
-        progressState = when {
-            work.isFinished -> "Finished"
-            progress > 0 -> "Reading"
-            else -> null
-        },
-        signals = defaultWorkSignals(work.rating, work.workCategories, work.workWarnings, work.isComplete),
-        footer = if (kind == LibrarySectionKind.Finished) "Finished" else null,
-        obscured = obscured,
-        isSelected = selected,
-        onClick = {
-            when {
-                selecting -> actions.onSelect(work.id)
-                obscured -> actions.onReveal(work.id)
-                work.hasEpub -> actions.onOpenReader(work.id)
-                else -> actions.onOpenWork(work.id)
-            }
-        },
-        onLongClick = { if (!obscured && !selecting) menuOpen = true }
-    )
-    LibraryWorkMenu(menuOpen, { menuOpen = false }, work, actions)
+    Box {
+        Box(
+            Modifier.combinedClickable(
+                onClick = {
+                    when {
+                        selecting -> actions.onSelect(work.id)
+                        obscured -> actions.onReveal(work.id)
+                        work.hasEpub -> actions.onOpenReader(work.id)
+                        else -> actions.onOpenWork(work.id)
+                    }
+                },
+                onLongClick = { if (!obscured && !selecting) menuOpen = true }
+            )
+        ) {
+            SubjectWorkCoverCard(
+                work = work,
+                obscured = obscured,
+                downloading = false,
+                footer = if (kind == LibrarySectionKind.Finished) "Finished" else null,
+                progress = if (kind == LibrarySectionKind.ReadingNow) progress else null,
+                isSelecting = selecting,
+                isSelected = selected
+            )
+        }
+        LibraryWorkMenu(menuOpen, { menuOpen = false }, work, actions)
+    }
 }
 
 @Composable

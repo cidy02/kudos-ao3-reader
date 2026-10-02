@@ -22,8 +22,7 @@ object LibraryQuery {
         // it here, alongside the other "what's visible on Library shelves" rules
         // (privacy, mature content) already computed in this function, is where a
         // reader would expect to find it.
-        val savedItems = snapshot.items.filter { !it.work.isQueueOnlyWork }
-        val visible = savedItems.mapNotNull { item ->
+        val visible = snapshot.items.mapNotNull { item ->
             when (
                 val visibility = LibraryPrivacy.visibility(item.work, snapshot.privacy, reveal)
             ) {
@@ -32,8 +31,10 @@ object LibraryQuery {
                 LibraryPrivacyVisibility.Obscured -> LibraryDisplayItem(item, visibility)
             }
         }
-        val hiddenCount = savedItems.size - visible.size
-        val filtered = apply(visible, searchQuery, filters, sort)
+        val visibleSaved = visible.filter { !it.item.work.isQueueOnlyWork }
+        val savedItems = snapshot.items.filter { !it.work.isQueueOnlyWork }
+        val hiddenCount = savedItems.size - visibleSaved.size
+        val filtered = apply(visibleSaved, searchQuery, filters, sort)
         // Fandom chips / facet filters narrow every shelf (Apple LibraryView).
         val shelfSource = filterOnly(visible, searchQuery, filters)
         val matureCount = savedItems.count { isMatureWork(it.work) }
@@ -47,7 +48,10 @@ object LibraryQuery {
             items = filtered,
             continueReading = continueReading(shelfSource),
             readingHistory = readingHistory(shelfSource),
-            recentlyAdded = sortDisplayItems(shelfSource, LibrarySort.RecentlyAdded),
+            recentlyAdded = sortDisplayItems(
+                filterOnly(visibleSaved, searchQuery, filters),
+                LibrarySort.RecentlyAdded
+            ),
             favorites = sortDisplayItems(
                 shelfSource.filter { it.item.work.isFavorite },
                 LibrarySort.RecentlyAdded
@@ -55,7 +59,7 @@ object LibraryQuery {
             savedForLater = savedForLater(shelfSource),
             finished = finished(shelfSource),
             downloaded = downloaded(shelfSource),
-            topFandoms = topFandoms(visible),
+            topFandoms = topFandoms(visibleSaved),
             userTags = snapshot.userTags.sortedBy { it.normalizedName.lowercase() },
             // Newest first, matching iOS's
             // `@Query(sort: \WorkCollection.dateAdded, order: .reverse)`. Sorting
@@ -120,34 +124,39 @@ object LibraryQuery {
 
     fun continueReading(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
-            .filter { it.item.work.isInProgress }
+            .filter { it.item.work.isInProgress && !it.item.work.isQueueOnlyWork }
             .sortedWith(recencyComparator())
     }
 
     /**
-     * Apple `LibrarySectionKind.savedForLater`: queue members (including queue-only)
-     * plus legacy isSaved works that predate queues and aren't already queued.
+     * Apple `LibrarySectionKind.savedForLater`: native Saved for Later queue members
+     * (including queue-only) plus legacy isSaved works that predate queues and
+     * aren't already queued.
      */
     fun savedForLater(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
             .filter {
-                val w = it.item.work
-                w.isQueuedForLater || (w.isSaved && !w.isQueuedForLater)
+                val item = it.item
+                item.inSavedForLater || (item.work.isSaved && !item.work.isQueuedForLater)
             }
             .sortedWith(recencyComparator())
     }
 
-    /** Apple `LibrarySectionKind.finished`. */
+    /**
+     * Apple `LibrarySectionKind.finished`: `readingState == .finished && !isQueueOnlyWork`
+     * (LibrarySectionKind.swift:127-129). A finished work held only by a queue lives
+     * on that queue, not on this shelf.
+     */
     fun finished(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
-            .filter { it.item.work.isFinished }
+            .filter { it.item.work.isFinished && !it.item.work.isQueueOnlyWork }
             .sortedWith(lastReadComparator())
     }
 
     /** Apple `LibrarySectionKind.downloaded`: a copy on-device the reader chose to keep. */
     fun downloaded(items: List<LibraryDisplayItem>): List<LibraryDisplayItem> {
         return items
-            .filter { it.item.work.isDownloaded }
+            .filter { it.item.work.isDownloaded && !it.item.work.isQueueOnlyWork }
             .sortedWith(
                 compareByDescending<LibraryDisplayItem> { it.item.work.dateAdded }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }

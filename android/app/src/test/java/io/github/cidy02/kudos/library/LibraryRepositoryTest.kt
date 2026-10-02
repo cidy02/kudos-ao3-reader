@@ -84,9 +84,12 @@ class LibraryRepositoryAllWorksTest {
 
         val snapshot = libraryRepository.observeSnapshot().first()
 
-        assertEquals(listOf(savedId), snapshot.items.map { it.work.id })
-        assertEquals(listOf("Comfort"), snapshot.items.single().userTags.map { it.normalizedName })
-        assertEquals(listOf("Weekend"), snapshot.items.single().collections.map { it.name })
+        // iOS LibraryView queries every non-deleted work (`!$0.isPendingDeletion`) and
+        // each shelf filters it, so an unsaved work you read is in the snapshot too.
+        assertEquals(setOf(savedId, historyId), snapshot.items.map { it.work.id }.toSet())
+        val saved = snapshot.items.single { it.work.id == savedId }
+        assertEquals(listOf("Comfort"), saved.userTags.map { it.normalizedName })
+        assertEquals(listOf("Weekend"), saved.collections.map { it.name })
         assertEquals(listOf("Comfort"), snapshot.userTags.map { it.normalizedName })
         assertEquals(listOf("Weekend"), snapshot.collections.map { it.name })
     }
