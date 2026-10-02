@@ -11,7 +11,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.MaterialTheme
+import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.core.model.AppThemeSetting
+import io.github.cidy02.kudos.ui.subject.DebugDestination
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.onboarding.WelcomeScreen
 import io.github.cidy02.kudos.onboarding.SyncFolderOnboardingScreen
@@ -92,8 +94,14 @@ private suspend fun importExternalFiles(
 fun KudosApp(
     container: KudosAppContainer,
     sessionTheme: KudosThemeMode? = null,
-    skipOnboarding: Boolean = false
+    skipOnboarding: Boolean = false,
+    debugRoute: String? = null
 ) {
+    // The catalog has to open before onboarding, or the adb extra never lands
+    // on a screen. Release builds compile a stub that always returns false.
+    if (BuildConfig.DEBUG) {
+        if (DebugDestination(debugRoute)) return
+    }
     val settings by container.settingsRepository.settings
         .collectAsState(initial = KudosSettings())
     // Keep PrivacyGate's biometric flag in lockstep with Settings (iOS UserDefaults).

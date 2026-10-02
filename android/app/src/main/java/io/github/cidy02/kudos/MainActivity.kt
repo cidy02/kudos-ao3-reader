@@ -4,9 +4,11 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import androidx.fragment.app.FragmentActivity
 import io.github.cidy02.kudos.app.DemoLibrary
 import io.github.cidy02.kudos.app.KudosApp
+import io.github.cidy02.kudos.ui.subject.DebugRoutes
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.ExternalFileImport
 import java.util.Locale
@@ -16,12 +18,15 @@ import kotlinx.coroutines.runBlocking
 // FragmentActivity (not bare ComponentActivity) so Readium's Fragment-based EPUB
 // navigator can be hosted via supportFragmentManager (see ReadiumNavigatorHost).
 class MainActivity : FragmentActivity() {
+    private val debugRoute = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // "Open with Kudos" / "Share to Kudos" — the manifest advertises these
         // mime types, so something has to actually read the incoming Intent.
         ExternalFileImport.offer(intent)
+        publishDebugRoute(intent)
         val container = (application as KudosApplication).container
 
         var sessionTheme: KudosThemeMode? = null
@@ -74,7 +79,8 @@ class MainActivity : FragmentActivity() {
             KudosApp(
                 container = container,
                 sessionTheme = sessionTheme,
-                skipOnboarding = skipOnboarding
+                skipOnboarding = skipOnboarding,
+                debugRoute = debugRoute.value
             )
         }
     }
@@ -84,6 +90,7 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         ExternalFileImport.offer(intent)
+        publishDebugRoute(intent)
         if (BuildConfig.DEBUG) {
             val isDemoRequested = intent.getBooleanExtra("kudosDemoLibrary", false) ||
                 intent.getStringExtra("kudosDemoLibrary").equals("true", ignoreCase = true)
@@ -100,5 +107,9 @@ class MainActivity : FragmentActivity() {
                 recreate()
             }
         }
+    }
+
+    private fun publishDebugRoute(intent: Intent?) {
+        debugRoute.value = if (BuildConfig.DEBUG) intent?.getStringExtra(DebugRoutes.EXTRA) else null
     }
 }
