@@ -114,8 +114,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             onNew: {
                 showingNewCollection = true
             },
-            card: { CollectionCard(collection: $0).collectionCardMenu($0) },
-            newCard: { NewCollectionCard() }
+            card: { CollectionCard(collection: $0).collectionCardMenu($0) }
         )
     }
 
@@ -416,18 +415,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         return WorkLedgerListSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
-            hasItems: true,
+            hasItems: !collections.isEmpty,
             itemCount: collections.count,
             onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
-            Button {
-                showingNewCollection = true
-            } label: {
-                NewCollectionLedgerRow()
-            }
-            .buttonStyle(.plain)
-            .dashboardListRow()
-
+            // The "New collection" row is the toolbar's "+" now (owner,
+            // 2026-10-01: global actions live in the top-right chrome).
             ForEach(collections.prefix(12)) { collection in
                 NavigationLink(value: collection) {
                     CollectionLedgerRow(
@@ -440,7 +433,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .dashboardListRow()
             }
         } emptyState: {
-            EmptyView()
+            Text("Group works into collections with + above.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -525,20 +520,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         return WorkCarouselSection(
             title: kind.title,
             collapseKey: "library.\(kind.rawValue)",
-            hasItems: true,
+            hasItems: !collections.isEmpty,
             itemCount: collections.count,
             layout: dashboardLayout,
             onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
+            // The "New collection" card is the toolbar's "+" now (owner,
+            // 2026-10-01: global actions live in the top-right chrome).
             switch dashboardLayout {
             case .shelves:
-                Button {
-                    showingNewCollection = true
-                } label: {
-                    NewCollectionCard()
-                }
-                .buttonStyle(.plain)
-
                 ForEach(collections.prefix(12)) { collection in
                     NavigationLink(value: collection) {
                         CollectionCard(collection: collection)
@@ -547,13 +537,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     .buttonStyle(.plain)
                 }
             case .ledger:
-                Button {
-                    showingNewCollection = true
-                } label: {
-                    NewCollectionLedgerRow()
-                }
-                .buttonStyle(.plain)
-
                 ForEach(collections.prefix(12)) { collection in
                     NavigationLink(value: collection) {
                         CollectionLedgerRow(
@@ -566,7 +549,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
             }
         } emptyState: {
-            EmptyView()
+            Text("Group works into collections with + above.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -694,10 +679,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // WorkListMoreMenu with no items) still reserves an (empty-looking)
             // toolbar slot, which is exactly what showed a blank "..." button when
             // the Library was empty.
-            if !works.isEmpty || showsMoreMenu {
-                // Filter is the only control that stays directly visible —
-                // Privacy now lives behind "..." too (with Select and Reading Insights).
-                ActionToolbar(items: [
+            // New Collection is always there — it was the collections shelf's
+            // first card (owner, 2026-10-01). Filter is the only other control
+            // directly visible; Privacy lives behind "..." (with Select and
+            // Reading Insights).
+            ActionToolbar(items: [
+                    AnyView(ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                        showingNewCollection = true
+                    }),
                     !works.isEmpty
                         ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                 showingFilters: router.isShowing(.libraryFilters),
@@ -733,7 +722,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         })
                         : nil
                 ].compactMap { $0 })
-            }
         }
     }
 

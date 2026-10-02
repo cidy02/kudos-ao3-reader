@@ -268,9 +268,15 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         // WorkListMoreMenu's own gate widened to
                         // `!allLocalSectionWorks.isEmpty || hasMature` — Privacy now
                         // lives inside it, so it needs a home even with no local works.
-                        if !allLocalSectionWorks.isEmpty || hasMature {
-                            ActionToolbar(items: [
-                                AnyView(WorkListMoreMenu {
+                        ActionToolbar(items: [
+                            // Was the Reading Queues shelf's first card (owner,
+                            // 2026-10-01): the top chrome holds the create action.
+                            AnyView(ToolbarIconButton(title: "New Queue", systemImage: "plus") {
+                                newQueueName = ""
+                                showingNewQueue = true
+                            }),
+                            (!allLocalSectionWorks.isEmpty || hasMature)
+                                ? AnyView(WorkListMoreMenu {
                                     if hasMature {
                                         MatureRevealToggle()
                                     }
@@ -282,11 +288,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                                         }
                                     }
                                 })
-                            ].compactMap { $0 })
-                        }
+                                : nil
+                        ].compactMap { $0 })
                     }
                 }
-                // Sheet for the dashboard carousel's New Queue card.
+                // Sheet for the toolbar's New Queue (it was the carousel's card).
                 //
                 // This was a third inline copy of the same plain `Form`, which is
                 // exactly what `NewReadingQueueSheet` was extracted to replace — the
@@ -440,23 +446,17 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         let customQueues = readingQueues
             .filter { $0.kind == .custom }
             .sorted { $0.sortOrder < $1.sortOrder }
+        // The "New queue" card that led this shelf is the toolbar's "+" now
+        // (owner, 2026-10-01: global actions live in the top-right chrome).
         return WorkCarouselSection(
             title: "Reading Queues",
             collapseKey: "home.readingQueues",
-            hasItems: true,
+            hasItems: !customQueues.isEmpty,
             itemCount: customQueues.count,
             onSeeAll: !customQueues.isEmpty
                 ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
                 : nil
         ) {
-            Button {
-                newQueueName = ""
-                showingNewQueue = true
-            } label: {
-                NewReadingQueueCard()
-            }
-            .buttonStyle(.plain)
-
             ForEach(customQueues.prefix(12)) { queue in
                 NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
                     ReadingQueueCard(queue: queue)
@@ -465,7 +465,9 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .modifier(QueueCardMenu(queue: queue))
             }
         } emptyState: {
-            EmptyView()
+            Text("Plan what to read next with + above.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

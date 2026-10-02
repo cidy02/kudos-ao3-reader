@@ -9,13 +9,14 @@ import SwiftUI
 ///
 /// `destination` maps each item to the navigation value pushed when its card is
 /// tapped — identity for Collections (detail), a browser route for Reading Queues.
-struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: View, NewCard: View>: View {
+struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: View>: View {
     let title: String
     let items: [Item]
     let destination: (Item) -> Destination
+    /// The toolbar's "+" — it was the grid's first cell (owner, 2026-10-01:
+    /// global actions live in the top-right chrome).
     let onNew: () -> Void
     @ViewBuilder let card: (Item) -> Card
-    @ViewBuilder let newCard: () -> NewCard
 
     @Environment(ThemeManager.self) private var themeManager
     /// Mirrors the same scaled width the cards themselves render at (see
@@ -46,8 +47,6 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             SubjectHeaderBlock(kicker: "Library", title: title, subtitle: tally, palette: themeManager.scopePalette)
                 .padding(.top, 20)
             LazyVGrid(columns: columns, spacing: CarouselCardMetrics.compactGridSpacing) {
-                Button(action: onNew) { newCard() }
-                    .buttonStyle(.plain)
                 ForEach(items) { item in
                     NavigationLink(value: destination(item)) { card(item) }
                         .buttonStyle(.plain)
@@ -58,6 +57,11 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             .uniformWorkCardHeights()
         }
         .subjectScreenWash(palette: themeManager.scopePalette)
+        .toolbar {
+            ActionToolbar(items: [
+                AnyView(ToolbarIconButton(title: "New Collection", systemImage: "plus", action: onNew))
+            ])
+        }
         #if os(macOS)
         .navigationTitle(title)
         #endif

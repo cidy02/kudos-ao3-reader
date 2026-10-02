@@ -124,16 +124,19 @@ enum QueueQuickFilter: String, CaseIterable, Identifiable {
 struct QueueProgressStrip: View {
     let progress: ReadingQueueFacts.Progress
     let palette: SubjectPalette
+    /// 1h's page strip; 1b's queue card draws a thinner one (3.5, 2.5 apart).
+    var height: CGFloat = 5
+    var gap: CGFloat = 3
 
     var body: some View {
         Canvas { context, size in
             let count = progress.total
             guard count > 0 else { return }
-            let gap: CGFloat = count > 40 ? 0 : 3
-            let width = (size.width - gap * CGFloat(count - 1)) / CGFloat(count)
-            let radius = gap == 0 ? 0 : size.height / 2
+            let spacing: CGFloat = count > 40 ? 0 : gap
+            let width = (size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
+            let radius = spacing == 0 ? 0 : size.height / 2
             for index in 0 ..< count {
-                let rect = CGRect(x: CGFloat(index) * (width + gap), y: 0, width: width, height: size.height)
+                let rect = CGRect(x: CGFloat(index) * (width + spacing), y: 0, width: width, height: size.height)
                 context.fill(Path(roundedRect: rect, cornerRadius: radius), with: .color(palette.accent.opacity(0.22)))
                 let fill: CGFloat = index < progress.finished ? 1
                     : index < progress.finished + progress.inProgress ? 0.45 : 0
@@ -143,7 +146,7 @@ struct QueueProgressStrip: View {
                 context.fill(Path(roundedRect: filled, cornerRadius: radius), with: .color(palette.accent))
             }
         }
-        .frame(height: 5)
+        .frame(height: height)
         .clipShape(Capsule())
         .accessibilityElement()
         .accessibilityLabel(
