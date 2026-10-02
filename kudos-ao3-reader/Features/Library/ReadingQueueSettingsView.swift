@@ -154,8 +154,8 @@ struct ReadingQueueSettingsView: View {
                 detailsPanel
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 Text(
-                    "Turning offline off leaves the queue as a plain list — "
-                        + "nothing is preserved and it stops counting against storage."
+                    "When this is off, the queue keeps only your list. It doesn't download or keep copies, "
+                        + "so it uses no extra storage."
                 )
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)

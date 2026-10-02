@@ -66,10 +66,8 @@ struct ReaderPronunciationSettingsView: View {
                     .disabled(isScanning)
                 } footer: {
                     Text(scanMessage
-                        ?? "Reads from here to the end of the chapter through "
-                            + "the pronunciation stage only — no audio — and "
-                            + "lists the names it would have to guess at, so "
-                            + "they can be fixed before you hear them.")
+                        ?? "Checks the rest of this chapter without playing audio. "
+                            + "It lists names Read Aloud would guess so you can correct them first.")
                 }
             }
 
@@ -131,9 +129,8 @@ struct ReaderPronunciationSettingsView: View {
                 } footer: {
                     // Say plainly what the number is, or it reads as a score.
                     Text(
-                        "No dictionary had these, so their pronunciation was "
-                            + "guessed — usually character names. The number is "
-                            + "how often each came up. Tap one to correct it."
+                        "These words weren't in the dictionary, so Read Aloud guessed how to say "
+                            + "them. The number shows how often each appeared. Tap one to correct it."
                     )
                 }
             }
@@ -388,10 +385,10 @@ struct ReaderPronunciationEditor: View {
                     // and hears nothing has no way to work out why.
                     Text(
                         canRespell
-                            ? "Spell it out in syllables, capitalising the stressed "
-                                + "one: her-MY-oh-nee. Phonemes are also accepted."
-                            : "IPA phonemes, e.g. hɜɹmˈIəni. Install the Kokoro "
-                                + "voice pack to spell pronunciations out instead."
+                            ? "Type it in syllables and capitalise the stressed one, as in "
+                                + "her-MY-oh-nee. You can also enter phonemes directly."
+                            : "Enter phonemes such as hɜɹmˈIəni. Download the Kokoro Voice Pack "
+                                + "if you want to type pronunciations as syllables instead."
                     )
                 }
             }

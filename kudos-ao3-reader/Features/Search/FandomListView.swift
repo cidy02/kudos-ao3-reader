@@ -185,7 +185,7 @@ struct FandomListView: View {
                         ContentUnavailableView {
                             Label("No matching fandoms", systemImage: "line.3.horizontal.decrease.circle")
                         } description: {
-                            Text("No fandom in \(category.name) matches the current search and filters.")
+                            Text("No fandom in \(category.name) matches your search and filters.")
                         } actions: {
                             Button("Clear Search and Filters") {
                                 query = ""

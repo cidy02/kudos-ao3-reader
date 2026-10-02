@@ -102,9 +102,8 @@ struct ChallengeSettingsView: View {
     }
 
     private var introCard: some View {
-        Text("AO3 keeps challenges as a second object on top of the collection, with sign-ups, "
-            + "assignments and deadlines of their own. This screen is the app’s read of it — "
-            + "the fields AO3 asks for, in AO3’s order.")
+        Text("An AO3 challenge belongs to a collection and has its own sign-ups, assignments and "
+            + "deadlines. This page shows its settings in the same order as AO3.")
             .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -202,8 +201,7 @@ struct ChallengeSettingsView: View {
     }
 
     private var promptsFootnote: some View {
-        Text("A Prompt Meme has no matching and no assignments: prompts are posted to the meme "
-            + "and claimed freely, so there is nothing to match or send.")
+        Text("A Prompt Meme has no matching or assignments. People post prompts and others claim them.")
             .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -298,8 +296,8 @@ struct ChallengeSettingsView: View {
     }
 
     private var datesFootnote: some View {
-        Text("AO3 does not close the collection on a deadline — closing is manual, "
-            + "which is why collection settings keeps Closed as its own switch.")
+        Text("AO3 doesn't close the collection when a deadline passes. You close it yourself "
+            + "with the Closed setting.")
             .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
@@ -438,8 +436,8 @@ struct ChallengeSettingsView: View {
     }
 
     private var assignmentsFootnote: some View {
-        Text("Matching is AO3’s own algorithm and runs on their side. "
-            + "The app can show sign-ups and assignments and send a pinch-hit request; it cannot match.")
+        Text("AO3 matches participants. In Kudos, you can view sign-ups and assignments and ask for "
+            + "a pinch hitter, but you can't run the match.")
             .font(.system(size: typeSubtitleSize))
             .foregroundStyle(Color.secondary.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)

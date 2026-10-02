@@ -59,15 +59,15 @@ enum ReadingQueueService {
 
         var message: String {
             if previewFailed || preview == nil {
-                return "Kudos couldn't confirm the series size. Preserve the entire series only if "
-                    + "you are comfortable with a larger AO3 request, paced one work at a time."
+                return "Kudos couldn't check how many works are in this series. Continuing may download many works. "
+                    + "Kudos adds them one at a time."
             }
             if canUsePreviewForPreservation {
                 return "This series has \(knownCount) work\(knownCount == 1 ? "" : "s"). "
-                    + "Preserve the entire series?"
+                    + "Download every work in the series?"
             }
             return "This series has at least \(knownCount) work\(knownCount == 1 ? "" : "s") "
-                + "and may span multiple pages. Preserve the entire series?"
+                + "and more may be on other pages. Download every work in the series?"
         }
 
         var autoPreserveLabel: String {

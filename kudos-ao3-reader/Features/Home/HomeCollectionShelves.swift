@@ -47,7 +47,7 @@ struct HomeCollectionShelf: View {
                 .localWorkContextMenu(work: work)
             }
         } emptyState: {
-            SectionEmptyState(message: "No works in this collection yet.", systemImage: "square.stack")
+            SectionEmptyState(message: "Add works to this collection to see them here.", systemImage: "square.stack")
         }
     }
 }

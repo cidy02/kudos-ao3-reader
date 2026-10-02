@@ -219,7 +219,7 @@ struct AO3CollectionFormView: View {
         SubjectHeaderBlock(
             kicker: "AO3 Account › Collections",
             title: isNew ? "New collection" : "Edit collection",
-            subtitle: "Every row is a field on AO3's own form",
+            subtitle: "Your changes are saved to AO3",
             palette: palette,
             gutter: SubjectMetrics.accountGutter
         )
@@ -374,16 +374,13 @@ struct AO3CollectionFormView: View {
     // MARK: Notes
 
     private var nameNote: String {
-        "Collection name is used in the address — letters, numbers and underscores, and "
-            + (isNew
-                ? "AO3 locks it after creation."
-                : "AO3 has locked it, so it cannot be changed here.")
+        "The collection name is part of its web address. Use letters, numbers and underscores. "
+            + "You can't change it after creating the collection."
     }
 
     private var preferencesNote: String {
-        "These are independent on AO3, so each is its own switch rather than one "
-            + "choice. Unrevealed shows works as Mystery Work; anonymous hides creators; "
-            + "new-item emails go to the contact email."
+        "You can turn on any combination of these settings. Unrevealed shows each work as "
+            + "Mystery Work, Anonymous hides its creators, and new-item emails go to the contact email."
     }
 
     // MARK: Actions
@@ -416,7 +413,7 @@ struct AO3CollectionFormView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Collection actions")
                 .font(.system(size: 15, weight: .semibold))
-            Text("Closing stays on AO3. Deleting removes the collection, not its works.")
+            Text("Open AO3 to close this collection. Deleting the collection leaves its works on AO3.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -593,9 +590,9 @@ extension AO3CollectionFormView {
 extension AO3CollectionFormView {
     /// 1bl's alert body, verbatim in substance: what goes, what stays, and
     /// what the deletion reveals about other people's works.
-    static let deletionMessage = "The collection, its challenge settings and any gift assignments are removed "
-        + "from AO3. The works stay with their creators — but any that were unrevealed become revealed, and "
-        + "any that were anonymous show their creators. Type the collection name to confirm."
+    static let deletionMessage = "This removes the collection, its challenge settings and any gift assignments "
+        + "from AO3. The works stay with their creators. Unrevealed works become visible, and anonymous works "
+        + "show their creators. Type the collection name to confirm."
 
     static func confirmsDeletion(typed: String, name: String) -> Bool {
         let typed = typed.trimmingCharacters(in: .whitespacesAndNewlines)

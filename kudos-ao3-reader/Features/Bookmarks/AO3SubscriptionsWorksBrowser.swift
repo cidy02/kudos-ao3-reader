@@ -173,8 +173,8 @@ enum AO3SubscriptionsCopy {
         let pages = max(totalPages, 1)
         let page = min(max(currentPage, 1), pages)
         let noun = pages == 1 ? "page" : "pages"
-        return "Subscriptions live on AO3 — unsubscribing here unsubscribes there. "
-            + "Pagination follows the list: \(page) of \(pages) \(noun)."
+        return "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3. "
+            + "You're viewing \(page) of \(pages) \(noun)."
     }
 }
 

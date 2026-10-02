@@ -167,13 +167,13 @@ struct AO3MarkedForLaterScreenTests {
     @Test func footerUsesTheRealPageNumbers() {
         #expect(
             AO3MarkedForLaterCopy.footer(currentPage: 2, totalPages: 4)
-                == "Marked for Later lives on AO3 — unmarking here unmarks there. "
-                + "Pagination follows the ledger: 2 of 4 pages."
+                == "Your Marked for Later list is stored on AO3. Unmarking a work here also removes it "
+                + "from that list on AO3. You're viewing 2 of 4 pages."
         )
         #expect(
             AO3MarkedForLaterCopy.footer(currentPage: 1, totalPages: 1)
-                == "Marked for Later lives on AO3 — unmarking here unmarks there. "
-                + "Pagination follows the ledger: 1 of 1 page."
+                == "Your Marked for Later list is stored on AO3. Unmarking a work here also removes it "
+                + "from that list on AO3. You're viewing 1 of 1 page."
         )
     }
 

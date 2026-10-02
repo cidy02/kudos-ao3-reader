@@ -97,7 +97,7 @@ struct WritingScreensPresentationTests {
 
     @Test func editorRowDetailLine() {
         #expect(WritingTextEditorRow.detail(text: "", previewsText: true, emptyHint: "opens the editor.")
-            == "Empty — opens the editor.")
+            == "Empty. This opens the editor.")
         #expect(WritingTextEditorRow.detail(text: "", previewsText: true, emptyHint: nil) == nil)
         #expect(WritingTextEditorRow.detail(text: "<p>Gojo &amp; Nanami</p>", previewsText: true, emptyHint: nil)
             == "Gojo & Nanami")

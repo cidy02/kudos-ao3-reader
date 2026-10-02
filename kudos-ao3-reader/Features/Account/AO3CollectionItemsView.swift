@@ -765,7 +765,7 @@ struct AO3CollectionItemCard: View {
     }
 
     private var removalNotice: some View {
-        Text("Staged for removal from this collection. The work stays on AO3.")
+        Text("This work will leave the collection when you submit your changes. It stays on AO3.")
             .font(.system(size: actionSize))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

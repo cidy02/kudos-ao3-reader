@@ -105,7 +105,7 @@ struct ReaderSpeechAuditionHarness: View {
         } header: {
             Text("Audition Voice")
         } footer: {
-            Text("Test current speech settings without opening a book.")
+            Text("Play a sample to hear your current Read Aloud settings without opening a work.")
         }
         .onDisappear {
             controller.stop()

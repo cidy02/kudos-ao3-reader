@@ -127,8 +127,8 @@ struct AccountShortcutsEditor: View {
                     Text("On the grid")
                 } footer: {
                     if chosen.isEmpty {
-                        Text("With none chosen the grid is hidden, and every destination is "
-                            + "still in the sections below it.")
+                        Text("If you choose none, the grid is hidden. You can still find every "
+                            + "destination in the sections below.")
                     }
                 }
 

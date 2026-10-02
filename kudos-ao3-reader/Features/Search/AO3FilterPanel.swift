@@ -338,8 +338,8 @@ struct AO3FilterPanel: View {
                     // Completion is not in the sentence: every blurb carries it, and
                     // Refine narrows by it (`AO3SummaryFilter`).
                     if mode == .search {
-                        Text("Crossover status is not carried on a search result, "
-                            + "so it needs AO3 to answer the query.")
+                        Text("When you change crossover status, Kudos runs a new AO3 search because "
+                            + "each result doesn't include it.")
                     }
                 }
 
@@ -365,8 +365,8 @@ struct AO3FilterPanel: View {
                     // The footer the comment above promises (1aq). otwarchive's
                     // `WorkQuery` turns both into `revised_at` ranges and ANDs them.
                     if mode == .search {
-                        Text("Updated and the After / Before dates all apply to the same date, "
-                            + "and a work has to pass every one.")
+                        Text("The Updated, After, and Before choices all use the work's update date. "
+                            + "A work appears only if it matches every date choice.")
                     }
                 }
 
@@ -479,8 +479,8 @@ struct AO3FilterPanel: View {
 
     private var openBoundFooter: Text {
         Text(
-            "Leave a handle where it is for an open bound. "
-                + "AO3 reads one-sided ranges as “more than” and “fewer than”."
+            "Leave either end of the slider at its starting position if you don't want a minimum "
+                + "or maximum. AO3 treats one-sided ranges as “more than” or “fewer than”."
         )
     }
 
@@ -662,8 +662,7 @@ extension AO3FilterPanel {
             } header: {
                 groupLabel("Completion")
             } footer: {
-                Text("Completion is applied by AO3 rather than to the page already "
-                    + "loaded, so it counts every match across every page.")
+                Text("AO3 applies this choice to all matching works, not only the page you can see.")
             }
         }
     }

@@ -311,8 +311,8 @@ struct AccountProfileCard: View {
                 Spacer(minLength: 0)
             }
 
-            Text("Log in to use your AO3 works, bookmarks, subscriptions, "
-                + "history and inbox. Your session stays on this device.")
+            Text("Log in to see your AO3 works, bookmarks, subscriptions, "
+                + "history and inbox. Your sign-in stays on this device.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

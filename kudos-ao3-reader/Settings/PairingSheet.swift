@@ -125,10 +125,10 @@ struct TombstoneTrustSettingsSection: View {
         } header: {
             Text("Deletion signing")
         } footer: {
-            Text("Deletes are signed on this device. Other devices signed into the same Apple "
-                + "ID pick up this device's key automatically. To trust a device on a different "
-                + "account, pair it — scan its QR code or share its key. A backup file can "
-                + "never add a trusted device.")
+            Text("Kudos checks that deletions came from one of your devices. Devices using the "
+                + "same Apple account are trusted automatically; for a different account, scan "
+                + "its QR code or share its pairing code. A backup file can never mark a device "
+                + "as trusted.")
         }
         .onAppear {
             TombstoneTrustStore.add(TombstoneSigning.publicKeyHex())
@@ -291,7 +291,8 @@ struct PairingSheet: View {
     private var pairingForm: some View {
         Form {
             Section {
-                Text("Scan another device's code, or share yours, to trust its deletions.")
+                Text("Scan another device's code to trust its deletions here, or show your code "
+                    + "so it can trust deletions from this device.")
                     .foregroundStyle(.secondary)
             }
 
@@ -361,7 +362,7 @@ struct PairingSheet: View {
     private func trustedNameStep(_ hex: String) -> some View {
         Form {
             Section {
-                Text("Trusted. Name this device so you recognize it later.")
+                Text("This device is now trusted. Give it a name you will recognize later.")
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -427,7 +428,7 @@ private struct QRScannerSheet: View {
                     ContentUnavailableView(
                         "Camera Unavailable",
                         systemImage: "camera.fill",
-                        description: Text("Allow camera access in Settings, or paste the key manually instead.")
+                        description: Text("Allow camera access for Kudos in Settings, or paste the code instead.")
                     )
                 }
             }

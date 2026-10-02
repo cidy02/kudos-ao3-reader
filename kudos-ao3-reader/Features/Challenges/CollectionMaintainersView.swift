@@ -101,7 +101,7 @@ struct CollectionMaintainersView: View {
         .alert("Cannot Step Down", isPresented: $showLastOwnerAlert) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("The last owner cannot remove themselves. Appoint another owner before stepping down.")
+            Text("You're the last owner. Appoint another owner before you step down.")
         }
         .confirmationDialog(
             isCurrentUserOwner ? "Step down as owner?" : "Leave collection?",
@@ -358,8 +358,8 @@ struct CollectionMaintainersView: View {
                     .padding(.bottom, 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("AO3 sends an invitation the other account accepts; until then nothing changes. "
-                + "An owner can remove a moderator, but the last owner cannot remove themselves.")
+            Text("AO3 sends the other account an invitation. Nothing changes until they accept it. "
+                + "An owner can remove a moderator, but the last owner can't step down.")
                 .font(.system(size: captionSize))
                 .foregroundStyle(Color.secondary.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)

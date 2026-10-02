@@ -39,7 +39,7 @@ struct SaveSearchSheet: View {
                         .subjectPanel()
                         .pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
 
-                    Text("Named from what the search is of. Rename it to anything.")
+                    Text("The name comes from your search. You can change it to anything.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -49,7 +49,7 @@ struct SaveSearchSheet: View {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         if summary.isEmpty {
-                            Text("This search has no filters yet — only its name will be saved.")
+                            Text("You haven't chosen any filters, so only the name will be saved.")
                                 .font(.system(size: 12.5))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -68,7 +68,7 @@ struct SaveSearchSheet: View {
                             .subjectPanel()
                         }
 
-                        Text("Only settings you changed are saved.")
+                        Text("Only the choices you changed are saved.")
                             .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                     }

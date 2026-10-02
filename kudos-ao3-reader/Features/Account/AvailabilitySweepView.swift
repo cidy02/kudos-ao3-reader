@@ -85,34 +85,33 @@ struct AvailabilitySweepView: View {
     private var explanationSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Kudos will ask AO3 about \(pendingCount.formatted()) "
+                Text("Kudos will check \(pendingCount.formatted()) "
                     + "\(pendingCount == 1 ? "work" : "works"), one at a time.")
                     .font(.subheadline)
                 // The honest reason this is a button and not a background task.
-                Text("There is no way to ask AO3 what changed, so this is one request per "
-                    + "work. It runs slowly on purpose — about two seconds each — to stay "
-                    + "well inside what a person browsing the site would do. You can stop "
-                    + "it at any time and keep whatever it has already found.")
+                Text("AO3 can't tell Kudos what changed, so each work must be checked "
+                    + "separately. Kudos waits about two seconds between works to avoid "
+                    + "overloading AO3; you can stop anytime and keep the results so far.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if unverifiableCount > 0 {
                     Text("\(unverifiableCount.formatted()) imported "
-                        + "\(unverifiableCount == 1 ? "work is" : "works are") from other sites and "
-                        + "can't be checked — Kudos has no way to reach them.")
+                        + "\(unverifiableCount == 1 ? "work came" : "works came") from other sites, "
+                        + "so Kudos can't check them on AO3.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 if pendingCount > WorkAvailabilitySweep.defaultLimit {
-                    Text("This run will cover \(WorkAvailabilitySweep.defaultLimit) of them. "
-                        + "Run it again later for the rest — already-checked works are skipped "
-                        + "for a week.")
+                    Text("This check covers up to \(WorkAvailabilitySweep.defaultLimit) works. "
+                        + "Start it again later for the rest; works checked during the past week "
+                        + "are skipped.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .cardRow()
         } header: {
-            Text("What this does")
+            Text("Before you start")
         }
     }
 
@@ -136,8 +135,8 @@ struct AvailabilitySweepView: View {
                         + "\(summary.nowUnavailable == 1 ? "work is" : "works are") no longer on AO3",
                         systemImage: "archivebox.fill")
                         .font(.subheadline)
-                    Text("Your downloaded copies are now marked as the last copy, and are kept "
-                        + "permanently.")
+                    Text("Kudos marked them as no longer on AO3. Any downloaded copies are now "
+                        + "treated as the last copies you have and will be kept permanently.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if summary.checked > 0 {
@@ -162,7 +161,7 @@ struct AvailabilitySweepView: View {
             parts.append("Skipped \(summary.skippedRecent.formatted()) checked in the last week.")
         }
         if summary.remaining > 0 {
-            parts.append("\(summary.remaining.formatted()) still to check — run this again to continue.")
+            parts.append("\(summary.remaining.formatted()) still to check. Run this again to continue.")
         }
         return parts.joined(separator: " ")
     }
@@ -177,7 +176,7 @@ struct AvailabilitySweepView: View {
             .disabled(isRunning || pendingCount == 0)
             .cardRow()
             if pendingCount == 0 {
-                Text("Every AO3 work in your Library was checked within the last week.")
+                Text("You checked every AO3 work in your Library within the past week.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .cardRow()

@@ -300,16 +300,16 @@ struct PreservedWorkTests {
     @Test func permanentDeleteMessageListsTheRealNumbers() {
         #expect(RecentlyDeletedView.workDeletionMessage(
             hasDownload: true, place: "Ch 4", highlights: 2, bookmarks: 1
-        ) == "This removes the download, your place at chapter 4, your 2 highlights and your 1 bookmark "
-            + "from this device. This cannot be undone.")
+        ) == "Kudos removes the download, your place at chapter 4, your 2 highlights and your 1 bookmark "
+            + "from this device. You can't undo this.")
         #expect(RecentlyDeletedView.workDeletionMessage(
             hasDownload: false, place: "42%", highlights: 0, bookmarks: 0
-        ) == "This removes your place at 42% from this device. This cannot be undone.")
+        ) == "Kudos removes your place at 42% from this device. You can't undo this.")
         #expect(RecentlyDeletedView.workDeletionMessage(
             hasDownload: false, place: nil, highlights: 0, bookmarks: 0
-        ) == "Its record is removed from this device. This cannot be undone.")
+        ) == "Kudos removes this item from your device. You can't undo this.")
         #expect(RecentlyDeletedView.containerDeletionMessage(workCount: 8)
-            == "The 8 works in it stay in your Library. This cannot be undone.")
+            == "The 8 works in it stay in your Library. You can't undo this.")
     }
 
     @Test func deleteConfirmationMessageEscalatesWhenAO3Unavailable() {

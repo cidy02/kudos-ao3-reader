@@ -244,7 +244,7 @@ struct TagPickerView: View {
         } else {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Type above to search AO3 \(title.lowercased()).")
-                Text("Add a fandom and this opens on its most-used \(title.lowercased()).")
+                Text("Choose a fandom to see its most-used \(title.lowercased()) here.")
                     .font(.footnote)
             }
             .foregroundStyle(.secondary)

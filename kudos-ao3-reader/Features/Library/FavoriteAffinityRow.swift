@@ -360,8 +360,8 @@ struct FavoriteAffinityEmptyCard: View {
             return "None of these \(noun) has posted something you have not already read. "
                 + "Tap All to see them again."
         }
-        return "These are the \(noun) behind the works you have "
-            + "actually read, ranked. They fill in as you read — there is nothing to star."
+        return "These \(noun) come from works you have read and are ranked by your reading. "
+            + "You don't need to favorite them first."
     }
 }
 

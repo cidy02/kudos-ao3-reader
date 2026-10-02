@@ -45,8 +45,8 @@ struct BugReportView: View {
                     Section("Included with your report") {
                         LabeledContent("App version", value: AboutView.versionString)
                         LabeledContent("System", value: Self.systemInfo)
-                        Text("Only these app and system details are attached — no personal "
-                            + "data, and never your AO3 account.")
+                        Text("Only these app and system details are sent with your report. Nothing "
+                            + "personal is included, and never your AO3 account.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -72,8 +72,8 @@ struct BugReportView: View {
                             .font(.subheadline)
                         }
                     } footer: {
-                        Text("Please don't contact the AO3 team about Kudos — they can't "
-                            + "provide support for this app.")
+                        Text("The AO3 team can't help with Kudos, so please don't contact them "
+                            + "about it.")
                     }
                 }
                 .appThemedRows()
@@ -125,8 +125,8 @@ struct BugReportView: View {
             } header: {
                 Text("Screenshot")
             } footer: {
-                Text("GitHub can't attach images automatically — save the screenshot, "
-                    + "then drag or paste it into the issue.")
+                Text("GitHub can't add the screenshot for you. Save it, then drag or paste "
+                    + "it into the issue.")
             }
         }
         #endif

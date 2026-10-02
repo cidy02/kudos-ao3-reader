@@ -59,8 +59,8 @@ struct RecentlyDeletedView: View {
                 ContentUnavailableView {
                     Label("Recently Deleted", systemImage: "trash")
                 } description: {
-                    Text("Deleted works, collections, and reading queues stay here for "
-                        + "\(Self.windowDays) days before they're permanently removed.")
+                    Text("Items you delete stay here for \(Self.windowDays) days. "
+                        + "After that, Kudos removes them permanently.")
                 }
             } else {
                 list(entries)
@@ -109,9 +109,8 @@ struct RecentlyDeletedView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Every work, collection and reading queue here is removed from this device, "
-                + "with its download, progress and notes. The works stay on AO3. "
-                + "This cannot be undone.")
+            Text("Kudos will permanently remove every item here and any download, progress, or notes "
+                + "stored with it. The works stay on AO3. You can't undo this.")
         }
         // One alert for the whole selection, naming the count. `presenting:`
         // for the same reason as the per-item alert above.
@@ -130,8 +129,8 @@ struct RecentlyDeletedView: View {
             }
             Button("Cancel", role: .cancel) { pendingBulkDelete = [] }
         } message: { _ in
-            Text("Each one is removed from this device, with its download, progress and notes. "
-                + "The works stay on AO3. This cannot be undone.")
+            Text("Kudos will permanently remove each item and any download, progress, or notes stored with it. "
+                + "The works stay on AO3. You can't undo this.")
         }
     }
 
@@ -291,8 +290,8 @@ struct RecentlyDeletedView: View {
     /// worry it answers — "have I deleted this off AO3?" — is exactly what makes the
     /// screen frightening without it.
     private var reassurance: some View {
-        Text("Deleting here only removes the app's copy — the download, your progress and "
-            + "your notes. The work stays on AO3.")
+        Text("Deleting an item here removes only the copy in Kudos, including its download, your progress, "
+            + "and your notes. The work stays on AO3.")
             .font(.system(size: 12.5))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -371,10 +370,10 @@ struct RecentlyDeletedView: View {
         if highlights > 0 { parts.append("your \(highlights) highlight\(highlights == 1 ? "" : "s")") }
         if bookmarks > 0 { parts.append("your \(bookmarks) bookmark\(bookmarks == 1 ? "" : "s")") }
         guard let last = parts.popLast() else {
-            return "Its record is removed from this device. This cannot be undone."
+            return "Kudos removes this item from your device. You can't undo this."
         }
         let list = parts.isEmpty ? last : parts.joined(separator: ", ") + " and " + last
-        return "This removes " + list + " from this device. This cannot be undone."
+        return "Kudos removes " + list + " from this device. You can't undo this."
     }
 
     /// A collection or queue is a list of works, not the works: deleting it
@@ -385,7 +384,7 @@ struct RecentlyDeletedView: View {
         case 1: "The 1 work in it stays in your Library."
         default: "The \(workCount) works in it stay in your Library."
         }
-        return works + " This cannot be undone."
+        return works + " You can't undo this."
     }
 
     /// 1bj: "amber under a week". Amber, not red — red is the destructive
