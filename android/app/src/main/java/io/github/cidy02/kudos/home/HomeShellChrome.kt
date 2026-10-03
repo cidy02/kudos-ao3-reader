@@ -1,11 +1,11 @@
 package io.github.cidy02.kudos.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -23,9 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 
 /**
  * Home's top-right chrome, drawn by the shell so it fades with the large title.
@@ -86,21 +86,20 @@ fun HomeToolbarActions(chrome: HomeShellChrome) {
             }
         }
     } else {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            GlassCircleButton(
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ToolbarAddButton(
                 onClick = { chrome.actions.onNewQueue() },
-                accessibilityName = "New Queue",
-                diameter = SubjectMetrics.toolbarCircle
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
-            }
+                accessibilityName = "New Queue"
+            )
             if (chrome.showOverflow) {
                 var open by remember { mutableStateOf(false) }
                 Box {
-                    GlassCircleButton(
+                    ToolbarCircleButton(
                         onClick = { open = true },
-                        accessibilityName = "More",
-                        diameter = SubjectMetrics.toolbarCircle
+                        accessibilityName = "More"
                     ) {
                         Icon(Icons.Filled.MoreHoriz, contentDescription = null)
                     }
@@ -132,10 +131,9 @@ fun HomeToolbarActions(chrome: HomeShellChrome) {
 
 @Composable
 private fun PrivacyButton(revealed: Boolean, onClick: () -> Unit) {
-    GlassCircleButton(
+    ToolbarCircleButton(
         onClick = onClick,
-        accessibilityName = if (revealed) "Hide mature" else "Show mature",
-        diameter = SubjectMetrics.toolbarCircle
+        accessibilityName = if (revealed) "Hide mature" else "Show mature"
     ) {
         Icon(
             imageVector = if (revealed) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,

@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.DropdownMenu
@@ -743,6 +744,52 @@ fun GlassCircleButton(
                 )
             }
         }
+    }
+}
+
+/**
+ * 44dp glass circle used for root-tab toolbar chrome (Home, Library, Account).
+ * Matches iOS 44pt toolbar glass circle with 17sp glyph.
+ */
+@Composable
+fun ToolbarCircleButton(
+    onClick: () -> Unit,
+    accessibilityName: String,
+    modifier: Modifier = Modifier,
+    isAccented: Boolean = false,
+    palette: SubjectPalette? = null,
+    badge: String? = null,
+    content: @Composable () -> Unit
+) {
+    GlassCircleButton(
+        onClick = onClick,
+        accessibilityName = accessibilityName,
+        modifier = modifier,
+        isAccented = isAccented,
+        palette = palette,
+        badge = badge,
+        diameter = SubjectMetrics.toolbarCircle,
+        content = content
+    )
+}
+
+/**
+ * 44dp "+" action button in the toolbar, tinted with the design token accent.
+ * Matches iOS Liquid Glass "+" toolbar item.
+ */
+@Composable
+fun ToolbarAddButton(
+    onClick: () -> Unit,
+    accessibilityName: String,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    ToolbarCircleButton(
+        onClick = onClick,
+        accessibilityName = accessibilityName,
+        modifier = modifier
+    ) {
+        Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
     }
 }
 
