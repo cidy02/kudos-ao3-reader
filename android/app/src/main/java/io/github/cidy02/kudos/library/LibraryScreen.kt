@@ -883,7 +883,7 @@ private fun LibraryContent(
                 item {
                     CollectionsShelf(
                         collections = state.collections,
-                        allItems = state.items,
+                        allItems = state.collectionMembers,
                         layout = dashboardLayout,
                         collapsed = collapsed["collections"],
                         onToggleCollapsed = { collapsed.toggle("collections") },

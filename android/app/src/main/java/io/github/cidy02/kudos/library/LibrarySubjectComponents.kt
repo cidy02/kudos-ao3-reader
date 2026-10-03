@@ -1,6 +1,10 @@
 package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import io.github.cidy02.kudos.home.HomeFacts
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -62,35 +66,42 @@ fun CollectionCard(
             },
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(221.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(palette.cardWash)
-                .border(0.5.dp, palette.cardBorder, RoundedCornerShape(18.dp))
-                .padding(8.dp)
-        ) {
-            if (previewWorks.isEmpty()) {
+        val shape = RoundedCornerShape(18.dp)
+        if (collection.workIds.isEmpty()) {
+            // iOS CollectionCard.singleTile: the collection's own hue, stack glyph at white 0.6.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(221.dp)
+                    .clip(shape)
+                    .background(palette.cardWash),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     Icons.Outlined.CollectionsBookmark,
                     contentDescription = null,
-                    tint = palette.accent.copy(alpha = 0.6f),
-                    modifier = Modifier.size(42.dp).align(Alignment.Center)
+                    tint = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.size(38.dp)
                 )
-            } else {
-                val slots = previewWorks.take(4).map<SavedWork, SavedWork?> { it } +
-                    List((4 - previewWorks.size.coerceAtMost(4)).coerceAtLeast(0)) { null }
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    slots.chunked(2).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            row.forEach { work ->
-                                if (work == null) {
-                                    EmptyMiniatureWorkCover(Modifier.weight(1f), height = 100.dp)
-                                } else {
-                                    MiniatureWorkCover(work, Modifier.weight(1f), height = 100.dp)
-                                }
-                            }
+            }
+        } else {
+            // iOS StackedWorkCover: neutral glass, a 2x2 of the newest works, faint empty slots.
+            val slots: List<SavedWork?> = previewWorks.take(4) + List(4 - previewWorks.size.coerceAtMost(4)) { null }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .height(221.dp)
+                    .clip(shape)
+                    .background(tokens.glassFill(0.06))
+                    .border(0.5.dp, tokens.glassStroke(0.07), shape)
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                slots.chunked(2).forEach { row ->
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        row.forEach { work ->
+                            val cell = Modifier.weight(1f).fillMaxHeight()
+                            if (work == null) MosaicPlaceholder(cell) else MosaicWorkTile(work, cell)
                         }
                     }
                 }
@@ -196,6 +207,50 @@ private fun MiniatureWorkCover(
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+/** iOS StackedWorkCover.workCell. */
+@Composable
+private fun MosaicWorkTile(work: SavedWork, modifier: Modifier) {
+    val tokens = LocalKudosTokens.current
+    val palette = remember(work.title, work.workFandoms, tokens.theme) {
+        SubjectPalette.fromHue(HomeFacts.workHue(work.workFandoms, work.title), tokens.theme)
+    }
+    val shape = RoundedCornerShape(9.dp)
+    val dark = tokens.theme.isDarkFamily
+    val authorInk = if (dark) Color.White.copy(alpha = 0.62f) else tokens.secondaryInk
+    Column(
+        modifier
+            .clip(shape)
+            .background(palette.cardWash)
+            .border(0.5.dp, tokens.glassStroke(0.10), shape)
+            .padding(horizontal = 7.dp, vertical = 6.dp)
+    ) {
+        Box(Modifier.size(width = 14.dp, height = 2.dp).background(palette.accent, RoundedCornerShape(50)))
+        Spacer(Modifier.height(6.dp))
+        Text(
+            work.title,
+            color = if (dark) Color.White.copy(alpha = 0.92f) else tokens.primaryInk,
+            fontSize = 9.5.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.weight(1f).height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Icon(Icons.Outlined.Person, contentDescription = null, tint = authorInk, modifier = Modifier.size(8.dp))
+            Text(work.author, color = authorInk, fontSize = 8.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** iOS StackedWorkCover.placeholderCell. */
+@Composable
+private fun MosaicPlaceholder(modifier: Modifier) {
+    val tokens = LocalKudosTokens.current
+    val shape = RoundedCornerShape(9.dp)
+    Box(modifier.clip(shape).background(tokens.glassFill(0.04)).border(0.5.dp, tokens.glassStroke(0.06), shape))
 }
 
 @Composable

@@ -51,7 +51,7 @@ object HomeDashboard {
             visibleItems = library.items,
             hideMatureContent = snapshot.privacy.hideMatureContent,
             confirmBeforeDelete = snapshot.confirmBeforeDelete,
-            homeCollections = HomeCollections.shelves(snapshot.collections, library.items)
+            homeCollections = HomeCollections.shelves(snapshot.collections, library.collectionMembers)
         )
     }
 

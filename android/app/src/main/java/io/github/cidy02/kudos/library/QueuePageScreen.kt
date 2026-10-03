@@ -63,6 +63,7 @@ import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
+import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.rememberWorkDownloading
 import io.github.cidy02.kudos.works.DownloadQueue
@@ -518,9 +519,8 @@ private fun PageToolbarActions(
         TextButton(onClick = onRemove, enabled = selectedCount > 0) { Text("Remove") }
         TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
     } else {
-        ToolbarCircleButton(onClick = onAdd, accessibilityName = "Add Works") {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
-        }
+        // iOS 1h: "an accent-filled + for adding works" (.glassProminent).
+        ToolbarAddButton(onClick = onAdd, accessibilityName = "Add Works", palette = palette, prominent = true)
         FilterButton(
             filtersActive = filtersActive,
             onClick = onFilter,

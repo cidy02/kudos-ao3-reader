@@ -102,9 +102,14 @@ val LocalShellOverlayState = staticCompositionLocalOf { ShellOverlayState() }
 fun MainScaffold(
     container: KudosAppContainer,
     themeMode: KudosThemeMode,
-    onCycleTheme: () -> Unit
+    onCycleTheme: () -> Unit,
+    startRoute: String? = null
 ) {
     val navController = rememberNavController()
+    // Debug launch extra `kudosDebugRoute nav:<route>` opens a screen directly (like iOS -KudosDebugRoute).
+    androidx.compose.runtime.LaunchedEffect(startRoute) {
+        startRoute?.let { navController.navigate(it) }
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val shell = Routes.isShellRoot(currentRoute)

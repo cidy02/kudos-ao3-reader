@@ -92,9 +92,7 @@ fun CollectionsScreen(
                 reveal = reveal
             )
             collections = state.collections
-            works = state.items
-                .filter { it.privacyVisibility == LibraryPrivacyVisibility.Visible }
-                .map { it.item.work }
+            works = state.collectionMembers.map { it.item.work }
         } catch (failure: Exception) {
             error = failure.message ?: "Could not load collections."
         } finally {
