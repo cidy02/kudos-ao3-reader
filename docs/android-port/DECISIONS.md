@@ -38,3 +38,10 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   on Neon reread's light purple, probably because the toolbar sits outside the wash's `screenTint`
   environment and the label is computed against the app's red. Android follows the code's intent
   (black on a light fill). iOS follow-up queued in the Living Prompt §5. Reverse: `ToolbarAddButton`.
+- **2026-10-03 · Android's Library sorts are exactly iOS's.** The sorts are Default, Date Added,
+  Date Downloaded, Title, Author and Word Count. Android's "Last read", "Kudos" and "Manual" are
+  gone; iOS says it doesn't offer AO3 counts because they aren't kept, and it has no last-read or
+  manual sort. Default keeps each section's own order (Reading Now and History: most recently read
+  first); any other sort re-sorts the section, and lights the filter button, as iOS's
+  `hasActiveFilters` does. The sort wasn't persisted, so no stored value needed mapping.
+  Reverse: `LibrarySort.kt`.

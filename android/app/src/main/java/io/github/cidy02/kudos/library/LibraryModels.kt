@@ -45,7 +45,7 @@ data class LibraryUiState(
     val error: String? = null,
     val searchQuery: String = "",
     val filters: LibraryFilterState = LibraryFilterState(),
-    val sort: LibrarySort = LibrarySort.RecentlyAdded,
+    val sort: LibrarySort = LibrarySort.Natural,
     val totalSaved: Int = 0,
     val hiddenByPrivacyCount: Int = 0,
     val items: List<LibraryDisplayItem> = emptyList(),
@@ -92,8 +92,9 @@ data class LibraryUiState(
     val hasSavedWorks: Boolean
         get() = totalSaved > 0
 
+    /** iOS counts a non-default sort as an active filter (LibraryFilters.hasActiveFilters). */
     val hasActiveQueryOrFilters: Boolean
-        get() = searchQuery.isNotBlank() || filters.hasActiveFilters
+        get() = searchQuery.isNotBlank() || filters.hasActiveFilters || sort != LibrarySort.Natural
 
     val selectedCount: Int
         get() = selectedWorkIds.size

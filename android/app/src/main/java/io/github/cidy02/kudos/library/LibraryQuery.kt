@@ -113,7 +113,7 @@ object LibraryQuery {
         items: List<LibraryDisplayItem>,
         searchQuery: String = "",
         filters: LibraryFilterState = LibraryFilterState(),
-        sort: LibrarySort = LibrarySort.RecentlyAdded
+        sort: LibrarySort = LibrarySort.Natural
     ): List<LibraryDisplayItem> {
         val query = searchQuery.trim()
         return sortDisplayItems(
@@ -187,7 +187,7 @@ object LibraryQuery {
         sort: LibrarySort
     ): List<LibraryDisplayItem> {
         return when (sort) {
-            LibrarySort.RecentlyAdded -> items.sortedWith(
+            LibrarySort.Natural, LibrarySort.RecentlyAdded -> items.sortedWith(
                 compareByDescending<LibraryDisplayItem> { it.item.work.dateAdded }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
                     .thenBy { it.item.work.id }
@@ -199,7 +199,6 @@ object LibraryQuery {
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
                     .thenBy { it.item.work.id }
             )
-            LibrarySort.LastRead -> items.sortedWith(lastReadComparator())
             LibrarySort.Title -> items.sortedWith(
                 compareBy<LibraryDisplayItem, String>(String.CASE_INSENSITIVE_ORDER) {
                     it.item.work.title
@@ -216,12 +215,6 @@ object LibraryQuery {
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
                     .thenBy { it.item.work.id }
             )
-            LibrarySort.Kudos -> items.sortedWith(
-                compareByDescending<LibraryDisplayItem> { it.item.work.kudos }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
-                    .thenBy { it.item.work.id }
-            )
-            LibrarySort.Manual -> items
         }
     }
 
