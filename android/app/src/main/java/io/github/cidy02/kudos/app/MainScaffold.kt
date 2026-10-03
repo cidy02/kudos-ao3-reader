@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.app
 
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.animateDpAsState
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -110,16 +113,23 @@ fun MainScaffold(
     val chrome = remember { ShellChromeState() }
     val homeChrome = remember { HomeShellChrome() }
     val libraryChrome = remember { LibraryShellChrome() }
+    val pushedChrome = remember { PushedShellChrome() }
     val onHome = currentRoute == Routes.Home
     val onLibrary = currentRoute == Routes.Library
     val homeSelecting = onHome && homeChrome.hideTabBar
     val librarySelecting = onLibrary && libraryChrome.hideTabBar
     val overlay = remember { ShellOverlayState() }
-    // Home (HomeShellChrome) and Library (LibraryShellChrome/ShellOverlayState) each hide the bar in select mode.
-    val hidesTabBar = homeSelecting || librarySelecting || overlay.hidesTabBar
-    val chromeHidden = chrome.isHidden(if (shell) currentRoute else null)
+    val pushedSelecting = pushedChrome.mounted && pushedChrome.hideTabBar
+    val selectionHidesBar = homeSelecting || librarySelecting || overlay.hidesTabBar || pushedSelecting
+    val showTabBar = !Routes.hidesTabBar(currentRoute) && !selectionHidesBar
+
+    val hasSubjectHeader = pushedChrome.hasSubjectHeader ?: Routes.hasSubjectHeader(currentRoute)
+    val isPushedSubject = !shell && !reader && hasSubjectHeader
+
+    val activeRoute = if (reader) null else currentRoute
+    val chromeHidden = chrome.isHidden(activeRoute)
     val bridge = remember { ShellScrollBridge() }
-    bridge.route = if (shell) currentRoute else null
+    bridge.route = activeRoute
     bridge.density = LocalDensity.current.density
     val connection = remember(chrome) {
         object : NestedScrollConnection {
@@ -150,8 +160,17 @@ fun MainScaffold(
         reader -> insets.calculateTopPadding()
         else -> 0.dp
     }
-    val bottomPad = insets.calculateBottomPadding() + if (shell && !hidesTabBar) ShellBarClearance else 0.dp
+    val bottomPad = insets.calculateBottomPadding() + if (showTabBar) ShellBarClearance else 0.dp
     val page = if (shell) tokens.background else MaterialTheme.colorScheme.background
+
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    val performBack: () -> Unit = {
+        if (pushedChrome.onBack != null) {
+            pushedChrome.onBack?.invoke()
+        } else {
+            backDispatcher?.onBackPressed() ?: navController.popBackStack()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -160,13 +179,14 @@ fun MainScaffold(
             .nestedScroll(connection)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (!shell && !reader) {
+            if (!shell && !reader && !hasSubjectHeader) {
                 PushedTopBar(
-                    title = Routes.titleFor(currentRoute),
+                    title = pushedChrome.customTitle ?: Routes.titleFor(currentRoute),
                     showTheme = currentRoute == Routes.Settings,
                     themeMode = themeMode,
-                    onBack = { navController.popBackStack() },
-                    onCycleTheme = onCycleTheme
+                    onBack = performBack,
+                    onCycleTheme = onCycleTheme,
+                    trailingActions = pushedChrome.trailingContent
                 )
             }
             Box(
@@ -175,7 +195,10 @@ fun MainScaffold(
                     .fillMaxWidth()
                     .padding(top = topPad, bottom = bottomPad)
             ) {
-                CompositionLocalProvider(LocalShellOverlayState provides overlay) {
+                CompositionLocalProvider(
+                    LocalShellOverlayState provides overlay,
+                    LocalPushedShellChrome provides pushedChrome
+                ) {
                     AppNavHost(
                         container = container,
                         navController = navController,
@@ -278,6 +301,40 @@ fun MainScaffold(
             }
         }
 
+        if (isPushedSubject) {
+            AnimatedVisibility(
+                visible = !chromeHidden,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(start = 8.dp, end = 8.dp, top = 6.dp),
+                enter = fadeIn(ChromeMotion),
+                exit = fadeOut(ChromeMotion)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ToolbarCircleButton(
+                        onClick = performBack,
+                        accessibilityName = "Back"
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (pushedChrome.trailingContent != null) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            pushedChrome.trailingContent?.invoke(this)
+                        }
+                    }
+                }
+            }
+        }
+
         DownloadQueueBanner(
             queue = container.downloadQueue,
             modifier = Modifier
@@ -285,7 +342,7 @@ fun MainScaffold(
                 .padding(bottom = bottomPad)
         )
 
-        if (shell && !hidesTabBar) {
+        if (showTabBar) {
             FloatingTabBar(
                 currentRoute = currentRoute,
                 minimized = chromeHidden,
@@ -302,7 +359,8 @@ private fun PushedTopBar(
     showTheme: Boolean,
     themeMode: KudosThemeMode,
     onBack: () -> Unit,
-    onCycleTheme: () -> Unit
+    onCycleTheme: () -> Unit,
+    trailingActions: (@Composable RowScope.() -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     Column(
@@ -313,10 +371,10 @@ private fun PushedTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            GlassCircleButton(onClick = onBack, accessibilityName = "Back") {
+            ToolbarCircleButton(onClick = onBack, accessibilityName = "Back") {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
             }
             Text(
@@ -325,17 +383,25 @@ private fun PushedTopBar(
                     .weight(1f)
                     .padding(horizontal = 12.dp),
                 color = tokens.primaryInk,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             if (showTheme) {
-                GlassCircleButton(
+                ToolbarCircleButton(
                     onClick = onCycleTheme,
                     accessibilityName = "Theme: ${themeMode.label}"
                 ) {
                     Icon(Icons.Outlined.Palette, contentDescription = null)
+                }
+            }
+            if (trailingActions != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    trailingActions()
                 }
             }
         }

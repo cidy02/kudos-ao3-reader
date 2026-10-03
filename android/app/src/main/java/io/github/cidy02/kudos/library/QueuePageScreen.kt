@@ -3,12 +3,18 @@ package io.github.cidy02.kudos.library
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,19 +51,21 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.app.PrivacyRevealState
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
-import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
-import io.github.cidy02.kudos.ui.subject.rememberWorkDownloading
-import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+import io.github.cidy02.kudos.ui.subject.rememberWorkDownloading
+import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
@@ -152,6 +160,12 @@ fun QueuePageScreen(
         error = if (loaded.queue == null) "This reading queue no longer exists." else null
     }
 
+    BackHandler(enabled = selecting || reordering) {
+        selecting = false
+        reordering = false
+        selected = emptySet()
+    }
+
     BackHandler(enabled = onBackToOrganizer != null && !selecting && !reordering) {
         onBackToOrganizer?.invoke()
     }
@@ -191,6 +205,7 @@ fun QueuePageScreen(
         hidesMature -> "Show Mature to Reorder"
         else -> "Reorder"
     }
+
     fun activate(work: SavedWork) {
         when {
             selecting -> selected = toggleId(selected, work.id)
@@ -199,20 +214,25 @@ fun QueuePageScreen(
         }
     }
 
-    KudosRefreshBox(
-        onRefresh = {
-            reload += 1
-            val refresh = metadataRefresh
-            if (refresh != null) {
-                works.forEach { work -> runCatching { refresh.refresh(work) } }
-                reload += 1
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        hideTabBar = selecting,
+        onBack = when {
+            selecting || reordering -> {
+                {
+                    selecting = false
+                    reordering = false
+                    selected = emptySet()
+                }
             }
+            onBackToOrganizer != null -> {
+                { onBackToOrganizer.invoke() }
+            }
+            else -> null
         },
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Column(Modifier.fillMaxSize().subjectScreenWash(palette).verticalScroll(rememberScrollState())) {
-            if (current != null) {
-                PageToolbar(
+        trailingContent = if (current != null) {
+            {
+                PageToolbarActions(
                     palette = palette,
                     selecting = selecting,
                     selectedCount = selected.size,
@@ -248,6 +268,24 @@ fun QueuePageScreen(
                     onRemove = { showRemove = true },
                     onDone = { selecting = false; reordering = false; selected = emptySet() }
                 )
+            }
+        } else null
+    )
+
+    KudosRefreshBox(
+        onRefresh = {
+            reload += 1
+            val refresh = metadataRefresh
+            if (refresh != null) {
+                works.forEach { work -> runCatching { refresh.refresh(work) } }
+                reload += 1
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(Modifier.fillMaxSize().subjectScreenWash(palette).verticalScroll(rememberScrollState())) {
+            Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
+            if (current != null) {
                 SubjectHeaderBlock(
                     kicker = ReadingQueueFacts.kicker("Home"),
                     title = if (selecting) "${selected.size} selected" else current.displayName,
@@ -443,7 +481,7 @@ fun QueuePageScreen(
 }
 
 @Composable
-private fun PageToolbar(
+private fun PageToolbarActions(
     palette: io.github.cidy02.kudos.ui.subject.SubjectPalette,
     selecting: Boolean,
     selectedCount: Int,
@@ -473,28 +511,24 @@ private fun PageToolbar(
     onRemove: () -> Unit,
     onDone: () -> Unit
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (selecting) {
-            TextButton(onClick = onSelectAll) {
-                Text(if (selectedCount == total && total > 0) "Deselect All" else "Select All", color = palette.accent)
-            }
-            TextButton(onClick = onRemove, enabled = selectedCount > 0) { Text("Remove from Queue") }
-            TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
-        } else {
-            GlassCircleButton(onClick = onAdd, accessibilityName = "Add Works", diameter = SubjectMetrics.toolbarCircle) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
-            }
-            FilterButton(
-                filtersActive = filtersActive,
-                onClick = onFilter,
-                badgeCount = badge,
-                onClearFilters = onClearFilters
-            )
-            GlassCircleButton(onClick = onMenu, accessibilityName = "More", diameter = SubjectMetrics.toolbarCircle) {
+    if (selecting) {
+        TextButton(onClick = onSelectAll) {
+            Text(if (selectedCount == total && total > 0) "Deselect All" else "Select All", color = palette.accent)
+        }
+        TextButton(onClick = onRemove, enabled = selectedCount > 0) { Text("Remove") }
+        TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
+    } else {
+        ToolbarCircleButton(onClick = onAdd, accessibilityName = "Add Works") {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
+        }
+        FilterButton(
+            filtersActive = filtersActive,
+            onClick = onFilter,
+            badgeCount = badge,
+            onClearFilters = onClearFilters
+        )
+        Box {
+            ToolbarCircleButton(onClick = onMenu, accessibilityName = "More") {
                 Icon(Icons.Filled.MoreHoriz, contentDescription = null)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = onDismissMenu) {

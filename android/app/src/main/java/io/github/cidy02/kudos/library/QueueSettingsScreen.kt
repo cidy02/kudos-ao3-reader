@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.library
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,10 +9,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +25,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -95,6 +103,29 @@ fun QueueSettingsScreen(
 
     val current = queue ?: return
     val palette = queuePalette(tokens.theme, current)
+
+    BackHandler(enabled = managing) {
+        managing = false
+        reload += 1
+    }
+
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        onBack = if (managing) {
+            {
+                managing = false
+                reload += 1
+            }
+        } else null,
+        trailingContent = if (managing) {
+            {
+                TextButton(onClick = { managing = false; reload += 1 }) {
+                    Text("Done", color = palette.accent)
+                }
+            }
+        } else null
+    )
+
     if (managing) {
         QueueTagManager(
             repository = repository,
@@ -114,6 +145,7 @@ fun QueueSettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 28.dp)
     ) {
+        Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
         SubjectHeaderBlock(
             kicker = ReadingQueueFacts.kicker("Home", isDetails = true),
             title = current.displayName,

@@ -5,12 +5,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
@@ -68,6 +73,18 @@ fun CollectionsScreen(
     var newName by remember { mutableStateOf("") }
     var deleteCandidate by remember { mutableStateOf<WorkCollection?>(null) }
     val scope = rememberCoroutineScope()
+
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        trailingContent = {
+            ToolbarCircleButton(
+                onClick = { showCreate = true },
+                accessibilityName = "New Collection"
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
+            }
+        }
+    )
 
     suspend fun refresh() {
         loading = true
@@ -175,30 +192,26 @@ fun CollectionsScreen(
             .subjectScreenWash(tokens.scopePalette)
     ) {
         KudosRefreshBox(onRefresh = { refresh() }, modifier = Modifier.fillMaxSize()) {
+            val topInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(SubjectWorkCardMetrics.width),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = topInset + 56.dp,
+                    bottom = 16.dp
+                ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            GlassCircleButton(
-                                onClick = { showCreate = true },
-                                accessibilityName = "New Collection"
-                            ) {
-                                Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.accent)
-                            }
-                        }
-                        SubjectHeaderBlock(
-                            kicker = "Library",
-                            title = "Collections",
-                            subtitle = "${collections.size} ${if (collections.size == 1) "collection" else "collections"}",
-                            palette = tokens.scopePalette
-                        )
-                    }
+                    SubjectHeaderBlock(
+                        kicker = "Library",
+                        title = "Collections",
+                        subtitle = "${collections.size} ${if (collections.size == 1) "collection" else "collections"}",
+                        palette = tokens.scopePalette
+                    )
                 }
 
                 when {
