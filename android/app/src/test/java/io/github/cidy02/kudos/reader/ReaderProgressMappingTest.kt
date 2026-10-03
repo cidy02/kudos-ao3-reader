@@ -84,6 +84,24 @@ class ReaderProgressMapperTest {
     fun beginningWhenNoProgress() {
         assertEquals(ReaderRestoreTarget.Beginning, mapper.restoreTarget(work()))
     }
+
+    @Test
+    fun legacyFractionAloneOpensAtTheBeginning() {
+        val target = mapper.restoreTarget(
+            work().copy(legacyReaderProgress = 0.42, lastScrollFraction = 0.42)
+        )
+        assertEquals(ReaderRestoreTarget.Beginning, target)
+    }
+
+    @Test
+    fun spineIndexAloneOpensAtTheStartOfThatItem() {
+        val target = mapper.restoreTarget(work(spineIndex = 4, scrollFraction = 0.3))
+        assertTrue(target is ReaderRestoreTarget.Fallback)
+        target as ReaderRestoreTarget.Fallback
+        assertEquals(4, target.spineIndex)
+        // iOS locates the spine item and does not recover the intra-chapter offset.
+        assertEquals(0.0, target.scrollFraction, 0.0)
+    }
 }
 
 class ReaderProgressFallbackTest {
@@ -96,7 +114,7 @@ class ReaderProgressFallbackTest {
         assertTrue(target is ReaderRestoreTarget.Fallback)
         target as ReaderRestoreTarget.Fallback
         assertEquals(4, target.spineIndex)
-        assertEquals(0.3, target.scrollFraction, 0.0)
+        assertEquals(0.0, target.scrollFraction, 0.0)
     }
 
     @Test
@@ -137,5 +155,40 @@ class ReaderProgressPreservesLegacyFieldsTest {
         assertEquals(1.0, updated.lastScrollFraction, 0.0) // clamped to [0,1]
         assertEquals("existing", updated.readiumLocator) // not erased when no new locator
         assertFalse(updated.lastScrollFraction > 1.0)
+    }
+
+    @Test
+    fun movedLocatorRetiresTheMacPercent() {
+        val envelope = ReaderLocatorCodec.encodeEnvelope(RAW_LOCATOR)!!
+        val previous = work(locator = envelope).copy(legacyReaderProgress = 0.9)
+        val moved = ReaderLocatorCodec.encodeEnvelope(
+            """{"href":"chapter2.xhtml","locations":{"totalProgression":0.6}}"""
+        )
+        val updated = mapper.applyProgress(
+            previous,
+            ReaderProgress(spineIndex = 2, scrollFraction = 0.1, locatorJson = moved, totalProgression = 0.6),
+            now
+        )
+        assertNull(updated.legacyReaderProgress)
+        assertEquals(moved, updated.readiumLocator)
+    }
+
+    @Test
+    fun rereportedSpotKeepsTheMacPercent() {
+        val opened = ReaderLocatorCodec.encodeEnvelope(
+            """{"href":"chapter1.xhtml","locations":{"totalProgression":0.2}}"""
+        )!!
+        val previous = work(locator = opened).copy(legacyReaderProgress = 0.7)
+        val again = ReaderLocatorCodec.encodeEnvelope(
+            """{"href":"chapter1.xhtml","locations":{"totalProgression":0.2004,"progression":0.1}}"""
+        )
+        val updated = mapper.applyProgress(
+            previous,
+            ReaderProgress(0, 0.1, again, totalProgression = 0.2004),
+            now,
+            shelfStamp = false
+        )
+        assertEquals(0.7, updated.legacyReaderProgress!!, 0.0)
+        assertEquals(previous.lastReadDate, updated.lastReadDate)
     }
 }
