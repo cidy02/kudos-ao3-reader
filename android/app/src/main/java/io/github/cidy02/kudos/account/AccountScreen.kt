@@ -13,10 +13,21 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.outlined.Login
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontFamily
 import io.github.cidy02.kudos.ui.subject.AccentIconSquare
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip
+import io.github.cidy02.kudos.ui.subject.SubjectKicker
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
 import android.content.Intent
 import android.net.Uri
@@ -177,13 +188,16 @@ fun AccountScreen(
         factory = AccountViewModel.factory(
             authRepository,
             authorRepository,
-            countsCache
+            countsCache,
+            listRepository
         )
     )
 ) {
     val state by viewModel.uiState.collectAsState()
     val signedIn = state.authState is AO3AuthState.SignedIn
     val username = (state.authState as? AO3AuthState.SignedIn)?.username
+    val palette = LocalSubjectPalette.current
+    val tokens = LocalKudosTokens.current
     
     var activePage by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -220,6 +234,7 @@ fun AccountScreen(
         return
     }
 
+    // The signed-in wash is drawn by the shell (MainScaffold), so it reaches the top edge.
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 32.dp)
@@ -229,6 +244,7 @@ fun AccountScreen(
                 authState = state.authState,
                 sessionHealth = state.sessionHealth,
                 avatarUrl = state.header?.avatarUrl,
+                pseuds = state.header?.pseuds.orEmpty(),
                 onLogin = onLogin,
                 onLogout = viewModel::logout,
                 onVerifySession = viewModel::verifySession,
@@ -239,7 +255,8 @@ fun AccountScreen(
                 onOpenLocalHistory = onOpenLocalHistory,
                 onOpenLocalFavorites = onOpenLocalFavorites,
                 onOpenCollections = onOpenCollections,
-                onOpenAuthorProfile = { onOpenWeb("native:profile") }
+                onOpenAuthorProfile = { onOpenWeb("native:profile") },
+                onOpenWeb = onOpenWeb
             )
         }
 
@@ -402,6 +419,7 @@ private fun AccountProfileHeader(
     authState: AO3AuthState,
     sessionHealth: AO3SessionHealth,
     avatarUrl: String?,
+    pseuds: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorPseud> = emptyList(),
     onLogin: () -> Unit,
     onLogout: () -> Unit,
     onVerifySession: () -> Unit,
@@ -412,240 +430,215 @@ private fun AccountProfileHeader(
     onOpenLocalHistory: () -> Unit,
     onOpenLocalFavorites: () -> Unit,
     onOpenCollections: () -> Unit,
-    onOpenAuthorProfile: () -> Unit = {}
+    onOpenAuthorProfile: () -> Unit = {},
+    onOpenWeb: (String) -> Unit = {}
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-        Text(
-            text = "AO3 ACCOUNT",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+    if (authState is AO3AuthState.SignedIn) {
+        AccountSignedInHeader(
+            username = authState.username,
+            sessionHealth = sessionHealth,
+            avatarUrl = avatarUrl,
+            pseuds = pseuds,
+            onOpenAuthorProfile = onOpenAuthorProfile,
+            onVerifySession = onVerifySession,
+            onOpenSettings = onOpenSettings,
+            onOpenAbout = onOpenAbout,
+            onOpenPrivacy = onOpenPrivacy,
+            onOpenBackup = onOpenBackup,
+            onOpenLocalHistory = onOpenLocalHistory,
+            onOpenLocalFavorites = onOpenLocalFavorites,
+            onOpenCollections = onOpenCollections,
+            onLogout = onLogout,
+            onOpenWeb = onOpenWeb
         )
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            shape = MaterialTheme.shapes.large
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(modifier = Modifier.clickable(enabled = authState is AO3AuthState.SignedIn) {
-                    onOpenAuthorProfile()
-                }) {
-                    AccountAvatar(avatarUrl = avatarUrl)
-                }
+    } else {
+        AccountSignedOutHeader(
+            authState = authState,
+            sessionHealth = sessionHealth,
+            onLogin = onLogin,
+            onVerifySession = onVerifySession,
+            onOpenSettings = onOpenSettings,
+            onOpenAbout = onOpenAbout,
+            onOpenPrivacy = onOpenPrivacy,
+            onOpenBackup = onOpenBackup,
+            onOpenLocalHistory = onOpenLocalHistory,
+            onOpenLocalFavorites = onOpenLocalFavorites,
+            onOpenCollections = onOpenCollections,
+            onLogout = onLogout,
+            onOpenWeb = onOpenWeb
+        )
+    }
+}
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    when (authState) {
-                        AO3AuthState.Restoring, AO3AuthState.SigningIn -> {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Text(
-                                    text = if (authState is AO3AuthState.SigningIn) "Signing in…" else "Checking session…",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
+@Composable
+private fun AccountSignedInHeader(
+    username: String,
+    sessionHealth: AO3SessionHealth,
+    avatarUrl: String?,
+    pseuds: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorPseud>,
+    onOpenAuthorProfile: () -> Unit,
+    onVerifySession: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenLocalHistory: () -> Unit,
+    onOpenLocalFavorites: () -> Unit,
+    onOpenCollections: () -> Unit,
+    onLogout: () -> Unit,
+    onOpenWeb: (String) -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    val palette = LocalSubjectPalette.current
+    var pseudMenuOpen by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var postingPseudName by rememberSaveable { mutableStateOf<String?>(null) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SubjectMetrics.accountGutter, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AccountAvatar(
+            avatarUrl = avatarUrl,
+            onClick = onOpenAuthorProfile
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            SubjectKicker(
+                text = "AO3 Account",
+                palette = palette,
+                ruleWidth = SubjectMetrics.pageRuleWidth,
+                ruleSpacing = 7.dp
+            )
+
+            Text(
+                text = username,
+                fontSize = 27.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.5).sp,
+                color = tokens.primaryInk,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .background(
+                            when (sessionHealth) {
+                                AO3SessionHealth.Expired -> MaterialTheme.colorScheme.error
+                                AO3SessionHealth.Unreachable -> Color(0xFFFF9500)
+                                else -> Color(0xFF34C759)
+                            },
+                            CircleShape
+                        )
+                )
+                Text(
+                    text = when (sessionHealth) {
+                        AO3SessionHealth.Verifying -> "Checking session…"
+                        AO3SessionHealth.Expired -> "Session expired"
+                        AO3SessionHealth.Unreachable -> "Signed in · couldn't verify"
+                        else -> "Signed in"
+                    },
+                    fontSize = 12.sp,
+                    color = tokens.secondaryInk,
+                    maxLines = 1
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(tokens.glassFill(0.12))
+                            .clickable { pseudMenuOpen = true }
+                            .padding(horizontal = 13.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = "Posting as ${postingPseudName ?: "Account Default"}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = tokens.primaryInk,
+                            maxLines = 1
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = pseudMenuOpen,
+                        onDismissRequest = { pseudMenuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Account Default") },
+                            trailingIcon = if (postingPseudName == null) {
+                                { Icon(Icons.Filled.Check, contentDescription = null) }
+                            } else null,
+                            onClick = {
+                                postingPseudName = null
+                                pseudMenuOpen = false
                             }
-                        }
-                        is AO3AuthState.SignedIn -> {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = authState.username,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.SemiBold
-                                    ),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false)
-                                )
-                                SessionHealthIcon(sessionHealth)
-                            }
-                            Text(
-                                text = "Signed in",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.secondary
+                        )
+                        pseuds.forEach { pseud ->
+                            DropdownMenuItem(
+                                text = { Text(pseud.name) },
+                                trailingIcon = if (postingPseudName == pseud.name) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                                } else null,
+                                onClick = {
+                                    postingPseudName = pseud.name
+                                    pseudMenuOpen = false
+                                }
                             )
-                            Card(
-                                shape = androidx.compose.foundation.shape.CircleShape,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                modifier = Modifier.padding(top = 4.dp)
-                            ) {
-                                Text(
-                                    text = "Posting as Account Default",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        AO3AuthState.SignedOut -> {
-                            Text(
-                                text = "Not signed in",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            )
-                            TextButton(
-                                onClick = onLogin,
-                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
-                            ) {
-                                Text("Log In to AO3…")
-                            }
-                        }
-                        is AO3AuthState.Expired -> {
-                            Text(
-                                text = "Session expired",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            TextButton(
-                                onClick = onLogin,
-                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
-                            ) {
-                                Text("Log In Again")
-                            }
-                        }
-                        is AO3AuthState.Error -> {
-                            Text(
-                                text = "Account error",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            TextButton(
-                                onClick = onLogin,
-                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
-                            ) {
-                                Text("Log In")
-                            }
                         }
                     }
                 }
 
                 Box {
-                    IconButton(onClick = { menuOpen = true }) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 36.dp, height = 30.dp)
+                            .clip(CircleShape)
+                            .background(tokens.glassFill(0.12))
+                            .clickable { menuOpen = true },
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
                             imageVector = Icons.Outlined.MoreHoriz,
-                            contentDescription = "Account menu"
+                            contentDescription = "Account menu",
+                            tint = tokens.primaryInk,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        if (authState is AO3AuthState.SignedIn) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (sessionHealth.isChecking) "Checking…" else "Verify Session"
-                                    )
-                                },
-                                leadingIcon = {
-                                    if (sessionHealth.isChecking) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(18.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Refresh,
-                                            contentDescription = null
-                                        )
-                                    }
-                                },
-                                enabled = !sessionHealth.isChecking,
-                                onClick = {
-                                    menuOpen = false
-                                    onVerifySession()
-                                }
-                            )
-                            HorizontalDivider()
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Settings") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenSettings()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Privacy & Local Data") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenPrivacy()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Backup") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenBackup()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Local Reading History") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenLocalHistory()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Favorites") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenLocalFavorites()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Local Collections") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenCollections()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("About Kudos") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenAbout()
-                            }
-                        )
-                        if (authState is AO3AuthState.SignedIn) {
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = {
-                                    Text("Log Out", color = MaterialTheme.colorScheme.error)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Outlined.Logout,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    onLogout()
-                                }
-                            )
-                        }
-                    }
+                    AccountOverflowDropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                        isLoggedIn = true,
+                        sessionHealth = sessionHealth,
+                        username = username,
+                        onVerifySession = onVerifySession,
+                        onOpenSettings = onOpenSettings,
+                        onOpenAbout = onOpenAbout,
+                        onOpenPrivacy = onOpenPrivacy,
+                        onOpenBackup = onOpenBackup,
+                        onOpenLocalHistory = onOpenLocalHistory,
+                        onOpenLocalFavorites = onOpenLocalFavorites,
+                        onOpenCollections = onOpenCollections,
+                        onLogout = onLogout,
+                        onOpenWeb = onOpenWeb
+                    )
                 }
             }
         }
@@ -653,56 +646,272 @@ private fun AccountProfileHeader(
 }
 
 @Composable
-private fun SessionHealthIcon(health: AO3SessionHealth) {
-    when (health) {
-        AO3SessionHealth.Unknown -> {
-            Icon(
-                imageVector = Icons.Outlined.CheckCircle,
-                contentDescription = "Signed in",
-                tint = Color(0xFF34C759),
-                modifier = Modifier.size(20.dp)
+private fun AccountSignedOutHeader(
+    authState: AO3AuthState,
+    sessionHealth: AO3SessionHealth,
+    onLogin: () -> Unit,
+    onVerifySession: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenLocalHistory: () -> Unit,
+    onOpenLocalFavorites: () -> Unit,
+    onOpenCollections: () -> Unit,
+    onLogout: () -> Unit,
+    onOpenWeb: (String) -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    var menuOpen by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SubjectMetrics.accountGutter, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(13.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AccountAvatar(avatarUrl = null)
+
+            Text(
+                text = when (authState) {
+                    is AO3AuthState.Expired -> "Session expired"
+                    is AO3AuthState.Error -> "Account error"
+                    else -> "Not signed in"
+                },
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 27.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp
+                ),
+                color = if (authState is AO3AuthState.Expired || authState is AO3AuthState.Error) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    tokens.primaryInk
+                },
+                modifier = Modifier.weight(1f),
+                maxLines = 2
             )
+
+            Box {
+                Box(
+                    modifier = Modifier
+                        .size(width = 36.dp, height = 30.dp)
+                        .clip(CircleShape)
+                        .background(tokens.glassFill(0.12))
+                        .clickable { menuOpen = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreHoriz,
+                        contentDescription = "Account menu",
+                        tint = tokens.primaryInk,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                AccountOverflowDropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    isLoggedIn = false,
+                    sessionHealth = sessionHealth,
+                    username = null,
+                    onVerifySession = onVerifySession,
+                    onOpenSettings = onOpenSettings,
+                    onOpenAbout = onOpenAbout,
+                    onOpenPrivacy = onOpenPrivacy,
+                    onOpenBackup = onOpenBackup,
+                    onOpenLocalHistory = onOpenLocalHistory,
+                    onOpenLocalFavorites = onOpenLocalFavorites,
+                    onOpenCollections = onOpenCollections,
+                    onLogout = onLogout,
+                    onOpenWeb = onOpenWeb
+                )
+            }
         }
-        AO3SessionHealth.Verifying -> {
-            CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp
+
+        Text(
+            text = "Log in to see your AO3 works, bookmarks, subscriptions, history and inbox. Your sign-in stays on this device.",
+            fontSize = 13.sp,
+            color = tokens.secondaryInk,
+            lineHeight = 18.sp
+        )
+
+        Button(
+            onClick = onLogin,
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = tokens.accent,
+                contentColor = Color.White
+            ),
+            enabled = authState !is AO3AuthState.SigningIn
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Login,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = when {
+                        authState is AO3AuthState.SigningIn -> "Logging In…"
+                        authState is AO3AuthState.Expired -> "Log In Again"
+                        else -> "Log In to AO3"
+                    },
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountOverflowDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    isLoggedIn: Boolean,
+    sessionHealth: AO3SessionHealth,
+    username: String?,
+    onVerifySession: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenLocalHistory: () -> Unit,
+    onOpenLocalFavorites: () -> Unit,
+    onOpenCollections: () -> Unit,
+    onLogout: () -> Unit,
+    onOpenWeb: (String) -> Unit
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
+        if (isLoggedIn) {
+            DropdownMenuItem(
+                text = {
+                    Text(if (sessionHealth.isChecking) "Checking…" else "Verify Session")
+                },
+                leadingIcon = {
+                    if (sessionHealth.isChecking) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.Refresh,
+                            contentDescription = null
+                        )
+                    }
+                },
+                enabled = !sessionHealth.isChecking,
+                onClick = {
+                    onDismissRequest()
+                    onVerifySession()
+                }
             )
+            if (username != null) {
+                DropdownMenuItem(
+                    text = { Text("Open on AO3") },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Public, contentDescription = null)
+                    },
+                    onClick = {
+                        onDismissRequest()
+                        onOpenWeb("https://archiveofourown.org/users/$username")
+                    }
+                )
+            }
+            HorizontalDivider()
         }
-        is AO3SessionHealth.Healthy -> {
-            Icon(
-                imageVector = Icons.Outlined.Verified,
-                contentDescription = "Session verified",
-                tint = Color(0xFF34C759),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        AO3SessionHealth.Expired -> {
-            Icon(
-                imageVector = Icons.Outlined.Cancel,
-                contentDescription = "Session expired",
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        AO3SessionHealth.Unreachable -> {
-            Icon(
-                imageVector = Icons.Outlined.WifiOff,
-                contentDescription = "Network unreachable",
-                tint = Color(0xFFFF9500),
-                modifier = Modifier.size(20.dp)
+        DropdownMenuItem(
+            text = { Text("Settings") },
+            onClick = {
+                onDismissRequest()
+                onOpenSettings()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Privacy & Local Data") },
+            onClick = {
+                onDismissRequest()
+                onOpenPrivacy()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Backup") },
+            onClick = {
+                onDismissRequest()
+                onOpenBackup()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Local Reading History") },
+            onClick = {
+                onDismissRequest()
+                onOpenLocalHistory()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Favorites") },
+            onClick = {
+                onDismissRequest()
+                onOpenLocalFavorites()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Local Collections") },
+            onClick = {
+                onDismissRequest()
+                onOpenCollections()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("About Kudos") },
+            onClick = {
+                onDismissRequest()
+                onOpenAbout()
+            }
+        )
+        if (isLoggedIn) {
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = {
+                    Text("Log Out", color = MaterialTheme.colorScheme.error)
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.Logout,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    onLogout()
+                }
             )
         }
     }
 }
 
 @Composable
-private fun AccountAvatar(avatarUrl: String?) {
+private fun AccountAvatar(
+    avatarUrl: String?,
+    onClick: (() -> Unit)? = null
+) {
     Box(
         modifier = Modifier
             .size(56.dp)
-            .clip(androidx.compose.foundation.shape.CircleShape)
+            .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center
     ) {
         if (avatarUrl != null) {
             AsyncImage(
@@ -712,7 +921,9 @@ private fun AccountAvatar(avatarUrl: String?) {
                     .build(),
                 contentDescription = "Avatar",
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                error = painterResource(id = R.drawable.ic_kudos_mark),
+                placeholder = painterResource(id = R.drawable.ic_kudos_mark)
             )
         } else {
             Icon(
@@ -721,7 +932,7 @@ private fun AccountAvatar(avatarUrl: String?) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(8.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = Color.Unspecified
             )
         }
     }

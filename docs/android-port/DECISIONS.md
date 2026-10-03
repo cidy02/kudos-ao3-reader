@@ -74,3 +74,7 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   `kudos-t284`, and the idle Grok worktree's `android/app/build`. Kept `kudos-polish`,
   `kudos-polish-mac`, `kudos-device` (iPhone builds) and the Gradle caches. Free space is now
   23 GB. Not lossy: everything deleted is build output. Reverse: rebuild.
+- **2026-10-03 · Account's theme-palette button is gone (Android-only).** iOS changes theme only in
+  Settings > Appearance. The quick-cycle button was an Android-only testing aid in the shell. The
+  gear is now an accent-tinted glass circle, as on iOS. Reverse: `MainScaffold.kt` (Account
+  chrome).
