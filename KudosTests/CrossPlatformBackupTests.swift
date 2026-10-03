@@ -305,6 +305,43 @@ struct CrossPlatformBackupTests {
         ]
         annotations.forEach(context.insert)
 
+        let log = seedReadingLog(in: context, first: first, second: second, dates: dates)
+        let (session, favorites, watermark) = (log.session, log.favorites, log.watermark)
+
+        let (search, bookmark) = seedSearchAndBookmark(in: context, dates: dates)
+
+        let tombstone = seedTombstone(in: context, dates: dates)
+
+        let defaults = try seedDefaults()
+
+        try context.save()
+        return SeededLibrary(
+            container: container,
+            works: [first, second],
+            collection: collection,
+            queues: [custom, savedForLater],
+            annotations: annotations,
+            session: session,
+            favorites: favorites,
+            watermark: watermark,
+            search: search,
+            bookmark: bookmark,
+            tombstone: tombstone,
+            defaults: defaults,
+            epub: epub
+        )
+    }
+
+    private struct SeededLog {
+        let session: ReadingSession
+        let favorites: [ReadingFavorite]
+        let watermark: FandomReadWatermark
+    }
+
+    /// The reading session, one favourite of each kind, and a fandom watermark.
+    private func seedReadingLog(
+        in context: ModelContext, first: SavedWork, second: SavedWork, dates: [Date]
+    ) -> SeededLog {
         let session = ReadingSession(
             id: Self.sessionID,
             workID: first.id,
@@ -342,7 +379,11 @@ struct CrossPlatformBackupTests {
         context.insert(session)
         favorites.forEach(context.insert)
         context.insert(watermark)
+        return SeededLog(session: session, favorites: favorites, watermark: watermark)
+    }
 
+    /// The saved search and bookmark the golden carries, inserted into `context`.
+    private func seedSearchAndBookmark(in context: ModelContext, dates: [Date]) -> (SavedSearch, Bookmark) {
         let filters = AO3SearchFilters(
             query: "portable query",
             title: "Exact title",
@@ -379,7 +420,11 @@ struct CrossPlatformBackupTests {
         bookmark.dateAdded = dates[5]
         context.insert(search)
         context.insert(bookmark)
+        return (search, bookmark)
+    }
 
+    /// One signed tombstone (fixed signature: Ed25519 signing is randomized).
+    private func seedTombstone(in context: ModelContext, dates: [Date]) -> SyncTombstone {
         let tombstone = SyncTombstone(
             recordID: Self.deletedRecordID,
             recordType: .savedSearch,
@@ -397,7 +442,11 @@ struct CrossPlatformBackupTests {
         tombstone.signerPublicKey = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
         tombstone.signature = "716fe0862b2769a5a06c558de57a7772de0877dd3ba527335ae0b9d405f46652e9f1cb6387a022ba4f067b8746fc0ac9da815c8ac5eb1caa0394fd1ad5deaa0a"
         context.insert(tombstone)
+        return tombstone
+    }
 
+    /// Every backed-up setting set to a distinctive value.
+    private func seedDefaults() throws -> UserDefaults {
         let defaults = try testDefaults()
         defaults.set("paged", forKey: "readerMode")
         defaults.set(true, forKey: "readerTwoPage")
@@ -419,23 +468,7 @@ struct CrossPlatformBackupTests {
         defaults.set("#2468AC", forKey: "accentColorHex")
         defaults.set(true, forKey: "autoPreserveSmallSeriesOnSaveForLater")
         defaults.set(9, forKey: "autoPreserveSeriesWorkThreshold")
-
-        try context.save()
-        return SeededLibrary(
-            container: container,
-            works: [first, second],
-            collection: collection,
-            queues: [custom, savedForLater],
-            annotations: annotations,
-            session: session,
-            favorites: favorites,
-            watermark: watermark,
-            search: search,
-            bookmark: bookmark,
-            tombstone: tombstone,
-            defaults: defaults,
-            epub: epub
-        )
+        return defaults
     }
 
     private func restore(_ contents: KudosBackupContents) throws -> RestoredLibrary {
