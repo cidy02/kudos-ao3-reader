@@ -169,6 +169,10 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ReaderJustify] = justify }
     }
 
+    suspend fun updateKeepScreenAwake(keep: Boolean) {
+        dataStore.edit { it[Keys.KeepScreenAwake] = keep }
+    }
+
     suspend fun updateReaderMargin(margin: Double) {
         dataStore.edit { it[Keys.ReaderMargin] = margin }
     }
@@ -408,7 +412,9 @@ class SettingsRepository(
                     ?: defaults.reader.readerJustify,
                 readerTheme = ReaderThemeSetting.fromStorage(preferences[Keys.ReaderTheme]),
                 matchAppReaderTheme = preferences[Keys.MatchAppReaderTheme]
-                    ?: defaults.reader.matchAppReaderTheme
+                    ?: defaults.reader.matchAppReaderTheme,
+                keepScreenAwake = preferences[Keys.KeepScreenAwake]
+                    ?: defaults.reader.keepScreenAwake
             ),
             app = AppSettings(
                 confirmBeforeDelete = preferences[Keys.ConfirmBeforeDelete]
@@ -453,6 +459,7 @@ class SettingsRepository(
         val ReaderWordSpacing = doublePreferencesKey("readerWordSpacing")
         val ReaderMargin = doublePreferencesKey("readerMargin")
         val ReaderJustify = booleanPreferencesKey("readerJustify")
+        val KeepScreenAwake = booleanPreferencesKey("keepScreenAwake")
         val ConfirmBeforeDelete = booleanPreferencesKey("confirmBeforeDelete")
         val KeepsWorksYouRead = booleanPreferencesKey("keepsWorksYouRead")
         val HideMatureContent = booleanPreferencesKey("hideMatureContent")

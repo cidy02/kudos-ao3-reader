@@ -63,7 +63,9 @@ data class ReaderSettings(
     val readerMargin: Double = 28.0,
     val readerJustify: Boolean = false,
     val readerTheme: ReaderThemeSetting = ReaderThemeSetting.Light,
-    val matchAppReaderTheme: Boolean = true
+    val matchAppReaderTheme: Boolean = true,
+    /** iOS "keepScreenAwake" (KeepScreenAwake.swift): device-local, not in backups. */
+    val keepScreenAwake: Boolean = false
 )
 
 data class AppSettings(
