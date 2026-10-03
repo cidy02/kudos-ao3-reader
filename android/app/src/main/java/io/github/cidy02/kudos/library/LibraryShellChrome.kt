@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Visibility
@@ -31,10 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.cidy02.kudos.ui.subject.GlassCircleButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.WorkSectionLayout
-import io.github.cidy02.kudos.ui.theme.Ao3Red
 
 /**
  * Library's top-right chrome, drawn by MainScaffold on the large title's row so it matches iOS and Home.
@@ -91,7 +90,10 @@ class LibraryShellActions {
 fun LibraryToolbarActions(chrome: LibraryShellChrome) {
     val tokens = LocalKudosTokens.current
     if (chrome.hideTabBar) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = if (chrome.allSelected) "Deselect All" else "Select All",
                 color = tokens.accent,
@@ -102,7 +104,7 @@ fun LibraryToolbarActions(chrome: LibraryShellChrome) {
                     .padding(horizontal = 8.dp, vertical = 8.dp)
             )
             if (chrome.showPrivacyToggle) {
-                GlassCircleButton(
+                ToolbarCircleButton(
                     onClick = { chrome.actions.onTogglePrivacy() },
                     accessibilityName = if (chrome.revealAll) "Hide mature" else "Show mature"
                 ) {
@@ -118,13 +120,11 @@ fun LibraryToolbarActions(chrome: LibraryShellChrome) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            GlassCircleButton(
+            ToolbarAddButton(
                 onClick = { chrome.actions.onNewCollection() },
                 accessibilityName = "New Collection"
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = Ao3Red)
-            }
-            GlassCircleButton(
+            )
+            ToolbarCircleButton(
                 onClick = { chrome.actions.onShowFilters() },
                 accessibilityName = "Filter",
                 isAccented = chrome.filtersActive,
@@ -138,7 +138,7 @@ fun LibraryToolbarActions(chrome: LibraryShellChrome) {
             }
             var open by remember { mutableStateOf(false) }
             Box {
-                GlassCircleButton(onClick = { open = true }, accessibilityName = "More") {
+                ToolbarCircleButton(onClick = { open = true }, accessibilityName = "More") {
                     Icon(Icons.Filled.MoreHoriz, contentDescription = null)
                 }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {

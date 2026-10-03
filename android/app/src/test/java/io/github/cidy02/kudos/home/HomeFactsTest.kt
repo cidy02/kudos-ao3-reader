@@ -33,6 +33,12 @@ class HomeFactsTest {
     fun bareFandomTitleDropsOneTrailingDisambiguator() {
         assertEquals("Doctor Who", HomeFacts.bareFandomTitle("Doctor Who (2005)"))
         assertEquals("Doctor Who", HomeFacts.bareFandomTitle("Doctor Who"))
+        assertEquals("Star Wars", HomeFacts.bareFandomTitle("Star Wars - All Media Types"))
+        assertEquals(
+            "My Hero Academia",
+            HomeFacts.bareFandomTitle("僕のヒーローアカデミア | Boku no Hero Academia | My Hero Academia")
+        )
+        assertEquals("Star Wars", HomeFacts.primaryFandom(listOf("Star Wars - All Media Types")))
         assertEquals(
             "Ellie and Abbie (and Ellie's Dead Aunt)",
             HomeFacts.bareFandomTitle("Ellie and Abbie (and Ellie's Dead Aunt) (2020)")

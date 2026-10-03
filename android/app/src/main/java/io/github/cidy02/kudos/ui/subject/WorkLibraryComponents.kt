@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.components.coverHue
 import kotlinx.coroutines.launch
 
@@ -157,7 +158,7 @@ fun WorkLedgerRow(
         WorkProgressRing(progress, state = progressState, diameter = 44.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             SubjectKicker(
-                text = fandoms.firstOrNull { it.isNotBlank() } ?: "Library",
+                text = HomeFacts.primaryFandom(fandoms) ?: "Library",
                 palette = palette,
                 trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
                 size = 9.sp,

@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.home
 
 import androidx.compose.ui.graphics.Color
+import io.github.cidy02.kudos.browse.FandomDisplayName
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.library.LibraryDisplayItem
@@ -61,23 +62,17 @@ object HomeFacts {
     }
 
     /**
-     * A kicker name: drop one trailing ` (…)` disambiguator.
-     * "Doctor Who (2005)" → "Doctor Who". The full iOS peel table (dash tails,
-     * stacked qualifiers) is not ported; one trailing parenthetical is the case
-     * Home's kickers actually show.
+     * A kicker name: the display segment of `a | b | c`, without its
+     * disambiguation — "Doctor Who", not "Doctor Who (2005)".
+     * Port of iOS `FandomDisplayName.bareTitle`.
      */
     fun bareFandomTitle(name: String): String {
-        val trimmed = name.trim()
-        if (trimmed.length < 4 || !trimmed.endsWith(')')) return trimmed
-        val open = trimmed.lastIndexOf(" (")
-        if (open <= 0) return trimmed
-        val title = trimmed.substring(0, open).trim()
-        return title.ifEmpty { trimmed }
+        return FandomDisplayName.bareTitle(name)
     }
 
     fun primaryFandom(fandoms: List<String>): String? {
         val raw = fandoms.firstOrNull { it.isNotBlank() } ?: return null
-        val bare = bareFandomTitle(raw)
+        val bare = FandomDisplayName.bareTitle(raw)
         return bare.ifBlank { null }
     }
 
