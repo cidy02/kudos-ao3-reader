@@ -51,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
@@ -1296,7 +1297,7 @@ private fun WorkDetailContent(
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     contentDescription = null,
-                    tint = if (isFavorite) palette.accent else tokens.secondaryInk,
+                    tint = if (isFavorite) Color(0xFFFFCC00) else tokens.secondaryInk, // iOS: .yellow
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -1654,6 +1655,7 @@ private fun WorkDetailContent(
                 bookmarksCount = state.local?.bookmarks ?: state.remote?.bookmarks,
                 hitsCount = state.hitsCount,
                 palette = palette,
+                hasAO3Work = state.ao3WorkId != null,
                 onComments = onComments
             )
 

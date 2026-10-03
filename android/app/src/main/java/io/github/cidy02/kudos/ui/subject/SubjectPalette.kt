@@ -80,10 +80,11 @@ class SubjectPalette private constructor(
             return derived + WashStop(theme.cardBackdrop, 1f)
         }
 
-    val wash: Brush
-        get() = Brush.verticalGradient(
-            *washStops.map { it.location to it.color }.toTypedArray()
-        )
+    /** The wash over [height] px. Give the height: drawRect sizes a gradient by the whole canvas. */
+    fun wash(height: Float): Brush = Brush.verticalGradient(
+        *washStops.map { it.location to it.color }.toTypedArray(),
+        endY = height
+    )
 
     val cardWashColors: List<Color>
         get() {

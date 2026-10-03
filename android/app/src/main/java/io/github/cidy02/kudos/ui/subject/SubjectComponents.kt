@@ -125,7 +125,7 @@ fun Modifier.subjectScreenWash(
 ): Modifier {
     val heightPx = with(LocalDensity.current) { washHeight.toPx() }
     val backdrop = palette.theme.cardBackdrop
-    val brush = palette.wash
+    val brush = palette.wash(heightPx)
     return drawBehind {
         drawRect(backdrop)
         drawRect(brush = brush, size = Size(size.width, heightPx))

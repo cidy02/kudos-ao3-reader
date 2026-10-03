@@ -57,6 +57,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
 import io.github.cidy02.kudos.ui.subject.compactCount
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import java.text.NumberFormat
 
 /**
  * Artboard 1a's Summary section (`WorkDetailOverviewSections.swift:33`).
@@ -277,7 +278,7 @@ fun WorkDetailFactsCard(
     val hasSeries = seriesTitle.isNotBlank()
     val headlineSegments = buildList {
         if (language.isNotBlank()) add(language)
-        if (wordCount > 0) add("${HomeFacts.compactFigure(wordCount)} words")
+        if (wordCount > 0) add("${NumberFormat.getIntegerInstance().format(wordCount)} words")
     }
     val hasHeadline = headlineSegments.isNotEmpty()
     val hasPublished = publishedDate.isNotBlank()
@@ -336,6 +337,7 @@ fun WorkDetailArchiveStatsStrip(
     bookmarksCount: Int?,
     hitsCount: Int?,
     palette: SubjectPalette,
+    hasAO3Work: Boolean,
     modifier: Modifier = Modifier,
     onComments: () -> Unit = {}
 ) {
@@ -348,15 +350,19 @@ fun WorkDetailArchiveStatsStrip(
                 )
             )
         }
-        val commentsText = commentsCount?.compactCount() ?: "—"
-        add(
-            SubjectStatCell(
-                value = commentsText,
-                label = "Comments",
-                isHighlighted = true,
-                onClick = onComments
+        // iOS: only an AO3 work gets the accented, tappable cell ("—" when unknown).
+        if (hasAO3Work) {
+            add(
+                SubjectStatCell(
+                    value = commentsCount?.compactCount() ?: "—",
+                    label = "Comments",
+                    isHighlighted = true,
+                    onClick = onComments
+                )
             )
-        )
+        } else if (commentsCount != null) {
+            add(SubjectStatCell(value = commentsCount.compactCount(), label = "Comments"))
+        }
         if (bookmarksCount != null) {
             add(
                 SubjectStatCell(
