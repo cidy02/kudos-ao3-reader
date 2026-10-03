@@ -41,7 +41,9 @@ data class AO3SearchPage(
     val currentPage: Int,
     val totalPages: Int,
     /** AO3's own result-count heading, when the page carries one. */
-    val summary: AO3ResultSummary? = null
+    val summary: AO3ResultSummary? = null,
+    val bookmarkDetails: List<io.github.cidy02.kudos.network.ao3.author.AO3AuthorBookmark> = emptyList(),
+    val readingEntries: List<io.github.cidy02.kudos.network.ao3.account.AO3ReadingEntry> = emptyList()
 )
 
 /**

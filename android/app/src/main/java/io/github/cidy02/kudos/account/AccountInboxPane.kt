@@ -2,35 +2,35 @@ package io.github.cidy02.kudos.account
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
-import io.github.cidy02.kudos.core.model.KudosSettings
-import io.github.cidy02.kudos.data.preferences.SettingsRepository
-import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,31 +50,42 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentParticipantRole
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository
 import io.github.cidy02.kudos.network.ao3.comments.AO3CommentWorkAuthor
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxBulkAction
-import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxFilterField
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxItem
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
 import io.github.cidy02.kudos.ui.components.CommentAvatar
 import io.github.cidy02.kudos.ui.components.CommentParticipantBadge
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
-import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectChip
+import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
+import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
+import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 
 /**
- * Account › Activity › Inbox pane — Material 3 expression of iOS AccountInboxViews.
- *
- * Chapter position is shown as informational text only; taps always open the
- * work's general comment thread ([AO3CommentTarget.Work]), matching Android's
- * existing comments-routing gap (not a new regression).
+ * Account › Activity › Inbox pane — redesigned to match iOS AccountInboxScreen.swift and AccountInboxViews.swift.
  */
 @Composable
 fun AccountInboxPane(
@@ -93,7 +104,67 @@ fun AccountInboxPane(
     val settingsFlow = settingsRepository?.settings ?: kotlinx.coroutines.flow.flowOf(KudosSettings.Defaults)
     val settingsState = settingsFlow.collectAsState(initial = KudosSettings.Defaults)
     val settings = settingsState.value
+    val tokens = LocalKudosTokens.current
+    val palette = remember(tokens.theme) { SubjectPalette.fromHue(210.0, tokens.theme) }
+
     var pendingDelete by remember { mutableStateOf<PendingInboxDelete?>(null) }
+    var showingFilters by remember { mutableStateOf(false) }
+
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        trailingContent = {
+            if (state.isSelecting) {
+                TextButton(
+                    onClick = viewModel::toggleSelectAllCurrentPage,
+                    enabled = !state.isPerformingBulkAction && state.selectableItemIds.isNotEmpty()
+                ) {
+                    Text(
+                        text = if (state.allCurrentPageSelected) "Deselect all" else "Select all",
+                        color = palette.accent
+                    )
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (state.canFilter) {
+                        IconButton(onClick = { showingFilters = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.FilterList,
+                                contentDescription = "Filters",
+                                tint = tokens.secondaryInk
+                            )
+                        }
+                    }
+                    if (state.canSelectItems) {
+                        var showMoreMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showMoreMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.MoreVert,
+                                    contentDescription = "Select inbox items",
+                                    tint = tokens.secondaryInk
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMoreMenu,
+                                onDismissRequest = { showMoreMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Select") },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Checklist, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        viewModel.beginSelection()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
 
     DestructiveConfirmation(
         show = pendingDelete != null,
@@ -120,146 +191,252 @@ fun AccountInboxPane(
         onDismissRequest = { pendingDelete = null }
     )
 
-    when {
-        state.phase == AccountInboxUiState.Phase.Loading && state.items.isEmpty() -> {
-            LoadingStateCard("Loading Inbox")
-        }
-        state.phase == AccountInboxUiState.Phase.Failed && state.items.isEmpty() -> {
-            ErrorStateCard(
-                title = "Couldn't load your inbox",
-                message = state.actionError ?: "Something went wrong.",
-                primaryActionLabel = "Retry",
-                onPrimaryAction = viewModel::retry
-            )
-        }
-        state.phase == AccountInboxUiState.Phase.Loaded && state.items.isEmpty() -> {
-            EmptyStateCard(
-                title = "No comments yet",
-                message = "Comments on your works, and replies to comments you've " +
-                    "posted, show up here from your AO3 inbox."
-            )
-        }
-        else -> {
-            Column(
-                modifier = modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                InboxToolbar(
-                    state = state,
-                    onBeginSelection = viewModel::beginSelection,
-                    onEndSelection = viewModel::endSelection,
-                    onToggleSelectAll = viewModel::toggleSelectAllCurrentPage,
-                    onFilter = viewModel::applyFilter,
-                    onBulkMarkRead = {
-                        viewModel.startBulkAction(AO3InboxBulkAction.MarkRead)
-                    },
-                    onBulkMarkUnread = {
-                        viewModel.startBulkAction(AO3InboxBulkAction.MarkUnread)
-                    },
-                    onBulkDelete = {
-                        if (state.selectedItems.isNotEmpty()) {
-                            pendingDelete = PendingInboxDelete(state.selectedItems)
-                        }
-                    }
-                )
+    if (showingFilters && state.filterForm != null) {
+        AccountInboxFilterSheet(
+            filterForm = state.filterForm!!,
+            selectedValues = state.filterValues,
+            onApplyFilter = viewModel::applyFilter,
+            onDismiss = { showingFilters = false },
+            palette = palette
+        )
+    }
 
-                state.actionError?.let { message ->
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .subjectScreenWash(palette = palette)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+            Spacer(modifier = Modifier.height(56.dp))
+
+            val tally = buildString {
+                state.totalComments?.let { append("$it comments") }
+                state.unreadCount?.let {
+                    if (isNotEmpty()) append(" · ")
+                    append("$it unread")
+                }
+                if (state.totalPages > 1) {
+                    if (isNotEmpty()) append(" · ")
+                    append("Page ${state.currentPage} of ${state.totalPages}")
+                }
+            }.ifEmpty { null }
+
+            SubjectHeaderBlock(
+                kicker = "AO3 Account",
+                title = "Inbox",
+                subtitle = tally,
+                palette = palette,
+                gutter = SubjectMetrics.accountGutter
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Filter pills (All, Unread, Awaiting reply, Replied)
+            InboxFilterPillRail(
+                state = state,
+                palette = palette,
+                onApplyFilters = viewModel::applyFilters
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            state.actionError?.let { message ->
+                Box(modifier = Modifier.padding(horizontal = SubjectMetrics.accountGutter)) {
                     ErrorStateCard(
-                        title = "Inbox update",
+                        title = "Couldn't update Inbox",
                         message = message,
                         primaryActionLabel = "Dismiss",
                         onPrimaryAction = viewModel::clearActionError
                     )
                 }
-                state.actionNotice?.let { message ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth()
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            state.actionNotice?.let { message ->
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = SubjectMetrics.accountGutter)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = viewModel::clearActionNotice) {
+                            Text("OK")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            when {
+                state.phase == AccountInboxUiState.Phase.Loading && state.items.isEmpty() -> {
+                    Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
+                        LoadingStateCard("Loading Inbox")
+                    }
+                }
+                state.phase == AccountInboxUiState.Phase.Failed && state.items.isEmpty() -> {
+                    Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
+                        ErrorStateCard(
+                            title = "Couldn't load your inbox",
+                            message = state.actionError ?: "Something went wrong.",
+                            primaryActionLabel = "Retry",
+                            onPrimaryAction = viewModel::retry
+                        )
+                    }
+                }
+                state.phase == AccountInboxUiState.Phase.Loaded && state.items.isEmpty() -> {
+                    Box(modifier = Modifier.padding(SubjectMetrics.accountGutter)) {
+                        EmptyStateCard(
+                            title = "No comments yet",
+                            message = "Comments on your works and replies to your comments appear here from your AO3 inbox."
+                        )
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(
+                            start = SubjectMetrics.accountGutter,
+                            end = SubjectMetrics.accountGutter,
+                            bottom = if (state.isSelecting) 80.dp else 24.dp
+                        ),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(state.items, key = { it.id }) { item ->
+                            val authors = state.workAuthorsById[item.workId].orEmpty()
+                            InboxItemCard(
+                                item = item,
+                                workAuthors = authors,
+                                currentUsername = currentUsername,
+                                isSelecting = state.isSelecting,
+                                isSelected = item.id in state.selectedItemIds,
+                                isSelectable = item.id in state.selectableItemIds,
+                                isPerformingAction = state.isPerformingBulkAction,
+                                canMarkRead = viewModel.canPerformItemAction(
+                                    AO3InboxBulkAction.MarkRead,
+                                    item
+                                ),
+                                canMarkUnread = viewModel.canPerformItemAction(
+                                    AO3InboxBulkAction.MarkUnread,
+                                    item
+                                ),
+                                canDelete = viewModel.canPerformItemAction(
+                                    AO3InboxBulkAction.Delete,
+                                    item
+                                ),
+                                onOpen = {
+                                    item.workId?.let { onOpenWorkComments(it, item.id) }
+                                },
+                                onOpenChapter = {
+                                    item.workId?.let { onOpenWorkComments(it, item.id) }
+                                },
+                                onReply = {
+                                    item.workId?.let { onOpenWorkComments(it, item.id) }
+                                },
+                                onToggleSelection = { viewModel.toggleSelection(item) },
+                                onMarkRead = {
+                                    viewModel.startItemAction(AO3InboxBulkAction.MarkRead, item)
+                                },
+                                onMarkUnread = {
+                                    viewModel.startItemAction(AO3InboxBulkAction.MarkUnread, item)
+                                },
+                                onDelete = {
+                                    pendingDelete = PendingInboxDelete(listOf(item))
+                                },
+                                palette = palette
                             )
-                            TextButton(onClick = viewModel::clearActionNotice) {
-                                Text("OK")
+                        }
+
+                        if (state.totalPages > 1) {
+                            item {
+                                KudosPaginationBar(
+                                    currentPage = state.currentPage,
+                                    totalPages = state.totalPages,
+                                    onPageChange = viewModel::goToPage,
+                                    enabled = !state.isPerformingBulkAction,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
                             }
                         }
                     }
                 }
+            }
+        }
 
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    modifier = Modifier.fillMaxSize()
+        // Floating Bulk Action Bar when selecting (matches iOS AccountInboxBulkActionBar)
+        if (state.isSelecting) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                color = tokens.cardFill,
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    item {
-                        val subtitle = buildString {
-                            state.totalComments?.let { append("$it comments") }
-                            state.unreadCount?.let {
-                                if (isNotEmpty()) append(" · ")
-                                append("$it unread")
+                    TextButton(
+                        onClick = {
+                            if (state.selectedItems.isNotEmpty()) {
+                                pendingDelete = PendingInboxDelete(state.selectedItems)
                             }
-                            if (state.totalPages > 1) {
-                                if (isNotEmpty()) append(" · ")
-                                append("Page ${state.currentPage} of ${state.totalPages}")
-                            }
-                        }.ifEmpty { null }
-                        KudosSectionHeader(title = "Inbox", subtitle = subtitle)
-                    }
-
-                    items(state.items, key = { it.id }) { item ->
-                        val authors = state.workAuthorsById[item.workId].orEmpty()
-                        InboxItemCard(
-                            item = item,
-                            workAuthors = authors,
-                            currentUsername = currentUsername,
-                            isSelecting = state.isSelecting,
-                            isSelected = item.id in state.selectedItemIds,
-                            isSelectable = item.id in state.selectableItemIds,
-                            isPerformingAction = state.isPerformingBulkAction,
-                            canMarkRead = viewModel.canPerformItemAction(
-                                AO3InboxBulkAction.MarkRead,
-                                item
-                            ),
-                            canMarkUnread = viewModel.canPerformItemAction(
-                                AO3InboxBulkAction.MarkUnread,
-                                item
-                            ),
-                            canDelete = viewModel.canPerformItemAction(
-                                AO3InboxBulkAction.Delete,
-                                item
-                            ),
-                            onOpen = {
-                                item.workId?.let { onOpenWorkComments(it, item.id) }
-                            },
-                            onToggleSelection = { viewModel.toggleSelection(item) },
-                            onMarkRead = {
-                                viewModel.startItemAction(AO3InboxBulkAction.MarkRead, item)
-                            },
-                            onMarkUnread = {
-                                viewModel.startItemAction(AO3InboxBulkAction.MarkUnread, item)
-                            },
-                            onDelete = {
-                                pendingDelete = PendingInboxDelete(listOf(item))
-                            }
+                        },
+                        enabled = state.selectedItems.isNotEmpty() && !state.isPerformingBulkAction
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "Delete from inbox",
+                            tint = if (state.selectedItems.isNotEmpty()) MaterialTheme.colorScheme.error else tokens.tertiaryInk
+                        )
+                        Spacer(modifier = Modifier.size(4.dp))
+                        Text(
+                            text = "Delete",
+                            color = if (state.selectedItems.isNotEmpty()) MaterialTheme.colorScheme.error else tokens.tertiaryInk
                         )
                     }
 
-                    if (state.totalPages > 1) {
-                        item {
-                            InboxPaginationControls(
-                                page = state.currentPage,
-                                totalPages = state.totalPages,
-                                enabled = !state.isPerformingBulkAction,
-                                onLoadPage = viewModel::goToPage
-                            )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = {
+                                viewModel.startBulkAction(AO3InboxBulkAction.MarkRead)
+                            },
+                            enabled = state.selectedItems.isNotEmpty() && !state.isPerformingBulkAction
+                        ) {
+                            Icon(Icons.Outlined.MarkEmailRead, contentDescription = "Mark read", tint = palette.accent)
+                            Spacer(modifier = Modifier.size(4.dp))
+                            Text("Mark Read", color = palette.accent)
                         }
+                        TextButton(
+                            onClick = {
+                                viewModel.startBulkAction(AO3InboxBulkAction.MarkUnread)
+                            },
+                            enabled = state.selectedItems.isNotEmpty() && !state.isPerformingBulkAction
+                        ) {
+                            Icon(Icons.Outlined.MarkEmailUnread, contentDescription = "Mark unread", tint = palette.accent)
+                            Spacer(modifier = Modifier.size(4.dp))
+                            Text("Mark Unread", color = palette.accent)
+                        }
+                    }
+
+                    TextButton(
+                        onClick = viewModel::endSelection,
+                        enabled = !state.isPerformingBulkAction
+                    ) {
+                        Text("Done", color = palette.accent, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -270,134 +447,67 @@ fun AccountInboxPane(
 private data class PendingInboxDelete(val items: List<AO3InboxItem>)
 
 @Composable
-private fun InboxToolbar(
+private fun InboxFilterPillRail(
     state: AccountInboxUiState,
-    onBeginSelection: () -> Unit,
-    onEndSelection: () -> Unit,
-    onToggleSelectAll: () -> Unit,
-    onFilter: (String, String) -> Unit,
-    onBulkMarkRead: () -> Unit,
-    onBulkMarkUnread: () -> Unit,
-    onBulkDelete: () -> Unit
+    palette: SubjectPalette,
+    onApplyFilters: (Map<String, String>) -> Unit
 ) {
-    if (state.isSelecting) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(
-                onClick = onToggleSelectAll,
-                enabled = !state.isPerformingBulkAction && state.selectableItemIds.isNotEmpty()
-            ) {
-                Text(if (state.allCurrentPageSelected) "Deselect all" else "Select all")
-            }
-            Spacer(Modifier.weight(1f))
-            IconButton(
-                onClick = onBulkDelete,
-                enabled = state.selectedItems.isNotEmpty() && !state.isPerformingBulkAction
-            ) {
-                Icon(Icons.Outlined.Delete, contentDescription = "Delete from inbox")
-            }
-            IconButton(
-                onClick = onBulkMarkRead,
-                enabled = state.selectedItems.isNotEmpty() && !state.isPerformingBulkAction
-            ) {
-                Icon(Icons.Outlined.MarkEmailRead, contentDescription = "Mark read")
-            }
-            IconButton(
-                onClick = onBulkMarkUnread,
-                enabled = state.selectedItems.isNotEmpty() && !state.isPerformingBulkAction
-            ) {
-                Icon(Icons.Outlined.MarkEmailUnread, contentDescription = "Mark unread")
-            }
-            TextButton(
-                onClick = onEndSelection,
-                enabled = !state.isPerformingBulkAction
-            ) {
-                Text("Done")
-            }
-        }
-    } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (state.canFilter) {
-                InboxFilterMenu(
-                    fields = state.filterForm?.fields.orEmpty(),
-                    selectedValues = state.filterValues,
-                    enabled = !state.isPerformingBulkAction,
-                    onSelect = onFilter
-                )
-            }
-            if (state.canSelectItems) {
-                IconButton(
-                    onClick = onBeginSelection,
-                    enabled = !state.isPerformingBulkAction
-                ) {
-                    Icon(Icons.Outlined.Checklist, contentDescription = "Select inbox items")
-                }
-            }
-        }
-    }
-}
+    val currentRead = state.filterValues["filters[read]"] ?: "all"
+    val currentReplied = state.filterValues["filters[replied_to]"] ?: "all"
 
-@Composable
-private fun InboxFilterMenu(
-    fields: List<AO3InboxFilterField>,
-    selectedValues: Map<String, String>,
-    enabled: Boolean,
-    onSelect: (String, String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(
-            onClick = { expanded = true },
-            enabled = enabled
-        ) {
-            Icon(
-                Icons.Outlined.FilterList,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text("Filters")
-            Icon(Icons.Outlined.ExpandMore, contentDescription = null)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            fields.forEach { field ->
-                Text(
-                    text = field.title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-                field.options.forEach { option ->
-                    val selected = (selectedValues[field.name] ?: field.selectedValue) ==
-                        option.value
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(option.label, modifier = Modifier.weight(1f))
-                                if (selected) {
-                                    Icon(
-                                        Icons.Outlined.Check,
-                                        contentDescription = "Selected",
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        },
-                        onClick = {
-                            expanded = false
-                            onSelect(field.name, option.value)
-                        }
-                    )
-                }
+    val isAll = currentRead == "all" && currentReplied == "all"
+    val isUnread = currentRead == "false"
+    val isAwaitingReply = currentReplied == "false"
+    val isReplied = currentReplied == "true"
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = SubjectMetrics.accountGutter),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SubjectChip(
+            text = "All",
+            style = SubjectChipStyle.Pill(isSelected = isAll),
+            palette = palette,
+            modifier = Modifier.clickable {
+                val map = state.filterValues.toMutableMap()
+                map["filters[read]"] = "all"
+                map["filters[replied_to]"] = "all"
+                onApplyFilters(map)
             }
-        }
+        )
+        SubjectChip(
+            text = "Unread",
+            style = SubjectChipStyle.Pill(isSelected = isUnread),
+            palette = palette,
+            modifier = Modifier.clickable {
+                val map = state.filterValues.toMutableMap()
+                map["filters[read]"] = "false"
+                onApplyFilters(map)
+            }
+        )
+        SubjectChip(
+            text = "Awaiting reply",
+            style = SubjectChipStyle.Pill(isSelected = isAwaitingReply),
+            palette = palette,
+            modifier = Modifier.clickable {
+                val map = state.filterValues.toMutableMap()
+                map["filters[replied_to]"] = "false"
+                onApplyFilters(map)
+            }
+        )
+        SubjectChip(
+            text = "Replied",
+            style = SubjectChipStyle.Pill(isSelected = isReplied),
+            palette = palette,
+            modifier = Modifier.clickable {
+                val map = state.filterValues.toMutableMap()
+                map["filters[replied_to]"] = "true"
+                onApplyFilters(map)
+            }
+        )
     }
 }
 
@@ -414,23 +524,25 @@ private fun InboxItemCard(
     canMarkUnread: Boolean,
     canDelete: Boolean,
     onOpen: () -> Unit,
+    onOpenChapter: () -> Unit,
+    onReply: () -> Unit,
     onToggleSelection: () -> Unit,
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    palette: SubjectPalette
 ) {
+    val tokens = LocalKudosTokens.current
     val role = item.participantRole(
         workAuthors = workAuthors.map { it.displayName },
         workAuthorUsernames = workAuthors.mapNotNull { it.username },
         currentUsername = currentUsername
     )
 
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .subjectPanel()
             .then(
                 if (isSelecting) {
                     Modifier.clickable(enabled = isSelectable, onClick = onToggleSelection)
@@ -440,18 +552,18 @@ private fun InboxItemCard(
                     Modifier
                 }
             )
+            .padding(14.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (isSelecting) {
                 Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onToggleSelection() },
-                    enabled = isSelectable && !isPerformingAction
+                    enabled = isSelectable && !isPerformingAction,
+                    modifier = Modifier.align(Alignment.CenterVertically)
                 )
             }
 
@@ -460,152 +572,152 @@ private fun InboxItemCard(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        .background(tokens.glassFill(0.2)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("?", style = MaterialTheme.typography.labelLarge)
+                    Text("?", color = tokens.secondaryInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
                 Text(
                     text = "A comment here is unavailable",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = tokens.secondaryInk,
+                    fontSize = 14.sp,
                     modifier = Modifier
                         .weight(1f)
                         .align(Alignment.CenterVertically)
                 )
             } else {
-            CommentAvatar(
-                avatarUrl = item.avatarUrl,
-                isGuest = item.isGuest
-            )
+                CommentAvatar(
+                    avatarUrl = item.avatarUrl,
+                    isGuest = item.isGuest,
+                    size = 40.dp
+                )
 
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    if (item.isUnread) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (item.isUnread) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(palette.accent)
+                            )
+                        }
+                        Text(
+                            text = item.commenterName,
+                            color = tokens.primaryInk,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
-                    }
-                    Text(
-                        text = item.commenterName,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    if (role != AO3CommentParticipantRole.User || workAuthors.isNotEmpty()) {
-                        // Show badge when enrichment resolved Author/Me/Guest, or
-                        // always for Guest/anonymous; skip neutral User when
-                        // authors aren't loaded yet so we don't flash User→Author.
-                        if (role != AO3CommentParticipantRole.User ||
-                            item.isGuest ||
-                            item.isAnonymousCreator ||
-                            workAuthors.isNotEmpty() ||
-                            item.commenterUsername?.equals(
-                                currentUsername,
-                                ignoreCase = true
-                            ) == true
-                        ) {
-                            CommentParticipantBadge(role = role)
+                        if (role != AO3CommentParticipantRole.User || workAuthors.isNotEmpty()) {
+                            if (role != AO3CommentParticipantRole.User ||
+                                item.isGuest ||
+                                item.isAnonymousCreator ||
+                                workAuthors.isNotEmpty() ||
+                                item.commenterUsername?.equals(currentUsername, ignoreCase = true) == true
+                            ) {
+                                CommentParticipantBadge(role = role)
+                            }
+                        }
+                        if (item.postedAgo.isNotEmpty()) {
+                            Text(
+                                text = item.postedAgo,
+                                color = tokens.tertiaryInk,
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
                         }
                     }
-                    if (item.postedAgo.isNotEmpty()) {
-                        Text(
-                            text = item.postedAgo,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-                }
 
-                if (item.subjectTitle.isNotEmpty()) {
-                    val chapter = item.chapterIndicatorTitle
-                    if (chapter != null) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 2.dp)
-                        ) {
-                            Text(
-                                text = "on",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                    // Context on work / chapter
+                    if (item.subjectTitle.isNotEmpty()) {
+                        val chapter = item.chapterIndicatorTitle
+                        if (chapter != null) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = chapter,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    text = "on",
+                                    color = tokens.secondaryInk,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = "$chapter of ${item.workTitle}",
+                                    color = tokens.secondaryInk,
+                                    fontSize = 12.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
+                        } else {
                             Text(
-                                text = "of ${item.workTitle}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = "on ${item.subjectTitle}",
+                                color = tokens.secondaryInk,
+                                fontSize = 12.sp,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                    } else {
+                    }
+
+                    // Excerpt
+                    if (item.excerpt.isNotEmpty()) {
                         Text(
-                            text = "on ${item.subjectTitle}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
+                            text = item.excerpt,
+                            color = tokens.primaryInk,
+                            fontSize = 14.sp,
+                            maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
-                }
 
-                if (item.excerpt.isNotEmpty()) {
-                    Text(
-                        text = item.excerpt,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (item.isReplied) {
-                        InboxRepliedBadge()
-                    }
-                    Spacer(Modifier.weight(1f))
-                    if (!isSelecting) {
-                        InboxItemOverflowMenu(
-                            item = item,
-                            enabled = !isPerformingAction,
-                            canMarkRead = canMarkRead,
-                            canMarkUnread = canMarkUnread,
-                            canDelete = canDelete,
-                            onOpen = onOpen,
-                            onMarkRead = onMarkRead,
-                            onMarkUnread = onMarkUnread,
-                            onDelete = onDelete
-                        )
+                    // Bottom actions row: Replied badge, Reply, Chapter comments, Menu
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (item.isReplied) {
+                            InboxRepliedBadge()
+                        }
+                        Spacer(Modifier.weight(1f))
+                        if (!isSelecting) {
+                            TextButton(onClick = onReply) {
+                                Text("Reply", fontSize = 12.sp, color = palette.accent)
+                            }
+                            if (item.chapterIndicatorTitle != null) {
+                                TextButton(onClick = onOpenChapter) {
+                                    Text("Chapter Comments", fontSize = 12.sp, color = tokens.secondaryInk)
+                                }
+                            }
+                            InboxItemOverflowMenu(
+                                item = item,
+                                enabled = !isPerformingAction,
+                                canMarkRead = canMarkRead,
+                                canMarkUnread = canMarkUnread,
+                                canDelete = canDelete,
+                                onOpen = onOpen,
+                                onOpenChapter = onOpenChapter,
+                                onMarkRead = onMarkRead,
+                                onMarkUnread = onMarkUnread,
+                                onDelete = onDelete
+                            )
+                        }
                     }
                 }
             }
-            } // end available item
         }
     }
 }
@@ -613,13 +725,15 @@ private fun InboxItemCard(
 @Composable
 private fun InboxRepliedBadge() {
     Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+        shape = RoundedCornerShape(percent = 50),
+        color = Color(0xFF2E7D32).copy(alpha = 0.12f),
+        contentColor = Color(0xFF2E7D32)
     ) {
         Text(
             text = "Replied",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = Color(0xFF2E7D32),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
         )
     }
@@ -633,16 +747,24 @@ private fun InboxItemOverflowMenu(
     canMarkUnread: Boolean,
     canDelete: Boolean,
     onOpen: () -> Unit,
+    onOpenChapter: () -> Unit,
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
     onDelete: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+
     Box {
-        IconButton(onClick = { expanded = true }, enabled = enabled) {
+        IconButton(
+            onClick = { expanded = true },
+            enabled = enabled,
+            modifier = Modifier.size(28.dp)
+        ) {
             Icon(
                 Icons.Outlined.MoreVert,
-                contentDescription = "More actions for ${item.commenterName}'s inbox comment"
+                contentDescription = "More actions for ${item.commenterName}'s inbox comment",
+                modifier = Modifier.size(18.dp)
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -652,6 +774,26 @@ private fun InboxItemOverflowMenu(
                     onClick = {
                         expanded = false
                         onOpen()
+                    }
+                )
+                if (item.chapterIndicatorTitle != null) {
+                    DropdownMenuItem(
+                        text = { Text("Chapter Comments") },
+                        onClick = {
+                            expanded = false
+                            onOpenChapter()
+                        }
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("Copy Link") },
+                    onClick = {
+                        expanded = false
+                        item.workId?.let { workId ->
+                            clipboardManager.setText(
+                                AnnotatedString("https://archiveofourown.org/comments/${item.id}")
+                            )
+                        }
                     }
                 )
             }
@@ -677,7 +819,7 @@ private fun InboxItemOverflowMenu(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            "Delete From Inbox",
+                            text = "Delete From Inbox",
                             color = MaterialTheme.colorScheme.error
                         )
                     },
@@ -687,42 +829,6 @@ private fun InboxItemOverflowMenu(
                     }
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun InboxPaginationControls(
-    page: Int,
-    totalPages: Int,
-    enabled: Boolean,
-    onLoadPage: (Int) -> Unit
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        OutlinedButton(
-            enabled = enabled && page > 1,
-            onClick = { onLoadPage(page - 1) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Previous")
-        }
-        Text(
-            text = "Page $page of $totalPages",
-            modifier = Modifier
-                .weight(1f)
-                .padding(top = 12.dp),
-            style = MaterialTheme.typography.labelLarge,
-            textAlign = TextAlign.Center
-        )
-        OutlinedButton(
-            enabled = enabled && page < totalPages,
-            onClick = { onLoadPage(page + 1) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Next")
         }
     }
 }

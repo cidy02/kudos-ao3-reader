@@ -26,7 +26,7 @@ import io.github.cidy02.kudos.account.AO3CollectionsScreen
 import io.github.cidy02.kudos.account.AO3DashboardScreen
 import io.github.cidy02.kudos.account.AO3PreferencesScreen
 import io.github.cidy02.kudos.account.AboutScreen
-import io.github.cidy02.kudos.account.AccountListScreen
+import io.github.cidy02.kudos.account.AccountWorksListScreen
 import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.account.AccountScreen
 import io.github.cidy02.kudos.account.AccountViewModel
@@ -595,7 +595,7 @@ fun AppNavHost(
             if (type == null) {
                 navController.popBackStack()
             } else {
-                AccountListScreen(
+                AccountWorksListScreen(
                     type = type,
                     repository = container.accountListRepository,
                     workRepository = container.workRepository,
