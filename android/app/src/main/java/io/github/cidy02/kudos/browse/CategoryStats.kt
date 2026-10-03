@@ -29,48 +29,142 @@ import kotlin.math.pow
 data class CategoryStats(
     /** null while the category's full fandom list is still loading. */
     val fandomCount: Int? = null,
+    /** Fandoms once disambiguations are merged. The counts line prefers this. */
+    val familyCount: Int? = null,
     val workCount: Int? = null,
+    /** True when [workCount] sums per-tag counts and can double-count a work. */
+    val isApproximateWorkCount: Boolean = false,
+    /** Kept copies on this device, not works fetched only to read. */
     val savedCount: Int = 0,
-    val recentFandoms: List<String> = emptyList()
+    val recentFandoms: List<String> = emptyList(),
+    /** Biggest families, at most twelve. A chip searches [ClusterFandom.names]. */
+    val clusterFandoms: List<ClusterFandom> = emptyList()
+) {
+    data class ClusterFandom(
+        val id: String,
+        val names: List<String>,
+        val title: String,
+        val workCount: Int,
+        val isApproximate: Boolean
+    )
+}
+
+/** One category's inputs for the off-main stats pass. */
+data class CategoryStatsInput(
+    val id: String,
+    val fandoms: List<AO3Fandom>,
+    val hasFullList: Boolean
 )
 
 object CategoryStatsCalculator {
-    private const val RecentLimit = 3
+    /** How many "recently read" chips a category card shows. */
+    const val RECENT_LIMIT = 5
+
+    /** Chips before the rest collapse into "+N more". */
+    const val CLUSTER_LIMIT = 12
 
     fun stats(
         category: AO3MediaCategory,
         fandomList: List<AO3Fandom>?,
         library: List<SavedWork>
     ): CategoryStats {
-        // Prefer full list for name matching; fall back to featured tags while loading.
-        val names = fandomList?.map { it.name }
-            ?: category.featuredFandoms
-        val nameSet = names.map { it.lowercase(Locale.US) }.toSet()
+        val input = CategoryStatsInput(
+            id = category.name,
+            fandoms = fandomList ?: category.featuredFandoms.map { AO3Fandom(name = it) },
+            hasFullList = fandomList != null
+        )
+        return computeStats(listOf(input), library.map { it.toBrowseSnapshot() })[category.name]
+            ?: CategoryStats()
+    }
 
-        fun inCategory(work: SavedWork): Boolean =
-            work.workFandoms.any { nameSet.contains(it.lowercase(Locale.US)) }
-
-        val recent = linkedSetOf<String>()
-        val seen = mutableSetOf<String>()
-        library
-            .asSequence()
-            .filter { it.hasBeenRead }
-            .sortedByDescending { it.dateAdded }
-            .forEach { work ->
-                for (fandom in work.workFandoms) {
-                    val key = fandom.lowercase(Locale.US)
+    /**
+     * iOS `MediaBrowserView.computeStats`. Downloaded counts are kept copies.
+     * Recent chips follow last-read, then date added. The cluster is the twelve
+     * biggest families once the full list is in.
+     */
+    fun computeStats(
+        inputs: List<CategoryStatsInput>,
+        works: List<LibraryWorkSnapshot>
+    ): Map<String, CategoryStats> {
+        val readWorks = works.filter { it.hasBeenRead }.sortedByDescending { it.recency }
+        val result = LinkedHashMap<String, CategoryStats>(inputs.size)
+        for (input in inputs) {
+            val nameSet = input.fandoms.map { it.name.lowercase(Locale.US) }.toSet()
+            var savedCount = 0
+            for (work in works) {
+                if (work.isOnDevice && work.fandomsLower.any { it in nameSet }) savedCount += 1
+            }
+            val recent = ArrayList<String>()
+            val seen = HashSet<String>()
+            for (work in readWorks) {
+                for (index in work.fandomsLower.indices) {
+                    val key = work.fandomsLower[index]
                     if (key in nameSet && seen.add(key)) {
-                        recent += fandom
-                        if (recent.size >= RecentLimit) return@forEach
+                        recent += work.fandomsDisplay[index]
                     }
                 }
+                if (recent.size >= RECENT_LIMIT) break
             }
+            val families = if (input.hasFullList) FandomFamily.grouped(input.fandoms) else emptyList()
+            val cluster = families
+                .sortedByDescending { it.summedWorkCount }
+                .take(CLUSTER_LIMIT)
+                .map { family ->
+                    CategoryStats.ClusterFandom(
+                        id = family.id,
+                        names = family.includedFilterNames,
+                        title = family.parsedTitle,
+                        workCount = family.summedWorkCount,
+                        isApproximate = family.showsApproximateCount
+                    )
+                }
+            val summed = if (input.hasFullList) input.fandoms.sumOf { it.workCount ?: 0 } else null
+            result[input.id] = CategoryStats(
+                fandomCount = if (input.hasFullList) input.fandoms.size else null,
+                familyCount = if (input.hasFullList) families.size else null,
+                workCount = summed,
+                isApproximateWorkCount = input.hasFullList,
+                savedCount = savedCount,
+                recentFandoms = recent.take(RECENT_LIMIT),
+                clusterFandoms = cluster
+            )
+        }
+        return result
+    }
 
-        return CategoryStats(
-            fandomCount = fandomList?.size,
-            workCount = fandomList?.sumOf { it.workCount ?: 0 }?.takeIf { it > 0 },
-            savedCount = library.count(::inCategory),
-            recentFandoms = recent.toList()
+    /**
+     * Maps read and visited fandoms onto the first category that lists them,
+     * then ranks by the latest visit or read. Work counts come from the whole
+     * list, not just the twelve cluster chips.
+     */
+    fun rankJumpBackIn(
+        inputs: List<CategoryStatsInput>,
+        works: List<LibraryWorkSnapshot>,
+        visits: List<JumpBackIn.Visit> = emptyList(),
+        limit: Int = JumpBackIn.LIMIT
+    ): List<JumpBackIn.Pick> {
+        val wanted = works.asSequence()
+            .filter { it.hasBeenRead }
+            .flatMap { it.fandomsLower.asSequence() }
+            .toMutableSet()
+        visits.mapTo(wanted) { it.fandom.lowercase(Locale.US) }
+        if (wanted.isEmpty()) return emptyList()
+        val categoryByFandom = HashMap<String, String>()
+        val workCountByFandom = HashMap<String, Int>()
+        for (input in inputs) {
+            for (fandom in input.fandoms) {
+                val lower = fandom.name.lowercase(Locale.US)
+                if (lower !in wanted || categoryByFandom.containsKey(lower)) continue
+                categoryByFandom[lower] = input.id
+                fandom.workCount?.let { workCountByFandom[lower] = it }
+            }
+        }
+        return JumpBackIn.fandoms(
+            works = works,
+            visits = visits,
+            categoryFor = { categoryByFandom[it] },
+            workCountFor = { workCountByFandom[it] },
+            limit = limit
         )
     }
 
@@ -111,7 +205,3 @@ object CategoryStatsCalculator {
 
     fun formatWorksEstimate(value: Int): String = "~${formatCount(value)} works"
 }
-
-private val SavedWork.hasBeenRead: Boolean
-    get() = isFinished || lastSpineIndex > 0 || lastReadDate != null ||
-        !readiumLocator.isNullOrBlank() || lastScrollFraction > 0.0

@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.browse
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 
@@ -9,12 +10,16 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 fun BrowseErrorBlock(
     message: String,
     onRetry: () -> Unit,
-    onWebFallback: (() -> Unit)? = null
+    onWebFallback: (() -> Unit)? = null,
+    title: String = "AO3 browse failed",
+    retryLabel: String = "Retry",
+    modifier: Modifier = Modifier
 ) {
     ErrorStateCard(
-        title = "AO3 browse failed",
+        title = title,
         message = message,
-        primaryActionLabel = "Retry",
+        modifier = modifier,
+        primaryActionLabel = retryLabel,
         onPrimaryAction = onRetry,
         secondaryActionLabel = if (onWebFallback != null) "Open on AO3" else null,
         onSecondaryAction = onWebFallback
