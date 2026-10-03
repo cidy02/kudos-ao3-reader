@@ -168,3 +168,66 @@ T-305 (Search chrome). Codex briefs ready (codex-task-1..4) for 17:27.
 - 23:45 organizer gutter (df43b534). Codex back; task 8 (library filter sheet) running in polish-codex (claude/polish-codex8).
 - 23:55 T-324 library filter sheet (Codex) landed 491e46c6. Next Codex: task 9 (P3 batch).
 - 00:15 T-325 (Codex task 9, 3 of 4 kept) landed aab3aa25.
+## 2026-09-30 ~15:00 — new session (handoff), iteration 12
+- Codex task 10 collected and verified (FINDINGS). T-326 landed (lane f7975b56, integrate 87e9eb81): challenge
+  screens + SubjectFormRow value width (app-wide). Lint 0/123. 110 tests in 10 suites green.
+- Harness: `-KudosDebugManageRow <label>` opens a collection Manage row; route `acct:ao3collection:winter_exchange`
+  (the fixture's own slug — `fest` breaks owner detection). TAP/SCROLL TOOL FOUND: AXe at
+  ~/.npm/_npx/99336612077b7094/node_modules/xcodebuildmcp/bundled/axe (run in place; `swipe`, `tap`,
+  `describe-ui`). Unblocks the 32 tap-only INVENTORY rows.
+- Codex task 11 running (task-muogxxns-iqqrca, polish-codex, claude/polish-codex11). OD #7–#9 added.
+- 15:45 iteration 13: Codex task 11 collected → T-327 (lane ff2e6630, integrate ada6e2fc) with Claude fixes: two dead
+  pushing rows (L3-B8-2, P1), filled-button label contrast on 9 buttons (L3-TH-3, P1), 1s approval chip menu.
+  Participants fixture → Moderation + Maintainers screenshot offline. 110 tests / 11 suites green; lint 0/123.
+  B8 INVENTORY rows updated. Next: fixtures for Prompt meme (`/requests`) and Tag set (`/profile` tag-set links),
+  then the tap-only rows (sheets, comment composer, reader chrome) with AXe.
+- 15:55 T-326 follow-up landed (lane 0b1d11b0, integrate 6cda4ea9): form link rows full width again; `/profile` route.
+  Codex task 12 (read-only audit: queue sheets, comments, fandom list, save search, AO3 history, author profile,
+  series) running as task-muoii0d1-9lsmu7.
+- 16:25 iteration 14: Codex task 12 audit verified (27 rows: 4 fixed by Claude → T-328 integrate eab554df, 12 queued
+  as Codex task 13 task-muojvppo-qwib0l, 2 later, 6 rejected, 2 owner). OD #10 (History layout). Author layout
+  picker P1 fixed. 81 tests / 8 suites green.
+- 16:50 iteration 15: Codex task 13 (hit usage limit before its own checks; back 19:59 local) reviewed, 4 review fixes,
+  landed T-329 (lane 2ac7d5dd, integrate 375fdd49). 195 tests / 20 suites green. New: L3-B4-5 (Browse hidden chips
+  exposed to VoiceOver), L3-B4-6. Full suite running in background (first since handoff).
+- 16:55 FULL SUITE (lane, after T-329): 2278 tests, 12 issues = exactly the 12 known env failures (10 backup/sync
+  case-fold, HistoryHideAndQueueNotes round trip, Kokoro names). L3-FORM-1 closed: Add Chapter + Edit Multiple
+  (lane c04c74ce, integrate 4ebb9acf; not screenshotted — same 2-line fix as 4 landed screens).
+  L3-B4-5 downgraded to unverified (AXe lists opacity-0 chips despite .accessibilityHidden; needs VoiceOver check).
+- 17:15 iteration 16: agy (Opus 4.6) task-14 audit verified → T-330 (lane 3206bf94, integrate ce771dff). 36 tests / 4 suites.
+  New L3-B10-2 (Settings sub-pages still system Forms). Codex back 19:59.
+- 17:20 L3-B10-2 landed (lane 5110252d): ten Settings pages drop the header that repeated their title. SettingsHubTests 10/10.
+- 17:25 agy task 15 (edit mode, polish-codex2 / claude/polish-agy14): List minimum on Drafts/Preview/pickers, dead fallbackHue removed + collection colour footnote (L3-B1-9), Prompt Meme fixture + test.
+- 17:40 iteration 17: agy task 15 → T-331 (lane 08e4382a, integrate 1962033b). Prompt Meme screenshot matches 1cc. 21 tests / 3 suites.
+- 17:45 FIRST PASS COMPLETE (68 rows). Second pass started: theme contact sheets (Dark/Light/Sepia/OLED) for 21 routes, scratchpad themes-batch.sh.
+- 18:15 second pass: theme sheets 1–6 reviewed (Home, Browse, Search, Account, Dashboard, Works, Inbox, Prefs, Settings, Queues, Collections, Insights, Recently Deleted, Work Detail) — consistent; L3-TH-4 fixed (integrate ffdcc764 + 9d8a2c00).
+- 18:25 second pass: theme sheets 7–10 reviewed (My copy, Bookmarks, History, Subscriptions, Marked for Later, AO3 collection) — consistent; History's grid-by-default supports OD #10. AX5 batch (16 routes) running.
+- 18:35 AX5 second pass: L3-AX-5 landed (lane 72210287, integrate 1e20fff9); 7 AX5 layout breaks briefed as codex-task-14-ax5.md.
+- 18:55 L3-AX-6…12 fixed by Claude (lane 9e5955f0, integrate baec039b). codex-task-15-design.md ready for Codex's return.
+- 20:40 Codex task 15 running (task-muot1sa8-5nm7gq, polish-codex, claude/polish-codex15 @ baec039b). Device build for owner's iPhone resumed after materializing iCloud-evicted .git (1,398 files) and Packages/Vendor/sources (~650).
+- 20:55 OWNER-REQUESTED INSTALL: integrate baec039b (Debug, DEVELOPMENT_TEAM on the command line only; pbxproj unchanged)
+  installed on "Yan's iPhone" (00008160-000045392021400A). Root cause of the stalls: data volume 98% full → iCloud
+  re-evicting repo/.git; owner approved deleting 15 stale DerivedData caches (now 52 GB free).
+- Gemini Flash task 17 (read-only pattern audit, ~15 min, 9.8k chars): pattern A 6 hits all false positives (closures
+  are real actions, no nav link — my brief was too loose); D 3 real (AO3CollectionFormView, NewReadingQueueSheet,
+  QueueTagSheet List minimum); E 15 fixed-size titles (backlog). No hallucinated file:lines.
+- 23:00 T-333 (owner request) Browse fandom/tag results on the Search tab's redesigned page — integrate 8067e790.
+  T-332 Codex task 15 (A–Z index, fandom markers, 1bv toolbar, mint privacy panel, Availability list) — integrate e97e1a7f.
+  Gemini's 3 List-minimum rows — integrate 317b0b96. Second pass: challenge screens Light ✓, AX5 → Codex task 16 running
+  (task-muoxtt6s-vp4t4b: scale body text in challenge/collection cards). agy Opus 4.6 task 18 (Home/Library/Work Detail
+  second-pass audit) running. iCloud: integrate worktree + .git re-materialized; cherry-picks wait on it.
+- 23:05 PAUSED (usage limit). In flight, to collect on resume: Codex task 16 (task-muoxtt6s-vp4t4b, polish-codex,
+  claude/polish-codex16 @ 8067e790 — uncommitted edits; review, build, AX5+default screenshots, land); agy task 18 audit
+  (output: scratchpad agy18.md / ~/.gemini/antigravity-cli/brain/<id>/design_audit.md). Before any build or git op:
+  re-materialize .git + Packages/Vendor + integrate tree (iCloud keeps evicting). Then: rest of second pass, full suite
+  on integrate, owner summary + OWNER-DECISIONS (10 items).
+- 23:35 resumed: T-334 Codex task 16 (Dynamic Type for challenge/collection card text) landed after review (2 fixes:
+  byline line limit, "Open on AO3" label restored) — lane 7160e9a1, integrate ebd52474. agy Opus 4.6 OUT (quota resets in
+  ~141h); its Home/Library/Work Detail/My copy second-pass audit reassigned to Codex task 17 (read-only,
+  task-muoz16as-wrac40). Full suite running on lane (== integrate sources).
+- 23:45 FULL SUITE (lane == integrate ebd52474 sources): 2281 tests, 11 issues — all known env failures (10 backup/sync case-fold + Kokoro names); HistoryHideAndQueueNotes passed this run. No new failures.
+- 23:55 Codex task 17 audit lost (usage limit until 01:37). Gemini Flash task 19 pattern sweep on Home/Library/WorkDetail running. OWNER-SUMMARY.md drafted (end phase).
+- 00:10 Gemini task 19 (Home/Library/WorkDetail pattern sweep): A/B/C none; D ×4 fixed (integrate 90ca7ca2; Queue Details
+  groups no longer spread apart); E ×15 fixed-size row titles → P3 backlog in the owner summary.
+- 00:12 STOP CONDITION MET: two passes complete, no open P1/P2, full suite = known env failures only. Owner summary
+  (OWNER-SUMMARY.md) and OWNER-DECISIONS.md presented; waiting for the owner's install request. Loop stopped.
