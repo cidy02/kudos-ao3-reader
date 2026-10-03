@@ -52,6 +52,17 @@ class AO3AuthRepository(
     suspend fun restoreSession() {
         if (didRestore) return
         didRestore = true
+        // Design review only (iOS AO3AuthService `DemoNetworkBlock.demoSignedIn`): a local demo
+        // session; every AO3 request in the demo is answered by the fixtures.
+        if (io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive &&
+            io.github.cidy02.kudos.network.ao3.DemoNetwork.signedIn
+        ) {
+            sessionMutex.withLock {
+                currentSession = AO3Session(username = "AO3_Reader", cookies = emptyList())
+                mutableState.value = AO3AuthState.SignedIn("AO3_Reader")
+            }
+            return
+        }
         val expectedGeneration = sessionMutex.withLock {
             mutableState.value = AO3AuthState.Restoring
             advanceSessionGenerationLocked()
