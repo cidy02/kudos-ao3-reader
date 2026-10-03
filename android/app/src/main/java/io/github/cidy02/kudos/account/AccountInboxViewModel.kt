@@ -228,6 +228,19 @@ class AccountInboxViewModel(
         load(page = 1)
     }
 
+    fun applyFilters(newFilters: Map<String, String>) {
+        val state = mutableState.value
+        if (state.isPerformingBulkAction) return
+        mutableState.update {
+            it.copy(
+                filterValues = it.filterValues + newFilters,
+                isSelecting = false,
+                selectedItemIds = emptySet()
+            )
+        }
+        load(page = 1)
+    }
+
     fun clearActionError() {
         mutableState.update { it.copy(actionError = null) }
     }
