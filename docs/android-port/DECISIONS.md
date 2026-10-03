@@ -45,3 +45,18 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   first); any other sort re-sorts the section, and lights the filter button, as iOS's
   `hasActiveFilters` does. The sort wasn't persisted, so no stored value needed mapping.
   Reverse: `LibrarySort.kt`.
+- **2026-10-03 · Repaired the lane branch after iCloud broke a ref update (no work lost).** The 08:56
+  commit (3v, `2595f7c8`) wrote `refs/heads/android/redesign-parity.lock` and a `HEAD.lock`, but the
+  rename into place failed, most likely because the repo's `.git` lives in iCloud `~/Documents`.
+  Git then read a stale `packed-refs` value (`ff2b6cb6`), so the branch looked rewound and the
+  index looked like the whole night was staged. Repair:
+  - confirmed no git process held the locks (two unrelated 2-day-old `git diff HEAD` processes
+    were running);
+  - backed up the lock and `packed-refs` to the scratchpad;
+  - removed the two stale locks;
+  - `git update-ref`'d the branch back to `2595f7c8`, guarded on `ff2b6cb6`.
+
+  The reflog had recorded every commit, so nothing was rewritten. Prevention: after every commit,
+  check the branch resolves to the new commit and that no `.lock` is left behind. Keep a
+  `git bundle` of the lane's commits outside iCloud in `~/kudos-backups/` (§9).
+  Reverse: n/a (repair).
