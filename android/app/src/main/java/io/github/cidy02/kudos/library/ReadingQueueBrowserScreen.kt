@@ -5,6 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkMetadataRefresh
 
 /**
@@ -20,7 +23,10 @@ fun ReadingQueueBrowserScreen(
     onOpenReader: (String) -> Unit = onOpenWork,
     onManageQueue: (String) -> Unit,
     epubBytes: (String) -> Long = { 0L },
-    metadataRefresh: WorkMetadataRefresh? = null
+    metadataRefresh: WorkMetadataRefresh? = null,
+    settingsRepository: SettingsRepository? = null,
+    privacyGate: PrivacyGate? = null,
+    downloadQueue: DownloadQueue? = null
 ) {
     var selectedQueueId by rememberSaveable { mutableStateOf(initialQueueId) }
     val queueId = selectedQueueId
@@ -36,6 +42,9 @@ fun ReadingQueueBrowserScreen(
             queueId = queueId,
             epubBytes = epubBytes,
             metadataRefresh = metadataRefresh,
+            settingsRepository = settingsRepository,
+            privacyGate = privacyGate,
+            downloadQueue = downloadQueue,
             onOpenWork = onOpenWork,
             onOpenReader = onOpenReader,
             onManageQueue = onManageQueue,

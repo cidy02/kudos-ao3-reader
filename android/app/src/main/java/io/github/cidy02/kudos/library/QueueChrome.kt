@@ -39,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
@@ -55,12 +57,18 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
+import io.github.cidy02.kudos.ui.subject.HomeStatusTray
+import io.github.cidy02.kudos.ui.subject.RevealCapsule
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
+import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
 import kotlin.math.roundToInt
@@ -212,6 +220,99 @@ fun WorkLedgerCard(work: SavedWork, modifier: Modifier = Modifier, content: @Com
             .background(palette.rowWash)
             .border(0.5.dp, palette.rowBorder, shape)
     ) { content() }
+}
+
+/**
+ * Up Next, and In Line while the page is a list. Port of `WorkRow(.ledger)` on
+ * `WorkLedgerCardBackground`: ring, fandom kicker, title, author · words ·
+ * chapters, and Home's status tray.
+ */
+@Composable
+fun QueueLedgerCard(
+    work: SavedWork,
+    downloading: Boolean,
+    obscured: Boolean,
+    modifier: Modifier = Modifier,
+    selecting: Boolean = false,
+    selected: Boolean = false,
+    drag: Boolean = false,
+    onStep: (Int) -> Unit = {}
+) {
+    val tokens = LocalKudosTokens.current
+    val fandoms = work.workFandoms.filter { it.isNotBlank() }
+    val kicker = HomeFacts.primaryFandom(work.workFandoms)
+    val fraction = work.readingProgressFraction() ?: if (work.isFinished) 1.0 else 0.0
+    val state = when {
+        fraction >= 1.0 -> "Finished"
+        fraction > 0.0 -> "Reading"
+        else -> null
+    }
+    val metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters)
+    val tile = 22.dp
+    WorkLedgerCard(work, modifier) {
+        Box {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (obscured) Modifier.blur(8.dp) else Modifier)
+                    .padding(horizontal = 16.dp, vertical = 15.dp),
+                horizontalArrangement = Arrangement.spacedBy(13.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                WorkReadingOrDownloadRing(
+                    downloading = downloading,
+                    progress = fraction,
+                    state = state,
+                    diameter = tile * 2 + 11.dp
+                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    SubjectKicker(
+                        text = kicker ?: " ",
+                        palette = SubjectPalette.fromHue(
+                            ReadingQueueFacts.coverHue(fandoms.firstOrNull() ?: work.title),
+                            tokens.theme
+                        ),
+                        trailingCount = (fandoms.size - 1).coerceAtLeast(0),
+                        size = 9.sp,
+                        ruleSpacing = 5.dp,
+                        modifier = Modifier.alpha(if (kicker == null) 0f else 1f)
+                    )
+                    Text(
+                        text = work.title,
+                        color = tokens.primaryInk,
+                        fontSize = 16.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (metadata.isNotEmpty()) {
+                        Text(
+                            text = metadata.joinToString("  ·  "),
+                            color = tokens.secondaryInk,
+                            fontSize = 11.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    HomeStatusTray(
+                        rating = work.rating,
+                        categories = work.workCategories,
+                        warnings = work.workWarnings,
+                        isComplete = work.isComplete,
+                        arrangement = HomeStatusArrangement.Grid,
+                        tileSize = tile
+                    )
+                    if (selecting) SelectionBubble(selected)
+                }
+                if (drag) DragGrip(Modifier.queueDragHandle(true, onStep))
+            }
+            if (obscured && !selecting) {
+                RevealCapsule(Modifier.align(Alignment.Center))
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

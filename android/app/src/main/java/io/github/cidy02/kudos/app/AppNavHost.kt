@@ -246,7 +246,10 @@ fun AppNavHost(
                 metadataRefresh = io.github.cidy02.kudos.works.WorkMetadataRefresh(
                     container.workRepository,
                     container.metadataRepository
-                )
+                ),
+                settingsRepository = container.settingsRepository,
+                privacyGate = container.privacyGate,
+                downloadQueue = container.downloadQueue
             )
         }
         sharedComposable(

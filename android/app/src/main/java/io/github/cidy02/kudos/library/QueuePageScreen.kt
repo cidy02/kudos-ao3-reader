@@ -4,8 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -26,7 +26,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,14 +37,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
+import io.github.cidy02.kudos.app.PrivacyGate
+import io.github.cidy02.kudos.app.PrivacyRevealState
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
+import io.github.cidy02.kudos.ui.subject.rememberWorkDownloading
+import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.GlassCircleButton
@@ -53,6 +64,8 @@ import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.WorkMetadataRefresh
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -84,13 +97,15 @@ private data class QueueExtraFilter(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun QueuePageScreen(
     repository: ReadingQueueRepository,
     queueId: String,
     epubBytes: (String) -> Long,
     metadataRefresh: WorkMetadataRefresh? = null,
+    settingsRepository: SettingsRepository? = null,
+    privacyGate: PrivacyGate? = null,
+    downloadQueue: DownloadQueue? = null,
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onManageQueue: (String) -> Unit,
@@ -107,7 +122,7 @@ fun QueuePageScreen(
     var quick by rememberSaveable(queueId) { mutableStateOf(QueueQuickFilter.All) }
     var extra by remember(queueId) { mutableStateOf(QueueExtraFilter()) }
     var onlyTag by remember(queueId) { mutableStateOf<String?>(null) }
-    var compact by rememberSaveable(queueId) { mutableStateOf(false) }
+    var compact by rememberSaveable(queueId) { mutableStateOf(true) }
     var selecting by remember(queueId) { mutableStateOf(false) }
     var reordering by remember(queueId) { mutableStateOf(false) }
     var selected by remember(queueId) { mutableStateOf<Set<String>>(emptySet()) }
@@ -141,19 +156,48 @@ fun QueuePageScreen(
         onBackToOrganizer?.invoke()
     }
 
+    val activity = LocalContext.current as? FragmentActivity
+    val shownSettings by remember(settingsRepository) {
+        settingsRepository?.settings ?: flowOf(
+            KudosSettings(privacy = PrivacySettings(hideMatureContent = false))
+        )
+    }.collectAsState(
+        initial = if (settingsRepository == null) {
+            KudosSettings(privacy = PrivacySettings(hideMatureContent = false))
+        } else {
+            KudosSettings.Defaults
+        }
+    )
+    val reveal by remember(privacyGate) {
+        privacyGate?.state ?: MutableStateFlow(PrivacyRevealState())
+    }.collectAsState()
     val current = queue
     val palette = if (current == null) tokens.scopePalette else queuePalette(tokens.theme, current)
     val preservedIds = works.filter { it.hasEpub && (bytes[it.id] ?: 0L) > 0 }.map { it.id }.toSet()
     val narrowed = quick != QueueQuickFilter.All || extra.activeCount > 0 || onlyTag != null
+    val hidesMature = works.any { isHiddenMature(it, shownSettings, reveal) }
     val filtered = works.filter { work ->
-        quick.matches(work, work.id in preservedIds) &&
+        !isHiddenMature(work, shownSettings, reveal) &&
+            quick.matches(work, work.id in preservedIds) &&
             extra.matches(work) &&
             (onlyTag == null || onlyTag in userTags[work.id].orEmpty())
     }
-    val dragLive = ReadingQueueFacts.isDragLive(reordering, selecting, narrowed)
-    val shown = if (dragLive) works else filtered
+    val dragLive = ReadingQueueFacts.isDragLive(reordering && !hidesMature, selecting, narrowed)
+    val shown = if (reordering && !hidesMature) works else filtered
     val (upNext, inLine) = if (dragLive) null to shown else ReadingQueueFacts.upNext(filtered)
     val preservedBytes = preservedIds.sumOf { bytes[it] ?: 0L }
+    val reorderLabel = when {
+        narrowed -> "Clear Filters to Reorder"
+        hidesMature -> "Show Mature to Reorder"
+        else -> "Reorder"
+    }
+    fun activate(work: SavedWork) {
+        when {
+            selecting -> selected = toggleId(selected, work.id)
+            isObscuredMature(work, shownSettings, reveal) -> privacyGate?.reveal(work.id, activity)
+            else -> openWork(work, onOpenReader, onOpenWork)
+        }
+    }
 
     KudosRefreshBox(
         onRefresh = {
@@ -176,13 +220,17 @@ fun QueuePageScreen(
                     filtersActive = extra.activeCount > 0,
                     badge = extra.activeCount,
                     custom = current.kindRaw == ReadingQueueKind.CUSTOM,
-                    canReorder = works.size > 1 && !narrowed,
+                    canReorder = works.size > 1 && !narrowed && !hidesMature,
+                    reorderLabel = reorderLabel,
+                    showMatureToggle = shownSettings.privacy.hideMatureContent,
+                    matureRevealed = reveal.revealAll,
                     menuOpen = menu,
                     onAdd = { showAdd = true },
                     onFilter = { showFilters = true },
                     onClearFilters = { extra = QueueExtraFilter(); quick = QueueQuickFilter.All; onlyTag = null },
                     onMenu = { menu = true },
                     onDismissMenu = { menu = false },
+                    onToggleMature = { privacyGate?.toggleRevealAll(activity) },
                     onSelect = { if (works.isNotEmpty()) { selecting = true; reordering = false } },
                     onReorder = { reordering = true; selecting = false; selected = emptySet() },
                     onDisplay = { compact = !compact; menu = false },
@@ -238,84 +286,79 @@ fun QueuePageScreen(
                     )
                     dragLive -> {
                         SectionRuleHeader("Queue", count = shown.size, modifier = Modifier.padding(top = 16.dp))
-                        shown.forEachIndexed { index, work ->
-                            WorkRow(
-                                work = work,
-                                compact = false,
-                                selecting = selecting,
-                                selected = work.id in selected,
-                                drag = true,
-                                onOpen = { openWork(work, onOpenReader, onOpenWork) },
-                                onToggle = { selected = toggleId(selected, work.id) },
-                                onStep = { delta ->
-                                    val next = moveWork(works, index, delta) ?: return@WorkRow
-                                    works = next
-                                    scope.launch { repository.updateSortOrder(queueId, next.map { it.id }) }
-                                }
-                            )
-                        }
-                    }
-                    compact -> {
-                        upNext?.let { work ->
-                            SectionRuleHeader("Up Next", modifier = Modifier.padding(top = 16.dp))
-                            SubjectWorkCoverCard(
-                                work = work,
-                                obscured = false,
-                                downloading = false,
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .clickable { openWork(work, onOpenReader, onOpenWork) }
-                            )
-                        }
-                        if (inLine.isNotEmpty()) {
-                            SectionRuleHeader("In Line", count = inLine.size, modifier = Modifier.padding(top = 8.dp))
-                            FlowRow(
-                                Modifier.padding(horizontal = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                inLine.forEach { work ->
-                                    SubjectWorkCoverCard(
-                                        work = work,
-                                        obscured = false,
-                                        downloading = false,
-                                        modifier = Modifier.clickable {
-                                            if (selecting) selected = toggleId(selected, work.id)
-                                            else openWork(work, onOpenReader, onOpenWork)
-                                        },
-                                        isSelecting = selecting,
-                                        isSelected = work.id in selected
-                                    )
-                                }
+                        shown.forEach { work ->
+                            key(work.id) {
+                                WorkRow(
+                                    work = work,
+                                    downloadQueue = downloadQueue,
+                                    obscured = isObscuredMature(work, shownSettings, reveal),
+                                    selecting = selecting,
+                                    selected = work.id in selected,
+                                    drag = true,
+                                    onClick = { activate(work) },
+                                    onStep = { delta ->
+                                        val index = works.indexOfFirst { it.id == work.id }
+                                        val next = moveWork(works, index, delta) ?: return@WorkRow
+                                        works = next
+                                        scope.launch { repository.updateSortOrder(queueId, next.map { it.id }) }
+                                    }
+                                )
                             }
                         }
                     }
                     else -> {
                         upNext?.let { work ->
                             SectionRuleHeader("Up Next", modifier = Modifier.padding(top = 16.dp))
-                            WorkRow(
-                                work = work,
-                                compact = false,
-                                selecting = selecting,
-                                selected = work.id in selected,
-                                drag = false,
-                                onOpen = { openWork(work, onOpenReader, onOpenWork) },
-                                onToggle = { selected = toggleId(selected, work.id) },
-                                onStep = {}
-                            )
-                        }
-                        if (inLine.isNotEmpty()) {
-                            SectionRuleHeader("In Line", count = inLine.size, modifier = Modifier.padding(top = 8.dp))
-                            inLine.forEach { work ->
+                            key(work.id) {
                                 WorkRow(
                                     work = work,
-                                    compact = false,
+                                    downloadQueue = downloadQueue,
+                                    obscured = isObscuredMature(work, shownSettings, reveal),
                                     selecting = selecting,
                                     selected = work.id in selected,
                                     drag = false,
-                                    onOpen = { openWork(work, onOpenReader, onOpenWork) },
-                                    onToggle = { selected = toggleId(selected, work.id) },
+                                    onClick = { activate(work) },
                                     onStep = {}
                                 )
+                            }
+                        }
+                        if (inLine.isNotEmpty()) {
+                            SectionRuleHeader("In Line", count = inLine.size, modifier = Modifier.padding(top = 8.dp))
+                            if (compact) {
+                                Column(Modifier.padding(horizontal = 12.dp)) {
+                                    inLine.chunked(2).forEach { row ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            row.forEach { work ->
+                                                key(work.id) {
+                                                    val downloading = rememberWorkDownloading(work, downloadQueue)
+                                                    SubjectWorkCoverCard(
+                                                        work = work,
+                                                        obscured = isObscuredMature(work, shownSettings, reveal),
+                                                        downloading = downloading,
+                                                        modifier = Modifier.clickable { activate(work) },
+                                                        isSelecting = selecting,
+                                                        isSelected = work.id in selected
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                inLine.forEach { work ->
+                                    key(work.id) {
+                                        WorkRow(
+                                            work = work,
+                                            downloadQueue = downloadQueue,
+                                            obscured = isObscuredMature(work, shownSettings, reveal),
+                                            selecting = selecting,
+                                            selected = work.id in selected,
+                                            drag = false,
+                                            onClick = { activate(work) },
+                                            onStep = {}
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -409,12 +452,16 @@ private fun PageToolbar(
     badge: Int,
     custom: Boolean,
     canReorder: Boolean,
+    reorderLabel: String,
+    showMatureToggle: Boolean,
+    matureRevealed: Boolean,
     menuOpen: Boolean,
     onAdd: () -> Unit,
     onFilter: () -> Unit,
     onClearFilters: () -> Unit,
     onMenu: () -> Unit,
     onDismissMenu: () -> Unit,
+    onToggleMature: () -> Unit,
     onSelect: () -> Unit,
     onReorder: () -> Unit,
     onDisplay: () -> Unit,
@@ -451,14 +498,26 @@ private fun PageToolbar(
                 Icon(Icons.Filled.MoreHoriz, contentDescription = null)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = onDismissMenu) {
+                if (showMatureToggle) {
+                    DropdownMenuItem(
+                        text = { Text(if (matureRevealed) "Hide mature" else "Show mature") },
+                        leadingIcon = {
+                            Icon(
+                                if (matureRevealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = null
+                            )
+                        },
+                        onClick = { onDismissMenu(); onToggleMature() }
+                    )
+                }
                 DropdownMenuItem(text = { Text("Select") }, onClick = { onDismissMenu(); onSelect() })
                 DropdownMenuItem(
-                    text = { Text(if (canReorder) "Reorder" else "Clear Filters to Reorder") },
+                    text = { Text(reorderLabel) },
                     enabled = canReorder,
                     onClick = { onDismissMenu(); if (canReorder) onReorder() }
                 )
                 DropdownMenuItem(
-                    text = { Text(if (compact) "Display mode: List" else "Display mode: Compact grid") },
+                    text = { Text(if (compact) "Display · Compact" else "Display · List") },
                     onClick = onDisplay
                 )
                 DropdownMenuItem(text = { Text("Queue details") }, onClick = { onDismissMenu(); onDetails() })
@@ -474,35 +533,27 @@ private fun PageToolbar(
 @Composable
 private fun WorkRow(
     work: SavedWork,
-    compact: Boolean,
+    downloadQueue: DownloadQueue?,
+    obscured: Boolean,
     selecting: Boolean,
     selected: Boolean,
     drag: Boolean,
-    onOpen: () -> Unit,
-    onToggle: () -> Unit,
+    onClick: () -> Unit,
     onStep: (Int) -> Unit
 ) {
-    if (compact) return
-    val tokens = LocalKudosTokens.current
-    WorkLedgerCard(
+    QueueLedgerCard(
         work = work,
+        downloading = rememberWorkDownloading(work, downloadQueue),
+        obscured = obscured,
+        selecting = selecting,
+        selected = selected,
+        drag = drag,
+        onStep = onStep,
         modifier = Modifier
+            .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable { if (selecting) onToggle() else onOpen() }
-    ) {
-        Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            if (selecting) SelectionBubble(selected)
-            Column(Modifier.weight(1f)) {
-                Text(work.title, color = tokens.primaryInk, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(work.author, color = tokens.secondaryInk, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (drag) DragGrip(Modifier.queueDragHandle(true, onStep))
-        }
-    }
+            .clickable(onClick = onClick)
+    )
 }
 
 @Composable
@@ -592,6 +643,22 @@ private fun AddWorksDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
     )
+}
+
+private fun isHiddenMature(
+    work: SavedWork,
+    settings: KudosSettings,
+    reveal: PrivacyRevealState
+): Boolean {
+    return LibraryPrivacy.visibility(work, settings.privacy, reveal) == LibraryPrivacyVisibility.Hidden
+}
+
+private fun isObscuredMature(
+    work: SavedWork,
+    settings: KudosSettings,
+    reveal: PrivacyRevealState
+): Boolean {
+    return LibraryPrivacy.visibility(work, settings.privacy, reveal) == LibraryPrivacyVisibility.Obscured
 }
 
 private fun openWork(work: SavedWork, onOpenReader: (String) -> Unit, onOpenWork: (String) -> Unit) {
