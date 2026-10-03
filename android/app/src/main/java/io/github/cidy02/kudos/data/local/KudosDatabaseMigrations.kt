@@ -316,4 +316,15 @@ object KudosDatabaseMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_queue_tag_cross_refs_tagId` ON `queue_tag_cross_refs` (`tagId`)")
         }
     }
+
+    /** v11 → v12: retain iOS v8 work fields through Android restore/re-export. */
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN createdAt INTEGER")
+            db.execSQL("ALTER TABLE works ADD COLUMN metadataSyncStatusRaw TEXT")
+            db.execSQL("ALTER TABLE works ADD COLUMN ao3WorkID INTEGER")
+            db.execSQL("ALTER TABLE collections ADD COLUMN createdAt INTEGER")
+            db.execSQL("ALTER TABLE collections ADD COLUMN syncStatusRaw TEXT")
+        }
+    }
 }

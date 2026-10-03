@@ -853,8 +853,9 @@ class BackupPreservesLegacyProgressFieldsTest {
 class BackupEpubPreservationPassThroughTest {
     @Test
     fun preservedValuesSurviveImportThenExport() {
-        val preservedAt = "2025-11-02T14:30:00Z"
-        val lastAttempt = "2025-11-02T14:29:55Z"
+        // iOS writes three fractional digits; Android now does too (BackupValidator.formatInstant).
+        val preservedAt = "2025-11-02T14:30:00.000Z"
+        val lastAttempt = "2025-11-02T14:29:55.000Z"
         val archived = sampleBackupWork().copy(
             epubPreservationStatusRaw = "preserved",
             preservedAt = preservedAt,

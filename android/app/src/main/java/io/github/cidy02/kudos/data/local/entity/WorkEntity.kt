@@ -21,6 +21,7 @@ data class WorkEntity(
     val summary: String,
     val sourceUrl: String,
     val dateAdded: Instant,
+    val createdAt: Instant? = null,
     val isFavorite: Boolean = false,
     @ColumnInfo(name = "hasGivenKudos", defaultValue = "0") val hasGivenKudos: Boolean = false,
     val isSaved: Boolean = false,
@@ -69,6 +70,7 @@ data class WorkEntity(
      * Android must not act on these values.
      */
     val epubPreservationStatusRaw: String? = null,
+    val metadataSyncStatusRaw: String? = null,
     val preservedAt: Instant? = null,
     val lastPreservationAttemptAt: Instant? = null,
     // v11 (Phase 2, iOS parity). Device-local or pass-through until each
@@ -81,6 +83,7 @@ data class WorkEntity(
     @ColumnInfo(defaultValue = "") val dateUpdated: String = "",
     val bookmarks: Int? = null,
     val ao3SeriesID: Int? = null,
+    val ao3WorkID: Int? = null,
     val legacyReaderProgress: Double? = null,
     @ColumnInfo(defaultValue = "") val authorIdentitiesJSON: String = "",
     @ColumnInfo(defaultValue = "") val epubDigest: String = "",

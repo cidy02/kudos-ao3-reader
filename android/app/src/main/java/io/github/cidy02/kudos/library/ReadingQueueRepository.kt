@@ -211,15 +211,23 @@ class ReadingQueueRepository(
     // could otherwise both pass the check-then-create race at once — confirmed via a
     // fresh install producing two "Saved for Later" rows before this fix.
     suspend fun ensureSavedForLaterQueue(): ReadingQueue = database.withTransaction {
-        queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)?.let {
-            return@withTransaction it.toDomain()
+        queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)?.let { existing ->
+            // One-time, migration-free pin. iOS does the same on every ensure:
+            // `sortOrder = min(sortOrder, -1000)`.
+            val pinned = minOf(existing.sortOrder, ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER)
+            if (pinned != existing.sortOrder) {
+                val updated = existing.copy(sortOrder = pinned)
+                queueDao.upsertQueue(updated)
+                return@withTransaction updated.toDomain()
+            }
+            return@withTransaction existing.toDomain()
         }
         val now = clock()
         val queue = ReadingQueue(
             id = uuidFactory(),
             name = ReadingQueueKind.SAVED_FOR_LATER_NAME,
             kindRaw = ReadingQueueKind.SAVED_FOR_LATER,
-            sortOrder = 0,
+            sortOrder = ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER,
             dateCreated = now,
             dateUpdated = now
         )

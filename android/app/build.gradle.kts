@@ -151,3 +151,9 @@ dependencies {
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
+
+// Cross-platform golden backups (docs/android-port/briefs/2x-cross-platform.md): ordinary runs only
+// read the committed fixtures; `./gradlew … -Dkudos.writeGolden=true` rewrites Android's export.
+tasks.withType<Test>().configureEach {
+    System.getProperty("kudos.writeGolden")?.let { systemProperty("kudos.writeGolden", it) }
+}

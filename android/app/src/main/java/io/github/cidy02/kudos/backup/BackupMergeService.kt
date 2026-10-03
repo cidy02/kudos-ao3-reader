@@ -141,7 +141,10 @@ object BackupMergeService {
             )
             worksById[targetId] = if (existing == null) {
                 summary = summary.copy(worksCreated = summary.worksCreated + 1)
-                restored
+                // iOS `SavedWork.init` names the file `<UUID>.epub` and `apply`
+                // keeps that non-empty local identifier. A custom archived name
+                // does not survive a restore onto an empty library.
+                restored.copy(assetIdentifier = BackupPaths.iosEpubAssetIdentifier(restored.id))
             } else if (mode == BackupImportMode.MERGE && existing.isDeleted) {
                 // Recently Deleted is not in the active library. File Merge
                 // adds it back without planting a tombstone, matching iOS.
@@ -304,6 +307,22 @@ object BackupMergeService {
             membershipsUpdated = queueMerge.membershipsUpdated,
             membershipsSuppressed = queueMerge.membershipsSuppressed
         )
+        val restoredEpubIds = (currentEpubIds + epubFilesToWrite.keys)
+            .map(BackupPaths::normalizeIdForComparison)
+            .toSet()
+        // iOS `ReadingQueueService.normalize` runs at the end of restore.
+        // Port the queued-work half: membership implies isQueuedForLater, a
+        // queued file is preserved, and unknown metadata that still needs an
+        // AO3 refresh becomes pending. Unqueued preservation stays pass-through
+        // (BackupEpubPreservationPassThroughTest): Android must not invent
+        // `notPreserved` for a work the archive did not queue.
+        normalizeQueuedWorks(
+            worksById = worksById,
+            memberships = queueMerge.memberships,
+            epubIds = restoredEpubIds,
+            now = now
+        )
+        val finishedQueues = finishRestoredQueues(queueMerge.queues, queueMerge.memberships)
 
         val readingSessions = mergeReadingSessions(
             current = current.readingSessions,
@@ -372,7 +391,7 @@ object BackupMergeService {
                 epubWorkIds = currentEpubIds + epubFilesToWrite.keys,
                 fontFilesByFileName = current.fontFilesByFileName + fontMerge.filesToWrite,
                 tombstones = tombstonesById.values.sortedBy { it.id },
-                readingQueues = queueMerge.queues,
+                readingQueues = finishedQueues,
                 readingQueueMemberships = queueMerge.memberships,
                 annotations = annotationMerge.items,
                 readingSessions = readingSessions,
@@ -452,6 +471,7 @@ object BackupMergeService {
                 isSaved = restored.isSaved || existing.isSaved,
                 isQueuedForLater = restored.isQueuedForLater || existing.isQueuedForLater,
                 dateAdded = minInstant(existing.dateAdded, restored.dateAdded),
+                createdAt = minNullableInstant(existing.createdAt, restored.createdAt),
                 lastModifiedAt = maxInstant(existing.lastModifiedAt, incomingModifiedAt)
                     ?: incomingModifiedAt,
                 comments = archived.comments ?: existing.comments,
@@ -469,7 +489,8 @@ object BackupMergeService {
                 epubDigest = restored.epubDigest.ifBlank { existing.epubDigest },
                 assetIdentifier = restored.assetIdentifier.ifBlank { existing.assetIdentifier },
                 bookmarks = archived.bookmarks ?: existing.bookmarks,
-                ao3SeriesID = archived.ao3SeriesID ?: existing.ao3SeriesID
+                ao3SeriesID = archived.ao3SeriesID ?: existing.ao3SeriesID,
+                ao3WorkID = archived.ao3WorkID ?: existing.ao3WorkID
             )
         } else {
             // Keep local flags/metadata; still absorb non-destructive fills.
@@ -480,6 +501,7 @@ object BackupMergeService {
                 author = existing.author.ifBlank { restored.author },
                 summary = existing.summary.ifBlank { restored.summary },
                 sourceUrl = existing.sourceUrl.ifBlank { restored.sourceUrl },
+                createdAt = minNullableInstant(existing.createdAt, restored.createdAt),
                 comments = existing.comments ?: archived.comments,
                 hits = existing.hits ?: archived.hits,
                 knownChapterCount = existing.knownChapterCount ?: archived.knownChapterCount,
@@ -503,7 +525,8 @@ object BackupMergeService {
                 epubDigest = existing.epubDigest.ifBlank { restored.epubDigest },
                 assetIdentifier = existing.assetIdentifier.ifBlank { restored.assetIdentifier },
                 bookmarks = existing.bookmarks ?: archived.bookmarks,
-                ao3SeriesID = existing.ao3SeriesID ?: archived.ao3SeriesID
+                ao3SeriesID = existing.ao3SeriesID ?: archived.ao3SeriesID,
+                ao3WorkID = existing.ao3WorkID ?: archived.ao3WorkID
             )
         }
 
@@ -515,6 +538,11 @@ object BackupMergeService {
                 restored.epubPreservationStatusRaw ?: existing.epubPreservationStatusRaw
             } else {
                 existing.epubPreservationStatusRaw ?: restored.epubPreservationStatusRaw
+            },
+            metadataSyncStatusRaw = if (incomingWins) {
+                restored.metadataSyncStatusRaw ?: existing.metadataSyncStatusRaw
+            } else {
+                existing.metadataSyncStatusRaw ?: restored.metadataSyncStatusRaw
             },
             preservedAt = maxInstant(existing.preservedAt, restored.preservedAt),
             lastPreservationAttemptAt = maxInstant(
@@ -895,7 +923,9 @@ object BackupMergeService {
                     .map { BackupPaths.normalizeIdForComparison(it) }
                     .toSet()
                 val added = incomingWorkIds.filter { it !in existingIds }
-                val filled = fillCollectionFields(existing, archived, incomingWins = false)
+                val filled = fillCollectionFields(
+                    existing, archived, incomingWins = false, exportedAt = exportedAt
+                )
                 val target = if (added.isNotEmpty()) {
                     filled.copy(workIds = filled.workIds + added)
                 } else {
@@ -908,7 +938,9 @@ object BackupMergeService {
             } else {
                 val localModified = existing.lastModifiedAt ?: existing.dateAdded
                 if (!SyncMerge.shouldApplyIncoming(localModified, incomingModified)) {
-                    val filled = fillCollectionFields(existing, archived, incomingWins = false)
+                    val filled = fillCollectionFields(
+                        existing, archived, incomingWins = false, exportedAt = exportedAt
+                    )
                     if (filled != existing) {
                         collectionsById[id] = filled
                         updated += 1
@@ -936,10 +968,15 @@ object BackupMergeService {
                         "collection.dateAdded",
                         exportedAt
                     ),
+                    createdAt = minNullableInstant(
+                        existing.createdAt,
+                        parseOptionalInstant(archived.createdAt, exportedAt)
+                    ),
                     workIds = mergedWorkIds,
                     description = archived.description ?: existing.description,
                     sortOrder = archived.sortOrder ?: existing.sortOrder,
                     lastModifiedAt = incomingModified ?: existing.lastModifiedAt,
+                    syncStatusRaw = archived.syncStatusRaw ?: existing.syncStatusRaw,
                     isDeleted = deletionState.isDeleted,
                     deletedAt = if (deletionState.isDeleted) {
                         parseOptionalInstant(archived.deletedAt, exportedAt) ?: incomingModified
@@ -948,7 +985,9 @@ object BackupMergeService {
                     },
                     permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt
                 )
-                collectionsById[id] = fillCollectionFields(base, archived, incomingWins = true)
+                collectionsById[id] = fillCollectionFields(
+                    base, archived, incomingWins = true, exportedAt = exportedAt
+                )
                 if (!archivedIsDeleted) names += archived.name
                 updated += 1
             }
@@ -960,7 +999,8 @@ object BackupMergeService {
     private fun fillCollectionFields(
         existing: WorkCollection,
         archived: BackupCollection,
-        incomingWins: Boolean
+        incomingWins: Boolean,
+        exportedAt: Instant?
     ): WorkCollection {
         val (chosenHue, chosenHex) = SyncMerge.chosenColor(
             local = existing.hue to existing.colorHex,
@@ -983,6 +1023,15 @@ object BackupMergeService {
             existing.workOrderRaw
         }
         return existing.copy(
+            createdAt = minNullableInstant(
+                existing.createdAt,
+                parseOptionalInstant(archived.createdAt, exportedAt)
+            ),
+            syncStatusRaw = if (incomingWins) {
+                archived.syncStatusRaw ?: existing.syncStatusRaw
+            } else {
+                existing.syncStatusRaw ?: archived.syncStatusRaw
+            },
             hue = chosenHue,
             colorHex = chosenHex,
             keepsWorksOffline = keepsOffline,
@@ -1163,7 +1212,14 @@ object BackupMergeService {
                     TombstoneResolution.PRESERVE_AMBIGUOUS,
                     TombstoneResolution.NO_TOMBSTONE -> Unit
                 }
-                queuesById[id] = archived.toReadingQueue(exportedAt)
+                val created = archived.toReadingQueue(exportedAt)
+                queuesById[id] = if (isSystemQueue) {
+                    // iOS `ensureSavedForLaterQueue` creates the system queue at
+                    // -1000 and does not copy an archived sort onto it.
+                    created.copy(sortOrder = ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER)
+                } else {
+                    created
+                }
                 queuesCreated += 1
             } else if (mode == BackupImportMode.MERGE) {
                 // Keep local queue name / fields. New memberships still insert below.
@@ -1192,6 +1248,13 @@ object BackupMergeService {
                         // there is no UI that could ever bring it back.
                         name = if (isSystemQueue) ReadingQueueKind.SAVED_FOR_LATER_NAME else restored.name,
                         kindRaw = if (isSystemQueue) ReadingQueueKind.SAVED_FOR_LATER else restored.kindRaw,
+                        // Archived sort is not applied to Saved for Later. iOS
+                        // keeps `min(local, -1000)` from ensure.
+                        sortOrder = if (isSystemQueue) {
+                            minOf(existing.sortOrder, ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER)
+                        } else {
+                            restored.sortOrder
+                        },
                         isDeleted = deletionState.isDeleted,
                         deletedAt = if (deletionState.isDeleted) restored.deletedAt else null,
                         permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
@@ -1696,6 +1759,12 @@ object BackupMergeService {
 
     private fun minInstant(a: Instant, b: Instant): Instant = if (a.isBefore(b)) a else b
 
+    private fun minNullableInstant(a: Instant?, b: Instant?): Instant? = when {
+        a == null -> b
+        b == null -> a
+        else -> minInstant(a, b)
+    }
+
     private fun maxInstant(a: Instant?, b: Instant?): Instant? {
         return when {
             a == null -> b
@@ -1738,6 +1807,100 @@ object BackupMergeService {
     )
 
     private val FUTURE_CLOCK_SKEW: Duration = Duration.ofHours(24)
+
+    /**
+     * Queued-work half of Apple `ReadingQueueService.normalize`. A membership
+     * sets `isQueuedForLater`. A queued work whose EPUB is in this restore
+     * becomes `preserved` (and gains `preservedAt` only when the archive had
+     * none). Unknown metadata that still needs an AO3 refresh becomes
+     * `pending`. Works with no membership are left alone so a pass-through
+     * preservation status is not rewritten to `notPreserved`.
+     */
+    private fun normalizeQueuedWorks(
+        worksById: MutableMap<String, SavedWork>,
+        memberships: List<ReadingQueueMembership>,
+        epubIds: Set<String>,
+        now: Instant
+    ) {
+        val queuedIds = memberships.mapTo(mutableSetOf()) {
+            BackupPaths.normalizeIdForComparison(it.workID)
+        }
+        for ((id, work) in worksById) {
+            if (BackupPaths.normalizeIdForComparison(id) !in queuedIds) continue
+            val hasFile = work.hasEpub &&
+                BackupPaths.normalizeIdForComparison(work.id) in epubIds
+            var status = work.epubPreservationStatusRaw
+            var preservedAt = work.preservedAt
+            if (hasFile) {
+                if (status != "preserving") status = "preserved"
+                if (preservedAt == null) preservedAt = now
+            } else if (status == null || status == "notPreserved") {
+                status = "queued"
+            }
+            var metadata = work.metadataSyncStatusRaw
+            if ((metadata == null || metadata == "unknown") && iosNeedsMetadataRefresh(work, now)) {
+                metadata = "pending"
+            }
+            worksById[id] = work.copy(
+                isQueuedForLater = true,
+                epubPreservationStatusRaw = status,
+                preservedAt = preservedAt,
+                metadataSyncStatusRaw = metadata
+            )
+        }
+    }
+
+    /** Apple `SavedWork.needsAO3Refresh`, used only by [normalizeQueuedWorks]. */
+    private fun iosNeedsMetadataRefresh(work: SavedWork, now: Instant): Boolean {
+        if (work.ao3Unavailable) return false
+        val attempt = work.lastTagRefreshAttemptAt
+        if (attempt != null && Duration.between(attempt, now) < Duration.ofHours(24)) return false
+        val hasCategorizedTags = work.workFandoms.isNotEmpty() ||
+            work.workCharacters.isNotEmpty() ||
+            work.workRelationships.isNotEmpty() ||
+            work.workFreeforms.isNotEmpty()
+        val missingCardStats = work.workWarnings.isEmpty() &&
+            work.workCategories.isEmpty() &&
+            work.language.isEmpty() &&
+            work.wordCount == 0
+        val source = work.sourceUrl.lowercase()
+        val hasAo3Source = work.ao3WorkID != null ||
+            source.contains("archiveofourown.org") ||
+            source.contains("ao3.org")
+        return !work.workTagsFetched ||
+            !hasCategorizedTags ||
+            missingCardStats ||
+            work.chapters.isEmpty() ||
+            (work.authorIdentitiesJSON.isEmpty() && hasAo3Source)
+    }
+
+    /**
+     * Apple restore derives `lastMembershipChangedAt` from membership clocks
+     * and pins Saved for Later at [ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER].
+     */
+    private fun finishRestoredQueues(
+        queues: List<ReadingQueue>,
+        memberships: List<ReadingQueueMembership>
+    ): List<ReadingQueue> {
+        val byQueue = memberships.groupBy { BackupPaths.normalizeIdForComparison(it.queueID) }
+        return queues.map { queue ->
+            val pinned = if (queue.kindRaw == ReadingQueueKind.SAVED_FOR_LATER) {
+                val sort = minOf(queue.sortOrder, ReadingQueueKind.SAVED_FOR_LATER_SORT_ORDER)
+                if (sort == queue.sortOrder) queue else queue.copy(sortOrder = sort)
+            } else {
+                queue
+            }
+            val times = byQueue[BackupPaths.normalizeIdForComparison(pinned.id)]
+                .orEmpty()
+                .map { it.lastModifiedAt ?: it.queuedAt }
+            val bumped = (listOfNotNull(pinned.lastMembershipChangedAt) + times).maxOrNull()
+            if (bumped != null && bumped != pinned.lastMembershipChangedAt) {
+                pinned.copy(lastMembershipChangedAt = bumped)
+            } else {
+                pinned
+            }
+        }.sortedBy { it.sortOrder }
+    }
 }
 
 /** Apple `SyncMerge` helpers used by backup restore. */

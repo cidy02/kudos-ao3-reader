@@ -117,6 +117,7 @@ fun SavedWork.toBackupWork(
         summary = summary,
         sourceURL = sourceUrl,
         dateAdded = BackupValidator.formatInstant(dateAdded),
+        createdAt = createdAt?.let(BackupValidator::formatInstant),
         isFavorite = isFavorite,
         hasGivenKudos = hasGivenKudos,
         isSaved = isSaved,
@@ -161,6 +162,7 @@ fun SavedWork.toBackupWork(
             ?.let(BackupValidator::formatInstant),
         // Pass-through only — do not default null to "notPreserved" (would rewrite iOS data).
         epubPreservationStatusRaw = epubPreservationStatusRaw,
+        metadataSyncStatusRaw = metadataSyncStatusRaw,
         preservedAt = preservedAt?.let(BackupValidator::formatInstant),
         lastPreservationAttemptAt = lastPreservationAttemptAt?.let(BackupValidator::formatInstant),
         keepInProgressOverride = keepInProgressOverride,
@@ -173,6 +175,7 @@ fun SavedWork.toBackupWork(
         datePublished = datePublished,
         dateUpdated = dateUpdated,
         ao3SeriesID = ao3SeriesID,
+        ao3WorkID = ao3WorkID,
         assetIdentifier = assetIdentifier.ifBlank { null }
     )
 }
@@ -211,6 +214,11 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         sourceUrl = io.github.cidy02.kudos.works.WorkTags.canonicalAO3WorkURL(sourceURL)
             ?: sourceURL,
         dateAdded = added,
+        createdAt = BackupValidator.parseNullableInstant(
+            createdAt?.takeIf { it.isNotBlank() },
+            "work.createdAt",
+            exportedAt
+        ),
         isFavorite = isFavorite,
         hasGivenKudos = hasGivenKudos,
         // Honour the archive's flag exactly, as iOS does (`KudosBackup.swift`
@@ -279,6 +287,7 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         permanentDeletionScheduledAt = deletionState.permanentDeletionScheduledAt,
         // Pass-through: blank/absent stays null (never invent "notPreserved").
         epubPreservationStatusRaw = epubPreservationStatusRaw?.takeIf { it.isNotBlank() },
+        metadataSyncStatusRaw = metadataSyncStatusRaw?.takeIf { it.isNotBlank() },
         preservedAt = BackupValidator.parseNullableInstant(
             preservedAt?.takeIf { it.isNotBlank() },
             "work.preservedAt",
@@ -295,6 +304,7 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         dateUpdated = dateUpdated.orEmpty(),
         bookmarks = bookmarks,
         ao3SeriesID = ao3SeriesID,
+        ao3WorkID = ao3WorkID,
         legacyReaderProgress = readerProgress,
         epubDigest = epubDigest.orEmpty(),
         assetIdentifier = assetIdentifier.orEmpty()
@@ -345,10 +355,12 @@ fun WorkCollection.toBackupCollection(): BackupCollection {
         id = BackupPaths.canonicalUuid(id, "collection.id"),
         name = name,
         dateAdded = BackupValidator.formatInstant(dateAdded),
+        createdAt = createdAt?.let(BackupValidator::formatInstant),
         workIDs = workIds.map { BackupPaths.canonicalUuid(it, "collection.workId") },
         description = description,
         sortOrder = sortOrder,
         lastModifiedAt = lastModifiedAt?.let { BackupValidator.formatInstant(it) },
+        syncStatusRaw = syncStatusRaw,
         deletedAt = deletedAt?.let { BackupValidator.formatInstant(it) },
         isDeleted = isDeleted,
         permanentDeletionScheduledAt = permanentDeletionScheduledAt
@@ -370,11 +382,17 @@ fun BackupCollection.toWorkCollection(
         id = BackupPaths.canonicalUuid(id, "collection.id"),
         name = nameOverride,
         dateAdded = BackupValidator.parseInstant(dateAdded, "collection.dateAdded", exportedAt),
+        createdAt = BackupValidator.parseNullableInstant(
+            createdAt?.takeIf { it.isNotBlank() },
+            "collection.createdAt",
+            exportedAt
+        ),
         workIds = workIDs.map { BackupPaths.canonicalUuid(it, "collection.workId") },
         description = description,
         sortOrder = sortOrder,
         lastModifiedAt = lastModifiedAt?.takeIf { it.isNotBlank() }
             ?.let { BackupValidator.parseInstant(it, "collection.lastModifiedAt", exportedAt) },
+        syncStatusRaw = syncStatusRaw,
         isDeleted = deletionState.isDeleted,
         deletedAt = if (deletionState.isDeleted) {
             deletedAt?.takeIf { it.isNotBlank() }?.let {
@@ -431,7 +449,9 @@ fun CoreBackupSettings.toBackupSettingsPayload(): BackupSettingsPayload {
         appTheme = appTheme,
         readerTheme = readerTheme,
         matchAppReaderTheme = matchAppReaderTheme,
-        accentColorHex = accentColorHex
+        accentColorHex = accentColorHex,
+        autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
+        autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
     )
 }
 
@@ -455,7 +475,9 @@ fun BackupSettingsPayload.toCoreBackupSettings(): CoreBackupSettings {
         appTheme = appTheme,
         readerTheme = readerTheme,
         matchAppReaderTheme = matchAppReaderTheme,
-        accentColorHex = accentColorHex
+        accentColorHex = accentColorHex,
+        autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
+        autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
     )
 }
 
