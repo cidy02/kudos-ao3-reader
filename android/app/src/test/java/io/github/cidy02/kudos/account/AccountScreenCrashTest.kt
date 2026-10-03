@@ -43,8 +43,8 @@ class AccountScreenCrashTest {
         // Let it render Overview
         composeTestRule.waitForIdle()
         
-        // Switch to Activity
-        composeTestRule.onNodeWithText("Activity").performClick()
+        // Account is one flat page, as on iOS (no Activity tab to switch to); its
+        // Activity group's rows render directly.
         composeTestRule.waitForIdle()
         
         // Wait for it to render Activity tab content

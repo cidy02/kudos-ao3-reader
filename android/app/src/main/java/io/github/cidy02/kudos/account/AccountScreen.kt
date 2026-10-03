@@ -1,4 +1,22 @@
 package io.github.cidy02.kudos.account
+import androidx.compose.foundation.background
+import io.github.cidy02.kudos.R
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.text.font.FontFamily
+import io.github.cidy02.kudos.ui.subject.AccentIconSquare
+import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
+import io.github.cidy02.kudos.ui.subject.SubjectChip
 
 import android.content.Intent
 import android.net.Uri
@@ -101,7 +119,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import io.github.cidy02.kudos.R
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3SessionHealth
@@ -128,6 +145,7 @@ import java.util.concurrent.TimeUnit
  * profile header · Overview/Reading/Writing/Activity tabs · shortcut grid ·
  * inline list browsers that reuse [AccountListRepository] / [AccountListType].
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountScreen(
@@ -166,121 +184,218 @@ fun AccountScreen(
     val state by viewModel.uiState.collectAsState()
     val signedIn = state.authState is AO3AuthState.SignedIn
     val username = (state.authState as? AO3AuthState.SignedIn)?.username
+    
+    var activePage by rememberSaveable { mutableStateOf<String?>(null) }
 
-    var tab by rememberSaveable { mutableStateOf(AccountHubTab.Overview.name) }
-    var readingKind by rememberSaveable { mutableStateOf(AccountReadingKind.MarkedForLater.name) }
-    var writingKind by rememberSaveable { mutableStateOf(AccountWritingKind.Works.name) }
-    var activityKind by rememberSaveable { mutableStateOf(AccountActivityKind.History.name) }
-    var selectedFandom by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailedMode by rememberSaveable { mutableStateOf(false) }
-
-    val selectedTab = AccountHubTab.entries.find { it.name == tab } ?: AccountHubTab.Overview
-    val selectedReading =
-        AccountReadingKind.entries.find { it.name == readingKind } ?: AccountReadingKind.MarkedForLater
-    val selectedWriting =
-        AccountWritingKind.entries.find { it.name == writingKind } ?: AccountWritingKind.Works
-    val selectedActivity =
-        AccountActivityKind.entries.find { it.name == activityKind } ?: AccountActivityKind.History
-
-    // Reset client fandom filter when the active list identity changes.
-    LaunchedEffect(selectedTab, selectedReading, selectedWriting, selectedActivity) {
-        selectedFandom = null
+    BackHandler(enabled = activePage != null) {
+        activePage = null
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    if (activePage == "Inbox" && inboxRepository != null && commentRepository != null) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Inbox") },
+                    navigationIcon = {
+                        IconButton(onClick = { activePage = null }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                )
+            }
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding)) {
+                AccountInboxPane(
+                    inboxRepository = inboxRepository,
+                    commentRepository = commentRepository,
+                    currentUsername = username,
+                    onOpenWorkComments = onOpenWorkComments,
+                    settingsRepository = listRepository.settingsRepository
+                )
+            }
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 32.dp)
     ) {
-        AccountProfileHeader(
-            authState = state.authState,
-            sessionHealth = state.sessionHealth,
-            avatarUrl = state.header?.avatarUrl,
-            onLogin = onLogin,
-            onLogout = viewModel::logout,
-            onVerifySession = viewModel::verifySession,
-            onOpenSettings = onOpenSettings,
-            onOpenAbout = onOpenAbout,
-            onOpenPrivacy = onOpenPrivacy,
-            onOpenBackup = onOpenBackup,
-            onOpenLocalHistory = onOpenLocalHistory,
-            onOpenLocalFavorites = onOpenLocalFavorites,
-            onOpenCollections = onOpenCollections,
-            onOpenAuthorProfile = { onOpenWeb("native:profile") }
-        )
+        item {
+            AccountProfileHeader(
+                authState = state.authState,
+                sessionHealth = state.sessionHealth,
+                avatarUrl = state.header?.avatarUrl,
+                onLogin = onLogin,
+                onLogout = viewModel::logout,
+                onVerifySession = viewModel::verifySession,
+                onOpenSettings = onOpenSettings,
+                onOpenAbout = onOpenAbout,
+                onOpenPrivacy = onOpenPrivacy,
+                onOpenBackup = onOpenBackup,
+                onOpenLocalHistory = onOpenLocalHistory,
+                onOpenLocalFavorites = onOpenLocalFavorites,
+                onOpenCollections = onOpenCollections,
+                onOpenAuthorProfile = { onOpenWeb("native:profile") }
+            )
+        }
 
-        AccountHubTabRow(
-            selected = selectedTab,
-            onSelect = { tab = it.name }
-        )
-
-        when (selectedTab) {
-            AccountHubTab.Overview -> {
-                OverviewTabContent(
-                    signedIn = signedIn,
-                    username = username,
+        if (signedIn) {
+            item { Spacer(Modifier.height(16.dp)) }
+            
+            item {
+                AccountHubShortcuts(
                     counts = state.counts,
                     onOpenDashboard = onOpenDashboard,
                     onOpenList = onOpenList,
                     onOpenAO3Collections = onOpenAO3Collections,
-                    onOpenWeb = onOpenWeb
+                    onOpenWeb = onOpenWeb,
+                    onOpenInbox = { activePage = "Inbox" }
                 )
             }
-            AccountHubTab.Reading -> {
-                ReadingTabContent(
-                    signedIn = signedIn,
-                    kind = selectedReading,
-                    onKindChange = { readingKind = it.name },
-                    listRepository = listRepository,
-                    workRepository = workRepository,
-                    detailedMode = detailedMode,
-                    onToggleDetailed = { detailedMode = !detailedMode },
-                    onLogin = onLogin,
-                    onOpenWork = onOpenWork,
-                    onOpenCollection = onOpenCollection,
-                    onOpenAO3Collections = onOpenAO3Collections
-                )
+            
+            item { Spacer(Modifier.height(16.dp)) }
+
+            item {
+                AccountScopeGroup("Reading") {
+                    AccountScopeRow(
+                        title = "Marked for Later",
+                        icon = Icons.Outlined.Schedule,
+                        count = state.counts[AccountListType.MarkedForLater.listKey]?.displayText,
+                        onClick = { onOpenList(AccountListType.MarkedForLater) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                    AccountScopeRow(
+                        title = "Bookmarks",
+                        icon = Icons.Outlined.BookmarkBorder,
+                        count = state.counts[AccountListType.Bookmarks.listKey]?.displayText,
+                        onClick = { onOpenList(AccountListType.Bookmarks) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                    AccountScopeRow(
+                        title = "Collections",
+                        icon = Icons.Outlined.Collections,
+                        onClick = onOpenAO3Collections
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                    AccountScopeRow(
+                        title = "Subscriptions",
+                        icon = Icons.Outlined.NotificationsNone,
+                        count = state.counts[AccountListType.Subscriptions.listKey]?.displayText,
+                        onClick = { onOpenList(AccountListType.Subscriptions) }
+                    )
+                }
             }
-            AccountHubTab.Writing -> {
-                WritingTabContent(
-                    signedIn = signedIn,
-                    username = username,
-                    kind = selectedWriting,
-                    onKindChange = { writingKind = it.name },
-                    selectedFandom = selectedFandom,
-                    onFandomChange = { selectedFandom = it },
-                    listRepository = listRepository,
-                    workRepository = workRepository,
-                    authorRepository = authorRepository,
-                    detailedMode = detailedMode,
-                    onToggleDetailed = { detailedMode = !detailedMode },
-                    onLogin = onLogin,
-                    onOpenWork = onOpenWork,
-                    onOpenSeries = onOpenSeries,
-                    onOpenWeb = onOpenWeb
-                )
+
+            item { Spacer(Modifier.height(16.dp)) }
+
+            item {
+                AccountScopeGroup("Writing") {
+                    AccountScopeRow(
+                        title = "Works",
+                        icon = Icons.Outlined.Description,
+                        count = state.counts[AccountListType.MyWorks.listKey]?.displayText,
+                        onClick = { onOpenList(AccountListType.MyWorks) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                    AccountScopeRow(
+                        title = "Series",
+                        icon = Icons.Outlined.Collections,
+                        onClick = { username?.let { onOpenSeries("https://archiveofourown.org/users/$it/series") } }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                    AccountScopeRow(
+                        title = "Drafts",
+                        subtitle = "Deleted by AO3 after 30 days",
+                        icon = Icons.Outlined.Drafts,
+                        onClick = { username?.let { onOpenWeb("https://archiveofourown.org/users/$it/works/drafts") } }
+                    )
+                }
             }
-            AccountHubTab.Activity -> {
-                ActivityTabContent(
-                    signedIn = signedIn,
-                    kind = selectedActivity,
-                    onKindChange = { activityKind = it.name },
-                    listRepository = listRepository,
-                    workRepository = workRepository,
-                    onLogin = onLogin,
-                    onOpenWork = onOpenWork,
-                    username = username,
-                    inboxRepository = inboxRepository,
-                    commentRepository = commentRepository,
-                    onOpenWorkComments = onOpenWorkComments
-                )
+
+            item { Spacer(Modifier.height(16.dp)) }
+
+            item {
+                AccountScopeGroup("Activity") {
+                    AccountScopeRow(
+                        title = "History",
+                        subtitle = "Your AO3 history, not your reading activity in Kudos",
+                        icon = Icons.Outlined.History,
+                        count = state.counts[AccountListType.History.listKey]?.displayText,
+                        onClick = { onOpenList(AccountListType.History) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                    AccountScopeRow(
+                        title = "Inbox",
+                        icon = Icons.Outlined.Inbox,
+                        onClick = { activePage = "Inbox" }
+                    )
+                }
+            }
+
+            item { Spacer(Modifier.height(16.dp)) }
+
+            item {
+                AccountScopeGroup("Account") {
+                    AccountScopeRow(
+                        title = "Preferences",
+                        icon = Icons.Outlined.Tune,
+                        onClick = { onOpenWeb("native:preferences") }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                    
+                    var moreOnAo3MenuOpen by remember { mutableStateOf(false) }
+                    Box {
+                        AccountScopeRow(
+                            title = "More on AO3",
+                            icon = Icons.Outlined.Public,
+                            onClick = { moreOnAo3MenuOpen = true }
+                        )
+                        DropdownMenu(
+                            expanded = moreOnAo3MenuOpen,
+                            onDismissRequest = { moreOnAo3MenuOpen = false }
+                        ) {
+                            val destinations = listOf(
+                                Triple("Drafts", Icons.Outlined.Drafts, "works/drafts"),
+                                Triple("Pseuds", Icons.Outlined.People, "pseuds"),
+                                Triple("Skins", Icons.Outlined.Palette, "skins"),
+                                Triple("Statistics", Icons.Outlined.BarChart, "stats"),
+                                Triple("Co-Creator Requests", Icons.Outlined.PersonAdd, "creatorships"),
+                                Triple("Sign-ups", Icons.Outlined.EditNote, "signups"),
+                                Triple("Assignments", Icons.AutoMirrored.Outlined.Assignment, "assignments"),
+                                Triple("Claims", Icons.Outlined.Flag, "claims"),
+                                Triple("Related Works", Icons.AutoMirrored.Outlined.CallSplit, "related_works"),
+                                Triple("Gifts", Icons.Outlined.CardGiftcard, "gifts")
+                            )
+                            destinations.forEach { (title, icon, pathSuffix) ->
+                                DropdownMenuItem(
+                                    text = { Text(title) },
+                                    leadingIcon = {
+                                        Icon(imageVector = icon, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        moreOnAo3MenuOpen = false
+                                        if (username != null) {
+                                            onOpenWeb("https://archiveofourown.org/users/$username/$pathSuffix")
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            item { Spacer(Modifier.height(16.dp)) }
+            item {
+                SignedOutPreviewSection()
             }
         }
     }
 }
-
-// region Profile + tabs
 
 @Composable
 private fun AccountProfileHeader(
@@ -301,223 +416,235 @@ private fun AccountProfileHeader(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        shape = MaterialTheme.shapes.large
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        Text(
+            text = "AO3 ACCOUNT",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ),
+            shape = MaterialTheme.shapes.large
         ) {
-            Box(modifier = Modifier.clickable(enabled = authState is AO3AuthState.SignedIn) {
-                onOpenAuthorProfile()
-            }) {
-                AccountAvatar(avatarUrl = avatarUrl)
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                when (authState) {
-                    AO3AuthState.Restoring, AO3AuthState.SigningIn -> {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Text(
-                                text = if (authState is AO3AuthState.SigningIn) {
-                                    "Signing in…"
-                                } else {
-                                    "Checking session…"
-                                },
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                Box(modifier = Modifier.clickable(enabled = authState is AO3AuthState.SignedIn) {
+                    onOpenAuthorProfile()
+                }) {
+                    AccountAvatar(avatarUrl = avatarUrl)
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    when (authState) {
+                        AO3AuthState.Restoring, AO3AuthState.SigningIn -> {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Text(
+                                    text = if (authState is AO3AuthState.SigningIn) "Signing in…" else "Checking session…",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
                         }
-                    }
-                    is AO3AuthState.SignedIn -> {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        is AO3AuthState.SignedIn -> {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = authState.username,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                SessionHealthIcon(sessionHealth)
+                            }
                             Text(
-                                text = authState.username,
+                                text = "Signed in",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Card(
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                modifier = Modifier.padding(top = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Posting as Account Default",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        AO3AuthState.SignedOut -> {
+                            Text(
+                                text = "Not signed in",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                            TextButton(
+                                onClick = onLogin,
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                            ) {
+                                Text("Log In to AO3…")
+                            }
+                        }
+                        is AO3AuthState.Expired -> {
+                            Text(
+                                text = "Session expired",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.SemiBold
                                 ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
+                                color = MaterialTheme.colorScheme.error
                             )
-                            SessionHealthIcon(sessionHealth)
-                        }
-                        Text(
-                            text = sessionHealthDetailText(sessionHealth),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = when (sessionHealth) {
-                                AO3SessionHealth.Expired -> MaterialTheme.colorScheme.error
-                                AO3SessionHealth.Unreachable -> Color(0xFFFF9500)
-                                else -> MaterialTheme.colorScheme.primary
+                            TextButton(
+                                onClick = onLogin,
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                            ) {
+                                Text("Log In Again")
                             }
-                        )
-                    }
-                    AO3AuthState.SignedOut -> {
-                        Text(
-                            text = "Not signed in",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold
+                        }
+                        is AO3AuthState.Error -> {
+                            Text(
+                                text = "Account error",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = MaterialTheme.colorScheme.error
                             )
-                        )
-                        TextButton(
-                            onClick = onLogin,
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
-                        ) {
-                            Text("Log In to AO3…")
-                        }
-                    }
-                    is AO3AuthState.Expired -> {
-                        Text(
-                            text = "Session expired",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        TextButton(
-                            onClick = onLogin,
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
-                        ) {
-                            Text("Log In Again")
-                        }
-                    }
-                    is AO3AuthState.Error -> {
-                        Text(
-                            text = "Account error",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        TextButton(
-                            onClick = onLogin,
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
-                        ) {
-                            Text("Log In")
+                            TextButton(
+                                onClick = onLogin,
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                            ) {
+                                Text("Log In")
+                            }
                         }
                     }
                 }
-            }
 
-            Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(
-                        imageVector = Icons.Outlined.MoreHoriz,
-                        contentDescription = "Account menu"
-                    )
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    if (authState is AO3AuthState.SignedIn) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (sessionHealth.isChecking) "Checking…" else "Verify Session"
-                                )
-                            },
-                            leadingIcon = {
-                                if (sessionHealth.isChecking) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Refresh,
-                                        contentDescription = null
-                                    )
-                                }
-                            },
-                            enabled = !sessionHealth.isChecking,
-                            onClick = {
-                                menuOpen = false
-                                onVerifySession()
-                            }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(
+                            imageVector = Icons.Outlined.MoreHoriz,
+                            contentDescription = "Account menu"
                         )
-                        HorizontalDivider()
                     }
-                    DropdownMenuItem(
-                        text = { Text("Settings") },
-                        onClick = {
-                            menuOpen = false
-                            onOpenSettings()
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        if (authState is AO3AuthState.SignedIn) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (sessionHealth.isChecking) "Checking…" else "Verify Session"
+                                    )
+                                },
+                                leadingIcon = {
+                                    if (sessionHealth.isChecking) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Refresh,
+                                            contentDescription = null
+                                        )
+                                    }
+                                },
+                                enabled = !sessionHealth.isChecking,
+                                onClick = {
+                                    menuOpen = false
+                                    onVerifySession()
+                                }
+                            )
+                            HorizontalDivider()
                         }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Privacy & Local Data") },
-                        onClick = {
-                            menuOpen = false
-                            onOpenPrivacy()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Backup") },
-                        onClick = {
-                            menuOpen = false
-                            onOpenBackup()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Local Reading History") },
-                        onClick = {
-                            menuOpen = false
-                            onOpenLocalHistory()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Favorites") },
-                        onClick = {
-                            menuOpen = false
-                            onOpenLocalFavorites()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Local Collections") },
-                        onClick = {
-                            menuOpen = false
-                            onOpenCollections()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("About Kudos") },
-                        onClick = {
-                            menuOpen = false
-                            onOpenAbout()
-                        }
-                    )
-                    if (authState is AO3AuthState.SignedIn) {
-                        HorizontalDivider()
                         DropdownMenuItem(
-                            text = {
-                                Text("Log Out", color = MaterialTheme.colorScheme.error)
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Outlined.Logout,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            },
+                            text = { Text("Settings") },
                             onClick = {
                                 menuOpen = false
-                                onLogout()
+                                onOpenSettings()
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Privacy & Local Data") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenPrivacy()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Backup") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenBackup()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Local Reading History") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenLocalHistory()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Favorites") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenLocalFavorites()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Local Collections") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenCollections()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("About Kudos") },
+                            onClick = {
+                                menuOpen = false
+                                onOpenAbout()
+                            }
+                        )
+                        if (authState is AO3AuthState.SignedIn) {
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Text("Log Out", color = MaterialTheme.colorScheme.error)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.Logout,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onLogout()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -561,7 +688,7 @@ private fun SessionHealthIcon(health: AO3SessionHealth) {
         AO3SessionHealth.Unreachable -> {
             Icon(
                 imageVector = Icons.Outlined.WifiOff,
-                contentDescription = "Couldn't verify session",
+                contentDescription = "Network unreachable",
                 tint = Color(0xFFFF9500),
                 modifier = Modifier.size(20.dp)
             )
@@ -569,280 +696,188 @@ private fun SessionHealthIcon(health: AO3SessionHealth) {
     }
 }
 
-private fun sessionHealthDetailText(health: AO3SessionHealth): String {
-    return when (health) {
-        AO3SessionHealth.Unknown -> "Signed in to AO3"
-        AO3SessionHealth.Verifying -> "Checking session…"
-        is AO3SessionHealth.Healthy -> {
-            val ageMs = (System.currentTimeMillis() - health.verifiedAtEpochMillis).coerceAtLeast(0L)
-            val minutes = TimeUnit.MILLISECONDS.toMinutes(ageMs)
-            when {
-                minutes < 1L -> "Signed in · verified just now"
-                minutes == 1L -> "Signed in · verified 1 minute ago"
-                minutes < 60L -> "Signed in · verified $minutes minutes ago"
-                else -> {
-                    val hours = TimeUnit.MILLISECONDS.toHours(ageMs)
-                    if (hours == 1L) {
-                        "Signed in · verified 1 hour ago"
-                    } else {
-                        "Signed in · verified $hours hours ago"
-                    }
-                }
-            }
-        }
-        AO3SessionHealth.Expired -> "Session expired"
-        AO3SessionHealth.Unreachable -> "Signed in · couldn't verify"
-    }
-}
-
 @Composable
 private fun AccountAvatar(avatarUrl: String?) {
-    val context = LocalContext.current
-    Surface(
+    Box(
         modifier = Modifier
             .size(56.dp)
-            .semantics { contentDescription = "Account avatar" },
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            if (avatarUrl != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(avatarUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_kudos_mark),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AccountHubTabRow(
-    selected: AccountHubTab,
-    onSelect: (AccountHubTab) -> Unit
-) {
-    val tabs = AccountHubTab.entries
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        tabs.forEachIndexed { index, hubTab ->
-            SegmentedButton(
-                selected = selected == hubTab,
-                onClick = { onSelect(hubTab) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = tabs.size),
-                label = {
-                    Text(
-                        text = hubTab.label,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+        if (avatarUrl != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(avatarUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "Avatar",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_kudos_mark),
+                contentDescription = "Default avatar",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
-// endregion
-
-// region Overview
+@Composable
+private fun AccountShortcutGridTile(
+    title: String,
+    icon: ImageVector,
+    count: String? = null,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                AccentIconSquare(icon = icon, contentDescription = null)
+                if (count != null) {
+                    Text(
+                        text = count,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
 
 @Composable
-private fun OverviewTabContent(
-    signedIn: Boolean,
-    username: String?,
+fun AccountScopeRow(
+    title: String,
+    icon: ImageVector,
+    subtitle: String? = null,
+    count: String? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        AccentIconSquare(icon = icon, contentDescription = null)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (count != null) {
+            Text(
+                text = count, 
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace), 
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+fun AccountScopeGroup(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    var collapsed by rememberSaveable { mutableStateOf(false) }
+    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        SectionRuleHeader(
+            title = title,
+            isCollapsed = collapsed,
+            onToggleCollapse = { collapsed = !collapsed }
+        )
+        AnimatedVisibility(visible = !collapsed) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountHubShortcuts(
     counts: Map<String, AO3AccountListCountsCache.Count>,
     onOpenDashboard: () -> Unit,
     onOpenList: (AccountListType) -> Unit,
     onOpenAO3Collections: () -> Unit,
-    onOpenWeb: (String) -> Unit
+    onOpenWeb: (String) -> Unit,
+    onOpenInbox: () -> Unit
 ) {
-    val context = LocalContext.current
-    var moreOnAo3MenuOpen by remember { mutableStateOf(false) }
-    val moreOnAo3Enabled = !username.isNullOrBlank()
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        item {
-            KudosSectionHeader(title = "Shortcuts")
-            Spacer(Modifier.height(8.dp))
-            AccountShortcutsGrid(
-                signedIn = signedIn,
-                counts = counts,
-                onOpenDashboard = onOpenDashboard,
-                onOpenList = onOpenList,
-                onOpenAO3Collections = onOpenAO3Collections
-            )
-        }
-        item {
-            KudosSectionHeader(title = "Account")
-            Spacer(Modifier.height(8.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AccountLinkRow(
-                    title = "Preferences",
-                    icon = Icons.Outlined.Tune,
-                    onClick = {
-                        if (signedIn) {
-                            onOpenWeb("native:preferences")
-                        } else {
-                            onOpenWeb("https://archiveofourown.org/preferences")
-                        }
-                    }
-                )
-                // Curated account-scoped AO3 destinations (iOS AccountMoreOnAO3View parity).
-                // Opens a menu first; each item hits the WebView fallback with the user path.
-                Box {
-                    AccountLinkRow(
-                        title = "More on AO3",
-                        icon = Icons.Outlined.Public,
-                        onClick = { moreOnAo3MenuOpen = true }
-                    )
-                    DropdownMenu(
-                        expanded = moreOnAo3MenuOpen,
-                        onDismissRequest = { moreOnAo3MenuOpen = false }
-                    ) {
-                        val destinations = listOf(
-                            Triple("Drafts", Icons.Outlined.Drafts, "works/drafts"),
-                            Triple("Pseuds", Icons.Outlined.People, "pseuds"),
-                            Triple("Skins", Icons.Outlined.Palette, "skins"),
-                            Triple("Statistics", Icons.Outlined.BarChart, "stats"),
-                            Triple("Co-Creator Requests", Icons.Outlined.PersonAdd, "creatorships"),
-                            Triple("Sign-ups", Icons.Outlined.EditNote, "signups"),
-                            Triple("Assignments", Icons.AutoMirrored.Outlined.Assignment, "assignments"),
-                            Triple("Claims", Icons.Outlined.Flag, "claims"),
-                            Triple("Related Works", Icons.AutoMirrored.Outlined.CallSplit, "related_works"),
-                            Triple("Gifts", Icons.Outlined.CardGiftcard, "gifts")
-                        )
-                        destinations.forEach { (title, icon, pathSuffix) ->
-                            DropdownMenuItem(
-                                text = { Text(title) },
-                                leadingIcon = {
-                                    Icon(imageVector = icon, contentDescription = null)
-                                },
-                                enabled = moreOnAo3Enabled,
-                                onClick = {
-                                    moreOnAo3MenuOpen = false
-                                    val user = username
-                                    if (!user.isNullOrBlank()) {
-                                        // Drafts shares the same helper as Writing → Drafts.
-                                        val url = if (pathSuffix == "works/drafts") {
-                                            io.github.cidy02.kudos.network.ao3.author.AO3AuthorUrls
-                                                .userDraftsUrl(user)
-                                        } else {
-                                            "https://archiveofourown.org/users/$user/$pathSuffix"
-                                        }
-                                        if (url != null) onOpenWeb(url)
-                                    }
-                                }
+    val defaults = listOf(
+        ShortcutItem("Dashboard", Icons.Outlined.GridView, onClick = onOpenDashboard),
+        ShortcutItem("Subscriptions", Icons.Outlined.NotificationsNone, count = counts[AccountListType.Subscriptions.listKey], onClick = { onOpenList(AccountListType.Subscriptions) }),
+        ShortcutItem("Works", Icons.Outlined.Description, count = counts[AccountListType.MyWorks.listKey], onClick = { onOpenList(AccountListType.MyWorks) }),
+        ShortcutItem("Bookmarks", Icons.Outlined.BookmarkBorder, count = counts[AccountListType.Bookmarks.listKey], onClick = { onOpenList(AccountListType.Bookmarks) }),
+        ShortcutItem("Collections", Icons.Outlined.Collections, onClick = onOpenAO3Collections),
+        ShortcutItem("History", Icons.Outlined.History, count = counts[AccountListType.History.listKey], onClick = { onOpenList(AccountListType.History) })
+    )
+
+    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        SectionRuleHeader(
+            title = "Shortcuts",
+            onSeeAll = { /* TODO implement shortcut editor */ }
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            defaults.chunked(3).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    row.forEach { item ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            AccountShortcutGridTile(
+                                title = item.title,
+                                icon = item.icon,
+                                count = item.count?.displayText,
+                                onClick = item.onClick
                             )
                         }
                     }
-                }
-            }
-        }
-        if (!signedIn) {
-            item {
-                Text(
-                    text = "Log in to use AO3 subscriptions, bookmarks, history, and your reading list.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
-            }
-        }
-        item {
-            // Quiet help affordance — iOS keeps bug/source off the overview face.
-            TextButton(
-                onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/cidy02/kudos-ao3-reader"))
-                    runCatching { context.startActivity(intent) }
-                }
-            ) {
-                Text("Source on GitHub", style = MaterialTheme.typography.labelLarge)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountShortcutsGrid(
-    signedIn: Boolean,
-    counts: Map<String, AO3AccountListCountsCache.Count>,
-    onOpenDashboard: () -> Unit,
-    onOpenList: (AccountListType) -> Unit,
-    onOpenAO3Collections: () -> Unit
-) {
-    val shortcuts = listOf(
-        ShortcutItem(
-            "My Dashboard",
-            Icons.Outlined.GridView,
-            enabled = signedIn,
-            onClick = onOpenDashboard
-        ),
-        ShortcutItem(
-            "My Subscriptions",
-            Icons.Outlined.NotificationsNone,
-            enabled = signedIn,
-            count = counts[AccountListType.Subscriptions.listKey],
-            onClick = { onOpenList(AccountListType.Subscriptions) }
-        ),
-        ShortcutItem(
-            "My Works",
-            Icons.Outlined.Description,
-            enabled = signedIn,
-            count = counts[AccountListType.MyWorks.listKey],
-            onClick = { onOpenList(AccountListType.MyWorks) }
-        ),
-        ShortcutItem(
-            "My Bookmarks",
-            Icons.Outlined.BookmarkBorder,
-            enabled = signedIn,
-            count = counts[AccountListType.Bookmarks.listKey],
-            onClick = { onOpenList(AccountListType.Bookmarks) }
-        ),
-        ShortcutItem(
-            "My Collections",
-            Icons.Outlined.Collections,
-            enabled = signedIn,
-            onClick = onOpenAO3Collections
-        ),
-        ShortcutItem(
-            "My History",
-            Icons.Outlined.History,
-            enabled = signedIn,
-            count = counts[AccountListType.History.listKey],
-            onClick = { onOpenList(AccountListType.History) }
-        )
-    )
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        shortcuts.chunked(3).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                row.forEach { item ->
-                    AccountShortcutTile(
-                        item = item,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                // Pad incomplete final rows so tiles keep equal width.
-                repeat(3 - row.size) {
-                    Spacer(Modifier.weight(1f))
+                    repeat(3 - row.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -852,521 +887,70 @@ private fun AccountShortcutsGrid(
 private data class ShortcutItem(
     val title: String,
     val icon: ImageVector,
-    val enabled: Boolean,
     val count: AO3AccountListCountsCache.Count? = null,
     val onClick: () -> Unit
 )
 
 @Composable
-private fun AccountShortcutTile(
-    item: ShortcutItem,
-    modifier: Modifier = Modifier
-) {
-    val iconTint = if (item.enabled) Ao3Red else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    val textColor = if (item.enabled) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    }
-    Card(
-        onClick = item.onClick,
-        enabled = item.enabled,
-        modifier = modifier.aspectRatio(1f),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.7f)
-        ),
-        shape = MaterialTheme.shapes.large
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = textColor,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            item.count?.displayText?.let { count ->
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 0.dp),
-                    modifier = Modifier.align(Alignment.BottomEnd)
-                ) {
-                    Text(
-                        text = count,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountLinkRow(
-    title: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        shape = MaterialTheme.shapes.large
-    ) {
-        ListItem(
-            headlineContent = { Text(title) },
-            leadingContent = {
-                Icon(imageVector = icon, contentDescription = null, tint = Ao3Red)
-            },
-            trailingContent = {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            colors = ListItemDefaults.colors(
-                containerColor = Color.Transparent
-            )
-        )
-    }
-}
-
-// endregion
-
-// region Reading / Writing / Activity tabs
-
-@Composable
-private fun ReadingTabContent(
-    signedIn: Boolean,
-    kind: AccountReadingKind,
-    onKindChange: (AccountReadingKind) -> Unit,
-    listRepository: AccountListRepository,
-    workRepository: WorkRepository,
-    detailedMode: Boolean,
-    onToggleDetailed: () -> Unit,
-    onLogin: () -> Unit,
-    onOpenWork: (AO3WorkSummary) -> Unit,
-    onOpenCollection: (AO3Collection) -> Unit,
-    onOpenAO3Collections: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AccountListKindPicker(
-                label = kind.label,
-                icon = when (kind) {
-                    AccountReadingKind.MarkedForLater -> Icons.Outlined.Schedule
-                    AccountReadingKind.Subscriptions -> Icons.Outlined.NotificationsNone
-                    AccountReadingKind.Bookmarks -> Icons.Outlined.BookmarkBorder
-                    AccountReadingKind.Collections -> Icons.Outlined.Collections
-                },
-                options = AccountReadingKind.entries.map { it.label to it },
-                onSelect = onKindChange,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = onToggleDetailed) {
-                Icon(
-                    imageVector = if (detailedMode) Icons.Outlined.GridView else Icons.AutoMirrored.Outlined.List,
-                    contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
-                )
-            }
-        }
-
-        if (!signedIn) {
-            SignInRequiredCard(onLogin)
-            return
-        }
-
-        when (kind) {
-            AccountReadingKind.Collections -> {
-                HubCollectionsPane(
-                    listRepository = listRepository,
-                    onLogin = onLogin,
-                    onOpenCollection = onOpenCollection,
-                    onOpenFullIndex = onOpenAO3Collections
-                )
-            }
-            else -> {
-                val listType = kind.toAccountListType() ?: return
-                HubWorksPane(
-                    listType = listType,
-                    listRepository = listRepository,
-                    workRepository = workRepository,
-                    detailedMode = detailedMode,
-                    onLogin = onLogin,
-                    onOpenWork = onOpenWork,
-                    sectionTitle = kind.label
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun WritingTabContent(
-    signedIn: Boolean,
-    username: String?,
-    kind: AccountWritingKind,
-    onKindChange: (AccountWritingKind) -> Unit,
-    selectedFandom: String?,
-    onFandomChange: (String?) -> Unit,
-    listRepository: AccountListRepository,
-    workRepository: WorkRepository,
-    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository?,
-    detailedMode: Boolean,
-    onToggleDetailed: () -> Unit,
-    onLogin: () -> Unit,
-    onOpenWork: (AO3WorkSummary) -> Unit,
-    onOpenSeries: (String) -> Unit,
-    onOpenWeb: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AccountListKindPicker(
-                label = kind.label,
-                icon = when (kind) {
-                    AccountWritingKind.Works -> Icons.Outlined.Description
-                    AccountWritingKind.Series -> Icons.Outlined.Collections
-                    AccountWritingKind.Drafts -> Icons.Outlined.Drafts
-                },
-                options = AccountWritingKind.entries.map { it.label to it },
-                onSelect = onKindChange,
-                modifier = Modifier.weight(1f)
-            )
-            // Density toggle only applies to native work lists (Works).
-            if (kind == AccountWritingKind.Works) {
-                IconButton(onClick = onToggleDetailed) {
-                    Icon(
-                        imageVector = if (detailedMode) {
-                            Icons.Outlined.GridView
-                        } else {
-                            Icons.AutoMirrored.Outlined.List
-                        },
-                        contentDescription = if (detailedMode) "Show Compact" else "Show Detailed"
-                    )
-                }
-            }
-        }
-
-        if (!signedIn) {
-            SignInRequiredCard(onLogin)
-            return
-        }
-
-        when (kind) {
-            AccountWritingKind.Works -> {
-                HubWorksPane(
-                    listType = AccountListType.MyWorks,
-                    listRepository = listRepository,
-                    workRepository = workRepository,
-                    detailedMode = detailedMode,
-                    onLogin = onLogin,
-                    onOpenWork = onOpenWork,
-                    sectionTitle = "Works",
-                    fandomFilter = selectedFandom,
-                    onFandomFilterChange = onFandomChange,
-                    showFandomChips = true
-                )
-            }
-            AccountWritingKind.Series -> {
-                // iOS: Writing → Series reuses the signed-in user's author-profile
-                // series tab (`syncProfileTab(.series)`). Same parser/source here.
-                if (username.isNullOrBlank() || authorRepository == null) {
-                    EmptyStateCard(
-                        title = "Series unavailable",
-                        message = "Couldn't load your series. Try signing in again."
-                    )
-                } else {
-                    HubSeriesPane(
-                        username = username,
-                        authorRepository = authorRepository,
-                        onLogin = onLogin,
-                        onOpenSeries = onOpenSeries
-                    )
-                }
-            }
-            AccountWritingKind.Drafts -> {
-                // iOS: Writing → Drafts opens AO3 web (`works/drafts`), not a
-                // native list. Same destination as Overview → More on AO3 → Drafts.
-                DraftsWebCard(
-                    username = username,
-                    onOpenWeb = onOpenWeb
-                )
-            }
-        }
-    }
-}
-
-/**
- * Writing → Drafts: open the signed-in user's AO3 drafts page in the in-app web
- * surface (iOS `AccountExternalNavCard` parity). No native drafts parser.
- */
-@Composable
-private fun DraftsWebCard(
-    username: String?,
-    onOpenWeb: (String) -> Unit
-) {
-    val draftsUrl = username
-        ?.takeIf { it.isNotBlank() }
-        ?.let { io.github.cidy02.kudos.network.ao3.author.AO3AuthorUrls.userDraftsUrl(it) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        AccountLinkRow(
-            title = "Open Drafts on AO3",
-            icon = Icons.Outlined.Drafts,
-            onClick = {
-                if (draftsUrl != null) onOpenWeb(draftsUrl)
-            }
-        )
+private fun SignedOutPreviewSection() {
+    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        SectionRuleHeader(title = "What is waiting")
         Text(
-            text = "Drafts still open on the Archive until a native editor ships.",
+            text = "When you sign in, this tab shows your AO3 account and activity.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-    }
-}
-
-@Composable
-private fun HubSeriesPane(
-    username: String,
-    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository,
-    onLogin: () -> Unit,
-    onOpenSeries: (String) -> Unit,
-    viewModel: AccountSeriesViewModel = viewModel(
-        key = "hub-series-$username",
-        factory = AccountSeriesViewModel.factory(username, authorRepository)
-    )
-) {
-    val state by viewModel.uiState.collectAsState()
-    when (val current = state) {
-        AccountSeriesUiState.Loading -> LoadingStateCard("Loading series")
-        AccountSeriesUiState.AuthRequired -> SignInRequiredCard(onLogin)
-        is AccountSeriesUiState.Failed -> ErrorStateCard(
-            title = "Couldn't load series",
-            message = current.message,
-            primaryActionLabel = "Retry",
-            onPrimaryAction = { viewModel.load(1) }
-        )
-        is AccountSeriesUiState.Loaded -> {
-            val page = current.page
-            if (page.series.isEmpty()) {
-                EmptyStateCard(
-                    title = "No series yet",
-                    message = "Series you create on AO3 show up here."
-                )
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    item {
-                        KudosSectionHeader(
-                            title = "Series",
-                            subtitle = if (page.totalPages > 1) {
-                                "Page ${page.currentPage} of ${page.totalPages}"
-                            } else {
-                                null
-                            }
-                        )
-                    }
-                    items(page.series, key = { it.id }) { item ->
-                        Card(
-                            onClick = { onOpenSeries(item.url) },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            ListItem(
-                                headlineContent = {
-                                    Text(
-                                        text = item.title,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                },
-                                supportingContent = {
-                                    val meta = buildList {
-                                        item.workCount?.let { add("$it works") }
-                                        item.words?.let { add("$it words") }
-                                        if (item.dateUpdated.isNotBlank()) add(item.dateUpdated)
-                                    }.joinToString(" · ")
-                                    if (meta.isNotBlank()) {
-                                        Text(
-                                            text = meta,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                },
-                                trailingContent = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                            )
-                        }
-                    }
-                    if (page.totalPages > 1) {
-                        item {
-                            PaginationControls(
-                                page = page.currentPage,
-                                totalPages = page.totalPages,
-                                onLoadPage = viewModel::load
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActivityTabContent(
-    signedIn: Boolean,
-    kind: AccountActivityKind,
-    onKindChange: (AccountActivityKind) -> Unit,
-    listRepository: AccountListRepository,
-    workRepository: WorkRepository,
-    onLogin: () -> Unit,
-    onOpenWork: (AO3WorkSummary) -> Unit,
-    onOpenWorkComments: (Long, Long?) -> Unit,
-    username: String? = null,
-    inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
-    commentRepository: io.github.cidy02.kudos.network.ao3.comments.AO3CommentRepository? = null
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-        AccountListKindPicker(
-            label = kind.label,
-            icon = when (kind) {
-                AccountActivityKind.History -> Icons.Outlined.History
-                AccountActivityKind.Inbox -> Icons.Outlined.Inbox
-            },
-            options = AccountActivityKind.entries.map { it.label to it },
-            onSelect = onKindChange
+            modifier = Modifier.padding(bottom = 14.dp, start = 4.dp)
         )
 
-        if (!signedIn) {
-            SignInRequiredCard(onLogin)
-            return
-        }
-
-        when (kind) {
-            AccountActivityKind.History -> {
-                HubWorksPane(
-                    listType = AccountListType.History,
-                    listRepository = listRepository,
-                    workRepository = workRepository,
-                    detailedMode = false, // History always compact in activity tab
-                    onLogin = onLogin,
-                    onOpenWork = onOpenWork,
-                    sectionTitle = "My AO3 History"
-                )
-            }
-            AccountActivityKind.Inbox -> {
-                if (inboxRepository != null && commentRepository != null) {
-                    AccountInboxPane(
-                        inboxRepository = inboxRepository,
-                        commentRepository = commentRepository,
-                        currentUsername = username,
-                        onOpenWorkComments = onOpenWorkComments,
-                        settingsRepository = listRepository.settingsRepository
-                    )
-                } else {
-                    EmptyStateCard(
-                        title = "Inbox not available yet",
-                        message = "AO3 inbox messages stay on the website for now."
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun <T> AccountListKindPicker(
-    label: String,
-    icon: ImageVector,
-    options: List<Pair<String, T>>,
-    onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier = modifier.fillMaxWidth()) {
-        Card(
-            onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            shape = MaterialTheme.shapes.large
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 16.dp)
         ) {
-            Row(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .size(44.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = Ao3Red)
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
                 Icon(
-                    imageVector = Icons.Outlined.ExpandMore,
-                    contentDescription = "Choose list",
+                    painter = painterResource(id = R.drawable.ic_kudos_mark),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Text(
+                text = "Your username",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (optionLabel, value) ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel) },
-                    onClick = {
-                        expanded = false
-                        onSelect(value)
-                    }
-                )
-            }
+
+        AccountScopeGroup("Reading") {
+            AccountScopeRow(title = "Marked for Later", icon = Icons.Outlined.Schedule, onClick = {})
+            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+            AccountScopeRow(title = "Bookmarks", icon = Icons.Outlined.BookmarkBorder, onClick = {})
+            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+            AccountScopeRow(title = "Collections", icon = Icons.Outlined.Collections, onClick = {})
+            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+            AccountScopeRow(title = "Subscriptions", icon = Icons.Outlined.NotificationsNone, onClick = {})
+        }
+        Spacer(Modifier.height(16.dp))
+        AccountScopeGroup("Writing") {
+            AccountScopeRow(title = "Works", icon = Icons.Outlined.Description, onClick = {})
+            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+            AccountScopeRow(title = "Series", icon = Icons.Outlined.Collections, onClick = {})
+            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+            AccountScopeRow(title = "Drafts", icon = Icons.Outlined.Drafts, onClick = {})
+        }
+        Spacer(Modifier.height(16.dp))
+        AccountScopeGroup("Activity") {
+            AccountScopeRow(title = "History", icon = Icons.Outlined.History, onClick = {})
+            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+            AccountScopeRow(title = "Inbox", icon = Icons.Outlined.Inbox, onClick = {})
         }
     }
 }
