@@ -147,6 +147,13 @@ object Routes {
     const val CollectionDetail = "collection-detail/{$ARG_COLLECTION_ID}"
     fun collectionDetail(collectionId: String) = "collection-detail/${encode(collectionId)}"
 
+    private const val ARG_AO3_COLLECTION_SLUG = "collectionSlug"
+    private const val ARG_AO3_COLLECTION_TITLE = "collectionTitle"
+    const val AO3CollectionDetail = "ao3-collection-detail/{$ARG_AO3_COLLECTION_SLUG}?title={$ARG_AO3_COLLECTION_TITLE}"
+    fun ao3CollectionDetail(slug: String, title: String? = null) =
+        if (title.isNullOrBlank()) "ao3-collection-detail/${encode(slug)}"
+        else "ao3-collection-detail/${encode(slug)}?title=${encode(title)}"
+
     private const val ARG_AUTHOR_NAME = "authorName"
     const val AuthorWorks = "author-works/{$ARG_AUTHOR_NAME}"
     fun authorWorks(authorName: String) = "author-works/${encode(authorName)}"
@@ -268,6 +275,7 @@ object Routes {
             base == QueueDetail.substringBefore("?").substringBefore("/") ||
             base == Collections.substringBefore("?").substringBefore("/") ||
             base == CollectionDetail.substringBefore("?").substringBefore("/") ||
+            base == AO3CollectionDetail.substringBefore("?").substringBefore("/") ||
             base == RecentlyDeleted.substringBefore("?").substringBefore("/") ||
             base == LibrarySection.substringBefore("?").substringBefore("/")
     }
@@ -284,7 +292,7 @@ object Routes {
         WorkDetail, // WorkDetailView
         BrowseFandoms, BrowseWorks, TagWorks, // FandomListView, NativeBrowseView
         Settings, Backup, QueueStorage, AvailabilitySweep, About, BugReport, // SettingsPageForm
-        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, // Account screens and AO3 lists
+        AO3Preferences, AO3Dashboard, AccountList, AccountMoreOnAO3, AO3CollectionDetail, // Account screens and AO3 lists
         Collections, // LibraryEntityGridView
         QueueDetail, // ReadingQueueSettingsView
         ReadingStatistics // ReadingInsightsView
