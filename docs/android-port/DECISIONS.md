@@ -101,3 +101,14 @@ Newest first. Each entry: decision · why · evidence · how to reverse · backu
   - The handoff folder is iCloud Drive › `Kudos Handoff 2026-10-03`. It holds the resume prompt
     and the gitignored `*prompt*.md` files, the Living Prompt among them.
   Reverse: n/a (nothing deleted).
+- **2026-10-03 · Work moved off iCloud, by copying.** The owner: "do the part of the handoff to move
+  stuff out of icloud that needs to be moved. copy, don't move". With every branch on GitHub, the
+  copy is a clone: `~/AO3_App_OpenSource`, with worktrees `~/kudos-android-lane` (this lane),
+  `~/kudos-ios-integrate`, `~/kudos-ios-polish` and `~/kudos-agent-{codex,gemini,gemini2,grok}`.
+  - The old worktree folders (`~/kudos-android-redesign`, `~/kudos-android-agent-*`) belong to the
+    iCloud repo and were left exactly where they are, so the new ones have new names.
+  - Local-only files were copied in: `local.properties`, the sherpa-onnx AAR, the gitignored
+    prompts, `.claude-overnight/`, FluidAudio and MuPDF.
+  - The iCloud workarounds (post-commit ref check, rsync snapshot) are dropped from the loop.
+  - The old iCloud copy is a frozen fallback. The two copies share nothing but GitHub.
+  Reverse: keep working in the old folders; delete the new ones.
