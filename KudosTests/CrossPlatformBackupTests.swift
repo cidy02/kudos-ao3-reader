@@ -112,6 +112,7 @@ struct CrossPlatformBackupTests {
             sourceURL: "https://archiveofourown.org/works/820001"
         )
         first.dateAdded = dates[0]
+        first.downloadedAt = dates[4] // T-353; the second work leaves it nil
         first.createdAt = dates[1]
         first.lastModifiedAt = dates[9]
         first.deletedAt = dates[2]
