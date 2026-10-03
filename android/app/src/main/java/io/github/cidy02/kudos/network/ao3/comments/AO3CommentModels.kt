@@ -184,7 +184,9 @@ data class AO3CommentThread(
      */
     val totalPages: Int = 1,
     /** Opportunistic work-level comment total from `dl.stats dd.comments`. */
-    val totalComments: Int? = null
+    val totalComments: Int? = null,
+    /** Work title from page preface (#workskin h2.title). */
+    val workTitle: String? = null
 )
 
 @Serializable

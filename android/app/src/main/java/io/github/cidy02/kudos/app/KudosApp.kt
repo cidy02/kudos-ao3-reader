@@ -197,6 +197,10 @@ fun KudosApp(
         // listener is lifecycle-bound to this composition and unregistered on leave.
         ShakeToReportEffect { showBugReport = true }
 
+        // Restore the AO3 session at launch, as iOS ContentView does; until now only the
+        // Account tab restored it, so Work detail and Comments read signed-out before then.
+        androidx.compose.runtime.LaunchedEffect(Unit) { container.authRepository.restoreSession() }
+
         if (showBugReport) {
             androidx.compose.ui.window.Dialog(
                 onDismissRequest = { showBugReport = false },
