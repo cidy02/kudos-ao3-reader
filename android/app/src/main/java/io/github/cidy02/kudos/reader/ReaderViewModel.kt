@@ -46,7 +46,7 @@ class ReaderViewModel(
     private var spineCountForEof = 0
 
     private val saver = ReaderProgressSaver(viewModelScope) { progress ->
-        repository.saveProgress(workId, progress)
+        repository.persistLocation(workId, progress)
     }
 
     init {
@@ -95,10 +95,15 @@ class ReaderViewModel(
         spineCountForEof = count
     }
 
-    /** Called by the navigator host on each meaningful location change. */
+    /**
+     * Called by the navigator host on each location, including the open landing.
+     * The landing is not a read and is not saved (iOS seeds the persistence
+     * baseline so the first identical callback stays quiet).
+     */
     fun onProgress(progress: ReaderProgress) {
-        saver.onProgress(progress)
         updateReading { it.copy(liveProgress = progress) }
+        if (!repository.observeLocation(workId, progress)) return
+        saver.onProgress(progress)
         maybeAutoFinish(progress)
     }
 
@@ -112,12 +117,16 @@ class ReaderViewModel(
     }
 
     fun flushProgress() {
-        viewModelScope.launch { saver.flush() }
+        viewModelScope.launch {
+            saver.flush()
+            repository.finishReading(workId)
+        }
     }
 
     fun close() {
         viewModelScope.launch {
             saver.flush()
+            repository.finishReading(workId)
             repository.close(workId)
         }
     }

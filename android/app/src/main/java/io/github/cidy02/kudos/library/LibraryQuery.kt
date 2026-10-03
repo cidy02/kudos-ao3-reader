@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.core.model.readingProgress
 import java.time.Instant
 
 object LibraryQuery {
@@ -292,12 +293,5 @@ object LibraryQuery {
     }
 }
 
-fun SavedWork.readingProgressFraction(): Double? {
-    val posted = chapters.substringBefore('/').trim().toIntOrNull()
-    val total = chapters.substringAfter('/', missingDelimiterValue = "").trim().toIntOrNull()
-    if (posted != null && total != null && total > 1 && lastSpineIndex >= 0) {
-        return ((lastSpineIndex + 1).toDouble() / total.toDouble()).coerceIn(0.0, 1.0)
-    }
-    if (lastScrollFraction > 0.0) return lastScrollFraction.coerceIn(0.0, 1.0)
-    return null
-}
+/** Rings and "42%" labels. iOS `SavedWork.readingProgress`, via [readingProgress]. */
+fun SavedWork.readingProgressFraction(): Double? = readingProgress

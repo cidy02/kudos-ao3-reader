@@ -83,6 +83,7 @@ import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.publicationProgress
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
@@ -115,6 +116,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
@@ -2642,8 +2644,10 @@ private data class WorkDetailUiState(
     val updatedDate: String = remote?.updatedDate.orEmpty()
     val dateAddedLabel: String? = local?.dateAdded?.let { formatInstant(it) }
     val lastOpenedLabel: String? = local?.lastReadDate?.let { formatInstant(it) }
-    val progressPercent: Int? = local?.takeIf { it.hasStartedReading }?.let {
-        (it.lastScrollFraction.coerceIn(0.0, 1.0) * 100).toInt()
+    // iOS Activity row: the whole-book percent only (`publicationProgress`),
+    // rounded the same way as `WorkReadingPosition.cardProgressLabel`.
+    val progressPercent: Int? = local?.publicationProgress?.let { fraction ->
+        (fraction.coerceIn(0.0, 1.0) * 100.0).roundToInt()
     }
     val seriesUrl: String = local?.seriesUrl?.takeIf { it.isNotBlank() }
         ?: remote?.seriesUrl?.takeIf { !it.isNullOrBlank() }

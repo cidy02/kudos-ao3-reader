@@ -27,6 +27,7 @@ class ReaderRepository(
     private val settingsProvider: suspend () -> KudosSettings,
     private val customFontRepository: CustomFontRepository? = null,
     private val progressMapper: ReaderProgressMapper = ReaderProgressMapper(),
+    private val progressGate: ReaderProgressGate = ReaderProgressGate(),
     private val settingsMapper: ReaderSettingsMapper = ReaderSettingsMapper(),
     private val clock: () -> Instant = { Instant.now() },
     private val customFontsProvider: (suspend () -> List<CustomFont>)? = null,
@@ -73,15 +74,67 @@ class ReaderRepository(
             fontPathResolver = pathResolver
         )
 
+        // iOS `ReadiumSessionStamp.noteOpened`: Continue Reading dates only.
+        // The stored fraction (including a macOS percent) stays put.
+        val now = clock()
+        val stamped = workRepository.upsert(
+            openedWork.copy(
+                lastReadDate = now,
+                progressModifiedAt = now,
+                lastModifiedAt = now,
+                hiddenFromHistoryAt = null
+            )
+        )
+        progressGate.seed(workId, stamped)
+
         return ReaderOpenResult.Success(
-            work = openedWork,
+            work = stamped,
             epubPath = path,
-            restoreTarget = progressMapper.restoreTarget(openedWork),
+            restoreTarget = progressMapper.restoreTarget(stamped),
             preferences = preferences
         )
     }
 
-    /** Persist captured progress; always refreshes fallback fields + lastReadDate. */
+    /**
+     * Navigator location. The open landing and sub-threshold noise return false
+     * and must not be written. A later move returns true; persist it with
+     * [persistLocation].
+     */
+    fun observeLocation(workId: String, progress: ReaderProgress): Boolean =
+        progressGate.consider(workId, progress) != null
+
+    /**
+     * Mid-session write for a location [observeLocation] already accepted.
+     * Updates the resume point and retires a macOS percent that the position
+     * moved past. Does not bump Continue Reading order (iOS debounced locator).
+     */
+    suspend fun persistLocation(workId: String, progress: ReaderProgress): SavedWork? {
+        val work = workRepository.getWork(workId) ?: return null
+        return workRepository.upsert(
+            progressMapper.applyProgress(work, progress, clock(), shelfStamp = false)
+        )
+    }
+
+    /**
+     * Reader close / background. When this session has a position and the
+     * locator did not move, this is iOS `noteUnchangedLocatorShelf`: dates
+     * only, stored fraction unchanged. A move was already persisted.
+     */
+    suspend fun finishReading(workId: String): SavedWork? {
+        val work = workRepository.getWork(workId) ?: return null
+        if (!progressGate.sessionMatches(workId) || !progressGate.hasSessionPosition) return work
+        val now = clock()
+        return workRepository.upsert(
+            work.copy(
+                lastReadDate = now,
+                progressModifiedAt = now,
+                lastModifiedAt = now,
+                hiddenFromHistoryAt = null
+            )
+        )
+    }
+
+    /** Explicit progress write (shelf stamp). Prefer [persistLocation] from the reader. */
     suspend fun saveProgress(workId: String, progress: ReaderProgress): SavedWork? {
         val work = workRepository.getWork(workId) ?: return null
         return workRepository.upsert(progressMapper.applyProgress(work, progress, clock()))
