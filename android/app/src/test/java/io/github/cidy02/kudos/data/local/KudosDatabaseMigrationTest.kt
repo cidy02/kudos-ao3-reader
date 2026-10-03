@@ -286,6 +286,42 @@ class KudosDatabaseMigrationTest {
     @Test
     fun schema10MigratesToCurrentAndPassesRoomValidation() = migrateFromExportedSchema(10)
 
+    @Test
+    fun schema12MigratesToCurrentAndPassesRoomValidation() = migrateFromExportedSchema(12)
+
+    @Test
+    fun migrate12To13AddsNullableDownloadedAtWithoutBackfill() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name("kudos-migration-12-13")
+                .callback(object : SupportSQLiteOpenHelper.Callback(12) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL("CREATE TABLE works (id TEXT NOT NULL, PRIMARY KEY(id))")
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+        try {
+            db.execSQL("INSERT INTO works (id) VALUES ('work-pre')")
+            KudosDatabaseMigrations.MIGRATION_12_13.migrate(db)
+            db.version = 13
+
+            assertTrue(columnNames(db, "works").contains("downloadedAt"))
+            db.query("SELECT downloadedAt FROM works WHERE id = 'work-pre'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+            }
+            assertEquals(13, db.version)
+        } finally {
+            db.close()
+            helper.close()
+        }
+    }
+
     private fun migrateFromExportedSchema(version: Int) {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "kudos-validate-from-$version"
@@ -324,11 +360,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_8_9,
                 KudosDatabaseMigrations.MIGRATION_9_10,
                 KudosDatabaseMigrations.MIGRATION_10_11,
-                KudosDatabaseMigrations.MIGRATION_11_12
+                KudosDatabaseMigrations.MIGRATION_11_12,
+                KudosDatabaseMigrations.MIGRATION_12_13
             )
             .build()
         try {
-            assertEquals(12, room.openHelper.writableDatabase.version)
+            assertEquals(13, room.openHelper.writableDatabase.version)
         } finally {
             room.close()
             context.deleteDatabase(name)
@@ -345,11 +382,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_8_9,
                 KudosDatabaseMigrations.MIGRATION_9_10,
                 KudosDatabaseMigrations.MIGRATION_10_11,
-                KudosDatabaseMigrations.MIGRATION_11_12
+                KudosDatabaseMigrations.MIGRATION_11_12,
+                KudosDatabaseMigrations.MIGRATION_12_13
             )
             .build()
         try {
-            assertEquals(12, db.openHelper.readableDatabase.version)
+            assertEquals(13, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }

@@ -54,6 +54,8 @@ class WorkRepository(
     private val queueDao = database.readingQueueDao()
     private val annotationDao = database.annotationDao()
 
+    internal fun currentInstant(): Instant = clock()
+
     fun observeSavedWorks(): Flow<List<SavedWork>> {
         return workDao.observeAll().decorated().map { works ->
             works.filter { it.isProtected && !it.isQueueOnlyWork }
@@ -157,6 +159,11 @@ class WorkRepository(
         .map { works -> works.filter(::qualifiesForHold) }
 
     suspend fun getWork(id: String): SavedWork? = workDao.getById(id)?.toDomain()?.let { decorate(it) }
+
+    suspend fun updateDownloadedAt(workId: String, downloadedAt: Instant): SavedWork? {
+        val work = getWork(workId) ?: return null
+        return upsert(work.copy(downloadedAt = downloadedAt, lastModifiedAt = clock()))
+    }
 
     /**
      * Marks current posted chapter count as seen, clearing Home → Recently Updated.

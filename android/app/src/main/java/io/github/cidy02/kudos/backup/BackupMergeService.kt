@@ -156,7 +156,7 @@ object BackupMergeService {
                     permanentDeletionScheduledAt = null
                 )
             } else if (mode == BackupImportMode.MERGE) {
-                existing
+                existing.copy(downloadedAt = existing.downloadedAt ?: restored.downloadedAt)
             } else if (mode == BackupImportMode.REPLACE_LIBRARY) {
                 summary = summary.copy(worksUpdated = summary.worksUpdated + 1)
                 applyReplaceWork(existing, restored)
@@ -534,6 +534,13 @@ object BackupMergeService {
         // non-null side when one is absent so a local-wins merge does not wipe
         // values that only arrived on the archive (and vice versa).
         val withPreservation = base.copy(
+            downloadedAt = if (archived.downloadedAt != null &&
+                (incomingWins || existing.downloadedAt == null)
+            ) {
+                restored.downloadedAt
+            } else {
+                existing.downloadedAt
+            },
             epubPreservationStatusRaw = if (incomingWins) {
                 restored.epubPreservationStatusRaw ?: existing.epubPreservationStatusRaw
             } else {
@@ -829,6 +836,7 @@ object BackupMergeService {
         return restored.copy(
             id = existing.id,
             hasEpub = existing.hasEpub || restored.hasEpub,
+            downloadedAt = restored.downloadedAt ?: existing.downloadedAt,
             dateAdded = minInstant(existing.dateAdded, restored.dateAdded)
         )
     }

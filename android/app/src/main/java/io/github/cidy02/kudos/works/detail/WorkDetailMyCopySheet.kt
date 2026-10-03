@@ -27,13 +27,21 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +71,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlin.math.roundToInt
@@ -99,6 +108,7 @@ fun WorkDetailMyCopySheet(
     onToggleFinished: () -> Unit,
     onAddToQueue: () -> Unit,
     onAddToCollection: () -> Unit,
+    onSetDownloadedAt: (Instant) -> Unit,
     onRebuildFromOriginal: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -106,6 +116,7 @@ fun WorkDetailMyCopySheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tokens = LocalKudosTokens.current
     val context = LocalContext.current
+    var showingDownloadedDateEditor by remember { mutableStateOf(false) }
 
     val epubFile = remember(work?.id) {
         work?.id?.let { id ->
@@ -221,7 +232,10 @@ fun WorkDetailMyCopySheet(
                     )
 
                     // Activity group
-                    MyCopyActivitySection(work = work)
+                    MyCopyActivitySection(
+                        work = work,
+                        onEditDownloadedAt = { showingDownloadedDateEditor = true }
+                    )
 
                     // Origin & Conversion
                     MyCopyOriginSection(
@@ -260,6 +274,17 @@ fun WorkDetailMyCopySheet(
                 )
             }
         }
+    }
+
+    if (showingDownloadedDateEditor && work != null) {
+        DownloadedDateEditorDialog(
+            initialDate = work.downloadedAt ?: work.dateAdded,
+            onDismiss = { showingDownloadedDateEditor = false },
+            onSave = {
+                showingDownloadedDateEditor = false
+                onSetDownloadedAt(it)
+            }
+        )
     }
 }
 
@@ -425,7 +450,10 @@ private fun MyCopyStorageSection(
 }
 
 @Composable
-private fun MyCopyActivitySection(work: SavedWork) {
+private fun MyCopyActivitySection(
+    work: SavedWork,
+    onEditDownloadedAt: () -> Unit
+) {
     val tokens = LocalKudosTokens.current
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         MyCopyGroupHeader(title = "Activity")
@@ -433,6 +461,11 @@ private fun MyCopyActivitySection(work: SavedWork) {
         MyCopyValueRow(
             title = "Added",
             value = formatInstant(work.dateAdded)
+        )
+        MyCopyValueRow(
+            title = "Downloaded",
+            value = work.downloadedAt?.let(::formatDate) ?: "Not recorded",
+            modifier = Modifier.clickable(onClick = onEditDownloadedAt)
         )
 
         val lastReadText = work.lastReadDate?.let { formatInstant(it) } ?: "Never"
@@ -472,6 +505,32 @@ private fun MyCopyActivitySection(work: SavedWork) {
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DownloadedDateEditorDialog(
+    initialDate: Instant,
+    onDismiss: () -> Unit,
+    onSave: (Instant) -> Unit
+) {
+    val now = remember { Instant.now() }
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = pickerMillis(initialDate),
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                utcTimeMillis <= pickerMillis(now)
+        }
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                state.selectedDateMillis?.let { onSave(pickerInstant(it)) }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    ) { DatePicker(state = state, title = { Text("Downloaded", modifier = Modifier.padding(24.dp)) }) }
 }
 
 @Composable
@@ -844,3 +903,21 @@ private fun formatInstant(instant: Instant): String {
         .withZone(ZoneId.systemDefault())
     return formatter.format(instant)
 }
+
+private fun formatDate(instant: Instant): String = DateTimeFormatter
+    .ofLocalizedDate(FormatStyle.MEDIUM)
+    .withZone(ZoneId.systemDefault())
+    .format(instant)
+
+private fun pickerMillis(instant: Instant): Long = instant
+    .atZone(ZoneId.systemDefault())
+    .toLocalDate()
+    .atStartOfDay(ZoneOffset.UTC)
+    .toInstant()
+    .toEpochMilli()
+
+private fun pickerInstant(millis: Long): Instant = Instant.ofEpochMilli(millis)
+    .atZone(ZoneOffset.UTC)
+    .toLocalDate()
+    .atStartOfDay(ZoneId.systemDefault())
+    .toInstant()

@@ -327,4 +327,11 @@ object KudosDatabaseMigrations {
             db.execSQL("ALTER TABLE collections ADD COLUMN syncStatusRaw TEXT")
         }
     }
+
+    /** v12 → v13: capture a work's download/import date; old rows remain unknown. */
+    val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE works ADD COLUMN downloadedAt INTEGER")
+        }
+    }
 }

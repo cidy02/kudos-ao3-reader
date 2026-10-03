@@ -192,6 +192,13 @@ object LibraryQuery {
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
                     .thenBy { it.item.work.id }
             )
+            LibrarySort.DateDownloaded -> items.sortedWith(
+                compareByDescending<LibraryDisplayItem> {
+                    it.item.work.downloadedAt ?: it.item.work.dateAdded
+                }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.item.work.title }
+                    .thenBy { it.item.work.id }
+            )
             LibrarySort.LastRead -> items.sortedWith(lastReadComparator())
             LibrarySort.Title -> items.sortedWith(
                 compareBy<LibraryDisplayItem, String>(String.CASE_INSENSITIVE_ORDER) {

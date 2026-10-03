@@ -117,6 +117,7 @@ fun SavedWork.toBackupWork(
         summary = summary,
         sourceURL = sourceUrl,
         dateAdded = BackupValidator.formatInstant(dateAdded),
+        downloadedAt = downloadedAt?.let(BackupValidator::formatInstant),
         createdAt = createdAt?.let(BackupValidator::formatInstant),
         isFavorite = isFavorite,
         hasGivenKudos = hasGivenKudos,
@@ -214,6 +215,11 @@ fun BackupWork.toSavedWork(hasEpub: Boolean, exportedAt: Instant? = null): Saved
         sourceUrl = io.github.cidy02.kudos.works.WorkTags.canonicalAO3WorkURL(sourceURL)
             ?: sourceURL,
         dateAdded = added,
+        downloadedAt = BackupValidator.parseNullableInstant(
+            downloadedAt?.takeIf { it.isNotBlank() },
+            "work.downloadedAt",
+            exportedAt
+        ),
         createdAt = BackupValidator.parseNullableInstant(
             createdAt?.takeIf { it.isNotBlank() },
             "work.createdAt",

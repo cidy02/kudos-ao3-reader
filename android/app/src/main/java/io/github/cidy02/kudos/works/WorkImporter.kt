@@ -134,7 +134,8 @@ class WorkImporter(
      */
     suspend fun importLocalEpub(
         displayName: String?,
-        bytes: ByteArray
+        bytes: ByteArray,
+        downloadedAt: Instant = workRepository.currentInstant()
     ): WorkImportResult {
         if (bytes.isEmpty()) {
             return WorkImportResult.Failure(
@@ -194,7 +195,8 @@ class WorkImporter(
             workFreeforms = exported?.freeforms.orEmpty(),
             hasEpub = true,
             isSaved = true,
-            lastModifiedAt = Instant.now()
+            downloadedAt = downloadedAt,
+            lastModifiedAt = workRepository.currentInstant()
         )
 
         // Converted imports keep their source so "Rebuild from Original" can re-run
@@ -287,13 +289,15 @@ class WorkImporter(
                 if (work.isDeleted) {
                     workRepository.restoreFromRecentlyDeleted(work.id)
                 }
+                val now = workRepository.currentInstant()
                 val updated = workRepository.upsert(
                     work.copy(
                         hasEpub = true,
+                        downloadedAt = work.downloadedAt ?: now,
                         isDeleted = false,
                         deletedAt = null,
                         permanentDeletionScheduledAt = null,
-                        lastModifiedAt = Instant.now()
+                        lastModifiedAt = now
                     )
                 )
                 WorkImportResult.Success(updated)

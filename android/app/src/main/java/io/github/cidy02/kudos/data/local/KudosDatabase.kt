@@ -50,7 +50,7 @@ import io.github.cidy02.kudos.data.local.entity.WorkTagCrossRef
         FandomReadWatermarkEntity::class,
         QueueTagCrossRef::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 @TypeConverters(KudosTypeConverters::class)

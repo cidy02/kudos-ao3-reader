@@ -10,6 +10,8 @@ data class SavedWork(
     val summary: String = "",
     val sourceUrl: String = "",
     val dateAdded: Instant = Instant.now(),
+    /** Captured once when AO3 finishes downloading or when a file is imported. */
+    val downloadedAt: Instant? = null,
     /** Apple sync creation clock; nullable for Android rows created before backup parity. */
     val createdAt: Instant? = null,
     val isFavorite: Boolean = false,

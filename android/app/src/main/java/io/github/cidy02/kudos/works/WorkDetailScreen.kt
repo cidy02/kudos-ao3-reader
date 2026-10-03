@@ -1067,6 +1067,13 @@ fun WorkDetailScreen(
                 }
             },
             onAddToCollection = { collectionDialogOpen = true },
+            onSetDownloadedAt = { downloadedAt ->
+                val work = state.local ?: return@WorkDetailMyCopySheet
+                runWorkAction {
+                    val updated = workRepository.updateDownloadedAt(work.id, downloadedAt)
+                    if (updated != null) refreshLocal(updated.id, state.remote)
+                }
+            },
             onRebuildFromOriginal = {
                 val work = state.local
                 if (work != null) {

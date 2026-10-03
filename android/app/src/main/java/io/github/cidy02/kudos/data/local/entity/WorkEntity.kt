@@ -21,6 +21,7 @@ data class WorkEntity(
     val summary: String,
     val sourceUrl: String,
     val dateAdded: Instant,
+    val downloadedAt: Instant? = null,
     val createdAt: Instant? = null,
     val isFavorite: Boolean = false,
     @ColumnInfo(name = "hasGivenKudos", defaultValue = "0") val hasGivenKudos: Boolean = false,
