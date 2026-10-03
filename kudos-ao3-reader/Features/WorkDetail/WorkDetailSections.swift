@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 // The Tags, Discussion, and Library sections of the redesigned Work Details
@@ -440,6 +441,25 @@ extension WorkDetailView {
         Group {
             myCopyHeader("Activity")
             myCopyValueRow("Added", work.dateAdded.formatted(date: .abbreviated, time: .shortened))
+            Button { showingDownloadedDateEditor = true } label: {
+                HStack(spacing: 10) {
+                    Text("Downloaded")
+                        .font(.system(size: 14.5))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    myCopyValue(
+                        work.downloadedAt?.formatted(date: .abbreviated, time: .omitted)
+                            ?? "Not recorded"
+                    )
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit downloaded date")
+            .myCopyRow()
             myCopyValueRow(
                 "Last opened",
                 work.lastReadDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
@@ -545,6 +565,44 @@ extension WorkDetailView {
                         .strokeBorder(.tint.opacity(0.22), lineWidth: 0.5)
                 )
         )
+    }
+}
+
+struct DownloadedDateEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    let work: SavedWork
+    @State private var date: Date
+
+    init(work: SavedWork) {
+        self.work = work
+        _date = State(initialValue: work.downloadedAt ?? work.dateAdded)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                DatePicker("Downloaded", selection: $date, in: ...Date(), displayedComponents: .date)
+            }
+            .navigationTitle("Downloaded")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        work.downloadedAt = date
+                        work.markModified()
+                        context.saveBestEffort(reason: "Saving downloaded date failed")
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
     }
 }
 

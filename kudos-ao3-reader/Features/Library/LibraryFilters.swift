@@ -330,6 +330,8 @@ struct LibraryFilters: Equatable {
         switch sort {
         case .natural: false
         case .dateAdded: first.dateAdded > second.dateAdded
+        case .dateDownloaded:
+            (first.downloadedAt ?? first.dateAdded) > (second.downloadedAt ?? second.dateAdded)
         case .title: first.title.localizedCaseInsensitiveCompare(second.title) == .orderedAscending
         case .author: first.author.localizedCaseInsensitiveCompare(second.author) == .orderedAscending
         case .wordCount: first.wordCount > second.wordCount
@@ -348,7 +350,7 @@ struct LibraryFilters: Equatable {
 /// The Library's sort options — limited to fields stored locally for saved works
 /// (AO3's kudos/hits/comments counts aren't kept, so they aren't offered).
 enum LibrarySort: String, CaseIterable, Identifiable, Equatable {
-    case natural, dateAdded, title, author, wordCount
+    case natural, dateAdded, dateDownloaded, title, author, wordCount
     var id: String {
         rawValue
     }
@@ -357,6 +359,7 @@ enum LibrarySort: String, CaseIterable, Identifiable, Equatable {
         switch self {
         case .natural: "Default"
         case .dateAdded: "Date Added"
+        case .dateDownloaded: "Date Downloaded"
         case .title: "Title"
         case .author: "Author"
         case .wordCount: "Word Count"

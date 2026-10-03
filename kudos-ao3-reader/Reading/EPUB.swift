@@ -61,6 +61,8 @@ nonisolated struct EPUBMetadata {
     /// Word count when the OPF states one; nil otherwise. An imported work has no AO3
     /// stats page to read a length from, so this is where it comes from.
     var wordCount: Int?
+    /// `<meta name="calibre:timestamp">`, parsed when present.
+    var generatedAt: Date?
 
     /// The AO3 ratings, in the exact spelling AO3 writes into EPUB subjects.
     private static let ratings: Set<String> = [
@@ -151,7 +153,8 @@ nonisolated struct EPUBDocument {
             language: parser.language,
             publishedDate: parser.publishedDate,
             updatedDate: parser.updatedDate,
-            wordCount: parser.wordCount
+            wordCount: parser.wordCount,
+            generatedAt: DownloadDateDetector.parseEPUBTimestamp(parser.calibreTimestamp)
         )
         chapters = EPUBDocument.tableOfContents(parser: parser, opfDir: opfDir, spineCount: spineURLs.count)
     }
@@ -278,7 +281,8 @@ nonisolated struct EPUBDocument {
             language: parser.language,
             publishedDate: parser.publishedDate,
             updatedDate: parser.updatedDate,
-            wordCount: parser.wordCount
+            wordCount: parser.wordCount,
+            generatedAt: DownloadDateDetector.parseEPUBTimestamp(parser.calibreTimestamp)
         )
         return EPUBPackageInspection(metadata: metadata, readableItemCount: readableItemCount)
     }

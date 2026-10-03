@@ -24,6 +24,7 @@ struct KudosBackupTests {
         work.tags = [Tag(name: "Comfort Read")]
         work.kudos = 890
         work.bookmarks = 56
+        work.downloadedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let epub = Data("epub-data".utf8)
         try epub.write(to: work.fileURL)
 
@@ -69,6 +70,7 @@ struct KudosBackupTests {
         // actually round-trip, not just decode.
         #expect(decoded.manifest.works.first?.kudos == 890)
         #expect(decoded.manifest.works.first?.bookmarks == 56)
+        #expect(decoded.manifest.works.first?.downloadedAt == work.downloadedAt)
         #expect(decoded.manifest.bookmarks.first?.urlString == bookmark.urlString)
         #expect(decoded.manifest.bookmarks.first?.id == bookmark.id)
         #expect(decoded.manifest.fonts.first?.fileName == font.fileName)
@@ -131,6 +133,47 @@ struct KudosBackupTests {
         #expect(restored.author == "Avery Writes")
         #expect(restored.verifiedAuthorIdentities.isEmpty)
         #expect(contents.manifest.version == KudosBackupManifest.currentVersion)
+    }
+
+    @Test func downloadedAtUsesRecencyAndAnAbsentKeyNeverClearsIt() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let id = UUID()
+        let localDate = Date(timeIntervalSince1970: 100)
+
+        let local = SavedWork(id: id, title: "Local", author: "Writer")
+        local.downloadedAt = localDate
+        local.lastModifiedAt = Date(timeIntervalSince1970: 200)
+        local.hasEPUB = false
+        context.insert(local)
+        try context.save()
+
+        let absent = SavedWork(id: id, title: "Incoming", author: "Writer")
+        absent.downloadedAt = nil
+        absent.lastModifiedAt = Date(timeIntervalSince1970: 300)
+        absent.hasEPUB = false
+        let absentContents = try KudosBackupService.makeContents(
+            works: [absent], bookmarks: [], fonts: [], readingQueues: [], defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(absentContents, into: context, defaults: try testDefaults())
+        #expect(local.downloadedAt == localDate)
+
+        let incomingDate = Date(timeIntervalSince1970: 250)
+        let present = SavedWork(id: id, title: "Newest", author: "Writer")
+        present.downloadedAt = incomingDate
+        present.lastModifiedAt = Date(timeIntervalSince1970: 400)
+        present.hasEPUB = false
+        let presentContents = try KudosBackupService.makeContents(
+            works: [present], bookmarks: [], fonts: [], readingQueues: [], defaults: try testDefaults()
+        )
+        _ = try KudosBackupService.restore(presentContents, into: context, defaults: try testDefaults())
+        #expect(local.downloadedAt == incomingDate)
     }
 
     @Test func restoreMergesRecordsTagsAssetsAndSettings() throws {

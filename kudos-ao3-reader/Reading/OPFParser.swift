@@ -14,6 +14,9 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
     var updatedDate = ""
     var seriesTitle = ""
     var seriesIndex: Int?
+    /// AO3/calibre's EPUB-generation time. This is not the download time, but
+    /// is the best fallback when the original file dates have been replaced.
+    var calibreTimestamp = ""
     /// Word count, when the OPF states one. calibre writes
     /// `<meta name="calibre:word_count">`, and `EPUBBuilder` writes the same key for
     /// converted imports — the only place a non-AO3 work's length can come from,
@@ -83,6 +86,7 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
                 }
             default: break
             }
+            recordCalibreTimestamp(attributes)
         default:
             break
         }
@@ -145,6 +149,11 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
         guard !value.isEmpty else { return }
         dates.append(value)
         if publishedDate.isEmpty { publishedDate = value }
+    }
+
+    private func recordCalibreTimestamp(_ attributes: [String: String]) {
+        guard attributes["name"]?.lowercased() == "calibre:timestamp" else { return }
+        calibreTimestamp = attributes["content"] ?? ""
     }
 
     private func recordMeta(_ value: String) {
