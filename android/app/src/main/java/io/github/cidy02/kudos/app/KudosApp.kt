@@ -146,11 +146,15 @@ fun KudosApp(
     androidx.compose.runtime.LaunchedEffect(offeredImports, effectiveCompletedOnboarding) {
         if (offeredImports.isEmpty() || effectiveCompletedOnboarding != true) return@LaunchedEffect
         val uris = io.github.cidy02.kudos.works.ExternalFileImport.consume()
-        val preparation = io.github.cidy02.kudos.works.prepareDocumentImports(context, uris)
-        pendingImports = preparation.imports
-        importPreparationFailures = preparation.failures
-        if (preparation.imports.isEmpty()) {
-            importStatus = preparation.failures.joinToString("\n").ifBlank { null }
+        // consume() empties the queue, which changes this effect's key and cancels it, so
+        // the preparation runs in the composition's scope rather than the effect's.
+        scope.launch {
+            val preparation = io.github.cidy02.kudos.works.prepareDocumentImports(context, uris)
+            pendingImports = pendingImports + preparation.imports
+            importPreparationFailures = importPreparationFailures + preparation.failures
+            if (preparation.imports.isEmpty()) {
+                importStatus = preparation.failures.joinToString("\n").ifBlank { null }
+            }
         }
     }
 

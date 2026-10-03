@@ -37,7 +37,11 @@ object ExternalFileImport {
      * validation before anything is written to the library.
      */
     fun offer(intent: Intent?) {
-        val uris = extractUris(intent ?: return)
+        offer(extractUris(intent ?: return))
+    }
+
+    /** Queues picked files (Settings > Import) for the same confirmation and import. */
+    fun offer(uris: List<Uri>) {
         if (uris.isNotEmpty()) {
             _pending.value = _pending.value + uris
         }
