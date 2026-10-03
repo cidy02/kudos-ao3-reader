@@ -70,7 +70,10 @@ data class AppSettings(
     val confirmBeforeDelete: Boolean = true,
     val keepsWorksYouRead: Boolean = false,
     val appTheme: AppThemeSetting = AppThemeSetting.Light,
-    val accentColorHex: String = "#990000"
+    val accentColorHex: String = "#990000",
+    /** iOS backup passthrough; Android has no UI for these queue defaults yet. */
+    val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
+    val autoPreserveSeriesWorkThreshold: Int = 5
 )
 
 data class PrivacySettings(

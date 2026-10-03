@@ -209,8 +209,15 @@ object BackupValidator {
      * already all the merge rules compare on (`KudosTypeConverters` stores
      * epoch-millis), so no conflict resolution changes.
      */
-    fun formatInstant(instant: Instant): String =
-        instant.truncatedTo(ChronoUnit.MILLIS).toString()
+    /**
+     * Always three fractional digits, as iOS writes them ("2023-11-14T22:13:20.000Z").
+     * `Instant.toString()` drops a zero fraction, so the same instant read the same
+     * but did not round-trip byte-for-byte between the apps.
+     */
+    fun formatInstant(instant: Instant): String = BACKUP_INSTANT_FORMAT.format(instant.truncatedTo(ChronoUnit.MILLIS))
+
+    private val BACKUP_INSTANT_FORMAT: java.time.format.DateTimeFormatter =
+        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(java.time.ZoneOffset.UTC)
 
     fun normalizeSettings(
         settings: BackupSettingsPayload,

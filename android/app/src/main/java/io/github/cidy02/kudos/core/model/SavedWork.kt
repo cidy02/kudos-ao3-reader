@@ -10,6 +10,8 @@ data class SavedWork(
     val summary: String = "",
     val sourceUrl: String = "",
     val dateAdded: Instant = Instant.now(),
+    /** Apple sync creation clock; nullable for Android rows created before backup parity. */
+    val createdAt: Instant? = null,
     val isFavorite: Boolean = false,
     val hasGivenKudos: Boolean = false,
     val isSaved: Boolean = false,
@@ -77,6 +79,7 @@ data class SavedWork(
      * status string, and do not drive Android UI or file cleanup from them.
      */
     val epubPreservationStatusRaw: String? = null,
+    val metadataSyncStatusRaw: String? = null,
     val preservedAt: Instant? = null,
     val lastPreservationAttemptAt: Instant? = null,
     // v11 iOS-parity fields (see WorkEntity).
@@ -87,6 +90,7 @@ data class SavedWork(
     val dateUpdated: String = "",
     val bookmarks: Int? = null,
     val ao3SeriesID: Int? = null,
+    val ao3WorkID: Int? = null,
     val legacyReaderProgress: Double? = null,
     val authorIdentitiesJSON: String = "",
     val epubDigest: String = "",

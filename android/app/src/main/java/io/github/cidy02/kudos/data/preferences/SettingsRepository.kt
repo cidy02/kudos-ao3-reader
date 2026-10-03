@@ -368,6 +368,8 @@ class SettingsRepository(
             prefs[Keys.ReaderTheme] = settings.reader.readerTheme.storageValue
             prefs[Keys.MatchAppReaderTheme] = settings.reader.matchAppReaderTheme
             prefs[Keys.AccentColorHex] = settings.app.accentColorHex
+            prefs[Keys.AutoPreserveSmallSeries] = settings.app.autoPreserveSmallSeriesOnSaveForLater
+            prefs[Keys.AutoPreserveSeriesThreshold] = settings.app.autoPreserveSeriesWorkThreshold
         }
     }
 
@@ -407,7 +409,11 @@ class SettingsRepository(
                     ?: defaults.app.keepsWorksYouRead,
                 appTheme = AppThemeSetting.fromStorage(preferences[Keys.AppTheme]),
                 accentColorHex = preferences[Keys.AccentColorHex]
-                    ?: defaults.app.accentColorHex
+                    ?: defaults.app.accentColorHex,
+                autoPreserveSmallSeriesOnSaveForLater = preferences[Keys.AutoPreserveSmallSeries]
+                    ?: defaults.app.autoPreserveSmallSeriesOnSaveForLater,
+                autoPreserveSeriesWorkThreshold = preferences[Keys.AutoPreserveSeriesThreshold]
+                    ?: defaults.app.autoPreserveSeriesWorkThreshold
             ),
             privacy = PrivacySettings(
                 hideMatureContent = preferences[Keys.HideMatureContent]
@@ -448,6 +454,10 @@ class SettingsRepository(
         val ReaderTheme = stringPreferencesKey("readerTheme")
         val MatchAppReaderTheme = booleanPreferencesKey("matchAppReaderTheme")
         val AccentColorHex = stringPreferencesKey("accentColorHex")
+        val AutoPreserveSmallSeries = booleanPreferencesKey("autoPreserveSmallSeriesOnSaveForLater")
+        val AutoPreserveSeriesThreshold = androidx.datastore.preferences.core.intPreferencesKey(
+            "autoPreserveSeriesWorkThreshold"
+        )
         /** Device-local first-launch flag; not included in backup-compatible settings. */
         val HasCompletedOnboarding = booleanPreferencesKey("hasCompletedOnboarding")
         val HasConfiguredSyncFolder = booleanPreferencesKey("hasConfiguredSyncFolder")

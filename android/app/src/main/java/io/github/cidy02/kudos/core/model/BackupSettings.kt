@@ -19,7 +19,9 @@ data class BackupSettings(
     val appTheme: String = AppThemeSetting.Light.storageValue,
     val readerTheme: String = ReaderThemeSetting.Light.storageValue,
     val matchAppReaderTheme: Boolean = true,
-    val accentColorHex: String = "#990000"
+    val accentColorHex: String = "#990000",
+    val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
+    val autoPreserveSeriesWorkThreshold: Int = 5
 ) {
     fun toSettings(): KudosSettings {
         return KudosSettings(
@@ -41,7 +43,9 @@ data class BackupSettings(
             app = AppSettings(
                 confirmBeforeDelete = confirmBeforeDelete,
                 appTheme = AppThemeSetting.fromStorage(appTheme),
-                accentColorHex = accentColorHex
+                accentColorHex = accentColorHex,
+                autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
+                autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
             ),
             privacy = PrivacySettings(
                 hideMatureContent = hideMatureContent,
@@ -72,7 +76,10 @@ data class BackupSettings(
                 appTheme = settings.app.appTheme.storageValue,
                 readerTheme = settings.reader.readerTheme.storageValue,
                 matchAppReaderTheme = settings.reader.matchAppReaderTheme,
-                accentColorHex = settings.app.accentColorHex
+                accentColorHex = settings.app.accentColorHex,
+                autoPreserveSmallSeriesOnSaveForLater =
+                    settings.app.autoPreserveSmallSeriesOnSaveForLater,
+                autoPreserveSeriesWorkThreshold = settings.app.autoPreserveSeriesWorkThreshold
             )
         }
     }

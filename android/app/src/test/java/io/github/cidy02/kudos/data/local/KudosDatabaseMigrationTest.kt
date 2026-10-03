@@ -323,11 +323,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_7_8,
                 KudosDatabaseMigrations.MIGRATION_8_9,
                 KudosDatabaseMigrations.MIGRATION_9_10,
-                KudosDatabaseMigrations.MIGRATION_10_11
+                KudosDatabaseMigrations.MIGRATION_10_11,
+                KudosDatabaseMigrations.MIGRATION_11_12
             )
             .build()
         try {
-            assertEquals(11, room.openHelper.writableDatabase.version)
+            assertEquals(12, room.openHelper.writableDatabase.version)
         } finally {
             room.close()
             context.deleteDatabase(name)
@@ -343,11 +344,12 @@ class KudosDatabaseMigrationTest {
                 KudosDatabaseMigrations.MIGRATION_7_8,
                 KudosDatabaseMigrations.MIGRATION_8_9,
                 KudosDatabaseMigrations.MIGRATION_9_10,
-                KudosDatabaseMigrations.MIGRATION_10_11
+                KudosDatabaseMigrations.MIGRATION_10_11,
+                KudosDatabaseMigrations.MIGRATION_11_12
             )
             .build()
         try {
-            assertEquals(11, db.openHelper.readableDatabase.version)
+            assertEquals(12, db.openHelper.readableDatabase.version)
         } finally {
             db.close()
         }

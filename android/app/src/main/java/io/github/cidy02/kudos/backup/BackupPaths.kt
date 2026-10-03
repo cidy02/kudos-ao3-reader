@@ -45,6 +45,16 @@ object BackupPaths {
         return "$WORKS_DIRECTORY/${canonicalUuid(workId, "work.id")}.epub"
     }
 
+    /**
+     * Apple `Storage.defaultEPUBAssetIdentifier` / `UUID.uuidString`: uppercase
+     * UUID plus `.epub`. A new restore row on iOS is born with this name, and
+     * `apply` will not replace a non-empty local identifier, so a custom
+     * archived name does not survive a restore onto an empty library.
+     */
+    fun iosEpubAssetIdentifier(workId: String): String {
+        return "${canonicalUuid(workId, "work.id").uppercase(Locale.ROOT)}.epub"
+    }
+
     fun fontEntryName(fileName: String): String {
         requireSafeFontFileName(fileName)
         return "$FONTS_DIRECTORY/$fileName"

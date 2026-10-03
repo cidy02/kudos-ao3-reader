@@ -102,6 +102,14 @@ object ReadingQueueKind {
     const val SAVED_FOR_LATER = "savedForLater"
     const val CUSTOM = "custom"
     const val SAVED_FOR_LATER_NAME = "Saved for Later"
+
+    /**
+     * Apple `ReadingQueueService.ensureSavedForLaterQueue` pins the system
+     * queue at -1000 so it sorts before every custom queue. Custom queues
+     * start at 0. Not a schema migration: [io.github.cidy02.kudos.library.ReadingQueueRepository.ensureSavedForLaterQueue]
+     * rewrites an existing row the next time it is opened.
+     */
+    const val SAVED_FOR_LATER_SORT_ORDER = -1000
 }
 
 data class ReadingQueue(

@@ -74,7 +74,8 @@ class KudosAppContainer(
                 KudosDatabaseMigrations.MIGRATION_7_8,
                 KudosDatabaseMigrations.MIGRATION_8_9,
                 KudosDatabaseMigrations.MIGRATION_9_10,
-                KudosDatabaseMigrations.MIGRATION_10_11
+                KudosDatabaseMigrations.MIGRATION_10_11,
+                KudosDatabaseMigrations.MIGRATION_11_12
             )
             .build()
     }
