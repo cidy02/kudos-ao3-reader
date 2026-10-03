@@ -18,8 +18,11 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadata
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.time.Instant
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -972,6 +975,91 @@ class WorkImporterLifecycleTest {
     }
 
     @Test
+    fun importedEpubReadsOpfMetadata() {
+        val metadata = EpubImportMetadata.inspect(syntheticAo3Epub(includePrefaceMetadata = false))
+
+        assertEquals("OPF Title", metadata.title)
+        assertEquals("OPF Author", metadata.author)
+        assertEquals("<p>OPF Summary</p>", metadata.summary)
+        assertEquals("https://archiveofourown.org/works/424242", metadata.sourceUrl)
+        assertEquals("Teen And Up Audiences", metadata.rating)
+        assertEquals("English", metadata.language)
+        assertEquals("2020-01-01", metadata.publishedDate)
+        assertEquals("2021-02-03", metadata.updatedDate)
+        assertEquals("Series Name", metadata.seriesTitle)
+        assertEquals(2, metadata.seriesIndex)
+        assertEquals(1_234, metadata.wordCount)
+        assertEquals(2, metadata.localChapterCount)
+        assertTrue(metadata.subjects.contains("Subject fallback"))
+    }
+
+    @Test
+    fun importedEpubScansAo3PrefaceMetadata() {
+        val metadata = EpubImportMetadata.inspect(syntheticAo3Epub())
+
+        assertEquals("https://archiveofourown.org/works/424242", metadata.sourceUrl)
+        assertEquals("Explicit", metadata.rating)
+        assertEquals("2022-03-04", metadata.publishedDate)
+        assertEquals("2023-05-06", metadata.updatedDate)
+        assertEquals(2_345, metadata.wordCount)
+        assertEquals("2/3", metadata.chapters)
+        assertEquals(10, metadata.kudos)
+        assertEquals(4, metadata.comments)
+        assertEquals(100, metadata.hits)
+        assertEquals(true, metadata.isComplete)
+        assertEquals(listOf("New Fandom"), metadata.fandoms)
+        assertEquals(listOf("A/B"), metadata.relationships)
+        assertEquals(listOf("Alice"), metadata.characters)
+        assertEquals(listOf("Fluff"), metadata.freeforms)
+        assertEquals(listOf("No Archive Warnings Apply"), metadata.warnings)
+        assertEquals(listOf("F/F"), metadata.categories)
+    }
+
+    @Test
+    fun duplicateEpubImportFillsMissingMetadataWithoutOverwritingAndRestores() = runTest {
+        repository.upsert(
+            SavedWork(
+                id = workUuid,
+                title = "Reader title",
+                author = "Reader author",
+                sourceUrl = "https://archiveofourown.org/works/424242",
+                rating = "Mature",
+                wordCount = 999,
+                workFandoms = listOf("Old Fandom"),
+                isSaved = true,
+                hasEpub = false
+            )
+        )
+        repository.softDelete(workUuid)
+        val importer = importer(
+            metadata = AO3Result.Failure(AO3Error.NotFound),
+            download = AO3Result.Failure(AO3Error.NotFound)
+        )
+
+        val result = importer.importLocalEpub("different-name.epub", syntheticAo3Epub())
+
+        val work = (result as WorkImportResult.Success).work
+        assertEquals(workUuid, work.id)
+        assertEquals("Reader title", work.title)
+        assertEquals("Reader author", work.author)
+        assertEquals("<p>OPF Summary</p>", work.summary)
+        assertEquals("Mature", work.rating)
+        assertEquals(999, work.wordCount)
+        assertEquals(listOf("Old Fandom", "New Fandom"), work.workFandoms)
+        assertEquals(424242, work.ao3WorkID)
+        assertFalse(work.isDeleted)
+        assertTrue(work.hasEpub)
+        assertEquals(capturedNow, work.downloadedAt)
+        assertEquals(1, repository.listSavedWorks().size)
+        assertTrue(
+            database.syncTombstoneDao().getByRecord(
+                workUuid,
+                SyncTombstoneRecordType.SAVED_WORK
+            ).isEmpty()
+        )
+    }
+
+    @Test
     fun importLocalEpubRejectsUnsupportedExtension() = runTest {
         val importer = importer(
             metadata = AO3Result.Failure(AO3Error.NotFound),
@@ -1091,6 +1179,82 @@ private class FakeAO3Client(
 
 private const val workUuid = "11111111-1111-1111-1111-111111111111"
 private val epubBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 1, 2, 3)
+
+private fun syntheticAo3Epub(includePrefaceMetadata: Boolean = true): ByteArray {
+    val opf = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <dc:title>OPF Title</dc:title>
+            <dc:creator>OPF Author</dc:creator>
+            <dc:description>&lt;p&gt;OPF Summary&lt;/p&gt;</dc:description>
+            <dc:source>https://archiveofourown.org/downloads/424242/book.epub</dc:source>
+            <dc:language>en</dc:language>
+            <dc:subject>Teen And Up Audiences</dc:subject>
+            <dc:subject>Subject fallback</dc:subject>
+            <dc:subject>No Archive Warnings Apply</dc:subject>
+            <dc:subject>Gen</dc:subject>
+            <dc:date>2020-01-01</dc:date>
+            <meta property="dcterms:modified">2021-02-03</meta>
+            <meta name="calibre:series" content="Series Name"/>
+            <meta name="calibre:series_index" content="2.0"/>
+            <meta name="calibre:word_count" content="1,234"/>
+          </metadata>
+          <manifest>
+            <item id="preface" href="preface.xhtml" media-type="application/xhtml+xml"/>
+            <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+          </manifest>
+          <spine>
+            <itemref idref="preface"/>
+            <itemref idref="chapter"/>
+          </spine>
+        </package>
+    """.trimIndent()
+    val preface = if (includePrefaceMetadata) {
+        """
+            <html><body>
+              <h2 class="title">Preface title</h2>
+              <h3 class="byline"><a rel="author">Preface author</a></h3>
+              <p>Posted at <a href="https://archiveofourown.org/works/424242">AO3</a>.</p>
+              <div class="summary"><blockquote>Preface summary</blockquote></div>
+              <dl>
+                <dt>Rating:</dt><dd><a>Explicit</a></dd>
+                <dt>Archive Warning:</dt><dd><a>No Archive Warnings Apply</a></dd>
+                <dt>Category:</dt><dd><a>F/F</a></dd>
+                <dt>Fandom:</dt><dd><a>New Fandom</a></dd>
+                <dt>Relationships:</dt><dd><a>A/B</a></dd>
+                <dt>Characters:</dt><dd><a>Alice</a></dd>
+                <dt>Additional Tags:</dt><dd><a>Fluff</a></dd>
+                <dt>Language:</dt><dd>English</dd>
+                <dt>Status:</dt><dd>Complete</dd>
+                <dt>Stats:</dt><dd>
+                  Published: 2022-03-04 Updated: 2023-05-06 Words: 2,345
+                  Chapters: 2/3 Kudos: 10 Comments: 4 Hits: 100
+                </dd>
+              </dl>
+            </body></html>
+        """.trimIndent()
+    } else {
+        "<html><body><p>Chapter one.</p></body></html>"
+    }
+    val output = ByteArrayOutputStream()
+    ZipOutputStream(output).use { zip ->
+        fun entry(name: String, value: String) {
+            zip.putNextEntry(ZipEntry(name))
+            zip.write(value.toByteArray())
+            zip.closeEntry()
+        }
+        entry("mimetype", "application/epub+zip")
+        entry(
+            "META-INF/container.xml",
+            """<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>"""
+        )
+        entry("OEBPS/content.opf", opf)
+        entry("OEBPS/preface.xhtml", preface)
+        entry("OEBPS/chapter.xhtml", "<html><body><p>Chapter two.</p></body></html>")
+    }
+    return output.toByteArray()
+}
 
 private fun sampleSummary(): AO3WorkSummary {
     return AO3WorkSummary(
