@@ -27,6 +27,9 @@ import io.github.cidy02.kudos.ui.subject.*
 import io.github.cidy02.kudos.home.HomeFacts
 import kotlinx.coroutines.launch
 
+import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+
 enum class AuthorTab(val label: String) {
     Works("Works"),
     Series("Series"),
@@ -125,6 +128,66 @@ fun AuthorProfileScreen(
     
     var showMenu by remember { mutableStateOf(false) }
 
+    val workHue = remember(route.displayName) { HomeFacts.workHue(emptyList(), route.displayName) }
+    val palette = remember(workHue, tokens.theme) { SubjectPalette.fromHue(workHue, tokens.theme) }
+
+    ProvidePushedShellChrome(
+        hasSubjectHeader = true,
+        trailingContent = {
+            Box {
+                ToolbarCircleButton(
+                    onClick = { showMenu = true },
+                    accessibilityName = "Menu",
+                    palette = palette
+                ) {
+                    Icon(Icons.Default.MoreVert, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    if (isDashboard) {
+                        DropdownMenuItem(
+                            text = { Text("My Works") },
+                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.MyWorks) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("My Collections") },
+                            onClick = { showMenu = false; onOpenAO3Collections?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("My Bookmarks") },
+                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.Bookmarks) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("My Subscriptions") },
+                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.Subscriptions) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Marked for Later") },
+                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.MarkedForLater) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("My History") },
+                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.History) }
+                        )
+                        HorizontalDivider()
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Ledger Mode") },
+                        onClick = { displayMode = AuthorDisplayMode.Ledger; showMenu = false }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Detailed Mode") },
+                        onClick = { displayMode = AuthorDisplayMode.Detailed; showMenu = false }
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Open on AO3") },
+                        onClick = { showMenu = false; onOpenWeb(AO3AuthorUrls.userProfileUrl(route.username) ?: "") }
+                    )
+                }
+            }
+        }
+    )
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -148,69 +211,30 @@ fun AuthorProfileScreen(
             val h = header
             if (h != null) {
                 item {
-                    Column {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            Box {
-                                IconButton(onClick = { showMenu = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                                }
-                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                    if (isDashboard) {
-                                        DropdownMenuItem(
-                                            text = { Text("My Works") },
-                                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.MyWorks) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("My Collections") },
-                                            onClick = { showMenu = false; onOpenAO3Collections?.invoke() }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("My Bookmarks") },
-                                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.Bookmarks) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("My Subscriptions") },
-                                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.Subscriptions) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Marked for Later") },
-                                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.MarkedForLater) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("My History") },
-                                            onClick = { showMenu = false; onOpenDashboardList?.invoke(AccountListType.History) }
-                                        )
-                                        HorizontalDivider()
-                                    }
-                                    DropdownMenuItem(
-                                        text = { Text("Ledger Mode") },
-                                        onClick = { displayMode = AuthorDisplayMode.Ledger; showMenu = false }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Detailed Mode") },
-                                        onClick = { displayMode = AuthorDisplayMode.Detailed; showMenu = false }
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        text = { Text("Open on AO3") },
-                                        onClick = { showMenu = false; onOpenWeb(AO3AuthorUrls.userProfileUrl(route.username) ?: "") }
-                                    )
-                                }
-                            }
-                        }
-
+                    Column(modifier = Modifier.padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp)) {
                         if (isDashboard) {
                             SubjectHeaderBlock(
                                 kicker = "AO3 Account",
                                 title = route.displayName,
-                                subtitle = route.pseud?.let { "Pseud of ${route.username}" } ?: "AO3 user",
+                                subtitle = null,
                                 palette = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), route.displayName), tokens.theme)
                             )
+                            if (h.pseuds.size > 1) {
+                                Spacer(Modifier.size(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        SubjectChip(text = "All Pseuds", style = SubjectChipStyle.Pill(route.pseud == null), modifier = Modifier.clickable { route = AO3AuthorRoute(route.username, null) })
+                                    }
+                                    items(h.pseuds) { pseud ->
+                                        SubjectChip(text = pseud.name, style = SubjectChipStyle.Pill(route.pseud.equals(pseud.route.pseud, true)), modifier = Modifier.clickable { route = pseud.route })
+                                    }
+                                }
+                            }
                         } else {
                             AO3AuthorHero(
                                 header = h,
                                 route = route,
-                                profileTitle = "", // Using as a dummy profileTitle because it's not on header. Wait, about is on AuthorTab.About
+                                profileTitle = about?.profileTitle ?: "",
                                 isOwnProfile = false, // Since this requires more logic, assuming false for now unless we know it's our own
                                 onSubscription = onOpenWeb,
                                 onModeration = { onOpenWeb(it.url) }
