@@ -2608,13 +2608,13 @@ struct KudosBackupTests {
         let workID = savedWork.id
         let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
         let manifestData = try KudosBackupContents(manifest: manifest).manifestData()
-        
+
         let epubData = Data("dummy".utf8)
         let zipData = HostileZipFixture.build([
             HostileZipFixture.Entry(name: "manifest.json", payload: manifestData),
             HostileZipFixture.Entry(name: "Works/\(workID.uuidString).epub", payload: epubData)
         ])
-        
+
         let contents = try KudosBackupContents(zipData: zipData)
         #expect(contents.epubFiles.isEmpty, "Extraction is lazy: epubFiles dictionary should not be pre-populated")
         #expect(
@@ -2638,20 +2638,20 @@ struct KudosBackupTests {
         let dirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dirURL) }
-        
+
         let savedWork = SavedWork(title: "Title", author: "Author")
         let fakeWork = KudosBackupWork(work: savedWork)
         let workID = savedWork.id
         let manifest = KudosBackupManifest(works: [fakeWork], bookmarks: [], fonts: [], settings: KudosBackupSettings.capture())
         let manifestData = try KudosBackupContents(manifest: manifest).manifestData()
         try manifestData.write(to: dirURL.appendingPathComponent("manifest.json"))
-        
+
         let worksDir = dirURL.appendingPathComponent("Works")
         try FileManager.default.createDirectory(at: worksDir, withIntermediateDirectories: true)
-        
+
         let epubURL = worksDir.appendingPathComponent("\(workID.uuidString).epub")
         try Data("dummy".utf8).write(to: epubURL)
-        
+
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: worksDir.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: worksDir.path) }
 
