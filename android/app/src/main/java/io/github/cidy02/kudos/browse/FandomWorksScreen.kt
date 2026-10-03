@@ -11,15 +11,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Checklist
-import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,8 +40,10 @@ import io.github.cidy02.kudos.search.collectLocalTagSuggestions
 import io.github.cidy02.kudos.ui.components.AO3WorkCard
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
-import io.github.cidy02.kudos.ui.components.KudosScreenHeader
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
+import io.github.cidy02.kudos.ui.subject.FilterButton
+import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.MetadataChipRow
 import io.github.cidy02.kudos.works.WorkRepository
@@ -95,7 +92,10 @@ fun FandomWorksScreen(
         collectLocalTagSuggestions(savedWorks, userTagNames)
     }
     val savedByUrl = remember(savedWorks) { BrowseLocalIndicators.index(savedWorks) }
+    val browseDefault = remember { AO3BrowseRepository.browseBaseline() }
     val activeFilters = remember(filters) { activeFilterCount(filters) }
+    val narrowed = filters != browseDefault
+    val palette = fandomListPalette(fandomName)
     
     val context = LocalContext.current
     val autocompleteRepository = remember {
@@ -119,60 +119,76 @@ fun FandomWorksScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .subjectScreenWash(palette)
     ) {
-        // TopAppBar is generic ("Works"); fandom name is useful context.
-        KudosScreenHeader(
-            title = fandomName,
-            subtitle = "AO3 works for this fandom.",
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showFilterSheet = true }) {
-                        BadgedBox(
-                            badge = {
-                                if (activeFilters > 0) {
-                                    androidx.compose.material3.Badge {
-                                        Text(activeFilters.toString())
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Outlined.FilterList, contentDescription = "Filters")
-                        }
-                    }
-                    IconButton(onClick = { expandAllCards = !expandAllCards }) {
-                        Icon(
-                            imageVector = if (expandAllCards) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
-                            contentDescription = if (expandAllCards) "Collapse all" else "Expand all"
-                        )
-                    }
-                    if (workImporter != null) {
-                        IconButton(
-                            onClick = { if (selection.isSelecting) selection.exit() else selection.enter() }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Checklist,
-                                contentDescription = if (selection.isSelecting) "Exit selection" else "Select works"
-                            )
-                        }
-                    }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(end = 4.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterButton(
+                filtersActive = narrowed,
+                onClick = { showFilterSheet = true },
+                badgeCount = if (narrowed) activeFilters else 0,
+                onClearFilters = { filters = browseDefault }
+            )
+            IconButton(onClick = { expandAllCards = !expandAllCards }) {
+                Icon(
+                    imageVector = if (expandAllCards) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
+                    contentDescription = if (expandAllCards) "Collapse all" else "Expand all"
+                )
+            }
+            if (workImporter != null) {
+                IconButton(
+                    onClick = { if (selection.isSelecting) selection.exit() else selection.enter() }
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Checklist,
+                        contentDescription = if (selection.isSelecting) "Exit selection" else "Select works"
+                    )
                 }
             }
+        }
+        SubjectHeaderBlock(
+            kicker = "Browse",
+            title = fandomName,
+            palette = palette
         )
 
         when (val current = state) {
-            FandomWorksState.Loading -> LoadingStateCard("Loading fandom works")
-            is FandomWorksState.Error -> BrowseErrorBlock(message = current.message, onRetry = { load(current.page) })
+            FandomWorksState.Loading -> LoadingStateCard(
+                "Loading fandom works",
+                Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
+            is FandomWorksState.Error -> BrowseErrorBlock(
+                message = current.message,
+                onRetry = { load(current.page) },
+                title = "Couldn't load works",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
             is FandomWorksState.Loaded -> {
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
-                        title = "No works found",
-                        message = "AO3 returned no works for this fandom."
+                        title = if (narrowed) "No matching works" else "No works found",
+                        message = if (narrowed) {
+                            "No works in this fandom match your filters."
+                        } else {
+                            "AO3 has no works for this fandom right now."
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        primaryActionLabel = if (narrowed) "Clear Filters" else null,
+                        onPrimaryAction = if (narrowed) {
+                            { filters = browseDefault }
+                        } else {
+                            null
+                        }
                     )
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         // weight(fill = false) so the selection bar below keeps its
                         // space when selecting, without stretching the list otherwise.
                         modifier = Modifier

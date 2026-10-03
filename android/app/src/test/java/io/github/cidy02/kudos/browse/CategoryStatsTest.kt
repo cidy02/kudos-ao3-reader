@@ -33,6 +33,34 @@ class CategoryStatsTest {
     }
 
     @Test
+    fun jumpBackInIncludesEveryRecentChip() {
+        val inputs = listOf(
+            CategoryStatsInput(
+                id = "Books & Literature",
+                fandoms = listOf(AO3Fandom("Star Wars - All Media Types", 1_000)),
+                hasFullList = true
+            ),
+            CategoryStatsInput(
+                id = "Movies",
+                fandoms = listOf(AO3Fandom("Frozen (Disney Movies)", 50)),
+                hasFullList = false
+            )
+        )
+        val works = listOf(
+            work("Star Wars - All Media Types", finished = true, read = Instant.parse("2026-03-01T00:00:00Z")),
+            work("Frozen (Disney Movies)", spine = 1, read = Instant.parse("2026-02-01T00:00:00Z"))
+        ).map { it.toBrowseSnapshot() }
+
+        val stats = CategoryStatsCalculator.computeStats(inputs, works)
+        val jump = CategoryStatsCalculator.rankJumpBackIn(inputs, works)
+
+        val recent = stats.values.flatMap { it.recentFandoms }.toSet()
+        assertEquals(setOf("Star Wars - All Media Types", "Frozen (Disney Movies)"), recent)
+        assertEquals(recent, jump.map { it.fandom }.toSet())
+        assertEquals("Books & Literature", jump.first { it.fandom.startsWith("Star Wars") }.categoryId)
+    }
+
+    @Test
     fun fullListProvidesFandomAndWorkCounts() {
         val category = AO3MediaCategory(
             name = "Movies",
@@ -52,6 +80,68 @@ class CategoryStatsTest {
         assertEquals(1_500, stats.workCount)
         assertEquals(1, stats.savedCount)
         assertEquals(listOf("Frozen"), stats.recentFandoms)
+    }
+
+    @Test
+    fun fetchedOnlyCopyDoesNotCountAsDownloaded() {
+        val category = AO3MediaCategory(
+            name = "Movies",
+            fandomsPath = "/media/Movies/fandoms",
+            featuredFandoms = listOf("Frozen")
+        )
+        val fetched = work("Frozen", finished = true).copy(
+            sourceUrl = "https://archiveofourown.org/works/1",
+            isSaved = false,
+            isKeptOffline = false,
+            hasEpub = true,
+            hasAo3WorkId = true
+        )
+        val kept = fetched.copy(isSaved = true)
+
+        assertEquals(0, CategoryStatsCalculator.stats(category, fandomList = null, library = listOf(fetched)).savedCount)
+        assertEquals(1, CategoryStatsCalculator.stats(category, fandomList = null, library = listOf(kept)).savedCount)
+    }
+
+    @Test
+    fun recentFandomsFollowLastReadAheadOfDateAdded() {
+        val category = AO3MediaCategory(
+            name = "Anime & Manga",
+            fandomsPath = "/media/Anime/fandoms",
+            featuredFandoms = listOf("Naruto", "Bleach")
+        )
+        val library = listOf(
+            work(
+                "Naruto",
+                finished = true,
+                added = Instant.parse("2026-06-01T00:00:00Z"),
+                read = Instant.parse("2026-01-01T00:00:00Z")
+            ),
+            work(
+                "Bleach",
+                finished = true,
+                added = Instant.parse("2026-01-01T00:00:00Z"),
+                read = Instant.parse("2026-06-01T00:00:00Z")
+            )
+        )
+
+        val stats = CategoryStatsCalculator.stats(category, fandomList = null, library = library)
+
+        assertEquals(listOf("Bleach", "Naruto"), stats.recentFandoms)
+    }
+
+    @Test
+    fun clusterKeepsTheTwelveLargestFamilies() {
+        val fandoms = (1..13).map { AO3Fandom("Fandom $it", workCount = it * 10) }
+        val category = AO3MediaCategory(name = "Movies", fandomsPath = "/media/Movies/fandoms")
+
+        val stats = CategoryStatsCalculator.stats(category, fandomList = fandoms, library = emptyList())
+
+        assertEquals(13, stats.fandomCount)
+        assertEquals(13, stats.familyCount)
+        assertEquals(12, stats.clusterFandoms.size)
+        assertEquals("Fandom 13", stats.clusterFandoms.first().title)
+        assertTrue(stats.isApproximateWorkCount)
+        assertEquals((1..13).sumOf { it * 10 }, stats.workCount)
     }
 
     @Test
@@ -75,13 +165,15 @@ class CategoryStatsTest {
         fandom: String,
         finished: Boolean = false,
         spine: Int = 0,
-        added: Instant = Instant.parse("2026-01-01T00:00:00Z")
+        added: Instant = Instant.parse("2026-01-01T00:00:00Z"),
+        read: Instant? = null
     ): SavedWork = SavedWork(
         title = fandom,
         author = "Author",
         workFandoms = listOf(fandom),
         isFinished = finished,
         lastSpineIndex = spine,
-        dateAdded = added
+        dateAdded = added,
+        lastReadDate = read
     )
 }

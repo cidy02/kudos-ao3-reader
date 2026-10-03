@@ -1,57 +1,44 @@
 package io.github.cidy02.kudos.browse
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Bookmark
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.TravelExplore
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import io.github.cidy02.kudos.data.local.dao.ReadingLogDao
+import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseRepository
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseUrls
 import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.browse.AO3MediaCategory
+import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
-import io.github.cidy02.kudos.ui.components.KudosSectionHeader
-import io.github.cidy02.kudos.ui.components.LoadingStateCard
-import io.github.cidy02.kudos.works.WorkRepository
+import io.github.cidy02.kudos.ui.components.GlassFieldBar
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -63,10 +50,11 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import io.github.cidy02.kudos.ui.components.GlassFieldBar
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.material.icons.outlined.Search
-import io.github.cidy02.kudos.network.ao3.displayMessage
+
+private data class BrowseDerived(
+    val stats: Map<String, CategoryStats> = emptyMap(),
+    val jumpBackIn: List<JumpBackIn.Pick> = emptyList()
+)
 
 @Composable
 fun BrowseScreen(
@@ -74,6 +62,7 @@ fun BrowseScreen(
     onOpenWebFallback: (String) -> Unit,
     onOpenFandom: (String) -> Unit = {},
     workRepository: WorkRepository? = null,
+    readingLogDao: ReadingLogDao? = null,
     repository: AO3BrowseRepository = remember { AO3BrowseRepository() }
 ) {
     var state by remember { mutableStateOf<BrowseCategoriesState>(BrowseCategoriesState.Loading) }
@@ -84,131 +73,168 @@ fun BrowseScreen(
         workRepository?.observeLibraryWorks() ?: flowOf(emptyList())
     }
     val library by libraryFlow.collectAsState(initial = emptyList())
+    val watermarkFlow = remember(readingLogDao) {
+        readingLogDao?.observeWatermarks() ?: flowOf(emptyList())
+    }
+    val watermarks by watermarkFlow.collectAsState(initial = emptyList())
+    val categories = (state as? BrowseCategoriesState.Loaded)?.categories.orEmpty()
+    // `produceState` restarted on every fandom-list arrival and cancelled the
+    // assignment, so the screen stayed on the first featured-only result.
+    // `collect` finishes each pass; snapshotFlow keeps only the newest inputs.
+    var derived by remember { mutableStateOf(BrowseDerived()) }
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            BrowseInputs(
+                categories = (state as? BrowseCategoriesState.Loaded)?.categories.orEmpty(),
+                lists = fandomLists,
+                library = library,
+                watermarks = watermarks
+            )
+        }.collect { tick ->
+            if (tick.categories.isEmpty()) {
+                derived = BrowseDerived()
+                return@collect
+            }
+            val snapshots = tick.library.map { it.toBrowseSnapshot() }
+            val visits = tick.watermarks.map { JumpBackIn.Visit(it.fandomName, it.lastVisitedAt) }
+            derived = withContext(Dispatchers.Default) {
+                val inputs = tick.categories.map { category ->
+                    val list = tick.lists[category.name]
+                    CategoryStatsInput(
+                        id = category.name,
+                        fandoms = list ?: category.featuredFandoms.map { AO3Fandom(name = it) },
+                        hasFullList = list != null
+                    )
+                }
+                BrowseDerived(
+                    stats = CategoryStatsCalculator.computeStats(inputs, snapshots),
+                    jumpBackIn = CategoryStatsCalculator.rankJumpBackIn(inputs, snapshots, visits)
+                )
+            }
+        }
+    }
 
-    // Suspending core so the shared pull-to-refresh spinner tracks the real
-    // request; load() keeps the fire-and-forget shape the rest of the screen uses.
     suspend fun loadNow() {
         state = BrowseCategoriesState.Loading
         fandomLists = emptyMap()
-        run {
-            when (val result = repository.categories()) {
-                is AO3Result.Success -> {
-                    state = BrowseCategoriesState.Loaded(result.value)
-                    // Background: fill fandom/work counts politely (bounded concurrency).
-                    prefetchFandomLists(repository, result.value) { name, list ->
-                        fandomLists = fandomLists + (name to list)
-                    }
+        when (val result = repository.categories()) {
+            is AO3Result.Success -> {
+                state = BrowseCategoriesState.Loaded(result.value)
+                prefetchFandomLists(repository, result.value) { name, list ->
+                    fandomLists = fandomLists + (name to list)
                 }
-                is AO3Result.Failure -> {
-                    state = BrowseCategoriesState.Error(result.error.displayMessage())
-                }
+            }
+            is AO3Result.Failure -> {
+                state = BrowseCategoriesState.Error(result.error.displayMessage())
             }
         }
     }
 
     fun load() { scope.launch { loadNow() } }
 
+    fun openFandom(name: String) {
+        // The visit write lives in the caller's scope. This screen's scope is
+        // cancelled as soon as navigation leaves Browse, which dropped the insert
+        // and, when it raced the caller's write, inserted a second watermark row.
+        onOpenFandom(name)
+    }
+
     LaunchedEffect(Unit) { loadNow() }
 
     KudosRefreshBox(onRefresh = { loadNow() }, modifier = Modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        GlassFieldBar(
-            text = addressQuery,
-            onTextChange = { addressQuery = it },
-            placeholder = "Search AO3 or enter a URL",
-            imeAction = ImeAction.Go,
-            onSubmit = {
-                if (addressQuery.isNotBlank()) {
-                    onOpenWebFallback(addressQuery)
-                    addressQuery = ""
-                }
-            },
-            leading = {
-                Icon(
-                    imageVector = Icons.Outlined.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        when (val current = state) {
-            BrowseCategoriesState.Loading -> LoadingStateCard("Loading AO3 media categories")
-            is BrowseCategoriesState.Error -> BrowseErrorBlock(
-                message = current.message,
-                onRetry = ::load,
-                onWebFallback = { onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl()) }
+        Column(modifier = Modifier.fillMaxSize()) {
+            GlassFieldBar(
+                text = addressQuery,
+                onTextChange = { addressQuery = it },
+                placeholder = "Search AO3 or enter a URL",
+                imeAction = ImeAction.Go,
+                onSubmit = {
+                    if (addressQuery.isNotBlank()) {
+                        onOpenWebFallback(addressQuery)
+                        addressQuery = ""
+                    }
+                },
+                leading = {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             )
-            is BrowseCategoriesState.Loaded -> {
-                if (current.categories.isEmpty()) {
-                    EmptyStateCard(
-                        title = "No fandom categories",
-                        message = "AO3 did not return any fandom categories."
+
+            when (val current = state) {
+                BrowseCategoriesState.Loading -> LoadingStateCard("Loading AO3 media categories")
+                is BrowseCategoriesState.Error -> Column(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    JumpBackInSection(derived.jumpBackIn, categories, ::openFandom)
+                    BrowseErrorBlock(
+                        message = current.message,
+                        onRetry = ::load,
+                        onWebFallback = { onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl()) },
+                        title = "Couldn't load fandoms",
+                        retryLabel = "Try Again"
                     )
-                } else {
-                    KudosSectionHeader(
-                        title = "Browse by fandom",
-                        subtitle = "Tap a category to see its fandoms.",
-                        trailing = {
-                            IconButton(
-                                onClick = {
-                                    onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl())
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.TravelExplore,
-                                    contentDescription = "Open AO3 website"
-                                )
-                            }
-                        }
-                    )
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(current.categories, key = { it.name }) { category ->
-                            // Stats scan the full library once per category — never do that
-                            // on the composition/main thread (jank on large libraries).
-                            val fandomList = fandomLists[category.name]
-                            val stats by produceState(
-                                initialValue = CategoryStats(),
-                                category,
-                                fandomList,
-                                library
-                            ) {
-                                value = withContext(Dispatchers.Default) {
-                                    CategoryStatsCalculator.stats(
-                                        category = category,
-                                        fandomList = fandomList,
-                                        library = library
+                }
+                is BrowseCategoriesState.Loaded -> {
+                    if (current.categories.isEmpty()) {
+                        EmptyStateCard(
+                            title = "No fandom categories",
+                            message = "AO3 did not return any fandom categories."
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            // Always reserve the slot. Adding it only once picks
+                            // exist meant a list built while ranking was still
+                            // empty never gained the carousel. Spacing lives on
+                            // the children so an empty slot adds no gap.
+                            item(key = "jump-back-in") {
+                                val picks = derived.jumpBackIn
+                                if (picks.isNotEmpty()) {
+                                    JumpBackInSection(
+                                        picks = picks,
+                                        categories = current.categories,
+                                        onOpenFandom = ::openFandom,
+                                        modifier = Modifier.padding(bottom = 18.dp)
                                     )
                                 }
                             }
-                            CategoryCard(
-                                category = category,
-                                stats = stats,
-                                onOpen = { onOpenCategory(category) },
-                                onOpenFandom = onOpenFandom
-                            )
+                            items(current.categories, key = { it.name }) { category ->
+                                CategoryPanel(
+                                    category = category,
+                                    stats = derived.stats[category.name] ?: CategoryStats(),
+                                    onOpen = { onOpenCategory(category) },
+                                    onOpenFandom = ::openFandom,
+                                    modifier = Modifier.padding(bottom = 18.dp)
+                                )
+                            }
+                            item(key = "open-website") {
+                                OpenAo3WebsiteRow(
+                                    modifier = Modifier.padding(bottom = 18.dp)
+                                ) {
+                                    onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl())
+                                }
+                            }
+                            item(key = "instructions") { BrowseInstructions() }
                         }
                     }
                 }
             }
         }
     }
-    }
 }
 
 /**
  * Prefetch each category's fandom index for card stats. Bounded so we stay polite
- * to AO3 (mirrors Apple FandomCatalog concurrency intent, in-memory only).
- * Invokes [onLoaded] as each category lands so cards fill in progressively.
+ * to AO3. Invokes [onLoaded] as each category lands so cards fill in progressively.
  */
 private suspend fun prefetchFandomLists(
     repository: AO3BrowseRepository,
@@ -224,9 +250,7 @@ private suspend fun prefetchFandomLists(
                 gate.withPermit {
                     when (val result = repository.fandoms(category)) {
                         is AO3Result.Success -> {
-                            emitLock.withLock {
-                                onLoaded(category.name, result.value)
-                            }
+                            emitLock.withLock { onLoaded(category.name, result.value) }
                         }
                         is AO3Result.Failure -> Unit
                     }
@@ -236,163 +260,12 @@ private suspend fun prefetchFandomLists(
     }
 }
 
-/**
- * iOS MediaBrowserView category card: whole row is a NavigationLink — no separate Open.
- * Icon + name · stats line · optional recently-read chips · trailing chevron.
- */
-@Composable
-private fun CategoryCard(
-    category: AO3MediaCategory,
-    stats: CategoryStats,
-    onOpen: () -> Unit,
-    onOpenFandom: (String) -> Unit
-) {
-    Card(
-        onClick = onOpen,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics {
-                contentDescription = "${category.name}. Open fandoms."
-            }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    imageVector = CategoryStatsCalculator.iconFor(category.name),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
-                )
-                Text(
-                    text = category.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            CategoryStatsLine(stats = stats)
-
-            if (stats.recentFandoms.isNotEmpty()) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                RecentlyReadChips(
-                    fandoms = stats.recentFandoms,
-                    onOpenFandom = onOpenFandom
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CategoryStatsLine(stats: CategoryStats) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        if (stats.fandomCount != null) {
-            StatItem(
-                icon = Icons.AutoMirrored.Outlined.MenuBook,
-                text = "${CategoryStatsCalculator.formatCount(stats.fandomCount)} fandoms"
-            )
-            if (stats.workCount != null) {
-                StatItem(
-                    icon = Icons.Outlined.Description,
-                    text = CategoryStatsCalculator.formatWorksEstimate(stats.workCount)
-                )
-            }
-        } else {
-            Text(
-                text = "Counting fandoms…",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        if (stats.savedCount > 0) {
-            StatItem(
-                icon = Icons.Outlined.Bookmark,
-                text = "${stats.savedCount} saved"
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatItem(icon: ImageVector, text: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(14.dp)
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun RecentlyReadChips(
-    fandoms: List<String>,
-    onOpenFandom: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = "Recently read",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            fandoms.forEach { fandom ->
-                // Chip tap opens the fandom (not the whole card).
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.clickable { onOpenFandom(fandom) }
-                ) {
-                    Text(
-                        text = fandom,
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
-                }
-            }
-        }
-    }
-}
+private data class BrowseInputs(
+    val categories: List<AO3MediaCategory>,
+    val lists: Map<String, List<AO3Fandom>>,
+    val library: List<SavedWork>,
+    val watermarks: List<FandomReadWatermarkEntity>
+)
 
 private sealed interface BrowseCategoriesState {
     data object Loading : BrowseCategoriesState

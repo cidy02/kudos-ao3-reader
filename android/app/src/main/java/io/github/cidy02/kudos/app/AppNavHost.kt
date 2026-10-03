@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.app
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -17,6 +18,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import io.github.cidy02.kudos.ui.components.LocalSharedTransitionScope
 import io.github.cidy02.kudos.ui.components.LocalAnimatedVisibilityScope
 import androidx.navigation.NavBackStackEntry
+import kotlinx.coroutines.launch
 import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraphBuilder
 import androidx.compose.runtime.collectAsState
@@ -38,6 +40,7 @@ import io.github.cidy02.kudos.author.AuthorProfileScreen
 import io.github.cidy02.kudos.author.AuthorWorksScreen
 import io.github.cidy02.kudos.backup.BackupScreen
 import io.github.cidy02.kudos.browse.BrowseScreen
+import io.github.cidy02.kudos.browse.FandomVisits
 import io.github.cidy02.kudos.browse.FandomListScreen
 import io.github.cidy02.kudos.browse.FandomWorksScreen
 import io.github.cidy02.kudos.browse.TagWorksScreen
@@ -83,6 +86,14 @@ fun AppNavHost(
     // way) just falls back to the same AO3 fetch WorkDetailSource.Ao3WorkId
     // already does.
     val remoteSummaryCache = remember { mutableMapOf<Long, AO3WorkSummary>() }
+    // Browse leaves composition the moment a fandom opens, which cancels the
+    // screen's own scope before the visit row is written.
+    val visitScope = rememberCoroutineScope()
+    fun rememberVisit(name: String) {
+        visitScope.launch {
+            FandomVisits.markVisited(container.database.readingLogDao(), name)
+        }
+    }
 
     fun navigateToWorkDetail(source: WorkDetailSource) {
         if (source is WorkDetailSource.RemoteSummary) {
@@ -280,10 +291,12 @@ fun AppNavHost(
             BrowseScreen(
                 repository = container.browseRepository,
                 workRepository = container.workRepository,
+                readingLogDao = container.database.readingLogDao(),
                 onOpenCategory = { category ->
                     navController.navigate(Routes.browseFandoms(category.name, category.fandomsPath))
                 },
                 onOpenFandom = { fandomName ->
+                    rememberVisit(fandomName)
                     navController.navigate(Routes.browseWorks(fandomName))
                 },
                 onOpenWebFallback = { url ->
@@ -306,7 +319,9 @@ fun AppNavHost(
                 FandomListScreen(
                     category = AO3MediaCategory(name = name, fandomsPath = fandomsPath),
                     repository = container.browseRepository,
+                    workRepository = container.workRepository,
                     onOpenFandom = { fandom ->
+                        rememberVisit(fandom.name)
                         navController.navigate(Routes.browseWorks(fandom.name))
                     },
                     onOpenWebFallback = { url ->
