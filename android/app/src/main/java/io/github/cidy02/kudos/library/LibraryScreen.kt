@@ -243,6 +243,8 @@ fun LibraryScreen(
             libraryChrome.filtersActive = state.hasActiveQueryOrFilters
             libraryChrome.filterBadgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1
             libraryChrome.layout = dashboardLayout
+            libraryChrome.washHue = state.continueReading.firstOrNull()?.item?.work
+                ?.let { io.github.cidy02.kudos.home.HomeFacts.workHue(it.workFandoms, it.title) }
             libraryChrome.actions.onNewCollection = { createCollectionName = "" }
             libraryChrome.actions.onShowFilters = { showFilters = true }
             libraryChrome.actions.onSelectAll = {

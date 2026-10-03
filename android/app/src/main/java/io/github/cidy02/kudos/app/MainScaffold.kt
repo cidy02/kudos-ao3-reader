@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.app
 
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseInOut
@@ -188,10 +189,20 @@ fun MainScaffold(
         }
     }
 
+    // Home and Library wash in their hero's colour (owner, 2026-10-03; iOS does the same).
+    val washHue = when {
+        onHome -> homeChrome.washHue
+        onLibrary -> libraryChrome.washHue
+        else -> null
+    }
+    val washModifier = washHue?.let {
+        Modifier.subjectScreenWash(io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(it, tokens.theme))
+    } ?: Modifier
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(page)
+            .then(washModifier)
             .nestedScroll(connection)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
