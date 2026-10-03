@@ -41,6 +41,8 @@ class HomeShellChrome {
     var showPrivacy by mutableStateOf(false)
     var revealAll by mutableStateOf(false)
     var showSelect by mutableStateOf(false)
+    /** The hero card's hue (owner, 2026-10-03): Home's wash takes the current hero's colour. */
+    var washHue by mutableStateOf<Double?>(null)
     val actions = HomeShellActions()
 
     fun reset() {
@@ -52,6 +54,7 @@ class HomeShellChrome {
         showPrivacy = false
         revealAll = false
         showSelect = false
+        washHue = null
         actions.onNewQueue = {}
         actions.onSelectAll = {}
         actions.onEnterSelect = {}

@@ -146,6 +146,7 @@ fun HomeScreen(
             shellChrome.showPrivacy = hideMature
             shellChrome.revealAll = privacyState.revealAll
             shellChrome.showSelect = selectable.isNotEmpty()
+            shellChrome.washHue = readingNow.firstOrNull()?.let { HomeFacts.workHue(it.workFandoms, it.title) }
             shellChrome.actions.onNewQueue = { showNewQueue = true }
             shellChrome.actions.onSelectAll = {
                 selection = if (allSelected) emptySet() else selectable.map { it.id }.toSet()

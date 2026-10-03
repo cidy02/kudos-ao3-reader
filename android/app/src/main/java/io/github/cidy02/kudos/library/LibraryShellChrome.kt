@@ -45,6 +45,8 @@ class LibraryShellChrome {
     var allSelected by mutableStateOf(false)
     var showPrivacyToggle by mutableStateOf(false)
     var revealAll by mutableStateOf(false)
+    /** The top Reading Now work's hue (owner, 2026-10-03): Library's wash takes its colour. */
+    var washHue by mutableStateOf<Double?>(null)
     var hasSavedWorks by mutableStateOf(false)
     var filtersActive by mutableStateOf(false)
     var filterBadgeCount by mutableStateOf(0)
@@ -61,6 +63,7 @@ class LibraryShellChrome {
         hasSavedWorks = false
         filtersActive = false
         filterBadgeCount = 0
+        washHue = null
         layout = WorkSectionLayout.Shelves
         actions.onNewCollection = {}
         actions.onShowFilters = {}
