@@ -175,6 +175,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     )
                 }
             }
+            .heroWash(readingNow.first)
             .background(themeManager.appTheme.cardBackdrop.ignoresSafeArea())
             .navigationTitle("Home")
             #if os(iOS)
