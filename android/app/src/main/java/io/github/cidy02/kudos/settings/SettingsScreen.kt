@@ -50,11 +50,17 @@ fun SettingsScreen(
         composable("reader") {
             SettingsReaderPage(repository, settings)
         }
+        composable("listening") {
+            SettingsListeningPage()
+        }
         composable("downloads") {
             SettingsDownloadsPage(repository, settings)
         }
+        composable("preservation") {
+            SettingsPreservationPage(workAvailabilitySweep, onOpenAvailabilitySweep)
+        }
         composable("library") {
-            SettingsLibraryPage(repository, settings, workImporter, workAvailabilitySweep, onOpenAvailabilitySweep)
+            SettingsLibraryPage(repository, settings)
         }
         composable("backup") {
             SettingsBackupPageWrapper(onOpenBackup, navController, repository, settings)
@@ -62,11 +68,13 @@ fun SettingsScreen(
         composable("folder_sync") {
             SettingsFolderSyncPage(repository, settings)
         }
+        composable("import_files") {
+            SettingsImportPage(workImporter)
+        }
         composable("reading_queues") {
             SettingsReadingQueuesPageWrapper(onOpenQueueStorage, navController)
         }
         composable("account") {
-            // The iOS SettingsAccountPage provides log out and login.
             SettingsAccountPage(authRepository, onLogin)
         }
         composable("privacy_settings") {
