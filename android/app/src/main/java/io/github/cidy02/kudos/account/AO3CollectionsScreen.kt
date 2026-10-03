@@ -46,8 +46,16 @@ import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
-import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+import io.github.cidy02.kudos.ui.subject.ToolbarAddButton
+import io.github.cidy02.kudos.ui.subject.FilterButton
+import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,25 +76,21 @@ fun AO3CollectionsScreen(
         hasSubjectHeader = true,
         trailingContent = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ToolbarCircleButton(
+                ToolbarAddButton(
                     onClick = { /* TODO: New Collection */ },
                     accessibilityName = "New Collection",
                     palette = palette
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                }
-                ToolbarCircleButton(
+                )
+                FilterButton(
+                    filtersActive = false,
                     onClick = { /* TODO: Filter */ },
-                    accessibilityName = "Sort and filter",
-                    palette = palette
-                ) {
-                    Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(18.dp))
-                }
+                    onClearFilters = { }
+                )
             }
         }
     )
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize().subjectScreenWash(palette)) {
             Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(modifier = Modifier.height(56.dp))
 
@@ -94,7 +98,7 @@ fun AO3CollectionsScreen(
                 kicker = "AO3 Account",
                 title = "Collections",
                 subtitle = when (val current = state) {
-                    is AO3CollectionsUiState.Loaded -> "${current.collections.size}"
+                    is AO3CollectionsUiState.Loaded -> "${current.collections.size} collection${if (current.collections.size == 1) "" else "s"}"
                     else -> null
                 },
                 palette = palette
@@ -203,37 +207,124 @@ fun AO3CollectionCard(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
+    val eyebrow = if (collection.viewerIsOwner) {
+        "You own"
+    } else if (collection.maintainerNames.firstOrNull { it.isNotBlank() } != null) {
+        collection.maintainerNames.first { it.isNotBlank() }
+    } else {
+        collection.byline.trim()
+    }
+
+    val metaFacts = mutableListOf<String>()
+    if (collection.worksCount > 0) metaFacts.add("${collection.worksCount} work${if (collection.worksCount == 1) "" else "s"}")
+    if (collection.bookmarksCount > 0) metaFacts.add("${collection.bookmarksCount} bookmark${if (collection.bookmarksCount == 1) "" else "s"}")
+    if (collection.isModerated) metaFacts.add("Moderated")
+    if (collection.isClosed) metaFacts.add("Closed")
+    collection.challengeKind?.let { metaFacts.add(it.displayName) }
+
+    val statusLabels = mutableListOf<String>()
+    if (collection.isUnrevealed) statusLabels.add("Unrevealed")
+    if (collection.isAnonymous) statusLabels.add("Anonymous")
+
+    val showsByline = collection.byline.isNotBlank() || collection.maintainerNames.isNotEmpty()
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .subjectPanel()
             .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = collection.title,
-            fontSize = 19.sp,
-            fontWeight = FontWeight.Bold,
-            color = tokens.primaryInk,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        if (collection.byline.isNotBlank()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(
+                        color = palette.chipFill,
+                        shape = RoundedCornerShape(10.dp)
+                    ),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = palette.accent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                if (eyebrow.isNotEmpty() || statusLabels.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        if (eyebrow.isNotEmpty()) {
+                            SubjectKicker(text = eyebrow, palette = palette)
+                        }
+                        statusLabels.forEach { label ->
+                            SubjectChip(text = label, style = SubjectChipStyle.Neutral, palette = palette)
+                        }
+                    }
+                }
+                Text(
+                    text = collection.title,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tokens.primaryInk,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
+            Icon(
+                imageVector = androidx.compose.material.icons.Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = palette.accent,
+                modifier = Modifier.size(12.dp).padding(top = 4.dp)
+            )
+        }
+
+        if (showsByline) {
             Text(
-                text = collection.byline,
+                text = "by ${collection.byline.ifEmpty { collection.maintainerNames.joinToString(", ") }}",
                 fontSize = 12.5.sp,
                 color = tokens.secondaryInk,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Text(
-            text = collection.name,
-            fontSize = 11.5.sp,
-            color = tokens.tertiaryInk,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        
+        if (collection.summary.isNotBlank()) {
+            Text(
+                text = collection.summary,
+                fontSize = 12.5.sp,
+                color = tokens.secondaryInk,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (metaFacts.isNotEmpty() || collection.updatedAtText.isNotBlank()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The facts take the flexible width and may wrap; the date never wraps.
+                Text(
+                    text = metaFacts.joinToString(" · "),
+                    fontSize = 11.5.sp,
+                    color = tokens.secondaryInk,
+                    modifier = Modifier.weight(1f)
+                )
+                if (collection.updatedAtText.isNotBlank()) {
+                    Text(
+                        text = collection.updatedAtText,
+                        fontSize = 11.5.sp,
+                        color = tokens.secondaryInk,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
     }
 }

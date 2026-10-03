@@ -57,10 +57,50 @@ class AO3AccountParser(
                 .trim()
             if (slug.isEmpty()) return@mapNotNull null
             val title = link.normalizedText().ifBlank { slug }
-            val byline = li.selectFirst(".byline, .heading .byline")
-                ?.normalizedText()
-                .orEmpty()
-            AO3Collection(name = slug, title = title, byline = byline)
+            
+            val maintainerLinks = li.select("h4.heading a[href*=/users/]")
+            val maintainerNames = maintainerLinks.map { it.normalizedText() }
+            val maintainerIdentities = maintainerLinks.map { linkEl ->
+                AO3AuthorIdentity(displayName = linkEl.normalizedText(), href = linkEl.attr("href"))
+            }
+            val fallbackByline = li.selectFirst(".byline, .heading .byline")?.normalizedText().orEmpty()
+            
+            val typeText = li.selectFirst("p.type")?.normalizedText().orEmpty().lowercase()
+            val isClosed = typeText.contains("closed")
+            val isModerated = typeText.contains("moderated") && !typeText.contains("unmoderated")
+            val isUnrevealed = typeText.contains("unrevealed")
+            val isAnonymous = typeText.contains("anonymous")
+            val challengeKind = when {
+                typeText.contains("gift exchange") -> AO3ChallengeKind.GiftExchange
+                typeText.contains("prompt meme") -> AO3ChallengeKind.PromptMeme
+                else -> null
+            }
+            
+            val worksText = li.selectFirst("dd.works")?.normalizedText()?.replace(",", "")?.toIntOrNull() ?: 0
+            val bookmarksText = li.selectFirst("dd.bookmarks")?.normalizedText()?.replace(",", "")?.toIntOrNull() ?: 0
+            
+            val summary = li.selectFirst("blockquote.userstuff.summary")?.normalizedText().orEmpty()
+            val updated = li.selectFirst("p.datetime")?.normalizedText().orEmpty()
+            
+            val viewerIsOwner = li.classNames().contains("own")
+            
+            AO3Collection(
+                name = slug,
+                title = title,
+                summary = summary,
+                byline = if (maintainerNames.isEmpty()) fallbackByline else maintainerNames.joinToString(", "),
+                maintainerNames = maintainerNames,
+                maintainerIdentities = maintainerIdentities,
+                isClosed = isClosed,
+                isModerated = isModerated,
+                isUnrevealed = isUnrevealed,
+                isAnonymous = isAnonymous,
+                challengeKind = challengeKind,
+                worksCount = worksText,
+                bookmarksCount = bookmarksText,
+                updatedAtText = updated,
+                viewerIsOwner = viewerIsOwner
+            )
         }
     }
 
