@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -79,11 +80,12 @@ internal fun AO3AuthorHero(
     val context = LocalContext.current
     val mute = header.actions.firstOrNull { it.kind == AO3AuthorWebAction.Kind.Mute }
     val block = header.actions.firstOrNull { it.kind == AO3AuthorWebAction.Kind.Block }
+    
+    val showsAccountActions = !isOwnProfile && route.username.isNotBlank() && route.username.lowercase() != "orphan_account"
+    val showsActionRow = showsAccountActions && (header.subscriptionForm != null || mute != null || block != null)
+
     Row(
-        modifier
-            .fillMaxWidth()
-            .subjectPanel(cornerRadius = 16.dp)
-            .padding(16.dp),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top
     ) {
@@ -113,17 +115,25 @@ internal fun AO3AuthorHero(
             if (profileTitle.isNotBlank()) {
                 Text(profileTitle, color = tokens.primaryInk, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
-            if (!isOwnProfile && (header.subscriptionForm != null || mute != null || block != null)) {
+            if (showsActionRow) {
                 Row(
                     modifier = Modifier.padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     header.subscriptionForm?.let { form ->
-                        Button(onClick = { onSubscription(form.actionUrl) }) {
-                            Icon(Icons.Outlined.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Button(
+                            onClick = { onSubscription(form.actionUrl) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (form.isSubscribed) Icons.Outlined.NotificationsOff else Icons.Outlined.Notifications,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(Modifier.size(5.dp))
-                            Text(if (form.isSubscribed) "Unsubscribe" else "Subscribe")
+                            Text(if (form.isSubscribed) "Unsubscribe" else "Subscribe", fontSize = 13.sp)
                         }
                     }
                     mute?.let { action ->
