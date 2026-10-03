@@ -277,6 +277,11 @@ struct LibraryFiltersTests {
         #expect(filters.apply(to: [alpha, bravo]).map(\.author) == ["anna", "Zed"])
         filters.sort = .wordCount
         #expect(filters.apply(to: [alpha, bravo]).map(\.wordCount) == [99, 10])
+
+        alpha.downloadedAt = Date(timeIntervalSince1970: 300)
+        filters.sort = .dateDownloaded
+        // Bravo has no captured date, so it falls back to dateAdded (200).
+        #expect(filters.apply(to: [bravo, alpha]).map(\.title) == ["alpha", "Bravo"])
     }
 
     /// The dashboard rebuilds its sections only when this key changes. Each

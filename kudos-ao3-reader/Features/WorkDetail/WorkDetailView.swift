@@ -69,6 +69,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Drives artboard 1a screen 2 — everything this device holds about the
     /// work, behind the My copy row at the foot of the page.
     @State var showingMyCopy = false
+    @State var showingDownloadedDateEditor = false
     /// Long summaries start collapsed; this is the Show More toggle.
     @State var summaryExpanded = false
 
@@ -383,6 +384,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         // The work's colour for the checks, links and chips, as on its page.
         .screenTint(workPalette)
+        .sheet(isPresented: $showingDownloadedDateEditor) {
+            if let work = localWork { DownloadedDateEditor(work: work) }
+        }
         #if !os(macOS)
         .presentationDragIndicator(.visible)
         #endif

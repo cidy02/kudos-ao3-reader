@@ -11,6 +11,8 @@ struct SettingsImportPage: View {
     @State private var isImportingEPUB = false
     @State private var epubImportProgress: String?
     @State private var epubNotice: SettingsNotice?
+    @State private var pendingImports: [PendingDocumentImport] = []
+    @State private var showingImportConfirmation = false
 
     var body: some View {
         SettingsPageForm(route: .importFiles) {
@@ -28,13 +30,18 @@ struct SettingsImportPage: View {
             importEPUBSelection(result)
         }
         .settingsNoticeAlert($epubNotice)
+        .sheet(isPresented: $showingImportConfirmation) {
+            DownloadDateImportConfirmation(imports: pendingImports) { selections in
+                Task { await importEPUBs(selections) }
+            }
+        }
     }
 
     private func importEPUBSelection(_ result: Result<[URL], Error>) {
         do {
             let urls = try result.get()
             guard !urls.isEmpty else { return }
-            Task { await importEPUBs(urls) }
+            Task { await prepareImports(urls) }
         } catch {
             guard !error.isUserCancellation else {
                 return
@@ -47,7 +54,29 @@ struct SettingsImportPage: View {
     }
 
     @MainActor
-    private func importEPUBs(_ urls: [URL]) async {
+    private func prepareImports(_ urls: [URL]) async {
+        isImportingEPUB = true
+        epubImportProgress = "Checking download dates…"
+        defer {
+            isImportingEPUB = false
+            epubImportProgress = nil
+        }
+
+        var prepared: [PendingDocumentImport] = []
+        for (index, url) in urls.enumerated() {
+            epubImportProgress = "Checking \(index + 1) of \(urls.count)…"
+            let scoped = url.startAccessingSecurityScopedResource()
+            let detection = (try? await UserDocumentImport.detectDownloadDate(of: url))
+                ?? DownloadDateDetection(date: Date(), source: .importTime)
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            prepared.append(PendingDocumentImport(url: url, detection: detection))
+        }
+        pendingImports = prepared
+        showingImportConfirmation = !prepared.isEmpty
+    }
+
+    @MainActor
+    private func importEPUBs(_ imports: [SelectedDocumentImport]) async {
         isImportingEPUB = true
         epubImportProgress = nil
         defer {
@@ -58,6 +87,7 @@ struct SettingsImportPage: View {
         // Security scope is held for the whole pass (download wait + import), not
         // just the read — a not-yet-downloaded iCloud Drive file needs access while
         // it materializes, not only once it's finally readable.
+        let urls = imports.map(\.url)
         let accessedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
         defer { accessedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
 
@@ -69,13 +99,16 @@ struct SettingsImportPage: View {
         }
 
         var summary = EPUBImportNoticeSummary()
-        for (index, url) in urls.enumerated() {
+        for (index, item) in imports.enumerated() {
+            let url = item.url
             do {
                 epubImportProgress = "Waiting for iCloud Drive… (\(index + 1) of \(urls.count))"
                 try await waitForUbiquitousDownload(of: url)
                 epubImportProgress = "Importing \(index + 1) of \(urls.count)…"
                 // Accepts any supported format, converting non-EPUBs on the way in.
-                let result = try await UserDocumentImport.perform(url, into: context)
+                let result = try await UserDocumentImport.perform(
+                    url, downloadedAt: item.downloadedAt, into: context
+                )
                 summary.record(result.outcome, convertedFrom: result.convertedFrom)
             } catch {
                 summary.recordFailure(fileName: url.lastPathComponent, message: error.localizedDescription)

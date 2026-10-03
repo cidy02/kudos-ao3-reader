@@ -109,7 +109,22 @@ struct ContentView: View {
             // community-redistributed copy actually reaches the app. Converts
             // non-EPUB formats on the way in; see ExternalFileImport.
             .onOpenURL { url in
-                Task { await externalImport.handle(url, in: modelContext) }
+                Task { await externalImport.handle(url) }
+            }
+            .sheet(isPresented: Binding(
+                get: { externalImport.pendingImport != nil },
+                set: { _ in }
+            )) {
+                if let pending = externalImport.pendingImport {
+                    DownloadDateImportConfirmation(
+                        imports: [pending],
+                        onCancel: { externalImport.cancelPendingImport() }
+                    ) { selections in
+                        guard let selection = selections.first else { return }
+                        Task { await externalImport.confirm(selection, in: modelContext) }
+                    }
+                    .interactiveDismissDisabled()
+                }
             }
             .alert(
                 externalImport.notice?.title ?? "",

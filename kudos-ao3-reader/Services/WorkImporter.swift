@@ -20,6 +20,7 @@ func importEPUB(
     knownChapterCount: Int = 0,
     into context: ModelContext
 ) async throws -> SavedWork {
+    let downloadedAt = Date()
     // Reading the EPUB's metadata pulls the whole file into memory and unzips it, so
     // run that off the main actor; everything below (SwiftData + the file move) stays
     // on the main actor where it belongs.
@@ -51,6 +52,7 @@ func importEPUB(
         do {
             try ReadingQueueService.replaceEPUB(for: existing, with: tempURL)
             existing.hasEPUB = true
+            if existing.downloadedAt == nil { existing.downloadedAt = downloadedAt }
         } catch {
             Log.library.error("Couldn't save imported EPUB: \(error.localizedDescription, privacy: .public)")
             throw error
@@ -96,6 +98,7 @@ func importEPUB(
     // chapters AO3 adds afterwards surface in Home → Recently Updated. Native imports
     // pass it from the AO3 work page; web imports baseline on the first update check.
     work.knownChapterCount = knownChapterCount
+    work.downloadedAt = downloadedAt
 
     do {
         try ReadingQueueService.replaceEPUB(for: work, with: tempURL)
@@ -235,7 +238,11 @@ private nonisolated struct UserEPUBInspection {
 }
 
 @MainActor
-func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> UserEPUBImportOutcome {
+func importUserEPUB(
+    _ url: URL,
+    downloadedAt: Date = Date(),
+    into context: ModelContext
+) async throws -> UserEPUBImportOutcome {
     guard url.isFileURL else { throw UserEPUBImportError.notLocalFile }
     guard url.pathExtension.localizedCaseInsensitiveCompare("epub") == .orderedSame else {
         throw UserEPUBImportError.invalidExtension
@@ -254,6 +261,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
             PreservedWorkService.restore(duplicate, in: context)
         }
         applyUserImportMetadata(inspection, to: duplicate, fillOnly: true)
+        if duplicate.downloadedAt == nil { duplicate.downloadedAt = downloadedAt }
         if !duplicate.hasEPUB {
             try copyImportedEPUB(from: url, into: duplicate)
             duplicate.hasEPUB = true
@@ -277,6 +285,7 @@ func importUserEPUB(_ url: URL, into context: ModelContext) async throws -> User
         sourceURL: inspection.sourceURL
     )
     applyUserImportMetadata(inspection, to: work, fillOnly: false)
+    work.downloadedAt = downloadedAt
     work.ao3WorkID = WorkTags.ao3WorkID(from: work.sourceURL)
     work.ao3SeriesID = ReadingQueueService.ao3SeriesID(from: work.seriesURL)
     work.markModified()
